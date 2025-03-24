@@ -11,6 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        # Cache node_modules
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
       - run: npx nx build link-shortener
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
