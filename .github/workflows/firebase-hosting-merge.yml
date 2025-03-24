@@ -17,6 +17,7 @@ jobs:
           node-version: 22
           cache: 'npm'
       - run: npm ci --legacy-peer-deps
+      - run: cd functions && npm ci
       - run: npx nx build link-shortener
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

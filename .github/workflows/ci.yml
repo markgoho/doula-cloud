@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - trunk
+      - main
   pull_request:
 
 permissions:
@@ -29,8 +29,8 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
-
       - run: npm ci --legacy-peer-deps
+      - run: cd functions && npm ci
       - run: npx playwright install --with-deps
       - uses: nrwl/nx-set-shas@v4
 
