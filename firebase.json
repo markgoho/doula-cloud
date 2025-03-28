@@ -33,10 +33,6 @@
         {
           "source": "/api/shorten",
           "function": "shortenUrl"
-        },
-        {
-          "source": "/:shortCode",
-          "function": "redirectUrl"
         }
       ]
     },
@@ -49,10 +45,6 @@
         "**/node_modules/**"
       ],
       "rewrites": [
-        {
-          "source": "/api/shorten",
-          "function": "shortenUrl"
-        },
         {
           "source": "/:shortCode",
           "function": "redirectUrl"

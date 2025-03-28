@@ -4,7 +4,12 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-  globalIgnores(['eslint.config.mjs', '**/lib/**/*', '**/generated/**/*']),
+  globalIgnores([
+    'eslint.config.mjs',
+    '**/lib/**/*',
+    '**/generated/**/*',
+    'jest.config.js',
+  ]),
   { files: ['**/*.{js,mjs,cjs,ts}'] },
   {
     files: ['**/*.{js,mjs,cjs,ts}'],
