@@ -23,7 +23,7 @@
   "hosting": [
     {
       "target": "doula-cloud",
-      "public": "public",
+      "public": "hugo/public",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -49,6 +49,15 @@
           "source": "/:shortCode",
           "function": "redirectUrl"
         }
+      ]
+    },
+    {
+      "target": "dc-link-tree",
+      "public": "dist/apps/link-tree",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
       ]
     }
   ],

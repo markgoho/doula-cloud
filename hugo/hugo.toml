@@ -1,0 +1,4 @@
+baseURL = 'https://doula.cloud/'
+languageCode = 'en-us'
+title = 'Doula Cloud'
+publishDir = "./public"

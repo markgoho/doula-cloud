@@ -1,3 +1,19 @@
 {
-  "singleQuote": true
+  "singleQuote": true,
+  "bracketSpacing": true,
+  "trailingComma": "es5",
+  "goTemplateBracketSpacing": true,
+  "plugins": [
+    "prettier-plugin-go-template"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "*.html"
+      ],
+      "options": {
+        "parser": "go-template"
+      }
+    }
+  ]
 }

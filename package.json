@@ -2,7 +2,10 @@
   "name": "@doula-cloud/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "hugo-dev": "cd hugo && hugo server --disableFastRender",
+    "hugo-build": "cd hugo && hugo --minify"
+  },
   "private": true,
   "dependencies": {
     "@angular/common": "~19.2.0",
@@ -48,7 +51,8 @@
     "jest-environment-jsdom": "^29.7.0",
     "jest-preset-angular": "~14.4.0",
     "nx": "20.6.2",
-    "prettier": "^2.6.2",
+    "prettier": "^3.5.3",
+    "prettier-plugin-go-template": "^0.0.15",
     "ts-jest": "^29.1.0",
     "ts-node": "10.9.1",
     "tslib": "^2.3.0",

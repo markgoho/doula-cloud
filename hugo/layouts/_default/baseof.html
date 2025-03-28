@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="{{ $.Site.LanguageCode | default "en" }}">
+  <head>
+    {{ partial "head.html" . }}
+
+    {{- block "head-scripts" . -}}
+    {{- end -}}
+
+    {{- block "head-styles" . -}}
+    {{- end -}}
+  </head>
+
+  <body>
+    <header class="header">
+      {{ block "header" . }}
+        {{ partial "header.html" . }}
+      {{ end }}
+    </header>
+
+    <main class="main">
+      {{ block "main" . }}{{ end }}
+    </main>
+
+    <footer class="footer">
+      {{ block "footer" . }}
+        {{ partial "footer.html" . }}
+      {{ end }}
+    </footer>
+
+    {{ block "footer-scripts" . }}{{ end }}
+  </body>
+</html>
