@@ -13,6 +13,9 @@
         ],
         "dc-link-tree": [
           "dc-link-tree"
+        ],
+        "dc-link-shortener": [
+          "dc-link-shortener"
         ]
       }
     }
