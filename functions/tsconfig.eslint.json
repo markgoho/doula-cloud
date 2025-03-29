@@ -1,0 +1,13 @@
+{
+  // Inherit all settings from your main tsconfig
+  "extends": "./tsconfig.json",
+  // Override 'include' to encompass all files ESLint should check
+  "include": [
+    "src/**/*.ts", // Your source files
+    "test/**/*.ts", // Your test files
+    "*.config.js", // Include config files like jest.config.js if needed
+    "*.config.mjs" // Include config files like eslint.config.mjs if needed
+  ],
+  // Exclude remains similar, ensuring build output and node_modules are ignored
+  "exclude": ["node_modules", "lib"]
+}
