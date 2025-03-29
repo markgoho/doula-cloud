@@ -1,4 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
+import admin from 'firebase-admin';
+
+admin.initializeApp();
 
 // --- Shorten URL Function ---
 export const shortenUrl = onRequest(async (req, res) => {

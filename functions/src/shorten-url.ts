@@ -6,9 +6,6 @@ import validUrl from 'valid-url';
 import admin from 'firebase-admin';
 
 export const handleShortenUrl = async (req: Request, res: Response) => {
-  if (admin.apps.length === 0) {
-    admin.initializeApp();
-  }
   const db = admin.firestore();
 
   // Handle CORS Preflight request (OPTIONS method)

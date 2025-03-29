@@ -67,7 +67,7 @@ describe('redirectUrl Cloud Function response', () => {
     }
   });
 
-  it('should return 301 status code for valid shortCode', async () => {
+  it('should return 302 status code for valid shortCode', async () => {
     // First create a URL to get a valid shortCode
     const { data: createData } = await axios.post<{ shortUrl: string }>(
       'http://localhost:5001/test-project/us-central1/shortenUrl',
@@ -81,7 +81,7 @@ describe('redirectUrl Cloud Function response', () => {
       throw new Error('Request should have failed');
     } catch (error) {
       const axiosError = error as AxiosError;
-      expect(axiosError.response?.status).toBe(301);
+      expect(axiosError.response?.status).toBe(302);
     }
   });
 });

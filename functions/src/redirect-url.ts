@@ -4,9 +4,6 @@ import { setCorsHeaders } from './util/set-cors-headers';
 import admin from 'firebase-admin';
 
 export const handleRedirectUrl = async (req: Request, res: Response) => {
-  if (admin.apps.length === 0) {
-    admin.initializeApp();
-  }
   const db = admin.firestore();
   // Handle CORS Preflight (OPTIONS) - May not be strictly needed for 3xx redirects
   // initiated by browser navigation, but good practice if the endpoint *could*
@@ -51,7 +48,7 @@ export const handleRedirectUrl = async (req: Request, res: Response) => {
         console.error('Error incrementing clicks:', shortCode, err);
       });
 
-    res.redirect(301, longUrl);
+    res.redirect(302, longUrl);
   } catch (error) {
     console.error('Error redirecting URL:', shortCode, error);
     // CORS header was already set
