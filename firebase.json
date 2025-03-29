@@ -22,21 +22,6 @@
   ],
   "hosting": [
     {
-      "target": "doula-cloud",
-      "public": "hugo/public",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ],
-      "rewrites": [
-        {
-          "source": "/api/shorten",
-          "function": "shortenUrl"
-        }
-      ]
-    },
-    {
       "target": "dou-la",
       "public": "public",
       "ignore": [
@@ -48,36 +33,6 @@
         {
           "source": "/:shortCode",
           "function": "redirectUrl"
-        }
-      ]
-    },
-    {
-      "target": "dc-link-tree",
-      "public": "dist/apps/link-tree/browser",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ],
-      "rewrites": [
-        {
-          "source": "**",
-          "destination": "/index.html"
-        }
-      ]
-    },
-    {
-      "target": "dc-link-shortener",
-      "public": "dist/apps/link-shortener/browser",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ],
-      "rewrites": [
-        {
-          "source": "**",
-          "destination": "/index.html"
         }
       ]
     }

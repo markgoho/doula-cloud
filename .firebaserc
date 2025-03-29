@@ -5,17 +5,8 @@
   "targets": {
     "doula-cloud": {
       "hosting": {
-        "doula-cloud": [
-          "doula-cloud"
-        ],
         "dou-la": [
           "dou-la"
-        ],
-        "dc-link-tree": [
-          "dc-link-tree"
-        ],
-        "dc-link-shortener": [
-          "dc-link-shortener"
         ]
       }
     }
