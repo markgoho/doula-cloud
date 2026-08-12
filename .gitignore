@@ -52,3 +52,4 @@ Thumbs.db
 # Hugo
 hugo/public
 hugo/resources
+hugo/.hugo_build.lock
