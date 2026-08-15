@@ -64,6 +64,51 @@ export async function startStack() {
 	await waitForPort(E2E_API_HOST, E2E_API_PORT, READY_TIMEOUT_MS);
 }
 
+// Links identityUID to clientID via client_portal_users, directly against
+// the compose stack's `db` service. Nothing in the BFF creates this row
+// (see #53: v1 has no Client-portal-provisioning endpoint, staff-side or
+// otherwise -- Staff creates a Client + Engagement per #52, but linking a
+// Client to portal login credentials isn't spec'd anywhere yet), so the
+// e2e test that proves login->landing works has to seed it itself. Uses
+// `compose exec` + psql the same way compose.e2e.yaml's own seed-role
+// service provisions the app_e2e login role, rather than adding a new
+// Postgres client dependency to app/ just for this one insert.
+//
+// Values are inlined into the -c string (escaped, not passed via psql's
+// own -v/:'var' substitution): podman-compose's `exec` passthrough
+// doesn't forward -v flags to the exec'd process intact (confirmed
+// empirically -- the SQL psql received still had the literal `:'uid'`
+// text in it, unsubstituted), so :'var' interpolation never fires.
+// identityUID and clientID both come from this test's own prior
+// API/emulator calls, not external input.
+function sqlLiteral(value: string): string {
+	return `'${value.replace(/'/g, "''")}'`;
+}
+
+export function seedClientPortalUser(identityUID: string, clientID: string) {
+	execFileSync(
+		CONTAINER_ENGINE,
+		[
+			'compose',
+			'-f',
+			'compose.e2e.yaml',
+			'exec',
+			'-T',
+			'db',
+			'psql',
+			'-U',
+			'app',
+			'-d',
+			'app',
+			'-v',
+			'ON_ERROR_STOP=1',
+			'-c',
+			`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(clientID)})`
+		],
+		{ stdio: 'inherit', timeout: 30_000 }
+	);
+}
+
 export function stopStack() {
 	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'down', '-v'], {
 		stdio: 'inherit',

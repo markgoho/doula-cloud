@@ -1,0 +1,189 @@
+// Package clientauth is the Client-portal-population auth middleware: it
+// verifies the caller's Identity Platform ID token, resolves it against
+// the client_portal_users table, and confirms the resulting Client holds
+// the Engagement named by :engagementId in the URL -- setting
+// app.current_client_id on a request-scoped transaction only once all of
+// that has passed, so Postgres RLS enforces it for the rest of the
+// request. Mirrors staffauth.Middleware's shape for the Staff population.
+package clientauth
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"doula-cloud/api/internal/authn"
+)
+
+type contextKey string
+
+const (
+	clientIDKey     contextKey = "clientauth.clientID"
+	engagementIDKey contextKey = "clientauth.engagementID"
+	txKey           contextKey = "clientauth.tx"
+)
+
+// MsgInternalError is the response body for any failure the caller can't
+// act on (a DB error, an encoding failure) -- deliberately vague so it
+// never leaks internals. Defined here rather than reused from staffauth
+// so the Client-portal population doesn't depend on the Staff-auth
+// package for something population-agnostic; portal reuses this one
+// rather than defining a third copy.
+const MsgInternalError = "internal error"
+
+// ClientID returns the resolved Client id for the current request.
+func ClientID(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(clientIDKey).(string)
+	return id, ok
+}
+
+// EngagementID returns the :engagementId the current request is scoped
+// to.
+func EngagementID(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(engagementIDKey).(string)
+	return id, ok
+}
+
+// Tx returns the request-scoped database transaction, with
+// app.current_client_id already set for the life of the transaction.
+// Handlers must run any query touching a client-tier-RLS table through
+// this transaction, not a fresh connection, or RLS will have nothing to
+// scope against.
+func Tx(ctx context.Context) (*sql.Tx, bool) {
+	tx, ok := ctx.Value(txKey).(*sql.Tx)
+	return tx, ok
+}
+
+// Middleware wraps an http.Handler with Client-portal population
+// resolution and Engagement-ownership authorization. db must be a
+// connection using the low-privilege app_runtime role -- the role the RLS
+// policies in 00006_client_portal_users.sql apply to.
+func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			idToken, ok := bearerToken(r)
+			if !ok {
+				http.Error(w, "missing bearer token", http.StatusUnauthorized)
+				return
+			}
+
+			verified, err := verifier.VerifyIDToken(r.Context(), idToken)
+			if err != nil {
+				http.Error(w, "invalid token", http.StatusUnauthorized)
+				return
+			}
+
+			engagementID := r.PathValue("engagementId")
+			if _, err := uuid.Parse(engagementID); err != nil {
+				http.Error(w, "invalid engagement id", http.StatusBadRequest)
+				return
+			}
+
+			tx, err := db.BeginTx(r.Context(), nil)
+			if err != nil {
+				// coverage:ignore reason: DB connection failure, not exercised by unit tests
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			committed := false
+			defer func() {
+				if !committed {
+					_ = tx.Rollback()
+				}
+			}()
+
+			clientID, found, err := setIdentityAndResolveClient(r.Context(), tx, verified.UID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			if !found {
+				http.Error(w, "no matching client account", http.StatusForbidden)
+				return
+			}
+
+			owns, err := setClientAndCheckEngagement(r.Context(), tx, clientID, engagementID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			if !owns {
+				http.Error(w, "engagement not linked to this client", http.StatusForbidden)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), clientIDKey, clientID)
+			ctx = context.WithValue(ctx, engagementIDKey, engagementID)
+			ctx = context.WithValue(ctx, txKey, tx)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+
+			if err := tx.Commit(); err == nil {
+				committed = true
+			}
+		})
+	}
+}
+
+func bearerToken(r *http.Request) (string, bool) {
+	const prefix = "Bearer "
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, prefix) {
+		return "", false
+	}
+	token := strings.TrimPrefix(header, prefix)
+	if token == "" {
+		return "", false
+	}
+	return token, true
+}
+
+// setIdentityAndResolveClient sets app.current_identity_uid -- the
+// session variable client_portal_users' self-visibility RLS policy
+// reads, since app.current_client_id isn't known yet -- then looks up
+// identityUID in client_portal_users.
+func setIdentityAndResolveClient(ctx context.Context, tx *sql.Tx, identityUID string) (string, bool, error) {
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
+		return "", false, fmt.Errorf("clientauth: set current identity uid: %w", err)
+	}
+
+	var clientID string
+	err := tx.QueryRowContext(ctx, `SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identityUID).Scan(&clientID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return "", false, fmt.Errorf("clientauth: resolve client: %w", err)
+	}
+	return clientID, true, nil
+}
+
+// setClientAndCheckEngagement sets app.current_client_id -- the session
+// variable client-tier RLS reads for the rest of the request -- then
+// checks whether engagementID belongs to clientID.
+func setClientAndCheckEngagement(ctx context.Context, tx *sql.Tx, clientID, engagementID string) (bool, error) {
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
+		return false, fmt.Errorf("clientauth: set current client id: %w", err)
+	}
+
+	var exists bool
+	err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM engagements WHERE id = $1 AND client_id = $2)`,
+		engagementID, clientID,
+	).Scan(&exists)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return false, fmt.Errorf("clientauth: check engagement ownership: %w", err)
+	}
+	return exists, nil
+}
