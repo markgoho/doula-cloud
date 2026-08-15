@@ -14,6 +14,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
 
       # Podman ships on the ubuntu-latest runner but its rootless socket
       # needs to be started explicitly, and testcontainers-go's Ryuk reaper
@@ -58,6 +59,13 @@ jobs:
       - name: Install podman-compose
         run: pipx install podman-compose
 
+      - name: Cache bun dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('app/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
       - name: Install dependencies
         working-directory: app
         run: bun install --frozen-lockfile
@@ -70,9 +78,22 @@ jobs:
         working-directory: app
         run: bun run lint
 
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/bun.lock') }}
+
       - name: Install Playwright browsers
         working-directory: app
         run: bunx playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+
+      - name: Install Playwright OS dependencies only
+        working-directory: app
+        run: bunx playwright install-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
 
       - name: Unit test with coverage gate
         working-directory: app
@@ -81,3 +102,4 @@ jobs:
       - name: E2e test
         working-directory: app
         run: bunx playwright test
+        timeout-minutes: 5
