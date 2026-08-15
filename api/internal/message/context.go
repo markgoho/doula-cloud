@@ -1,10 +1,15 @@
-// Package message holds the Staff-side BFF handlers for a Message thread:
-// list and create. Both rely on staffauth.Middleware having already
-// resolved the caller's Staff/Practice ids and opened a request-scoped
-// *sql.Tx with app.current_practice_id set, the same way the engagement
-// and visit packages' handlers do. Messages are text-only and immutable --
-// there is no update or delete endpoint (attachments and push
-// notifications are separate tickets, per #58).
+// Package message holds the BFF handlers for a Message thread: list and
+// create, for both the Staff-side (#58) and Client-portal-side (#59)
+// populations. The Staff handlers rely on staffauth.Middleware having
+// already resolved the caller's Staff/Practice ids and opened a
+// request-scoped *sql.Tx with app.current_practice_id set, the same way
+// the engagement and visit packages' handlers do; the Client-portal
+// handlers (client.go) rely on clientauth.Middleware the same way, with
+// app.current_client_id set instead. Both populations share the same
+// thread per Engagement -- one continuous conversation, not split by
+// sender. Messages are text-only and immutable -- there is no update or
+// delete endpoint (attachments and push notifications are separate
+// tickets, per #58).
 package message
 
 import (

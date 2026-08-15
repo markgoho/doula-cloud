@@ -48,44 +48,63 @@ func CreateHandler() http.Handler {
 			return
 		}
 
-		var req CreateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		req.Body = strings.TrimSpace(req.Body)
-		if req.Body == "" {
-			http.Error(w, "body is required", http.StatusBadRequest)
+		req, ok := decodeCreateRequest(w, r)
+		if !ok {
 			return
 		}
 
 		messageID := uuid.NewString()
-		item, err := insertMessage(r.Context(), tx, messageID, engagementID, staffID, req.Body)
+		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeStaff, staffID, req.Body)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(item); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		writeCreated(w, item, staffauth.MsgInternalError)
 	})
 }
 
-// insertMessage writes a Message row from the calling Staff member and
-// returns it in the same Message shape ListHandler uses, so the frontend
-// can append the response directly without a refetch. Unlike listMessages'
-// COALESCE across two LEFT JOINs for a polymorphic sender, the sender here
-// is always the calling Staff member, so a single staff lookup is enough.
-func insertMessage(ctx context.Context, tx *sql.Tx, messageID, engagementID, staffID, body string) (Message, error) {
+// decodeCreateRequest decodes and validates a CreateRequest body, shared by
+// CreateHandler and ClientCreateHandler so the "text required, trimmed"
+// rule lives in one place. Writes its own error response and returns
+// ok=false on failure.
+func decodeCreateRequest(w http.ResponseWriter, r *http.Request) (CreateRequest, bool) {
+	var req CreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return CreateRequest{}, false
+	}
+	req.Body = strings.TrimSpace(req.Body)
+	if req.Body == "" {
+		http.Error(w, "body is required", http.StatusBadRequest)
+		return CreateRequest{}, false
+	}
+	return req, true
+}
+
+// writeCreated writes item as a 201 JSON response, shared by CreateHandler
+// and ClientCreateHandler.
+func writeCreated(w http.ResponseWriter, item Message, internalErrorMsg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	// coverage:ignore reason: response encoding failure, not exercised by unit tests
+	if err := json.NewEncoder(w).Encode(item); err != nil {
+		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+	}
+}
+
+// insertMessage writes a Message row from the calling Staff or Client
+// identity (senderType picks which) and returns it in the same Message
+// shape ListHandler uses, so the frontend can append the response
+// directly without a refetch. Unlike listMessages' COALESCE across two
+// LEFT JOINs for a polymorphic sender, the sender here is always the
+// caller, so a single lookup (picked by resolveSenderName) is enough.
+func insertMessage(ctx context.Context, tx *sql.Tx, messageID, engagementID, senderType, senderID, body string) (Message, error) {
 	msg := Message{
 		MessageID:  messageID,
-		SenderType: senderTypeStaff,
-		SenderID:   staffID,
+		SenderType: senderType,
+		SenderID:   senderID,
 		Body:       body,
 	}
 
@@ -93,17 +112,36 @@ func insertMessage(ctx context.Context, tx *sql.Tx, messageID, engagementID, sta
 		`INSERT INTO messages (id, engagement_id, sender_type, sender_id, body)
 		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING created_at`,
-		messageID, engagementID, senderTypeStaff, staffID, body,
+		messageID, engagementID, senderType, senderID, body,
 	).Scan(&msg.CreatedAt)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
 		return Message{}, fmt.Errorf("message: insert message: %w", err)
 	}
 
+	name, err := resolveSenderName(ctx, tx, senderType, senderID)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err := tx.QueryRowContext(ctx, `SELECT name FROM staff WHERE id = $1`, staffID).Scan(&msg.SenderName); err != nil {
-		return Message{}, fmt.Errorf("message: resolve sender name: %w", err)
+	if err != nil {
+		return Message{}, err
 	}
+	msg.SenderName = name
 
 	return msg, nil
+}
+
+// resolveSenderName looks up the display name of the Staff or Client that
+// sent a Message, picking the static query by senderType (senderTypeStaff
+// or senderTypeClient) rather than building the query dynamically.
+func resolveSenderName(ctx context.Context, tx *sql.Tx, senderType, senderID string) (string, error) {
+	query := `SELECT name FROM staff WHERE id = $1`
+	if senderType == senderTypeClient {
+		query = `SELECT name FROM clients WHERE id = $1`
+	}
+
+	var name string
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err := tx.QueryRowContext(ctx, query, senderID).Scan(&name); err != nil {
+		return "", fmt.Errorf("message: resolve sender name: %w", err)
+	}
+	return name, nil
 }
