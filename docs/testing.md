@@ -1,5 +1,27 @@
 # Testing infrastructure
 
+## `api/`: lint with golangci-lint, matching CI exactly
+
+CI runs `golangci-lint` (config: `api/.golangci.yml`) as its own gating step,
+separate from `go vet`/`go build` -- a change can compile and pass `go test`
+while still failing CI on `golangci-lint` alone (goconst, noctx, unparam,
+wrapcheck, and the rest of the curated set in that config). `go vet` is not a
+substitute for it. Before considering `api/` work done, run the same command
+CI runs:
+
+```sh
+cd api
+golangci-lint run
+```
+
+Two linters in this set are package-wide, not per-file, so a change to one
+file can newly flag lines you didn't touch in other files in the same
+package -- `goconst` (a literal crosses its repetition threshold once new
+call sites are added elsewhere) and `unparam` (a return value becomes
+"never used" once it's whole-package, not just per-caller). Don't skip
+fixing those on the grounds that "that file isn't part of this change" --
+if `golangci-lint run` at the repo's current state reports it, CI will too.
+
 ## Coverage: 100% line coverage, with justified exceptions
 
 Both `api/` and `app/` are gated at 100% line coverage in CI. A line that

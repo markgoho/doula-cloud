@@ -42,24 +42,24 @@ func postAccept(t *testing.T, srv *httptest.Server, token string, body any) *htt
 // seedPendingInvite seeds a Practice, an Owner, and a pending (unclaimed)
 // invite for a second person -- the state InviteHandler leaves behind for
 // AcceptInviteHandler to pick up.
-func seedPendingInvite(t *testing.T, db *testdb.DB) (staffID, practiceID, inviteToken string) {
+func seedPendingInvite(t *testing.T, db *testdb.DB) (staffID, inviteToken string) {
 	t.Helper()
-	practiceID = seedPractice(t, db, "Accept Test Practice")
+	practiceID := seedPractice(t, db, "Accept Test Practice")
 	ownerID := seedStaff(t, db, "accept-test-owner")
 	seedMembership(t, db, practiceID, ownerID)
 
-	if err := db.Admin.QueryRow(
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO staff (id, name, email, invite_token) VALUES (gen_random_uuid(), 'Invitee', 'invitee@example.com', gen_random_uuid()) RETURNING id, invite_token::text`,
 	).Scan(&staffID, &inviteToken); err != nil {
 		t.Fatalf("seed pending invite: %v", err)
 	}
-	if _, err := db.Admin.Exec(
+	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{}')`,
 		practiceID, staffID,
 	); err != nil {
 		t.Fatalf("seed pending membership: %v", err)
 	}
-	return staffID, practiceID, inviteToken
+	return staffID, inviteToken
 }
 
 func TestAcceptInviteHandler_MissingToken(t *testing.T) {
@@ -90,7 +90,7 @@ func TestAcceptInviteHandler_TokenVerificationFailure(t *testing.T) {
 
 func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: "some-uid"}, db)
+	srv := newAcceptServer(fakeVerifier{uid: someUID}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/accept-invite", bytes.NewReader([]byte("not json")))
@@ -112,7 +112,7 @@ func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 
 func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: "some-uid"}, db)
+	srv := newAcceptServer(fakeVerifier{uid: someUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: ""})
@@ -125,7 +125,7 @@ func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 
 func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: "some-uid"}, db)
+	srv := newAcceptServer(fakeVerifier{uid: someUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: "00000000-0000-0000-0000-000000000000"})
@@ -138,9 +138,9 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 
 func TestAcceptInviteHandler_Success(t *testing.T) {
 	db := testdb.New(t)
-	staffID, _, inviteToken := seedPendingInvite(t, db)
+	staffID, inviteToken := seedPendingInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: "invitee-identity"}, db)
+	srv := newAcceptServer(fakeVerifier{uid: inviteeIdentityUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: inviteToken})
@@ -160,11 +160,11 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 
 	var identityUID string
 	var storedToken sql.NullString
-	if err := db.Admin.QueryRow(`SELECT identity_uid, invite_token::text FROM staff WHERE id = $1`, staffID).Scan(&identityUID, &storedToken); err != nil {
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid, invite_token::text FROM staff WHERE id = $1`, staffID).Scan(&identityUID, &storedToken); err != nil {
 		t.Fatalf("query claimed staff: %v", err)
 	}
-	if identityUID != "invitee-identity" {
-		t.Fatalf("identity_uid = %q, want %q", identityUID, "invitee-identity")
+	if identityUID != inviteeIdentityUID {
+		t.Fatalf("identity_uid = %q, want %q", identityUID, inviteeIdentityUID)
 	}
 	if storedToken.Valid {
 		t.Fatalf("expected invite_token cleared after accept, got %q", storedToken.String)
@@ -173,9 +173,9 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 
 func TestAcceptInviteHandler_TokenAlreadyClaimed(t *testing.T) {
 	db := testdb.New(t)
-	_, _, inviteToken := seedPendingInvite(t, db)
+	_, inviteToken := seedPendingInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: "invitee-identity"}, db)
+	srv := newAcceptServer(fakeVerifier{uid: inviteeIdentityUID}, db)
 	defer srv.Close()
 
 	first := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: inviteToken})
@@ -199,7 +199,7 @@ func TestAcceptInviteHandler_IdentityAlreadyClaimedElsewhere(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "already-active-identity"
 	seedStaffWithMembership(t, db, identityUID)
-	_, _, inviteToken := seedPendingInvite(t, db)
+	_, inviteToken := seedPendingInvite(t, db)
 
 	srv := newAcceptServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()

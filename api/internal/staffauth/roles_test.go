@@ -46,7 +46,7 @@ func TestAssignRolesHandler_NonOwnerForbidden(t *testing.T) {
 	srv := newRolesServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, practiceID, staffID, staffauth.AssignRolesRequest{Roles: []string{"owner"}})
+	resp := patchRoles(t, srv, practiceID, staffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -104,7 +104,7 @@ func TestAssignRolesHandler_NoSuchMembership(t *testing.T) {
 	srv := newRolesServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, practiceID, "00000000-0000-0000-0000-000000000000", staffauth.AssignRolesRequest{Roles: []string{"doula"}})
+	resp := patchRoles(t, srv, practiceID, "00000000-0000-0000-0000-000000000000", staffauth.AssignRolesRequest{Roles: []string{doulaRole}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -122,7 +122,7 @@ func TestAssignRolesHandler_Success(t *testing.T) {
 	srv := newRolesServer(fakeVerifier{uid: ownerUID}, db)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, practiceID, targetID, staffauth.AssignRolesRequest{Roles: []string{"owner", "doula"}})
+	resp := patchRoles(t, srv, practiceID, targetID, staffauth.AssignRolesRequest{Roles: []string{ownerRole, doulaRole}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -130,7 +130,7 @@ func TestAssignRolesHandler_Success(t *testing.T) {
 	}
 
 	var roles string
-	if err := db.Admin.QueryRow(
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT array_to_string(roles, ',') FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
 		practiceID, targetID,
 	).Scan(&roles); err != nil {
@@ -153,7 +153,7 @@ func TestRoleAssignmentUnlocksAccess(t *testing.T) {
 
 	const invitedUID = "unlock-invitee"
 	invitedStaffID := seedStaff(t, db, invitedUID)
-	if _, err := db.Admin.Exec(
+	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{}')`,
 		practiceID, invitedStaffID,
 	); err != nil {
@@ -171,7 +171,7 @@ func TestRoleAssignmentUnlocksAccess(t *testing.T) {
 
 	rolesSrv := newRolesServer(fakeVerifier{uid: ownerUID}, db)
 	defer rolesSrv.Close()
-	assign := patchRoles(t, rolesSrv, practiceID, invitedStaffID, staffauth.AssignRolesRequest{Roles: []string{"owner"}})
+	assign := patchRoles(t, rolesSrv, practiceID, invitedStaffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
 	_ = assign.Body.Close()
 	if assign.StatusCode != http.StatusOK {
 		t.Fatalf("assign roles: status = %d, want %d", assign.StatusCode, http.StatusOK)
@@ -194,19 +194,19 @@ func TestRoles(t *testing.T) {
 	seedMembership(t, db, practiceID, doulaID) // seeds '{doula}'
 
 	zeroRoleID := seedStaff(t, db, "roles-fn-zero")
-	if _, err := db.Admin.Exec(
+	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{}')`,
 		practiceID, zeroRoleID,
 	); err != nil {
 		t.Fatalf("seed zero-role membership: %v", err)
 	}
 
-	tx, err := db.App.Begin()
+	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
 		t.Fatalf("set_config: %v", err)
 	}
 
@@ -214,7 +214,7 @@ func TestRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roles(doula): %v", err)
 	}
-	if len(roles) != 1 || roles[0] != "doula" {
+	if len(roles) != 1 || roles[0] != doulaRole {
 		t.Fatalf("Roles(doula) = %v, want [doula]", roles)
 	}
 

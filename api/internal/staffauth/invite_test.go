@@ -18,7 +18,7 @@ import (
 func seedOwnerMembership(t *testing.T, db *testdb.DB, identityUID string) (staffID, practiceID string) {
 	t.Helper()
 	staffID, practiceID = seedStaffWithMembership(t, db, identityUID)
-	if _, err := db.Admin.Exec(`UPDATE practice_memberships SET roles = '{owner}' WHERE staff_id = $1`, staffID); err != nil {
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practice_memberships SET roles = '{owner}' WHERE staff_id = $1`, staffID); err != nil {
 		t.Fatalf("promote to owner: %v", err)
 	}
 	return staffID, practiceID
@@ -58,7 +58,7 @@ func TestInviteHandler_NonOwnerForbidden(t *testing.T) {
 	srv := newInviteServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: "Invitee"})
+	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -74,7 +74,7 @@ func TestInviteHandler_MissingFields(t *testing.T) {
 	srv := newInviteServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "", Name: "Invitee"})
+	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "", Name: inviteeName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -115,7 +115,7 @@ func TestInviteHandler_Success(t *testing.T) {
 	srv := newInviteServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: "Invitee"})
+	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -131,7 +131,7 @@ func TestInviteHandler_Success(t *testing.T) {
 	}
 
 	var roles string
-	if err := db.Admin.QueryRow(
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT array_to_string(roles, ',') FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
 		practiceID, out.StaffID,
 	).Scan(&roles); err != nil {
@@ -142,7 +142,7 @@ func TestInviteHandler_Success(t *testing.T) {
 	}
 
 	var identityUIDCol sql.NullString
-	if err := db.Admin.QueryRow(`SELECT identity_uid FROM staff WHERE id = $1`, out.StaffID).Scan(&identityUIDCol); err != nil {
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid FROM staff WHERE id = $1`, out.StaffID).Scan(&identityUIDCol); err != nil {
 		t.Fatalf("query pending staff: %v", err)
 	}
 	if identityUIDCol.Valid {

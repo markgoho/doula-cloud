@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -24,7 +25,11 @@ func staffHasRole(ctx context.Context, tx *sql.Tx, practiceID, staffID, role str
 		`SELECT $1 = ANY(roles) FROM practice_memberships WHERE practice_id = $2 AND staff_id = $3`,
 		role, practiceID, staffID,
 	).Scan(&has)
-	return has, err
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return false, fmt.Errorf("staffauth: check role: %w", err)
+	}
+	return has, nil
 }
 
 // Roles returns the roles staffID's membership holds at practiceID -- an
@@ -40,7 +45,7 @@ func Roles(ctx context.Context, tx *sql.Tx, practiceID, staffID string) ([]strin
 	).Scan(&roles)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("staffauth: list roles: %w", err)
 	}
 	if roles == "" {
 		return []string{}, nil
@@ -53,27 +58,27 @@ func Roles(ctx context.Context, tx *sql.Tx, practiceID, staffID string) ([]strin
 // holds the 'owner' role at that Practice, writing the appropriate error
 // response itself if not. Shared by the two Owner-only handlers: invite
 // and role assignment.
-func requireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, staffID, practiceID string, ok bool) {
+func requireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		http.Error(w, MsgInternalError, http.StatusInternalServerError)
-		return nil, "", "", false
+		return nil, "", false
 	}
-	staffID, _ = StaffID(r.Context())
+	staffID, _ := StaffID(r.Context())
 	practiceID, _ = PracticeID(r.Context())
 
 	isOwner, err := staffHasRole(r.Context(), tx, practiceID, staffID, "owner")
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		http.Error(w, MsgInternalError, http.StatusInternalServerError)
-		return nil, "", "", false
+		return nil, "", false
 	}
 	if !isOwner {
 		http.Error(w, "only a Practice Owner can do that", http.StatusForbidden)
-		return nil, "", "", false
+		return nil, "", false
 	}
-	return tx, staffID, practiceID, true
+	return tx, practiceID, true
 }
 
 // AssignRolesRequest replaces a membership's full role set (not a diff) --
@@ -95,7 +100,7 @@ type AssignRolesResponse struct {
 // mounted behind staffauth.Middleware.
 func AssignRolesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, practiceID, ok := requireOwner(w, r)
+		tx, practiceID, ok := requireOwner(w, r)
 		if !ok {
 			return
 		}

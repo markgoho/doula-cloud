@@ -17,7 +17,7 @@ import (
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 	t.Helper()
 	var id string
-	if err := db.Admin.QueryRow(`INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
+	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
 		t.Fatalf("seed practice %q: %v", name, err)
 	}
 	return id
@@ -26,7 +26,7 @@ func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 func seedStaff(t *testing.T, db *testdb.DB, identityUID string) string {
 	t.Helper()
 	var id string
-	if err := db.Admin.QueryRow(
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
 		identityUID,
 	).Scan(&id); err != nil {
@@ -37,7 +37,7 @@ func seedStaff(t *testing.T, db *testdb.DB, identityUID string) string {
 
 func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string) {
 	t.Helper()
-	if _, err := db.Admin.Exec(
+	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{doula}')`,
 		practiceID, staffID,
 	); err != nil {
@@ -56,7 +56,7 @@ func TestRLS_StaffFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	seedMembership(t, db, practiceID, staffID)
 
 	var count int
-	if err := db.App.QueryRow(`SELECT count(*) FROM staff`).Scan(&count); err != nil {
+	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM staff`).Scan(&count); err != nil {
 		t.Fatalf("query staff with no session vars set: %v", err)
 	}
 	if count != 0 {
@@ -77,18 +77,18 @@ func TestRLS_StaffPracticeVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	seedMembership(t, db, practiceA, staffAtA)
 	seedMembership(t, db, practiceB, staffAtB)
 
-	tx, err := db.App.Begin()
+	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
 		t.Fatalf("set_config: %v", err)
 	}
 
 	var visibleIDs []string
-	rows, err := tx.Query(`SELECT id FROM staff`)
+	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM staff`)
 	if err != nil {
 		t.Fatalf("query staff: %v", err)
 	}
@@ -99,6 +99,9 @@ func TestRLS_StaffPracticeVisibilityIsScopedToCurrentPractice(t *testing.T) {
 			t.Fatalf("scan: %v", err)
 		}
 		visibleIDs = append(visibleIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate rows: %v", err)
 	}
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != staffAtA {
@@ -115,29 +118,29 @@ func TestRLS_StaffSelfVisibilityOnlyAppliesBeforePracticeIsChosen(t *testing.T) 
 	unrelatedPractice := seedPractice(t, db, "Unrelated Practice")
 	staffID := seedStaff(t, db, "self-visibility-uid")
 
-	tx, err := db.App.Begin()
+	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`SELECT set_config('app.current_identity_uid', $1, true)`, "self-visibility-uid"); err != nil {
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "self-visibility-uid"); err != nil {
 		t.Fatalf("set_config identity: %v", err)
 	}
 
 	var count int
-	if err := tx.QueryRow(`SELECT count(*) FROM staff WHERE id = $1`, staffID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, staffID).Scan(&count); err != nil {
 		t.Fatalf("query staff before practice set: %v", err)
 	}
 	if count != 1 {
 		t.Fatalf("expected caller's own staff row visible before a Practice is chosen, got count = %d", count)
 	}
 
-	if _, err := tx.Exec(`SELECT set_config('app.current_practice_id', $1, true)`, unrelatedPractice); err != nil {
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, unrelatedPractice); err != nil {
 		t.Fatalf("set_config practice: %v", err)
 	}
 
-	if err := tx.QueryRow(`SELECT count(*) FROM staff WHERE id = $1`, staffID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, staffID).Scan(&count); err != nil {
 		t.Fatalf("query staff after practice set: %v", err)
 	}
 	if count != 0 {
@@ -157,18 +160,18 @@ func TestRLS_PracticeMembershipsVisibilityIsScopedToCurrentPractice(t *testing.T
 	seedMembership(t, db, practiceA, staffA)
 	seedMembership(t, db, practiceB, staffB)
 
-	tx, err := db.App.Begin()
+	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
 		t.Fatalf("set_config: %v", err)
 	}
 
 	var count int
-	if err := tx.QueryRow(`SELECT count(*) FROM practice_memberships`).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships`).Scan(&count); err != nil {
 		t.Fatalf("query practice_memberships: %v", err)
 	}
 	if count != 1 {

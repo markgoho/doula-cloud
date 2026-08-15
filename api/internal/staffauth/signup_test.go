@@ -14,6 +14,14 @@ import (
 const (
 	testStaffEmail = "s@example.com"
 	jamieEmail     = "jamie@example.com"
+
+	// Shared across staffauth_test files: goconst flags repeated literals
+	// package-wide, not just within one file.
+	someUID            = "some-uid"
+	inviteeIdentityUID = "invitee-identity"
+	inviteeName        = "Invitee"
+	ownerRole          = "owner"
+	doulaRole          = "doula"
 )
 
 func newSignupServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
@@ -129,7 +137,7 @@ func TestSignupHandler_Success(t *testing.T) {
 	}
 
 	var roleCount int
-	if err := db.Admin.QueryRow(
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT array_length(roles, 1) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
 		out.PracticeID, out.StaffID,
 	).Scan(&roleCount); err != nil {

@@ -124,7 +124,7 @@ func TestMiddleware_TokenVerificationFailure(t *testing.T) {
 
 func TestMiddleware_InvalidPracticeID(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{uid: "some-uid"}, db)
+	srv := newServer(fakeVerifier{uid: someUID}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/not-a-uuid/ping", nil)
@@ -168,7 +168,7 @@ func TestMiddleware_NoPracticeMembership(t *testing.T) {
 	// A different, unrelated Practice: the caller is a known Staff member,
 	// but not of this Practice.
 	var otherPracticeID string
-	if err := db.Admin.QueryRow(
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO practices (name) VALUES ('Other Practice') RETURNING id`,
 	).Scan(&otherPracticeID); err != nil {
 		t.Fatalf("seed other practice: %v", err)
@@ -217,7 +217,7 @@ func TestMiddleware_Success(t *testing.T) {
 	}
 
 	var lastPracticeID string
-	if err := db.Admin.QueryRow(`SELECT last_practice_id FROM staff WHERE id = $1`, staffID).Scan(&lastPracticeID); err != nil {
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT last_practice_id FROM staff WHERE id = $1`, staffID).Scan(&lastPracticeID); err != nil {
 		t.Fatalf("query last_practice_id: %v", err)
 	}
 	if lastPracticeID != practiceID {
@@ -234,7 +234,7 @@ func TestMiddleware_FailClosedWithoutSessionVar(t *testing.T) {
 	seedStaffWithMembership(t, db, "fail-closed-uid")
 
 	var count int
-	if err := db.App.QueryRow(`SELECT count(*) FROM practice_memberships`).Scan(&count); err != nil {
+	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships`).Scan(&count); err != nil {
 		t.Fatalf("query practice_memberships as app role: %v", err)
 	}
 	if count != 0 {

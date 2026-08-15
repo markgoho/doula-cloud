@@ -96,7 +96,7 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 	if len(out.Memberships) != 1 || out.Memberships[0].PracticeID != practiceID {
 		t.Fatalf("memberships = %+v, want single membership at %q", out.Memberships, practiceID)
 	}
-	if len(out.Memberships[0].Roles) != 1 || out.Memberships[0].Roles[0] != "doula" {
+	if len(out.Memberships[0].Roles) != 1 || out.Memberships[0].Roles[0] != doulaRole {
 		t.Fatalf("roles = %v, want [doula]", out.Memberships[0].Roles)
 	}
 	if out.LastPracticeID != nil {
@@ -112,7 +112,7 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 	practiceB := seedPractice(t, db, "Practice B")
 	seedMembership(t, db, practiceA, staffID)
 	seedMembership(t, db, practiceB, staffID)
-	if _, err := db.Admin.Exec(`UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceB, staffID); err != nil {
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceB, staffID); err != nil {
 		t.Fatalf("seed last_practice_id: %v", err)
 	}
 

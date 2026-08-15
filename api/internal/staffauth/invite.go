@@ -31,7 +31,7 @@ type InviteResponse struct {
 // behind staffauth.Middleware.
 func InviteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, practiceID, ok := requireOwner(w, r)
+		tx, practiceID, ok := requireOwner(w, r)
 		if !ok {
 			return
 		}

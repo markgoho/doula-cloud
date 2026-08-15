@@ -8,6 +8,12 @@ import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 const DB_HOST = '127.0.0.1';
 const DB_PORT = 15432;
 const READY_TIMEOUT_MS = 60_000;
+// `up --build` builds two separate Go services (migrate, api), each
+// running its own `go mod download` from a cold module cache with no
+// sharing between them, plus pulling base images -- observed to take up
+// to ~57s on a cold CI runner even when nothing is wrong, so it needs a
+// longer budget than the port-readiness waits below.
+const BUILD_TIMEOUT_MS = 300_000;
 
 // The Firebase Auth emulator (see firebase.json) is plain Node with no
 // Postgres dependency, so it runs as a host process rather than another
@@ -31,7 +37,7 @@ export async function startStack() {
 
 	execFileSync('podman', ['compose', '-f', 'compose.e2e.yaml', 'up', '-d', '--build'], {
 		stdio: 'inherit',
-		timeout: READY_TIMEOUT_MS,
+		timeout: BUILD_TIMEOUT_MS,
 		env: {
 			...process.env,
 			E2E_API_PORT: String(E2E_API_PORT),
