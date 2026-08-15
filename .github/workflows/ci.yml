@@ -48,6 +48,13 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      # Podman ships on the runner but its rootless socket needs to be
+      # started explicitly before `podman compose` can reach it.
+      - name: Start Podman socket
+        run: |
+          systemctl --user start podman.socket
+          echo "DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock" >> "$GITHUB_ENV"
+
       - name: Install podman-compose
         run: pipx install podman-compose
 
