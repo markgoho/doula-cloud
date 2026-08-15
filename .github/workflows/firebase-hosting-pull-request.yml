@@ -15,6 +15,7 @@ permissions:
   checks: write
   contents: read
   id-token: write
+  packages: read
   pull-requests: write
 
 jobs:
