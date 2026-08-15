@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-auto';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { E2E_API_HOST, E2E_API_PORT } from './e2e/ports.ts';
 
 export default defineConfig({
 	plugins: [
@@ -20,10 +21,10 @@ export default defineConfig({
 	// Playwright's webServer runs `vite preview`, not `vite dev`, so the
 	// e2e stack needs its own proxy entry (preview.proxy, not
 	// server.proxy) to reach the Go BFF container without hitting CORS --
-	// see app/compose.e2e.yaml for where port 18080 comes from.
+	// see e2e/ports.ts for where the port comes from.
 	preview: {
 		proxy: {
-			'/api': 'http://127.0.0.1:18080'
+			'/api': `http://${E2E_API_HOST}:${E2E_API_PORT}`
 		}
 	},
 	test: {

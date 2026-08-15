@@ -3,13 +3,10 @@ import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 
 const DB_HOST = '127.0.0.1';
 const DB_PORT = 15432;
-const API_HOST = '127.0.0.1';
-const API_PORT = 18080;
-const EMULATOR_HOST = '127.0.0.1';
-const EMULATOR_PORT = 9099;
 const READY_TIMEOUT_MS = 60_000;
 
 // The Firebase Auth emulator (see firebase.json) is plain Node with no
@@ -33,10 +30,15 @@ export default async function globalSetup() {
 
 	execFileSync('podman', ['compose', '-f', 'compose.e2e.yaml', 'up', '-d', '--build'], {
 		stdio: 'inherit',
-		timeout: READY_TIMEOUT_MS
+		timeout: READY_TIMEOUT_MS,
+		env: {
+			...process.env,
+			E2E_API_PORT: String(E2E_API_PORT),
+			E2E_EMULATOR_PORT: String(E2E_EMULATOR_PORT)
+		}
 	});
 	await waitForPort(DB_HOST, DB_PORT, READY_TIMEOUT_MS);
-	await waitForPort(API_HOST, API_PORT, READY_TIMEOUT_MS);
+	await waitForPort(E2E_API_HOST, E2E_API_PORT, READY_TIMEOUT_MS);
 }
 
 async function startEmulator() {
@@ -52,7 +54,7 @@ async function startEmulator() {
 		writeFileSync(EMULATOR_PIDFILE, String(child.pid));
 	}
 
-	await waitForPort(EMULATOR_HOST, EMULATOR_PORT, READY_TIMEOUT_MS);
+	await waitForPort(E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, READY_TIMEOUT_MS);
 }
 
 // A crashed previous run can leave the emulator holding port 9099. Clear

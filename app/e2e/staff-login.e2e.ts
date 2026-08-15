@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 
 // The Firebase Auth emulator and the Go BFF container -- see
 // e2e/global-setup.ts and compose.e2e.yaml for how these get started.
-const EMULATOR_URL = 'http://127.0.0.1:9099';
-const API_URL = 'http://127.0.0.1:18080';
+const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
+const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 test('Staff login lands on their practice-scoped URL', async ({ page, request }) => {
 	const email = `staff-${Date.now()}@example.com`;
