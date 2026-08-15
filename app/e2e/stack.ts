@@ -77,6 +77,19 @@ async function startEmulator() {
 	// Clear it out before starting a fresh one instead of failing to bind.
 	killPidfile();
 
+	// firebase.json sets emulators.auth.host to 0.0.0.0 -- the Firebase
+	// CLI defaults to binding auth's port on 127.0.0.1 only, which the
+	// Playwright test process (running on the host) can reach fine, but
+	// the `api` container cannot: on plain Linux (unlike this repo's
+	// Podman-on-macOS-VM local dev setup, where host.containers.internal
+	// happens to route to loopback-bound services too), a container's
+	// route to the host's gateway IP never reaches a service bound only
+	// to the host's own loopback interface. Confirmed as the actual cause
+	// of a "401 invalid token" e2e failure that persisted across both
+	// Podman and Docker in CI -- switching container engines was a red
+	// herring for this specific bug, even though it fixed a separate,
+	// real Podman-in-CI issue (see git log for this file/compose.e2e.yaml).
+
 	const child = spawn(
 		'bunx',
 		['firebase-tools', 'emulators:start', '--only', 'auth', '--project', 'doula-cloud'],
