@@ -2,9 +2,9 @@
 	import { signInWithEmailAndPassword } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '$lib/firebase';
-	import { apiFetch } from '$lib/api';
-	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '$lib/portalLanding';
+	import { getFirebaseAuth } from '#lib/firebase.js';
+	import { apiFetch } from '#lib/api.js';
+	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 
 	let email = $state('');
 	let password = $state('');

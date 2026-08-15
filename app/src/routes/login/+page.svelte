@@ -2,9 +2,9 @@
 	import { signInWithEmailAndPassword } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '$lib/firebase';
-	import { apiFetch } from '$lib/api';
-	import { decideLanding, type Membership, type SessionInfo } from '$lib/landing';
+	import { getFirebaseAuth } from '#lib/firebase.js';
+	import { apiFetch } from '#lib/api.js';
+	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 
 	let email = $state('');
 	let password = $state('');
