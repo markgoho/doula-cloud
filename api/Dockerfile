@@ -1,8 +1,9 @@
 FROM golang:1.26 AS build
 WORKDIR /src
-COPY go.mod ./
-COPY main.go ./
-RUN CGO_ENABLED=0 go build -o /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /app .
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /app /app

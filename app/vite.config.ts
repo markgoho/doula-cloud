@@ -17,6 +17,15 @@ export default defineConfig({
 			adapter: adapter()
 		})
 	],
+	// Playwright's webServer runs `vite preview`, not `vite dev`, so the
+	// e2e stack needs its own proxy entry (preview.proxy, not
+	// server.proxy) to reach the Go BFF container without hitting CORS --
+	// see app/compose.e2e.yaml for where port 18080 comes from.
+	preview: {
+		proxy: {
+			'/api': 'http://127.0.0.1:18080'
+		}
+	},
 	test: {
 		expect: { requireAssertions: true },
 		coverage: {

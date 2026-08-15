@@ -12,3 +12,64 @@ services:
       interval: 2s
       timeout: 2s
       retries: 15
+
+  # Applies goose migrations against `db` before anything else starts.
+  # Runs api/cmd/migrate rather than the `goose` CLI (which
+  # scripts/migrate.sh uses for the real Cloud SQL Auth Proxy deploy
+  # path) because the CLI pulls in every database dialect it supports,
+  # which is too heavy to compile reliably in a constrained container.
+  migrate:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+      target: build
+    command: ['go', 'run', './cmd/migrate']
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Creates the low-privilege LOGIN role the RLS policies in
+  # db/migrations apply to. Migration 00002 creates the app_runtime
+  # *group* role, but nothing can log in as it until a member role
+  # exists -- a real deploy would provision that via Cloud SQL IAM
+  # instead of a hardcoded password. Reuses the `db` image purely because
+  # it already ships psql.
+  seed-role:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      PGPASSWORD: app
+    entrypoint: ['sh', '-c']
+    command:
+      - |
+        psql -h db -U app -d app -v ON_ERROR_STOP=1 -c "
+          DO \$\$ BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_e2e') THEN
+              CREATE ROLE app_e2e LOGIN PASSWORD 'app_e2e' IN ROLE app_runtime;
+            END IF;
+          END \$\$;
+        "
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # The Go BFF itself. FIREBASE_AUTH_EMULATOR_HOST points at the Firebase
+  # Auth emulator, which e2e/global-setup.ts starts as a host process (not
+  # part of this compose stack -- it's plain Node, no container needed).
+  # host.containers.internal is Podman's route from a container back to
+  # the host machine.
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://app_e2e:app_e2e@db:5432/app?sslmode=disable
+      FIREBASE_AUTH_EMULATOR_HOST: host.containers.internal:9099
+      GCP_PROJECT_ID: doula-cloud
+      PORT: '8080'
+    ports:
+      - '18080:8080'
+    depends_on:
+      seed-role:
+        condition: service_completed_successfully
