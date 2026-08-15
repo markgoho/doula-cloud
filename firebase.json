@@ -6,6 +6,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
+    "target": "hugo",
     "public": "hugo/public",
     "ignore": [
       "firebase.json",
