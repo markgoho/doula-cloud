@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "cd hugo && hugo --minify"
+    "build": "cd hugo && hugo --minify",
+    "dev": "bun run --cwd app dev:full"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -18,10 +18,14 @@ export default defineConfig({
 			adapter: adapter()
 		})
 	],
-	// Playwright's webServer runs `vite preview`, not `vite dev`, so the
-	// e2e stack needs its own proxy entry (preview.proxy, not
-	// server.proxy) to reach the Go BFF container without hitting CORS --
-	// see e2e/ports.ts for where the port comes from.
+	// `vite dev` (server) and Playwright's webServer (`vite preview`) each
+	// need their own proxy entry to reach the Go BFF container without
+	// hitting CORS -- see e2e/ports.ts for where the port comes from.
+	server: {
+		proxy: {
+			'/api': `http://${E2E_API_HOST}:${E2E_API_PORT}`
+		}
+	},
 	preview: {
 		proxy: {
 			'/api': `http://${E2E_API_HOST}:${E2E_API_PORT}`
