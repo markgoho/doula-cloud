@@ -47,9 +47,14 @@ all of `app/`.
 ## `api/`: real Postgres for tests, via Podman
 
 `api/internal/testdb` uses testcontainers-go to start a real, disposable
-Postgres container for Go HTTP tests, and applies the goose migrations
-(`api/db/migrations`) against it before handing back a `*sql.DB`. It
-targets Podman: testcontainers-go reads `DOCKER_HOST` from the
+Postgres container for Go HTTP tests, applies the goose migrations
+(`api/db/migrations`) against it, and hands back a `*testdb.DB` with two
+connections: `Admin` (the superuser the migrations ran as, for fixture
+setup) and `App` (a low-privilege `app_runtime`-derived role, the one the
+running application actually connects as). Postgres superusers and table
+owners always bypass Row-Level Security, so tests that need to observe RLS
+in effect — not just assume it — must query through `App`, not `Admin`.
+It targets Podman: testcontainers-go reads `DOCKER_HOST` from the
 environment, so no code here is Podman-specific.
 
 To run locally:

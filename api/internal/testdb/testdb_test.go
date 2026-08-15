@@ -13,10 +13,17 @@ func TestHarness(t *testing.T) {
 	db := testdb.New(t)
 
 	var count int
-	if err := db.QueryRow("SELECT count(*) FROM goose_bootstrap_check").Scan(&count); err != nil {
+	if err := db.Admin.QueryRow("SELECT count(*) FROM goose_bootstrap_check").Scan(&count); err != nil {
 		t.Fatalf("query bootstrap table: %v", err)
 	}
 	if count != 0 {
 		t.Fatalf("expected empty bootstrap table, got %d rows", count)
+	}
+
+	if err := db.App.QueryRow("SELECT count(*) FROM practices").Scan(&count); err != nil {
+		t.Fatalf("query practices as app role: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected empty practices table, got %d rows", count)
 	}
 }
