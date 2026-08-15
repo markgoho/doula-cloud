@@ -25,8 +25,9 @@ test('Staff login lands on their practice-scoped URL', async ({ page, request })
 		headers: { Authorization: `Bearer ${idToken}` },
 		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', staffEmail: email }
 	});
-	expect(signup.ok()).toBe(true);
-	const { practiceId } = await signup.json();
+	const signupBody = await signup.text();
+	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
+	const { practiceId } = JSON.parse(signupBody);
 
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(email);
