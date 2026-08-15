@@ -6,10 +6,12 @@
 // visit/. See #47/#55.
 //
 // It runs against the "engagements" table (00005_client_engagement.sql,
-// widened by 00006_client_portal_users.sql) because that is the one table
-// in the schema carrying both tiers' policies at once
-// (engagements_practice_visibility and engagements_client_visibility),
-// making it the natural place to prove both hold together. No dedicated
+// widened by 00006_client_portal_users.sql), the first table in the schema
+// to carry both tiers' policies at once (engagements_practice_visibility
+// and engagements_client_visibility), making it the natural place to prove
+// both hold together -- clients and staff later grew their own both-tier
+// policies too (00009_messaging_client_portal_read.sql), covered directly
+// by message/client_rls_test.go rather than duplicated here. No dedicated
 // CI step is added for this package -- the existing "api" job in
 // .github/workflows/ci.yml already runs `go test ./...` on every push and
 // pull_request with no path filter, so it already runs this test on every
