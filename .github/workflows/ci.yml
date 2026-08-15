@@ -23,14 +23,11 @@ jobs:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
-      # Podman ships on the ubuntu-latest runner but its rootless socket
-      # needs to be started explicitly, and testcontainers-go's Ryuk reaper
-      # is unreliable under rootless Podman, so it's disabled.
-      - name: Start Podman socket
-        run: |
-          systemctl --user start podman.socket
-          echo "DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock" >> "$GITHUB_ENV"
-          echo "TESTCONTAINERS_RYUK_DISABLED=true" >> "$GITHUB_ENV"
+      # Docker ships preinstalled and running on ubuntu-latest, so
+      # testcontainers-go (internal/testdb) needs no setup here -- it
+      # falls back to Docker's default socket when DOCKER_HOST is unset.
+      # Local dev instead points DOCKER_HOST at a Podman socket (see
+      # docs/testing.md); internal/testdb itself is engine-agnostic.
 
       - name: Vet
         working-directory: api
@@ -57,20 +54,17 @@ jobs:
 
   app:
     runs-on: ubuntu-latest
+    # e2e/stack.ts's compose stack: `docker compose` ships preinstalled on
+    # ubuntu-latest and needs no rootless-socket setup or external compose
+    # provider, unlike this runner's Podman (see e2e/stack.ts and
+    # compose.e2e.yaml for what that combination broke). Local dev keeps
+    # defaulting to Podman -- see docs/testing.md.
+    env:
+      CONTAINER_ENGINE: docker
     steps:
       - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
-
-      # Podman ships on the runner but its rootless socket needs to be
-      # started explicitly before `podman compose` can reach it.
-      - name: Start Podman socket
-        run: |
-          systemctl --user start podman.socket
-          echo "DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock" >> "$GITHUB_ENV"
-
-      - name: Install podman-compose
-        run: pipx install podman-compose
 
       - name: Cache bun dependencies
         uses: actions/cache@v6

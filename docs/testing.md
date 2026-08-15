@@ -66,7 +66,7 @@ run's coverage and merging it into the same threshold is the follow-up;
 until then the 100% gate is honest about covering `src/lib/**` only, not
 all of `app/`.
 
-## `api/`: real Postgres for tests, via Podman
+## `api/`: real Postgres for tests, container-engine-agnostic
 
 `api/internal/testdb` uses testcontainers-go to start a real, disposable
 Postgres container for Go HTTP tests, applies the goose migrations
@@ -76,10 +76,11 @@ setup) and `App` (a low-privilege `app_runtime`-derived role, the one the
 running application actually connects as). Postgres superusers and table
 owners always bypass Row-Level Security, so tests that need to observe RLS
 in effect — not just assume it — must query through `App`, not `Admin`.
-It targets Podman: testcontainers-go reads `DOCKER_HOST` from the
-environment, so no code here is Podman-specific.
 
-To run locally:
+CI runs this against Docker (preinstalled on the runner, no setup needed).
+Locally, testcontainers-go reads `DOCKER_HOST` from the environment, so
+pointing that at a Podman socket runs the same tests against Podman
+instead, with no code change:
 
 ```sh
 # macOS: podman machine start, then export the socket it prints, e.g.
@@ -102,12 +103,24 @@ migration fails. It's not yet wired to a real instance (none is
 provisioned in the `doula-cloud` GCP project); see the script's header for
 the required env vars.
 
-## `app/`: self-contained podman-compose stack for e2e
+## `app/`: self-contained compose stack for e2e
 
-`app/compose.e2e.yaml` defines the backing services (currently just
-Postgres) that Playwright e2e tests run against — pinned images, no calls
-to external/real services. `app/playwright.config.ts` brings the stack up
-and down automatically via `globalSetup`/`globalTeardown`
-(`app/e2e/global-setup.ts`, `app/e2e/global-teardown.ts`), which shell out
-to `podman compose`. Locally this needs `podman-compose` on `PATH`
-(`brew install podman-compose`); CI installs it via `pipx`.
+`app/compose.e2e.yaml` defines the backing services (Postgres, the goose
+migration step, and the Go BFF itself) that Playwright e2e tests run
+against — pinned/locally-built images, no calls to external/real services.
+`app/playwright.config.ts` brings the stack up and down automatically via
+`globalSetup`/`globalTeardown` (`app/e2e/global-setup.ts`,
+`app/e2e/global-teardown.ts`), through `app/e2e/stack.ts`, which shells out
+to `$CONTAINER_ENGINE compose` (`docker compose` and `podman compose` share
+the same v2 CLI syntax). CI sets `CONTAINER_ENGINE=docker` — Docker ships
+preinstalled and needs no setup on `ubuntu-latest`, unlike Podman's
+rootless-socket dance and its `docker-compose`-as-external-provider
+translation layer, which silently broke container-to-host networking
+(`host.containers.internal`) under CI in practice. `CONTAINER_ENGINE`
+defaults to `podman` when unset, so local dev is unaffected and needs
+`podman-compose` on `PATH` (`brew install podman-compose`) as before.
+`compose.e2e.yaml`'s `api` service resolves the right host-gateway
+hostname (`host.containers.internal` for Podman, `host.docker.internal`
+for Docker, the latter needing an explicit `extra_hosts: host-gateway`
+entry) via the `E2E_HOST_GATEWAY` env var `stack.ts` sets from
+`CONTAINER_ENGINE`.

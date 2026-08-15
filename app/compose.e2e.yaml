@@ -58,19 +58,24 @@ services:
   # The Go BFF itself. FIREBASE_AUTH_EMULATOR_HOST points at the Firebase
   # Auth emulator, which e2e/global-setup.ts starts as a host process (not
   # part of this compose stack -- it's plain Node, no container needed).
-  # host.containers.internal is Podman's route from a container back to
-  # the host machine. E2E_API_PORT/E2E_EMULATOR_PORT come from
-  # e2e/ports.ts via global-setup.ts (the defaults here match that file,
-  # for anyone running `podman compose` by hand).
+  # E2E_HOST_GATEWAY (set by e2e/stack.ts) is the container-to-host route:
+  # Podman predefines host.containers.internal itself; Docker Engine needs
+  # host.docker.internal added explicitly via extra_hosts below (Docker
+  # Desktop predefines it too, but the extra_hosts entry is harmless
+  # there). E2E_API_PORT/E2E_EMULATOR_PORT come from e2e/ports.ts via
+  # global-setup.ts (the defaults here match that file, for anyone running
+  # this by hand).
   api:
     build:
       context: ../api
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgres://app_e2e:app_e2e@db:5432/app?sslmode=disable
-      FIREBASE_AUTH_EMULATOR_HOST: host.containers.internal:${E2E_EMULATOR_PORT:-9099}
+      FIREBASE_AUTH_EMULATOR_HOST: ${E2E_HOST_GATEWAY:-host.containers.internal}:${E2E_EMULATOR_PORT:-9099}
       GCP_PROJECT_ID: doula-cloud
       PORT: '8080'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       - '${E2E_API_PORT:-18080}:8080'
     depends_on:

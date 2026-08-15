@@ -1,9 +1,10 @@
 // Package testdb spins up a real, disposable Postgres instance (via
 // testcontainers-go) for Go HTTP tests, applies the goose migrations, and
-// hands back a ready-to-use *sql.DB. It targets Podman: testcontainers-go
-// reads DOCKER_HOST from the environment, so pointing that at a Podman
-// socket (see docs/testing.md) is enough to run against Podman with no
-// code change here.
+// hands back a ready-to-use *sql.DB. It's container-engine-agnostic:
+// testcontainers-go falls back to Docker's default socket with no setup
+// (what CI uses), or reads DOCKER_HOST from the environment to target a
+// Podman socket instead (see docs/testing.md for local dev) -- either way,
+// no code change here.
 package testdb
 
 import (

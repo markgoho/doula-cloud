@@ -15,6 +15,22 @@ const READY_TIMEOUT_MS = 60_000;
 // longer budget than the port-readiness waits below.
 const BUILD_TIMEOUT_MS = 300_000;
 
+// `docker compose` and `podman compose` share the same v2 CLI syntax, so
+// this doubles as both the binary to exec and the flag that picks
+// compose.e2e.yaml's host-gateway hostname (see HOST_GATEWAY below).
+// Local dev defaults to Podman (see docs/testing.md); CI sets
+// CONTAINER_ENGINE=docker, since GH-hosted runners ship Docker natively
+// with no rootless-socket setup and no docker-compose-as-external
+// -provider translation layer -- the source of a real, hard-to-debug
+// Podman-only bug (container-to-host networking via
+// host.containers.internal silently breaking under CI's Podman setup).
+const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE ?? 'podman';
+// Docker Engine (unlike Docker Desktop) doesn't predefine
+// host.docker.internal -- compose.e2e.yaml adds it via `extra_hosts:
+// host-gateway` for when this is 'docker'. Podman predefines
+// host.containers.internal itself, no extra_hosts entry needed.
+const HOST_GATEWAY = CONTAINER_ENGINE === 'docker' ? 'host.docker.internal' : 'host.containers.internal';
+
 // The Firebase Auth emulator (see firebase.json) is plain Node with no
 // Postgres dependency, so it runs as a host process rather than another
 // compose service. Shared by the Playwright e2e run
@@ -22,26 +38,26 @@ const BUILD_TIMEOUT_MS = 300_000;
 // (scripts/dev-full.ts) for local interactive use.
 const EMULATOR_PIDFILE = join(tmpdir(), 'doula-cloud-e2e-firebase-emulator.pid');
 
-// Brings up the self-contained podman-compose stack -- Postgres, the
-// goose migration step, the app_e2e login role, and the Go BFF itself
-// (see compose.e2e.yaml) -- plus the Firebase Auth emulator.
+// Brings up the self-contained compose stack -- Postgres, the goose
+// migration step, the app_e2e login role, and the Go BFF itself (see
+// compose.e2e.yaml) -- plus the Firebase Auth emulator.
 //
-// Deliberately doesn't use `up --wait`: under this runner's rootless
-// Podman + docker-compose-as-provider combination, the container starts
-// fine but its healthcheck never reports "healthy", so --wait blocks
-// forever (confirmed on trunk -- see git log for this file). Polling the
-// host-exposed ports directly sidesteps whatever is wrong with Podman's
-// health-status reporting.
+// Deliberately doesn't use `up --wait`: under CI's rootless Podman (when
+// CONTAINER_ENGINE=podman) with docker-compose-as-provider, the container
+// starts fine but its healthcheck never reports "healthy", so --wait
+// blocks forever (confirmed on trunk -- see git log for this file).
+// Polling the host-exposed ports directly sidesteps that.
 export async function startStack() {
 	await startEmulator();
 
-	execFileSync('podman', ['compose', '-f', 'compose.e2e.yaml', 'up', '-d', '--build'], {
+	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'up', '-d', '--build'], {
 		stdio: 'inherit',
 		timeout: BUILD_TIMEOUT_MS,
 		env: {
 			...process.env,
 			E2E_API_PORT: String(E2E_API_PORT),
-			E2E_EMULATOR_PORT: String(E2E_EMULATOR_PORT)
+			E2E_EMULATOR_PORT: String(E2E_EMULATOR_PORT),
+			E2E_HOST_GATEWAY: HOST_GATEWAY
 		}
 	});
 	await waitForPort(DB_HOST, DB_PORT, READY_TIMEOUT_MS);
@@ -49,7 +65,7 @@ export async function startStack() {
 }
 
 export function stopStack() {
-	execFileSync('podman', ['compose', '-f', 'compose.e2e.yaml', 'down', '-v'], {
+	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'down', '-v'], {
 		stdio: 'inherit',
 		timeout: 60_000
 	});
