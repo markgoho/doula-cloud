@@ -7,6 +7,7 @@
 	import { apiFetch } from '$lib/api';
 
 	let practiceName = $state('');
+	let roles = $state<string[]>([]);
 	let error = $state('');
 
 	onMount(async () => {
@@ -23,8 +24,9 @@
 			return;
 		}
 
-		const body: { practiceName: string } = await response.json();
+		const body: { practiceName: string; roles: string[] } = await response.json();
 		practiceName = body.practiceName;
+		roles = body.roles;
 	});
 </script>
 
@@ -32,4 +34,9 @@
 	<p role="alert">{error}</p>
 {:else if practiceName}
 	<h1>Welcome to {practiceName}</h1>
+	{#if roles.includes('owner')}
+		<a href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
+			>Invite a Staff member</a
+		>
+	{/if}
 {/if}
