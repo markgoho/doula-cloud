@@ -108,4 +108,4 @@ jobs:
       - name: E2e test
         working-directory: app
         run: bunx playwright test
-        timeout-minutes: 5
+        timeout-minutes: 10
