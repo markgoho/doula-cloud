@@ -18,3 +18,8 @@ Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents
 
 100% line coverage gate (with justified inline exceptions), the Podman-based
 test infra for `api/` and `app/`, and goose migrations. See `docs/testing.md`.
+
+### API design
+
+Go BFF HTTP endpoint standards (DTOs, contract stability, idempotency, cursor pagination, rate limits, error structures). See `docs/api-design.md`.
+
