@@ -1,0 +1,9 @@
+# Message delivery: push-triggered fetch, not a real-time relay
+
+Staff-to-client Messages (per-Engagement threads, settled in #37) need to feel responsive enough that neither a Doula nor a Client ever has a reason to fall back to texting or emailing instead. The frontend is planned as a PWA with a service worker, which makes standard Web Push (VAPID-based, works even with the app fully closed) available as a delivery mechanism.
+
+Two real real-time options were on the table: a persistent WebSocket connection backed by a live relay (Cloud Firestore or Firebase Realtime Database), or a WebSocket served directly off the Go BFF with a fan-out layer (e.g. Cloud Pub/Sub) across Cloud Run instances. Research confirmed Cloud Firestore is HIPAA BAA-eligible (even accessed via the Firebase SDK), so it wasn't ruled out on compliance grounds — Firebase Realtime Database is not BAA-eligible and was never a candidate. Either real-time option would also mean either a second datastore (Firestore) that the BFF has to keep in sync with Postgres via double-write, or building and operating fan-out infrastructure from scratch.
+
+Instead, message delivery uses **push-triggered fetch**: a content-free Web Push notification ("you have a new message" — no message body, matching the no-PHI-to-non-BAA-vendor rule already applied to notifications) wakes the service worker, which triggers a normal REST fetch against the Go BFF for the actual content. Postgres stays the single source of truth for Message content; no second datastore, no persistent connections to manage on Cloud Run, no double-write consistency problem.
+
+This trades a small amount of latency (a push round-trip plus a fetch, vs. a live stream) for materially less infrastructure — the right call for a solo dev building toward a Jan 2027 launch. If real latency complaints surface later, revisit with a WebSocket/Firestore relay; nothing here forecloses that path, but don't build it preemptively.

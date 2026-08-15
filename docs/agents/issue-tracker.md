@@ -27,7 +27,7 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 ## When a skill says "publish to the issue tracker"
 
-Create a GitHub issue.
+Create a GitHub issue. If the ticket has a parent/source issue (e.g. tickets broken out from a spec via `/to-tickets`), also link it as a native GitHub sub-issue of that parent — `gh api --method POST repos/<owner>/<repo>/issues/<parent>/sub_issues -F sub_issue_id=<child-db-id>`, where `<child-db-id>` is the child's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, not the `#number`). A text reference ("Part of #N") in the body is not a substitute — it doesn't show up in GitHub's sub-issue progress bar or hierarchy UI.
 
 ## When a skill says "fetch the relevant ticket"
 
