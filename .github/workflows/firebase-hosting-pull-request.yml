@@ -42,7 +42,7 @@ jobs:
         id: firebase_hosting_preview
 
       - name: Comment on PR with preview URL
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PREVIEW_URL: ${{ steps.firebase_hosting_preview.outputs.details_url }}
         with:
