@@ -27,14 +27,14 @@ type Visit struct {
 // staffauth.Middleware.
 func ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := requireTx(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
 
 		engagementID := r.PathValue("engagementId")
-		if !parseUUID(w, "engagement", engagementID) {
+		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {

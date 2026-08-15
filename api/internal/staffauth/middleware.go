@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -50,6 +49,32 @@ func Tx(ctx context.Context) (*sql.Tx, bool) {
 	return tx, ok
 }
 
+// RequireTx resolves the request-scoped tx and Practice id
+// Middleware placed on context, writing an internal error response if
+// the tx is missing. Shared by downstream BFF packages (engagement, visit)
+// mounted behind Middleware.
+func RequireTx(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
+	tx, has := Tx(r.Context())
+	if !has {
+		// coverage:ignore reason: Middleware always sets a tx before this handler runs
+		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		return nil, "", false
+	}
+	practiceID, _ = PracticeID(r.Context())
+	return tx, practiceID, true
+}
+
+// ParseUUID validates that value is a well-formed UUID, writing a 400
+// response itself (naming the field via label) if not. Shared by
+// Middleware and downstream handlers.
+func ParseUUID(w http.ResponseWriter, label, value string) (ok bool) {
+	if _, err := uuid.Parse(value); err != nil {
+		http.Error(w, "invalid "+label+" id", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
 // Middleware wraps an http.Handler with Staff population resolution and
 // practice-membership authorization. db must be a connection using the
 // low-privilege app_runtime role -- the role the RLS policies in
@@ -57,28 +82,8 @@ func Tx(ctx context.Context) (*sql.Tx, bool) {
 func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			idToken, ok := bearerToken(r)
+			tx, uid, ok := authn.Begin(w, r, verifier, db)
 			if !ok {
-				http.Error(w, "missing bearer token", http.StatusUnauthorized)
-				return
-			}
-
-			verified, err := verifier.VerifyIDToken(r.Context(), idToken)
-			if err != nil {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
-				return
-			}
-
-			practiceID := r.PathValue("practiceId")
-			if _, err := uuid.Parse(practiceID); err != nil {
-				http.Error(w, "invalid practice id", http.StatusBadRequest)
-				return
-			}
-
-			tx, err := db.BeginTx(r.Context(), nil)
-			if err != nil {
-				// coverage:ignore reason: DB connection failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			committed := false
@@ -88,7 +93,12 @@ func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Han
 				}
 			}()
 
-			staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, verified.UID)
+			practiceID := r.PathValue("practiceId")
+			if !ParseUUID(w, "practice", practiceID) {
+				return
+			}
+
+			staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				http.Error(w, MsgInternalError, http.StatusInternalServerError)
@@ -127,19 +137,6 @@ func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Han
 			}
 		})
 	}
-}
-
-func bearerToken(r *http.Request) (string, bool) {
-	const prefix = "Bearer "
-	header := r.Header.Get("Authorization")
-	if !strings.HasPrefix(header, prefix) {
-		return "", false
-	}
-	token := strings.TrimPrefix(header, prefix)
-	if token == "" {
-		return "", false
-	}
-	return token, true
 }
 
 // setIdentityAndResolveStaff sets app.current_identity_uid -- the session

@@ -29,17 +29,16 @@ type AcceptInviteResponse struct {
 // chosen, so it never sets app.current_practice_id.
 func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		idToken, ok := bearerToken(r)
+		tx, uid, ok := authn.Begin(w, r, verifier, db)
 		if !ok {
-			http.Error(w, "missing bearer token", http.StatusUnauthorized)
 			return
 		}
-
-		verified, err := verifier.VerifyIDToken(r.Context(), idToken)
-		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
-			return
-		}
+		committed := false
+		defer func() {
+			if !committed {
+				_ = tx.Rollback()
+			}
+		}()
 
 		var req AcceptInviteRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -52,20 +51,7 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
-
-		resp, status, msg := acceptInvite(r, tx, verified.UID, req.InviteToken)
+		resp, status, msg := acceptInvite(r, tx, uid, req.InviteToken)
 		if status != http.StatusOK {
 			http.Error(w, msg, status)
 			return

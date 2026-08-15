@@ -32,11 +32,11 @@ func ReassignHandler() http.Handler {
 		}
 
 		engagementID := r.PathValue("engagementId")
-		if !parseUUID(w, "engagement", engagementID) {
+		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
 		visitID := r.PathValue("visitId")
-		if !parseUUID(w, "visit", visitID) {
+		if !staffauth.ParseUUID(w, "visit", visitID) {
 			return
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
@@ -54,7 +54,7 @@ func ReassignHandler() http.Handler {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if !parseUUID(w, "staff", req.StaffID) {
+		if !staffauth.ParseUUID(w, "staff", req.StaffID) {
 			return
 		}
 

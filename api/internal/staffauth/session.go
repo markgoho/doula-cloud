@@ -36,27 +36,13 @@ type SessionResponse struct {
 // never app.current_practice_id.
 func SessionHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		idToken, ok := bearerToken(r)
+		tx, uid, ok := authn.Begin(w, r, verifier, db)
 		if !ok {
-			http.Error(w, "missing bearer token", http.StatusUnauthorized)
-			return
-		}
-
-		verified, err := verifier.VerifyIDToken(r.Context(), idToken)
-		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		resp, status, msg := session(r, tx, verified.UID)
+		resp, status, msg := session(r, tx, uid)
 		if status != http.StatusOK {
 			http.Error(w, msg, status)
 			return

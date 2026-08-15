@@ -24,7 +24,7 @@ const doulaRole = "doula"
 // shape is safe to use here (unlike for an arbitrary reassignment target,
 // see doulaMembership below).
 func requireDoula(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
-	tx, practiceID, ok = requireTx(w, r)
+	tx, practiceID, ok = staffauth.RequireTx(w, r)
 	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 	if !ok {
 		return nil, "", false

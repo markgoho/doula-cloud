@@ -25,7 +25,7 @@ type ClientEngagement struct {
 // restricted-visibility model. Must be mounted behind staffauth.Middleware.
 func ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := requireTx(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return

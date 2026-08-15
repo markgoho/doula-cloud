@@ -5,11 +5,59 @@ package authn
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"net/http"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 )
+
+// BearerToken extracts the token from an HTTP Authorization header of the
+// form "Bearer <token>". It returns ("", false) if the header is missing,
+// malformed, or contains an empty token.
+func BearerToken(r *http.Request) (string, bool) {
+	const prefix = "Bearer "
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, prefix) {
+		return "", false
+	}
+	token := strings.TrimPrefix(header, prefix)
+	if token == "" {
+		return "", false
+	}
+	return token, true
+}
+
+// Begin extracts the Bearer token from r, verifies it with verifier, and
+// opens a transaction on db. It writes the appropriate HTTP error (401 for
+// missing or invalid token, 500 for DB connection failure) and returns
+// ok=false if any step fails. On success it returns the open *sql.Tx and
+// the verified caller's UID. Callers must ensure the returned transaction is
+// rolled back or committed.
+func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, string, bool) {
+	idToken, ok := BearerToken(r)
+	if !ok {
+		http.Error(w, "missing bearer token", http.StatusUnauthorized)
+		return nil, "", false
+	}
+
+	verified, err := verifier.VerifyIDToken(r.Context(), idToken)
+	if err != nil {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return nil, "", false
+	}
+
+	tx, err := db.BeginTx(r.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: DB connection failure, not exercised by unit tests
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return nil, "", false
+	}
+
+	return tx, verified.UID, true
+}
 
 // VerifiedToken is the identity a Verifier extracts from a valid ID
 // token. Identity Platform provides identity only -- no custom claims --

@@ -1,3 +1,9 @@
+// Package engagement holds the Staff-side BFF handlers for Client and
+// Engagement: list, create, and view. All three rely on
+// staffauth.Middleware having already resolved the caller's Staff/Practice
+// ids and opened a request-scoped *sql.Tx with app.current_practice_id
+// set, the same way staffauth's own Owner-only handlers (invite, role
+// assignment) do.
 package engagement
 
 import (
@@ -34,7 +40,7 @@ type CreateClientResponse struct {
 // Client without one. Must be mounted behind staffauth.Middleware.
 func CreateHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := requireTx(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return

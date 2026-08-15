@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -27,15 +25,14 @@ type Detail struct {
 // behind staffauth.Middleware.
 func DetailHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := requireTx(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
 
 		engagementID := r.PathValue("engagementId")
-		if _, err := uuid.Parse(engagementID); err != nil {
-			http.Error(w, "invalid engagement id", http.StatusBadRequest)
+		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
 

@@ -29,7 +29,7 @@ func CreateHandler() http.Handler {
 		staffID, _ := staffauth.StaffID(r.Context())
 
 		engagementID := r.PathValue("engagementId")
-		if !parseUUID(w, "engagement", engagementID) {
+		if !staffauth.ParseUUID(w, "engagement", engagementID) {
 			return
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
