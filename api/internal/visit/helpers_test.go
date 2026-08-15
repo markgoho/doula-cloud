@@ -1,0 +1,123 @@
+package visit_test
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/visit"
+)
+
+const (
+	doulaRole         = "doula"
+	officeManagerRole = "office_manager"
+)
+
+// fakeVerifier is a test double for authn.Verifier -- see staffauth's own
+// middleware_test.go for why: real Identity Platform tokens can't be
+// minted without a live GCP project.
+type fakeVerifier struct {
+	uid string
+}
+
+func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
+	return &authn.VerifiedToken{UID: f.uid}, nil
+}
+
+// newServer mounts the same routes main.go wires up for this package,
+// behind staffauth.Middleware.
+func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/visits",
+		staffauth.Middleware(verifier, db.App)(visit.ListHandler()))
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/visits",
+		staffauth.Middleware(verifier, db.App)(visit.CreateHandler()))
+	mux.Handle("PATCH /practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
+		staffauth.Middleware(verifier, db.App)(visit.ReassignHandler()))
+	return httptest.NewServer(mux)
+}
+
+// seedStaffAtPracticeWithRoles inserts a Staff row bound to identityUID and
+// a practice_memberships row linking them to an existing practiceID with
+// the given roles, using the superuser Admin connection (which bypasses
+// RLS) so fixture setup isn't gated by the policies under test.
+func seedStaffAtPracticeWithRoles(t *testing.T, db *testdb.DB, practiceID, identityUID string, roles []string) (staffID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, $2, $3) RETURNING id`,
+		identityUID, "Test Staff "+identityUID, identityUID+"@example.com",
+	).Scan(&staffID); err != nil {
+		t.Fatalf("seed staff: %v", err)
+	}
+	literal := "{" + strings.Join(roles, ",") + "}"
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, $3::practice_role[])`,
+		practiceID, staffID, literal,
+	); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+	return staffID
+}
+
+// seedPractice inserts a bare Practice row using the superuser Admin
+// connection.
+func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`,
+	).Scan(&practiceID); err != nil {
+		t.Fatalf("seed practice: %v", err)
+	}
+	return practiceID
+}
+
+// seedDoulaWithMembership inserts a new Practice plus a Staff member
+// holding the Doula role there.
+func seedDoulaWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID, staffID string) {
+	t.Helper()
+
+	practiceID = seedPractice(t, db)
+	staffID = seedStaffAtPracticeWithRoles(t, db, practiceID, identityUID, []string{doulaRole})
+	return practiceID, staffID
+}
+
+// seedEngagement inserts a Client and an Engagement linking them to
+// practiceID, using the superuser Admin connection.
+func seedEngagement(t *testing.T, db *testdb.DB, practiceID string) (engagementID string) {
+	t.Helper()
+
+	var clientID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (name, email) VALUES ('Test Client', 'client@example.com') RETURNING id`,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id) VALUES ($1, $2) RETURNING id`,
+		clientID, practiceID,
+	).Scan(&engagementID); err != nil {
+		t.Fatalf("seed engagement: %v", err)
+	}
+	return engagementID
+}
+
+// seedVisit inserts a Visit under engagementID assigned to staffID, using
+// the superuser Admin connection.
+func seedVisit(t *testing.T, db *testdb.DB, engagementID, staffID string) (visitID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO visits (engagement_id, staff_id) VALUES ($1, $2) RETURNING id`,
+		engagementID, staffID,
+	).Scan(&visitID); err != nil {
+		t.Fatalf("seed visit: %v", err)
+	}
+	return visitID
+}

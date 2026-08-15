@@ -18,6 +18,7 @@ import (
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/visit"
 )
 
 func helloHandler(w http.ResponseWriter, _ *http.Request) {
@@ -92,6 +93,12 @@ func routes(verifier authn.Verifier, db *sql.DB) *http.ServeMux {
 		staffauth.Middleware(verifier, db)(engagement.CreateHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}",
 		staffauth.Middleware(verifier, db)(engagement.DetailHandler()))
+	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/visits",
+		staffauth.Middleware(verifier, db)(visit.ListHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
+		staffauth.Middleware(verifier, db)(visit.CreateHandler()))
+	mux.Handle("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
+		staffauth.Middleware(verifier, db)(visit.ReassignHandler()))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(verifier, db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(verifier, db)(portal.DetailHandler()))
