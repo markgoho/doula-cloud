@@ -110,6 +110,12 @@ func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Han
 				return
 			}
 
+			if _, err := tx.ExecContext(r.Context(), `UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceID, staffID); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+
 			ctx := context.WithValue(r.Context(), staffIDKey, staffID)
 			ctx = context.WithValue(ctx, practiceIDKey, practiceID)
 			ctx = context.WithValue(ctx, txKey, tx)

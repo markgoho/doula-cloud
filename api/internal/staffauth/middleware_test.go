@@ -215,6 +215,14 @@ func TestMiddleware_Success(t *testing.T) {
 	if got := resp.Header.Get("X-Practice-Id"); got != practiceID {
 		t.Fatalf("X-Practice-Id = %q, want %q", got, practiceID)
 	}
+
+	var lastPracticeID string
+	if err := db.Admin.QueryRow(`SELECT last_practice_id FROM staff WHERE id = $1`, staffID).Scan(&lastPracticeID); err != nil {
+		t.Fatalf("query last_practice_id: %v", err)
+	}
+	if lastPracticeID != practiceID {
+		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, practiceID)
+	}
 }
 
 // TestMiddleware_FailClosedWithoutSessionVar proves the RLS backstop
