@@ -3,9 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '$lib/firebase';
-	import { apiFetch } from '$lib/api';
-	import { decideLanding, type Membership, type SessionInfo } from '$lib/landing';
+	import { getFirebaseAuth } from '#lib/firebase.js';
+	import { apiFetch } from '#lib/api.js';
+	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 

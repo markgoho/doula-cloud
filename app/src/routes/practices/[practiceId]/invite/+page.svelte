@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { getFirebaseAuth } from '$lib/firebase';
-	import { apiFetch } from '$lib/api';
+	import { getFirebaseAuth } from '#lib/firebase.js';
+	import { apiFetch } from '#lib/api.js';
 
 	let email = $state('');
 	let name = $state('');

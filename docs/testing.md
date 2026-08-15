@@ -1,24 +1,18 @@
 # Testing infrastructure
 
-## `api/`: gofmt, enforced in CI and (optionally) at commit time
+## Pre-commit hook: `gofmt` and `app/` typecheck/lint (opt-in locally, enforced in CI)
 
-Nothing in `golangci-lint` checks formatting (`gofmt`/`gofumpt` aren't in
-the enabled set in `api/.golangci.yml`), so CI runs it as its own step,
-separate from `golangci-lint run`: `gofmt -l .` in `api/`, failing the
-build if it lists any file.
-
-To catch this before it reaches CI, enable the repo's pre-commit hook
-once per clone:
+To catch formatting, typecheck, or lint issues before they reach CI, enable the repo's pre-commit hook once per clone:
 
 ```sh
 git config core.hooksPath scripts/hooks
 ```
 
-`scripts/hooks/pre-commit` then blocks any commit that stages an
-unformatted `.go` file, telling you which file and to run `gofmt -w` on
-it. This is opt-in (`core.hooksPath` is local git config, not something a
-clone picks up automatically) -- the CI step above is the actual
-enforcement backstop regardless of whether it's enabled locally.
+`scripts/hooks/pre-commit` runs:
+1. **`api/` (Go)**: blocks any commit that stages an unformatted `.go` file, prompting to run `gofmt -w <file>` on it.
+2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
+
+This is opt-in (`core.hooksPath` is local git config, not something a clone picks up automatically) — the CI jobs are the actual enforcement backstop regardless of whether it's enabled locally.
 
 ## `api/`: lint with golangci-lint, matching CI exactly
 
