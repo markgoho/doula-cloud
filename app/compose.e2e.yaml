@@ -7,17 +7,18 @@ services:
       POSTGRES_DB: app
     ports:
       - '15432:5432'
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U app']
-      interval: 2s
-      timeout: 2s
-      retries: 15
-
   # Applies goose migrations against `db` before anything else starts.
   # Runs api/cmd/migrate rather than the `goose` CLI (which
   # scripts/migrate.sh uses for the real Cloud SQL Auth Proxy deploy
   # path) because the CLI pulls in every database dialect it supports,
   # which is too heavy to compile reliably in a constrained container.
+  #
+  # Depends on `db` only reaching "started", not "healthy" -- like
+  # `up --wait` (see app/e2e/stack.ts), a `service_healthy` condition
+  # never resolves under this runner's rootless Podman + docker-compose
+  # -as-provider combination, so `depends_on` hangs until compose's own
+  # command times out. cmd/migrate retries its own connection instead of
+  # trusting a container status Podman can't seem to report correctly.
   migrate:
     build:
       context: ../api
@@ -28,7 +29,7 @@ services:
       DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_started
 
   # Creates the low-privilege LOGIN role the RLS policies in
   # db/migrations apply to. Migration 00002 creates the app_runtime
