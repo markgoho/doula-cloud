@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "doula-cloud"
-  }
+  },
+  "targets": {
+    "doula-cloud": {
+      "hosting": {
+        "hugo": [
+          "doula-cloud"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
