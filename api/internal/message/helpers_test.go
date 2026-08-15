@@ -38,6 +38,29 @@ func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID st
 	return staffID
 }
 
+// seedStaffAtPracticeNamed mirrors seedStaffAtPractice but takes an
+// explicit name, for tests that assert a specific Staff member's name
+// shows up as a Message's sender -- seedStaffAtPractice always hardcodes
+// "Test Staff", which would make such an assertion vacuous once two Staff
+// are seeded in the same test.
+func seedStaffAtPracticeNamed(t *testing.T, db *testdb.DB, practiceID, identityUID, name string) (staffID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, $2, 'staff@example.com') RETURNING id`,
+		identityUID, name,
+	).Scan(&staffID); err != nil {
+		t.Fatalf("seed staff: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{doula}')`,
+		practiceID, staffID,
+	); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+	return staffID
+}
+
 // seedClientEngagement inserts a Client and an Engagement linking them to
 // practiceID, using the superuser Admin connection.
 func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email string) (clientID, engagementID string) {

@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/visit"
@@ -99,6 +100,10 @@ func routes(verifier authn.Verifier, db *sql.DB) *http.ServeMux {
 		staffauth.Middleware(verifier, db)(visit.CreateHandler()))
 	mux.Handle("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
 		staffauth.Middleware(verifier, db)(visit.ReassignHandler()))
+	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages",
+		staffauth.Middleware(verifier, db)(message.ListHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
+		staffauth.Middleware(verifier, db)(message.CreateHandler()))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(verifier, db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(verifier, db)(portal.DetailHandler()))
