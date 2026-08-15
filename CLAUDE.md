@@ -13,3 +13,8 @@ Default canonical labels (needs-triage, needs-info, ready-for-agent, ready-for-h
 ### Domain docs
 
 Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Testing
+
+100% line coverage gate (with justified inline exceptions), the Podman-based
+test infra for `api/` and `app/`, and goose migrations. See `docs/testing.md`.

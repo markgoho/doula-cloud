@@ -14,15 +14,20 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+func resolvePort() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return port
 	}
+	return "8080"
+}
+
+func main() {
+	port := resolvePort()
 
 	http.HandleFunc("/hello", helloHandler)
 
 	log.Printf("listening on port %s", port)
+	// coverage:ignore reason: listener startup, not exercised by unit tests
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}

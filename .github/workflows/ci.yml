@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+
+      # Podman ships on the ubuntu-latest runner but its rootless socket
+      # needs to be started explicitly, and testcontainers-go's Ryuk reaper
+      # is unreliable under rootless Podman, so it's disabled.
+      - name: Start Podman socket
+        run: |
+          systemctl --user start podman.socket
+          echo "DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_RYUK_DISABLED=true" >> "$GITHUB_ENV"
+
+      - name: Vet
+        working-directory: api
+        run: go vet ./...
+
+      # The testdb harness (internal/testdb) starts a real Postgres
+      # container and applies the goose migrations against it — this is
+      # the CI-provable half of "goose is set up for api/" (see
+      # scripts/migrate.sh for the Cloud SQL Auth Proxy half, which needs
+      # a real instance CI doesn't have).
+      - name: Test
+        working-directory: api
+        run: go test ./... -coverprofile=coverage.out
+
+      - name: Enforce 100% line coverage
+        working-directory: api
+        run: go run ./tools/covcheck -profile=coverage.out -module=doula-cloud/api -skip=doula-cloud/api/tools/
+
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install podman-compose
+        run: pipx install podman-compose
+
+      - name: Install dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: app
+        run: bun run check
+
+      - name: Lint
+        working-directory: app
+        run: bun run lint
+
+      - name: Install Playwright browsers
+        working-directory: app
+        run: bunx playwright install --with-deps chromium
+
+      - name: Unit test with coverage gate
+        working-directory: app
+        run: bun run test:unit:coverage
+
+      - name: E2e test
+        working-directory: app
+        run: bunx playwright test
