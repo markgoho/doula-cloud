@@ -34,6 +34,9 @@
 	<p role="alert">{error}</p>
 {:else if practiceName}
 	<h1>Welcome to {practiceName}</h1>
+	<a href={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })}
+		>Clients</a
+	>
 	{#if roles.includes('owner')}
 		<a href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
 			>Invite a Staff member</a

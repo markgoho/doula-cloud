@@ -14,6 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -83,6 +84,12 @@ func routes(verifier authn.Verifier, db *sql.DB) *http.ServeMux {
 		staffauth.Middleware(verifier, db)(staffauth.InviteHandler()))
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
 		staffauth.Middleware(verifier, db)(staffauth.AssignRolesHandler()))
+	mux.Handle("GET /api/practices/{practiceId}/clients",
+		staffauth.Middleware(verifier, db)(engagement.ListHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/clients",
+		staffauth.Middleware(verifier, db)(engagement.CreateHandler()))
+	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}",
+		staffauth.Middleware(verifier, db)(engagement.DetailHandler()))
 	return mux
 }
 
