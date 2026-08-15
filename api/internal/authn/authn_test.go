@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/testdb"
 )
 
 type fakeVerifier struct {
@@ -83,5 +84,21 @@ func TestBegin_InvalidToken(t *testing.T) {
 	}
 	if got := rec.Body.String(); got != "invalid token\n" {
 		t.Fatalf("body = %q, want %q", got, "invalid token\n")
+	}
+}
+
+func TestBegin_Success(t *testing.T) {
+	db := testdb.New(t)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+
+	tx, uid, ok := authn.Begin(rec, req, fakeVerifier{uid: "test-uid"}, db.App)
+	if !ok {
+		t.Fatalf("expected ok=true, got false")
+	}
+	defer func() { _ = tx.Rollback() }()
+	if uid != "test-uid" {
+		t.Fatalf("uid = %q, want %q", uid, "test-uid")
 	}
 }

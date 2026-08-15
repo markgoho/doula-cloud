@@ -2,6 +2,7 @@ package staffauth_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -240,4 +241,67 @@ func TestMiddleware_FailClosedWithoutSessionVar(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
 	}
+}
+
+func TestRequireTx(t *testing.T) {
+	t.Run("tx present", func(t *testing.T) {
+		db := testdb.New(t)
+		rec := httptest.NewRecorder()
+		var gotTx *sql.Tx
+		var gotPracticeID string
+		var gotOK bool
+		h := staffauth.Middleware(fakeVerifier{uid: someUID}, db.App)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotTx, gotPracticeID, gotOK = staffauth.RequireTx(w, r)
+		}))
+
+		_, practiceID := seedStaffWithMembership(t, db, someUID)
+		testReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/practices/"+practiceID+"/ping", nil)
+		testReq.SetPathValue("practiceId", practiceID)
+		testReq.Header.Set("Authorization", "Bearer token")
+		h.ServeHTTP(rec, testReq)
+
+		if !gotOK {
+			t.Fatalf("expected ok=true, got false")
+		}
+		if gotTx == nil {
+			t.Fatalf("expected non-nil tx")
+		}
+		if gotPracticeID != practiceID {
+			t.Fatalf("practiceID = %q, want %q", gotPracticeID, practiceID)
+		}
+	})
+
+	t.Run("tx missing", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+		tx, practiceID, ok := staffauth.RequireTx(rec, req)
+		if ok {
+			t.Fatalf("expected ok=false, got true (tx=%v, practiceID=%q)", tx, practiceID)
+		}
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
+	})
+}
+
+func TestParseUUID(t *testing.T) {
+	t.Run("valid uuid", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		if !staffauth.ParseUUID(rec, "practice", "00000000-0000-0000-0000-000000000000") {
+			t.Fatalf("expected true for valid uuid")
+		}
+	})
+
+	t.Run("invalid uuid", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		if staffauth.ParseUUID(rec, "practice", "not-a-uuid") {
+			t.Fatalf("expected false for invalid uuid")
+		}
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+		if got := rec.Body.String(); got != "invalid practice id\n" {
+			t.Fatalf("body = %q, want %q", got, "invalid practice id\n")
+		}
+	})
 }
