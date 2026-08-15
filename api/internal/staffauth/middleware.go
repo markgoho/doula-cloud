@@ -78,7 +78,7 @@ func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Han
 			tx, err := db.BeginTx(r.Context(), nil)
 			if err != nil {
 				// coverage:ignore reason: DB connection failure, not exercised by unit tests
-				http.Error(w, "internal error", http.StatusInternalServerError)
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			committed := false
@@ -91,7 +91,7 @@ func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Han
 			staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, verified.UID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, "internal error", http.StatusInternalServerError)
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !found {
@@ -102,7 +102,7 @@ func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Han
 			isMember, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, "internal error", http.StatusInternalServerError)
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !isMember {
@@ -112,7 +112,7 @@ func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Han
 
 			if _, err := tx.ExecContext(r.Context(), `UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceID, staffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, "internal error", http.StatusInternalServerError)
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 

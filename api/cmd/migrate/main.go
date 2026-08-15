@@ -19,31 +19,29 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// main and run are exercised by the e2e run (app/e2e/global-setup.ts runs
-// this binary against the compose Postgres), not by `go test`, so every
-// line below is a justified coverage exception.
 func main() {
-	// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
+	// coverage:ignore reason: exits the process, not exercised by unit tests
 	if err := run(); err != nil {
-		// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
+		// coverage:ignore reason: exits the process, not exercised by unit tests
 		log.Fatal(err)
 	}
 }
 
+// run is exercised directly by main_test.go for the DATABASE_URL-unset
+// path; everything past that needs a real Postgres instance, which is
+// what the e2e run (app/e2e/global-setup.ts runs this binary against the
+// compose Postgres) proves instead of a unit test.
 func run() error {
-	// coverage:ignore reason: requires a real DATABASE_URL, not exercised by unit tests
 	dsn := os.Getenv("DATABASE_URL")
-	// coverage:ignore reason: requires a real DATABASE_URL, not exercised by unit tests
 	if dsn == "" {
-		// coverage:ignore reason: requires a real DATABASE_URL, not exercised by unit tests
 		return errors.New("migrate: DATABASE_URL must be set")
 	}
 
-	// coverage:ignore reason: DB connection failure, not exercised by unit tests
+	// coverage:ignore reason: malformed DSN, not exercised by unit tests
 	db, err := sql.Open("pgx", dsn)
-	// coverage:ignore reason: DB connection failure, not exercised by unit tests
+	// coverage:ignore reason: malformed DSN, not exercised by unit tests
 	if err != nil {
-		// coverage:ignore reason: DB connection failure, not exercised by unit tests
+		// coverage:ignore reason: malformed DSN, not exercised by unit tests
 		return fmt.Errorf("migrate: open db: %w", err)
 	}
 	// coverage:ignore reason: requires a real DB connection, not exercised by unit tests

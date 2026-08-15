@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '$lib/firebase';
 	import { apiFetch } from '$lib/api';
-	import { decideLanding, type Membership } from '$lib/landing';
+	import { decideLanding, type Membership, type SessionInfo } from '$lib/landing';
 
 	let email = $state('');
 	let password = $state('');
@@ -27,8 +27,7 @@
 				return;
 			}
 
-			const session: { memberships: Membership[]; lastPracticeId: string | null } =
-				await response.json();
+			const session: SessionInfo = await response.json();
 			const landing = decideLanding(session);
 			if (landing.type === 'redirect') {
 				await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));

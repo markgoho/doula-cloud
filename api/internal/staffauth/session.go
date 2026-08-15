@@ -51,7 +51,7 @@ func SessionHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, msgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -65,7 +65,7 @@ func SessionHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, msgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -75,7 +75,7 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return SessionResponse{}, http.StatusInternalServerError, msgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	var staffID string
@@ -88,13 +88,13 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, msgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	memberships, err := listMemberships(ctx, tx, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, msgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	resp := SessionResponse{StaffID: staffID, Memberships: memberships}

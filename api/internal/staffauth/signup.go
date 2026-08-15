@@ -12,10 +12,11 @@ import (
 	"doula-cloud/api/internal/authn"
 )
 
-// msgInternalError is the response body for any failure the caller can't
-// act on (a DB error, an encoding error) -- shared across signup and
-// session handlers so it isn't duplicated per call site.
-const msgInternalError = "internal error"
+// MsgInternalError is the response body for any failure the caller can't
+// act on (a DB error, an encoding error) -- exported so every handler and
+// the middleware, in this package and in main, share one literal instead
+// of duplicating it per call site.
+const MsgInternalError = "internal error"
 
 // SignupRequest is the body of a Practice-signup request: a new Practice,
 // created together with the Staff row for the person creating it.
@@ -67,7 +68,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, msgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -85,7 +86,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, msgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -94,7 +95,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		w.WriteHeader(http.StatusCreated)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, msgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -104,13 +105,13 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return SignupResponse{}, http.StatusInternalServerError, msgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	var practiceID string
 	if err := tx.QueryRowContext(ctx, `INSERT INTO practices (name) VALUES ($1) RETURNING id`, req.PracticeName).Scan(&practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, msgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	var staffID string
@@ -123,12 +124,12 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, msgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		return SignupResponse{}, http.StatusInternalServerError, msgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -136,7 +137,7 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		practiceID, staffID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, msgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
 	return SignupResponse{StaffID: staffID, PracticeID: practiceID}, http.StatusCreated, ""
