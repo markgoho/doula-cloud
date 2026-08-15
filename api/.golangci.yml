@@ -1,0 +1,51 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  # Start from the small default set (errcheck, govet, ineffassign,
+  # staticcheck, unused) and add linters that catch real bugs, unhandled
+  # errors, or missing documentation. Deliberately skip the purely
+  # aesthetic linters (wsl, nlreturn, varnamelen, exhaustruct, ...) and the
+  # ones that fight idioms already used throughout this codebase
+  # (noinlineerr bans `if err := f(); err != nil {...}`; nonamedreturns
+  # bans deliberate named returns; err113 demands every error be a
+  # pre-declared sentinel, even one-off messages in a dev tool).
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - durationcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - godot
+    - goconst
+    - gocritic
+    - gosec
+    - intrange
+    - misspell
+    - modernize
+    - nilerr
+    - nilnil
+    - noctx
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - testifylint
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+    - wrapcheck
+  exclusions:
+    rules:
+      # Deferred Close()/Rollback() on response bodies, rows, and
+      # read-only test transactions carry no actionable error in tests.
+      - path: _test\.go
+        linters:
+          - errcheck

@@ -7,7 +7,7 @@ import (
 )
 
 func TestHelloHandler(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/hello", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/hello", nil)
 	rec := httptest.NewRecorder()
 
 	helloHandler(rec, req)

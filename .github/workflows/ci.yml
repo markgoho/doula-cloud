@@ -29,6 +29,12 @@ jobs:
         working-directory: api
         run: go vet ./...
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12.2
+          working-directory: api
+
       # The testdb harness (internal/testdb) starts a real Postgres
       # container and applies the goose migrations against it — this is
       # the CI-provable half of "goose is set up for api/" (see

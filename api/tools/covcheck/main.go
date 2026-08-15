@@ -17,6 +17,12 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run holds the actual logic so `defer f.Close()` always executes before
+// the process exits -- os.Exit called directly from main would skip it.
+func run() int {
 	profilePath := flag.String("profile", "coverage.out", "path to the go test -coverprofile output")
 	modulePrefix := flag.String("module", "doula-cloud/api", "Go module path prefix to strip when resolving files on disk")
 	skip := flag.String("skip", "", "comma-separated package path prefixes to exclude from the coverage requirement (still tested, just not gated)")
@@ -30,14 +36,18 @@ func main() {
 	f, err := os.Open(*profilePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "covcheck: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			fmt.Fprintf(os.Stderr, "covcheck: close profile: %v\n", cerr)
+		}
+	}()
 
 	blocks, err := parseProfile(f)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "covcheck: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	violations, err := findViolations(blocks, skipPrefixes, func(file string) ([]string, error) {
@@ -45,25 +55,27 @@ func main() {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "covcheck: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	if len(violations) == 0 {
 		fmt.Println("covcheck: 100% line coverage (excluding justified coverage:ignore exceptions)")
-		return
+		return 0
 	}
 
 	fmt.Fprintln(os.Stderr, "covcheck: uncovered lines with no coverage:ignore justification:")
 	for _, v := range violations {
 		fmt.Fprintf(os.Stderr, "  %s:%d-%d\n", v.File, v.StartLine, v.EndLine)
 	}
-	os.Exit(1)
+	return 1
 }
 
+// readDiskFile reads a source file named by a -module-relative path derived
+// from the coverage profile, not from untrusted external input.
 func readDiskFile(path string) ([]string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path comes from the trusted coverage profile, not user input
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("covcheck: read %s: %w", path, err)
 	}
 	return strings.Split(string(data), "\n"), nil
 }

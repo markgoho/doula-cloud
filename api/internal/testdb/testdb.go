@@ -17,6 +17,7 @@ import (
 
 	"doula-cloud/api/db/migrations"
 
+	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -85,7 +86,7 @@ func New(t *testing.T) *DB {
 		t.Fatalf("testdb: apply migrations: %v", err)
 	}
 
-	appDB := newAppDB(t, ctx, db, dsn)
+	appDB := newAppDB(ctx, t, db, dsn)
 
 	return &DB{Admin: db, App: appDB}
 }
@@ -94,7 +95,7 @@ func New(t *testing.T) *DB {
 // role the migrations grant table privileges to) and opens a connection
 // as it, so tests can exercise queries the way the running application
 // -- and the RLS policies scoped to app_runtime -- actually see them.
-func newAppDB(t *testing.T, ctx context.Context, admin *sql.DB, adminDSN string) *sql.DB {
+func newAppDB(ctx context.Context, t *testing.T, admin *sql.DB, adminDSN string) *sql.DB {
 	t.Helper()
 
 	const appUser = "app_test"

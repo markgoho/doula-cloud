@@ -46,13 +46,13 @@ func parseProfile(r io.Reader) ([]Block, error) {
 		blocks = append(blocks, block)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("covcheck: read profile: %w", err)
 	}
 	return blocks, nil
 }
 
-// parseProfileLine parses a single line of the form:
-// "file.go:startLine.startCol,endLine.endCol numStmt count"
+// parseProfileLine parses a single line of the form
+// "file.go:startLine.startCol,endLine.endCol numStmt count".
 func parseProfileLine(line string) (Block, error) {
 	fileAndRest := strings.SplitN(line, ":", 2)
 	if len(fileAndRest) != 2 {
@@ -92,7 +92,11 @@ func lineNumber(pos string) (int, error) {
 	if !ok {
 		return 0, fmt.Errorf("malformed position: %q", pos)
 	}
-	return strconv.Atoi(lineStr)
+	n, err := strconv.Atoi(lineStr)
+	if err != nil {
+		return 0, fmt.Errorf("malformed position: %q: %w", pos, err)
+	}
+	return n, nil
 }
 
 // findViolations returns the uncovered blocks that have no coverage:ignore

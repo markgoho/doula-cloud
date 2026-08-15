@@ -10,6 +10,8 @@ package staffauth
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -141,17 +143,17 @@ func bearerToken(r *http.Request) (string, bool) {
 func setIdentityAndResolveStaff(ctx context.Context, tx *sql.Tx, identityUID string) (string, bool, error) {
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("staffauth: set current identity uid: %w", err)
 	}
 
 	var staffID string
 	err := tx.QueryRowContext(ctx, `SELECT id FROM staff WHERE identity_uid = $1`, identityUID).Scan(&staffID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("staffauth: resolve staff: %w", err)
 	}
 	return staffID, true, nil
 }
@@ -163,7 +165,7 @@ func setIdentityAndResolveStaff(ctx context.Context, tx *sql.Tx, identityUID str
 func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (bool, error) {
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		return false, err
+		return false, fmt.Errorf("staffauth: set current practice id: %w", err)
 	}
 
 	var exists bool
@@ -173,7 +175,7 @@ func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, pra
 	).Scan(&exists)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("staffauth: check practice membership: %w", err)
 	}
 	return exists, nil
 }

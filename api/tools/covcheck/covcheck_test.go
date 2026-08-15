@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+const testFile = "foo.go"
+
 func TestParseProfile(t *testing.T) {
 	input := "mode: set\n" +
 		"doula-cloud/api/main.go:10.2,12.3 2 1\n" +
@@ -36,10 +38,10 @@ func lines(ss ...string) []string { return ss }
 
 func TestFindViolations_FlagsUncoveredBlock(t *testing.T) {
 	blocks := []Block{
-		{File: "foo.go", StartLine: 2, EndLine: 2, Count: 0},
+		{File: testFile, StartLine: 2, EndLine: 2, Count: 0},
 	}
 	src := map[string][]string{
-		"foo.go": lines(`package foo`, `func bar() {}`, ``),
+		testFile: lines(`package foo`, `func bar() {}`, ``),
 	}
 
 	violations, err := findViolations(blocks, nil, fakeReader(src))
@@ -53,10 +55,10 @@ func TestFindViolations_FlagsUncoveredBlock(t *testing.T) {
 
 func TestFindViolations_ExcusesBlockWithPrecedingIgnoreComment(t *testing.T) {
 	blocks := []Block{
-		{File: "foo.go", StartLine: 3, EndLine: 3, Count: 0},
+		{File: testFile, StartLine: 3, EndLine: 3, Count: 0},
 	}
 	src := map[string][]string{
-		"foo.go": lines(
+		testFile: lines(
 			`package foo`,
 			`// coverage:ignore reason: unreachable listener failure`,
 			`func bar() {}`,
@@ -74,10 +76,10 @@ func TestFindViolations_ExcusesBlockWithPrecedingIgnoreComment(t *testing.T) {
 
 func TestFindViolations_ExcusesBlockWithInlineIgnoreComment(t *testing.T) {
 	blocks := []Block{
-		{File: "foo.go", StartLine: 1, EndLine: 1, Count: 0},
+		{File: testFile, StartLine: 1, EndLine: 1, Count: 0},
 	}
 	src := map[string][]string{
-		"foo.go": lines(`log.Fatal(err) // coverage:ignore reason: unreachable`),
+		testFile: lines(`log.Fatal(err) // coverage:ignore reason: unreachable`),
 	}
 
 	violations, err := findViolations(blocks, nil, fakeReader(src))
@@ -91,10 +93,10 @@ func TestFindViolations_ExcusesBlockWithInlineIgnoreComment(t *testing.T) {
 
 func TestFindViolations_IgnoresCoveredBlocks(t *testing.T) {
 	blocks := []Block{
-		{File: "foo.go", StartLine: 1, EndLine: 1, Count: 3},
+		{File: testFile, StartLine: 1, EndLine: 1, Count: 3},
 	}
 	src := map[string][]string{
-		"foo.go": lines(`func bar() {}`),
+		testFile: lines(`func bar() {}`),
 	}
 
 	violations, err := findViolations(blocks, nil, fakeReader(src))

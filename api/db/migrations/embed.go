@@ -5,5 +5,7 @@ package migrations
 
 import "embed"
 
+// FS holds the embedded goose migration files.
+//
 //go:embed *.sql
 var FS embed.FS

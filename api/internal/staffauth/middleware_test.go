@@ -20,7 +20,7 @@ type fakeVerifier struct {
 	err error
 }
 
-func (f fakeVerifier) VerifyIDToken(ctx context.Context, idToken string) (*authn.VerifiedToken, error) {
+func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -71,7 +71,11 @@ func TestMiddleware_MissingToken(t *testing.T) {
 	srv := newServer(fakeVerifier{}, db)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/practices/00000000-0000-0000-0000-000000000000/ping")
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -87,7 +91,7 @@ func TestMiddleware_EmptyBearerToken(t *testing.T) {
 	srv := newServer(fakeVerifier{}, db)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
 	req.Header.Set("Authorization", "Bearer ")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -105,7 +109,7 @@ func TestMiddleware_TokenVerificationFailure(t *testing.T) {
 	srv := newServer(fakeVerifier{err: errBadToken}, db)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -123,7 +127,7 @@ func TestMiddleware_InvalidPracticeID(t *testing.T) {
 	srv := newServer(fakeVerifier{uid: "some-uid"}, db)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/practices/not-a-uuid/ping", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/not-a-uuid/ping", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -143,7 +147,7 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 	srv := newServer(fakeVerifier{uid: "unknown-uid"}, db)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -173,7 +177,7 @@ func TestMiddleware_NoPracticeMembership(t *testing.T) {
 	srv := newServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/practices/"+otherPracticeID+"/ping", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+otherPracticeID+"/ping", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -194,7 +198,7 @@ func TestMiddleware_Success(t *testing.T) {
 	srv := newServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/practices/"+practiceID+"/ping", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/ping", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
