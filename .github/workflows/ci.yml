@@ -40,6 +40,16 @@ jobs:
       # Local dev instead points DOCKER_HOST at a Podman socket (see
       # docs/testing.md); internal/testdb itself is engine-agnostic.
 
+      - name: Check formatting
+        working-directory: api
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "The files above are not gofmt-formatted. Run 'gofmt -w' on them."
+            exit 1
+          fi
+
       - name: Vet
         working-directory: api
         run: go vet ./...

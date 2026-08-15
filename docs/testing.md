@@ -1,5 +1,25 @@
 # Testing infrastructure
 
+## `api/`: gofmt, enforced in CI and (optionally) at commit time
+
+Nothing in `golangci-lint` checks formatting (`gofmt`/`gofumpt` aren't in
+the enabled set in `api/.golangci.yml`), so CI runs it as its own step,
+separate from `golangci-lint run`: `gofmt -l .` in `api/`, failing the
+build if it lists any file.
+
+To catch this before it reaches CI, enable the repo's pre-commit hook
+once per clone:
+
+```sh
+git config core.hooksPath scripts/hooks
+```
+
+`scripts/hooks/pre-commit` then blocks any commit that stages an
+unformatted `.go` file, telling you which file and to run `gofmt -w` on
+it. This is opt-in (`core.hooksPath` is local git config, not something a
+clone picks up automatically) -- the CI step above is the actual
+enforcement backstop regardless of whether it's enabled locally.
+
 ## `api/`: lint with golangci-lint, matching CI exactly
 
 CI runs `golangci-lint` (config: `api/.golangci.yml`) as its own gating step,
