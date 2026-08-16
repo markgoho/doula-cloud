@@ -17,7 +17,14 @@
 		type Fetcher
 	} from '#lib/planInstance.js';
 	import ContractForm from '#lib/ContractForm.svelte';
-	import { loadContract, createContract, saveContractValues, setMergeFieldValue, type Contract } from '#lib/contract.js';
+	import {
+		loadContract,
+		createContract,
+		saveContractValues,
+		sendContract,
+		setMergeFieldValue,
+		type Contract
+	} from '#lib/contract.js';
 
 	type Detail = {
 		engagementId: string;
@@ -276,6 +283,25 @@
 			);
 		} catch (error_) {
 			contractError = error_ instanceof Error ? error_.message : 'Failed to save contract';
+		} finally {
+			isContractBusy = false;
+		}
+	}
+
+	async function handleSendContract() {
+		if (!contract) return;
+		contractError = '';
+		isContractBusy = true;
+		try {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) {
+				contractError = 'You must be logged in to send the contract';
+				return;
+			}
+			const idToken = await user.getIdToken();
+			contract = await sendContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+		} catch (error_) {
+			contractError = error_ instanceof Error ? error_.message : 'Failed to send contract';
 		} finally {
 			isContractBusy = false;
 		}
@@ -553,6 +579,7 @@
 			/>
 			{#if contract.status === 'draft'}
 				<button type="button" onclick={handleSaveContract} disabled={isContractBusy}>Save Contract</button>
+				<button type="button" onclick={handleSendContract} disabled={isContractBusy}>Send Contract</button>
 			{/if}
 		{:else}
 			<button type="button" onclick={handleCreateContract} disabled={isContractBusy}>Create Draft Contract</button>

@@ -29,8 +29,43 @@ export function mergeFieldLabel(key: string): string {
 	return entry?.label ?? key;
 }
 
+/** Matches a {{merge_field_key}} placeholder in Contract prose -- mirrors
+ * the Go BFF's mergeFieldPattern (api/internal/contracts/contract.go). */
+const mergeFieldPattern = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
+
+/** Substitutes every {{merge_field_key}} placeholder in prose with its
+ * filled value, leaving an unfilled placeholder blank -- the read-only
+ * Client-portal Contract view's "filled Contract text" is this, not the
+ * raw prose. */
+export function fillProse(prose: string, values: Record<string, string>): string {
+	return prose.replaceAll(mergeFieldPattern, (_match, key: string) => values[key] ?? '');
+}
+
 function contractPath(practiceId: string, engagementId: string): string {
 	return `/api/practices/${practiceId}/engagements/${engagementId}/contract`;
+}
+
+function clientContractPath(engagementId: string): string {
+	return `/api/portal/engagements/${engagementId}/contract`;
+}
+
+/** Loads the sent/signed/voided Contract for engagementId from the
+ * Client-portal route, or null if none has been sent yet (a 404 from
+ * ClientGetContractHandler -- a Draft Contract 404s the same way, since
+ * it's unreachable from this role) -- mirrors planInstance.ts's
+ * loadClientBirthPlan, distinguishing "not yet sent" (null) from the
+ * caller's own "not yet loaded" (undefined) state. Throws with the
+ * response body text on any other non-2xx response. */
+export async function loadClientContract(fetcher: Fetcher, engagementId: string): Promise<Contract | null> {
+	const response = await fetcher(clientContractPath(engagementId));
+	if (response.status === 404) {
+		// eslint-disable-next-line unicorn/no-null
+		return null;
+	}
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
 }
 
 /** Loads the Contract for engagementId, or undefined if none has been
@@ -83,6 +118,22 @@ export async function saveContractValues(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ values })
 	});
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
+}
+
+/** Transitions the Contract for engagementId from Draft to Sent --
+ * one-way, and only while it's still a Draft (a non-Draft Contract 409s).
+ * Triggers a content-free push notification to the Client server-side.
+ * Throws with the response body text on a non-2xx response. */
+export async function sendContract(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<Contract> {
+	const response = await fetcher(`${contractPath(practiceId, engagementId)}/send`, { method: 'POST' });
 	if (!response.ok) {
 		throw new Error(await response.text());
 	}

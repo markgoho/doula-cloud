@@ -233,6 +233,9 @@
 	<a href={resolve('/portal/engagements/[engagementId]/birth-plan', { engagementId: page.params.engagementId! })}
 		>Birth Plan</a
 	>
+	<a href={resolve('/portal/engagements/[engagementId]/contract', { engagementId: page.params.engagementId! })}
+		>Contract</a
+	>
 
 	<h2>Messages</h2>
 

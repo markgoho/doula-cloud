@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -123,6 +124,13 @@ func seedContract(t *testing.T, db *testdb.DB, engagementID, status, prose strin
 }
 
 func newContractServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+	return newContractServerWithPusher(verifier, db, push.NewFakePusher())
+}
+
+// newContractServerWithPusher mirrors newContractServer but lets the
+// caller inject pusher, so a test can inspect what Send triggers --
+// mirrors message/handlers_test.go's newServerWithPusher.
+func newContractServerWithPusher(verifier fakeVerifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/contract-template",
 		staffauth.Middleware(verifier, db.App)(contracts.GetTemplateHandler()))
@@ -134,6 +142,8 @@ func newContractServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
 		staffauth.Middleware(verifier, db.App)(contracts.GetContractHandler()))
 	mux.Handle("PUT /practices/{practiceId}/engagements/{engagementId}/contract",
 		staffauth.Middleware(verifier, db.App)(contracts.PutContractHandler()))
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/send",
+		staffauth.Middleware(verifier, db.App)(contracts.PostSendContractHandler(pusher)))
 	return httptest.NewServer(mux)
 }
 

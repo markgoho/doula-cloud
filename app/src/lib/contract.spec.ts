@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createContract, loadContract, mergeFieldLabel, saveContractValues, setMergeFieldValue } from './contract.js';
+import {
+	createContract,
+	fillProse,
+	loadClientContract,
+	loadContract,
+	mergeFieldLabel,
+	saveContractValues,
+	sendContract,
+	setMergeFieldValue
+} from './contract.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
 	return {
@@ -92,6 +101,89 @@ describe('saveContractValues', () => {
 		await expect(saveContractValues(fetcher, 'practice-1', 'eng-1', {})).rejects.toThrow(
 			'contract is no longer a draft'
 		);
+	});
+});
+
+describe('sendContract', () => {
+	it('POSTs to the practice+engagement contract send path and returns the decoded contract', async () => {
+		const contract = {
+			engagementId: 'eng-1',
+			status: 'sent',
+			prose: 'Agreement for {{client_name}}.',
+			mergeFields: ['client_name'],
+			values: { client_name: 'Jamie' }
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
+
+		const result = await sendContract(fetcher, 'practice-1', 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/send', {
+			method: 'POST'
+		});
+		expect(result).toEqual(contract);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('contract is not a draft', 409));
+
+		await expect(sendContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('contract is not a draft');
+	});
+});
+
+describe('loadClientContract', () => {
+	it('fetches the portal engagement contract path and returns the decoded contract', async () => {
+		const contract = {
+			engagementId: 'eng-1',
+			status: 'sent',
+			prose: 'Agreement for {{client_name}}.',
+			mergeFields: ['client_name'],
+			values: { client_name: 'Jamie' }
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
+
+		const result = await loadClientContract(fetcher, 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/portal/engagements/eng-1/contract');
+		expect(result).toEqual(contract);
+	});
+
+	it('returns null on a 404 (no Contract sent yet, or still a Draft)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not found', 404));
+
+		const result = await loadClientContract(fetcher, 'eng-1');
+
+		expect(result).toBeNull();
+	});
+
+	it('throws with the response body text on any other non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('server error', 500));
+
+		await expect(loadClientContract(fetcher, 'eng-1')).rejects.toThrow('server error');
+	});
+});
+
+describe('fillProse', () => {
+	it('substitutes every merge field placeholder with its filled value', () => {
+		const result = fillProse('Agreement for {{client_name}} at {{price}}.', {
+			client_name: 'Jamie',
+			price: '$1,200'
+		});
+		expect(result).toBe('Agreement for Jamie at $1,200.');
+	});
+
+	it('leaves an unfilled placeholder blank', () => {
+		const result = fillProse('Agreement for {{client_name}}.', {});
+		expect(result).toBe('Agreement for .');
+	});
+
+	it('substitutes every occurrence of a repeated placeholder', () => {
+		const result = fillProse('{{client_name}}, meet {{client_name}}.', { client_name: 'Jamie' });
+		expect(result).toBe('Jamie, meet Jamie.');
+	});
+
+	it('leaves prose with no placeholders unchanged', () => {
+		const result = fillProse('Plain prose, no merge fields.', {});
+		expect(result).toBe('Plain prose, no merge fields.');
 	});
 });
 
