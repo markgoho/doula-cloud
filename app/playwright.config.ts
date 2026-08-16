@@ -11,6 +11,11 @@ export default defineConfig({
 	// the failing attempt, so a true regression still leaves debuggable
 	// evidence instead of silently passing on retry.
 	retries: process.env.CI ? 2 : 0,
+	// Default reporter ('list') never writes playwright-report/, so CI's
+	// "Upload Playwright report" step had nothing to pick up -- add 'html'
+	// so a failing run's trace/screenshot evidence is actually browsable
+	// from the uploaded artifact, not just implied by retries.
+	reporter: [['list'], ['html', { open: 'never' }]],
 	use: {
 		trace: 'on-first-retry',
 		screenshot: 'only-on-failure'
