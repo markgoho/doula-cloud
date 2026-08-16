@@ -22,8 +22,9 @@ CREATE TABLE credit_ledger (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Populated lazily on a Practice's first credit purchase (a later ticket).
-ALTER TABLE practices ADD COLUMN stripe_customer_id text UNIQUE;
+-- Populated lazily on a Practice's first credit purchase (a later ticket),
+-- which also owns any uniqueness constraint that purchase flow needs.
+ALTER TABLE practices ADD COLUMN stripe_customer_id text;
 
 GRANT SELECT, INSERT ON credit_ledger TO app_runtime;
 
