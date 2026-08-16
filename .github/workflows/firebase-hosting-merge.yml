@@ -12,9 +12,16 @@ permissions:
   id-token: write
   packages: read
 
+# No cancel-in-progress, unlike ci.yml's group -- this is a live-site
+# deploy, and two quick hugo/** pushes must apply in order, not have the
+# first one cancelled mid-deploy by the second.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     container:
       image: ghcr.io/${{ github.repository }}:trunk
     steps:
@@ -37,6 +44,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

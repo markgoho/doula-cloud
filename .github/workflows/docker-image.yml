@@ -7,9 +7,16 @@ on:
     paths:
       - "Dockerfile"
 
+# Reused across workflows so ordering is preserved when two trunk pushes
+# land close together -- no cancel-in-progress, since a published image
+# is a side effect other jobs depend on, not disposable work.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
