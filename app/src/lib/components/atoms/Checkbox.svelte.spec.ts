@@ -82,4 +82,30 @@ describe('Checkbox.svelte', () => {
 
 		await expect.element(page.getByRole('checkbox')).not.toHaveAttribute('aria-describedby');
 	});
+
+	it('defaults to the native checkbox role', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('checkbox')).not.toHaveAttribute('role');
+	});
+
+	it('exposes the switch role when variant is "toggle"', async () => {
+		await setup({ variant: 'toggle' });
+
+		await expect.element(page.getByRole('switch')).toBeInTheDocument();
+	});
+
+	it('reflects checked state for the toggle variant', async () => {
+		await setup({ variant: 'toggle', checked: true });
+
+		await expect.element(page.getByRole('switch')).toBeChecked();
+	});
+
+	it('calls onChange with the new checked value when the toggle variant is clicked', async () => {
+		const { onChange } = await setup({ variant: 'toggle', checked: false });
+
+		await page.getByRole('switch').click();
+
+		expect(onChange).toHaveBeenCalledWith(true);
+	});
 });

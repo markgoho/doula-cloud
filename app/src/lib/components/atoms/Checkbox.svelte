@@ -9,6 +9,7 @@
 		required?: boolean;
 		invalid?: boolean;
 		describedBy?: string;
+		variant?: 'checkbox' | 'toggle';
 	}
 
 	const generatedId = $props.id();
@@ -21,7 +22,8 @@
 		disabled = false,
 		required = false,
 		invalid = false,
-		describedBy
+		describedBy,
+		variant = 'checkbox'
 	}: Properties = $props();
 </script>
 
@@ -33,6 +35,8 @@
 	{disabled}
 	{required}
 	class:invalid
+	class:toggle={variant === 'toggle'}
+	role={variant === 'toggle' ? 'switch' : undefined}
 	aria-invalid={invalid}
 	aria-describedby={describedBy}
 	onchange={(event_) => onChange(event_.currentTarget.checked)}
@@ -60,6 +64,45 @@
 		input:focus-visible {
 			outline: 2px solid var(--color-accent);
 			outline-offset: 2px;
+		}
+
+		input.toggle {
+			appearance: none;
+			position: relative;
+			inline-size: 2.5rem;
+			block-size: 1.5rem;
+			border: var(--border-thin) solid var(--color-input-border);
+			border-radius: 999px;
+			background-color: var(--color-border);
+		}
+
+		input.toggle::before {
+			content: '';
+			position: absolute;
+			inset-block-start: 1px;
+			inset-inline-start: 1px;
+			inline-size: 1.2rem;
+			block-size: 1.2rem;
+			border-radius: 50%;
+			background-color: var(--color-bg);
+		}
+
+		input.toggle:checked {
+			background-color: var(--color-accent);
+		}
+
+		input.toggle:checked::before {
+			translate: 1rem 0;
+		}
+
+		@media (prefers-reduced-motion: no-preference) {
+			input.toggle {
+				transition: background-color 150ms ease;
+			}
+
+			input.toggle::before {
+				transition: translate 150ms ease;
+			}
 		}
 	}
 </style>
