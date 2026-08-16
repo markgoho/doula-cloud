@@ -1,11 +1,13 @@
-<script lang="ts">
-	import type { Snippet } from 'svelte';
-
-	interface ControlProperties {
+<script module lang="ts">
+	export interface ControlProperties {
 		id: string;
 		describedBy: string | undefined;
 		invalid: boolean;
 	}
+</script>
+
+<script lang="ts">
+	import type { Snippet } from 'svelte';
 
 	interface Properties {
 		id?: string;
@@ -24,15 +26,23 @@
 	const describedBy = $derived(error ? errorId : undefined);
 </script>
 
-<stack-l space="var(--space-1)">
+{#snippet control()}
+	{@render children({ id, describedBy, invalid: isInvalid })}
+{/snippet}
+
+{#snippet fieldLabel()}
+	<label for={id}>{label}</label>
+{/snippet}
+
+<stack-l>
 	{#if orientation === 'inline'}
-		<cluster-l space="var(--space-2)" align="center">
-			{@render children({ id, describedBy, invalid: isInvalid })}
-			<label for={id}>{label}</label>
+		<cluster-l>
+			{@render control()}
+			{@render fieldLabel()}
 		</cluster-l>
 	{:else}
-		<label for={id}>{label}</label>
-		{@render children({ id, describedBy, invalid: isInvalid })}
+		{@render fieldLabel()}
+		{@render control()}
 	{/if}
 	{#if error}
 		<p id={errorId} role="alert">{error}</p>

@@ -3,13 +3,7 @@ import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import LabeledField from './LabeledField.svelte';
-
-interface ControlProperties {
-	id: string;
-	describedBy: string | undefined;
-	invalid: boolean;
-}
+import LabeledField, { type ControlProperties } from './LabeledField.svelte';
 
 function inputSnippet() {
 	return createRawSnippet<[ControlProperties]>((control) => ({
@@ -27,7 +21,7 @@ function inputSnippet() {
 type SetupOptions = Partial<Omit<ComponentProps<typeof LabeledField>, 'children'>>;
 
 async function setup({ label = 'Client name', ...rest }: SetupOptions = {}) {
-	await render(LabeledField, { label, children: inputSnippet(), ...rest });
+	return render(LabeledField, { label, children: inputSnippet(), ...rest });
 }
 
 describe('LabeledField.svelte', () => {
@@ -86,21 +80,23 @@ describe('LabeledField.svelte', () => {
 		await expect.element(page.getByLabelText('Client name')).toHaveAttribute('aria-invalid', 'false');
 	});
 
-	it('defaults to stacked orientation, rendering the label before the control', async () => {
-		await setup();
+	it('defaults to stacked orientation, rendering the label before the control with no cluster wrapper', async () => {
+		const { container } = await setup();
 
 		const label = page.getByText('Client name').element();
 		const control = page.getByLabelText('Client name').element();
 
 		expect(label.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(container.querySelector('cluster-l')).toBeNull();
 	});
 
-	it('renders the control before the label in inline orientation', async () => {
-		await setup({ orientation: 'inline' });
+	it('renders the control before the label inside a cluster-l wrapper in inline orientation', async () => {
+		const { container } = await setup({ orientation: 'inline' });
 
 		const label = page.getByText('Client name').element();
 		const control = page.getByLabelText('Client name').element();
 
 		expect(control.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(container.querySelector('cluster-l')).toContainElement(control);
 	});
 });
