@@ -7,7 +7,8 @@ import {
 	mergeFieldLabel,
 	saveContractValues,
 	sendContract,
-	setMergeFieldValue
+	setMergeFieldValue,
+	signContract
 } from './contract.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -159,6 +160,36 @@ describe('loadClientContract', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('server error', 500));
 
 		await expect(loadClientContract(fetcher, 'eng-1')).rejects.toThrow('server error');
+	});
+});
+
+describe('signContract', () => {
+	it('POSTs the typed name and attestation to the portal engagement sign path and returns the decoded contract', async () => {
+		const contract = {
+			engagementId: 'eng-1',
+			status: 'signed',
+			prose: 'Agreement for {{client_name}}.',
+			mergeFields: ['client_name'],
+			values: { client_name: 'Jamie' }
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
+
+		const result = await signContract(fetcher, 'eng-1', 'Jamie Doe', true);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/portal/engagements/eng-1/contract/sign', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ fullLegalName: 'Jamie Doe', attestation: true })
+		});
+		expect(result).toEqual(contract);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('contract is not awaiting signature', 409));
+
+		await expect(signContract(fetcher, 'eng-1', 'Jamie Doe', true)).rejects.toThrow(
+			'contract is not awaiting signature'
+		);
 	});
 });
 

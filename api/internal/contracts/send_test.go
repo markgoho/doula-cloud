@@ -124,7 +124,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	const uid = "send-success"
 	practiceID := seedMember(t, db, uid)
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
@@ -189,7 +189,7 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	const uid = "send-no-subscription"
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	pusher := push.NewFakePusher()
 	srv := newContractServerWithPusher(fakeVerifier{uid: uid}, db, pusher)
@@ -217,7 +217,7 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 	const uid = "send-push-fails"
 	practiceID := seedMember(t, db, uid)
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
 
 	pusher := push.NewFakePusher()

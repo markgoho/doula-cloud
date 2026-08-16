@@ -147,6 +147,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		clientauth.Middleware(verifier, db)(plans.ClientGetBirthPlanHandler()))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/contract",
 		clientauth.Middleware(verifier, db)(contracts.ClientGetContractHandler()))
+	mux.Handle("POST /api/portal/engagements/{engagementId}/contract/sign",
+		clientauth.Middleware(verifier, db)(contracts.ClientPostSignContractHandler()))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(verifier, db)(message.ClientListHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",

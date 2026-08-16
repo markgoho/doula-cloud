@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	statusDraft  = "draft"
 	statusSent   = "sent"
 	statusSigned = "signed"
 	statusVoided = "voided"
@@ -70,6 +71,8 @@ func newPortalServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/contract",
 		clientauth.Middleware(verifier, db.App)(contracts.ClientGetContractHandler()))
+	mux.Handle("POST /portal/engagements/{engagementId}/contract/sign",
+		clientauth.Middleware(verifier, db.App)(contracts.ClientPostSignContractHandler()))
 	return httptest.NewServer(mux)
 }
 
@@ -150,7 +153,7 @@ func TestClientGetContractHandler_DraftNeverReturned404s(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()

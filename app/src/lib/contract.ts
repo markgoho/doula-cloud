@@ -140,6 +140,28 @@ export async function sendContract(
 	return response.json();
 }
 
+/** Signs the sent Contract for engagementId -- transitions it to signed,
+ * one-way, and only while it's still sent (a non-sent Contract 409s).
+ * fullLegalName and isAttestation are the only fields the caller supplies;
+ * the BFF derives signed_at and the signer's IP itself. Throws with the
+ * response body text on a non-2xx response. */
+export async function signContract(
+	fetcher: Fetcher,
+	engagementId: string,
+	fullLegalName: string,
+	isAttestation: boolean
+): Promise<Contract> {
+	const response = await fetcher(`${clientContractPath(engagementId)}/sign`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ fullLegalName, attestation: isAttestation })
+	});
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
+}
+
 /** Sets the value for a merge field key within values, returning a new
  * object (values is never mutated) -- mirrors planInstance.ts's
  * setAnswer, minus the polymorphic-type handling a Contract's merge

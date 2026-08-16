@@ -118,7 +118,7 @@ func TestRLS_ContractsFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Some Practice")
 	engagementID := seedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "draft", "Some prose")
+	seedContract(t, db, engagementID, statusDraft, "Some prose")
 
 	var count int
 	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM contracts`).Scan(&count); err != nil {
@@ -138,8 +138,8 @@ func TestRLS_ContractsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	practiceB := seedPractice(t, db, "Practice B")
 	engagementA := seedEngagement(t, db, practiceA)
 	engagementB := seedEngagement(t, db, practiceB)
-	seedContract(t, db, engagementA, "draft", "Practice A's prose")
-	seedContract(t, db, engagementB, "draft", "Practice B's prose")
+	seedContract(t, db, engagementA, statusDraft, "Practice A's prose")
+	seedContract(t, db, engagementB, statusDraft, "Practice B's prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -183,7 +183,7 @@ func TestRLS_ContractsUpdateRejectedAcrossPractice(t *testing.T) {
 	practiceA := seedPractice(t, db, "Practice A")
 	practiceB := seedPractice(t, db, "Practice B")
 	engagementB := seedEngagement(t, db, practiceB)
-	seedContract(t, db, engagementB, "draft", "Practice B's prose")
+	seedContract(t, db, engagementB, statusDraft, "Practice B's prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -253,7 +253,7 @@ func TestRLS_ContractsClientCannotReadDraft(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Practice")
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedContract(t, db, engagementID, "draft", "Agreement prose")
+	seedContract(t, db, engagementID, statusDraft, "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -341,9 +341,17 @@ func TestRLS_ContractsClientCannotReadOtherClientsContract(t *testing.T) {
 	}
 }
 
-// TestRLS_ContractsClientUpdateRejected proves the policy is SELECT-only:
-// a Client-portal session can't UPDATE their own sent Contract, even
-// though it can SELECT it.
+// TestRLS_ContractsClientUpdateRejected proves
+// contracts_client_visibility itself grants no write access: an UPDATE
+// that doesn't land on the exact sent -> signed transition
+// contracts_client_sign (00018_contracts_signing.sql) admits -- here,
+// merge_field_values with status left untouched (so it stays 'sent', not
+// the 'signed' contracts_client_sign's WITH CHECK requires) -- is
+// rejected. The row is visible for UPDATE (contracts_client_sign's USING
+// clause passes on a 'sent' Contract the caller owns), so Postgres
+// evaluates WITH CHECK against the new row and rejects it outright rather
+// than silently affecting 0 rows -- unlike the SELECT-only case, where an
+// invisible row is simply filtered out.
 func TestRLS_ContractsClientUpdateRejected(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Practice")
@@ -360,8 +368,41 @@ func TestRLS_ContractsClientUpdateRejected(t *testing.T) {
 		t.Fatalf("set_config: %v", err)
 	}
 
-	result, err := tx.ExecContext(t.Context(),
+	_, err = tx.ExecContext(t.Context(),
 		`UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`,
+		engagementID,
+	)
+	if err == nil {
+		t.Fatal("expected an RLS violation updating a Contract as a Client-portal session, got no error")
+	}
+}
+
+// These tests exercise the contracts_client_sign RLS policy from
+// 00018_contracts_signing.sql directly via db.App and set_config,
+// bypassing the Go handler -- the sent -> signed transition it admits, on
+// the caller's own Engagement only.
+
+// TestRLS_ContractsClientCanSignOwnSentContract proves the policy allows
+// a Client-portal session to transition their own sent Contract to
+// signed.
+func TestRLS_ContractsClientCanSignOwnSentContract(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Practice")
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	seedContract(t, db, engagementID, "sent", "Agreement prose")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	result, err := tx.ExecContext(t.Context(),
+		`UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`,
 		engagementID,
 	)
 	if err != nil {
@@ -371,7 +412,115 @@ func TestRLS_ContractsClientUpdateRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rows affected: %v", err)
 	}
+	if rows != 1 {
+		t.Fatalf("expected 1 row affected signing own sent Contract as a Client-portal session, got %d", rows)
+	}
+}
+
+// TestRLS_ContractsClientCannotSignOtherClientsContract proves the
+// policy's Engagement-ownership EXISTS subquery, not just the status
+// condition: a Client-portal session can't sign a sent Contract on an
+// Engagement belonging to a different Client.
+func TestRLS_ContractsClientCannotSignOtherClientsContract(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Practice")
+	clientA, _ := seedClientEngagement(t, db, practiceID, "Client A", "a@example.com")
+	_, engagementB := seedClientEngagement(t, db, practiceID, "Client B", "b@example.com")
+	seedContract(t, db, engagementB, "sent", "Agreement prose")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientA); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	result, err := tx.ExecContext(t.Context(),
+		`UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`,
+		engagementB,
+	)
+	if err != nil {
+		t.Fatalf("update contracts: %v", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		t.Fatalf("rows affected: %v", err)
+	}
 	if rows != 0 {
-		t.Fatalf("expected 0 rows affected updating a Contract as a Client-portal session, got %d", rows)
+		t.Fatalf("expected 0 rows affected signing Client B's Contract as Client A, got %d", rows)
+	}
+}
+
+// TestRLS_ContractsClientCannotSignNonSentContract proves the policy's
+// USING clause, not just WITH CHECK: an already-signed or voided Contract
+// isn't visible to this UPDATE at all, so the sent -> signed transition
+// can't be re-run or reversed through it.
+func TestRLS_ContractsClientCannotSignNonSentContract(t *testing.T) {
+	for _, status := range []string{statusSigned, statusVoided} {
+		t.Run(status, func(t *testing.T) {
+			db := testdb.New(t)
+			practiceID := seedPractice(t, db, "Practice")
+			clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+			seedContract(t, db, engagementID, status, "Agreement prose")
+
+			tx, err := db.App.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatalf("begin: %v", err)
+			}
+			defer tx.Rollback()
+
+			if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
+				t.Fatalf("set_config: %v", err)
+			}
+
+			result, err := tx.ExecContext(t.Context(),
+				`UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`,
+				engagementID,
+			)
+			if err != nil {
+				t.Fatalf("update contracts: %v", err)
+			}
+			rows, err := result.RowsAffected()
+			if err != nil {
+				t.Fatalf("rows affected: %v", err)
+			}
+			if rows != 0 {
+				t.Fatalf("expected 0 rows affected signing a %s Contract, got %d", status, rows)
+			}
+		})
+	}
+}
+
+// TestRLS_ContractsClientCannotTransitionSentToOtherStatus proves the
+// policy's WITH CHECK, not just USING: a Client-portal session can't use
+// the sign policy's window to move a sent Contract to voided (or any
+// status other than signed) -- the row is visible for UPDATE (USING
+// passes on a 'sent' Contract the caller owns), but WITH CHECK rejects
+// the resulting 'voided' row outright.
+func TestRLS_ContractsClientCannotTransitionSentToOtherStatus(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Practice")
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	seedContract(t, db, engagementID, "sent", "Agreement prose")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	_, err = tx.ExecContext(t.Context(),
+		`UPDATE contracts SET status = 'voided'::contract_status WHERE engagement_id = $1`,
+		engagementID,
+	)
+	if err == nil {
+		t.Fatal("expected an RLS violation voiding a sent Contract as a Client-portal session, got no error")
 	}
 }

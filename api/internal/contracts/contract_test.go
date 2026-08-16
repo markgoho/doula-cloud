@@ -160,7 +160,7 @@ func TestPostContractHandler_Success(t *testing.T) {
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
 	}
-	if out.Status != "draft" {
+	if out.Status != statusDraft {
 		t.Fatalf("status = %q, want draft", out.Status)
 	}
 	if out.Prose != mergeFieldProse {
@@ -316,7 +316,7 @@ func TestPutContractHandler_InvalidBody(t *testing.T) {
 	const uid = "put-invalid-body"
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv := newContractServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()
@@ -334,7 +334,7 @@ func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
 	const uid = "put-unknown-key"
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv := newContractServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()
@@ -355,7 +355,7 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 	const uid = "put-status-ignored"
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv := newContractServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()
@@ -372,7 +372,7 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.Status != "draft" {
+	if out.Status != statusDraft {
 		t.Fatalf("status = %q, want draft (unaffected by the request body)", out.Status)
 	}
 }
@@ -386,7 +386,7 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	const uid = "put-empty-body"
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv := newContractServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()
@@ -414,7 +414,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 	const uid = "put-success"
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv := newContractServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()
