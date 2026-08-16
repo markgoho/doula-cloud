@@ -10,6 +10,7 @@ import {
 	type Field
 } from './planTemplate.js';
 
+// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
 function jsonResponse(body: unknown, ok = true): Response {
 	return {
 		ok,
@@ -149,7 +150,7 @@ describe('validateFields', () => {
 				{ id: 'a', type: 'short_text', label: 'A', order: 0 },
 				{ id: 'b', type: 'single_select', label: 'B', options: ['x'], order: 1 }
 			])
-		).toBeNull();
+		).toBeUndefined();
 	});
 
 	it('rejects a blank id', () => {

@@ -23,16 +23,6 @@ export function defineIcon(): void {
 			return [...super.observedAttributes, 'label'];
 		}
 
-		connectedCallback(): void {
-			super.connectedCallback();
-			this.#syncLabel();
-		}
-
-		attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
-			super.attributeChangedCallback(name, oldValue, newValue);
-			if (name === 'label') this.#syncLabel();
-		}
-
 		#syncLabel(): void {
 			const label = this.getAttribute('label');
 			if (label) {
@@ -42,6 +32,16 @@ export function defineIcon(): void {
 				this.removeAttribute('role');
 				this.removeAttribute('aria-label');
 			}
+		}
+
+		connectedCallback(): void {
+			super.connectedCallback();
+			this.#syncLabel();
+		}
+
+		attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
+			super.attributeChangedCallback(name, oldValue, newValue);
+			if (name === 'label') this.#syncLabel();
 		}
 	}
 

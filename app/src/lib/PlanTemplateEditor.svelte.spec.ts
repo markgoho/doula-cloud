@@ -41,7 +41,7 @@ describe('PlanTemplateEditor.svelte', () => {
 		await setup();
 
 		const labelInputs = page.getByLabelText('Field label').elements() as HTMLInputElement[];
-		expect(labelInputs.map((el) => el.value)).toEqual(['Support people', 'Pain management']);
+		expect(labelInputs.map((element) => element.value)).toEqual(['Support people', 'Pain management']);
 	});
 
 	it('renders an empty options textarea for a select field with no options', async () => {

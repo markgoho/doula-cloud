@@ -6,7 +6,9 @@ export interface Membership {
 
 export interface SessionInfo {
 	memberships: Membership[];
-	lastPracticeId: string | null;
+	// The Go BFF's staffauth session response omits this key entirely (omitempty) when unset --
+	// it never sends a JSON null, so this stays `undefined`, not `null`.
+	lastPracticeId: string | undefined;
 }
 
 export type Landing =

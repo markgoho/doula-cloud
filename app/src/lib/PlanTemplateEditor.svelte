@@ -42,7 +42,7 @@
 				type="text"
 				aria-label="Field label"
 				value={field.label}
-				oninput={(e) => onLabelChange(field.id, e.currentTarget.value)}
+				oninput={(event_) => onLabelChange(field.id, event_.currentTarget.value)}
 			/>
 			<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for the
 			     bound <select>/<option> pair below aren't reachable from app-level
@@ -50,7 +50,7 @@
 			<select
 				aria-label="Field type"
 				value={field.type}
-				onchange={(e) => onTypeChange(field.id, e.currentTarget.value as FieldType)}
+				onchange={(event_) => onTypeChange(field.id, event_.currentTarget.value as FieldType)}
 			>
 				{#each FIELD_TYPES as type (type)}
 					<option value={type}>{type}</option>
@@ -61,7 +61,7 @@
 				<textarea
 					aria-label="Options, one per line"
 					value={optionsText(field)}
-					oninput={(e) => handleOptionsInput(field.id, e.currentTarget.value)}
+					oninput={(event_) => handleOptionsInput(field.id, event_.currentTarget.value)}
 				></textarea>
 			{/if}
 			<button type="button" onclick={() => onMoveUp(field.id)} disabled={index === 0}

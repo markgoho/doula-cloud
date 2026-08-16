@@ -24,7 +24,7 @@
 	let planType = $state<'care_plan' | 'birth_plan'>('care_plan');
 	let fields = $state<Field[]>([]);
 	let error = $state('');
-	let saved = $state(false);
+	let isSaved = $state(false);
 
 	async function fetcher(): Promise<Fetcher> {
 		const user = getFirebaseAuth().currentUser;
@@ -37,19 +37,19 @@
 
 	async function load() {
 		error = '';
-		saved = false;
+		isSaved = false;
 		try {
 			const fetch = await fetcher();
 			const template = await loadTemplate(fetch, page.params.practiceId!, planType);
 			fields = template.fields;
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load plan template';
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to load plan template';
 		}
 	}
 
 	async function save() {
 		error = '';
-		saved = false;
+		isSaved = false;
 		const validationError = validateFields(fields);
 		if (validationError) {
 			error = validationError;
@@ -59,9 +59,9 @@
 			const fetch = await fetcher();
 			const template = await saveTemplate(fetch, page.params.practiceId!, planType, fields);
 			fields = template.fields;
-			saved = true;
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to save plan template';
+			isSaved = true;
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to save plan template';
 		}
 	}
 
@@ -92,7 +92,7 @@
 {#if error}
 	<p role="alert">{error}</p>
 {/if}
-{#if saved}
+{#if isSaved}
 	<p>Saved.</p>
 {/if}
 

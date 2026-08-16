@@ -17,17 +17,17 @@ export type PushPayload = {
  * well-formed PushPayload rather than letting a malformed or unexpected
  * payload propagate into notificationFor/threadURLFor.
  */
-export function parsePushPayload(raw: string): PushPayload | null {
+export function parsePushPayload(raw: string): PushPayload | undefined {
 	let data: unknown;
 	try {
 		data = JSON.parse(raw);
 	} catch {
-		return null;
+		return undefined;
 	}
-	if (typeof data !== 'object' || data === null) return null;
+	if (typeof data !== 'object' || data === null) return undefined;
 	const { engagementId, practiceId } = data as Record<string, unknown>;
-	if (typeof engagementId !== 'string' || engagementId === '') return null;
-	if (practiceId !== undefined && (typeof practiceId !== 'string' || practiceId === '')) return null;
+	if (typeof engagementId !== 'string' || engagementId === '') return undefined;
+	if (practiceId !== undefined && (typeof practiceId !== 'string' || practiceId === '')) return undefined;
 	return practiceId ? { engagementId, practiceId } : { engagementId };
 }
 
@@ -46,7 +46,9 @@ export function notificationFor(payload: PushPayload): { title: string; options:
 	};
 }
 
-/** Resolves the thread URL a notification tap should open. */
+/**
+Resolves the thread URL a notification tap should open.
+*/
 export function threadURLFor(payload: PushPayload): string {
 	return payload.practiceId
 		? `/practices/${payload.practiceId}/engagements/${payload.engagementId}`
@@ -69,23 +71,25 @@ export const PUSH_MESSAGE_TYPE = 'doula-cloud/push-message';
 
 export type PushMessage = { type: typeof PUSH_MESSAGE_TYPE; payload: PushPayload };
 
-/** Builds the message the service worker posts to open window clients. */
+/**
+Builds the message the service worker posts to open window clients.
+*/
 export function pushMessageFor(payload: PushPayload): PushMessage {
 	return { type: PUSH_MESSAGE_TYPE, payload };
 }
 
 /**
  * Narrows an incoming `message` event's data to a PushMessage carrying
- * engagementId, or null if it isn't one -- used by a page to tell a
+ * engagementId, or undefined if it isn't one -- used by a page to tell a
  * same-origin `message` event apart from this one before deciding to
  * refetch.
  */
-export function asPushMessage(data: unknown): PushMessage | null {
-	if (typeof data !== 'object' || data === null) return null;
+export function asPushMessage(data: unknown): PushMessage | undefined {
+	if (typeof data !== 'object' || data === null) return undefined;
 	const { type, payload } = data as Record<string, unknown>;
-	if (type !== PUSH_MESSAGE_TYPE) return null;
-	if (typeof payload !== 'object' || payload === null) return null;
+	if (type !== PUSH_MESSAGE_TYPE) return undefined;
+	if (typeof payload !== 'object' || payload === null) return undefined;
 	const { engagementId } = payload as Record<string, unknown>;
-	if (typeof engagementId !== 'string' || engagementId === '') return null;
+	if (typeof engagementId !== 'string' || engagementId === '') return undefined;
 	return { type: PUSH_MESSAGE_TYPE, payload: payload as PushPayload };
 }

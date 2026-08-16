@@ -16,15 +16,17 @@ const vite = spawn('bun', ['run', 'dev'], {
 	}
 });
 
-let tornDown = false;
+let isTornDown = false;
 function teardown() {
-	if (tornDown) return;
-	tornDown = true;
+	if (isTornDown) return;
+	// eslint-disable-next-line unicorn/no-top-level-assignment-in-function -- one-shot guard against a double teardown from both the exit handler and a signal handler
+	isTornDown = true;
 	stopStack();
 }
 
 vite.on('exit', (code) => {
 	teardown();
+	// eslint-disable-next-line unicorn/no-process-exit -- forwards the dev server's own exit code to the parent shell
 	process.exit(code ?? 0);
 });
 

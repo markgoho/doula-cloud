@@ -9,7 +9,7 @@ describe('apiBaseURL', () => {
 
 describe('apiFetch', () => {
 	it('attaches the bearer token and merges caller headers', async () => {
-		const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+		const fetchMock = vi.fn(async () => new Response(undefined, { status: 200 }));
 		vi.stubGlobal('fetch', fetchMock);
 
 		await apiFetch('/api/staff/session', 'tok-123', { headers: { 'X-Test': 'yes' } });

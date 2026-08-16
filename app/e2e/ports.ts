@@ -10,6 +10,6 @@
 // - scripts/dev-full.ts's dev-server env (same, for `bun run dev:full`)
 // - staff-login.e2e.ts, to talk to the emulator and BFF directly
 export const E2E_API_HOST = '127.0.0.1';
-export const E2E_API_PORT = 18080;
+export const E2E_API_PORT = 18_080;
 export const E2E_EMULATOR_HOST = '127.0.0.1';
 export const E2E_EMULATOR_PORT = 9099;

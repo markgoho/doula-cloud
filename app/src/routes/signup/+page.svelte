@@ -10,12 +10,12 @@
 	let email = $state('');
 	let password = $state('');
 	let error = $state('');
-	let submitting = $state(false);
+	let isSubmitting = $state(false);
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
-		submitting = true;
+		isSubmitting = true;
 		try {
 			const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
 			const idToken = await credential.user.getIdToken();
@@ -32,10 +32,10 @@
 
 			const created: { practiceId: string } = await response.json();
 			await goto(resolve('/practices/[practiceId]', { practiceId: created.practiceId }));
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Signup failed';
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Signup failed';
 		} finally {
-			submitting = false;
+			isSubmitting = false;
 		}
 	}
 </script>
@@ -59,7 +59,7 @@
 		Password
 		<input type="password" bind:value={password} required minlength="6" />
 	</label>
-	<button type="submit" disabled={submitting}>Create Practice</button>
+	<button type="submit" disabled={isSubmitting}>Create Practice</button>
 	{#if error}
 		<p role="alert">{error}</p>
 	{/if}

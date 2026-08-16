@@ -9,14 +9,14 @@
 	let email = $state('');
 	let password = $state('');
 	let error = $state('');
-	let submitting = $state(false);
-	let picker = $state<Membership[] | null>(null);
+	let isSubmitting = $state(false);
+	let picker = $state<Membership[] | undefined>();
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
-		picker = null;
-		submitting = true;
+		picker = undefined;
+		isSubmitting = true;
 		try {
 			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
 			const idToken = await credential.user.getIdToken();
@@ -34,10 +34,10 @@
 			} else {
 				picker = landing.memberships;
 			}
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Login failed';
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Login failed';
 		} finally {
-			submitting = false;
+			isSubmitting = false;
 		}
 	}
 </script>
@@ -53,7 +53,7 @@
 		Password
 		<input type="password" bind:value={password} required />
 	</label>
-	<button type="submit" disabled={submitting}>Log in</button>
+	<button type="submit" disabled={isSubmitting}>Log in</button>
 	{#if error}
 		<p role="alert">{error}</p>
 	{/if}

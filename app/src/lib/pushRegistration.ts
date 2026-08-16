@@ -8,9 +8,9 @@ import { apiFetch } from '#lib/api.js';
  */
 export function urlBase64ToUint8Array(base64String: string): Uint8Array {
 	const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-	const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+	const base64 = (base64String + padding).replaceAll('-', '+').replaceAll('_', '/');
 	const rawData = atob(base64);
-	return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+	return Uint8Array.from([...rawData].map((c) => c.codePointAt(0)!));
 }
 
 /**
@@ -36,7 +36,7 @@ export function vapidPublicKey(): string {
 /* v8 ignore start -- requires the Service Worker/PushManager browser APIs, exercised by Playwright e2e not Vitest */
 export async function registerPushSubscription(subscribeURL: string, idToken: string): Promise<void> {
 	try {
-		if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+		if (!('serviceWorker' in navigator) || !('PushManager' in globalThis)) return;
 		const publicKey = vapidPublicKey();
 		if (!publicKey) return;
 

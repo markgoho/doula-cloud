@@ -21,23 +21,23 @@ describe('parsePushPayload', () => {
 	});
 
 	it('rejects malformed JSON', () => {
-		expect(parsePushPayload('not json')).toBeNull();
+		expect(parsePushPayload('not json')).toBeUndefined();
 	});
 
 	it('rejects a JSON payload that is not an object', () => {
-		expect(parsePushPayload('"just a string"')).toBeNull();
+		expect(parsePushPayload('"just a string"')).toBeUndefined();
 	});
 
 	it('rejects a payload missing engagementId', () => {
-		expect(parsePushPayload('{"practiceId":"p1"}')).toBeNull();
+		expect(parsePushPayload('{"practiceId":"p1"}')).toBeUndefined();
 	});
 
 	it('rejects a payload with an empty engagementId', () => {
-		expect(parsePushPayload('{"engagementId":""}')).toBeNull();
+		expect(parsePushPayload('{"engagementId":""}')).toBeUndefined();
 	});
 
 	it('rejects a payload with a non-string practiceId', () => {
-		expect(parsePushPayload('{"engagementId":"e1","practiceId":42}')).toBeNull();
+		expect(parsePushPayload('{"engagementId":"e1","practiceId":42}')).toBeUndefined();
 	});
 });
 
@@ -71,19 +71,21 @@ describe('pushMessageFor / asPushMessage', () => {
 	});
 
 	it('rejects data with the wrong type tag', () => {
-		expect(asPushMessage({ type: 'something-else', payload: { engagementId: 'e1' } })).toBeNull();
+		expect(asPushMessage({ type: 'something-else', payload: { engagementId: 'e1' } })).toBeUndefined();
 	});
 
 	it('rejects data that is not an object', () => {
-		expect(asPushMessage('not an object')).toBeNull();
-		expect(asPushMessage(null)).toBeNull();
+		expect(asPushMessage('not an object')).toBeUndefined();
+		// MessageEvent.data can be the DOM value null, not just this module's own undefined sentinel.
+		// eslint-disable-next-line unicorn/no-null
+		expect(asPushMessage(null)).toBeUndefined();
 	});
 
 	it('rejects a message whose payload is not an object', () => {
-		expect(asPushMessage({ type: PUSH_MESSAGE_TYPE, payload: 'nope' })).toBeNull();
+		expect(asPushMessage({ type: PUSH_MESSAGE_TYPE, payload: 'nope' })).toBeUndefined();
 	});
 
 	it('rejects a message whose payload is missing engagementId', () => {
-		expect(asPushMessage({ type: PUSH_MESSAGE_TYPE, payload: { practiceId: 'p1' } })).toBeNull();
+		expect(asPushMessage({ type: PUSH_MESSAGE_TYPE, payload: { practiceId: 'p1' } })).toBeUndefined();
 	});
 });

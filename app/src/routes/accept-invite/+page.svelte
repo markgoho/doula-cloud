@@ -13,14 +13,14 @@
 	let password = $state('');
 	let mode = $state<'signup' | 'login'>('signup');
 	let error = $state('');
-	let submitting = $state(false);
-	let picker = $state<Membership[] | null>(null);
+	let isSubmitting = $state(false);
+	let picker = $state<Membership[] | undefined>();
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
-		picker = null;
-		submitting = true;
+		picker = undefined;
+		isSubmitting = true;
 		try {
 			if (!inviteToken) {
 				error = 'Missing invite token';
@@ -55,10 +55,10 @@
 			} else {
 				picker = landing.memberships;
 			}
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Accept invite failed';
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Accept invite failed';
 		} finally {
-			submitting = false;
+			isSubmitting = false;
 		}
 	}
 </script>
@@ -85,7 +85,7 @@
 			<input type="radio" name="mode" value="login" bind:group={mode} />
 			I already have an account -- log in
 		</label>
-		<button type="submit" disabled={submitting}>Accept invite</button>
+		<button type="submit" disabled={isSubmitting}>Accept invite</button>
 		{#if error}
 			<p role="alert">{error}</p>
 		{/if}

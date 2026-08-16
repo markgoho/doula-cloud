@@ -1,8 +1,9 @@
 <script lang="ts">
-	interface Props {
+	interface Properties {
 		id?: string;
 		name?: string;
 		checked: boolean;
+		// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property this atom wraps 1:1
 		onChange: (checked: boolean) => void;
 		disabled?: boolean;
 		required?: boolean;
@@ -21,7 +22,7 @@
 		required = false,
 		invalid = false,
 		describedBy
-	}: Props = $props();
+	}: Properties = $props();
 </script>
 
 <input
@@ -34,7 +35,7 @@
 	class:invalid
 	aria-invalid={invalid}
 	aria-describedby={describedBy}
-	onchange={(e) => onChange(e.currentTarget.checked)}
+	onchange={(event_) => onChange(event_.currentTarget.checked)}
 />
 
 <style>

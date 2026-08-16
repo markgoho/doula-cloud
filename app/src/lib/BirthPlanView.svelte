@@ -1,15 +1,15 @@
 <script lang="ts">
-	import { answerChecked, answerOptions, answerText, type Answers, type Field } from './planInstance.js';
+	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from './planInstance.js';
 
 	let { fields, answers }: { fields: Field[]; answers: Answers } = $props();
 
 	function textValue(field: Field): string {
 		const value = answerText(answers, field.id);
-		return value !== '' ? value : '—';
+		return value === '' ? '—' : value;
 	}
 
 	function checkboxValue(field: Field): string {
-		return answerChecked(answers, field.id) ? 'Yes' : 'No';
+		return isAnswerChecked(answers, field.id) ? 'Yes' : 'No';
 	}
 
 	function selectedOptions(field: Field): string {

@@ -8,12 +8,12 @@
 	let name = $state('');
 	let email = $state('');
 	let error = $state('');
-	let submitting = $state(false);
+	let isSubmitting = $state(false);
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
-		submitting = true;
+		isSubmitting = true;
 		try {
 			const user = getFirebaseAuth().currentUser;
 			if (!user) {
@@ -39,10 +39,10 @@
 					engagementId: created.engagementId
 				})
 			);
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to add Client';
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to add Client';
 		} finally {
-			submitting = false;
+			isSubmitting = false;
 		}
 	}
 </script>
@@ -58,7 +58,7 @@
 		Their email
 		<input type="email" bind:value={email} required />
 	</label>
-	<button type="submit" disabled={submitting}>Add Client</button>
+	<button type="submit" disabled={isSubmitting}>Add Client</button>
 	{#if error}
 		<p role="alert">{error}</p>
 	{/if}

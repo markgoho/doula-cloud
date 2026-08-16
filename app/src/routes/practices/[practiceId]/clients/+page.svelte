@@ -16,7 +16,7 @@
 
 	let clients = $state<ClientEngagement[]>([]);
 	let error = $state('');
-	let loaded = $state(false);
+	let isLoaded = $state(false);
 
 	onMount(async () => {
 		const user = getFirebaseAuth().currentUser;
@@ -33,7 +33,7 @@
 		}
 
 		clients = await response.json();
-		loaded = true;
+		isLoaded = true;
 	});
 </script>
 
@@ -45,7 +45,7 @@
 
 {#if error}
 	<p role="alert">{error}</p>
-{:else if loaded}
+{:else if isLoaded}
 	{#if clients.length === 0}
 		<p>No Clients yet.</p>
 	{:else}

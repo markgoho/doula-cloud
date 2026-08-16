@@ -1,5 +1,5 @@
 <script lang="ts">
-	interface Props {
+	interface Properties {
 		id?: string;
 		name?: string;
 		options: string[];
@@ -23,7 +23,7 @@
 		required = false,
 		invalid = false,
 		describedBy
-	}: Props = $props();
+	}: Properties = $props();
 </script>
 
 <select

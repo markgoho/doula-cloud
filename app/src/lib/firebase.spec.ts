@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { emulatorURL } from './firebase';
 
 describe('emulatorURL', () => {
-	it('returns null when no emulator host is configured', () => {
-		expect(emulatorURL(undefined)).toBeNull();
+	it('returns undefined when no emulator host is configured', () => {
+		expect(emulatorURL(undefined)).toBeUndefined();
 	});
 
 	it('builds an http URL from a host:port pair', () => {

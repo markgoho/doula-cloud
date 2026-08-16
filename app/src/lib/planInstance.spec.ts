@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-	answerChecked,
+	isAnswerChecked,
 	answerOptions,
 	answerText,
 	createInstance,
@@ -32,12 +32,12 @@ describe('loadInstance', () => {
 		expect(result).toEqual(instance);
 	});
 
-	it('returns null on a 404 (no instance created yet)', async () => {
+	it('returns undefined on a 404 (no instance created yet)', async () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not found', 404));
 
 		const result = await loadInstance(fetcher, 'practice-1', 'eng-1', 'care_plan');
 
-		expect(result).toBeNull();
+		expect(result).toBeUndefined();
 	});
 
 	it('throws with the response body text on any other non-ok response', async () => {
@@ -181,11 +181,11 @@ describe('answerText', () => {
 	});
 });
 
-describe('answerChecked', () => {
+describe('isAnswerChecked', () => {
 	it('returns true only when the stored value is exactly true', () => {
-		expect(answerChecked({ f1: true }, 'f1')).toBe(true);
-		expect(answerChecked({ f1: false }, 'f1')).toBe(false);
-		expect(answerChecked({}, 'f1')).toBe(false);
+		expect(isAnswerChecked({ f1: true }, 'f1')).toBe(true);
+		expect(isAnswerChecked({ f1: false }, 'f1')).toBe(false);
+		expect(isAnswerChecked({}, 'f1')).toBe(false);
 	});
 });
 
