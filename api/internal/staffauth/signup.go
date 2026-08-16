@@ -126,8 +126,39 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO plan_templates (practice_id, plan_type, fields) VALUES ($1, 'care_plan', $2), ($1, 'birth_plan', $3)`,
+		practiceID, defaultCarePlanFields, defaultBirthPlanFields,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
 	return SignupResponse{StaffID: staffID, PracticeID: practiceID}, http.StatusCreated, ""
 }
+
+// defaultCarePlanFields and defaultBirthPlanFields are the field lists a
+// new Practice starts with (ADR-0001: seeding applies going forward only,
+// no backfill for practices created before this ticket). Each field must
+// match the palette and options shape validated server-side by the
+// plans package (api/internal/plans/template.go) -- kept as a literal
+// here, rather than importing that package, to avoid a staffauth<->plans
+// import cycle (plans imports staffauth for its own handlers).
+const defaultCarePlanFields = `[
+	{"id": "support-people", "type": "section_header", "label": "Support People", "order": 0},
+	{"id": "support-people-names", "type": "short_text", "label": "Who will be present for support?", "order": 1},
+	{"id": "pain-management", "type": "single_select", "label": "Preferred pain management", "options": ["Unmedicated", "Epidural", "Open to options in the moment"], "order": 2},
+	{"id": "special-requests", "type": "long_text", "label": "Special requests or concerns", "order": 3},
+	{"id": "share-with-backup", "type": "checkbox", "label": "OK to share this plan with a backup doula", "order": 4}
+]`
+
+const defaultBirthPlanFields = `[
+	{"id": "birth-setting", "type": "section_header", "label": "Birth Setting", "order": 0},
+	{"id": "location", "type": "single_select", "label": "Planned birth location", "options": ["Home", "Birth center", "Hospital"], "order": 1},
+	{"id": "notify", "type": "multi_select", "label": "People to notify when labor starts", "options": ["Partner", "Doula", "Midwife", "OB", "Family"], "order": 2},
+	{"id": "atmosphere", "type": "long_text", "label": "Preferences for atmosphere (music, lighting, etc.)", "order": 3},
+	{"id": "consent-photos", "type": "checkbox", "label": "OK to take photos/video during labor", "order": 4}
+]`
 
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError

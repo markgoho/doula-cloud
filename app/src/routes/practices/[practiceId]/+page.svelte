@@ -47,5 +47,10 @@
 		<a href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
 			>Invite a Staff member</a
 		>
+		<a
+			href={resolve('/practices/[practiceId]/settings/plan-templates', {
+				practiceId: page.params.practiceId!
+			})}>Plan Templates</a
+		>
 	{/if}
 {/if}
