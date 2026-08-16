@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -123,14 +124,43 @@ func seedContract(t *testing.T, db *testdb.DB, engagementID, status, prose strin
 	}
 }
 
+// seedSignedContract seeds a 'signed' Contract row directly (prose fixed
+// at mergeFieldProse, the same prose every caller needs), with
+// signed_pdf_object_path set -- exercising GetSignedContractPDFHandler /
+// ClientGetSignedContractPDFHandler's DB read without going through the
+// full Sign transition. Callers separately Put matching bytes into the
+// objectstore.ObjectStore the test server was built with, at
+// contracts.SignedPDFObjectPath(engagementID), unless the test wants the "PDF row
+// found but object missing" case.
+func seedSignedContract(t *testing.T, db *testdb.DB, engagementID, pdfObjectPath string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO contracts (engagement_id, status, prose, signed_pdf_object_path) VALUES ($1, 'signed'::contract_status, $2, $3)`,
+		engagementID, mergeFieldProse, pdfObjectPath,
+	); err != nil {
+		t.Fatalf("seed signed contract: %v", err)
+	}
+}
+
 func newContractServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
-	return newContractServerWithPusher(verifier, db, push.NewFakePusher())
+	return newContractServerWithPusherAndStore(verifier, db, push.NewFakePusher(), objectstore.NewMemoryStore())
 }
 
 // newContractServerWithPusher mirrors newContractServer but lets the
 // caller inject pusher, so a test can inspect what Send triggers --
 // mirrors message/handlers_test.go's newServerWithPusher.
 func newContractServerWithPusher(verifier fakeVerifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
+	return newContractServerWithPusherAndStore(verifier, db, pusher, objectstore.NewMemoryStore())
+}
+
+// newContractServerWithStore mirrors newContractServer but lets the
+// caller inject store, so a test can seed what the Signed PDF endpoint
+// reads back.
+func newContractServerWithStore(verifier fakeVerifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
+	return newContractServerWithPusherAndStore(verifier, db, push.NewFakePusher(), store)
+}
+
+func newContractServerWithPusherAndStore(verifier fakeVerifier, db *testdb.DB, pusher push.Pusher, store objectstore.ObjectStore) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/contract-template",
 		staffauth.Middleware(verifier, db.App)(contracts.GetTemplateHandler()))
@@ -144,6 +174,8 @@ func newContractServerWithPusher(verifier fakeVerifier, db *testdb.DB, pusher pu
 		staffauth.Middleware(verifier, db.App)(contracts.PutContractHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/send",
 		staffauth.Middleware(verifier, db.App)(contracts.PostSendContractHandler(pusher)))
+	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract/pdf",
+		staffauth.Middleware(verifier, db.App)(contracts.GetSignedContractPDFHandler(store)))
 	return httptest.NewServer(mux)
 }
 

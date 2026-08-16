@@ -2,15 +2,33 @@ package contracts_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/testdb"
 )
+
+// failingStore is an objectstore.ObjectStore whose Put and Get always
+// fail, standing in for a real GCS outage -- mirrors
+// message/handlers_test.go's failingStore. Package-local per client_test.go's
+// note that Go test doubles aren't exported across packages.
+type failingStore struct{}
+
+func (failingStore) Put(_ context.Context, _, _ string, _ io.Reader) error {
+	return errors.New("simulated store failure")
+}
+
+func (failingStore) Get(_ context.Context, _ string) (io.ReadCloser, error) {
+	return nil, errors.New("simulated store failure")
+}
 
 func signContractURL(srv *httptest.Server, engagementID string) string {
 	return srv.URL + "/portal/engagements/" + engagementID + "/contract/sign"
@@ -59,11 +77,12 @@ func postSignContract(t *testing.T, srv *httptest.Server, engagementID, fullLega
 // signedRow is the row shape sign_test.go reads back via db.Admin to
 // assert what ClientPostSignContractHandler actually persisted.
 type signedRow struct {
-	status            string
-	signerFullName    sqlNullString
-	signerAttestation bool
-	signedAt          *time.Time
-	signerIP          sqlNullString
+	status              string
+	signerFullName      sqlNullString
+	signerAttestation   bool
+	signedAt            *time.Time
+	signerIP            sqlNullString
+	signedPDFObjectPath sqlNullString
 }
 
 type sqlNullString struct {
@@ -74,13 +93,13 @@ type sqlNullString struct {
 func fetchSignedRow(t *testing.T, db *testdb.DB, engagementID string) signedRow {
 	t.Helper()
 	var row signedRow
-	var name, ip *string
+	var name, ip, pdfObjectPath *string
 	var signedAt *time.Time
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, signer_full_name, signer_attestation, signed_at, signer_ip
+		`SELECT status, signer_full_name, signer_attestation, signed_at, signer_ip, signed_pdf_object_path
 		 FROM contracts WHERE engagement_id = $1`,
 		engagementID,
-	).Scan(&row.status, &name, &row.signerAttestation, &signedAt, &ip); err != nil {
+	).Scan(&row.status, &name, &row.signerAttestation, &signedAt, &ip, &pdfObjectPath); err != nil {
 		t.Fatalf("fetch contract row: %v", err)
 	}
 	if name != nil {
@@ -88,6 +107,9 @@ func fetchSignedRow(t *testing.T, db *testdb.DB, engagementID string) signedRow 
 	}
 	if ip != nil {
 		row.signerIP = sqlNullString{String: *ip, Valid: true}
+	}
+	if pdfObjectPath != nil {
+		row.signedPDFObjectPath = sqlNullString{String: *pdfObjectPath, Valid: true}
 	}
 	row.signedAt = signedAt
 	return row
@@ -231,7 +253,7 @@ func TestClientPostSignContractHandler_OtherClientsEngagementRejected(t *testing
 	}
 
 	row := fetchSignedRow(t, db, otherEngagementID)
-	if row.status != "sent" {
+	if row.status != statusSent {
 		t.Fatalf("other client's contract status = %q, want unchanged sent", row.status)
 	}
 }
@@ -349,5 +371,79 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 				t.Fatalf("contract status = %q, want unchanged sent", row.status)
 			}
 		})
+	}
+}
+
+// TestClientPostSignContractHandler_RendersAndStoresSignedPDF proves the
+// sent -> signed transition renders a PDF-shaped payload and stores it in
+// the injected ObjectStore under SignedPDFObjectPath(engagementID), and
+// persists that same key on the contracts row -- the #71 AC, checked by
+// content-shape (the "%PDF" magic bytes) rather than byte-for-byte
+// content.
+func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-signing-stores-pdf"
+	practiceID := seedPractice(t, db, "Practice")
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	seedPortalUser(t, db, identityUID, clientID)
+	seedContract(t, db, engagementID, "sent", mergeFieldProse)
+
+	store := objectstore.NewMemoryStore()
+	srv := newPortalServerWithStore(fakeVerifier{uid: identityUID}, db, store)
+	defer srv.Close()
+
+	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	row := fetchSignedRow(t, db, engagementID)
+	wantKey := contracts.SignedPDFObjectPath(engagementID)
+	if !row.signedPDFObjectPath.Valid || row.signedPDFObjectPath.String != wantKey {
+		t.Fatalf("persisted signed_pdf_object_path = %+v, want %q", row.signedPDFObjectPath, wantKey)
+	}
+
+	obj, err := store.Get(t.Context(), wantKey)
+	if err != nil {
+		t.Fatalf("get stored pdf at %q: %v", wantKey, err)
+	}
+	defer func() { _ = obj.Close() }()
+	pdfBytes, err := io.ReadAll(obj)
+	if err != nil {
+		t.Fatalf("read stored pdf: %v", err)
+	}
+	if !bytes.HasPrefix(pdfBytes, []byte("%PDF")) {
+		t.Fatalf("stored object does not look like a PDF, starts with %q", pdfBytes[:min(4, len(pdfBytes))])
+	}
+}
+
+// TestClientPostSignContractHandler_PDFStoreFailureRejected proves a
+// Storage.Put failure (a GCS outage) 500s the Sign request and leaves the
+// Contract untransitioned -- rendering/storing the PDF happens before the
+// status UPDATE, so a store failure never leaves a 'signed' row with no
+// PDF behind it.
+func TestClientPostSignContractHandler_PDFStoreFailureRejected(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-signing-store-failure"
+	practiceID := seedPractice(t, db, "Practice")
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	seedPortalUser(t, db, identityUID, clientID)
+	seedContract(t, db, engagementID, "sent", mergeFieldProse)
+
+	srv := newPortalServerWithStore(fakeVerifier{uid: identityUID}, db, failingStore{})
+	defer srv.Close()
+
+	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	row := fetchSignedRow(t, db, engagementID)
+	if row.status != "sent" {
+		t.Fatalf("contract status = %q, want unchanged sent after a store failure", row.status)
 	}
 }
