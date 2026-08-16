@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh issue edit *)",
+            "command": "bash .claude/hooks/mark-ac-verified.sh",
+            "statusMessage": "Recording AC re-verification"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh issue close *)",
+            "command": "bash .claude/hooks/gate-issue-close.sh",
+            "statusMessage": "Checking AC re-verification before close"
+          }
+        ]
+      }
+    ]
+  }
+}
