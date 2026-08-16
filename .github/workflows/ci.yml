@@ -97,11 +97,12 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('app/bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
-      # app/node_modules is cached directly, not just the bun tarball cache
-      # above -- 637 packages / 610MB of extract-and-link is what dominates
-      # a cold install on this 2 vCPU runner, and the tarball cache alone
-      # doesn't remove that step. No restore-keys: a miss falls through to
-      # a clean cold install, never a stale tree.
+      # app/node_modules is cached directly (measured ~91s cold install,
+      # ~2s on a cache hit), not just the bun tarball cache above -- 637
+      # packages of extract-and-link is what dominates a cold install on
+      # this 2 vCPU runner, and the tarball cache alone doesn't remove
+      # that step. No restore-keys: a miss falls through to a clean cold
+      # install, never a stale tree.
       - name: Cache node_modules
         uses: actions/cache@v6
         with:
