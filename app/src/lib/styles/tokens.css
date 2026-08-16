@@ -42,6 +42,12 @@
 
 	/* Radius */
 	--radius-sm: 8px;
+
+	/* Border */
+	--border-thin: 1px;
+
+	/* Layout — wayfinder #98, default line-length cap for the Center primitive */
+	--measure: 65ch;
 }
 
 /* Dark — follows system preference unless a manual [data-theme] override wins */

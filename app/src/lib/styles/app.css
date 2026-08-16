@@ -1,0 +1,12 @@
+/*
+ * Project-wide cascade layer order -- ADR-0003. Declared exactly once, here,
+ * so specificity conflicts between the reset, tokens, base element styling,
+ * the layout-primitive utility layer, and components resolve by explicit
+ * order rather than accident.
+ */
+@layer reset, tokens, base, utilities, components;
+
+@import './reset.css' layer(reset);
+@import './tokens.css' layer(tokens);
+@import './base.css' layer(base);
+@import './primitives.css' layer(utilities);

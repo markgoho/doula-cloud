@@ -1,0 +1,11 @@
+/*
+ * Base element styling, sourced from tokens.css. Wayfinder #98.
+ */
+
+body {
+	font-family: var(--font-family-base);
+	font-size: var(--text-base);
+	font-weight: var(--font-weight-normal);
+	color: var(--color-text);
+	background-color: var(--color-bg);
+}

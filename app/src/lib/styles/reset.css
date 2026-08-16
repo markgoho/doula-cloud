@@ -1,0 +1,71 @@
+/*
+ * Josh Comeau's CSS reset (https://www.joshwcomeau.com/css/custom-css-reset/),
+ * plus his companion recommendations, wired for wayfinder #98.
+ *
+ * Adaptation: Comeau's `#root, #__next { isolation: isolate; }` targets a
+ * React app root. SvelteKit's own root (src/app.html) is
+ * `<div style="display: contents">`, which generates no box at all -- an
+ * `isolation` rule there would be a no-op. `body` is the nearest real box,
+ * so the stacking-context isolation is applied there instead.
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+*:not(dialog) {
+	margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	html {
+		interpolate-size: allow-keywords;
+	}
+}
+
+body {
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	isolation: isolate;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+	display: block;
+	max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+	font: inherit;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	overflow-wrap: break-word;
+}
+
+p {
+	text-wrap: pretty;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	text-wrap: balance;
+}

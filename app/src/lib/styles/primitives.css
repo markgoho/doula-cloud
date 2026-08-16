@@ -1,0 +1,194 @@
+/*
+ * Default (zero-JS) styling for the 13 Every Layout-inspired custom
+ * elements -- wayfinder #98, ADR-0003. Each rule here is the element's
+ * unconfigured state; `primitives/*.ts` only injects an override style,
+ * scoped by `[data-i]`, when an instance sets a non-default attribute.
+ * These defaults and the JS `defaults` objects must stay in sync -- see
+ * each element's own spec, which asserts computed style against these
+ * values.
+ *
+ * Boolean toggles (invert, and-text, intrinsic, no-pad, no-bar, breakout,
+ * fixed) are plain `[attr]` selectors here and never reach the JS layer --
+ * Rule of Least Power.
+ */
+
+/* Stack */
+stack-l {
+	display: block;
+}
+stack-l > * + * {
+	margin-block-start: var(--space-4);
+}
+
+/* Box */
+box-l {
+	display: block;
+	padding: var(--space-4);
+	border: var(--border-thin) solid var(--color-border);
+	color: var(--color-text);
+	background-color: var(--color-bg);
+}
+box-l * {
+	color: inherit;
+}
+box-l[invert] {
+	color: var(--color-bg);
+	background-color: var(--color-text);
+}
+
+/* Center */
+center-l {
+	display: block;
+	box-sizing: content-box;
+	margin-inline: auto;
+	max-inline-size: var(--measure);
+	padding-inline: 0;
+}
+center-l[and-text] {
+	text-align: center;
+}
+center-l[intrinsic] {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+/* Cluster */
+cluster-l {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+	justify-content: flex-start;
+	align-items: flex-start;
+}
+
+/* Sidebar */
+sidebar-l {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+}
+sidebar-l > :first-child {
+	flex-basis: 20rem;
+	flex-grow: 1;
+}
+sidebar-l > :last-child {
+	flex-basis: 0;
+	flex-grow: 999;
+	min-inline-size: 50%;
+}
+
+/* Switcher */
+switcher-l {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+}
+switcher-l > * {
+	flex-grow: 1;
+	flex-basis: calc((var(--measure) - 100%) * 999);
+}
+switcher-l > :nth-last-child(n + 5),
+switcher-l > :nth-last-child(n + 5) ~ * {
+	flex-basis: 100%;
+}
+
+/* Cover */
+cover-l {
+	display: flex;
+	flex-direction: column;
+	min-block-size: 100vh;
+	padding: var(--space-4);
+}
+cover-l[no-pad] {
+	padding: 0;
+}
+cover-l > * {
+	margin-block: var(--space-4);
+}
+cover-l > :first-child:not(h1) {
+	margin-block-start: 0;
+}
+cover-l > :last-child:not(h1) {
+	margin-block-end: 0;
+}
+cover-l > h1 {
+	margin-block: auto;
+}
+
+/* Grid */
+grid-l {
+	display: grid;
+	gap: var(--space-4);
+	grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+}
+
+/* Frame */
+frame-l {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	overflow: hidden;
+	aspect-ratio: 16 / 9;
+}
+frame-l > img,
+frame-l > video {
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: cover;
+}
+
+/* Reel */
+reel-l {
+	display: flex;
+	block-size: auto;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+reel-l > * {
+	flex: 0 0 auto;
+}
+reel-l > * + * {
+	margin-inline-start: var(--space-2);
+}
+reel-l[no-bar] {
+	scrollbar-width: none;
+}
+reel-l[no-bar]::-webkit-scrollbar {
+	display: none;
+}
+
+/* Imposter */
+imposter-l {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	transform: translate(-50%, -50%);
+	max-inline-size: calc(100% - 0px);
+	max-block-size: calc(100% - 0px);
+	overflow: auto;
+}
+imposter-l[fixed] {
+	position: fixed;
+}
+imposter-l[breakout] {
+	max-inline-size: none;
+	max-block-size: none;
+	overflow: visible;
+}
+
+/* Icon */
+icon-l {
+	display: inline-block;
+	width: 0.75em;
+	width: 1cap;
+	height: 0.75em;
+	height: 1cap;
+	vertical-align: -0.125em;
+}
+
+/* Container */
+container-l {
+	display: block;
+	container-type: inline-size;
+}
