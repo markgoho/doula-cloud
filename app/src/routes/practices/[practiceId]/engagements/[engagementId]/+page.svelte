@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
-	import { asPushMessage } from '#lib/push.js';
+	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 
 	type Detail = {
 		engagementId: string;
@@ -55,14 +55,13 @@
 	// apiFetch since the attachment endpoint requires the caller's auth
 	// header, which a plain <img src> can't send.
 	let attachmentPreviewURLs = $state<Record<string, string>>({});
+	let unsubscribePushMessages: () => void = () => {};
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
 			URL.revokeObjectURL(url);
 		}
-		if ('serviceWorker' in navigator) {
-			navigator.serviceWorker.removeEventListener('message', handlePushMessage);
-		}
+		unsubscribePushMessages();
 	});
 
 	async function loadAttachmentPreviews(idToken: string, items: Message[]) {
@@ -134,21 +133,14 @@
 		// "push wakes the client, which fetches the real content" delivery
 		// ADR-0002 describes -- see push.ts's PUSH_MESSAGE_TYPE doc comment
 		// for why the service worker can't just fetch this itself.
-		if ('serviceWorker' in navigator) {
-			navigator.serviceWorker.addEventListener('message', handlePushMessage);
-		}
+		unsubscribePushMessages = subscribeToThreadPushMessages(page.params.engagementId!, () => {
+			void (async () => {
+				const current = getFirebaseAuth().currentUser;
+				if (!current) return;
+				await loadMessages(await current.getIdToken());
+			})();
+		});
 	});
-
-	function handlePushMessage(event: MessageEvent) {
-		const message = asPushMessage(event.data);
-		if (message?.payload.engagementId !== page.params.engagementId) return;
-
-		void (async () => {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) return;
-			await loadMessages(await user.getIdToken());
-		})();
-	}
 
 	async function handleCreateVisit() {
 		visitsError = '';

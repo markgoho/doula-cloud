@@ -90,7 +90,7 @@ func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handl
 			return
 		}
 
-		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeClient)
+		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeStaff)
 		writeCreated(w, item, staffauth.MsgInternalError)
 	})
 }

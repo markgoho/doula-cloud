@@ -139,7 +139,7 @@ func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 
 // TestCreateHandler_PushFailureDoesNotBlockMessageCreation proves push
 // delivery failure (e.g. the recipient's subscription expired at the push
-// service) is non-fatal: the Message is already durably written by the
+// service) is non-fatal: the Message row is already written to tx by the
 // time Pusher.Send runs, so a push failure is logged, not surfaced as a
 // 500.
 func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {

@@ -87,7 +87,7 @@ func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http
 			return
 		}
 
-		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeStaff)
+		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeClient)
 		writeCreated(w, item, clientauth.MsgInternalError)
 	})
 }

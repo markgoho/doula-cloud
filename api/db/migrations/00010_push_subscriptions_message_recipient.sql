@@ -49,6 +49,11 @@ AS $$
 $$;
 -- +goose StatementEnd
 
+-- Postgres grants EXECUTE to PUBLIC by default on CREATE FUNCTION, which
+-- would undercut this function's own "narrow, engagement-scoped escape
+-- hatch" premise -- revoke that default, then grant only to the one role
+-- (app_runtime) that should ever call it.
+REVOKE EXECUTE ON FUNCTION push_subscriptions_for_message_recipient(uuid, actor_type) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION push_subscriptions_for_message_recipient(uuid, actor_type) TO app_runtime;
 
 -- +goose Down

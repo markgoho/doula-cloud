@@ -28,7 +28,7 @@ type VAPIDPusher struct {
 // webpush.GenerateVAPIDKeys) and a subscriber contact (a "mailto:" URI,
 // required by the VAPID spec).
 func NewVAPIDPusher(publicKey, privateKey, subscriber string) *VAPIDPusher {
-	// coverage:ignore reason: requires real VAPID keys and network access, not exercised by unit tests
+	// coverage:ignore reason: only called from main() to build the real Pusher; not exercised by unit tests, which inject push.FakePusher instead
 	return &VAPIDPusher{
 		publicKey:  publicKey,
 		privateKey: privateKey,

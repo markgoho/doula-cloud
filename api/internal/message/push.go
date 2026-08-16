@@ -21,16 +21,29 @@ type pushPayload struct {
 	PracticeID   string `json:"practiceId,omitempty"`
 }
 
-// notifyRecipient resolves the *other* party's registered push
-// subscription(s) for engagementID and sends each one a content-free
-// notification, synchronously and in-request -- #56's "no background
-// job/queue" decision. Any failure along the way (resolving the
-// Practice id, marshaling the payload, resolving subscriptions,
-// delivering a push) is logged and swallowed rather than surfaced as a
-// 500: by the time this runs the Message is already durably written, and
-// push delivery is a best-effort notification layer on top of it, not
-// part of create's own success criteria.
-func notifyRecipient(ctx context.Context, tx *sql.Tx, pusher push.Pusher, engagementID, recipientType string) {
+// notifyRecipient resolves the *other* party's (the recipient's)
+// registered push subscription(s) for engagementID and sends each one a
+// content-free notification, synchronously and in-request -- #56's "no
+// background job/queue" decision. senderType is the population that
+// authored the Message (senderTypeStaff or senderTypeClient, as passed to
+// insertMessage) -- the recipient is always the other one; taking the
+// sender's type here, rather than the recipient's, keeps call sites
+// self-explanatory (CreateHandler passes senderTypeStaff because a Staff
+// member is sending, not because it's notifying Staff). Any failure along
+// the way (resolving the Practice id, marshaling the payload, resolving
+// subscriptions, delivering a push) is logged and swallowed rather than
+// surfaced as a 500: the Message row has already been written to tx by
+// the time this runs (durability itself still depends on the
+// staffauth/clientauth Middleware's deferred commit succeeding, same as
+// every other write in this package), and push delivery is a best-effort
+// notification layer on top of it, not part of create's own success
+// criteria.
+func notifyRecipient(ctx context.Context, tx *sql.Tx, pusher push.Pusher, engagementID, senderType string) {
+	recipientType := senderTypeStaff
+	if senderType == senderTypeStaff {
+		recipientType = senderTypeClient
+	}
+
 	payload := pushPayload{EngagementID: engagementID}
 	if recipientType == senderTypeStaff {
 		practiceID, err := fetchEngagementPracticeID(ctx, tx, engagementID)
