@@ -100,6 +100,12 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
+	// staff_self_visibility (00002) only admits the caller's own row while
+	// app.current_practice_id is unset -- see that policy's comment -- so
+	// the staff INSERT ... RETURNING below must run before it's set. Only
+	// after staff exists is app.current_practice_id set, which then covers
+	// the signup-bonus, membership, and plan_templates inserts that need
+	// it.
 	var staffID string
 	err := tx.QueryRowContext(ctx,
 		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, $2, $3) RETURNING id`,
@@ -115,6 +121,17 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
+	// The signup bonus: +3 credits, granted exactly once per Practice, in
+	// the same transaction as the Practice row itself so a Practice can
+	// never exist without it.
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3)`,
+		practiceID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 

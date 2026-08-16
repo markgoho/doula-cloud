@@ -171,6 +171,42 @@ func TestSignupHandler_DuplicateSignup(t *testing.T) {
 	}
 }
 
+// TestSignupHandler_GrantsSignupBonus proves signup inserts exactly one
+// +3 signup_bonus credit_ledger row for the new Practice, in the same
+// transaction as the Practice/Staff/membership rows.
+func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(fakeVerifier{uid: "bonus-owner"}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		PracticeName: "Bonus Practice",
+		StaffName:    jamieOwnerName,
+		StaffEmail:   jamieEmail,
+	})
+	defer resp.Body.Close()
+
+	var out staffauth.SignupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	var origin string
+	var quantity, rowCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT origin::text, quantity, count(*) OVER () FROM credit_ledger WHERE practice_id = $1`,
+		out.PracticeID,
+	).Scan(&origin, &quantity, &rowCount); err != nil {
+		t.Fatalf("query credit_ledger: %v", err)
+	}
+	if rowCount != 1 {
+		t.Fatalf("expected exactly 1 credit_ledger row, got %d", rowCount)
+	}
+	if origin != "signup_bonus" || quantity != 3 {
+		t.Fatalf("credit_ledger row = {origin: %q, quantity: %d}, want {signup_bonus, 3}", origin, quantity)
+	}
+}
+
 // TestSignupHandler_SeedsDefaultPlanTemplates proves signup inserts one
 // plan_templates row per plan type (care_plan, birth_plan) in the same
 // transaction as the Practice/Staff/membership rows.
