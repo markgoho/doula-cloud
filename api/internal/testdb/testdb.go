@@ -1,10 +1,11 @@
-// Package testdb spins up a real, disposable Postgres instance (via
-// testcontainers-go) for Go HTTP tests, applies the goose migrations, and
-// hands back a ready-to-use *sql.DB. It's container-engine-agnostic:
-// testcontainers-go falls back to Docker's default socket with no setup
-// (what CI uses), or reads DOCKER_HOST from the environment to target a
-// Podman socket instead (see docs/testing.md for local dev) -- either way,
-// no code change here.
+// Package testdb starts one real, disposable Postgres container per test
+// *process* (via testcontainers-go), applies the goose migrations once
+// into a template database, and hands each test a fresh database cloned
+// from that template -- a file copy, not a migration replay. It's
+// container-engine-agnostic: testcontainers-go falls back to Docker's
+// default socket with no setup (what CI uses), or reads DOCKER_HOST from
+// the environment to target a Podman socket instead (see docs/testing.md
+// for local dev) -- either way, no code change here.
 package testdb
 
 import (
@@ -13,13 +14,13 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/pressly/goose/v3"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-
-	"doula-cloud/api/db/migrations"
-
 	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
+)
+
+const (
+	appUser     = "app_test"
+	appPassword = "app_test"
 )
 
 // DB holds two connections to the same disposable Postgres instance.
@@ -34,37 +35,47 @@ type DB struct {
 	App   *sql.DB
 }
 
-// New starts a Postgres container, applies all goose migrations against
-// it, and returns Admin and App connections to it. The container and both
-// connections are torn down automatically via t.Cleanup.
+// New clones a fresh database from the test process's shared, migrated
+// template (starting the container and template on first call, via
+// sync.Once) and returns Admin and App connections to the clone. The
+// clone and both connections are torn down automatically via t.Cleanup;
+// the container itself lives for the whole test process -- see Main.
 func New(t *testing.T) *DB {
 	t.Helper()
 	ctx := context.Background()
 
-	container, err := postgres.Run(ctx, "docker.io/library/postgres:16-alpine",
-		postgres.WithDatabase("testdb"),
-		postgres.WithUsername("testdb"),
-		postgres.WithPassword("testdb"),
-		postgres.BasicWaitStrategies(),
-	)
-	// coverage:ignore reason: container startup failure, not exercised by the happy-path test
-	if err != nil {
-		t.Fatalf("testdb: start postgres container: %v", err)
+	setupOnce.Do(func() { errSetup = setup(ctx) })
+	// coverage:ignore reason: one-time setup failure, not exercised by the happy-path test
+	if errSetup != nil {
+		t.Fatalf("testdb: setup: %v", errSetup)
 	}
+
+	name := cloneDatabase(ctx, t)
+	// Registered before Admin/App are opened below so it runs *last*
+	// (t.Cleanup is LIFO), after both connections are closed -- DROP
+	// DATABASE fails while either is still open.
 	t.Cleanup(func() {
-		// coverage:ignore reason: container teardown failure, not exercised by the happy-path test
-		if err := container.Terminate(context.Background()); err != nil {
-			t.Errorf("testdb: terminate postgres container: %v", err)
+		admin, err := sql.Open("pgx", maintenanceDSN)
+		// coverage:ignore reason: driver open failure, not exercised by the happy-path test
+		if err != nil {
+			t.Errorf("testdb: open admin db for drop: %v", err)
+			return
+		}
+		defer func() { _ = admin.Close() }()
+		if _, err := admin.ExecContext(context.Background(), "DROP DATABASE "+name); err != nil {
+			// coverage:ignore reason: drop failure, not exercised by the happy-path test
+			t.Errorf("testdb: drop database %s: %v", name, err)
 		}
 	})
 
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	// coverage:ignore reason: connection string failure, not exercised by the happy-path test
+	u, err := url.Parse(maintenanceDSN)
+	// coverage:ignore reason: malformed maintenance DSN, not exercised by the happy-path test
 	if err != nil {
-		t.Fatalf("testdb: connection string: %v", err)
+		t.Fatalf("testdb: parse dsn: %v", err)
 	}
+	u.Path = "/" + name
 
-	db, err := sql.Open("pgx", dsn)
+	db, err := sql.Open("pgx", u.String())
 	// coverage:ignore reason: driver open failure, not exercised by the happy-path test
 	if err != nil {
 		t.Fatalf("testdb: open db: %v", err)
@@ -76,39 +87,21 @@ func New(t *testing.T) *DB {
 		}
 	})
 
-	goose.SetBaseFS(migrations.FS)
-	defer goose.SetBaseFS(nil)
-	// coverage:ignore reason: dialect registration failure, not exercised by the happy-path test
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatalf("testdb: set dialect: %v", err)
-	}
-	// coverage:ignore reason: migration failure, not exercised by the happy-path test
-	if err := goose.Up(db, "."); err != nil {
-		t.Fatalf("testdb: apply migrations: %v", err)
-	}
-
-	appDB := newAppDB(ctx, t, db, dsn)
+	appDB := newAppDB(t, u.String())
 
 	return &DB{Admin: db, App: appDB}
 }
 
-// newAppDB creates a per-test LOGIN role in the app_runtime group (the
-// role the migrations grant table privileges to) and opens a connection
-// as it, so tests can exercise queries the way the running application
-// -- and the RLS policies scoped to app_runtime -- actually see them.
-func newAppDB(ctx context.Context, t *testing.T, admin *sql.DB, adminDSN string) *sql.DB {
+// newAppDB opens a connection to the clone as app_test, the shared
+// LOGIN role in the app_runtime group (created once in setup, since
+// roles are cluster-global -- a per-test CREATE ROLE would fail with
+// "role already exists" on the second test in the package). This is the
+// connection RLS policies scoped to app_runtime actually apply to.
+func newAppDB(t *testing.T, dsn string) *sql.DB {
 	t.Helper()
 
-	const appUser = "app_test"
-	const appPassword = "app_test"
-	_, err := admin.ExecContext(ctx, "CREATE ROLE "+appUser+" LOGIN PASSWORD '"+appPassword+"' IN ROLE app_runtime")
-	// coverage:ignore reason: role creation failure, not exercised by the happy-path test
-	if err != nil {
-		t.Fatalf("testdb: create app role: %v", err)
-	}
-
-	u, err := url.Parse(adminDSN)
-	// coverage:ignore reason: malformed DSN from testcontainers, not exercised by the happy-path test
+	u, err := url.Parse(dsn)
+	// coverage:ignore reason: malformed DSN, not exercised by the happy-path test
 	if err != nil {
 		t.Fatalf("testdb: parse dsn: %v", err)
 	}

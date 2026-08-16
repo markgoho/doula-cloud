@@ -82,14 +82,27 @@ all of `app/`.
 
 ## `api/`: real Postgres for tests, container-engine-agnostic
 
-`api/internal/testdb` uses testcontainers-go to start a real, disposable
-Postgres container for Go HTTP tests, applies the goose migrations
-(`api/db/migrations`) against it, and hands back a `*testdb.DB` with two
-connections: `Admin` (the superuser the migrations ran as, for fixture
-setup) and `App` (a low-privilege `app_runtime`-derived role, the one the
-running application actually connects as). Postgres superusers and table
-owners always bypass Row-Level Security, so tests that need to observe RLS
-in effect — not just assume it — must query through `App`, not `Admin`.
+`api/internal/testdb` uses testcontainers-go to start **one** real,
+disposable Postgres container per test *process* (`go test` forks one
+process per package), applies the goose migrations (`api/db/migrations`)
+once into a template database, and then hands each call to `testdb.New(t)`
+a fresh database cloned from that template — a file copy, not a migration
+replay. It hands back a `*testdb.DB` with two connections: `Admin` (the
+superuser the migrations ran as, for fixture setup) and `App` (a
+low-privilege `app_runtime`-derived role, the one the running application
+actually connects as). Postgres superusers and table owners always bypass
+Row-Level Security, so tests that need to observe RLS in effect — not just
+assume it — must query through `App`, not `Admin`.
+
+Every package that calls `testdb.New` must define a `TestMain` that hands
+off to `testdb.Main`, so the shared container is terminated once at
+process exit rather than leaked or torn down mid-run:
+
+```go
+func TestMain(m *testing.M) {
+	os.Exit(testdb.Main(m))
+}
+```
 
 CI runs this against Docker (preinstalled on the runner, no setup needed).
 Locally, testcontainers-go reads `DOCKER_HOST` from the environment, so
@@ -106,6 +119,13 @@ export TESTCONTAINERS_RYUK_DISABLED=true # Ryuk is unreliable under rootless Pod
 cd api
 go test ./...
 ```
+
+Ryuk being disabled locally is why `testdb.Main` exists: without an
+explicit `container.Terminate` at process exit, a full local `go test
+./...` would leave one Postgres container running per package that calls
+`testdb.New`. CI leaves Ryuk enabled as a backstop, but relies on
+`testdb.Main` too, since Ryuk only reaps containers after they're already
+orphaned.
 
 ## `api/`: migrations via goose
 
