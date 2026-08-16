@@ -134,6 +134,14 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO contract_templates (practice_id, prose) VALUES ($1, $2)`,
+		practiceID, defaultContractTemplateProse,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
 	return SignupResponse{StaffID: staffID, PracticeID: practiceID}, http.StatusCreated, ""
 }
 
@@ -159,6 +167,23 @@ const defaultBirthPlanFields = `[
 	{"id": "atmosphere", "type": "long_text", "label": "Preferences for atmosphere (music, lighting, etc.)", "order": 3},
 	{"id": "consent-photos", "type": "checkbox", "label": "OK to take photos/video during labor", "order": 4}
 ]`
+
+// defaultContractTemplateProse is the Contract Template prose a new
+// Practice starts with (seeding applies going forward only, no backfill
+// for practices created before this ticket). Its merge-field placeholders
+// match the tokens the contracts package/settings screen document as
+// available -- kept as a literal here, rather than importing the
+// contracts package, to avoid a staffauth<->contracts import cycle
+// (contracts imports staffauth for its own handlers).
+const defaultContractTemplateProse = `This agreement is between {{practice_name}} and {{client_name}} for doula services.
+
+Scope of service: {{scope_of_service}}
+
+Engagement dates: {{engagement_start_date}} through {{engagement_end_date}}
+
+Price: {{price}}
+
+By signing below, both parties agree to the terms described above.`
 
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError

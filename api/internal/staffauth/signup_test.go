@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -16,6 +17,7 @@ const (
 	testStaffEmail = "s@example.com"
 	jamieEmail     = "jamie@example.com"
 	jamieName      = "Jamie"
+	jamieOwnerName = "Jamie Owner"
 
 	// Shared across staffauth_test files: goconst flags repeated literals
 	// package-wide, not just within one file.
@@ -121,7 +123,7 @@ func TestSignupHandler_Success(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		PracticeName: "Solo Doula Co",
-		StaffName:    "Jamie Owner",
+		StaffName:    jamieOwnerName,
 		StaffEmail:   jamieEmail,
 	})
 	defer resp.Body.Close()
@@ -179,7 +181,7 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		PracticeName: "Seeded Practice",
-		StaffName:    "Jamie Owner",
+		StaffName:    jamieOwnerName,
 		StaffEmail:   jamieEmail,
 	})
 	defer resp.Body.Close()
@@ -281,5 +283,106 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 		if putResp.StatusCode != http.StatusOK {
 			t.Fatalf("PUT %s status = %d, want %d", planType, putResp.StatusCode, http.StatusOK)
 		}
+	}
+}
+
+// TestSignupHandler_SeedsDefaultContractTemplate proves signup inserts a
+// contract_templates row in the same transaction as the
+// Practice/Staff/membership rows.
+func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(fakeVerifier{uid: "seed-contract-owner"}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		PracticeName: "Seeded Contract Practice",
+		StaffName:    jamieOwnerName,
+		StaffEmail:   jamieEmail,
+	})
+	defer resp.Body.Close()
+
+	var out staffauth.SignupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	var prose string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT prose FROM contract_templates WHERE practice_id = $1`, out.PracticeID,
+	).Scan(&prose); err != nil {
+		t.Fatalf("query contract_templates: %v", err)
+	}
+	if prose == "" {
+		t.Fatal("expected a non-empty seeded contract template prose")
+	}
+}
+
+// TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI
+// proves the hardcoded default prose in signup.go passes the contracts
+// package's own validation: GET the seeded template, then PUT that exact
+// payload back. If signup's literal ever normalizes to blank, this test
+// goes red instead of shipping a seeded template the API would reject.
+func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *testing.T) {
+	db := testdb.New(t)
+	verifier := fakeVerifier{uid: "roundtrip-contract-owner"}
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
+	mux.Handle("GET /practices/{practiceId}/contract-template",
+		staffauth.Middleware(verifier, db.App)(contracts.GetTemplateHandler()))
+	mux.Handle("PUT /practices/{practiceId}/contract-template",
+		staffauth.Middleware(verifier, db.App)(contracts.PutTemplateHandler()))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		PracticeName: "Roundtrip Contract Practice", StaffName: jamieName, StaffEmail: jamieEmail,
+	})
+	defer signupResp.Body.Close()
+	var signedUp staffauth.SignupResponse
+	if err := json.NewDecoder(signupResp.Body).Decode(&signedUp); err != nil {
+		t.Fatalf("decode signup response: %v", err)
+	}
+
+	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		srv.URL+"/practices/"+signedUp.PracticeID+"/contract-template", nil)
+	if err != nil {
+		t.Fatalf("build GET request: %v", err)
+	}
+	getReq.Header.Set("Authorization", "Bearer tok")
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("GET request: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
+	}
+	var seeded contracts.TemplateResponse
+	if err := json.NewDecoder(getResp.Body).Decode(&seeded); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if seeded.Prose == "" {
+		t.Fatal("expected seeded prose to be non-empty")
+	}
+
+	putBody, err := json.Marshal(seeded)
+	if err != nil {
+		t.Fatalf("marshal seeded prose: %v", err)
+	}
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
+		srv.URL+"/practices/"+signedUp.PracticeID+"/contract-template", bytes.NewReader(putBody))
+	if err != nil {
+		t.Fatalf("build PUT request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer tok")
+	putReq.Header.Set("Content-Type", "application/json")
+	putResp, err := http.DefaultClient.Do(putReq)
+	if err != nil {
+		t.Fatalf("PUT request: %v", err)
+	}
+	defer putResp.Body.Close()
+	if putResp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
 	}
 }

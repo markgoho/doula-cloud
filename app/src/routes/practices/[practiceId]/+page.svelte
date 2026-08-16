@@ -52,5 +52,10 @@
 				practiceId: page.params.practiceId!
 			})}>Plan Templates</a
 		>
+		<a
+			href={resolve('/practices/[practiceId]/settings/contract-template', {
+				practiceId: page.params.practiceId!
+			})}>Contract Template</a
+		>
 	{/if}
 {/if}
