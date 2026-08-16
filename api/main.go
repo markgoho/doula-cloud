@@ -130,6 +130,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(verifier, db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(verifier, db)(portal.DetailHandler()))
+	mux.Handle("GET /api/portal/engagements/{engagementId}/birth-plan",
+		clientauth.Middleware(verifier, db)(plans.ClientGetBirthPlanHandler()))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(verifier, db)(message.ClientListHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",

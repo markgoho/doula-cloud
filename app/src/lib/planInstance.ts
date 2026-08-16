@@ -29,8 +29,33 @@ export interface Instance {
  * planTemplate.ts's Fetcher for why. */
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
+/** Reads fieldId's raw stored value out of answers as a string, or '' if
+ * unset/mistyped -- shared by PlanInstanceForm.svelte (editable) and
+ * BirthPlanView.svelte (read-only) so both read Answers the same way and
+ * only differ in how they format a missing value. */
+export function answerText(answers: Answers, fieldId: string): string {
+	const value = answers[fieldId];
+	return typeof value === 'string' ? value : '';
+}
+
+/** Reads fieldId's raw stored checkbox value out of answers. */
+export function answerChecked(answers: Answers, fieldId: string): boolean {
+	return answers[fieldId] === true;
+}
+
+/** Reads fieldId's raw stored multi_select value out of answers, or []
+ * if unset/mistyped. */
+export function answerOptions(answers: Answers, fieldId: string): string[] {
+	const value = answers[fieldId];
+	return Array.isArray(value) ? (value as string[]) : [];
+}
+
 function instancePath(practiceId: string, engagementId: string, planType: string): string {
 	return `/api/practices/${practiceId}/engagements/${engagementId}/plans/${planType}`;
+}
+
+function clientBirthPlanPath(engagementId: string): string {
+	return `/api/portal/engagements/${engagementId}/birth-plan`;
 }
 
 /** Loads the Plan Instance for engagementId + planType, or null if none
@@ -85,6 +110,22 @@ export async function saveAnswers(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ answers })
 	});
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
+}
+
+/** Loads the Client-portal read-only Birth Plan view for engagementId, or
+ * null if Staff hasn't created one yet (a 404 from ClientGetBirthPlanHandler).
+ * Throws with the response body text on any other non-2xx response --
+ * including a 403 for an Engagement the caller isn't linked to, which
+ * clientauth.Middleware has already rejected before this ever runs. */
+export async function loadClientBirthPlan(fetcher: Fetcher, engagementId: string): Promise<Instance | null> {
+	const response = await fetcher(clientBirthPlanPath(engagementId));
+	if (response.status === 404) {
+		return null;
+	}
 	if (!response.ok) {
 		throw new Error(await response.text());
 	}

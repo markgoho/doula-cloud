@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Answers, Field } from './planInstance.js';
+	import { answerChecked, answerOptions, answerText, type Answers, type Field } from './planInstance.js';
 
 	let {
 		fields,
@@ -14,17 +14,15 @@
 	} = $props();
 
 	function textValue(field: Field): string {
-		const value = answers[field.id];
-		return typeof value === 'string' ? value : '';
+		return answerText(answers, field.id);
 	}
 
 	function checkboxValue(field: Field): boolean {
-		return answers[field.id] === true;
+		return answerChecked(answers, field.id);
 	}
 
 	function selectedOptions(field: Field): string[] {
-		const value = answers[field.id];
-		return Array.isArray(value) ? (value as string[]) : [];
+		return answerOptions(answers, field.id);
 	}
 </script>
 

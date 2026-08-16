@@ -228,6 +228,10 @@
 		<dd>{new Date(detail.createdAt).toLocaleDateString()}</dd>
 	</dl>
 
+	<a href={resolve('/portal/engagements/[engagementId]/birth-plan', { engagementId: page.params.engagementId! })}
+		>Birth Plan</a
+	>
+
 	<h2>Messages</h2>
 
 	{#if messagesError}

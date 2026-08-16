@@ -1,0 +1,91 @@
+import { expect, test } from '@playwright/test';
+import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { seedClientPortalUser } from './stack';
+
+// Exercises #65's critical path: Staff fills out a Birth Plan for an
+// Engagement (through the real staff-side UI from #64), then the Client
+// portal shows the matching read-only view. Provisions Practice/Client/
+// Engagement and the two Identity Platform accounts the same way
+// client-portal-login.e2e.ts does -- this test isn't re-proving login
+// itself, just that both sides of the Birth Plan feature agree.
+const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
+const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+
+test('Staff fills a Birth Plan, and the Client portal shows the matching read-only view', async ({
+	page,
+	request
+}) => {
+	const staffEmail = `staff-${Date.now()}@example.com`;
+	const clientEmail = `client-${Date.now()}@example.com`;
+	const password = 'password123';
+
+	const staffSignUp = await request.post(
+		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
+		{ data: { email: staffEmail, password, returnSecureToken: true } }
+	);
+	expect(staffSignUp.ok()).toBe(true);
+	const { idToken: staffIdToken } = await staffSignUp.json();
+
+	const signup = await request.post(`${API_URL}/api/staff/signup`, {
+		headers: { Authorization: `Bearer ${staffIdToken}` },
+		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', staffEmail }
+	});
+	const signupBody = await signup.text();
+	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
+	const { practiceId } = JSON.parse(signupBody);
+
+	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
+		headers: { Authorization: `Bearer ${staffIdToken}` },
+		data: { name: 'Pat Client', email: clientEmail }
+	});
+	const createClientBody = await createClient.text();
+	expect(createClient.ok(), `create client failed: ${createClient.status()} ${createClientBody}`).toBe(
+		true
+	);
+	const { clientId, engagementId } = JSON.parse(createClientBody);
+
+	// Staff side: log in, create the Birth Plan (signup seeds a default
+	// template per Practice per #63), fill one field, and save.
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(staffEmail);
+	await page.getByLabel('Password').fill(password);
+	await page.getByRole('button', { name: 'Log in' }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+
+	await page.getByRole('link', { name: 'Clients' }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients$`));
+	await page.getByRole('link', { name: 'Pat Client' }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagements/${engagementId}$`));
+
+	await page.getByRole('button', { name: 'Create Birth Plan' }).click();
+	await page
+		.getByLabel('Preferences for atmosphere (music, lighting, etc.)')
+		.fill('Soft lighting, calm music');
+	const saveButton = page.getByRole('button', { name: 'Save Birth Plan' });
+	await saveButton.click();
+	// The click only dispatches the event -- handleSavePlan's PUT is async,
+	// and the button stays disabled (planBusy) until it resolves. Wait for
+	// it to re-enable so the save has actually round-tripped before this
+	// test switches to the Client-portal session below.
+	await expect(saveButton).toBeEnabled();
+
+	// Client side: a separate Identity Platform account, linked to the same
+	// Client via client_portal_users, viewing the read-only Birth Plan.
+	const clientSignUp = await request.post(
+		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
+		{ data: { email: clientEmail, password, returnSecureToken: true } }
+	);
+	expect(clientSignUp.ok()).toBe(true);
+	const { localId: clientUID } = await clientSignUp.json();
+	seedClientPortalUser(clientUID, clientId);
+
+	await page.goto('/portal/login');
+	await page.getByLabel('Email').fill(clientEmail);
+	await page.getByLabel('Password').fill(password);
+	await page.getByRole('button', { name: 'Log in' }).click();
+	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
+
+	await page.getByRole('link', { name: 'Birth Plan' }).click();
+	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}/birth-plan$`));
+	await expect(page.getByText('Soft lighting, calm music')).toBeVisible();
+});
