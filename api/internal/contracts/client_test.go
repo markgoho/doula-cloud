@@ -8,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -65,14 +66,24 @@ func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpo
 	}
 }
 
-// newPortalServer mounts the same route main.go wires up for the
-// Client-portal Contract view, behind clientauth.Middleware.
+// newPortalServer mounts the same routes main.go wires up for the
+// Client-portal Contract view, behind clientauth.Middleware, backed by a
+// fresh objectstore.MemoryStore.
 func newPortalServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+	return newPortalServerWithStore(verifier, db, objectstore.NewMemoryStore())
+}
+
+// newPortalServerWithStore mirrors newPortalServer but lets the caller
+// inject store, so a test can inspect what Sign wrote or force a Put/Get
+// failure.
+func newPortalServerWithStore(verifier fakeVerifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/contract",
 		clientauth.Middleware(verifier, db.App)(contracts.ClientGetContractHandler()))
 	mux.Handle("POST /portal/engagements/{engagementId}/contract/sign",
-		clientauth.Middleware(verifier, db.App)(contracts.ClientPostSignContractHandler()))
+		clientauth.Middleware(verifier, db.App)(contracts.ClientPostSignContractHandler(store)))
+	mux.Handle("GET /portal/engagements/{engagementId}/contract/pdf",
+		clientauth.Middleware(verifier, db.App)(contracts.ClientGetSignedContractPDFHandler(store)))
 	return httptest.NewServer(mux)
 }
 
@@ -88,6 +99,27 @@ func getClientContract(t *testing.T, srv *httptest.Server, engagementID string) 
 		t.Fatalf("request: %v", err)
 	}
 	return resp
+}
+
+func getClientContractPDFRaw(t *testing.T, srv *httptest.Server, engagementID, authHeader string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/contract/pdf", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+func getClientContractPDF(t *testing.T, srv *httptest.Server, engagementID string) *http.Response {
+	t.Helper()
+	return getClientContractPDFRaw(t, srv, engagementID, "Bearer tok")
 }
 
 // TestClientGetContractHandler_Success proves a Client-portal caller can

@@ -136,6 +136,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(verifier, db)(contracts.PutContractHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
 		staffauth.Middleware(verifier, db)(contracts.PostSendContractHandler(pusher)))
+	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract/pdf",
+		staffauth.Middleware(verifier, db)(contracts.GetSignedContractPDFHandler(store)))
 	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",
 		staffauth.Middleware(verifier, db)(pushsub.RegisterHandler()))
 	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
@@ -148,7 +150,9 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("GET /api/portal/engagements/{engagementId}/contract",
 		clientauth.Middleware(verifier, db)(contracts.ClientGetContractHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/contract/sign",
-		clientauth.Middleware(verifier, db)(contracts.ClientPostSignContractHandler()))
+		clientauth.Middleware(verifier, db)(contracts.ClientPostSignContractHandler(store)))
+	mux.Handle("GET /api/portal/engagements/{engagementId}/contract/pdf",
+		clientauth.Middleware(verifier, db)(contracts.ClientGetSignedContractPDFHandler(store)))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(verifier, db)(message.ClientListHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",

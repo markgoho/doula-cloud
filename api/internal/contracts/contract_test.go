@@ -51,6 +51,27 @@ func getContract(t *testing.T, srv *httptest.Server, practiceID, engagementID st
 	return resp
 }
 
+func getContractPDFRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID, authHeader string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, contractURL(srv, practiceID, engagementID)+"/pdf", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+func getContractPDF(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+	t.Helper()
+	return getContractPDFRaw(t, srv, practiceID, engagementID, "Bearer tok")
+}
+
 func putContractRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, contractURL(srv, practiceID, engagementID), bytes.NewReader(body))

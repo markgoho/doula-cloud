@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/objectstore"
 )
 
 const statusSigned = "signed"
@@ -29,13 +31,17 @@ type SignContractRequest struct {
 // legal name and attestation checkbox state come from the request body;
 // signed_at (server clock) and signer_ip (the caller's remote address)
 // are derived here, never trusted from the body, since both are part of
-// the ESIGN legal record. Mirrors PostSendContractHandler's shape: the
-// status check above is what gates the transition; the contracts_client_sign
-// RLS policy (00018_contracts_signing.sql) is the backstop that keeps the
+// the ESIGN legal record. As part of the same transition, it renders the
+// filled Contract (prose with merge fields substituted, per fillProse) to
+// PDF and uploads it to store before persisting -- the permanent,
+// never-re-rendered record of what the Client actually saw and agreed
+// to (#71). Mirrors PostSendContractHandler's shape: the status check
+// above is what gates the transition; the contracts_client_sign RLS
+// policy (00018_contracts_signing.sql) is the backstop that keeps the
 // UPDATE itself scoped to a 'sent' Contract on the caller's own Engagement
 // even if a future bug skipped that check. Must be mounted behind
 // clientauth.Middleware.
-func ClientPostSignContractHandler() http.Handler {
+func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
@@ -71,12 +77,24 @@ func ClientPostSignContractHandler() http.Handler {
 			return
 		}
 
+		pdfBytes, err := renderContractPDF(fillProse(prose, values))
+		if err != nil {
+			// coverage:ignore reason: renderContractPDF only fails on an internal fpdf encoding error, not exercised by unit tests
+			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		objectPath := SignedPDFObjectPath(engagementID)
+		if err := store.Put(r.Context(), objectPath, contentTypePDF, bytes.NewReader(pdfBytes)); err != nil {
+			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		if _, err := tx.ExecContext(r.Context(),
 			`UPDATE contracts
 			 SET status = $1::contract_status, signer_full_name = $2, signer_attestation = $3,
-			     signed_at = now(), signer_ip = $4
-			 WHERE engagement_id = $5`,
-			statusSigned, req.FullLegalName, req.Attestation, clientIP(r), engagementID,
+			     signed_at = now(), signer_ip = $4, signed_pdf_object_path = $5
+			 WHERE engagement_id = $6`,
+			statusSigned, req.FullLegalName, req.Attestation, clientIP(r), objectPath, engagementID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
