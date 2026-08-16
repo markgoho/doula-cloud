@@ -117,6 +117,12 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(verifier, db)(plans.GetTemplateHandler()))
 	mux.Handle("PUT /api/practices/{practiceId}/plan-templates/{planType}",
 		staffauth.Middleware(verifier, db)(plans.PutTemplateHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
+		staffauth.Middleware(verifier, db)(plans.PostInstanceHandler()))
+	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
+		staffauth.Middleware(verifier, db)(plans.GetInstanceHandler()))
+	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
+		staffauth.Middleware(verifier, db)(plans.PutInstanceHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",
 		staffauth.Middleware(verifier, db)(pushsub.RegisterHandler()))
 	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",

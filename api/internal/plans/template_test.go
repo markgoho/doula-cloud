@@ -26,6 +26,9 @@ const testFieldLabel = "Name"
 
 const shortTextType = "short_text"
 
+const carePlanType = "care_plan"
+const birthPlanType = "birth_plan"
+
 func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
 	return &authn.VerifiedToken{UID: f.uid}, nil
 }
@@ -81,16 +84,47 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 	return practiceID
 }
 
-// seedTemplate seeds a care_plan Plan Template row directly (bypassing the
-// handlers under test) -- every caller in this package needs a care_plan
-// fixture, not birth_plan.
-func seedTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON string) {
+// seedTemplate seeds a Plan Template row directly (bypassing the handlers
+// under test).
+func seedTemplate(t *testing.T, db *testdb.DB, practiceID, planType, fieldsJSON string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO plan_templates (practice_id, plan_type, fields) VALUES ($1, 'care_plan', $2)`,
-		practiceID, fieldsJSON,
+		`INSERT INTO plan_templates (practice_id, plan_type, fields) VALUES ($1, $2, $3)`,
+		practiceID, planType, fieldsJSON,
 	); err != nil {
 		t.Fatalf("seed template: %v", err)
+	}
+}
+
+// seedEngagement inserts a Client and an Engagement linking them to
+// practiceID, using the superuser Admin connection -- mirrors
+// visit/helpers_test.go's seedEngagement.
+func seedEngagement(t *testing.T, db *testdb.DB, practiceID string) (engagementID string) {
+	t.Helper()
+	var clientID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (name, email) VALUES ('Test Client', 'client@example.com') RETURNING id`,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id) VALUES ($1, $2) RETURNING id`,
+		clientID, practiceID,
+	).Scan(&engagementID); err != nil {
+		t.Fatalf("seed engagement: %v", err)
+	}
+	return engagementID
+}
+
+// seedInstance seeds a Plan Instance row directly (bypassing the handlers
+// under test).
+func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSON, answersJSON string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO plan_instances (engagement_id, plan_type, fields, answers) VALUES ($1, $2, $3, $4)`,
+		engagementID, planType, fieldsJSON, answersJSON,
+	); err != nil {
+		t.Fatalf("seed instance: %v", err)
 	}
 }
 
@@ -100,6 +134,12 @@ func newPlanServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
 		staffauth.Middleware(verifier, db.App)(plans.GetTemplateHandler()))
 	mux.Handle("PUT /practices/{practiceId}/plan-templates/{planType}",
 		staffauth.Middleware(verifier, db.App)(plans.PutTemplateHandler()))
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
+		staffauth.Middleware(verifier, db.App)(plans.PostInstanceHandler()))
+	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
+		staffauth.Middleware(verifier, db.App)(plans.GetInstanceHandler()))
+	mux.Handle("PUT /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
+		staffauth.Middleware(verifier, db.App)(plans.PutInstanceHandler()))
 	return httptest.NewServer(mux)
 }
 
@@ -141,6 +181,62 @@ func putTemplate(t *testing.T, srv *httptest.Server, practiceID, planType string
 	return putTemplateRaw(t, srv, practiceID, planType, payload)
 }
 
+func instancePath(practiceID, engagementID, planType string) string {
+	return "/practices/" + practiceID + "/engagements/" + engagementID + "/plans/" + planType
+}
+
+func postInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+instancePath(practiceID, engagementID, planType), nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer tok")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+func getInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+instancePath(practiceID, engagementID, planType), nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer tok")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+func putInstanceRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string, body []byte) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+instancePath(practiceID, engagementID, planType), bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+func putInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string, body plans.PutInstanceRequest) *http.Response {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	return putInstanceRaw(t, srv, practiceID, engagementID, planType, payload)
+}
+
 func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-unknown-plan-type"
@@ -179,7 +275,7 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-any-member"
 	practiceID := seedMember(t, db, uid)
-	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
 	srv := newPlanServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()
@@ -309,7 +405,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	srv := newPlanServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()
 
-	putResp := putTemplate(t, srv, practiceID, "birth_plan", plans.TemplateResponse{Fields: []plans.Field{
+	putResp := putTemplate(t, srv, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
 		{ID: secondFieldID, Type: "checkbox", Label: "Consent", Order: 99},
 		{ID: firstFieldID, Type: "single_select", Label: "Location", Options: []string{"Home", "Hospital"}, Order: 1},
 	}})
@@ -327,7 +423,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 		t.Fatalf("PUT fields = %+v, want order recomputed from array position", putOut.Fields)
 	}
 
-	getResp := getTemplate(t, srv, practiceID, "birth_plan")
+	getResp := getTemplate(t, srv, practiceID, birthPlanType)
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
@@ -348,7 +444,7 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-replace"
 	practiceID := seedOwner(t, db, uid)
-	seedTemplate(t, db, practiceID, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
+	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
 
 	srv := newPlanServer(fakeVerifier{uid: uid}, db)
 	defer srv.Close()

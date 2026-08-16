@@ -1,9 +1,11 @@
 // Package plans holds the Staff-side BFF handlers for a Practice's Plan
-// Templates: the field list a Practice defines for its Care Plan and
-// Birth Plan (see docs/adr/0001-practice-defined-plan-templates.md). Both
-// handlers rely on staffauth.Middleware having already resolved the
-// caller's Staff/Practice ids and opened a request-scoped *sql.Tx with
-// app.current_practice_id set, the same way engagement and visit do.
+// Templates (the field list a Practice defines for its Care Plan and
+// Birth Plan) and Plan Instances (an Engagement's filled-out Care Plan or
+// Birth Plan, snapshotted from a Plan Template at creation) -- see
+// docs/adr/0001-practice-defined-plan-templates.md. All handlers rely on
+// staffauth.Middleware having already resolved the caller's Staff/Practice
+// ids and opened a request-scoped *sql.Tx with app.current_practice_id
+// set, the same way engagement and visit do.
 package plans
 
 import (
@@ -23,18 +25,26 @@ import (
 // ever reaches Postgres.
 var validPlanTypes = map[string]bool{"care_plan": true, "birth_plan": true}
 
+// fieldTypeSingleSelect and fieldTypeMultiSelect are shared between
+// selectFieldTypes below and instance.go's validateAnswers, which needs to
+// tell a select field's answer shape apart from the others.
+const (
+	fieldTypeSingleSelect = "single_select"
+	fieldTypeMultiSelect  = "multi_select"
+)
+
 // validFieldTypes is the field-type palette from ADR-0001: the only kinds
 // of field a Plan Template may contain.
 var validFieldTypes = map[string]bool{
-	"short_text":     true,
-	"long_text":      true,
-	"single_select":  true,
-	"multi_select":   true,
-	"checkbox":       true,
-	"section_header": true,
+	"short_text":          true,
+	"long_text":           true,
+	fieldTypeSingleSelect: true,
+	fieldTypeMultiSelect:  true,
+	"checkbox":            true,
+	"section_header":      true,
 }
 
-var selectFieldTypes = map[string]bool{"single_select": true, "multi_select": true}
+var selectFieldTypes = map[string]bool{fieldTypeSingleSelect: true, fieldTypeMultiSelect: true}
 
 // Field is one entry in a Plan Template's field list. Order is not read
 // from request bodies -- see normalizeFields -- but is always present on

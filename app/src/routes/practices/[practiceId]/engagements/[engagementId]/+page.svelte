@@ -6,6 +6,16 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
+	import PlanInstanceForm from '#lib/PlanInstanceForm.svelte';
+	import {
+		loadInstance,
+		createInstance,
+		saveAnswers,
+		setAnswer,
+		toggleMultiSelectOption,
+		type Instance,
+		type Fetcher
+	} from '#lib/planInstance.js';
 
 	type Detail = {
 		engagementId: string;
@@ -57,6 +67,19 @@
 	let attachmentPreviewURLs = $state<Record<string, string>>({});
 	let unsubscribePushMessages: () => void = () => {};
 
+	type PlanType = 'care_plan' | 'birth_plan';
+	// The Engagement view's Care Plan and Birth Plan sections both render
+	// off this one list -- see planInstance.ts's doc comment: they're driven
+	// by the same generic Plan Instance API, parameterized by plan type.
+	const planSections: { type: PlanType; heading: string }[] = [
+		{ type: 'care_plan', heading: 'Care Plan' },
+		{ type: 'birth_plan', heading: 'Birth Plan' }
+	];
+	let planInstances = $state<Record<PlanType, Instance | null>>({ care_plan: null, birth_plan: null });
+	let planLoaded = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+	let planError = $state<Record<PlanType, string>>({ care_plan: '', birth_plan: '' });
+	let planBusy = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
 			URL.revokeObjectURL(url);
@@ -107,6 +130,87 @@
 		await loadAttachmentPreviews(idToken, messages);
 	}
 
+	function planFetcher(idToken: string): Fetcher {
+		return (path, init) => apiFetch(path, idToken, init);
+	}
+
+	async function loadPlan(idToken: string, planType: PlanType) {
+		planError[planType] = '';
+		try {
+			planInstances[planType] = await loadInstance(
+				planFetcher(idToken),
+				page.params.practiceId!,
+				page.params.engagementId!,
+				planType
+			);
+		} catch (err) {
+			planError[planType] = err instanceof Error ? err.message : 'Failed to load plan';
+		} finally {
+			planLoaded[planType] = true;
+		}
+	}
+
+	async function handleCreatePlan(planType: PlanType) {
+		planError[planType] = '';
+		planBusy[planType] = true;
+		try {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) {
+				planError[planType] = 'You must be logged in to create a plan';
+				return;
+			}
+			const idToken = await user.getIdToken();
+			planInstances[planType] = await createInstance(
+				planFetcher(idToken),
+				page.params.practiceId!,
+				page.params.engagementId!,
+				planType
+			);
+		} catch (err) {
+			planError[planType] = err instanceof Error ? err.message : 'Failed to create plan';
+		} finally {
+			planBusy[planType] = false;
+		}
+	}
+
+	function handlePlanAnswerChange(planType: PlanType, fieldId: string, value: unknown) {
+		const instance = planInstances[planType];
+		if (!instance) return;
+		instance.answers = setAnswer(instance.answers, fieldId, value);
+	}
+
+	function handlePlanToggleOption(planType: PlanType, fieldId: string, option: string) {
+		const instance = planInstances[planType];
+		if (!instance) return;
+		instance.answers = toggleMultiSelectOption(instance.answers, fieldId, option);
+	}
+
+	async function handleSavePlan(planType: PlanType) {
+		const instance = planInstances[planType];
+		if (!instance) return;
+		planError[planType] = '';
+		planBusy[planType] = true;
+		try {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) {
+				planError[planType] = 'You must be logged in to save a plan';
+				return;
+			}
+			const idToken = await user.getIdToken();
+			planInstances[planType] = await saveAnswers(
+				planFetcher(idToken),
+				page.params.practiceId!,
+				page.params.engagementId!,
+				planType,
+				instance.answers
+			);
+		} catch (err) {
+			planError[planType] = err instanceof Error ? err.message : 'Failed to save plan';
+		} finally {
+			planBusy[planType] = false;
+		}
+	}
+
 	onMount(async () => {
 		const user = getFirebaseAuth().currentUser;
 		if (!user) {
@@ -127,6 +231,7 @@
 		detail = await response.json();
 		await loadVisits(idToken);
 		await loadMessages(idToken);
+		await Promise.all(planSections.map((section) => loadPlan(idToken, section.type)));
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -333,6 +438,32 @@
 			{/each}
 		</ul>
 	{/if}
+
+	{#each planSections as section (section.type)}
+		<h2>{section.heading}</h2>
+
+		{#if planError[section.type]}
+			<p role="alert">{planError[section.type]}</p>
+		{/if}
+
+		{#if planLoaded[section.type]}
+			{#if planInstances[section.type]}
+				<PlanInstanceForm
+					fields={planInstances[section.type]!.fields}
+					answers={planInstances[section.type]!.answers}
+					onAnswerChange={(fieldId, value) => handlePlanAnswerChange(section.type, fieldId, value)}
+					onToggleOption={(fieldId, option) => handlePlanToggleOption(section.type, fieldId, option)}
+				/>
+				<button type="button" onclick={() => handleSavePlan(section.type)} disabled={planBusy[section.type]}>
+					Save {section.heading}
+				</button>
+			{:else}
+				<button type="button" onclick={() => handleCreatePlan(section.type)} disabled={planBusy[section.type]}>
+					Create {section.heading}
+				</button>
+			{/if}
+		{/if}
+	{/each}
 
 	<h2>Messages</h2>
 
