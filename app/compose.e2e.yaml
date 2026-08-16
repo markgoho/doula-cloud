@@ -64,7 +64,12 @@ services:
   # Desktop predefines it too, but the extra_hosts entry is harmless
   # there). E2E_API_PORT/E2E_EMULATOR_PORT come from e2e/ports.ts via
   # global-setup.ts (the defaults here match that file, for anyone running
-  # this by hand).
+  # this by hand). STORAGE_EMULATOR_HOST (unreachable, and never dialed --
+  # no e2e test exercises the attachment endpoints, per #60) makes the GCS
+  # SDK skip Application Default Credentials discovery at startup, which
+  # otherwise blocks on a real metadata-server probe with no route to
+  # succeed in this container, delaying main()'s listener past the point
+  # Playwright starts hitting it.
   api:
     build:
       context: ../api
@@ -73,6 +78,8 @@ services:
       DATABASE_URL: postgres://app_e2e:app_e2e@db:5432/app?sslmode=disable
       FIREBASE_AUTH_EMULATOR_HOST: ${E2E_HOST_GATEWAY:-host.containers.internal}:${E2E_EMULATOR_PORT:-9099}
       GCP_PROJECT_ID: doula-cloud
+      STORAGE_EMULATOR_HOST: storage-emulator-disabled.invalid:1
+      GCS_ATTACHMENTS_BUCKET: doula-cloud-e2e-unused
       PORT: '8080'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
