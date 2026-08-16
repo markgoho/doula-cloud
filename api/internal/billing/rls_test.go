@@ -7,7 +7,7 @@ import (
 )
 
 // These tests exercise the credit_ledger_practice_visibility policy from
-// 00014_credit_ledger.sql directly via db.App and set_config, following the
+// 00015_credit_ledger.sql directly via db.App and set_config, following the
 // pattern in staffauth/rls_test.go.
 
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
