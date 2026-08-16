@@ -1,7 +1,9 @@
 package message_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,17 +11,23 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/message"
+	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/testdb"
 )
 
 // newPortalServer mounts the same routes main.go wires up for the
-// Client-portal side of this package, behind clientauth.Middleware.
+// Client-portal side of this package, behind clientauth.Middleware,
+// backed by a fresh in-memory ObjectStore -- no real GCS bucket reachable
+// from api/ tests, per docs/testing.md.
 func newPortalServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+	store := objectstore.NewMemoryStore()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(verifier, db.App)(message.ClientListHandler()))
 	mux.Handle("POST /portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(verifier, db.App)(message.ClientCreateHandler()))
+		clientauth.Middleware(verifier, db.App)(message.ClientCreateHandler(store)))
+	mux.Handle("GET /portal/engagements/{engagementId}/messages/{messageId}/attachment",
+		clientauth.Middleware(verifier, db.App)(message.ClientAttachmentHandler(store)))
 	return httptest.NewServer(mux)
 }
 
@@ -297,4 +305,96 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 		t.Fatalf("decode client-side list: %v", err)
 	}
 	assertBothMessagesInOrder(t, clientView.Items)
+}
+
+// TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip mirrors
+// TestCreateHandler_AttachmentUploadAndDownloadRoundTrip for the
+// Client-portal side.
+func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-attachment"
+	practiceID := seedPractice(t, db, "Practice")
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	seedPortalUser(t, db, identityUID, clientID)
+
+	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	defer srv.Close()
+
+	resp := authedMultipartPost(t, srv.URL+"/portal/engagements/"+engagementID+"/messages",
+		"Here's a photo", "photo.png", pngBytes)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var created message.Message
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if created.AttachmentContentType != pngContentType {
+		t.Fatalf("attachmentContentType = %q, want image/png", created.AttachmentContentType)
+	}
+
+	dlResp := authedGet(t, srv.URL+"/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	defer dlResp.Body.Close()
+	if dlResp.StatusCode != http.StatusOK {
+		t.Fatalf("download status = %d, want %d", dlResp.StatusCode, http.StatusOK)
+	}
+	body, err := io.ReadAll(dlResp.Body)
+	if err != nil {
+		t.Fatalf("read download body: %v", err)
+	}
+	if !bytes.Equal(body, pngBytes) {
+		t.Fatalf("downloaded bytes don't match uploaded bytes")
+	}
+}
+
+// TestClientAttachmentHandler_InvalidMessageID mirrors
+// TestAttachmentHandler_InvalidMessageID for the Client-portal side.
+func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-bad-message-id"
+	practiceID := seedPractice(t, db, "Practice")
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	seedPortalUser(t, db, identityUID, clientID)
+
+	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	defer srv.Close()
+
+	resp := authedGet(t, srv.URL+"/portal/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+// TestClientAttachmentHandler_NotLinkedToClientForbidden mirrors
+// TestClientCreateHandler_NotLinkedToClientForbidden for the attachment
+// download route.
+func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Practice")
+	ownerClientID, engagementID := seedClientEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
+	seedPortalUser(t, db, "client-owner-of-thread", ownerClientID)
+
+	ownerSrv := newPortalServer(fakeVerifier{uid: "client-owner-of-thread"}, db)
+	defer ownerSrv.Close()
+	createResp := authedMultipartPost(t, ownerSrv.URL+"/portal/engagements/"+engagementID+"/messages",
+		"", "photo.png", pngBytes)
+	defer createResp.Body.Close()
+	var created message.Message
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	unrelatedClientID, _ := seedClientEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
+	seedPortalUser(t, db, "client-elsewhere-dl", unrelatedClientID)
+
+	unrelatedSrv := newPortalServer(fakeVerifier{uid: "client-elsewhere-dl"}, db)
+	defer unrelatedSrv.Close()
+
+	resp := authedGet(t, unrelatedSrv.URL+"/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
 }

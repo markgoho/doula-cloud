@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/objectstore"
 )
 
 // ClientListHandler mirrors ListHandler for the Client-portal population:
@@ -57,10 +58,10 @@ func ClientListHandler() http.Handler {
 }
 
 // ClientCreateHandler mirrors CreateHandler for the Client-portal
-// population: posts a text-only Message as the calling Client into the
-// caller's own Engagement thread. Must be mounted behind
-// clientauth.Middleware.
-func ClientCreateHandler() http.Handler {
+// population: posts a Message, with an optional single image/PDF
+// attachment, as the calling Client into the caller's own Engagement
+// thread. Must be mounted behind clientauth.Middleware.
+func ClientCreateHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
@@ -71,13 +72,13 @@ func ClientCreateHandler() http.Handler {
 		clientID, _ := clientauth.ClientID(r.Context())
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		req, ok := decodeCreateRequest(w, r)
+		messageID := uuid.NewString()
+		body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, clientauth.MsgInternalError)
 		if !ok {
 			return
 		}
 
-		messageID := uuid.NewString()
-		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeClient, clientID, req.Body)
+		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeClient, clientID, body, attachment)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)

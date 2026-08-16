@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
@@ -27,6 +27,8 @@
 		senderId: string;
 		senderName: string;
 		body: string;
+		attachmentFilename?: string;
+		attachmentContentType?: string;
 		createdAt: string;
 	};
 
@@ -45,7 +47,32 @@
 	let messagesHasMore = $state(false);
 	let loadingOlderMessages = $state(false);
 	let newMessageBody = $state('');
+	let newMessageAttachment = $state<File | null>(null);
 	let sendingMessage = $state(false);
+	// Object URLs for image attachments, keyed by messageId, so images
+	// render inline in the thread (not just downloadable) -- fetched via
+	// apiFetch since the attachment endpoint requires the caller's auth
+	// header, which a plain <img src> can't send.
+	let attachmentPreviewURLs = $state<Record<string, string>>({});
+
+	onDestroy(() => {
+		for (const url of Object.values(attachmentPreviewURLs)) {
+			URL.revokeObjectURL(url);
+		}
+	});
+
+	async function loadAttachmentPreviews(idToken: string, items: Message[]) {
+		await Promise.all(
+			items
+				.filter((m) => m.attachmentContentType?.startsWith('image/') && !attachmentPreviewURLs[m.messageId])
+				.map(async (m) => {
+					const response = await apiFetch(`${messagesURL()}/${m.messageId}/attachment`, idToken);
+					if (!response.ok) return;
+					const blob = await response.blob();
+					attachmentPreviewURLs[m.messageId] = URL.createObjectURL(blob);
+				})
+		);
+	}
 
 	function visitsURL() {
 		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/visits`;
@@ -74,6 +101,7 @@
 		messages = [...data.items].reverse();
 		messagesCursor = data.nextCursor ?? '';
 		messagesHasMore = data.hasMore;
+		await loadAttachmentPreviews(idToken, messages);
 	}
 
 	onMount(async () => {
@@ -175,6 +203,7 @@
 			messages = [...[...data.items].reverse(), ...messages];
 			messagesCursor = data.nextCursor ?? '';
 			messagesHasMore = data.hasMore;
+			await loadAttachmentPreviews(idToken, messages);
 		} catch (err) {
 			messagesError = err instanceof Error ? err.message : 'Failed to load older messages';
 		} finally {
@@ -194,11 +223,19 @@
 			}
 			const idToken = await user.getIdToken();
 
-			const response = await apiFetch(messagesURL(), idToken, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ body: newMessageBody })
-			});
+			let response: Response;
+			if (newMessageAttachment) {
+				const form = new FormData();
+				form.set('body', newMessageBody);
+				form.set('attachment', newMessageAttachment);
+				response = await apiFetch(messagesURL(), idToken, { method: 'POST', body: form });
+			} else {
+				response = await apiFetch(messagesURL(), idToken, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ body: newMessageBody })
+				});
+			}
 			if (!response.ok) {
 				messagesError = await response.text();
 				return;
@@ -207,11 +244,36 @@
 			const created = await response.json();
 			messages = [...messages, created];
 			newMessageBody = '';
+			newMessageAttachment = null;
+			await loadAttachmentPreviews(idToken, [created]);
 		} catch (err) {
 			messagesError = err instanceof Error ? err.message : 'Failed to send message';
 		} finally {
 			sendingMessage = false;
 		}
+	}
+
+	async function handleDownloadAttachment(messageId: string, filename: string) {
+		const user = getFirebaseAuth().currentUser;
+		if (!user) {
+			messagesError = 'You must be logged in to download an attachment';
+			return;
+		}
+		const idToken = await user.getIdToken();
+
+		const response = await apiFetch(`${messagesURL()}/${messageId}/attachment`, idToken);
+		if (!response.ok) {
+			messagesError = await response.text();
+			return;
+		}
+
+		const blob = await response.blob();
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = filename;
+		link.click();
+		URL.revokeObjectURL(url);
 	}
 </script>
 
@@ -276,7 +338,24 @@
 				<li>
 					<strong>{message.senderName}</strong> ({message.senderType}) —
 					{new Date(message.createdAt).toLocaleString()}
-					<p>{message.body}</p>
+					{#if message.body}
+						<p>{message.body}</p>
+					{/if}
+					{#if message.attachmentFilename}
+						{#if attachmentPreviewURLs[message.messageId]}
+							<img
+								src={attachmentPreviewURLs[message.messageId]}
+								alt={message.attachmentFilename}
+								style="max-width: 240px; max-height: 240px; display: block;"
+							/>
+						{/if}
+						<button
+							type="button"
+							onclick={() => handleDownloadAttachment(message.messageId, message.attachmentFilename ?? '')}
+						>
+							📎 {message.attachmentFilename}
+						</button>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -285,7 +364,15 @@
 	<form onsubmit={handleSendMessage}>
 		<label>
 			Message
-			<textarea bind:value={newMessageBody} required></textarea>
+			<textarea bind:value={newMessageBody}></textarea>
+		</label>
+		<label>
+			Attachment (image or PDF, up to 10MB)
+			<input
+				type="file"
+				accept="image/*,application/pdf"
+				onchange={(event) => (newMessageAttachment = event.currentTarget.files?.[0] ?? null)}
+			/>
 		</label>
 		<button type="submit" disabled={sendingMessage}>Send</button>
 	</form>

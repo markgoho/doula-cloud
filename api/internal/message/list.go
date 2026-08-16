@@ -19,19 +19,25 @@ import (
 // fixed size is enough for "paginated" to be true.
 const pageSize = 30
 
-// Message is one Message in a thread. Body is scanned via COALESCE into
-// an empty string rather than sql.NullString: the schema (00008_messaging.sql)
-// allows a NULL body for an attachment-only row, but no code path writes
-// one yet (attachments are a separate ticket), so an empty string is
-// indistinguishable from "no case exercises this today" without adding a
-// pointer/NullString the rest of this ticket has no use for.
+// Message is one Message in a thread. Body and the attachment fields are
+// scanned via COALESCE into zero values rather than sql.NullString/Int64:
+// the schema (00008_messaging.sql) allows a NULL body for an
+// attachment-only row and NULL attachment_* columns for a text-only row,
+// and the "all or nothing" CHECK constraint means AttachmentFilename == ""
+// is an unambiguous "no attachment" signal for the frontend, with no need
+// for a pointer/NullString the API layer has no other use for.
+// AttachmentContentType/AttachmentFilename are omitted from the JSON
+// response when empty (no attachment) so existing text-only consumers see
+// no shape change, per docs/api-design.md's additive-only rule.
 type Message struct {
-	MessageID  string    `json:"messageId"`
-	SenderType string    `json:"senderType"`
-	SenderID   string    `json:"senderId"`
-	SenderName string    `json:"senderName"`
-	Body       string    `json:"body"`
-	CreatedAt  time.Time `json:"createdAt"`
+	MessageID             string    `json:"messageId"`
+	SenderType            string    `json:"senderType"`
+	SenderID              string    `json:"senderId"`
+	SenderName            string    `json:"senderName"`
+	Body                  string    `json:"body"`
+	AttachmentContentType string    `json:"attachmentContentType,omitempty"`
+	AttachmentFilename    string    `json:"attachmentFilename,omitempty"`
+	CreatedAt             time.Time `json:"createdAt"`
 }
 
 // ListResponse is the standard cursor-pagination envelope from
@@ -108,7 +114,8 @@ func ListHandler() http.Handler {
 // senderTypeClient (context.go) are the single source of truth for those
 // values across this package.
 const listMessagesQuery = `SELECT m.id, m.sender_type, m.sender_id,
-		COALESCE(s.name, c.name) AS sender_name, COALESCE(m.body, ''), m.created_at
+		COALESCE(s.name, c.name) AS sender_name, COALESCE(m.body, ''),
+		COALESCE(m.attachment_content_type, ''), COALESCE(m.attachment_filename, ''), m.created_at
 	FROM messages m
 	LEFT JOIN staff s ON s.id = m.sender_id AND m.sender_type = $1
 	LEFT JOIN clients c ON c.id = m.sender_id AND m.sender_type = $2
@@ -116,7 +123,8 @@ const listMessagesQuery = `SELECT m.id, m.sender_type, m.sender_id,
 	ORDER BY m.created_at DESC, m.id DESC LIMIT $4`
 
 const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
-		COALESCE(s.name, c.name) AS sender_name, COALESCE(m.body, ''), m.created_at
+		COALESCE(s.name, c.name) AS sender_name, COALESCE(m.body, ''),
+		COALESCE(m.attachment_content_type, ''), COALESCE(m.attachment_filename, ''), m.created_at
 	FROM messages m
 	LEFT JOIN staff s ON s.id = m.sender_id AND m.sender_type = $1
 	LEFT JOIN clients c ON c.id = m.sender_id AND m.sender_type = $2
@@ -147,7 +155,8 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 	items := []Message{}
 	for rows.Next() {
 		var it Message
-		if err := rows.Scan(&it.MessageID, &it.SenderType, &it.SenderID, &it.SenderName, &it.Body, &it.CreatedAt); err != nil {
+		if err := rows.Scan(&it.MessageID, &it.SenderType, &it.SenderID, &it.SenderName, &it.Body,
+			&it.AttachmentContentType, &it.AttachmentFilename, &it.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("message: scan message row: %w", err)
 		}

@@ -13,10 +13,13 @@ import (
 	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"cloud.google.com/go/storage"
+
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/message"
+	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/visit"
@@ -73,10 +76,11 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// routes builds the BFF's route table. verifier and db are threaded
-// through so tests can substitute a fake Identity Platform verifier and a
-// test Postgres instance instead of the real ones main() wires up.
-func routes(verifier authn.Verifier, db *sql.DB) *http.ServeMux {
+// routes builds the BFF's route table. verifier, db, and store are
+// threaded through so tests can substitute a fake Identity Platform
+// verifier, a test Postgres instance, and an in-memory ObjectStore instead
+// of the real ones main() wires up.
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hello", helloHandler)
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
@@ -103,14 +107,18 @@ func routes(verifier authn.Verifier, db *sql.DB) *http.ServeMux {
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages",
 		staffauth.Middleware(verifier, db)(message.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db)(message.CreateHandler()))
+		staffauth.Middleware(verifier, db)(message.CreateHandler(store)))
+	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
+		staffauth.Middleware(verifier, db)(message.AttachmentHandler(store)))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(verifier, db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(verifier, db)(portal.DetailHandler()))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(verifier, db)(message.ClientListHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(verifier, db)(message.ClientCreateHandler()))
+		clientauth.Middleware(verifier, db)(message.ClientCreateHandler(store)))
+	mux.Handle("GET /api/portal/engagements/{engagementId}/messages/{messageId}/attachment",
+		clientauth.Middleware(verifier, db)(message.ClientAttachmentHandler(store)))
 	return mux
 }
 
@@ -131,9 +139,18 @@ func main() {
 		log.Fatalf("init verifier: %v", err)
 	}
 
+	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+	gcsClient, err := storage.NewClient(context.Background())
+	if err != nil {
+		// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+		log.Fatalf("init GCS client: %v", err)
+	}
+	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+	store := objectstore.NewGCSStore(gcsClient, os.Getenv("GCS_ATTACHMENTS_BUCKET"))
+
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           routes(verifier, db),
+		Handler:           routes(verifier, db, store),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

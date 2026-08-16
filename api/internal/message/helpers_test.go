@@ -107,6 +107,25 @@ func seedMessage(t *testing.T, db *testdb.DB, engagementID, senderType, senderID
 	}
 }
 
+// seedMessageWithAttachment inserts a Message row carrying attachment
+// metadata directly (bypassing CreateHandler/ObjectStore.Put entirely),
+// for tests that need a DB row pointing at an object path without a real
+// upload -- e.g. exercising the download endpoint's ObjectStore.Get
+// failure branch, where the store never needs to have actually stored
+// anything.
+func seedMessageWithAttachment(t *testing.T, db *testdb.DB, engagementID, senderType, senderID, objectPath, contentType, filename string, byteSize int64) (messageID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO messages (engagement_id, sender_type, sender_id, attachment_object_path, attachment_content_type, attachment_byte_size, attachment_filename)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		engagementID, senderType, senderID, objectPath, contentType, byteSize, filename,
+	).Scan(&messageID); err != nil {
+		t.Fatalf("seed message with attachment: %v", err)
+	}
+	return messageID
+}
+
 // seedPushSubscription inserts a push_subscriptions row for
 // ownerType/ownerID, using the superuser Admin connection.
 func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpoint string) (id string) {

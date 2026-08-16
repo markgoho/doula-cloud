@@ -7,9 +7,10 @@
 // handlers (client.go) rely on clientauth.Middleware the same way, with
 // app.current_client_id set instead. Both populations share the same
 // thread per Engagement -- one continuous conversation, not split by
-// sender. Messages are text-only and immutable -- there is no update or
-// delete endpoint (attachments and push notifications are separate
-// tickets, per #58).
+// sender. A Message may carry a single image/PDF attachment (attachment.go,
+// #60), stored via an objectstore.ObjectStore rather than inline; there is
+// no update or delete endpoint -- Messages are immutable (push
+// notifications are a separate ticket, per #58).
 package message
 
 import (
