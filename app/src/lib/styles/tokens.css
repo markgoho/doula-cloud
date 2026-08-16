@@ -18,6 +18,7 @@
 	--color-accent: oklch(48% 0.13 325);
 	--color-accent-strong: oklch(40% 0.13 325);
 	--color-accent-contrast: oklch(99% 0.005 325);
+	--color-error: oklch(48% 0.18 25);
 
 	/* Typography */
 	--font-family-base: system-ui, sans-serif;
@@ -62,6 +63,7 @@
 		--color-accent: oklch(72% 0.14 325);
 		--color-accent-strong: oklch(80% 0.14 325);
 		--color-accent-contrast: oklch(18% 0.02 325);
+		--color-error: oklch(72% 0.17 25);
 	}
 }
 
@@ -75,4 +77,5 @@
 	--color-accent: oklch(72% 0.14 325);
 	--color-accent-strong: oklch(80% 0.14 325);
 	--color-accent-contrast: oklch(18% 0.02 325);
+	--color-error: oklch(72% 0.17 25);
 }
