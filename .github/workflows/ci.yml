@@ -119,9 +119,13 @@ jobs:
 
       # Keyed on the resolved @playwright/test version, not
       # hashFiles('app/bun.lock') -- any unrelated dep bump changes that
-      # hash and throws away a 268MB cache entry for no reason. No
+      # hash and throws away the cache entry for no reason. No
       # restore-keys fallback: a stale-version hit would pair old browser
-      # binaries with the install-deps-only branch below.
+      # binaries with the install-deps-only branch below. The key carries
+      # a "shell" tag because it caches chromium-headless-shell only (see
+      # the install step below), not the full Chromium browser -- reusing
+      # the old "playwright-" key would silently serve stale full-browser
+      # cache entries from before this switch.
       - name: Resolve Playwright version
         id: playwright-version
         working-directory: app
@@ -134,13 +138,21 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+          key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
+      # --only-shell installs chromium-headless-shell instead of full
+      # Chromium -- roughly half the download/cache size. Headless runs
+      # (both Playwright e2e and the vitest browser tests, see
+      # vite.config.ts) use the headless shell by default and neither
+      # pins a `channel:`, so the full browser is never actually needed.
       - name: Install Playwright browsers
         working-directory: app
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps --only-shell chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
 
+      # On a cache hit the headless shell binary is already restored, but
+      # the OS-level libraries it links against live outside the cached
+      # path and still need installing on every fresh runner.
       - name: Install Playwright OS dependencies only
         working-directory: app
         run: bunx playwright install-deps chromium
