@@ -130,7 +130,7 @@ func seedContract(t *testing.T, db *testdb.DB, engagementID, status, prose strin
 // ClientGetSignedContractPDFHandler's DB read without going through the
 // full Sign transition. Callers separately Put matching bytes into the
 // objectstore.ObjectStore the test server was built with, at
-// signedPDFObjectPath(engagementID), unless the test wants the "PDF row
+// contracts.SignedPDFObjectPath(engagementID), unless the test wants the "PDF row
 // found but object missing" case.
 func seedSignedContract(t *testing.T, db *testdb.DB, engagementID, pdfObjectPath string) {
 	t.Helper()
