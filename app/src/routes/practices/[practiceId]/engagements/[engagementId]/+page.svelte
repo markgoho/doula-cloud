@@ -16,6 +16,8 @@
 		type Instance,
 		type Fetcher
 	} from '#lib/planInstance.js';
+	import ContractForm from '#lib/ContractForm.svelte';
+	import { loadContract, createContract, saveContractValues, setMergeFieldValue, type Contract } from '#lib/contract.js';
 
 	type Detail = {
 		engagementId: string;
@@ -82,6 +84,11 @@
 	let planLoaded = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
 	let planError = $state<Record<PlanType, string>>({ care_plan: '', birth_plan: '' });
 	let planBusy = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+
+	let contract = $state<Contract | undefined>();
+	let isContractLoaded = $state(false);
+	let contractError = $state('');
+	let isContractBusy = $state(false);
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -216,6 +223,64 @@
 		}
 	}
 
+	async function loadContractSection(idToken: string) {
+		contractError = '';
+		try {
+			contract = await loadContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+		} catch (error_) {
+			contractError = error_ instanceof Error ? error_.message : 'Failed to load contract';
+		} finally {
+			isContractLoaded = true;
+		}
+	}
+
+	async function handleCreateContract() {
+		contractError = '';
+		isContractBusy = true;
+		try {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) {
+				contractError = 'You must be logged in to create a contract';
+				return;
+			}
+			const idToken = await user.getIdToken();
+			contract = await createContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+		} catch (error_) {
+			contractError = error_ instanceof Error ? error_.message : 'Failed to create contract';
+		} finally {
+			isContractBusy = false;
+		}
+	}
+
+	function handleContractValueChange(key: string, value: string) {
+		if (!contract) return;
+		contract.values = setMergeFieldValue(contract.values, key, value);
+	}
+
+	async function handleSaveContract() {
+		if (!contract) return;
+		contractError = '';
+		isContractBusy = true;
+		try {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) {
+				contractError = 'You must be logged in to save the contract';
+				return;
+			}
+			const idToken = await user.getIdToken();
+			contract = await saveContractValues(
+				planFetcher(idToken),
+				page.params.practiceId!,
+				page.params.engagementId!,
+				contract.values
+			);
+		} catch (error_) {
+			contractError = error_ instanceof Error ? error_.message : 'Failed to save contract';
+		} finally {
+			isContractBusy = false;
+		}
+	}
+
 	onMount(async () => {
 		const user = getFirebaseAuth().currentUser;
 		if (!user) {
@@ -237,6 +302,7 @@
 		await loadVisits(idToken);
 		await loadMessages(idToken);
 		await Promise.all(planSections.map((section) => loadPlan(idToken, section.type)));
+		await loadContractSection(idToken);
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -469,6 +535,29 @@
 			{/if}
 		{/if}
 	{/each}
+
+	<h2>Contract</h2>
+
+	{#if contractError}
+		<p role="alert">{contractError}</p>
+	{/if}
+
+	{#if isContractLoaded}
+		{#if contract}
+			<p>Status: {contract.status}</p>
+			<ContractForm
+				mergeFields={contract.mergeFields}
+				values={contract.values}
+				readOnly={contract.status !== 'draft'}
+				onValueChange={handleContractValueChange}
+			/>
+			{#if contract.status === 'draft'}
+				<button type="button" onclick={handleSaveContract} disabled={isContractBusy}>Save Contract</button>
+			{/if}
+		{:else}
+			<button type="button" onclick={handleCreateContract} disabled={isContractBusy}>Create Draft Contract</button>
+		{/if}
+	{/if}
 
 	<h2>Messages</h2>
 

@@ -87,12 +87,53 @@ func seedTemplate(t *testing.T, db *testdb.DB, practiceID, prose string) {
 	}
 }
 
+// seedEngagement inserts a Client and an Engagement linking them to
+// practiceID, using the superuser Admin connection -- mirrors
+// plans/template_test.go's seedEngagement.
+func seedEngagement(t *testing.T, db *testdb.DB, practiceID string) (engagementID string) {
+	t.Helper()
+	var clientID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (name, email) VALUES ('Test Client', 'client@example.com') RETURNING id`,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id) VALUES ($1, $2) RETURNING id`,
+		clientID, practiceID,
+	).Scan(&engagementID); err != nil {
+		t.Fatalf("seed engagement: %v", err)
+	}
+	return engagementID
+}
+
+// seedContract seeds a Contract row directly (bypassing the handlers
+// under test), with an explicit status so tests can exercise a
+// non-'draft' Contract that PutContractHandler must reject -- a state no
+// endpoint in this ticket can reach on its own. merge_field_values is
+// left at its NOT NULL DEFAULT '{}'::jsonb, matching every caller.
+func seedContract(t *testing.T, db *testdb.DB, engagementID, status, prose string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO contracts (engagement_id, status, prose) VALUES ($1, $2::contract_status, $3)`,
+		engagementID, status, prose,
+	); err != nil {
+		t.Fatalf("seed contract: %v", err)
+	}
+}
+
 func newContractServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/contract-template",
 		staffauth.Middleware(verifier, db.App)(contracts.GetTemplateHandler()))
 	mux.Handle("PUT /practices/{practiceId}/contract-template",
 		staffauth.Middleware(verifier, db.App)(contracts.PutTemplateHandler()))
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract",
+		staffauth.Middleware(verifier, db.App)(contracts.PostContractHandler()))
+	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract",
+		staffauth.Middleware(verifier, db.App)(contracts.GetContractHandler()))
+	mux.Handle("PUT /practices/{practiceId}/engagements/{engagementId}/contract",
+		staffauth.Middleware(verifier, db.App)(contracts.PutContractHandler()))
 	return httptest.NewServer(mux)
 }
 
