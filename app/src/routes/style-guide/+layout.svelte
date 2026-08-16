@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
-	import { atomPages } from './components.js';
+	import { atomPages, moleculePages } from './components.js';
+
+	const componentPages = [...atomPages, ...moleculePages];
 
 	let { children } = $props();
 
@@ -26,8 +28,8 @@
 		<nav>
 			<cluster-l space="var(--space-4)">
 				<a href={resolve('/style-guide')}>Overview</a>
-				{#each atomPages as atomPage (atomPage.slug)}
-					<a href={resolve(`/style-guide/${atomPage.slug}`)}>{atomPage.name}</a>
+				{#each componentPages as componentPage (componentPage.slug)}
+					<a href={resolve(`/style-guide/${componentPage.slug}`)}>{componentPage.name}</a>
 				{/each}
 			</cluster-l>
 		</nav>
