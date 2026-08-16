@@ -4,83 +4,66 @@ import { render } from 'vitest-browser-svelte';
 import PlanTemplateEditor from './PlanTemplateEditor.svelte';
 import type { Field } from './planTemplate.js';
 
-const fields: Field[] = [
+const defaultFields: Field[] = [
 	{ id: 'a', type: 'short_text', label: 'Support people', order: 0 },
 	{ id: 'b', type: 'single_select', label: 'Pain management', options: ['Unmedicated', 'Epidural'], order: 1 }
 ];
 
-function noop() {}
+interface SetupOptions {
+	fields?: Field[];
+}
+
+function setup({ fields = defaultFields }: SetupOptions = {}) {
+	const onAdd = vi.fn();
+	const onRemove = vi.fn();
+	const onMoveUp = vi.fn();
+	const onMoveDown = vi.fn();
+	const onLabelChange = vi.fn();
+	const onTypeChange = vi.fn();
+	const onOptionsChange = vi.fn();
+
+	render(PlanTemplateEditor, {
+		fields,
+		onAdd,
+		onRemove,
+		onMoveUp,
+		onMoveDown,
+		onLabelChange,
+		onTypeChange,
+		onOptionsChange
+	});
+
+	return { onAdd, onRemove, onMoveUp, onMoveDown, onLabelChange, onTypeChange, onOptionsChange };
+}
 
 describe('PlanTemplateEditor.svelte', () => {
 	it('renders a label input and type select for each field', async () => {
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		setup();
 
 		const labelInputs = page.getByLabelText('Field label').elements() as HTMLInputElement[];
 		expect(labelInputs.map((el) => el.value)).toEqual(['Support people', 'Pain management']);
 	});
 
 	it('renders an empty options textarea for a select field with no options', async () => {
-		const fieldWithoutOptions: Field[] = [
-			{ id: 'a', type: 'single_select', label: 'Location', order: 0 }
-		];
-		render(PlanTemplateEditor, {
-			fields: fieldWithoutOptions,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		const fieldWithoutOptions: Field[] = [{ id: 'a', type: 'single_select', label: 'Location', order: 0 }];
+		setup({ fields: fieldWithoutOptions });
 
 		await expect.element(page.getByLabelText('Options, one per line')).toHaveValue('');
 	});
 
 	it('renders an options textarea only for select-type fields', async () => {
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		setup();
 
 		const optionsTextareas = page.getByLabelText('Options, one per line').elements();
 		expect(optionsTextareas).toHaveLength(1);
-		await expect
-			.element(page.getByLabelText('Options, one per line'))
-			.toHaveValue('Unmedicated\nEpidural');
+		await expect.element(page.getByLabelText('Options, one per line')).toHaveValue('Unmedicated\nEpidural');
 	});
 
 	it('disables Move up on the first field and Move down on the last field', async () => {
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		setup();
 
 		const moveUpButtons = page.getByRole('button', { name: 'Move up' }).elements() as HTMLButtonElement[];
-		const moveDownButtons = page
-			.getByRole('button', { name: 'Move down' })
-			.elements() as HTMLButtonElement[];
+		const moveDownButtons = page.getByRole('button', { name: 'Move down' }).elements() as HTMLButtonElement[];
 
 		expect(moveUpButtons[0].disabled).toBe(true);
 		expect(moveUpButtons[1].disabled).toBe(false);
@@ -89,37 +72,15 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onRemove with the field id when Remove is clicked', async () => {
-		const onRemove = vi.fn();
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		const { onRemove } = setup();
 
-		const removeButtons = page.getByRole('button', { name: 'Remove' }).elements();
-		removeButtons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await page.getByRole('button', { name: 'Remove' }).nth(1).click();
 
 		expect(onRemove).toHaveBeenCalledWith('b');
 	});
 
 	it('calls onMoveUp/onMoveDown with the field id when clicked', async () => {
-		const onMoveUp = vi.fn();
-		const onMoveDown = vi.fn();
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp,
-			onMoveDown,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		const { onMoveUp, onMoveDown } = setup();
 
 		await page.getByRole('button', { name: 'Move down' }).first().click();
 		await page.getByRole('button', { name: 'Move up' }).nth(1).click();
@@ -129,17 +90,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onLabelChange when the label input changes', async () => {
-		const onLabelChange = vi.fn();
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		const { onLabelChange } = setup();
 
 		await page.getByLabelText('Field label').first().fill('New label');
 
@@ -147,17 +98,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onTypeChange when the field type select changes', async () => {
-		const onTypeChange = vi.fn();
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange,
-			onOptionsChange: noop
-		});
+		const { onTypeChange } = setup();
 
 		await page.getByLabelText('Field type').first().selectOptions('long_text');
 
@@ -165,17 +106,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onOptionsChange with the split, trimmed lines when the options textarea changes', async () => {
-		const onOptionsChange = vi.fn();
-		render(PlanTemplateEditor, {
-			fields,
-			onAdd: noop,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange
-		});
+		const { onOptionsChange } = setup();
 
 		await page.getByLabelText('Options, one per line').fill('Home\n Hospital ');
 
@@ -183,17 +114,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onAdd with the selected new-field type', async () => {
-		const onAdd = vi.fn();
-		render(PlanTemplateEditor, {
-			fields: [],
-			onAdd,
-			onRemove: noop,
-			onMoveUp: noop,
-			onMoveDown: noop,
-			onLabelChange: noop,
-			onTypeChange: noop,
-			onOptionsChange: noop
-		});
+		const { onAdd } = setup({ fields: [] });
 
 		await page.getByLabelText('New field type').selectOptions('checkbox');
 		await page.getByRole('button', { name: 'Add field' }).click();

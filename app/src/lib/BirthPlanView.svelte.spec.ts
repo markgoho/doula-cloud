@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import BirthPlanView from './BirthPlanView.svelte';
 import type { Answers, Field } from './planInstance.js';
 
-const fields: Field[] = [
+const defaultFields: Field[] = [
 	{ id: 'heading', type: 'section_header', label: 'Birth Setting', order: 0 },
 	{ id: 'location', type: 'single_select', label: 'Planned birth location', options: ['Home', 'Hospital'], order: 1 },
 	{ id: 'atmosphere', type: 'long_text', label: 'Atmosphere preferences', order: 2 },
@@ -12,54 +12,60 @@ const fields: Field[] = [
 	{ id: 'notify', type: 'multi_select', label: 'Notify', options: ['Partner', 'Doula'], order: 4 }
 ];
 
+interface SetupOptions {
+	fields?: Field[];
+	answers?: Answers;
+}
+
+function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
+	render(BirthPlanView, { fields, answers });
+}
+
+function valueFor(label: string) {
+	return page.getByText(label).element().nextElementSibling as HTMLElement;
+}
+
 describe('BirthPlanView.svelte', () => {
 	it('renders a heading for a section_header field', async () => {
-		render(BirthPlanView, { fields, answers: {} });
+		setup();
 
 		await expect.element(page.getByRole('heading', { name: 'Birth Setting' })).toBeInTheDocument();
 	});
 
 	it('renders the stored value for a text-shaped field', async () => {
-		const answers: Answers = { location: 'Hospital', atmosphere: 'Quiet, dim lighting' };
-		render(BirthPlanView, { fields, answers });
+		setup({ answers: { location: 'Hospital', atmosphere: 'Quiet, dim lighting' } });
 
 		await expect.element(page.getByText('Hospital')).toBeInTheDocument();
 		await expect.element(page.getByText('Quiet, dim lighting')).toBeInTheDocument();
 	});
 
 	it('renders an em dash for a text-shaped field with no answer', async () => {
-		render(BirthPlanView, { fields, answers: {} });
+		setup();
 
-		const sibling = page.getByText('Planned birth location').element().nextElementSibling as HTMLElement;
-		await expect.element(sibling).toHaveTextContent('—');
+		await expect.element(valueFor('Planned birth location')).toHaveTextContent('—');
 	});
 
 	it('renders Yes for a checkbox field answered true', async () => {
-		const answers: Answers = { 'consent-photos': true };
-		render(BirthPlanView, { fields, answers });
+		setup({ answers: { 'consent-photos': true } });
 
-		const sibling = page.getByText('OK to take photos').element().nextElementSibling as HTMLElement;
-		await expect.element(sibling).toHaveTextContent('Yes');
+		await expect.element(valueFor('OK to take photos')).toHaveTextContent('Yes');
 	});
 
 	it('renders No for a checkbox field answered false or unanswered', async () => {
-		render(BirthPlanView, { fields, answers: {} });
+		setup();
 
-		const sibling = page.getByText('OK to take photos').element().nextElementSibling as HTMLElement;
-		await expect.element(sibling).toHaveTextContent('No');
+		await expect.element(valueFor('OK to take photos')).toHaveTextContent('No');
 	});
 
 	it('renders the joined selected options for a multi_select field', async () => {
-		const answers: Answers = { notify: ['Partner', 'Doula'] };
-		render(BirthPlanView, { fields, answers });
+		setup({ answers: { notify: ['Partner', 'Doula'] } });
 
 		await expect.element(page.getByText('Partner, Doula')).toBeInTheDocument();
 	});
 
 	it('renders an em dash for a multi_select field with no selected options', async () => {
-		render(BirthPlanView, { fields, answers: {} });
+		setup();
 
-		const sibling = page.getByText('Notify').element().nextElementSibling as HTMLElement;
-		await expect.element(sibling).toHaveTextContent('—');
+		await expect.element(valueFor('Notify')).toHaveTextContent('—');
 	});
 });
