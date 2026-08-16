@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { answerChecked, answerOptions, answerText, type Answers, type Field } from './planInstance.js';
+	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from './planInstance.js';
 
 	let {
 		fields,
@@ -17,8 +17,8 @@
 		return answerText(answers, field.id);
 	}
 
-	function checkboxValue(field: Field): boolean {
-		return answerChecked(answers, field.id);
+	function isCheckboxChecked(field: Field): boolean {
+		return isAnswerChecked(answers, field.id);
 	}
 
 	function selectedOptions(field: Field): string[] {
@@ -39,7 +39,7 @@
 					<input
 						type="text"
 						value={textValue(field)}
-						oninput={(e) => onAnswerChange(field.id, e.currentTarget.value)}
+						oninput={(event_) => onAnswerChange(field.id, event_.currentTarget.value)}
 					/>
 				</label>
 			{:else if field.type === 'long_text'}
@@ -49,15 +49,15 @@
 					<!-- v8 ignore stop -->
 					<textarea
 						value={textValue(field)}
-						oninput={(e) => onAnswerChange(field.id, e.currentTarget.value)}
+						oninput={(event_) => onAnswerChange(field.id, event_.currentTarget.value)}
 					></textarea>
 				</label>
 			{:else if field.type === 'checkbox'}
 				<label>
 					<input
 						type="checkbox"
-						checked={checkboxValue(field)}
-						onchange={(e) => onAnswerChange(field.id, e.currentTarget.checked)}
+						checked={isCheckboxChecked(field)}
+						onchange={(event_) => onAnswerChange(field.id, event_.currentTarget.checked)}
 					/>
 					<!-- v8 ignore start: same unreachable null-guard as above -->
 					{field.label}
@@ -76,7 +76,7 @@
 					{field.label}
 					<select
 						value={textValue(field)}
-						onchange={(e) => onAnswerChange(field.id, e.currentTarget.value)}
+						onchange={(event_) => onAnswerChange(field.id, event_.currentTarget.value)}
 					>
 						<option value="">--</option>
 						{#each field.options ?? [] as option (option)}

@@ -6,7 +6,7 @@ const practiceB: Membership = { practiceId: 'b', practiceName: 'Practice B', rol
 
 describe('decideLanding', () => {
 	it('redirects straight to the only Practice when there is exactly one', () => {
-		expect(decideLanding({ memberships: [practiceA], lastPracticeId: null })).toEqual({
+		expect(decideLanding({ memberships: [practiceA], lastPracticeId: undefined })).toEqual({
 			type: 'redirect',
 			practiceId: 'a'
 		});
@@ -20,7 +20,7 @@ describe('decideLanding', () => {
 	});
 
 	it('falls back to a picker when there is no last-used Practice recorded', () => {
-		expect(decideLanding({ memberships: [practiceA, practiceB], lastPracticeId: null })).toEqual({
+		expect(decideLanding({ memberships: [practiceA, practiceB], lastPracticeId: undefined })).toEqual({
 			type: 'picker',
 			memberships: [practiceA, practiceB]
 		});
@@ -34,7 +34,7 @@ describe('decideLanding', () => {
 	});
 
 	it('falls back to a picker when there are no memberships at all', () => {
-		expect(decideLanding({ memberships: [], lastPracticeId: null })).toEqual({
+		expect(decideLanding({ memberships: [], lastPracticeId: undefined })).toEqual({
 			type: 'picker',
 			memberships: []
 		});

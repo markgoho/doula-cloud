@@ -26,17 +26,17 @@
 		createdAt: string;
 	};
 
-	let detail = $state<Detail | null>(null);
+	let detail = $state<Detail | undefined>();
 	let error = $state('');
 
 	let messages = $state<Message[]>([]);
 	let messagesError = $state('');
 	let messagesCursor = $state('');
-	let messagesHasMore = $state(false);
-	let loadingOlderMessages = $state(false);
+	let isMessagesHasMore = $state(false);
+	let isLoadingOlderMessages = $state(false);
 	let newMessageBody = $state('');
-	let newMessageAttachment = $state<File | null>(null);
-	let sendingMessage = $state(false);
+	let newMessageAttachment = $state<File | undefined>();
+	let isSendingMessage = $state(false);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
 	// apiFetch since the attachment endpoint requires the caller's auth
@@ -58,7 +58,9 @@
 	async function loadAttachmentPreviews(idToken: string, items: Message[]) {
 		await Promise.all(
 			items
-				.filter((m) => m.attachmentContentType?.startsWith('image/') && !attachmentPreviewURLs[m.messageId])
+				.filter(
+					(m) => m.attachmentContentType?.startsWith('image/') && !Object.hasOwn(attachmentPreviewURLs, m.messageId)
+				)
 				.map(async (m) => {
 					const response = await apiFetch(`${messagesURL()}/${m.messageId}/attachment`, idToken);
 					if (!response.ok) return;
@@ -75,9 +77,9 @@
 			return;
 		}
 		const data = await response.json();
-		messages = [...data.items].reverse();
+		messages = data.items.toReversed();
 		messagesCursor = data.nextCursor ?? '';
-		messagesHasMore = data.hasMore;
+		isMessagesHasMore = data.hasMore;
 		await loadAttachmentPreviews(idToken, messages);
 	}
 
@@ -121,7 +123,7 @@
 
 	async function handleLoadOlderMessages() {
 		messagesError = '';
-		loadingOlderMessages = true;
+		isLoadingOlderMessages = true;
 		try {
 			const user = getFirebaseAuth().currentUser;
 			if (!user) {
@@ -140,21 +142,21 @@
 			}
 
 			const data = await response.json();
-			messages = [...[...data.items].reverse(), ...messages];
+			messages = [...data.items.toReversed(), ...messages];
 			messagesCursor = data.nextCursor ?? '';
-			messagesHasMore = data.hasMore;
+			isMessagesHasMore = data.hasMore;
 			await loadAttachmentPreviews(idToken, messages);
-		} catch (err) {
-			messagesError = err instanceof Error ? err.message : 'Failed to load older messages';
+		} catch (error_) {
+			messagesError = error_ instanceof Error ? error_.message : 'Failed to load older messages';
 		} finally {
-			loadingOlderMessages = false;
+			isLoadingOlderMessages = false;
 		}
 	}
 
 	async function handleSendMessage(event: SubmitEvent) {
 		event.preventDefault();
 		messagesError = '';
-		sendingMessage = true;
+		isSendingMessage = true;
 		try {
 			const user = getFirebaseAuth().currentUser;
 			if (!user) {
@@ -184,12 +186,12 @@
 			const created = await response.json();
 			messages = [...messages, created];
 			newMessageBody = '';
-			newMessageAttachment = null;
+			newMessageAttachment = undefined;
 			await loadAttachmentPreviews(idToken, [created]);
-		} catch (err) {
-			messagesError = err instanceof Error ? err.message : 'Failed to send message';
+		} catch (error_) {
+			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
 		} finally {
-			sendingMessage = false;
+			isSendingMessage = false;
 		}
 	}
 
@@ -238,8 +240,8 @@
 		<p role="alert">{messagesError}</p>
 	{/if}
 
-	{#if messagesHasMore}
-		<button type="button" onclick={handleLoadOlderMessages} disabled={loadingOlderMessages}>
+	{#if isMessagesHasMore}
+		<button type="button" onclick={handleLoadOlderMessages} disabled={isLoadingOlderMessages}>
 			Load older messages
 		</button>
 	{/if}
@@ -285,9 +287,9 @@
 			<input
 				type="file"
 				accept="image/*,application/pdf"
-				onchange={(event) => (newMessageAttachment = event.currentTarget.files?.[0] ?? null)}
+				onchange={(event) => (newMessageAttachment = event.currentTarget.files?.[0])}
 			/>
 		</label>
-		<button type="submit" disabled={sendingMessage}>Send</button>
+		<button type="submit" disabled={isSendingMessage}>Send</button>
 	</form>
 {/if}

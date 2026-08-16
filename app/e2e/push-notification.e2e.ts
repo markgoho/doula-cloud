@@ -92,7 +92,7 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 
 	const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
 	await sw.evaluate((payload) => {
-		self.dispatchEvent(new PushEvent('push', { data: JSON.stringify(payload) }));
+		dispatchEvent(new PushEvent('push', { data: JSON.stringify(payload) }));
 	}, { engagementId });
 
 	// Proves delivery end to end: no manual reload, just the push ->

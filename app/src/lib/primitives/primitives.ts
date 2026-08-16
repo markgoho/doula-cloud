@@ -1,6 +1,6 @@
-import { defineLayoutPrimitive, type PropDefaults } from './defineLayoutPrimitive.js';
+import { defineLayoutPrimitive, type PropertyDefaults } from './defineLayoutPrimitive.js';
 
-interface PrimitiveSpec<Defaults extends PropDefaults> {
+interface PrimitiveSpec<Defaults extends PropertyDefaults> {
 	tagName: string;
 	defaults: Defaults;
 	css: (values: Defaults, selector: string) => string;
@@ -12,7 +12,7 @@ interface PrimitiveSpec<Defaults extends PropDefaults> {
  * primitive (Icon's `label`) that needs ARIA attribute reflection instead of
  * CSS injection, and so isn't expressible as one of these.
  */
-export const primitiveSpecs: PrimitiveSpec<PropDefaults>[] = [
+export const primitiveSpecs: PrimitiveSpec<PropertyDefaults>[] = [
 	{
 		tagName: 'stack-l',
 		defaults: { space: 'var(--space-4)' },

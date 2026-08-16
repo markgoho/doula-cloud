@@ -37,7 +37,7 @@
 	class:invalid
 	aria-invalid={invalid}
 	aria-describedby={describedBy}
-	oninput={(e) => onInput(e.currentTarget.value)}
+	oninput={(event_) => onInput(event_.currentTarget.value)}
 />
 
 <style>

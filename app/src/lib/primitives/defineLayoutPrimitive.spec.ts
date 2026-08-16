@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { defineLayoutPrimitive } from './defineLayoutPrimitive.js';
 
-function mountFixture(tag: string, attrs: Record<string, string> = {}) {
-	const el = document.createElement(tag);
-	for (const [key, value] of Object.entries(attrs)) {
-		el.setAttribute(key, value);
+function mountFixture(tag: string, attributes: Record<string, string> = {}) {
+	const element = document.createElement(tag);
+	for (const [key, value] of Object.entries(attributes)) {
+		element.setAttribute(key, value);
 	}
-	document.body.appendChild(el);
-	return el;
+	document.body.append(element);
+	return element;
 }
 
 describe('defineLayoutPrimitive', () => {
@@ -18,9 +18,9 @@ describe('defineLayoutPrimitive', () => {
 			(v, s) => `${s} { gap: ${v.space}; }`
 		);
 
-		const el = mountFixture('fixture-default-l');
+		const element = mountFixture('fixture-default-l');
 
-		expect(el.hasAttribute('data-i')).toBe(false);
+		expect(Object.hasOwn(element.dataset, 'i')).toBe(false);
 		expect(document.querySelector('[data-layout-primitive-style^="fixture-default-l__"]')).toBeNull();
 	});
 
@@ -31,9 +31,9 @@ describe('defineLayoutPrimitive', () => {
 			(v, s) => `${s} > * + * { gap: ${v.space}; }`
 		);
 
-		const el = mountFixture('fixture-override-l', { space: '2rem' });
+		const element = mountFixture('fixture-override-l', { space: '2rem' });
 
-		expect(el.getAttribute('data-i')).toBe('space:2rem');
+		expect(element.dataset.i).toBe('space:2rem');
 
 		const style = document.querySelector('[data-layout-primitive-style="fixture-override-l__space:2rem"]');
 		expect(style).not.toBeNull();
@@ -63,9 +63,9 @@ describe('defineLayoutPrimitive', () => {
 			(v, s) => `${s} { gap: ${v.space}; --limit: ${v.limit}; }`
 		);
 
-		const el = mountFixture('fixture-multi-l', { space: '2rem' });
+		const element = mountFixture('fixture-multi-l', { space: '2rem' });
 
-		expect(el.getAttribute('data-i')).toBe('space:2rem;limit:4');
+		expect(element.dataset.i).toBe('space:2rem;limit:4');
 	});
 
 	it('reverts to the default (no data-i, no new style) when a non-default attribute is removed', () => {
@@ -75,10 +75,10 @@ describe('defineLayoutPrimitive', () => {
 			(v, s) => `${s} { gap: ${v.space}; }`
 		);
 
-		const el = mountFixture('fixture-revert-l', { space: '4rem' });
-		expect(el.hasAttribute('data-i')).toBe(true);
+		const element = mountFixture('fixture-revert-l', { space: '4rem' });
+		expect(Object.hasOwn(element.dataset, 'i')).toBe(true);
 
-		el.removeAttribute('space');
-		expect(el.hasAttribute('data-i')).toBe(false);
+		element.removeAttribute('space');
+		expect(Object.hasOwn(element.dataset, 'i')).toBe(false);
 	});
 });

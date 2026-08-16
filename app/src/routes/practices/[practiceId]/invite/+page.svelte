@@ -6,14 +6,14 @@
 	let email = $state('');
 	let name = $state('');
 	let error = $state('');
-	let submitting = $state(false);
+	let isSubmitting = $state(false);
 	let acceptLink = $state('');
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
 		acceptLink = '';
-		submitting = true;
+		isSubmitting = true;
 		try {
 			const user = getFirebaseAuth().currentUser;
 			if (!user) {
@@ -40,10 +40,10 @@
 			acceptLink = `${location.origin}/accept-invite?token=${created.inviteToken}`;
 			email = '';
 			name = '';
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Invite failed';
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Invite failed';
 		} finally {
-			submitting = false;
+			isSubmitting = false;
 		}
 	}
 </script>
@@ -59,7 +59,7 @@
 		Their email
 		<input type="email" bind:value={email} required />
 	</label>
-	<button type="submit" disabled={submitting}>Send invite</button>
+	<button type="submit" disabled={isSubmitting}>Send invite</button>
 	{#if error}
 		<p role="alert">{error}</p>
 	{/if}

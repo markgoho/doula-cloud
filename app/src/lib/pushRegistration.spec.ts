@@ -19,6 +19,6 @@ describe('urlBase64ToUint8Array', () => {
 		// Byte 0xFB 0xFF encodes to "-_8=" in URL-safe base64
 		// ("+/8=" in standard base64).
 		const bytes = urlBase64ToUint8Array('-_8=');
-		expect(Array.from(bytes)).toEqual([0xfb, 0xff]);
+		expect([...bytes]).toEqual([0xFB, 0xFF]);
 	});
 });

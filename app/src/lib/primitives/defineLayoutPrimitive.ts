@@ -12,23 +12,23 @@
  * specificity without needing `!important`.
  */
 
-export type PropDefaults = Record<string, string>;
+export type PropertyDefaults = Record<string, string>;
 
-function resolveValues<Defaults extends PropDefaults>(
-	el: HTMLElement,
+function resolveValues<Defaults extends PropertyDefaults>(
+	element: HTMLElement,
 	defaults: Defaults
 ): Defaults {
 	const resolved = { ...defaults };
 	for (const key of Object.keys(defaults)) {
-		const attrValue = el.getAttribute(key);
-		if (attrValue) {
-			resolved[key as keyof Defaults] = attrValue as Defaults[keyof Defaults];
+		const attributeValue = element.getAttribute(key);
+		if (attributeValue) {
+			resolved[key as keyof Defaults] = attributeValue as Defaults[keyof Defaults];
 		}
 	}
 	return resolved;
 }
 
-function serialize(values: PropDefaults): string {
+function serialize(values: PropertyDefaults): string {
 	return Object.entries(values)
 		.map(([key, value]) => `${key}:${value}`)
 		.join(';');
@@ -42,9 +42,9 @@ function injectStyle(tagName: string, id: string, cssText: string): void {
 	injectedStyleIds.add(styleId);
 
 	const style = document.createElement('style');
-	style.setAttribute('data-layout-primitive-style', styleId);
+	style.dataset.layoutPrimitiveStyle = styleId;
 	style.textContent = `@layer utilities {\n${cssText}\n}`;
-	document.head.appendChild(style);
+	document.head.append(style);
 }
 
 /**
@@ -64,16 +64,30 @@ function injectStyle(tagName: string, id: string, cssText: string): void {
  * sync. Primitives with no such extra behavior should use
  * `defineLayoutPrimitive` instead, which registers directly.
  */
-export function createLayoutPrimitiveClass<Defaults extends PropDefaults>(
+export function createLayoutPrimitiveClass<Defaults extends PropertyDefaults>(
 	tagName: string,
 	defaults: Defaults,
 	css: (values: Defaults, selector: string) => string
 ) {
-	const attrNames = Object.keys(defaults);
+	const attributeNames = Object.keys(defaults);
 
 	return class LayoutPrimitiveElement extends HTMLElement {
 		static get observedAttributes(): string[] {
-			return attrNames;
+			return attributeNames;
+		}
+
+		#sync(): void {
+			const values = resolveValues(this, defaults);
+			const isDefault = attributeNames.every((key) => values[key] === defaults[key]);
+
+			if (isDefault) {
+				delete this.dataset.i;
+				return;
+			}
+
+			const id = serialize(values);
+			this.dataset.i = id;
+			injectStyle(tagName, id, css(values, `${tagName}[data-i="${id}"]`));
 		}
 
 		connectedCallback(): void {
@@ -86,25 +100,13 @@ export function createLayoutPrimitiveClass<Defaults extends PropDefaults>(
 		attributeChangedCallback(name?: string, oldValue?: string | null, newValue?: string | null): void {
 			this.#sync();
 		}
-
-		#sync(): void {
-			const values = resolveValues(this, defaults);
-			const isDefault = attrNames.every((key) => values[key] === defaults[key]);
-
-			if (isDefault) {
-				this.removeAttribute('data-i');
-				return;
-			}
-
-			const id = serialize(values);
-			this.setAttribute('data-i', id);
-			injectStyle(tagName, id, css(values, `${tagName}[data-i="${id}"]`));
-		}
 	};
 }
 
-/** Builds and registers a primitive class in one step -- see {@link createLayoutPrimitiveClass}. */
-export function defineLayoutPrimitive<Defaults extends PropDefaults>(
+/**
+Builds and registers a primitive class in one step -- see {@link createLayoutPrimitiveClass}.
+*/
+export function defineLayoutPrimitive<Defaults extends PropertyDefaults>(
 	tagName: string,
 	defaults: Defaults,
 	css: (values: Defaults, selector: string) => string

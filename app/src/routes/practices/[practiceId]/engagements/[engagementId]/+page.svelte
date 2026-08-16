@@ -43,23 +43,23 @@
 		createdAt: string;
 	};
 
-	let detail = $state<Detail | null>(null);
+	let detail = $state<Detail | undefined>();
 	let error = $state('');
 
 	let visits = $state<Visit[]>([]);
 	let visitsError = $state('');
-	let creatingVisit = $state(false);
+	let isCreatingVisit = $state(false);
 	let reassignStaffId = $state<Record<string, string>>({});
 	let reassignError = $state<Record<string, string>>({});
 
 	let messages = $state<Message[]>([]);
 	let messagesError = $state('');
 	let messagesCursor = $state('');
-	let messagesHasMore = $state(false);
-	let loadingOlderMessages = $state(false);
+	let isMessagesHasMore = $state(false);
+	let isLoadingOlderMessages = $state(false);
 	let newMessageBody = $state('');
-	let newMessageAttachment = $state<File | null>(null);
-	let sendingMessage = $state(false);
+	let newMessageAttachment = $state<File | undefined>();
+	let isSendingMessage = $state(false);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
 	// apiFetch since the attachment endpoint requires the caller's auth
@@ -75,7 +75,10 @@
 		{ type: 'care_plan', heading: 'Care Plan' },
 		{ type: 'birth_plan', heading: 'Birth Plan' }
 	];
-	let planInstances = $state<Record<PlanType, Instance | null>>({ care_plan: null, birth_plan: null });
+	let planInstances = $state<Record<PlanType, Instance | undefined>>({
+		care_plan: undefined,
+		birth_plan: undefined
+	});
 	let planLoaded = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
 	let planError = $state<Record<PlanType, string>>({ care_plan: '', birth_plan: '' });
 	let planBusy = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
@@ -90,7 +93,9 @@
 	async function loadAttachmentPreviews(idToken: string, items: Message[]) {
 		await Promise.all(
 			items
-				.filter((m) => m.attachmentContentType?.startsWith('image/') && !attachmentPreviewURLs[m.messageId])
+				.filter(
+					(m) => m.attachmentContentType?.startsWith('image/') && !Object.hasOwn(attachmentPreviewURLs, m.messageId)
+				)
 				.map(async (m) => {
 					const response = await apiFetch(`${messagesURL()}/${m.messageId}/attachment`, idToken);
 					if (!response.ok) return;
@@ -124,9 +129,9 @@
 			return;
 		}
 		const data = await response.json();
-		messages = [...data.items].reverse();
+		messages = data.items.toReversed();
 		messagesCursor = data.nextCursor ?? '';
-		messagesHasMore = data.hasMore;
+		isMessagesHasMore = data.hasMore;
 		await loadAttachmentPreviews(idToken, messages);
 	}
 
@@ -143,8 +148,8 @@
 				page.params.engagementId!,
 				planType
 			);
-		} catch (err) {
-			planError[planType] = err instanceof Error ? err.message : 'Failed to load plan';
+		} catch (error_) {
+			planError[planType] = error_ instanceof Error ? error_.message : 'Failed to load plan';
 		} finally {
 			planLoaded[planType] = true;
 		}
@@ -166,8 +171,8 @@
 				page.params.engagementId!,
 				planType
 			);
-		} catch (err) {
-			planError[planType] = err instanceof Error ? err.message : 'Failed to create plan';
+		} catch (error_) {
+			planError[planType] = error_ instanceof Error ? error_.message : 'Failed to create plan';
 		} finally {
 			planBusy[planType] = false;
 		}
@@ -204,8 +209,8 @@
 				planType,
 				instance.answers
 			);
-		} catch (err) {
-			planError[planType] = err instanceof Error ? err.message : 'Failed to save plan';
+		} catch (error_) {
+			planError[planType] = error_ instanceof Error ? error_.message : 'Failed to save plan';
 		} finally {
 			planBusy[planType] = false;
 		}
@@ -249,7 +254,7 @@
 
 	async function handleCreateVisit() {
 		visitsError = '';
-		creatingVisit = true;
+		isCreatingVisit = true;
 		try {
 			const user = getFirebaseAuth().currentUser;
 			if (!user) {
@@ -265,10 +270,10 @@
 			}
 
 			await loadVisits(idToken);
-		} catch (err) {
-			visitsError = err instanceof Error ? err.message : 'Failed to add Visit';
+		} catch (error_) {
+			visitsError = error_ instanceof Error ? error_.message : 'Failed to add Visit';
 		} finally {
-			creatingVisit = false;
+			isCreatingVisit = false;
 		}
 	}
 
@@ -295,14 +300,14 @@
 
 			reassignStaffId[visitId] = '';
 			await loadVisits(idToken);
-		} catch (err) {
-			reassignError[visitId] = err instanceof Error ? err.message : 'Failed to reassign Visit';
+		} catch (error_) {
+			reassignError[visitId] = error_ instanceof Error ? error_.message : 'Failed to reassign Visit';
 		}
 	}
 
 	async function handleLoadOlderMessages() {
 		messagesError = '';
-		loadingOlderMessages = true;
+		isLoadingOlderMessages = true;
 		try {
 			const user = getFirebaseAuth().currentUser;
 			if (!user) {
@@ -321,21 +326,21 @@
 			}
 
 			const data = await response.json();
-			messages = [...[...data.items].reverse(), ...messages];
+			messages = [...data.items.toReversed(), ...messages];
 			messagesCursor = data.nextCursor ?? '';
-			messagesHasMore = data.hasMore;
+			isMessagesHasMore = data.hasMore;
 			await loadAttachmentPreviews(idToken, messages);
-		} catch (err) {
-			messagesError = err instanceof Error ? err.message : 'Failed to load older messages';
+		} catch (error_) {
+			messagesError = error_ instanceof Error ? error_.message : 'Failed to load older messages';
 		} finally {
-			loadingOlderMessages = false;
+			isLoadingOlderMessages = false;
 		}
 	}
 
 	async function handleSendMessage(event: SubmitEvent) {
 		event.preventDefault();
 		messagesError = '';
-		sendingMessage = true;
+		isSendingMessage = true;
 		try {
 			const user = getFirebaseAuth().currentUser;
 			if (!user) {
@@ -365,12 +370,12 @@
 			const created = await response.json();
 			messages = [...messages, created];
 			newMessageBody = '';
-			newMessageAttachment = null;
+			newMessageAttachment = undefined;
 			await loadAttachmentPreviews(idToken, [created]);
-		} catch (err) {
-			messagesError = err instanceof Error ? err.message : 'Failed to send message';
+		} catch (error_) {
+			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
 		} finally {
-			sendingMessage = false;
+			isSendingMessage = false;
 		}
 	}
 
@@ -411,7 +416,7 @@
 
 	<h2>Visits</h2>
 
-	<button type="button" onclick={handleCreateVisit} disabled={creatingVisit}>Add a Visit</button>
+	<button type="button" onclick={handleCreateVisit} disabled={isCreatingVisit}>Add a Visit</button>
 
 	{#if visitsError}
 		<p role="alert">{visitsError}</p>
@@ -471,8 +476,8 @@
 		<p role="alert">{messagesError}</p>
 	{/if}
 
-	{#if messagesHasMore}
-		<button type="button" onclick={handleLoadOlderMessages} disabled={loadingOlderMessages}>
+	{#if isMessagesHasMore}
+		<button type="button" onclick={handleLoadOlderMessages} disabled={isLoadingOlderMessages}>
 			Load older messages
 		</button>
 	{/if}
@@ -518,9 +523,9 @@
 			<input
 				type="file"
 				accept="image/*,application/pdf"
-				onchange={(event) => (newMessageAttachment = event.currentTarget.files?.[0] ?? null)}
+				onchange={(event) => (newMessageAttachment = event.currentTarget.files?.[0])}
 			/>
 		</label>
-		<button type="submit" disabled={sendingMessage}>Send</button>
+		<button type="submit" disabled={isSendingMessage}>Send</button>
 	</form>
 {/if}

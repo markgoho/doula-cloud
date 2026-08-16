@@ -11,14 +11,16 @@ const firebaseConfig = {
 	authDomain: 'doula-cloud.firebaseapp.com'
 };
 
-/** Builds the emulator URL connectAuthEmulator expects, or null to use real Identity Platform. */
-export function emulatorURL(host: string | undefined): string | null {
-	return host ? `http://${host}` : null;
+/**
+Builds the emulator URL connectAuthEmulator expects, or undefined to use real Identity Platform.
+*/
+export function emulatorURL(host: string | undefined): string | undefined {
+	return host ? `http://${host}` : undefined;
 }
 
 /* v8 ignore start -- requires the Firebase SDK's live app/auth wiring, exercised by Playwright e2e not Vitest */
 export function getFirebaseAuth(): Auth {
-	const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+	const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 	const auth = getAuth(app);
 	const url = emulatorURL(import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_HOST as string | undefined);
 	if (url) {

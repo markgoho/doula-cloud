@@ -8,7 +8,7 @@
 	import { loadClientBirthPlan, type Instance } from '#lib/planInstance.js';
 	import BirthPlanView from '#lib/BirthPlanView.svelte';
 
-	let instance = $state<Instance | null | undefined>(undefined);
+	let instance = $state<Instance | null | undefined>();
 	let error = $state('');
 
 	onMount(async () => {
@@ -24,8 +24,8 @@
 				(path) => apiFetch(path, idToken),
 				page.params.engagementId!
 			);
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load Birth Plan';
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to load Birth Plan';
 		}
 	});
 </script>
@@ -45,7 +45,7 @@
 	<p class="no-print">No Birth Plan has been created for this Engagement yet.</p>
 {:else}
 	<h1>Birth Plan</h1>
-	<button type="button" class="no-print" onclick={() => window.print()}>Print</button>
+	<button type="button" class="no-print" onclick={() => print()}>Print</button>
 	<BirthPlanView fields={instance.fields} answers={instance.answers} />
 {/if}
 

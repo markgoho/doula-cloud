@@ -2,11 +2,11 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path from 'node:path';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 
 const DB_HOST = '127.0.0.1';
-const DB_PORT = 15432;
+const DB_PORT = 15_432;
 const READY_TIMEOUT_MS = 60_000;
 // `up --build` builds two separate Go services (migrate, api), each
 // running its own `go mod download` from a cold module cache with no
@@ -36,7 +36,7 @@ const HOST_GATEWAY = CONTAINER_ENGINE === 'docker' ? 'host.docker.internal' : 'h
 // compose service. Shared by the Playwright e2e run
 // (global-setup.ts/global-teardown.ts) and `bun run dev:full`
 // (scripts/dev-full.ts) for local interactive use.
-const EMULATOR_PIDFILE = join(tmpdir(), 'doula-cloud-e2e-firebase-emulator.pid');
+const EMULATOR_PIDFILE = path.join(tmpdir(), 'doula-cloud-e2e-firebase-emulator.pid');
 
 // Brings up the self-contained compose stack -- Postgres, the goose
 // migration step, the app_e2e login role, and the Go BFF itself (see
@@ -82,7 +82,7 @@ export async function startStack() {
 // identityUID and clientID both come from this test's own prior
 // API/emulator calls, not external input.
 function sqlLiteral(value: string): string {
-	return `'${value.replace(/'/g, "''")}'`;
+	return `'${value.replaceAll('\'', "''")}'`;
 }
 
 export function seedClientPortalUser(identityUID: string, clientID: string) {

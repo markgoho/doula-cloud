@@ -116,7 +116,9 @@ export function moveField(fields: Field[], id: string, direction: 'up' | 'down')
 		return fields;
 	}
 	const reordered = [...fields];
-	[reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+	const moved = reordered[index];
+	reordered[index] = reordered[target];
+	reordered[target] = moved;
 	return normalizeOrder(reordered);
 }
 
@@ -127,9 +129,9 @@ function normalizeOrder(fields: Field[]): Field[] {
 /** Validates fields against the same rules the Go BFF enforces
  * server-side (api/internal/plans/template.go's normalizeFields) --
  * mirrored here purely for early UX feedback before a round trip; the
- * server remains the authority. Returns an error message, or null if
+ * server remains the authority. Returns an error message, or undefined if
  * fields is valid. */
-export function validateFields(fields: Field[]): string | null {
+export function validateFields(fields: Field[]): string | undefined {
 	const seenIDs = new Set<string>();
 	for (const f of fields) {
 		if (f.id === '') {
@@ -155,5 +157,5 @@ export function validateFields(fields: Field[]): string | null {
 			return `field ${f.id} of type ${f.type} may not have options`;
 		}
 	}
-	return null;
+	return undefined;
 }

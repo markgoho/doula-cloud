@@ -18,7 +18,7 @@
 import { notificationFor, parsePushPayload, pushMessageFor, threadURLFor } from '#lib/push.js';
 
 const worker = /** @type {ServiceWorkerGlobalScope} */ (
-	/** @type {unknown} */ (globalThis.self)
+	/** @type {unknown} */ (globalThis)
 );
 
 // A page open before this service worker activates is otherwise never

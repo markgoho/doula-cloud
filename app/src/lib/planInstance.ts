@@ -5,11 +5,11 @@
  * Birth Plan sections, decoupled from SvelteKit and the DOM so it can be
  * unit-tested directly -- the same shape as planTemplate.ts.
  */
-import type { Field, FieldType } from './planTemplate.js';
-import { isSelectType } from './planTemplate.js';
+import type { Field,  } from './planTemplate.js';
 
-export type { Field, FieldType };
-export { isSelectType };
+
+
+
 
 /** A Plan Instance's filled-in values, keyed by field id. Value shape
  * depends on the field's type: string for short_text/long_text/
@@ -38,8 +38,10 @@ export function answerText(answers: Answers, fieldId: string): string {
 	return typeof value === 'string' ? value : '';
 }
 
-/** Reads fieldId's raw stored checkbox value out of answers. */
-export function answerChecked(answers: Answers, fieldId: string): boolean {
+/**
+Reads fieldId's raw stored checkbox value out of answers.
+*/
+export function isAnswerChecked(answers: Answers, fieldId: string): boolean {
 	return answers[fieldId] === true;
 }
 
@@ -67,10 +69,10 @@ export async function loadInstance(
 	practiceId: string,
 	engagementId: string,
 	planType: string
-): Promise<Instance | null> {
+): Promise<Instance | undefined> {
 	const response = await fetcher(instancePath(practiceId, engagementId, planType));
 	if (response.status === 404) {
-		return null;
+		return undefined;
 	}
 	if (!response.ok) {
 		throw new Error(await response.text());
@@ -124,6 +126,8 @@ export async function saveAnswers(
 export async function loadClientBirthPlan(fetcher: Fetcher, engagementId: string): Promise<Instance | null> {
 	const response = await fetcher(clientBirthPlanPath(engagementId));
 	if (response.status === 404) {
+		// null (not-yet-created) is distinct from the caller's own `undefined` (not-yet-loaded) state.
+		// eslint-disable-next-line unicorn/no-null
 		return null;
 	}
 	if (!response.ok) {
@@ -154,3 +158,5 @@ export function toggleMultiSelectOption(answers: Answers, fieldId: string, optio
 	const next = current.includes(option) ? current.filter((o) => o !== option) : [...current, option];
 	return setAnswer(answers, fieldId, next);
 }
+
+export {type FieldType, isSelectType, type Field} from './planTemplate.js';
