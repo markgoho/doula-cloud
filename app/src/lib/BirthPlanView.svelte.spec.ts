@@ -17,8 +17,8 @@ interface SetupOptions {
 	answers?: Answers;
 }
 
-function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
-	render(BirthPlanView, { fields, answers });
+async function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
+	await render(BirthPlanView, { fields, answers });
 }
 
 function valueFor(label: string) {
@@ -27,44 +27,44 @@ function valueFor(label: string) {
 
 describe('BirthPlanView.svelte', () => {
 	it('renders a heading for a section_header field', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByRole('heading', { name: 'Birth Setting' })).toBeInTheDocument();
 	});
 
 	it('renders the stored value for a text-shaped field', async () => {
-		setup({ answers: { location: 'Hospital', atmosphere: 'Quiet, dim lighting' } });
+		await setup({ answers: { location: 'Hospital', atmosphere: 'Quiet, dim lighting' } });
 
 		await expect.element(page.getByText('Hospital')).toBeInTheDocument();
 		await expect.element(page.getByText('Quiet, dim lighting')).toBeInTheDocument();
 	});
 
 	it('renders an em dash for a text-shaped field with no answer', async () => {
-		setup();
+		await setup();
 
 		await expect.element(valueFor('Planned birth location')).toHaveTextContent('—');
 	});
 
 	it('renders Yes for a checkbox field answered true', async () => {
-		setup({ answers: { 'consent-photos': true } });
+		await setup({ answers: { 'consent-photos': true } });
 
 		await expect.element(valueFor('OK to take photos')).toHaveTextContent('Yes');
 	});
 
 	it('renders No for a checkbox field answered false or unanswered', async () => {
-		setup();
+		await setup();
 
 		await expect.element(valueFor('OK to take photos')).toHaveTextContent('No');
 	});
 
 	it('renders the joined selected options for a multi_select field', async () => {
-		setup({ answers: { notify: ['Partner', 'Doula'] } });
+		await setup({ answers: { notify: ['Partner', 'Doula'] } });
 
 		await expect.element(page.getByText('Partner, Doula')).toBeInTheDocument();
 	});
 
 	it('renders an em dash for a multi_select field with no selected options', async () => {
-		setup();
+		await setup();
 
 		await expect.element(valueFor('Notify')).toHaveTextContent('—');
 	});

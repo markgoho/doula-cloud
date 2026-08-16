@@ -18,11 +18,11 @@ interface SetupOptions {
 	answers?: Answers;
 }
 
-function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
+async function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
 	const onAnswerChange = vi.fn();
 	const onToggleOption = vi.fn();
 
-	render(PlanInstanceForm, { fields, answers, onAnswerChange, onToggleOption });
+	await render(PlanInstanceForm, { fields, answers, onAnswerChange, onToggleOption });
 
 	return { onAnswerChange, onToggleOption };
 }
@@ -30,57 +30,57 @@ function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
 describe('PlanInstanceForm.svelte', () => {
 	it('renders no option checkboxes for a multi_select field with no options', async () => {
 		const fieldWithoutOptions: Field[] = [{ id: 'notify', type: 'multi_select', label: 'Notify', order: 0 }];
-		setup({ fields: fieldWithoutOptions });
+		await setup({ fields: fieldWithoutOptions });
 
 		await expect.element(page.getByRole('group', { name: 'Notify' })).toBeInTheDocument();
 		expect(page.getByRole('checkbox').elements()).toHaveLength(0);
 	});
 
 	it('renders a heading for a section_header field, with no input', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByRole('heading', { name: 'Support' })).toBeInTheDocument();
 	});
 
 	it('renders the stored value for a short_text field', async () => {
-		setup({ answers: { names: 'Jamie' } });
+		await setup({ answers: { names: 'Jamie' } });
 
 		await expect.element(page.getByLabelText('Support people')).toHaveValue('Jamie');
 	});
 
 	it('renders the stored value for a long_text field', async () => {
-		setup({ answers: { notes: 'Prefers quiet' } });
+		await setup({ answers: { notes: 'Prefers quiet' } });
 
 		await expect.element(page.getByLabelText('Additional notes')).toHaveValue('Prefers quiet');
 	});
 
 	it('renders a checked checkbox when the stored answer is true', async () => {
-		setup({ answers: { consent: true } });
+		await setup({ answers: { consent: true } });
 
 		await expect.element(page.getByLabelText('Consent to photos')).toBeChecked();
 	});
 
 	it('renders an unchecked checkbox when the field has no answer yet', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByLabelText('Consent to photos')).not.toBeChecked();
 	});
 
 	it('renders the selected option for a single_select field', async () => {
-		setup({ answers: { location: 'Hospital' } });
+		await setup({ answers: { location: 'Hospital' } });
 
 		await expect.element(page.getByLabelText('Location')).toHaveValue('Hospital');
 	});
 
 	it('checks the selected options for a multi_select field', async () => {
-		setup({ answers: { notify: ['Doula'] } });
+		await setup({ answers: { notify: ['Doula'] } });
 
 		await expect.element(page.getByLabelText('Notify: Doula')).toBeChecked();
 		await expect.element(page.getByLabelText('Notify: Partner')).not.toBeChecked();
 	});
 
 	it('calls onAnswerChange when the short_text input changes', async () => {
-		const { onAnswerChange } = setup();
+		const { onAnswerChange } = await setup();
 
 		await page.getByLabelText('Support people').fill('Alex');
 
@@ -88,7 +88,7 @@ describe('PlanInstanceForm.svelte', () => {
 	});
 
 	it('calls onAnswerChange when the long_text textarea changes', async () => {
-		const { onAnswerChange } = setup();
+		const { onAnswerChange } = await setup();
 
 		await page.getByLabelText('Additional notes').fill('Prefers quiet');
 
@@ -96,7 +96,7 @@ describe('PlanInstanceForm.svelte', () => {
 	});
 
 	it('calls onAnswerChange when the checkbox changes', async () => {
-		const { onAnswerChange } = setup();
+		const { onAnswerChange } = await setup();
 
 		await page.getByLabelText('Consent to photos').click();
 
@@ -104,7 +104,7 @@ describe('PlanInstanceForm.svelte', () => {
 	});
 
 	it('calls onAnswerChange when the single_select changes', async () => {
-		const { onAnswerChange } = setup();
+		const { onAnswerChange } = await setup();
 
 		await page.getByLabelText('Location').selectOptions('Home');
 
@@ -112,7 +112,7 @@ describe('PlanInstanceForm.svelte', () => {
 	});
 
 	it('calls onToggleOption with the field id and option when a multi_select checkbox is clicked', async () => {
-		const { onToggleOption } = setup();
+		const { onToggleOption } = await setup();
 
 		await page.getByLabelText('Notify: Partner').click();
 

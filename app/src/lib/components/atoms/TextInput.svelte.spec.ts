@@ -6,21 +6,21 @@ import TextInput from './TextInput.svelte';
 
 type SetupOptions = Partial<Omit<ComponentProps<typeof TextInput>, 'onInput'>>;
 
-function setup({ value = '', ...rest }: SetupOptions = {}) {
+async function setup({ value = '', ...rest }: SetupOptions = {}) {
 	const onInput = vi.fn();
-	render(TextInput, { value, onInput, ...rest });
+	await render(TextInput, { value, onInput, ...rest });
 	return { onInput };
 }
 
 describe('TextInput.svelte', () => {
 	it('renders a textbox with the given value', async () => {
-		setup({ value: 'Alex' });
+		await setup({ value: 'Alex' });
 
 		await expect.element(page.getByRole('textbox')).toHaveValue('Alex');
 	});
 
 	it('calls onInput with the new value when typed into', async () => {
-		const { onInput } = setup();
+		const { onInput } = await setup();
 
 		await page.getByRole('textbox').fill('Jordan');
 
@@ -28,23 +28,23 @@ describe('TextInput.svelte', () => {
 	});
 
 	it('defaults to type=text', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'text');
 	});
 
 	it('reflects a non-default type', async () => {
-		setup({ type: 'email' });
+		await setup({ type: 'email' });
 
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'email');
 	});
 
 	it('auto-generates a distinct id per instance, so external labels can target each safely', async () => {
-		const { unmount } = render(TextInput, { value: '', onInput: vi.fn() });
+		const { unmount } = await render(TextInput, { value: '', onInput: vi.fn() });
 		const firstId = page.getByRole('textbox').element().id;
 		await unmount();
 
-		render(TextInput, { value: '', onInput: vi.fn() });
+		await render(TextInput, { value: '', onInput: vi.fn() });
 		const secondId = page.getByRole('textbox').element().id;
 
 		expect(firstId).not.toBe('');
@@ -52,43 +52,43 @@ describe('TextInput.svelte', () => {
 	});
 
 	it('accepts a caller-supplied id', async () => {
-		setup({ id: 'client-first-name' });
+		await setup({ id: 'client-first-name' });
 
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('id', 'client-first-name');
 	});
 
 	it('reflects disabled', async () => {
-		setup({ disabled: true });
+		await setup({ disabled: true });
 
 		await expect.element(page.getByRole('textbox')).toBeDisabled();
 	});
 
 	it('reflects required', async () => {
-		setup({ required: true });
+		await setup({ required: true });
 
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('required');
 	});
 
 	it('sets aria-invalid=false by default', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('aria-invalid', 'false');
 	});
 
 	it('sets aria-invalid=true when invalid', async () => {
-		setup({ invalid: true });
+		await setup({ invalid: true });
 
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
 	});
 
 	it('wires aria-describedby to an external error message for accessible announcement', async () => {
-		setup({ invalid: true, describedBy: 'first-name-error' });
+		await setup({ invalid: true, describedBy: 'first-name-error' });
 
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('aria-describedby', 'first-name-error');
 	});
 
 	it('omits aria-describedby when not provided', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
 	});

@@ -13,7 +13,7 @@ interface SetupOptions {
 	fields?: Field[];
 }
 
-function setup({ fields = defaultFields }: SetupOptions = {}) {
+async function setup({ fields = defaultFields }: SetupOptions = {}) {
 	const onAdd = vi.fn();
 	const onRemove = vi.fn();
 	const onMoveUp = vi.fn();
@@ -22,7 +22,7 @@ function setup({ fields = defaultFields }: SetupOptions = {}) {
 	const onTypeChange = vi.fn();
 	const onOptionsChange = vi.fn();
 
-	render(PlanTemplateEditor, {
+	await render(PlanTemplateEditor, {
 		fields,
 		onAdd,
 		onRemove,
@@ -38,7 +38,7 @@ function setup({ fields = defaultFields }: SetupOptions = {}) {
 
 describe('PlanTemplateEditor.svelte', () => {
 	it('renders a label input and type select for each field', async () => {
-		setup();
+		await setup();
 
 		const labelInputs = page.getByLabelText('Field label').elements() as HTMLInputElement[];
 		expect(labelInputs.map((el) => el.value)).toEqual(['Support people', 'Pain management']);
@@ -46,13 +46,13 @@ describe('PlanTemplateEditor.svelte', () => {
 
 	it('renders an empty options textarea for a select field with no options', async () => {
 		const fieldWithoutOptions: Field[] = [{ id: 'a', type: 'single_select', label: 'Location', order: 0 }];
-		setup({ fields: fieldWithoutOptions });
+		await setup({ fields: fieldWithoutOptions });
 
 		await expect.element(page.getByLabelText('Options, one per line')).toHaveValue('');
 	});
 
 	it('renders an options textarea only for select-type fields', async () => {
-		setup();
+		await setup();
 
 		const optionsTextareas = page.getByLabelText('Options, one per line').elements();
 		expect(optionsTextareas).toHaveLength(1);
@@ -60,7 +60,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('disables Move up on the first field and Move down on the last field', async () => {
-		setup();
+		await setup();
 
 		const moveUpButtons = page.getByRole('button', { name: 'Move up' }).elements() as HTMLButtonElement[];
 		const moveDownButtons = page.getByRole('button', { name: 'Move down' }).elements() as HTMLButtonElement[];
@@ -72,7 +72,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onRemove with the field id when Remove is clicked', async () => {
-		const { onRemove } = setup();
+		const { onRemove } = await setup();
 
 		await page.getByRole('button', { name: 'Remove' }).nth(1).click();
 
@@ -80,7 +80,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onMoveUp/onMoveDown with the field id when clicked', async () => {
-		const { onMoveUp, onMoveDown } = setup();
+		const { onMoveUp, onMoveDown } = await setup();
 
 		await page.getByRole('button', { name: 'Move down' }).first().click();
 		await page.getByRole('button', { name: 'Move up' }).nth(1).click();
@@ -90,7 +90,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onLabelChange when the label input changes', async () => {
-		const { onLabelChange } = setup();
+		const { onLabelChange } = await setup();
 
 		await page.getByLabelText('Field label').first().fill('New label');
 
@@ -98,7 +98,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onTypeChange when the field type select changes', async () => {
-		const { onTypeChange } = setup();
+		const { onTypeChange } = await setup();
 
 		await page.getByLabelText('Field type').first().selectOptions('long_text');
 
@@ -106,7 +106,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onOptionsChange with the split, trimmed lines when the options textarea changes', async () => {
-		const { onOptionsChange } = setup();
+		const { onOptionsChange } = await setup();
 
 		await page.getByLabelText('Options, one per line').fill('Home\n Hospital ');
 
@@ -114,7 +114,7 @@ describe('PlanTemplateEditor.svelte', () => {
 	});
 
 	it('calls onAdd with the selected new-field type', async () => {
-		const { onAdd } = setup({ fields: [] });
+		const { onAdd } = await setup({ fields: [] });
 
 		await page.getByLabelText('New field type').selectOptions('checkbox');
 		await page.getByRole('button', { name: 'Add field' }).click();

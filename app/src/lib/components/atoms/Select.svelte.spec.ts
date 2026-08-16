@@ -15,7 +15,7 @@ interface SetupOptions {
 	id?: string;
 }
 
-function setup({
+async function setup({
 	options = ['Home', 'Hospital', 'Birth center'],
 	value,
 	placeholder,
@@ -26,12 +26,12 @@ function setup({
 	name,
 	id
 }: SetupOptions = {}) {
-	render(Select, { options, value, placeholder, disabled, required, invalid, describedBy, name, id });
+	await render(Select, { options, value, placeholder, disabled, required, invalid, describedBy, name, id });
 }
 
 describe('Select.svelte', () => {
 	it('renders an option for each entry in options', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByRole('combobox').getByRole('option', { name: 'Home' })).toBeInTheDocument();
 		await expect.element(page.getByRole('combobox').getByRole('option', { name: 'Hospital' })).toBeInTheDocument();
@@ -41,13 +41,13 @@ describe('Select.svelte', () => {
 	});
 
 	it('selects the option matching the bound value', async () => {
-		setup({ value: 'Hospital' });
+		await setup({ value: 'Hospital' });
 
 		await expect.element(page.getByRole('combobox')).toHaveValue('Hospital');
 	});
 
 	it('updates the bound value when the user picks an option', async () => {
-		setup();
+		await setup();
 
 		await page.getByRole('combobox').selectOptions('Hospital');
 
@@ -55,7 +55,7 @@ describe('Select.svelte', () => {
 	});
 
 	it('renders a disabled placeholder option when placeholder is set', async () => {
-		setup({ placeholder: 'Choose a location' });
+		await setup({ placeholder: 'Choose a location' });
 
 		const placeholderOption = page.getByRole('option', { name: 'Choose a location' });
 		await expect.element(placeholderOption).toBeInTheDocument();
@@ -63,55 +63,55 @@ describe('Select.svelte', () => {
 	});
 
 	it('omits the placeholder option when placeholder is not set', async () => {
-		setup();
+		await setup();
 
 		await expect.element(page.getByRole('option', { name: 'Choose a location' })).not.toBeInTheDocument();
 	});
 
 	it('disables the control when disabled is true', async () => {
-		setup({ disabled: true });
+		await setup({ disabled: true });
 
 		await expect.element(page.getByRole('combobox')).toBeDisabled();
 	});
 
 	it('marks the control invalid when invalid is true', async () => {
-		setup({ invalid: true });
+		await setup({ invalid: true });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('aria-invalid', 'true');
 	});
 
 	it('marks the control valid when invalid is false', async () => {
-		setup({ invalid: false });
+		await setup({ invalid: false });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('aria-invalid', 'false');
 	});
 
 	it('associates an external error message via describedBy', async () => {
-		setup({ describedBy: 'location-error' });
+		await setup({ describedBy: 'location-error' });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('aria-describedby', 'location-error');
 	});
 
 	it('generates an id when none is supplied', async () => {
-		setup({ options: ['Home'] });
+		await setup({ options: ['Home'] });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('id');
 	});
 
 	it('uses a supplied id instead of generating one', async () => {
-		setup({ id: 'location' });
+		await setup({ id: 'location' });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('id', 'location');
 	});
 
 	it('sets the name attribute when supplied', async () => {
-		setup({ name: 'location' });
+		await setup({ name: 'location' });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('name', 'location');
 	});
 
 	it('marks the control required when required is true', async () => {
-		setup({ required: true });
+		await setup({ required: true });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('required');
 	});

@@ -24,19 +24,23 @@ interface SetupOptions {
   answers?: Answers;
 }
 
-function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
+async function setup({ fields = defaultFields, answers = {} }: SetupOptions = {}) {
   const onAnswerChange = vi.fn();
   const onToggleOption = vi.fn();
-  render(PlanInstanceForm, { fields, answers, onAnswerChange, onToggleOption });
+  await render(PlanInstanceForm, { fields, answers, onAnswerChange, onToggleOption });
   return { onAnswerChange, onToggleOption };
 }
 
 it('calls onAnswerChange when the short_text input changes', async () => {
-  const { onAnswerChange } = setup();
+  const { onAnswerChange } = await setup();
   await page.getByLabelText('Support people').fill('Alex');
   expect(onAnswerChange).toHaveBeenCalledWith('names', 'Alex');
 });
 ```
+
+`render()` is async-only as of `vitest-browser-svelte@3` — `setup()` must
+be `async` and every call site must `await` it, even when the test doesn't
+otherwise await anything before it.
 
 If a spec needs a per-test DOM lookup helper (e.g. reading a value next to
 a label), define it alongside `setup()` rather than repeating a DOM-walk
