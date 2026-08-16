@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -50,9 +51,10 @@ type attachmentInfo struct {
 // attachment, to an Engagement's thread as the calling Staff member. Any
 // Staff member with access to the Practice may post -- there is no
 // per-role restriction, unlike visit.CreateHandler's Doula-only rule,
-// since #58's thread has no per-Staff-member sub-threads. Must be mounted
-// behind staffauth.Middleware.
-func CreateHandler(store objectstore.ObjectStore) http.Handler {
+// since #58's thread has no per-Staff-member sub-threads. On success,
+// notifies the Client's registered push subscription(s) (#61) before
+// responding. Must be mounted behind staffauth.Middleware.
+func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -88,6 +90,7 @@ func CreateHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
+		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeClient)
 		writeCreated(w, item, staffauth.MsgInternalError)
 	})
 }

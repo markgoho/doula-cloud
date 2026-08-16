@@ -21,6 +21,8 @@ import (
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/pushsub"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/visit"
 )
@@ -76,11 +78,11 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// routes builds the BFF's route table. verifier, db, and store are
+// routes builds the BFF's route table. verifier, db, store, and pusher are
 // threaded through so tests can substitute a fake Identity Platform
-// verifier, a test Postgres instance, and an in-memory ObjectStore instead
-// of the real ones main() wires up.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore) *http.ServeMux {
+// verifier, a test Postgres instance, an in-memory ObjectStore, and an
+// in-memory Pusher instead of the real ones main() wires up.
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hello", helloHandler)
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
@@ -107,18 +109,26 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore) 
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages",
 		staffauth.Middleware(verifier, db)(message.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db)(message.CreateHandler(store)))
+		staffauth.Middleware(verifier, db)(message.CreateHandler(store, pusher)))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
 		staffauth.Middleware(verifier, db)(message.AttachmentHandler(store)))
+	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",
+		staffauth.Middleware(verifier, db)(pushsub.RegisterHandler()))
+	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
+		staffauth.Middleware(verifier, db)(pushsub.UnregisterHandler()))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(verifier, db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(verifier, db)(portal.DetailHandler()))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(verifier, db)(message.ClientListHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(verifier, db)(message.ClientCreateHandler(store)))
+		clientauth.Middleware(verifier, db)(message.ClientCreateHandler(store, pusher)))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages/{messageId}/attachment",
 		clientauth.Middleware(verifier, db)(message.ClientAttachmentHandler(store)))
+	mux.Handle("POST /api/portal/engagements/{engagementId}/push-subscriptions",
+		clientauth.Middleware(verifier, db)(pushsub.ClientRegisterHandler()))
+	mux.Handle("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
+		clientauth.Middleware(verifier, db)(pushsub.ClientUnregisterHandler()))
 	return mux
 }
 
@@ -148,9 +158,12 @@ func main() {
 	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
 	store := objectstore.NewGCSStore(gcsClient, os.Getenv("GCS_ATTACHMENTS_BUCKET"))
 
+	// coverage:ignore reason: constructs the real Web Push client, not exercised by unit tests
+	pusher := push.NewVAPIDPusher(os.Getenv("VAPID_PUBLIC_KEY"), os.Getenv("VAPID_PRIVATE_KEY"), os.Getenv("VAPID_SUBSCRIBER"))
+
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           routes(verifier, db, store),
+		Handler:           routes(verifier, db, store, pusher),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

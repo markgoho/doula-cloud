@@ -69,7 +69,13 @@ services:
   # SDK skip Application Default Credentials discovery at startup, which
   # otherwise blocks on a real metadata-server probe with no route to
   # succeed in this container, delaying main()'s listener past the point
-  # Playwright starts hitting it.
+  # Playwright starts hitting it. VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are a
+  # throwaway keypair (generated once via webpush.GenerateVAPIDKeys(), not
+  # a real secret) purely so push.NewVAPIDPusher constructs cleanly at
+  # startup -- no e2e test registers a real push_subscriptions row through
+  # the UI (per #61, PushManager.subscribe() doesn't work headless), so
+  # Pusher.Send is never actually reached, but this keeps main() from ever
+  # depending on real VAPID keys existing to boot.
   api:
     build:
       context: ../api
@@ -80,6 +86,9 @@ services:
       GCP_PROJECT_ID: doula-cloud
       STORAGE_EMULATOR_HOST: storage-emulator-disabled.invalid:1
       GCS_ATTACHMENTS_BUCKET: doula-cloud-e2e-unused
+      VAPID_PUBLIC_KEY: BEOwHFGQTdwLqgkxPeDzvHQAHjqFkfxMVdO8ONFexrHrD4_43Jvr_XPB5LUA6AAdvnGK1sHeo7WYPwCAOfRI9Ow
+      VAPID_PRIVATE_KEY: Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4
+      VAPID_SUBSCRIBER: mailto:e2e@doula-cloud.invalid
       PORT: '8080'
     extra_hosts:
       - 'host.docker.internal:host-gateway'

@@ -9,8 +9,9 @@
 // thread per Engagement -- one continuous conversation, not split by
 // sender. A Message may carry a single image/PDF attachment (attachment.go,
 // #60), stored via an objectstore.ObjectStore rather than inline; there is
-// no update or delete endpoint -- Messages are immutable (push
-// notifications are a separate ticket, per #58).
+// no update or delete endpoint -- Messages are immutable. On successful
+// creation, the recipient's push subscription(s) are notified via a
+// push.Pusher (push.go, #61).
 package message
 
 import (

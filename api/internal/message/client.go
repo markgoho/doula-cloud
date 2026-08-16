@@ -8,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/push"
 )
 
 // ClientListHandler mirrors ListHandler for the Client-portal population:
@@ -60,8 +61,9 @@ func ClientListHandler() http.Handler {
 // ClientCreateHandler mirrors CreateHandler for the Client-portal
 // population: posts a Message, with an optional single image/PDF
 // attachment, as the calling Client into the caller's own Engagement
-// thread. Must be mounted behind clientauth.Middleware.
-func ClientCreateHandler(store objectstore.ObjectStore) http.Handler {
+// thread. On success, notifies the Practice's Staff push subscription(s)
+// (#61) before responding. Must be mounted behind clientauth.Middleware.
+func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
@@ -85,6 +87,7 @@ func ClientCreateHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
+		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeStaff)
 		writeCreated(w, item, clientauth.MsgInternalError)
 	})
 }

@@ -31,6 +31,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.56.0 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/SherClockHolmes/webpush-go v1.4.0 // indirect
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
@@ -61,6 +62,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect

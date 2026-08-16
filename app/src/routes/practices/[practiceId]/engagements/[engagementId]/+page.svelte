@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
+	import { asPushMessage } from '#lib/push.js';
 
 	type Detail = {
 		engagementId: string;
@@ -58,6 +59,9 @@
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
 			URL.revokeObjectURL(url);
+		}
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.removeEventListener('message', handlePushMessage);
 		}
 	});
 
@@ -124,7 +128,27 @@
 		detail = await response.json();
 		await loadVisits(idToken);
 		await loadMessages(idToken);
+
+		// #61: an open service worker push message ("a new Message arrived
+		// on this Engagement") triggers a refetch, the same content-free
+		// "push wakes the client, which fetches the real content" delivery
+		// ADR-0002 describes -- see push.ts's PUSH_MESSAGE_TYPE doc comment
+		// for why the service worker can't just fetch this itself.
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.addEventListener('message', handlePushMessage);
+		}
 	});
+
+	function handlePushMessage(event: MessageEvent) {
+		const message = asPushMessage(event.data);
+		if (message?.payload.engagementId !== page.params.engagementId) return;
+
+		void (async () => {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) return;
+			await loadMessages(await user.getIdToken());
+		})();
+	}
 
 	async function handleCreateVisit() {
 		visitsError = '';

@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -53,7 +54,7 @@ func TestResolvePort(t *testing.T) {
 }
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
-	mux := routes(fakeVerifier{}, nil, objectstore.NewMemoryStore())
+	mux := routes(fakeVerifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -88,7 +89,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	mux := routes(fakeVerifier{uid: identityUID}, db.App, objectstore.NewMemoryStore())
+	mux := routes(fakeVerifier{uid: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

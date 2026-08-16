@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -30,18 +31,11 @@ func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.Verifie
 }
 
 // newServer mounts the same routes main.go wires up for this package,
-// behind staffauth.Middleware, backed by a fresh in-memory ObjectStore --
-// no real GCS bucket reachable from api/ tests, per docs/testing.md.
+// behind staffauth.Middleware, backed by a fresh in-memory ObjectStore and
+// a fresh in-memory Pusher -- no real GCS bucket or VAPID/push service
+// reachable from api/ tests, per docs/testing.md.
 func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
-	store := objectstore.NewMemoryStore()
-	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db.App)(message.ListHandler()))
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db.App)(message.CreateHandler(store)))
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
-		staffauth.Middleware(verifier, db.App)(message.AttachmentHandler(store)))
-	return httptest.NewServer(mux)
+	return newServerWithStoreAndPusher(verifier, db, objectstore.NewMemoryStore(), push.NewFakePusher())
 }
 
 // newServerWithStore mirrors newServer but lets the caller inject store
@@ -49,11 +43,21 @@ func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
 // store failure (e.g. a GCS outage) -- a path MemoryStore's happy path
 // never reaches.
 func newServerWithStore(verifier authn.Verifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
+	return newServerWithStoreAndPusher(verifier, db, store, push.NewFakePusher())
+}
+
+// newServerWithPusher mirrors newServer but lets the caller inject pusher
+// directly, so a test can inspect what Message creation sent to it.
+func newServerWithPusher(verifier authn.Verifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
+	return newServerWithStoreAndPusher(verifier, db, objectstore.NewMemoryStore(), pusher)
+}
+
+func newServerWithStoreAndPusher(verifier authn.Verifier, db *testdb.DB, store objectstore.ObjectStore, pusher push.Pusher) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages",
 		staffauth.Middleware(verifier, db.App)(message.ListHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db.App)(message.CreateHandler(store)))
+		staffauth.Middleware(verifier, db.App)(message.CreateHandler(store, pusher)))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
 		staffauth.Middleware(verifier, db.App)(message.AttachmentHandler(store)))
 	return httptest.NewServer(mux)

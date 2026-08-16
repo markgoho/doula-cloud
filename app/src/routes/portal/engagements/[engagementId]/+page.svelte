@@ -5,6 +5,8 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
+	import { registerPushSubscription } from '#lib/pushRegistration.js';
+	import { asPushMessage } from '#lib/push.js';
 
 	type Detail = {
 		engagementId: string;
@@ -44,6 +46,9 @@
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
 			URL.revokeObjectURL(url);
+		}
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.removeEventListener('message', handlePushMessage);
 		}
 	});
 
@@ -93,7 +98,34 @@
 
 		detail = await response.json();
 		await loadMessages(idToken);
+
+		// Fire-and-forget: #61's "once per device after login" push
+		// registration is best-effort and must never block landing on the
+		// thread (see pushRegistration.ts's doc comment).
+		void registerPushSubscription(
+			`/api/portal/engagements/${page.params.engagementId}/push-subscriptions`,
+			idToken
+		);
+
+		// #61: an open service worker push message ("a new Message arrived
+		// on this Engagement") triggers a refetch -- see push.ts's
+		// PUSH_MESSAGE_TYPE doc comment for why the service worker can't
+		// just fetch this itself.
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.addEventListener('message', handlePushMessage);
+		}
 	});
+
+	function handlePushMessage(event: MessageEvent) {
+		const message = asPushMessage(event.data);
+		if (message?.payload.engagementId !== page.params.engagementId) return;
+
+		void (async () => {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) return;
+			await loadMessages(await user.getIdToken());
+		})();
+	}
 
 	async function handleLoadOlderMessages() {
 		messagesError = '';

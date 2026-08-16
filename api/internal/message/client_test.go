@@ -12,20 +12,29 @@ import (
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/testdb"
 )
 
 // newPortalServer mounts the same routes main.go wires up for the
 // Client-portal side of this package, behind clientauth.Middleware,
-// backed by a fresh in-memory ObjectStore -- no real GCS bucket reachable
-// from api/ tests, per docs/testing.md.
+// backed by a fresh in-memory ObjectStore and a fresh in-memory Pusher --
+// no real GCS bucket or VAPID/push service reachable from api/ tests, per
+// docs/testing.md.
 func newPortalServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+	return newPortalServerWithPusher(verifier, db, push.NewFakePusher())
+}
+
+// newPortalServerWithPusher mirrors newPortalServer but lets the caller
+// inject pusher directly, so a test can inspect what Message creation
+// sent to it.
+func newPortalServerWithPusher(verifier authn.Verifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
 	store := objectstore.NewMemoryStore()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(verifier, db.App)(message.ClientListHandler()))
 	mux.Handle("POST /portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(verifier, db.App)(message.ClientCreateHandler(store)))
+		clientauth.Middleware(verifier, db.App)(message.ClientCreateHandler(store, pusher)))
 	mux.Handle("GET /portal/engagements/{engagementId}/messages/{messageId}/attachment",
 		clientauth.Middleware(verifier, db.App)(message.ClientAttachmentHandler(store)))
 	return httptest.NewServer(mux)

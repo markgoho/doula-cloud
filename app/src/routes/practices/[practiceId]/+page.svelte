@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
+	import { registerPushSubscription } from '#lib/pushRegistration.js';
 
 	let practiceName = $state('');
 	let roles = $state<string[]>([]);
@@ -27,6 +28,11 @@
 		const body: { practiceName: string; roles: string[] } = await response.json();
 		practiceName = body.practiceName;
 		roles = body.roles;
+
+		// Fire-and-forget: #61's "once per device after login" push
+		// registration is best-effort and must never block landing on the
+		// Practice page (see pushRegistration.ts's doc comment).
+		void registerPushSubscription(`/api/practices/${page.params.practiceId}/push-subscriptions`, idToken);
 	});
 </script>
 
