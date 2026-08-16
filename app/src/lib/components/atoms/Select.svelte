@@ -63,7 +63,7 @@
 			font-size: var(--text-base);
 			color: var(--color-text);
 			background-color: var(--color-bg);
-			border: var(--border-thin) solid var(--color-border);
+			border: var(--border-thin) solid var(--color-input-border);
 			border-radius: var(--radius-sm);
 		}
 
@@ -75,7 +75,7 @@
 			font-size: var(--text-base);
 			color: var(--color-text);
 			background-color: var(--color-bg);
-			border: var(--border-thin) solid var(--color-border);
+			border: var(--border-thin) solid var(--color-input-border);
 			border-radius: var(--radius-sm);
 		}
 
