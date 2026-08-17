@@ -2,6 +2,13 @@
 // pulls both `duotone` and `light` weights for every entry here into
 // ./generated -- Icon.svelte picks the weight at render time by size (see
 // its size threshold).
-export const iconManifest = ['check', 'x', 'warning', 'info', 'arrow-right'] as const;
+export const iconManifest = [
+	'check',
+	'x',
+	'warning',
+	'info',
+	'arrow-right',
+	'arrow-square-out'
+] as const;
 
 export type IconName = (typeof iconManifest)[number];
