@@ -15,6 +15,11 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// invoiceStatusOpen is the invoices.status value shared by seed helpers
+// and assertions across this package's test files -- pulled out once
+// goconst's package-wide "open" repeat count crossed its threshold.
+const invoiceStatusOpen = "open"
+
 // seedEngagement inserts a Client (with the given name/email, so tests can
 // assert exactly what reaches the fake Stripe port) and an Engagement
 // linking them to practiceID, using the superuser Admin connection.
@@ -270,8 +275,8 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	if out.Invoice.ContractID != contractID {
 		t.Fatalf("invoice.contractId = %q, want %q", out.Invoice.ContractID, contractID)
 	}
-	if out.Invoice.Status != "open" {
-		t.Fatalf("invoice.status = %q, want %q", out.Invoice.Status, "open")
+	if out.Invoice.Status != invoiceStatusOpen {
+		t.Fatalf("invoice.status = %q, want %q", out.Invoice.Status, invoiceStatusOpen)
 	}
 	if out.Invoice.AmountCents != 15000 {
 		t.Fatalf("invoice.amountCents = %d, want 15000", out.Invoice.AmountCents)
@@ -303,8 +308,8 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 		t.Fatalf("FinalizeInvoice calls = %d, want 1", len(client.FinalizeInvoiceIDs))
 	}
 
-	if got := invoiceStatus(t, db, out.Invoice.ID); got != "open" {
-		t.Fatalf("persisted invoice status = %q, want %q", got, "open")
+	if got := invoiceStatus(t, db, out.Invoice.ID); got != invoiceStatusOpen {
+		t.Fatalf("persisted invoice status = %q, want %q", got, invoiceStatusOpen)
 	}
 }
 
@@ -511,7 +516,7 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 
 	base := time.Now().Add(-time.Hour)
 	oldInvoiceID := seedInvoice(t, db, practiceID, voidedContractID, "in_old", "paid", 10000, base)
-	newInvoiceID := seedInvoice(t, db, practiceID, currentContractID, "in_new", "open", 20000, base.Add(time.Minute))
+	newInvoiceID := seedInvoice(t, db, practiceID, currentContractID, "in_new", invoiceStatusOpen, 20000, base.Add(time.Minute))
 
 	client := payments.NewFakeClient()
 	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
@@ -654,7 +659,7 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	base := time.Now().Add(-time.Hour)
 	ids := make([]string, total)
 	for i := range total {
-		ids[i] = seedInvoice(t, db, practiceID, contractID, "in_page_"+strconv.Itoa(i), "open", int64(1000+i), base.Add(time.Duration(i)*time.Second))
+		ids[i] = seedInvoice(t, db, practiceID, contractID, "in_page_"+strconv.Itoa(i), invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second))
 	}
 
 	client := payments.NewFakeClient()

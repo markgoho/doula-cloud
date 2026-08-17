@@ -19,7 +19,7 @@ func TestRLS_InvoicesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	practiceID := seedPractice(t, db, "Some Practice")
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedContract(t, db, engagementID)
-	seedInvoice(t, db, practiceID, contractID, "in_rls_closed", "open", 5000, time.Now())
+	seedInvoice(t, db, practiceID, contractID, "in_rls_closed", invoiceStatusOpen, 5000, time.Now())
 
 	var count int
 	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM invoices`).Scan(&count); err != nil {
@@ -40,8 +40,8 @@ func TestRLS_InvoicesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	engagementB := seedEngagement(t, db, practiceB, "Client B", "b@example.com")
 	contractA := seedContract(t, db, engagementA)
 	contractB := seedContract(t, db, engagementB)
-	invoiceA := seedInvoice(t, db, practiceA, contractA, "in_rls_a", "open", 5000, time.Now())
-	seedInvoice(t, db, practiceB, contractB, "in_rls_b", "open", 7000, time.Now())
+	invoiceA := seedInvoice(t, db, practiceA, contractA, "in_rls_a", invoiceStatusOpen, 5000, time.Now())
+	seedInvoice(t, db, practiceB, contractB, "in_rls_b", invoiceStatusOpen, 7000, time.Now())
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
