@@ -65,18 +65,26 @@ jobs:
       # a real instance CI doesn't have).
       #
       # go-test-action runs `go test -json` itself and renders the result
-      # as a per-package job summary with failures annotated inline --
+      # as a per-package job summary with failing tests called out --
       # mirroring the Vitest job summary the app job already gets for
       # free from Vitest's built-in GitHub Actions reporter. -coverprofile
       # is passed through testArguments so coverage.out is produced
       # exactly as before for the covcheck gate below; `cover: true` just
       # tells the action to render the coverage column (it detects the
       # -coverprofile flag already in testArguments and skips appending
-      # its own -cover, per the action's docs). -json only changes how
-      # `go test`'s own output is framed; it isn't one of the flags
-      # forwarded to the test binary that Go's test cache keys on
-      # (-coverprofile is on that cacheable list), so cached results from
-      # unchanged packages still short-circuit as before.
+      # its own -cover, per the action's docs).
+      #
+      # Caveat: -json still lets go test cache successful results (a
+      # cache hit for a package now shows up as a lookup with no "save"
+      # line rather than a miss+recompute), but it changes the cache key
+      # shape versus the old `go test ./... -coverprofile=...` command by
+      # forwarding an extra cacheable flag to the test binary. Since
+      # actions/setup-go's persisted cache blob is keyed only on go.sum
+      # and skips re-saving once it already has a hit, the newly-shaped
+      # entries this step computes never make it back into that blob --
+      # so, until go.sum next changes and forces a fresh save, every run
+      # recomputes all packages here (~70s) instead of hitting the near
+      # -instant cache trunk had before this change.
       - name: Test
         uses: robherley/go-test-action@v1
         with:
