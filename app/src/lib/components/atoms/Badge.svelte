@@ -1,19 +1,34 @@
 <script lang="ts">
+	import Icon from './Icon.svelte';
+	import type { IconName } from './Icon/manifest.js';
+
 	interface Properties {
 		label: string;
 		variant: 'info' | 'success' | 'warning' | 'error' | 'neutral';
 	}
 
 	let { label, variant }: Properties = $props();
+
+	const iconByVariant: Record<Properties['variant'], IconName> = {
+		info: 'info',
+		success: 'check',
+		warning: 'warning',
+		error: 'x',
+		neutral: 'minus-circle'
+	};
 </script>
 
-<span class={variant}>{label}</span>
+<span class={variant}>
+	<Icon name={iconByVariant[variant]} size={16} />
+	{label}
+</span>
 
 <style>
 	@layer components {
 		span {
 			display: inline-flex;
 			align-items: center;
+			gap: var(--space-1);
 			padding: var(--space-1) var(--space-3);
 			border: var(--border-thin) solid;
 			border-radius: 999px;

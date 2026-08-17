@@ -25,4 +25,14 @@ describe('Badge.svelte', () => {
 			expect(container.querySelector(`span.${variant}`)).toBeInTheDocument();
 		}
 	});
+
+	it('renders a decorative icon for each variant', async () => {
+		for (const variant of ['info', 'success', 'warning', 'error', 'neutral'] as const) {
+			const { container } = await setup({ variant });
+
+			const svg = container.querySelector('svg');
+			expect(svg).toBeInTheDocument();
+			expect(svg).toHaveAttribute('aria-hidden', 'true');
+		}
+	});
 });
