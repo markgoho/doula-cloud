@@ -145,9 +145,21 @@ jobs:
       # (both Playwright e2e and the vitest browser tests, see
       # vite.config.ts) use the headless shell by default and neither
       # pins a `channel:`, so the full browser is never actually needed.
+      # Retried with a 30s gap: cdn.playwright.dev intermittently 403s
+      # runner IPs with a geo-block ("not available in your location"),
+      # and Playwright's own 3 retries fire within seconds of each other,
+      # too fast for the CDN edge to recover.
       - name: Install Playwright browsers
         working-directory: app
-        run: bunx playwright install --with-deps --only-shell chromium
+        run: |
+          for attempt in 1 2 3; do
+            if bunx playwright install --with-deps --only-shell chromium; then
+              exit 0
+            fi
+            echo "Browser install attempt ${attempt} failed; retrying in 30s..."
+            sleep 30
+          done
+          exit 1
         if: steps.playwright-cache.outputs.cache-hit != 'true'
 
       # On a cache hit the headless shell binary is already restored, but
