@@ -25,6 +25,12 @@
 	--color-error: oklch(45% 0.19 25);
 	--color-status: oklch(45% 0.15 145);
 	--color-info: oklch(45% 0.15 250);
+	--color-warning: oklch(45% 0.15 85);
+	/* Close to --color-muted's value but a distinct token on purpose: this
+	   sits in the error/status/info/warning severity family (45%/72%
+	   lightness pattern) for Badge's neutral variant, while --color-muted is
+	   a text-hierarchy token -- they can diverge independently later. */
+	--color-neutral: oklch(45% 0.02 320);
 
 	/* Typography */
 	--font-family-base: system-ui, sans-serif;
@@ -73,6 +79,8 @@
 		--color-error: oklch(72% 0.19 25);
 		--color-status: oklch(72% 0.15 145);
 		--color-info: oklch(72% 0.15 250);
+		--color-warning: oklch(72% 0.15 85);
+		--color-neutral: oklch(72% 0.02 320);
 	}
 }
 
@@ -90,4 +98,6 @@
 	--color-error: oklch(72% 0.19 25);
 	--color-status: oklch(72% 0.15 145);
 	--color-info: oklch(72% 0.15 250);
+	--color-warning: oklch(72% 0.15 85);
+	--color-neutral: oklch(72% 0.02 320);
 }
