@@ -7,13 +7,6 @@ import (
 
 const testFile = "foo.go"
 
-// TestDeliberateFailure_CIReportSmokeTest is a temporary test used only to
-// verify the go-test-action job summary still renders on a red run. It is
-// reverted immediately after that's confirmed.
-func TestDeliberateFailure_CIReportSmokeTest(t *testing.T) {
-	t.Fatal("deliberate failure to exercise the CI report's red path")
-}
-
 func TestParseProfile(t *testing.T) {
 	input := "mode: set\n" +
 		"doula-cloud/api/main.go:10.2,12.3 2 1\n" +
