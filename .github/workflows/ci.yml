@@ -492,8 +492,13 @@ jobs:
   # share one needs graph off the same trunk push and a failing test blocks
   # both deploys equally. Runs on every trunk push, unconditional on which
   # paths changed, matching deploy-api's own (also unconditional) behavior.
+  # migrate is also a needs dep, matching deploy-api: app/ talks to doula-api,
+  # not the database directly, but a failed migration must still block the
+  # frontend from going live against a schema it wasn't tested against.
+  # api-image is deliberately not a dep here -- it boot-tests the api/
+  # Docker image, which has no bearing on the static app/ SPA build.
   deploy-app:
-    needs: [api, app]
+    needs: [api, app, migrate]
     if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -528,10 +533,15 @@ jobs:
       - name: Deploy to Firebase
         run: bunx firebase-tools deploy --only hosting:app --non-interactive
 
+      # Reads the site ID from .firebaserc rather than hardcoding it, so a
+      # future retarget (see ded8f60) can't leave this checking the old site
+      # while Deploy to Firebase above ships to the new one.
       - name: Smoke test deployed site
         run: |
-          if ! curl -fsS https://doula-cloud-app.web.app/ | grep -q 'manifest.webmanifest'; then
-            echo "Deployed app/ site did not serve the expected build output"
+          site=$(bun -e "const c = JSON.parse(require('fs').readFileSync('./.firebaserc', 'utf8')); console.log(c.targets['doula-cloud'].hosting.app[0])")
+          url="https://${site}.web.app/"
+          if ! curl -fsS "$url" | grep -q 'manifest.webmanifest'; then
+            echo "Deployed app/ site ($url) did not serve the expected build output"
             exit 1
           fi
-          echo "Deployed app/ site answered with the expected build output."
+          echo "Deployed app/ site ($url) answered with the expected build output."
