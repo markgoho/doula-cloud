@@ -1,0 +1,94 @@
+name: Deploy app to Firebase Hosting on PR
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "firebase.json"
+      - ".github/workflows/firebase-hosting-app-pull-request.yml"
+
+permissions:
+  checks: write
+  contents: read
+  id-token: write
+  packages: read
+  pull-requests: write
+
+jobs:
+  build_and_preview:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+
+      - name: Build app
+        working-directory: app
+        run: bun run build
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+
+      - name: Deploy to Firebase preview channel
+        id: firebase_hosting_preview
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          bunx firebase-tools hosting:channel:deploy "pr-${PR_NUMBER}" \
+            --only app --expires 7d --non-interactive --json > deploy-output.json
+          url=$(bun -e "console.log(Object.values(require('./deploy-output.json').result)[0].url)")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR with preview URL
+        uses: actions/github-script@v9
+        env:
+          PREVIEW_URL: ${{ steps.firebase_hosting_preview.outputs.url }}
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('App Preview Deployment')
+            );
+
+            const commentBody = [
+              '## App Preview Deployment',
+              '',
+              '**Preview URL**: ' + process.env.PREVIEW_URL,
+            ].join('\n');
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+            }
