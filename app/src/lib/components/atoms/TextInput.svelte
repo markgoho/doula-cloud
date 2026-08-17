@@ -16,7 +16,7 @@
 		id?: string;
 		value: string;
 		onInput: (value: string) => void;
-		type?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search';
+		type?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search' | 'number';
 		name?: string;
 		placeholder?: string;
 		required?: boolean;

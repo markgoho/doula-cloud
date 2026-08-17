@@ -5,6 +5,7 @@
 
 	let name = $state('');
 	let email = $state('');
+	let quantity = $state('1');
 </script>
 
 <stack-l space="var(--space-6)">
@@ -22,6 +23,16 @@
 			value={email}
 			onInput={(value) => (email = value)}
 			placeholder="you@example.com"
+		/>
+	</section>
+
+	<section>
+		<h2>Number type</h2>
+		<TextInput
+			type="number"
+			value={quantity}
+			onInput={(value) => (quantity = value)}
+			placeholder="1"
 		/>
 	</section>
 

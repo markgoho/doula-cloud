@@ -39,6 +39,12 @@ describe('TextInput.svelte', () => {
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'email');
 	});
 
+	it('accepts type=number', async () => {
+		await setup({ type: 'number', value: '3' });
+
+		await expect.element(page.getByRole('spinbutton')).toHaveAttribute('type', 'number');
+	});
+
 	it('auto-generates a distinct id per instance, so external labels can target each safely', async () => {
 		const { unmount } = await render(TextInput, { value: '', onInput: vi.fn() });
 		const firstId = page.getByRole('textbox').element().id;
