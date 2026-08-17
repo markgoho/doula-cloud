@@ -415,8 +415,12 @@ jobs:
   # reference to the existing doula-api Cloud Run service. Gated on
   # `migrate` in addition to the test jobs, so a failed migration blocks
   # the deploy through normal `needs` propagation.
+  # api-image is also a needs dep, not just api/app/migrate: it's the job
+  # that catches a distroless image compiling and testing clean but failing
+  # to boot (missing CA bundle/tzdata) -- that check must gate deploy the
+  # same way a failed migration does, not run merely in parallel with it.
   deploy-api:
-    needs: [api, app, migrate]
+    needs: [api, app, migrate, api-image]
     if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -433,7 +437,6 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Authenticate to Google Cloud
-        id: auth
         uses: google-github-actions/auth@v3
         with:
           project_id: doula-cloud
