@@ -16,6 +16,7 @@ import (
 	"cloud.google.com/go/storage"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/engagement"
@@ -96,6 +97,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(verifier, db)(staffauth.InviteHandler()))
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
 		staffauth.Middleware(verifier, db)(staffauth.AssignRolesHandler()))
+	mux.Handle("GET /api/practices/{practiceId}/billing",
+		staffauth.Middleware(verifier, db)(billing.GetBalanceHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/clients",
 		staffauth.Middleware(verifier, db)(engagement.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/clients",
@@ -136,6 +139,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(verifier, db)(contracts.PutContractHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
 		staffauth.Middleware(verifier, db)(contracts.PostSendContractHandler(pusher)))
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
+		staffauth.Middleware(verifier, db)(contracts.PostVoidContractHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract/pdf",
 		staffauth.Middleware(verifier, db)(contracts.GetSignedContractPDFHandler(store)))
 	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",

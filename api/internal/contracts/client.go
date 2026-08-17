@@ -28,7 +28,7 @@ func ClientGetContractHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
+		_, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
 			return

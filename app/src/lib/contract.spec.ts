@@ -8,7 +8,8 @@ import {
 	saveContractValues,
 	sendContract,
 	setMergeFieldValue,
-	signContract
+	signContract,
+	voidContract
 } from './contract.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -128,6 +129,32 @@ describe('sendContract', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('contract is not a draft', 409));
 
 		await expect(sendContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('contract is not a draft');
+	});
+});
+
+describe('voidContract', () => {
+	it('POSTs to the practice+engagement contract void path and returns the decoded contract', async () => {
+		const contract = {
+			engagementId: 'eng-1',
+			status: 'voided',
+			prose: 'Agreement for {{client_name}}.',
+			mergeFields: ['client_name'],
+			values: { client_name: 'Jamie' }
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
+
+		const result = await voidContract(fetcher, 'practice-1', 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/void', {
+			method: 'POST'
+		});
+		expect(result).toEqual(contract);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('contract is not signed', 409));
+
+		await expect(voidContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('contract is not signed');
 	});
 });
 

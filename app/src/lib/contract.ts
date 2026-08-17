@@ -162,6 +162,23 @@ export async function signContract(
 	return response.json();
 }
 
+/** Transitions the Contract for engagementId from Signed to Voided --
+ * one-way and terminal, and only while it's still signed (a non-signed
+ * Contract 409s). Staff create a fresh Draft afterward via createContract
+ * to capture updated terms; there is no amendment/addendum entity. Throws
+ * with the response body text on a non-2xx response. */
+export async function voidContract(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<Contract> {
+	const response = await fetcher(`${contractPath(practiceId, engagementId)}/void`, { method: 'POST' });
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
+}
+
 /** Sets the value for a merge field key within values, returning a new
  * object (values is never mutated) -- mirrors planInstance.ts's
  * setAnswer, minus the polymorphic-type handling a Contract's merge

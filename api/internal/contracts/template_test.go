@@ -174,6 +174,8 @@ func newContractServerWithPusherAndStore(verifier fakeVerifier, db *testdb.DB, p
 		staffauth.Middleware(verifier, db.App)(contracts.PutContractHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/send",
 		staffauth.Middleware(verifier, db.App)(contracts.PostSendContractHandler(pusher)))
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/void",
+		staffauth.Middleware(verifier, db.App)(contracts.PostVoidContractHandler()))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract/pdf",
 		staffauth.Middleware(verifier, db.App)(contracts.GetSignedContractPDFHandler(store)))
 	return httptest.NewServer(mux)

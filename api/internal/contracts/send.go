@@ -36,7 +36,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -52,8 +52,8 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE contracts SET status = 'sent' WHERE engagement_id = $1`,
-			engagementID,
+			`UPDATE contracts SET status = 'sent' WHERE id = $1`,
+			id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)

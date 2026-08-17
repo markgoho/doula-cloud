@@ -43,6 +43,9 @@
 	<a href={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })}
 		>Clients</a
 	>
+	<a href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
+		>Billing</a
+	>
 	{#if roles.includes('owner')}
 		<a href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
 			>Invite a Staff member</a
