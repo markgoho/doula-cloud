@@ -10,6 +10,17 @@ package payments
 
 import "context"
 
+// InvoiceLineItemDescription is the fixed line-item description and
+// Stripe statement descriptor every Invoice uses -- unconditional, not a
+// default, per #78's no-PHI-to-Stripe rule (a Client's identity must
+// never be paired with anything that implies a health condition, on the
+// Stripe dashboard, a card statement, or the invoice email). Passed
+// through the Client port as an explicit parameter, rather than baked
+// into StripeAPIClient.CreateInvoice alone, so PostInvoiceHandler's tests
+// can assert -- via FakeClient -- that this constant, and nothing
+// request-supplied, is what actually reaches Stripe.
+const InvoiceLineItemDescription = "Professional services"
+
 // AccountStatus mirrors the subset of Stripe's Account object payments
 // cares about -- the same three capabilities persisted (by #80's webhook
 // handler) on practices.stripe_connect_charges_enabled,
@@ -28,9 +39,9 @@ type AccountStatus struct {
 // Mirrors billing.StripeClient's shape (a small interface around exactly
 // the calls the package needs, not the whole SDK), but is defined for the
 // whole feature up front per #79's ticket body, not grown incrementally --
-// StripeAPIClient's CreateInvoice and FinalizeInvoice are real methods
-// today only so it satisfies this interface; both return
-// errInvoicingNotImplemented until #81/#82 build them for real.
+// #79 landed CreateInvoice and FinalizeInvoice as stubs (returning
+// errInvoicingNotImplemented) purely so StripeAPIClient satisfied this
+// interface before #81 built them for real.
 //
 // Unlike billing.StripeClient, webhook signature verification is part of
 // this port rather than called directly via stripe.ConstructEvent -- #78's
@@ -62,12 +73,13 @@ type Client interface {
 	// directly from Stripe -- an on-demand read, not backed by the
 	// webhook-synced booleans on practices (see #79's ticket body).
 	RetrieveAccount(ctx context.Context, accountID string) (AccountStatus, error)
-	// CreateInvoice creates a Stripe Invoice on behalf of accountID's
-	// connected account, billing customerEmail/customerName amountCents
-	// for a fixed "Professional services" line item -- no clinical
-	// content is ever included, per #78's no-PHI-to-Stripe rule. Returns
-	// the created Invoice's id.
-	CreateInvoice(ctx context.Context, accountID, customerEmail, customerName string, amountCents int64) (invoiceID string, err error)
+	// CreateInvoice creates a Stripe Invoice (draft, not yet finalized) on
+	// behalf of accountID's connected account, billing
+	// customerEmail/customerName amountCents for a single line item read
+	// as description (always InvoiceLineItemDescription in production) --
+	// no clinical content is ever included, per #78's no-PHI-to-Stripe
+	// rule. Returns the created Invoice's id.
+	CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (invoiceID string, err error)
 	// FinalizeInvoice finalizes invoiceID on accountID's connected
 	// account, making it payable, and returns its hosted payment page URL.
 	FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (hostedInvoiceURL string, err error)

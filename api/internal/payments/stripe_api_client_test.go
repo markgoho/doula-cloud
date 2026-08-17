@@ -62,18 +62,3 @@ func TestStripeAPIClient_VerifyWebhookSignature_InvalidSignatureRejected(t *test
 		t.Fatal("expected an error verifying a payload signed with the wrong secret, got nil")
 	}
 }
-
-// TestStripeAPIClient_InvoicingNotImplemented proves CreateInvoice and
-// FinalizeInvoice -- #80/#82's territory, not this ticket's -- fail
-// clearly rather than silently no-opping if called before those tickets
-// land.
-func TestStripeAPIClient_InvoicingNotImplemented(t *testing.T) {
-	client := payments.NewStripeAPIClient("sk_test_unused", "https://app.test")
-
-	if _, err := client.CreateInvoice(t.Context(), "acct_test", "client@example.com", "Client Name", 5000); err == nil {
-		t.Fatal("expected CreateInvoice to return an error, got nil")
-	}
-	if _, err := client.FinalizeInvoice(t.Context(), "acct_test", "in_test"); err == nil {
-		t.Fatal("expected FinalizeInvoice to return an error, got nil")
-	}
-}

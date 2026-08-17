@@ -27,6 +27,9 @@
 		setMergeFieldValue,
 		type Contract
 	} from '#lib/contract.js';
+	import InvoiceSection from '#lib/InvoiceSection.svelte';
+	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
+	import { connect as connectStripe } from '#lib/payments.js';
 
 	type Detail = {
 		engagementId: string;
@@ -98,6 +101,10 @@
 	let isContractLoaded = $state(false);
 	let contractError = $state('');
 	let isContractBusy = $state(false);
+
+	let invoices = $state<Invoice[]>([]);
+	let invoicesError = $state('');
+	let connectGate = $state<{ isOwner: boolean } | undefined>();
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -324,6 +331,46 @@
 		contract = await voidContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
 	}
 
+	async function loadInvoicesSection(idToken: string) {
+		invoicesError = '';
+		try {
+			invoices = await loadInvoices(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+		} catch (error_) {
+			invoicesError = error_ instanceof Error ? error_.message : 'Failed to load invoices';
+		}
+	}
+
+	// Reported by InvoiceSection's onCreate prop -- see its own doc comment
+	// for why it owns the resulting state change (invoices list vs.
+	// connectGate) rather than the component itself.
+	async function handleCreateInvoice(amountCents: number) {
+		const user = getFirebaseAuth().currentUser;
+		if (!user) {
+			throw new Error('You must be logged in to create an invoice');
+		}
+		const idToken = await user.getIdToken();
+		const result = await createInvoice(
+			planFetcher(idToken),
+			page.params.practiceId!,
+			page.params.engagementId!,
+			amountCents
+		);
+		connectGate = result.connectRequired ? { isOwner: result.isOwner ?? false } : undefined;
+		if (result.invoice) {
+			invoices = [result.invoice, ...invoices];
+		}
+	}
+
+	async function handleConnectInvoicing() {
+		const user = getFirebaseAuth().currentUser;
+		if (!user) {
+			throw new Error('You must be logged in to connect Stripe');
+		}
+		const idToken = await user.getIdToken();
+		const onboardingUrl = await connectStripe(planFetcher(idToken), page.params.practiceId!);
+		location.assign(onboardingUrl);
+	}
+
 	onMount(async () => {
 		const user = getFirebaseAuth().currentUser;
 		if (!user) {
@@ -346,6 +393,7 @@
 		await loadMessages(idToken);
 		await Promise.all(planSections.map((section) => loadPlan(idToken, section.type)));
 		await loadContractSection(idToken);
+		await loadInvoicesSection(idToken);
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -601,6 +649,16 @@
 		{:else}
 			<button type="button" onclick={handleCreateContract} disabled={isContractBusy}>Create Draft Contract</button>
 		{/if}
+	{/if}
+
+	{#if contract}
+		<h2>Invoices</h2>
+
+		{#if invoicesError}
+			<p role="alert">{invoicesError}</p>
+		{/if}
+
+		<InvoiceSection {invoices} {connectGate} onCreate={handleCreateInvoice} onConnect={handleConnectInvoicing} />
 	{/if}
 
 	<h2>Messages</h2>

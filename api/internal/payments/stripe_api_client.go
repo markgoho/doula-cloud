@@ -2,18 +2,10 @@ package payments
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/stripe/stripe-go/v86"
 )
-
-// errInvoicingNotImplemented is returned by CreateInvoice and
-// FinalizeInvoice: #79's ticket body scopes this ticket to implementing
-// only Account Link creation and Account retrieve "for real" -- Invoicing
-// is #81/#82's territory. Both methods exist now only so StripeAPIClient
-// satisfies the Client interface defined for the whole of #78.
-var errInvoicingNotImplemented = errors.New("payments: invoicing is not implemented yet (see #81/#82)")
 
 // StripeAPIClient is the production Client, backed by the real Stripe API
 // via stripe-go -- the same bucket/pusher-vs-client shape as
@@ -86,14 +78,81 @@ func (c *StripeAPIClient) RetrieveAccount(ctx context.Context, accountID string)
 	}, nil
 }
 
-// CreateInvoice is not implemented yet -- see errInvoicingNotImplemented.
-func (c *StripeAPIClient) CreateInvoice(_ context.Context, _, _, _ string, _ int64) (string, error) {
-	return "", errInvoicingNotImplemented
+// CreateInvoice creates a draft Stripe Invoice on behalf of accountID's
+// connected account: a Customer (tagged with the Client's name/email,
+// nothing else -- no metadata, per #78's no-PHI-to-Stripe rule), a draft
+// Invoice billing that Customer via collection_method=send_invoice (so
+// Stripe emails it once finalized rather than auto-charging a saved card),
+// and a single InvoiceItem for amountCents described as description. Every
+// call is made with the Params.StripeAccount on-behalf-of header set to
+// accountID, per #78's ticket body ("using the Stripe-Account association,
+// not a separate OAuth token per Practice"), rather than a platform-level
+// call. Returns the draft Invoice's id; FinalizeInvoice makes it payable.
+func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, error) {
+	onBehalfOf := stripe.Params{StripeAccount: stripe.String(accountID)}
+
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	cust, err := c.client.V1Customers.Create(ctx, &stripe.CustomerCreateParams{
+		Params: onBehalfOf,
+		Email:  stripe.String(customerEmail),
+		Name:   stripe.String(customerName),
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("payments: create stripe customer for invoice: %w", err)
+	}
+
+	// DaysUntilDue is not a Doula Cloud payment-terms policy -- Stripe's
+	// API rejects collection_method=send_invoice without either
+	// days_until_due or due_date set, so a value is mandatory here purely
+	// to satisfy that constraint. 30 is a fixed, non-configurable
+	// placeholder; unlike the "Professional services" description, #78/#81
+	// make no claim about what this should be.
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	inv, err := c.client.V1Invoices.Create(ctx, &stripe.InvoiceCreateParams{
+		Params:              onBehalfOf,
+		Customer:            stripe.String(cust.ID),
+		CollectionMethod:    stripe.String(string(stripe.InvoiceCollectionMethodSendInvoice)),
+		DaysUntilDue:        stripe.Int64(30),
+		StatementDescriptor: stripe.String(description),
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("payments: create stripe invoice: %w", err)
+	}
+
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	_, err = c.client.V1InvoiceItems.Create(ctx, &stripe.InvoiceItemCreateParams{
+		Params:      onBehalfOf,
+		Customer:    stripe.String(cust.ID),
+		Invoice:     stripe.String(inv.ID),
+		Amount:      new(amountCents),
+		Currency:    stripe.String(string(stripe.CurrencyUSD)),
+		Description: stripe.String(description),
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("payments: create stripe invoice item: %w", err)
+	}
+
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return inv.ID, nil
 }
 
-// FinalizeInvoice is not implemented yet -- see errInvoicingNotImplemented.
-func (c *StripeAPIClient) FinalizeInvoice(_ context.Context, _, _ string) (string, error) {
-	return "", errInvoicingNotImplemented
+// FinalizeInvoice finalizes invoiceID on accountID's connected account --
+// the transition that makes it payable and triggers Stripe's hosted
+// invoice email to the Customer -- and returns its hosted payment page URL.
+func (c *StripeAPIClient) FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	inv, err := c.client.V1Invoices.FinalizeInvoice(ctx, invoiceID, &stripe.InvoiceFinalizeInvoiceParams{
+		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("payments: finalize stripe invoice: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return inv.HostedInvoiceURL, nil
 }
 
 // VerifyWebhookSignature verifies payload against Stripe's HMAC-SHA256

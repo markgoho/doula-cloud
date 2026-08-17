@@ -13,6 +13,19 @@ type FakeAccountLinkCall struct {
 	PracticeID string
 }
 
+// FakeCreateInvoiceCall records one CreateInvoice call -- every argument
+// the handler passed the port, so a test can assert the connected account
+// id, the Client's name/email (and nothing else, i.e. no clinical field),
+// and that Description was InvoiceLineItemDescription and nothing
+// request-supplied.
+type FakeCreateInvoiceCall struct {
+	AccountID     string
+	CustomerEmail string
+	CustomerName  string
+	Description   string
+	AmountCents   int64
+}
+
 // FakeClient is an in-memory Client double, injected into handler tests
 // instead of a real Stripe account -- mirrors billing.FakeStripeClient.
 // The *Err fields, when set, are returned by the corresponding method
@@ -22,9 +35,11 @@ type FakeClient struct {
 	mu     sync.Mutex
 	nextID int
 
-	AccountCalls     []string
-	AccountLinkCalls []FakeAccountLinkCall
-	RetrieveCalls    []string
+	AccountCalls       []string
+	AccountLinkCalls   []FakeAccountLinkCall
+	RetrieveCalls      []string
+	CreateInvoiceCalls []FakeCreateInvoiceCall
+	FinalizeInvoiceIDs []string
 
 	// Statuses, keyed by account id, is what RetrieveAccount returns --
 	// tests set this to control the "not connected / onboarding
@@ -34,6 +49,8 @@ type FakeClient struct {
 	CreateAccountErr     error
 	CreateAccountLinkErr error
 	RetrieveAccountErr   error
+	CreateInvoiceErr     error
+	FinalizeInvoiceErr   error
 }
 
 // NewFakeClient returns a FakeClient with no recorded calls.
@@ -80,18 +97,36 @@ func (f *FakeClient) RetrieveAccount(_ context.Context, accountID string) (Accou
 	return f.Statuses[accountID], nil
 }
 
-// CreateInvoice is not exercised by any handler yet (#81/#82 build it) --
-// it always returns a deterministic fake invoice id.
-func (f *FakeClient) CreateInvoice(_ context.Context, _, _, _ string, _ int64) (string, error) {
+// CreateInvoice records the call -- accountID, customerEmail,
+// customerName, description, amountCents, exactly as PostInvoiceHandler
+// passed them -- and returns a deterministic fake invoice id, or
+// CreateInvoiceErr if a test set one.
+func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.CreateInvoiceErr != nil {
+		return "", f.CreateInvoiceErr
+	}
+	f.CreateInvoiceCalls = append(f.CreateInvoiceCalls, FakeCreateInvoiceCall{
+		AccountID:     accountID,
+		CustomerEmail: customerEmail,
+		CustomerName:  customerName,
+		Description:   description,
+		AmountCents:   amountCents,
+	})
 	f.nextID++
 	return fmt.Sprintf("in_fake_%d", f.nextID), nil
 }
 
-// FinalizeInvoice is not exercised by any handler yet (#81/#82 build it) --
-// it always returns a deterministic fake hosted invoice URL.
+// FinalizeInvoice records the call and returns a deterministic fake
+// hosted invoice URL, or FinalizeInvoiceErr if a test set one.
 func (f *FakeClient) FinalizeInvoice(_ context.Context, _, invoiceID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.FinalizeInvoiceErr != nil {
+		return "", f.FinalizeInvoiceErr
+	}
+	f.FinalizeInvoiceIDs = append(f.FinalizeInvoiceIDs, invoiceID)
 	return "https://invoice.stripe.test/" + invoiceID, nil
 }
 
