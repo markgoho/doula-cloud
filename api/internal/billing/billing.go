@@ -5,9 +5,11 @@
 // the derived-balance read used by GetBalanceHandler and available to other
 // packages. #76 adds ConsumeCredit, the seam #52's Engagement-creation flow
 // will invoke to spend one credit once it's wired in (a separate ticket --
-// this one only builds and tests the operation itself). The Stripe
-// purchase webhook is a separate ticket (see #73) that will add exported
-// functions here.
+// this one only builds and tests the operation itself). #77 adds the
+// purchase side: PostPurchaseHandler (Owner-only, creates a Stripe
+// Checkout Session) and PostPurchaseWebhookHandler (credits the ledger
+// once Stripe confirms payment), plus the StripeClient seam the former
+// runs Stripe API calls through.
 package billing
 
 import (

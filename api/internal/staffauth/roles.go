@@ -53,12 +53,14 @@ func Roles(ctx context.Context, tx *sql.Tx, practiceID, staffID string) ([]strin
 	return strings.Split(roles, ","), nil
 }
 
-// requireOwner resolves the caller's Staff/Practice ids and request-scoped
+// RequireOwner resolves the caller's Staff/Practice ids and request-scoped
 // tx from context (set by staffauth.Middleware) and confirms the caller
 // holds the 'owner' role at that Practice, writing the appropriate error
-// response itself if not. Shared by the two Owner-only handlers: invite
-// and role assignment.
-func requireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
+// response itself if not. Shared by Owner-only handlers across packages
+// (invite, role assignment, here, and billing.PostPurchaseHandler) the
+// same way RequireTx is -- exported so billing doesn't need its own copy
+// of the owner check.
+func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -100,7 +102,7 @@ type AssignRolesResponse struct {
 // mounted behind staffauth.Middleware.
 func AssignRolesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := requireOwner(w, r)
+		tx, practiceID, ok := RequireOwner(w, r)
 		if !ok {
 			return
 		}

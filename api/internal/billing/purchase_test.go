@@ -1,0 +1,246 @@
+package billing_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/testdb"
+)
+
+// errStripeFake is returned by FakeStripeClient methods in tests that
+// exercise a handler's Stripe-failure path.
+var errStripeFake = errors.New("stripe: fake failure")
+
+// seedOwner seeds a Practice and a Staff member holding the owner role
+// there -- PostPurchaseHandler is Owner-only, unlike GetBalanceHandler.
+func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
+	t.Helper()
+	practiceID = seedPractice(t, db, "Test Practice")
+	staffID := seedStaff(t, db, identityUID)
+	seedMembership(t, db, practiceID, staffID, "{owner}")
+	return practiceID
+}
+
+func newPurchaseServer(verifier fakeVerifier, db *testdb.DB, stripeClient billing.StripeClient) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.Handle("POST /practices/{practiceId}/billing/purchases",
+		staffauth.Middleware(verifier, db.App)(billing.PostPurchaseHandler(stripeClient)))
+	return httptest.NewServer(mux)
+}
+
+func postPurchase(t *testing.T, srv *httptest.Server, practiceID string, body string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		srv.URL+"/practices/"+practiceID+"/billing/purchases", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+func stripeCustomerID(t *testing.T, db *testdb.DB, practiceID string) *string {
+	t.Helper()
+	var id *string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT stripe_customer_id FROM practices WHERE id = $1`, practiceID).Scan(&id); err != nil {
+		t.Fatalf("query stripe_customer_id: %v", err)
+	}
+	return id
+}
+
+// TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession proves an
+// Owner's first purchase lazily creates a Stripe Customer, persists its id
+// on the Practice, and returns a Checkout Session URL tagged with the
+// right metadata.
+func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-owner"
+	practiceID := seedOwner(t, db, uid)
+	stripeClient := billing.NewFakeStripeClient()
+
+	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out billing.PurchaseResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.CheckoutURL == "" {
+		t.Fatal("checkoutUrl is empty")
+	}
+
+	calls := stripeClient.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("CreateCheckoutSession calls = %d, want 1", len(calls))
+	}
+	if calls[0].PracticeID != practiceID || calls[0].Quantity != 5 {
+		t.Fatalf("checkout session call = %+v, want practiceID %q, quantity 5", calls[0], practiceID)
+	}
+
+	id := stripeCustomerID(t, db, practiceID)
+	if id == nil || *id == "" {
+		t.Fatal("stripe_customer_id was not persisted")
+	}
+	if calls[0].CustomerID != *id {
+		t.Fatalf("checkout session customer id = %q, want %q", calls[0].CustomerID, *id)
+	}
+}
+
+// TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer proves a
+// Practice's second purchase does not create a second Stripe Customer.
+func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-owner-repeat"
+	practiceID := seedOwner(t, db, uid)
+	stripeClient := billing.NewFakeStripeClient()
+
+	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	defer srv.Close()
+
+	first := postPurchase(t, srv, practiceID, `{"quantity": 3}`)
+	_ = first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("first purchase status = %d, want %d", first.StatusCode, http.StatusOK)
+	}
+	firstCustomerID := stripeCustomerID(t, db, practiceID)
+
+	second := postPurchase(t, srv, practiceID, `{"quantity": 10}`)
+	_ = second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("second purchase status = %d, want %d", second.StatusCode, http.StatusOK)
+	}
+
+	if got := stripeClient.CustomerCallCount(); got != 1 {
+		t.Fatalf("CreateCustomer call count = %d, want 1", got)
+	}
+	if got := stripeCustomerID(t, db, practiceID); got == nil || *got != *firstCustomerID {
+		t.Fatalf("stripe_customer_id changed across purchases: first %v, second %v", firstCustomerID, got)
+	}
+	if got := len(stripeClient.Calls()); got != 2 {
+		t.Fatalf("CreateCheckoutSession calls = %d, want 2", got)
+	}
+}
+
+// TestPostPurchaseHandler_NonOwnerForbidden proves a non-Owner Staff
+// member cannot initiate a purchase.
+func TestPostPurchaseHandler_NonOwnerForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-non-owner"
+	practiceID := seedMember(t, db, uid) // doula role, not owner
+	stripeClient := billing.NewFakeStripeClient()
+
+	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+	if got := len(stripeClient.Calls()); got != 0 {
+		t.Fatalf("CreateCheckoutSession calls = %d, want 0", got)
+	}
+}
+
+// TestPostPurchaseHandler_InvalidQuantityRejected proves a non-positive
+// quantity is rejected before any Stripe call is made.
+func TestPostPurchaseHandler_InvalidQuantityRejected(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-bad-quantity"
+	practiceID := seedOwner(t, db, uid)
+	stripeClient := billing.NewFakeStripeClient()
+
+	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, practiceID, `{"quantity": 0}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if got := len(stripeClient.Calls()); got != 0 {
+		t.Fatalf("CreateCheckoutSession calls = %d, want 0", got)
+	}
+}
+
+// TestPostPurchaseHandler_InvalidBodyRejected proves malformed JSON is
+// rejected with a 400.
+func TestPostPurchaseHandler_InvalidBodyRejected(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-bad-body"
+	practiceID := seedOwner(t, db, uid)
+	stripeClient := billing.NewFakeStripeClient()
+
+	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, practiceID, `not json`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+// TestPostPurchaseHandler_CreateCustomerFailureReturns500 proves a Stripe
+// Customer-creation failure surfaces as an internal error and never
+// persists a customer id.
+func TestPostPurchaseHandler_CreateCustomerFailureReturns500(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-customer-fail"
+	practiceID := seedOwner(t, db, uid)
+	stripeClient := billing.NewFakeStripeClient()
+	stripeClient.CreateCustomerErr = errStripeFake
+
+	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+	if got := stripeCustomerID(t, db, practiceID); got != nil {
+		t.Fatalf("stripe_customer_id = %v, want nil (never persisted)", got)
+	}
+}
+
+// TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500 proves a
+// Stripe Checkout Session-creation failure surfaces as an internal error.
+func TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-checkout-fail"
+	practiceID := seedOwner(t, db, uid)
+	stripeClient := billing.NewFakeStripeClient()
+	stripeClient.CreateCheckoutSessionErr = errStripeFake
+
+	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+}
