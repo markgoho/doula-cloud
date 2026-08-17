@@ -231,18 +231,27 @@ jobs:
             -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=app \
             postgres:16-alpine
 
-      # DATABASE_URL/GCP_PROJECT_ID/STORAGE_EMULATOR_HOST/GCS_ATTACHMENTS_BUCKET
-      # /VAPID_* mirror e2e/stack.ts's host-process BFF env (see its
-      # startAPI for why each one is set the way it is -- same throwaway,
-      # documented, non-secret values, not duplicated here). The
-      # assertion below is two-part: the container must actually answer
-      # on its port with the expected body, and must still be running a
+      # DATABASE_URL/GCP_PROJECT_ID/FIREBASE_AUTH_EMULATOR_HOST/
+      # STORAGE_EMULATOR_HOST/GCS_ATTACHMENTS_BUCKET/VAPID_* mirror
+      # e2e/stack.ts's host-process BFF env (see its startAPI for why each
+      # one is set the way it is -- same throwaway, documented, non-secret
+      # values, not duplicated here). FIREBASE_AUTH_EMULATOR_HOST doesn't
+      # need to point at a real emulator any more than STORAGE_EMULATOR_HOST
+      # needs a real GCS emulator -- just being set makes the Firebase Admin
+      # SDK skip Application Default Credentials discovery at startup,
+      # which otherwise blocks main() on a real metadata-server probe with
+      # no route to succeed in CI (confirmed the hard way: the first run of
+      # this job died in `authn.NewFirebaseVerifier` with "could not find
+      # default credentials" before it ever reached the listener). The
+      # assertion below is two-part: the container must actually answer on
+      # its port with the expected body, and must still be running a
       # couple seconds after that -- not just "docker run returned 0".
       - name: Boot smoke test
         run: |
           docker run -d --name api-smoke --network api-smoke -p 18081:8080 \
-            -e DATABASE_URL=postgres://app:app@api-smoke-db:5432/app?sslmode=disable \
+            -e "DATABASE_URL=postgres://app:app@api-smoke-db:5432/app?sslmode=disable" \
             -e GCP_PROJECT_ID=doula-cloud \
+            -e FIREBASE_AUTH_EMULATOR_HOST=auth-emulator-disabled.invalid:1 \
             -e STORAGE_EMULATOR_HOST=storage-emulator-disabled.invalid:1 \
             -e GCS_ATTACHMENTS_BUCKET=doula-cloud-e2e-unused \
             -e VAPID_PUBLIC_KEY=BEOwHFGQTdwLqgkxPeDzvHQAHjqFkfxMVdO8ONFexrHrD4_43Jvr_XPB5LUA6AAdvnGK1sHeo7WYPwCAOfRI9Ow \
