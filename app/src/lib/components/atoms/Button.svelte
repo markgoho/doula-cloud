@@ -1,0 +1,139 @@
+<script lang="ts">
+	import Icon from './Icon.svelte';
+	import type { IconName } from './Icon/manifest.js';
+
+	interface Properties {
+		label: string;
+		variant?: 'primary' | 'secondary' | 'destructive';
+		size?: 'sm' | 'md' | 'lg';
+		type?: 'button' | 'submit' | 'reset';
+		disabled?: boolean;
+		loading?: boolean;
+		icon?: IconName;
+		iconOnly?: boolean;
+		onClick?: (event: MouseEvent) => void;
+	}
+
+	let {
+		label,
+		variant = 'primary',
+		size = 'md',
+		type = 'button',
+		disabled = false,
+		loading = false,
+		icon,
+		iconOnly = false,
+		onClick
+	}: Properties = $props();
+
+	const isDisabled = $derived(disabled || loading);
+	const iconSize = $derived(size === 'sm' ? 16 : (size === 'lg' ? 24 : 20));
+	const buttonClass = $derived(`${variant} size-${size}`);
+</script>
+
+<button
+	{type}
+	class={buttonClass}
+	disabled={isDisabled}
+	aria-busy={loading}
+	aria-label={iconOnly ? label : undefined}
+	onclick={onClick}
+>
+	{#if loading}
+		<span class="spinner" aria-hidden="true"></span>
+	{:else if icon}
+		<Icon name={icon} size={iconSize} weight="light" />
+	{/if}
+	{#if !iconOnly}
+		<span>{label}</span>
+	{/if}
+</button>
+
+<style>
+	@layer components {
+		button {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: var(--space-2);
+			font-family: var(--font-family-base);
+			font-weight: var(--font-weight-medium);
+			border-radius: var(--radius-sm);
+			border: var(--border-thin) solid transparent;
+		}
+
+		button:disabled {
+			cursor: not-allowed;
+			opacity: 0.6;
+		}
+
+		button:focus-visible {
+			outline: 2px solid var(--color-accent);
+			outline-offset: 2px;
+		}
+
+		button.size-sm {
+			min-height: 2rem;
+			padding: var(--space-1) var(--space-3);
+			font-size: var(--text-sm);
+		}
+
+		button.size-md {
+			min-height: 2.5rem;
+			padding: var(--space-2) var(--space-4);
+			font-size: var(--text-base);
+		}
+
+		button.size-lg {
+			min-height: 3rem;
+			padding: var(--space-3) var(--space-6);
+			font-size: var(--text-lg);
+		}
+
+		button.primary {
+			color: var(--color-accent-contrast);
+			background-color: var(--color-accent);
+		}
+
+		button.primary:not(:disabled):hover {
+			background-color: var(--color-accent-strong);
+		}
+
+		button.secondary {
+			color: var(--color-text);
+			background-color: transparent;
+			border-color: var(--color-input-border);
+		}
+
+		button.secondary:not(:disabled):hover {
+			background-color: var(--color-border);
+		}
+
+		/* --color-error's lightness tracks --color-accent's per theme (light:
+		   dark-on-light, dark: light-on-dark), so --color-accent-contrast
+		   stays legible here too -- no separate error-contrast token needed. */
+		button.destructive {
+			color: var(--color-accent-contrast);
+			background-color: var(--color-error);
+		}
+
+		button.destructive:not(:disabled):hover {
+			opacity: 0.85;
+		}
+
+		.spinner {
+			inline-size: 1em;
+			block-size: 1em;
+			border: 2px solid currentColor;
+			border-inline-end-color: transparent;
+			border-radius: 50%;
+			animation: spin 700ms linear infinite;
+		}
+
+		@keyframes spin {
+			to {
+				transform: rotate(360deg);
+			}
+		}
+	}
+</style>

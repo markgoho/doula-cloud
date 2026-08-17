@@ -19,11 +19,14 @@
 		name: IconName;
 		size?: number;
 		label?: string;
+		weight?: 'light' | 'duotone';
 	}
 
-	let { name, size = 24, label }: Properties = $props();
+	let { name, size = 24, label, weight: weightOverride }: Properties = $props();
 
-	const weight = $derived(size < SIZE_THRESHOLD_FOR_DUOTONE ? 'light' : 'duotone');
+	const weight = $derived(
+		weightOverride ?? (size < SIZE_THRESHOLD_FOR_DUOTONE ? 'light' : 'duotone')
+	);
 	const innerMarkup = $derived(iconModules[`./Icon/generated/${name}.ts`][weight]);
 </script>
 

@@ -1,4 +1,5 @@
 export const atomPages = [
+	{ name: 'Button', slug: 'button' },
 	{ name: 'Checkbox', slug: 'checkbox' },
 	{ name: 'Icon', slug: 'icon' },
 	{ name: 'Select', slug: 'select' },

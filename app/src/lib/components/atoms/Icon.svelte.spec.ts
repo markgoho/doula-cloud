@@ -47,6 +47,18 @@ describe('Icon.svelte', () => {
 		expect(container.querySelector(':scope svg path.icon-fg')).toBeInTheDocument();
 	});
 
+	it('honors an explicit weight override above the threshold', async () => {
+		const { container } = await setup({ size: SIZE_THRESHOLD_FOR_DUOTONE, weight: 'light' });
+
+		expect(container.querySelectorAll(':scope svg path')).toHaveLength(1);
+	});
+
+	it('honors an explicit weight override below the threshold', async () => {
+		const { container } = await setup({ size: SIZE_THRESHOLD_FOR_DUOTONE - 1, weight: 'duotone' });
+
+		expect(container.querySelectorAll(':scope svg path')).toHaveLength(2);
+	});
+
 	it('marks the svg non-focusable', async () => {
 		const { container } = await setup();
 
