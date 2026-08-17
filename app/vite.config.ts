@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
-import adapter from '@sveltejs/adapter-auto';
+import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { E2E_API_HOST, E2E_API_PORT } from './e2e/ports.ts';
 
@@ -12,10 +12,12 @@ export default defineConfig({
 				runes: ({ filename }) => filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-			// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-			adapter: adapter()
+			// Fully client-side SPA behind auth, no SSR -- see
+			// src/routes/+layout.ts for the ssr = false that fallback mode
+			// requires. `200.html` (not `index.html`) per adapter-static's
+			// own guidance, since it's the name Firebase Hosting's
+			// SPA-rewrite convention expects for a catch-all fallback.
+			adapter: adapter({ fallback: '200.html' })
 		})
 	],
 	// `vite dev` (server) and Playwright's webServer (`vite preview`) each
