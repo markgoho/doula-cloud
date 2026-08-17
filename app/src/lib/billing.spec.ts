@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadBalance } from './billing.js';
+import { loadBalance, purchaseCredits } from './billing.js';
 
 // eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
 function jsonResponse(body: unknown, ok = true): Response {
@@ -31,5 +31,26 @@ describe('loadBalance', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden', false));
 
 		await expect(loadBalance(fetcher, 'practice-1')).rejects.toThrow('forbidden');
+	});
+});
+
+describe('purchaseCredits', () => {
+	it('posts the quantity to the practice purchases path and returns the checkout URL', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ checkoutUrl: 'https://checkout.stripe.com/session-1' }));
+
+		const result = await purchaseCredits(fetcher, 'practice-1', 5);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/billing/purchases', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ quantity: 5 })
+		});
+		expect(result).toBe('https://checkout.stripe.com/session-1');
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden: owner only', false));
+
+		await expect(purchaseCredits(fetcher, 'practice-1', 5)).rejects.toThrow('forbidden: owner only');
 	});
 });

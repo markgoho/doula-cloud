@@ -35,3 +35,25 @@ export async function loadBalance(fetcher: Fetcher, practiceId: string): Promise
 	}
 	return response.json();
 }
+
+/** Starts a credit purchase for `quantity` credits and returns the
+ * Stripe-hosted Checkout URL the caller's browser must navigate to (#110).
+ * Throws with the response body text on a non-2xx response -- e.g. a
+ * non-Owner attempting the request, which the backend's `RequireOwner`
+ * rejects. */
+export async function purchaseCredits(
+	fetcher: Fetcher,
+	practiceId: string,
+	quantity: number
+): Promise<string> {
+	const response = await fetcher(`${billingPath(practiceId)}/purchases`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ quantity })
+	});
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	const body: { checkoutUrl: string } = await response.json();
+	return body.checkoutUrl;
+}
