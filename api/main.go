@@ -87,7 +87,7 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // substitute a fake Identity Platform verifier, a test Postgres instance,
 // an in-memory ObjectStore, an in-memory Pusher, and in-memory billing.StripeClient
 // / payments.Client doubles instead of the real ones main() wires up.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client) *http.ServeMux {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hello", helloHandler)
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
@@ -108,6 +108,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(verifier, db)(payments.PostConnectHandler(paymentsClient)))
 	mux.Handle("GET /api/practices/{practiceId}/payments/connect",
 		staffauth.Middleware(verifier, db)(payments.GetConnectStatusHandler(paymentsClient)))
+	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret))
 	mux.Handle("GET /api/practices/{practiceId}/clients",
 		staffauth.Middleware(verifier, db)(engagement.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/clients",
@@ -217,7 +218,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient),
+		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET")),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

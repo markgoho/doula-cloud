@@ -3,16 +3,16 @@
 // integration, distinct from billing's Practice -> Doula Cloud side. #79
 // establishes the schema (three columns on practices, mirroring billing's
 // stripe_customer_id pattern), the Client Stripe-client port, and
-// Owner-only onboarding via a Stripe-hosted Account Link. Later tickets in
-// #78 (#80/#81/#82) add Invoice creation and the Connect webhook that keeps
-// the capability booleans live.
+// Owner-only onboarding via a Stripe-hosted Account Link. #80 adds the
+// Connect webhook that keeps the capability booleans live. Later tickets
+// in #78 (#81/#82) add Invoice creation.
 package payments
 
 import "context"
 
 // AccountStatus mirrors the subset of Stripe's Account object payments
-// cares about -- the same three capabilities persisted (by the webhook
-// handler, a later ticket) on practices.stripe_connect_charges_enabled,
+// cares about -- the same three capabilities persisted (by #80's webhook
+// handler) on practices.stripe_connect_charges_enabled,
 // stripe_connect_payouts_enabled, and stripe_connect_details_submitted.
 type AccountStatus struct {
 	ChargesEnabled   bool
@@ -22,7 +22,7 @@ type AccountStatus struct {
 
 // Client is the seam over the outbound Stripe API calls the payments
 // package needs across all of #78 -- Connect account linkage (#79),
-// Invoicing (#80/#82), and webhook signature verification (#81) -- so
+// webhook signature verification (#80), and Invoicing (#81/#82) -- so
 // tests can inject a fake instead of reaching a real Stripe account.
 // StripeAPIClient is the production, stripe-go-backed implementation.
 // Mirrors billing.StripeClient's shape (a small interface around exactly
@@ -30,13 +30,13 @@ type AccountStatus struct {
 // whole feature up front per #79's ticket body, not grown incrementally --
 // StripeAPIClient's CreateInvoice and FinalizeInvoice are real methods
 // today only so it satisfies this interface; both return
-// errInvoicingNotImplemented until #80/#82 build them for real.
+// errInvoicingNotImplemented until #81/#82 build them for real.
 //
 // Unlike billing.StripeClient, webhook signature verification is part of
 // this port rather than called directly via stripe.ConstructEvent -- #78's
-// spec explicitly asks for it to be injectable here, since the Connect
-// webhook handler (a later ticket) also needs to disambiguate events by
-// connected account, not just verify them.
+// spec explicitly asks for it to be injectable here, since #80's Connect
+// webhook handler also needs to disambiguate events by connected account,
+// not just verify them.
 //
 // billing.StripeClient (#77) predates this ticket but covers a narrower,
 // non-overlapping set of calls (Customer + Checkout Session, for the
@@ -77,10 +77,10 @@ type Client interface {
 	VerifyWebhookSignature(payload []byte, sigHeader, secret string) (WebhookEvent, error)
 }
 
-// WebhookEvent is the subset of a verified Stripe event the Connect
-// webhook handler (a later ticket) needs: its id (for idempotency,
-// mirroring stripe_webhook_events), its type, the connected account it
-// occurred on, and its raw object payload to unmarshal further.
+// WebhookEvent is the subset of a verified Stripe event #80's Connect
+// webhook handler needs: its id (for idempotency, mirroring
+// stripe_webhook_events), its type, the connected account it occurred on,
+// and its raw object payload to unmarshal further.
 type WebhookEvent struct {
 	ID      string
 	Type    string

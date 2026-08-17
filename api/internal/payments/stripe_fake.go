@@ -80,7 +80,7 @@ func (f *FakeClient) RetrieveAccount(_ context.Context, accountID string) (Accou
 	return f.Statuses[accountID], nil
 }
 
-// CreateInvoice is not exercised by any handler yet (#80/#82 build it) --
+// CreateInvoice is not exercised by any handler yet (#81/#82 build it) --
 // it always returns a deterministic fake invoice id.
 func (f *FakeClient) CreateInvoice(_ context.Context, _, _, _ string, _ int64) (string, error) {
 	f.mu.Lock()
@@ -89,14 +89,17 @@ func (f *FakeClient) CreateInvoice(_ context.Context, _, _, _ string, _ int64) (
 	return fmt.Sprintf("in_fake_%d", f.nextID), nil
 }
 
-// FinalizeInvoice is not exercised by any handler yet (#80/#82 build it) --
+// FinalizeInvoice is not exercised by any handler yet (#81/#82 build it) --
 // it always returns a deterministic fake hosted invoice URL.
 func (f *FakeClient) FinalizeInvoice(_ context.Context, _, invoiceID string) (string, error) {
 	return "https://invoice.stripe.test/" + invoiceID, nil
 }
 
-// VerifyWebhookSignature is not exercised by any handler yet (#81 builds
-// it) -- it always returns a zero-value WebhookEvent and no error.
+// VerifyWebhookSignature is not exercised through FakeClient by any
+// handler -- #80's PostConnectWebhookHandler test suite injects the real
+// StripeAPIClient instead, per its ticket body ("stripe-go's real
+// signature-construction helper... needs no faking"), so this always
+// returns a zero-value WebhookEvent and no error.
 func (f *FakeClient) VerifyWebhookSignature(_ []byte, _, _ string) (WebhookEvent, error) {
 	return WebhookEvent{}, nil
 }

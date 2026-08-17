@@ -11,9 +11,9 @@ import (
 // errInvoicingNotImplemented is returned by CreateInvoice and
 // FinalizeInvoice: #79's ticket body scopes this ticket to implementing
 // only Account Link creation and Account retrieve "for real" -- Invoicing
-// is #80/#82's territory. Both methods exist now only so StripeAPIClient
+// is #81/#82's territory. Both methods exist now only so StripeAPIClient
 // satisfies the Client interface defined for the whole of #78.
-var errInvoicingNotImplemented = errors.New("payments: invoicing is not implemented yet (see #80/#82)")
+var errInvoicingNotImplemented = errors.New("payments: invoicing is not implemented yet (see #81/#82)")
 
 // StripeAPIClient is the production Client, backed by the real Stripe API
 // via stripe-go -- the same bucket/pusher-vs-client shape as

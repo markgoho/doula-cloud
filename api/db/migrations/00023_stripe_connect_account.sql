@@ -7,7 +7,7 @@
 -- no new table for the linkage itself.
 --
 -- The three booleans are written only by the Connect webhook handler (a
--- later ticket, #81) in production -- this ticket's on-demand status read
+-- later ticket, #80) in production -- this ticket's on-demand status read
 -- calls Stripe's Account retrieve directly and does not write them, to
 -- avoid two write paths. They default to false so a freshly-linked account
 -- (before its first webhook delivery) reads as not-yet-active rather than
