@@ -9,6 +9,7 @@ on:
     paths:
       - "app/**"
       - "firebase.json"
+      - ".firebaserc"
       - ".github/workflows/firebase-hosting-app-pull-request.yml"
 
 permissions:

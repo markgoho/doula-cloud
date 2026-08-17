@@ -484,3 +484,54 @@ jobs:
             exit 1
           fi
           echo "Deployed revision answered on /hello."
+
+  # Was a standalone workflow (firebase-hosting-app-merge.yml) triggered by
+  # its own push+paths filter, so it ran as a separate Actions run with no
+  # dependency on api/app passing -- a red test suite couldn't block a live
+  # app/ deploy. Folded in here, gated the same way deploy-api is, so both
+  # share one needs graph off the same trunk push and a failing test blocks
+  # both deploys equally. Runs on every trunk push, unconditional on which
+  # paths changed, matching deploy-api's own (also unconditional) behavior.
+  deploy-app:
+    needs: [api, app]
+    if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Own concurrency group, no cancel-in-progress -- same rationale as
+    # `migrate`/`deploy-api` above: a second quick trunk push must not
+    # cancel a live-site deploy mid-flight.
+    concurrency:
+      group: deploy-app-${{ github.ref }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+
+      - name: Build app
+        working-directory: app
+        run: bun run build
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+
+      - name: Deploy to Firebase
+        run: bunx firebase-tools deploy --only hosting:app --non-interactive
+
+      - name: Smoke test deployed site
+        run: |
+          if ! curl -fsS https://doula-cloud-app.web.app/ | grep -q 'manifest.webmanifest'; then
+            echo "Deployed app/ site did not serve the expected build output"
+            exit 1
+          fi
+          echo "Deployed app/ site answered with the expected build output."
