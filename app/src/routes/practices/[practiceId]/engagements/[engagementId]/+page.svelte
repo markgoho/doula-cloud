@@ -17,11 +17,13 @@
 		type Fetcher
 	} from '#lib/planInstance.js';
 	import ContractForm from '#lib/ContractForm.svelte';
+	import ContractStatus from '#lib/ContractStatus.svelte';
 	import {
 		loadContract,
 		createContract,
 		saveContractValues,
 		sendContract,
+		voidContract,
 		setMergeFieldValue,
 		type Contract
 	} from '#lib/contract.js';
@@ -307,6 +309,21 @@
 		}
 	}
 
+	// ContractStatus.svelte owns the error display for Void (it awaits
+	// the onVoid callback prop itself and renders whatever it throws) --
+	// unlike the other Contract handlers above, this one deliberately
+	// doesn't set contractError, so it throws rather than swallowing the
+	// "not logged in" case into a variable no one reads.
+	async function handleVoidContract() {
+		if (!contract) return;
+		const user = getFirebaseAuth().currentUser;
+		if (!user) {
+			throw new Error('You must be logged in to void the contract');
+		}
+		const idToken = await user.getIdToken();
+		contract = await voidContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+	}
+
 	onMount(async () => {
 		const user = getFirebaseAuth().currentUser;
 		if (!user) {
@@ -570,7 +587,7 @@
 
 	{#if isContractLoaded}
 		{#if contract}
-			<p>Status: {contract.status}</p>
+			<ContractStatus status={contract.status} onVoid={handleVoidContract} />
 			<ContractForm
 				mergeFields={contract.mergeFields}
 				values={contract.values}

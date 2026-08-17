@@ -140,7 +140,7 @@ func GetContractHandler() http.Handler {
 			return
 		}
 
-		prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
+		_, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -178,7 +178,7 @@ func PutContractHandler() http.Handler {
 			return
 		}
 
-		prose, status, _, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, _, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -214,8 +214,8 @@ func PutContractHandler() http.Handler {
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE contracts SET merge_field_values = $1 WHERE engagement_id = $2`,
-			valuesJSON, engagementID,
+			`UPDATE contracts SET merge_field_values = $1 WHERE id = $2`,
+			valuesJSON, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -237,29 +237,42 @@ func PutContractHandler() http.Handler {
 	})
 }
 
-// fetchContract reads the prose snapshot, status, and merge field values
-// stored for engagementID, reporting sql.ErrNoRows (wrapped, so
+// fetchContract reads the id, prose snapshot, status, and merge field
+// values of engagementID's current Contract -- the most recently created
+// row, per created_at DESC -- reporting sql.ErrNoRows (wrapped, so
 // errors.Is still matches) if no Contract exists yet -- callers translate
-// that into a 404.
-func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (prose, status string, values MergeFieldValues, err error) {
+// that into a 404. An Engagement can have more than one Contract row
+// once Void-then-recreate (#72) is in play: at most one non-voided row
+// at a time (contracts_engagement_id_active_key,
+// 00020_contracts_recreate_after_void.sql), plus any number of superseded
+// voided rows. "Most recent" is always the right one to surface here --
+// either the in-flight Draft/Sent/Signed Contract, or, in the window
+// right after a Void before Staff creates the next Draft, the just-voided
+// row, so its terminal state still displays. Callers that mutate the row
+// (Put/Send/Sign/Void) target the returned id directly, rather than
+// re-deriving "the current row" via engagement_id in their own UPDATE,
+// so a concurrent create-after-void can never make an UPDATE land on the
+// wrong row.
+func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, err error) {
 	var rawValues []byte
 	err = tx.QueryRowContext(ctx,
-		`SELECT prose, status, merge_field_values FROM contracts WHERE engagement_id = $1`,
+		`SELECT id, prose, status, merge_field_values FROM contracts
+		 WHERE engagement_id = $1 ORDER BY created_at DESC LIMIT 1`,
 		engagementID,
-	).Scan(&prose, &status, &rawValues)
+	).Scan(&id, &prose, &status, &rawValues)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", nil, fmt.Errorf("contracts: fetch contract: %w", err)
+		return "", "", "", nil, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return "", "", nil, fmt.Errorf("contracts: fetch contract: %w", err)
+		return "", "", "", nil, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 
 	if err := json.Unmarshal(rawValues, &values); err != nil {
 		// coverage:ignore reason: stored JSON is always written by PostContractHandler/PutContractHandler, not exercised by unit tests
-		return "", "", nil, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
+		return "", "", "", nil, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
 	}
-	return prose, status, values, nil
+	return id, prose, status, values, nil
 }
 
 // validateMergeFieldValues checks each entry in values against

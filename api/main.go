@@ -136,6 +136,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(verifier, db)(contracts.PutContractHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
 		staffauth.Middleware(verifier, db)(contracts.PostSendContractHandler(pusher)))
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
+		staffauth.Middleware(verifier, db)(contracts.PostVoidContractHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract/pdf",
 		staffauth.Middleware(verifier, db)(contracts.GetSignedContractPDFHandler(store)))
 	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",

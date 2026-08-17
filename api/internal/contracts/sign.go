@@ -62,7 +62,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
-		prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -93,8 +93,8 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			`UPDATE contracts
 			 SET status = $1::contract_status, signer_full_name = $2, signer_attestation = $3,
 			     signed_at = now(), signer_ip = $4, signed_pdf_object_path = $5
-			 WHERE engagement_id = $6`,
-			statusSigned, req.FullLegalName, req.Attestation, clientIP(r), objectPath, engagementID,
+			 WHERE id = $6`,
+			statusSigned, req.FullLegalName, req.Attestation, clientIP(r), objectPath, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)

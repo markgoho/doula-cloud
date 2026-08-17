@@ -7,6 +7,7 @@
 	import { apiFetch } from '#lib/api.js';
 	import { loadClientContract, signContract, type Contract } from '#lib/contract.js';
 	import ContractView from '#lib/ContractView.svelte';
+	import ContractStatus from '#lib/ContractStatus.svelte';
 	import SignContract from '#lib/SignContract.svelte';
 
 	let contract = $state<Contract | null | undefined>();
@@ -54,7 +55,7 @@
 	<p>No Contract has been sent for this Engagement yet.</p>
 {:else}
 	<h1>Contract</h1>
-	<p>Status: {contract.status}</p>
+	<ContractStatus status={contract.status} />
 	<ContractView prose={contract.prose} values={contract.values} />
 	{#if contract.status === 'sent'}
 		<SignContract onSign={handleSign} />
