@@ -408,3 +408,76 @@ jobs:
           export DB_NAME="${db_name%%\?*}"
           export INSTANCE_CONNECTION_NAME=doula-cloud:us-central1:doula-cloud-pg
           ./scripts/migrate.sh
+
+  # Builds api/Dockerfile, pushes it to the `api` Artifact Registry repo
+  # (separate from the `cloud-run-source-deploy` repo the earlier manual
+  # `gcloud run deploy --source` created), and deploys that image by
+  # reference to the existing doula-api Cloud Run service. Gated on
+  # `migrate` in addition to the test jobs, so a failed migration blocks
+  # the deploy through normal `needs` propagation.
+  deploy-api:
+    needs: [api, app, migrate]
+    if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Own concurrency group, no cancel-in-progress -- same rationale as
+    # `migrate` above: a second quick trunk push must not cancel a deploy
+    # that ran after a migration already succeeded, which would leave prod
+    # schema ahead of prod code.
+    concurrency:
+      group: deploy-api-${{ github.ref }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: api
+          push: true
+          tags: us-central1-docker.pkg.dev/doula-cloud/api/doula-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # DATABASE_URL is doula-cloud-pg-app-runtime-dsn, shaped as
+      # postgres://user:pass@/dbname?host=/cloudsql/INSTANCE&sslmode=disable
+      # -- unlike migrate-dsn's placeholder `_` host (dialed through a proxy
+      # process instead), the running service has no proxy sidecar and
+      # connects straight through the /cloudsql/INSTANCE unix socket that
+      # --add-cloudsql-instances mounts into the container.
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: doula-api
+          region: us-central1
+          project_id: doula-cloud
+          image: us-central1-docker.pkg.dev/doula-cloud/api/doula-api:${{ github.sha }}
+          secrets: DATABASE_URL=doula-cloud-pg-app-runtime-dsn:latest
+          flags: --min-instances=1 --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg
+
+      - name: Smoke test deployed revision
+        run: |
+          url="${{ steps.deploy.outputs.url }}/hello"
+          if ! curl -fsS "$url" | grep -q 'hello world'; then
+            echo "Deployed revision did not answer on /hello"
+            exit 1
+          fi
+          echo "Deployed revision answered on /hello."
