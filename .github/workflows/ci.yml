@@ -63,9 +63,34 @@ jobs:
       # the CI-provable half of "goose is set up for api/" (see
       # scripts/migrate.sh for the Cloud SQL Auth Proxy half, which needs
       # a real instance CI doesn't have).
+      #
+      # go-test-action runs `go test -json` itself and renders the result
+      # as a per-package job summary with failing tests called out --
+      # mirroring the Vitest job summary the app job already gets for
+      # free from Vitest's built-in GitHub Actions reporter. -coverprofile
+      # is passed through testArguments so coverage.out is produced
+      # exactly as before for the covcheck gate below; `cover: true` just
+      # tells the action to render the coverage column (it detects the
+      # -coverprofile flag already in testArguments and skips appending
+      # its own -cover, per the action's docs).
+      #
+      # Caveat: -json still lets go test cache successful results (a
+      # cache hit for a package now shows up as a lookup with no "save"
+      # line rather than a miss+recompute), but it changes the cache key
+      # shape versus the old `go test ./... -coverprofile=...` command by
+      # forwarding an extra cacheable flag to the test binary. Since
+      # actions/setup-go's persisted cache blob is keyed only on go.sum
+      # and skips re-saving once it already has a hit, the newly-shaped
+      # entries this step computes never make it back into that blob --
+      # so, until go.sum next changes and forces a fresh save, every run
+      # recomputes all packages here (~70s) instead of hitting the near
+      # -instant cache trunk had before this change.
       - name: Test
-        working-directory: api
-        run: go test ./... -coverprofile=coverage.out
+        uses: robherley/go-test-action@v1
+        with:
+          moduleDirectory: api
+          testArguments: '-coverprofile=coverage.out ./...'
+          cover: true
 
       - name: Enforce 100% line coverage
         working-directory: api
