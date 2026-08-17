@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { atomPages, moleculePages } from './components.js';
+	import { atomPages, moleculePages, organismPages } from './components.js';
 </script>
 
 <section>
@@ -19,5 +19,9 @@
 	</ul>
 
 	<h2>Organisms</h2>
-	<p>None yet.</p>
+	<ul>
+		{#each organismPages as organismPage (organismPage.slug)}
+			<li><a href={resolve(`/style-guide/${organismPage.slug}`)}>{organismPage.name}</a></li>
+		{/each}
+	</ul>
 </section>

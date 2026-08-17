@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
-	import { atomPages, moleculePages } from './components.js';
+	import { atomPages, moleculePages, organismPages } from './components.js';
 
-	const componentPages = [...atomPages, ...moleculePages];
+	const componentPages = [...atomPages, ...moleculePages, ...organismPages];
 
 	let { children } = $props();
 
