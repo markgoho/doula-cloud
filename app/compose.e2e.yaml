@@ -1,4 +1,12 @@
 services:
+  # The only piece of the e2e stack still worth containerizing: a pinned
+  # Postgres version, rather than whatever the runner happens to have
+  # preinstalled. Migrations, the app_e2e login role, and the Go BFF
+  # itself all run as host processes now (see app/e2e/stack.ts) -- they're
+  # plain Go binaries with no OS dependency worth a container, and running
+  # them as host processes skips a cold `go build` inside a container on
+  # every CI run entirely (the Go build cache, warmed by actions/setup-go
+  # in ci.yml, makes an unchanged compile nearly free).
   db:
     image: docker.io/library/postgres:16-alpine
     environment:
@@ -7,93 +15,3 @@ services:
       POSTGRES_DB: app
     ports:
       - '15432:5432'
-  # Applies goose migrations against `db` before anything else starts.
-  # Runs api/cmd/migrate rather than the `goose` CLI (which
-  # scripts/migrate.sh uses for the real Cloud SQL Auth Proxy deploy
-  # path) because the CLI pulls in every database dialect it supports,
-  # which is too heavy to compile reliably in a constrained container.
-  #
-  # Depends on `db` only reaching "started", not "healthy" -- like
-  # `up --wait` (see app/e2e/stack.ts), a `service_healthy` condition
-  # never resolves under this runner's rootless Podman + docker-compose
-  # -as-provider combination, so `depends_on` hangs until compose's own
-  # command times out. cmd/migrate retries its own connection instead of
-  # trusting a container status Podman can't seem to report correctly.
-  migrate:
-    build:
-      context: ../api
-      dockerfile: Dockerfile
-      target: build
-    command: ['go', 'run', './cmd/migrate']
-    environment:
-      DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
-    depends_on:
-      db:
-        condition: service_started
-
-  # Creates the low-privilege LOGIN role the RLS policies in
-  # db/migrations apply to. Migration 00002 creates the app_runtime
-  # *group* role, but nothing can log in as it until a member role
-  # exists -- a real deploy would provision that via Cloud SQL IAM
-  # instead of a hardcoded password. Reuses the `db` image purely because
-  # it already ships psql.
-  seed-role:
-    image: docker.io/library/postgres:16-alpine
-    environment:
-      PGPASSWORD: app
-    entrypoint: ['sh', '-c']
-    command:
-      - |
-        psql -h db -U app -d app -v ON_ERROR_STOP=1 -c "
-          DO \$\$ BEGIN
-            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_e2e') THEN
-              CREATE ROLE app_e2e LOGIN PASSWORD 'app_e2e' IN ROLE app_runtime;
-            END IF;
-          END \$\$;
-        "
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-
-  # The Go BFF itself. FIREBASE_AUTH_EMULATOR_HOST points at the Firebase
-  # Auth emulator, which e2e/global-setup.ts starts as a host process (not
-  # part of this compose stack -- it's plain Node, no container needed).
-  # E2E_HOST_GATEWAY (set by e2e/stack.ts) is the container-to-host route:
-  # Podman predefines host.containers.internal itself; Docker Engine needs
-  # host.docker.internal added explicitly via extra_hosts below (Docker
-  # Desktop predefines it too, but the extra_hosts entry is harmless
-  # there). E2E_API_PORT/E2E_EMULATOR_PORT come from e2e/ports.ts via
-  # global-setup.ts (the defaults here match that file, for anyone running
-  # this by hand). STORAGE_EMULATOR_HOST (unreachable, and never dialed --
-  # no e2e test exercises the attachment endpoints, per #60) makes the GCS
-  # SDK skip Application Default Credentials discovery at startup, which
-  # otherwise blocks on a real metadata-server probe with no route to
-  # succeed in this container, delaying main()'s listener past the point
-  # Playwright starts hitting it. VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are a
-  # throwaway keypair (generated once via webpush.GenerateVAPIDKeys(), not
-  # a real secret) purely so push.NewVAPIDPusher constructs cleanly at
-  # startup -- no e2e test registers a real push_subscriptions row through
-  # the UI (per #61, PushManager.subscribe() doesn't work headless), so
-  # Pusher.Send is never actually reached, but this keeps main() from ever
-  # depending on real VAPID keys existing to boot.
-  api:
-    build:
-      context: ../api
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgres://app_e2e:app_e2e@db:5432/app?sslmode=disable
-      FIREBASE_AUTH_EMULATOR_HOST: ${E2E_HOST_GATEWAY:-host.containers.internal}:${E2E_EMULATOR_PORT:-9099}
-      GCP_PROJECT_ID: doula-cloud
-      STORAGE_EMULATOR_HOST: storage-emulator-disabled.invalid:1
-      GCS_ATTACHMENTS_BUCKET: doula-cloud-e2e-unused
-      VAPID_PUBLIC_KEY: BEOwHFGQTdwLqgkxPeDzvHQAHjqFkfxMVdO8ONFexrHrD4_43Jvr_XPB5LUA6AAdvnGK1sHeo7WYPwCAOfRI9Ow
-      VAPID_PRIVATE_KEY: Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4
-      VAPID_SUBSCRIBER: mailto:e2e@doula-cloud.invalid
-      PORT: '8080'
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
-    ports:
-      - '${E2E_API_PORT:-18080}:8080'
-    depends_on:
-      seed-role:
-        condition: service_completed_successfully

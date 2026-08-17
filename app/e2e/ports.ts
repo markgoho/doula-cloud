@@ -1,10 +1,11 @@
 // Single source of truth for the local stack's ports/hosts -- the same
-// podman-compose + Firebase Auth emulator setup backs both the
-// Playwright e2e run and `bun run dev:full` for interactive local use.
+// db-only podman-compose stack + host-process migrate/BFF/Firebase Auth
+// emulator setup (see e2e/stack.ts) backs both the Playwright e2e run
+// and `bun run dev:full` for interactive local use.
 // Consumed by:
-// - compose.e2e.yaml, via ${E2E_API_PORT}/${E2E_EMULATOR_PORT} env vars
-//   stack.ts passes to `podman compose up` (with matching defaults in
-//   the yaml itself, for anyone running it by hand)
+// - e2e/stack.ts, which passes E2E_API_PORT/E2E_EMULATOR_PORT straight
+//   into the host-process BFF's and emulator's own env (PORT,
+//   FIREBASE_AUTH_EMULATOR_HOST) rather than through compose
 // - vite.config.ts's dev and preview proxies
 // - playwright.config.ts's webServer env (build-time emulator host)
 // - scripts/dev-full.ts's dev-server env (same, for `bun run dev:full`)

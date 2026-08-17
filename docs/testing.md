@@ -137,24 +137,42 @@ migration fails. It's not yet wired to a real instance (none is
 provisioned in the `doula-cloud` GCP project); see the script's header for
 the required env vars.
 
-## `app/`: self-contained compose stack for e2e
+## `app/`: e2e stack — Postgres in compose, migrate/BFF/emulator as host processes
 
-`app/compose.e2e.yaml` defines the backing services (Postgres, the goose
-migration step, and the Go BFF itself) that Playwright e2e tests run
-against — pinned/locally-built images, no calls to external/real services.
-`app/playwright.config.ts` brings the stack up and down automatically via
-`globalSetup`/`globalTeardown` (`app/e2e/global-setup.ts`,
-`app/e2e/global-teardown.ts`), through `app/e2e/stack.ts`, which shells out
-to `$CONTAINER_ENGINE compose` (`docker compose` and `podman compose` share
-the same v2 CLI syntax). CI sets `CONTAINER_ENGINE=docker` — Docker ships
-preinstalled and needs no setup on `ubuntu-latest`, unlike Podman's
-rootless-socket dance and its `docker-compose`-as-external-provider
-translation layer, which silently broke container-to-host networking
-(`host.containers.internal`) under CI in practice. `CONTAINER_ENGINE`
-defaults to `podman` when unset, so local dev is unaffected and needs
-`podman-compose` on `PATH` (`brew install podman-compose`) as before.
-`compose.e2e.yaml`'s `api` service resolves the right host-gateway
-hostname (`host.containers.internal` for Podman, `host.docker.internal`
-for Docker, the latter needing an explicit `extra_hosts: host-gateway`
-entry) via the `E2E_HOST_GATEWAY` env var `stack.ts` sets from
-`CONTAINER_ENGINE`.
+`app/compose.e2e.yaml` now defines exactly one backing service: a pinned
+`postgres:16-alpine`. Everything else Playwright e2e tests run against —
+the goose migration step, the `app_e2e` login role, the Go BFF, and the
+Firebase Auth emulator — runs as a plain host process, started/stopped by
+`app/e2e/stack.ts` (`startStack`/`stopStack`), which `app/playwright.config.ts`
+wires up via `globalSetup`/`globalTeardown`
+(`app/e2e/global-setup.ts`/`app/e2e/global-teardown.ts`). `stack.ts` runs
+`api/cmd/migrate` with `go run` and the BFF with `go build` + a tracked
+PID (mirroring how it already managed the Firebase emulator), against
+`DATABASE_URL`s pointed at the compose Postgres over `127.0.0.1:15432`.
+Building the BFF and migrate binaries as compose images used to cost the
+e2e run a cold `go mod download`/build on every CI run with no cache
+sharing between them; running them as host processes instead lets CI's
+`app` job share a single warm Go build cache (via `actions/setup-go`,
+keyed on `api/go.sum`) with everything else that touches `api/`.
+
+Postgres itself stays in `compose.e2e.yaml` (image pinning matters more
+than build cost there) and is brought up/down via `$CONTAINER_ENGINE
+compose` (`docker compose` and `podman compose` share the same v2 CLI
+syntax) — CI sets `CONTAINER_ENGINE=docker` (preinstalled, no
+rootless-socket setup needed on `ubuntu-latest`); it defaults to `podman`
+for local dev, which needs `podman-compose` on `PATH` (`brew install
+podman-compose`). Since every process now reaches Postgres, the emulator,
+and the BFF's own listener over loopback directly, the old
+`E2E_HOST_GATEWAY`/`host.containers.internal`/`host.docker.internal`
+container-to-host routing machinery is gone — it was only ever needed to
+get a *container* to reach a host-bound service, and nothing runs the BFF
+in a container anymore.
+
+Because that removes the only thing that proved `api/Dockerfile` still
+builds and boots (the runtime image is distroless
+`gcr.io/distroless/static-debian12`, where a missing CA bundle or tzdata
+would break a real deploy even though `go build`/`go test` pass cleanly),
+CI's `api-image` job (`.github/workflows/ci.yml`) now builds that image
+with `docker/build-push-action` and runs a boot smoke test against it —
+container stays running and answers on its port — in parallel with `app`,
+off the critical path.

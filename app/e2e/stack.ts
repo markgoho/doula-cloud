@@ -8,132 +8,153 @@ import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 const DB_HOST = '127.0.0.1';
 const DB_PORT = 15_432;
 const READY_TIMEOUT_MS = 60_000;
-// `up --build` builds two separate Go services (migrate, api), each
-// running its own `go mod download` from a cold module cache with no
-// sharing between them, plus pulling base images -- observed to take up
-// to ~57s on a cold CI runner even when nothing is wrong, so it needs a
-// longer budget than the port-readiness waits below.
-const BUILD_TIMEOUT_MS = 300_000;
+// `db` (compose.e2e.yaml) just pulls/starts a pinned postgres:16-alpine
+// image -- no build involved -- so it doesn't need the long budget a Go
+// image build used to require here.
+const DB_UP_TIMEOUT_MS = 60_000;
+// `go run ./cmd/migrate` and `go build` (below) both compile from
+// scratch on a cold module/build cache; actions/setup-go's cache (see
+// ci.yml) keeps that close to free on an unchanged api/, but give both a
+// generous budget for a cold cache or a real api/ change.
+const MIGRATE_TIMEOUT_MS = 90_000;
+const BUILD_TIMEOUT_MS = 120_000;
 
 // `docker compose` and `podman compose` share the same v2 CLI syntax, so
-// this doubles as both the binary to exec and the flag that picks
-// compose.e2e.yaml's host-gateway hostname (see HOST_GATEWAY below).
-// Local dev defaults to Podman (see docs/testing.md); CI sets
+// this doubles as the binary to exec for the db-only compose stack
+// (compose.e2e.yaml) and for the `compose exec` calls below that run SQL
+// against it. Local dev defaults to Podman (see docs/testing.md); CI sets
 // CONTAINER_ENGINE=docker, since GH-hosted runners ship Docker natively
 // with no rootless-socket setup and no docker-compose-as-external
-// -provider translation layer -- the source of a real, hard-to-debug
-// Podman-only bug (container-to-host networking via
-// host.containers.internal silently breaking under CI's Podman setup).
+// -provider translation layer required.
 const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE ?? 'podman';
-// Docker Engine (unlike Docker Desktop) doesn't predefine
-// host.docker.internal -- compose.e2e.yaml adds it via `extra_hosts:
-// host-gateway` for when this is 'docker'. Podman predefines
-// host.containers.internal itself, no extra_hosts entry needed.
-const HOST_GATEWAY = CONTAINER_ENGINE === 'docker' ? 'host.docker.internal' : 'host.containers.internal';
 
-// The Firebase Auth emulator (see firebase.json) is plain Node with no
-// Postgres dependency, so it runs as a host process rather than another
-// compose service. Shared by the Playwright e2e run
-// (global-setup.ts/global-teardown.ts) and `bun run dev:full`
-// (scripts/dev-full.ts) for local interactive use.
+// The Firebase Auth emulator (see firebase.json) and the Go BFF (see
+// startAPI below) are both plain host processes now -- Postgres is the
+// only piece still worth containerizing (see compose.e2e.yaml). Shared
+// pidfile pattern for both, so `bun run dev:full` (scripts/dev-full.ts)
+// gets the same clean-teardown behavior as the Playwright e2e run
+// (global-setup.ts/global-teardown.ts).
 const EMULATOR_PIDFILE = path.join(tmpdir(), 'doula-cloud-e2e-firebase-emulator.pid');
+const API_PIDFILE = path.join(tmpdir(), 'doula-cloud-e2e-api.pid');
+const API_BINARY_PATH = path.join(tmpdir(), 'doula-cloud-e2e-api');
 
-// Brings up the self-contained compose stack -- Postgres, the goose
-// migration step, the app_e2e login role, and the Go BFF itself (see
-// compose.e2e.yaml) -- plus the Firebase Auth emulator.
-//
-// Deliberately doesn't use `up --wait`: under CI's rootless Podman (when
-// CONTAINER_ENGINE=podman) with docker-compose-as-provider, the container
-// starts fine but its healthcheck never reports "healthy", so --wait
-// blocks forever (confirmed on trunk -- see git log for this file).
-// Polling the host-exposed ports directly sidesteps that.
+// Brings up the whole e2e stack: the Firebase Auth emulator, the db-only
+// compose stack (see compose.e2e.yaml), the goose migrations and the
+// app_e2e login role against it, and finally the Go BFF -- all but
+// Postgres running as host processes reaching each other over loopback.
+// Sequenced by hand (db, then migrate, then the role, then the BFF)
+// because that used to be compose's own `depends_on` chain; each step
+// still needs the one before it to have actually finished.
 export async function startStack() {
 	await startEmulator();
-
-	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'up', '-d', '--build'], {
-		stdio: 'inherit',
-		timeout: BUILD_TIMEOUT_MS,
-		env: {
-			...process.env,
-			E2E_API_PORT: String(E2E_API_PORT),
-			E2E_EMULATOR_PORT: String(E2E_EMULATOR_PORT),
-			E2E_HOST_GATEWAY: HOST_GATEWAY
-		}
-	});
-	await waitForPort(DB_HOST, DB_PORT, READY_TIMEOUT_MS);
-	await waitForPort(E2E_API_HOST, E2E_API_PORT, READY_TIMEOUT_MS);
+	await startDatabase();
+	runMigrations();
+	seedAppE2ERole();
+	await startAPI();
 }
 
-// Links identityUID to clientID via client_portal_users, directly against
-// the compose stack's `db` service. Nothing in the BFF creates this row
-// (see #53: v1 has no Client-portal-provisioning endpoint, staff-side or
-// otherwise -- Staff creates a Client + Engagement per #52, but linking a
-// Client to portal login credentials isn't spec'd anywhere yet), so the
-// e2e test that proves login->landing works has to seed it itself. Uses
-// `compose exec` + psql the same way compose.e2e.yaml's own seed-role
-// service provisions the app_e2e login role, rather than adding a new
-// Postgres client dependency to app/ just for this one insert.
+// Deliberately doesn't use `up --wait` for `db`: under CI's rootless
+// Podman (when CONTAINER_ENGINE=podman) with docker-compose-as-provider,
+// the container starts fine but its healthcheck never reports "healthy",
+// so --wait blocks forever (confirmed on trunk -- see git log for this
+// file). Polling the host-exposed port directly sidesteps that.
+async function startDatabase() {
+	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'up', '-d'], {
+		stdio: 'inherit',
+		timeout: DB_UP_TIMEOUT_MS
+	});
+	await waitForPort(DB_HOST, DB_PORT, READY_TIMEOUT_MS);
+}
+
+// Runs api/cmd/migrate as a host process against the compose `db`,
+// connecting as the `app` superuser (the same role compose's old
+// `migrate` service used). cmd/migrate retries its own connection for up
+// to 30s (see its connectTimeout), so there's no separate db-readiness
+// wait needed here beyond startDatabase's own port check.
+function runMigrations() {
+	execFileSync('go', ['run', './cmd/migrate'], {
+		stdio: 'inherit',
+		cwd: '../api',
+		timeout: MIGRATE_TIMEOUT_MS,
+		env: {
+			...process.env,
+			DATABASE_URL: `postgres://app:app@${DB_HOST}:${DB_PORT}/app?sslmode=disable`
+		}
+	});
+}
+
+// Runs one SQL statement against the compose `db` via `compose exec` +
+// psql, rather than adding a new Postgres client dependency to app/ for
+// the handful of one-shot statements the e2e stack needs (provisioning
+// app_e2e below, and seedClientPortalUser's insert).
 //
 // Values are inlined into the -c string (escaped, not passed via psql's
 // own -v/:'var' substitution): podman-compose's `exec` passthrough
 // doesn't forward -v flags to the exec'd process intact (confirmed
 // empirically -- the SQL psql received still had the literal `:'uid'`
-// text in it, unsubstituted), so :'var' interpolation never fires.
-// identityUID and clientID both come from this test's own prior
-// API/emulator calls, not external input.
-function sqlLiteral(value: string): string {
-	return `'${value.replaceAll('\'', "''")}'`;
-}
-
-export function seedClientPortalUser(identityUID: string, clientID: string) {
+// text in it, unsubstituted), so :'var' interpolation never fires. Every
+// caller of sqlLiteral in this file controls its own input (this test
+// run's prior API/emulator calls, or a hardcoded role name), not
+// external input.
+function execSQL(sql: string) {
 	execFileSync(
 		CONTAINER_ENGINE,
-		[
-			'compose',
-			'-f',
-			'compose.e2e.yaml',
-			'exec',
-			'-T',
-			'db',
-			'psql',
-			'-U',
-			'app',
-			'-d',
-			'app',
-			'-v',
-			'ON_ERROR_STOP=1',
-			'-c',
-			`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(clientID)})`
-		],
+		['compose', '-f', 'compose.e2e.yaml', 'exec', '-T', 'db', 'psql', '-U', 'app', '-d', 'app', '-v', 'ON_ERROR_STOP=1', '-c', sql],
 		{ stdio: 'inherit', timeout: 30_000 }
 	);
 }
 
+function sqlLiteral(value: string): string {
+	return `'${value.replaceAll('\'', "''")}'`;
+}
+
+// Creates the low-privilege LOGIN role the RLS policies in db/migrations
+// apply to. Migration 00002 creates the app_runtime *group* role, but
+// nothing can log in as it until a member role exists -- a real deploy
+// would provision that via Cloud SQL IAM instead of a hardcoded
+// password. Used to be compose.e2e.yaml's own `seed-role` service; now
+// runs the identical SQL via execSQL once runMigrations has finished.
+function seedAppE2ERole() {
+	execSQL(
+		"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_e2e') THEN " +
+			"CREATE ROLE app_e2e LOGIN PASSWORD 'app_e2e' IN ROLE app_runtime; END IF; END $$;"
+	);
+}
+
+// Links identityUID to clientID via client_portal_users. Nothing in the
+// BFF creates this row (see #53: v1 has no Client-portal-provisioning
+// endpoint, staff-side or otherwise -- Staff creates a Client +
+// Engagement per #52, but linking a Client to portal login credentials
+// isn't spec'd anywhere yet), so the e2e test that proves login->landing
+// works has to seed it itself.
+export function seedClientPortalUser(identityUID: string, clientID: string) {
+	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(clientID)})`);
+}
+
 export function stopStack() {
+	killPidfile(API_PIDFILE);
+	rmSync(API_BINARY_PATH, { force: true });
+	killPidfile(EMULATOR_PIDFILE);
 	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'down', '-v'], {
 		stdio: 'inherit',
 		timeout: 60_000
 	});
-	killPidfile();
 }
 
 async function startEmulator() {
 	// A crashed previous run can leave the emulator holding its port.
 	// Clear it out before starting a fresh one instead of failing to bind.
-	killPidfile();
+	killPidfile(EMULATOR_PIDFILE);
 
-	// firebase.json sets emulators.auth.host to 0.0.0.0 -- the Firebase
-	// CLI defaults to binding auth's port on 127.0.0.1 only, which the
-	// Playwright test process (running on the host) can reach fine, but
-	// the `api` container cannot: on plain Linux (unlike this repo's
-	// Podman-on-macOS-VM local dev setup, where host.containers.internal
-	// happens to route to loopback-bound services too), a container's
-	// route to the host's gateway IP never reaches a service bound only
-	// to the host's own loopback interface. Confirmed as the actual cause
-	// of a "401 invalid token" e2e failure that persisted across both
-	// Podman and Docker in CI -- switching container engines was a red
-	// herring for this specific bug, even though it fixed a separate,
-	// real Podman-in-CI issue (see git log for this file/compose.e2e.yaml).
+	// firebase.json sets emulators.auth.host to 0.0.0.0 rather than the
+	// Firebase CLI's 127.0.0.1 default. That used to matter for a second
+	// reason beyond "any host process can reach it" -- the old `api`
+	// container needed a route to a host-bound service, which a
+	// loopback-only bind doesn't give a container (this was the actual
+	// cause of a "401 invalid token" e2e failure that persisted across
+	// both Podman and Docker in CI; see git log for this file). Now that
+	// the BFF is a host process too (startAPI below), that reason is
+	// gone, but the 0.0.0.0 bind is harmless to leave as-is.
 
 	const child = spawn(
 		'bunx',
@@ -148,18 +169,75 @@ async function startEmulator() {
 	await waitForPort(E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, READY_TIMEOUT_MS);
 }
 
-// Kills whatever process the pidfile points at (if any) and removes it.
-// Used both to clear a stale pidfile before starting a fresh emulator and
-// to stop the emulator this module started.
-function killPidfile() {
-	if (!existsSync(EMULATOR_PIDFILE)) return;
-	const pid = Number(readFileSync(EMULATOR_PIDFILE, 'utf8'));
+// Builds the BFF once, then runs it as a host process -- `go build` up
+// front (rather than `go run`) gives startAPI a stable binary path and a
+// direct child PID to track, so teardown (stopStack) can kill it cleanly
+// the same way it kills the emulator, instead of having to guess at a
+// `go run`-spawned child's PID.
+//
+// Env mirrors what compose.e2e.yaml's old `api` service set, with
+// loopback addresses in place of compose service names/host-gateway
+// hostnames (a host process reaches Postgres, the emulator, and its own
+// listener over 127.0.0.1 directly -- no container-to-host routing to
+// work around). STORAGE_EMULATOR_HOST is unreachable on purpose (no e2e
+// test exercises the attachment endpoints, per #60) -- it makes the GCS
+// SDK skip Application Default Credentials discovery at startup, which
+// otherwise blocks on a real metadata-server probe with no route to
+// succeed here, delaying main()'s listener past the point Playwright
+// starts hitting it. VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are a throwaway
+// keypair (generated once via webpush.GenerateVAPIDKeys(), not a real
+// secret) purely so push.NewVAPIDPusher constructs cleanly at startup --
+// no e2e test registers a real push_subscriptions row through the UI
+// (per #61, PushManager.subscribe() doesn't work headless), so
+// Pusher.Send is never actually reached, but this keeps main() from ever
+// depending on real VAPID keys existing to boot.
+async function startAPI() {
+	killPidfile(API_PIDFILE);
+
+	execFileSync('go', ['build', '-o', API_BINARY_PATH, '.'], {
+		stdio: 'inherit',
+		cwd: '../api',
+		timeout: BUILD_TIMEOUT_MS
+	});
+
+	const child = spawn(API_BINARY_PATH, [], {
+		// Unlike the emulator, the BFF's own logs are worth seeing inline
+		// in CI when an e2e run fails -- 'inherit' rather than 'ignore'.
+		stdio: 'inherit',
+		detached: true,
+		env: {
+			...process.env,
+			DATABASE_URL: `postgres://app_e2e:app_e2e@${DB_HOST}:${DB_PORT}/app?sslmode=disable`,
+			FIREBASE_AUTH_EMULATOR_HOST: `${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`,
+			GCP_PROJECT_ID: 'doula-cloud',
+			STORAGE_EMULATOR_HOST: 'storage-emulator-disabled.invalid:1',
+			GCS_ATTACHMENTS_BUCKET: 'doula-cloud-e2e-unused',
+			VAPID_PUBLIC_KEY: 'BEOwHFGQTdwLqgkxPeDzvHQAHjqFkfxMVdO8ONFexrHrD4_43Jvr_XPB5LUA6AAdvnGK1sHeo7WYPwCAOfRI9Ow',
+			VAPID_PRIVATE_KEY: 'Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4',
+			VAPID_SUBSCRIBER: 'mailto:e2e@doula-cloud.invalid',
+			PORT: String(E2E_API_PORT)
+		}
+	});
+	child.unref();
+	if (child.pid) {
+		writeFileSync(API_PIDFILE, String(child.pid));
+	}
+
+	await waitForPort(E2E_API_HOST, E2E_API_PORT, READY_TIMEOUT_MS);
+}
+
+// Kills whatever process the given pidfile points at (if any) and
+// removes it. Used both to clear a stale pidfile before starting a fresh
+// process and to stop a process this module started.
+function killPidfile(pidfile: string) {
+	if (!existsSync(pidfile)) return;
+	const pid = Number(readFileSync(pidfile, 'utf8'));
 	try {
 		process.kill(pid);
 	} catch {
 		// Already gone -- nothing to clean up.
 	}
-	rmSync(EMULATOR_PIDFILE, { force: true });
+	rmSync(pidfile, { force: true });
 }
 
 function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {

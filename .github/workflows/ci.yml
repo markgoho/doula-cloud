@@ -74,15 +74,26 @@ jobs:
   app:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # e2e/stack.ts's compose stack: `docker compose` ships preinstalled on
-    # ubuntu-latest and needs no rootless-socket setup or external compose
-    # provider, unlike this runner's Podman (see e2e/stack.ts and
-    # compose.e2e.yaml for what that combination broke). Local dev keeps
-    # defaulting to Podman -- see docs/testing.md.
+    # e2e/stack.ts's db-only compose stack: `docker compose` ships
+    # preinstalled on ubuntu-latest and needs no rootless-socket setup or
+    # external compose provider, unlike this runner's Podman (see
+    # e2e/stack.ts and compose.e2e.yaml for what that combination broke
+    # back when the stack also built/ran Go images through it). Local dev
+    # keeps defaulting to Podman -- see docs/testing.md.
     env:
       CONTAINER_ENGINE: docker
     steps:
       - uses: actions/checkout@v7
+
+      # e2e/stack.ts runs api/cmd/migrate and the Go BFF itself as host
+      # processes (`go run`/`go build`) rather than building them into
+      # compose images -- this primes the Go toolchain and its build/
+      # module cache (~13s warm) so the e2e step below doesn't pay for a
+      # cold compile of api/ on every run.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
 
       - uses: oven-sh/setup-bun@v2
 
@@ -186,3 +197,84 @@ jobs:
           name: playwright-report
           path: app/playwright-report/
           retention-days: 7
+
+  # e2e/stack.ts (see the `app` job above) now runs api/cmd/migrate and
+  # the BFF as host processes instead of building them into compose
+  # images, so that build no longer proves api/Dockerfile still builds
+  # *and boots*. It matters because the runtime image is distroless
+  # (gcr.io/distroless/static-debian12) -- a missing CA bundle or tzdata
+  # would break the running container even though `go build` and `go
+  # test` both pass cleanly, and a compile-only check can't catch that.
+  # Runs in parallel with `app`, off the critical path -- it doesn't gate
+  # or slow down the e2e run, which no longer touches this image at all.
+  api-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: api
+          push: false
+          load: true
+          tags: doula-cloud-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start throwaway Postgres for the boot smoke test
+        run: |
+          docker network create api-smoke
+          docker run -d --name api-smoke-db --network api-smoke \
+            -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=app \
+            postgres:16-alpine
+
+      # DATABASE_URL/GCP_PROJECT_ID/STORAGE_EMULATOR_HOST/GCS_ATTACHMENTS_BUCKET
+      # /VAPID_* mirror e2e/stack.ts's host-process BFF env (see its
+      # startAPI for why each one is set the way it is -- same throwaway,
+      # documented, non-secret values, not duplicated here). The
+      # assertion below is two-part: the container must actually answer
+      # on its port with the expected body, and must still be running a
+      # couple seconds after that -- not just "docker run returned 0".
+      - name: Boot smoke test
+        run: |
+          docker run -d --name api-smoke --network api-smoke -p 18081:8080 \
+            -e DATABASE_URL=postgres://app:app@api-smoke-db:5432/app?sslmode=disable \
+            -e GCP_PROJECT_ID=doula-cloud \
+            -e STORAGE_EMULATOR_HOST=storage-emulator-disabled.invalid:1 \
+            -e GCS_ATTACHMENTS_BUCKET=doula-cloud-e2e-unused \
+            -e VAPID_PUBLIC_KEY=BEOwHFGQTdwLqgkxPeDzvHQAHjqFkfxMVdO8ONFexrHrD4_43Jvr_XPB5LUA6AAdvnGK1sHeo7WYPwCAOfRI9Ow \
+            -e VAPID_PRIVATE_KEY=Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4 \
+            -e VAPID_SUBSCRIBER=mailto:e2e@doula-cloud.invalid \
+            doula-cloud-api:ci
+
+          answered=false
+          for _ in $(seq 1 30); do
+            if [ "$(docker inspect -f '{{.State.Running}}' api-smoke 2>/dev/null)" != "true" ]; then
+              echo "Container exited early:"
+              docker logs api-smoke
+              exit 1
+            fi
+            if curl -fsS http://127.0.0.1:18081/hello | grep -q 'hello world'; then
+              answered=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$answered" != "true" ]; then
+            echo "Container never answered on /hello:"
+            docker logs api-smoke
+            exit 1
+          fi
+
+          # Confirm it's still alive after answering, not a one-shot fluke.
+          sleep 2
+          if [ "$(docker inspect -f '{{.State.Running}}' api-smoke)" != "true" ]; then
+            echo "Container exited after answering:"
+            docker logs api-smoke
+            exit 1
+          fi
+          echo "Boot smoke test passed."
