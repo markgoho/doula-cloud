@@ -19,8 +19,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Retried with a 10s gap: the download script hits GitHub's API to
+      # resolve the release asset, which intermittently 429s shared
+      # runner IPs (see the Playwright install step below for the same
+      # pattern against a different flaky download).
       - name: Install actionlint
-        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+        run: |
+          for attempt in 1 2 3; do
+            if bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12; then
+              exit 0
+            fi
+            echo "actionlint install attempt ${attempt} failed; retrying in 10s..."
+            sleep 10
+          done
+          exit 1
 
       - name: Lint workflows
         run: ./actionlint
