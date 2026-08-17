@@ -47,13 +47,13 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 		if status != statusDraft {
-			http.Error(w, "contract is not a draft", http.StatusConflict)
+			http.Error(w, "contract is no longer a draft", http.StatusConflict)
 			return
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE contracts SET status = 'sent' WHERE id = $1`,
-			id,
+			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
+			statusSent, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
