@@ -175,4 +175,4 @@ would break a real deploy even though `go build`/`go test` pass cleanly),
 CI's `api-image` job (`.github/workflows/ci.yml`) now builds that image
 with `docker/build-push-action` and runs a boot smoke test against it —
 container stays running and answers on its port — in parallel with `app`,
-off the critical path.
+off the critical path (see PR #108 for measured before/after timings).
