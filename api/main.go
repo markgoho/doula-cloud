@@ -22,6 +22,7 @@ import (
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/push"
@@ -81,12 +82,12 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// routes builds the BFF's route table. verifier, db, store, pusher, and
-// stripeClient are threaded through so tests can substitute a fake
-// Identity Platform verifier, a test Postgres instance, an in-memory
-// ObjectStore, an in-memory Pusher, and an in-memory StripeClient instead
-// of the real ones main() wires up.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string) *http.ServeMux {
+// routes builds the BFF's route table. verifier, db, store, pusher,
+// stripeClient, and paymentsClient are threaded through so tests can
+// substitute a fake Identity Platform verifier, a test Postgres instance,
+// an in-memory ObjectStore, an in-memory Pusher, and in-memory billing.StripeClient
+// / payments.Client doubles instead of the real ones main() wires up.
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hello", helloHandler)
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
@@ -103,6 +104,10 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("POST /api/practices/{practiceId}/billing/purchases",
 		staffauth.Middleware(verifier, db)(billing.PostPurchaseHandler(stripeClient)))
 	mux.Handle("POST /api/stripe/webhook", billing.PostPurchaseWebhookHandler(db, stripeWebhookSecret))
+	mux.Handle("POST /api/practices/{practiceId}/payments/connect",
+		staffauth.Middleware(verifier, db)(payments.PostConnectHandler(paymentsClient)))
+	mux.Handle("GET /api/practices/{practiceId}/payments/connect",
+		staffauth.Middleware(verifier, db)(payments.GetConnectStatusHandler(paymentsClient)))
 	mux.Handle("GET /api/practices/{practiceId}/clients",
 		staffauth.Middleware(verifier, db)(engagement.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/clients",
@@ -207,9 +212,12 @@ func main() {
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
 	stripeClient := billing.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("STRIPE_CREDIT_PRICE_ID"), os.Getenv("APP_BASE_URL"))
 
+	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
+	paymentsClient := payments.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("APP_BASE_URL"))
+
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET")),
+		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

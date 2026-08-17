@@ -61,4 +61,9 @@
 			})}>Contract Template</a
 		>
 	{/if}
+	<a
+		href={resolve('/practices/[practiceId]/settings/payments', {
+			practiceId: page.params.practiceId!
+		})}>Payments</a
+	>
 {/if}
