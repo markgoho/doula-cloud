@@ -1,0 +1,4 @@
+-- +goose Up
+SELECT * FROM this_table_does_not_exist;
+
+-- +goose Down
