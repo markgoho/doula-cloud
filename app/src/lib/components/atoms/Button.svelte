@@ -36,7 +36,6 @@
 	class={buttonClass}
 	disabled={isDisabled}
 	aria-busy={loading}
-	aria-label={iconOnly ? label : undefined}
 	onclick={onClick}
 >
 	{#if loading}
@@ -44,9 +43,7 @@
 	{:else if icon}
 		<Icon name={icon} size={iconSize} weight="light" />
 	{/if}
-	{#if !iconOnly}
-		<span>{label}</span>
-	{/if}
+	<span class:visually-hidden={iconOnly}>{label}</span>
 </button>
 
 <style>
@@ -119,6 +116,21 @@
 
 		button.destructive:not(:disabled):hover {
 			opacity: 0.85;
+		}
+
+		/* WCAG-standard clip technique: stays in the accessibility tree and
+		   readable by AT/voice-control/translation tools, unlike aria-label
+		   which strips real DOM text out of those paths. */
+		.visually-hidden {
+			position: absolute;
+			inline-size: 1px;
+			block-size: 1px;
+			margin: -1px;
+			padding: 0;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			white-space: nowrap;
+			border: 0;
 		}
 
 		.spinner {

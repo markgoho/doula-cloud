@@ -16,6 +16,10 @@ function icon(container: HTMLElement) {
 	return container.querySelector('svg');
 }
 
+function labelSpan(container: HTMLElement) {
+	return container.querySelector(':scope button > span:not(.spinner)');
+}
+
 describe('Button.svelte', () => {
 	it('renders the label as visible, accessible text by default', async () => {
 		await setup({ label: 'Save' });
@@ -80,17 +84,18 @@ describe('Button.svelte', () => {
 		expect(container.querySelectorAll(':scope svg path')).toHaveLength(1);
 	});
 
-	it('hides the visible label and exposes it as the accessible name when iconOnly', async () => {
+	it('keeps the label in the accessibility tree but visually hides it when iconOnly, instead of relying on aria-label', async () => {
 		const { container } = await setup({ icon: 'check', iconOnly: true, label: 'Confirm' });
 
 		await expect.element(page.getByRole('button', { name: 'Confirm' })).toBeVisible();
-		expect(container.querySelector(':scope button > span')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button')).not.toHaveAttribute('aria-label');
+		expect(labelSpan(container)).toHaveClass('visually-hidden');
 	});
 
-	it('omits aria-label when not iconOnly', async () => {
-		await setup();
+	it('keeps the label visible (not visually-hidden) when not iconOnly', async () => {
+		const { container } = await setup();
 
-		await expect.element(page.getByRole('button')).not.toHaveAttribute('aria-label');
+		expect(labelSpan(container)).not.toHaveClass('visually-hidden');
 	});
 
 	it('is disabled and marked aria-busy when loading', async () => {
