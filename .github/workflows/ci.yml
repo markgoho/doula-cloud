@@ -63,9 +63,26 @@ jobs:
       # the CI-provable half of "goose is set up for api/" (see
       # scripts/migrate.sh for the Cloud SQL Auth Proxy half, which needs
       # a real instance CI doesn't have).
+      #
+      # go-test-action runs `go test -json` itself and renders the result
+      # as a per-package job summary with failures annotated inline --
+      # mirroring the Vitest job summary the app job already gets for
+      # free from Vitest's built-in GitHub Actions reporter. -coverprofile
+      # is passed through testArguments so coverage.out is produced
+      # exactly as before for the covcheck gate below; `cover: true` just
+      # tells the action to render the coverage column (it detects the
+      # -coverprofile flag already in testArguments and skips appending
+      # its own -cover, per the action's docs). -json only changes how
+      # `go test`'s own output is framed; it isn't one of the flags
+      # forwarded to the test binary that Go's test cache keys on
+      # (-coverprofile is on that cacheable list), so cached results from
+      # unchanged packages still short-circuit as before.
       - name: Test
-        working-directory: api
-        run: go test ./... -coverprofile=coverage.out
+        uses: robherley/go-test-action@v1
+        with:
+          moduleDirectory: api
+          testArguments: '-coverprofile=coverage.out ./...'
+          cover: true
 
       - name: Enforce 100% line coverage
         working-directory: api
