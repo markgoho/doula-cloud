@@ -9,7 +9,7 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // own Vitest coverage, but this is the only test that renders the actual route and hits the real
 // API, proving signup's seeded defaults, add/save, and the plan-type switch all work together.
 test('Practice Owner can view seeded plan templates and add/save a field', async ({ page, request }) => {
-	const email = `plan-templates-${Date.now()}@example.com`;
+	const email = `plan-templates-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
 	const signUp = await request.post(

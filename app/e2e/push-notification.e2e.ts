@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { seedClientPortalUser } from './stack';
 
-// The Firebase Auth emulator and the Go BFF container -- see
-// e2e/global-setup.ts and compose.e2e.yaml for how these get started.
+// The Firebase Auth emulator and the Go BFF -- both host processes -- see
+// e2e/global-setup.ts and e2e/stack.ts for how these get started.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -25,8 +25,10 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	request,
 	context
 }) => {
-	const staffEmail = `staff-${Date.now()}@example.com`;
-	const clientEmail = `client-${Date.now()}@example.com`;
+	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
+	// millisecond-only uniqueness collides across parallel workers.
+	const staffEmail = `staff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
 	// Provision a Practice + Staff (owner), a Client + Engagement at that
@@ -37,7 +39,7 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
 		{ data: { email: staffEmail, password, returnSecureToken: true } }
 	);
-	expect(staffSignUp.ok()).toBe(true);
+	expect(staffSignUp.ok(), `staffSignUp failed: ${staffSignUp.status()} ${await staffSignUp.text()}`).toBe(true);
 	const { idToken: staffIdToken } = await staffSignUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {

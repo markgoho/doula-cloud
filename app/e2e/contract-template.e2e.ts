@@ -9,7 +9,7 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // their own Vitest coverage, but this is the only test that renders the actual route and hits the real
 // API, proving signup's seeded default and edit/save work together.
 test('Practice Owner can view the seeded contract template and edit/save it', async ({ page, request }) => {
-	const email = `contract-template-${Date.now()}@example.com`;
+	const email = `contract-template-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
 	const signUp = await request.post(

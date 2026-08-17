@@ -15,15 +15,17 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	page,
 	request
 }) => {
-	const staffEmail = `staff-${Date.now()}@example.com`;
-	const clientEmail = `client-${Date.now()}@example.com`;
+	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
+	// millisecond-only uniqueness collides across parallel workers.
+	const staffEmail = `staff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
 	const staffSignUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
 		{ data: { email: staffEmail, password, returnSecureToken: true } }
 	);
-	expect(staffSignUp.ok()).toBe(true);
+	expect(staffSignUp.ok(), `staffSignUp failed: ${staffSignUp.status()} ${await staffSignUp.text()}`).toBe(true);
 	const { idToken: staffIdToken } = await staffSignUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {

@@ -1,13 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 
-// The Firebase Auth emulator and the Go BFF container -- see
-// e2e/global-setup.ts and compose.e2e.yaml for how these get started.
+// The Firebase Auth emulator and the Go BFF -- both host processes -- see
+// e2e/global-setup.ts and e2e/stack.ts for how these get started.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 test('Staff login lands on their practice-scoped URL', async ({ page, request }) => {
-	const email = `staff-${Date.now()}@example.com`;
+	// The random suffix (not just Date.now(), millisecond-resolution) avoids
+	// EMAIL_EXISTS collisions with other *.e2e.ts files' own staff-<ts>@
+	// emails when Playwright's parallel workers start within the same
+	// millisecond of each other -- confirmed as a real, intermittent
+	// failure across this suite, not a theoretical one.
+	const email = `staff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
 	// Provision the account and Practice directly against the emulator and
@@ -18,7 +23,7 @@ test('Staff login lands on their practice-scoped URL', async ({ page, request })
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
 		{ data: { email, password, returnSecureToken: true } }
 	);
-	expect(signUp.ok()).toBe(true);
+	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
