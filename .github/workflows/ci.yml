@@ -345,6 +345,12 @@ jobs:
     if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Own concurrency group, no cancel-in-progress -- overrides the
+    # workflow-level group above, which would otherwise let a second quick
+    # trunk push cancel a migration mid-run against the real instance.
+    # Matches firebase-hosting-merge.yml's rationale for the same problem.
+    concurrency:
+      group: migrate-${{ github.ref }}
     permissions:
       contents: read
       id-token: write
