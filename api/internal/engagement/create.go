@@ -8,11 +8,13 @@ package engagement
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -79,6 +81,25 @@ func CreateHandler() http.Handler {
 			`INSERT INTO engagements (id, client_id, practice_id, status) VALUES ($1, $2, $3, $4)`,
 			engagementID, clientID, practiceID, intakeStatus,
 		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// Runs after the Engagement insert, not before: the consumption
+		// row's consumed_engagement_id FK requires the Engagement to
+		// already exist. On ErrNoCreditsRemaining, staffauth.Middleware's
+		// deferred tx.Commit() would otherwise still persist the Client
+		// and Engagement just written above, so this is the one handler
+		// in the codebase that must roll back explicitly before
+		// responding -- Middleware's later Commit() then fails harmlessly
+		// against an already-done tx.
+		if err := billing.ConsumeCredit(r.Context(), tx, practiceID, engagementID); err != nil {
+			if errors.Is(err, billing.ErrNoCreditsRemaining) {
+				_ = tx.Rollback()
+				http.Error(w, "no credits remaining, ask a Practice Owner to buy more", http.StatusPaymentRequired)
+				return
+			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return

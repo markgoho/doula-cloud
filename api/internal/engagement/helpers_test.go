@@ -58,6 +58,19 @@ func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID st
 	}
 }
 
+// seedSignupBonus grants practiceID the same +3 signup-bonus credit_ledger
+// row staffauth.signup writes for a real Practice, giving CreateHandler
+// tests a balance to spend without going through the signup flow.
+func seedSignupBonus(t *testing.T, db *testdb.DB, practiceID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3)`,
+		practiceID,
+	); err != nil {
+		t.Fatalf("seed signup bonus: %v", err)
+	}
+}
+
 // seedStaffWithMembership inserts a new Practice plus a Staff member at
 // it, via seedStaffAtPractice.
 func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {

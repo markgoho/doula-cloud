@@ -3,6 +3,7 @@ package engagement_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -98,6 +99,7 @@ func TestCreateHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-creating"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
+	seedSignupBonus(t, db, practiceID)
 
 	srv := newServer(fakeVerifier{uid: identityUID}, db)
 	defer srv.Close()
@@ -128,6 +130,169 @@ func TestCreateHandler_Success(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].ClientID != out.ClientID {
 		t.Fatalf("expected the created client to appear in the list, got %+v", list)
+	}
+
+	var consumptionCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM credit_ledger WHERE practice_id = $1 AND origin = 'consumption'`,
+		practiceID,
+	).Scan(&consumptionCount); err != nil {
+		t.Fatalf("count consumption rows: %v", err)
+	}
+	if consumptionCount != 1 {
+		t.Fatalf("consumption row count = %d, want exactly 1", consumptionCount)
+	}
+
+	var origin string
+	var quantity int
+	var consumedEngagementID string
+	err = db.Admin.QueryRowContext(t.Context(),
+		`SELECT origin, quantity, consumed_engagement_id FROM credit_ledger WHERE practice_id = $1 AND origin = 'consumption'`,
+		practiceID,
+	).Scan(&origin, &quantity, &consumedEngagementID)
+	if err != nil {
+		t.Fatalf("query consumption row: %v", err)
+	}
+	if origin != "consumption" || quantity != -1 || consumedEngagementID != out.EngagementID {
+		t.Fatalf("consumption row = (%q, %d, %q), want (\"consumption\", -1, %q)", origin, quantity, consumedEngagementID, out.EngagementID)
+	}
+}
+
+// TestCreateHandler_NoCreditsReturnsPaymentRequired proves a Practice with
+// a zero balance is rejected with 402 and that the Client/Engagement rows
+// written earlier in the same handler are rolled back, not left orphaned.
+func TestCreateHandler_NoCreditsReturnsPaymentRequired(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-broke"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+
+	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	defer srv.Close()
+
+	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Broke Client", Email: "broke@example.com"})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusPaymentRequired)
+	}
+
+	var clientCount, engagementCount, ledgerCount int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM clients`).Scan(&clientCount); err != nil {
+		t.Fatalf("count clients: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements WHERE practice_id = $1`, practiceID).Scan(&engagementCount); err != nil {
+		t.Fatalf("count engagements: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM credit_ledger WHERE practice_id = $1`, practiceID).Scan(&ledgerCount); err != nil {
+		t.Fatalf("count credit_ledger: %v", err)
+	}
+	if clientCount != 0 || engagementCount != 0 || ledgerCount != 0 {
+		t.Fatalf("rows survived rollback: clients=%d engagements=%d credit_ledger=%d, want all 0", clientCount, engagementCount, ledgerCount)
+	}
+}
+
+// TestCreateHandler_NegativeBalanceReturnsPaymentRequired proves the
+// "zero-or-negative balance" half of the AC that a zero balance alone
+// doesn't exercise: a Practice whose ledger nets negative (e.g. a refunded
+// purchase clawed back credits already spent) is blocked the same way.
+func TestCreateHandler_NegativeBalanceReturnsPaymentRequired(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-negative-balance"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', -1)`,
+		practiceID,
+	); err != nil {
+		t.Fatalf("seed negative balance: %v", err)
+	}
+
+	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	defer srv.Close()
+
+	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Negative Client", Email: "negative@example.com"})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusPaymentRequired)
+	}
+
+	var clientCount, engagementCount, ledgerCount int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM clients`).Scan(&clientCount); err != nil {
+		t.Fatalf("count clients: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements WHERE practice_id = $1`, practiceID).Scan(&engagementCount); err != nil {
+		t.Fatalf("count engagements: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM credit_ledger WHERE practice_id = $1`, practiceID).Scan(&ledgerCount); err != nil {
+		t.Fatalf("count credit_ledger: %v", err)
+	}
+	if clientCount != 0 || engagementCount != 0 || ledgerCount != 1 {
+		t.Fatalf("rows after rollback: clients=%d engagements=%d credit_ledger=%d, want 0, 0, 1 (only the seeded negative row)", clientCount, engagementCount, ledgerCount)
+	}
+}
+
+// TestCreateHandler_SequenceExhaustsFreeCreditsThenFails proves a fresh
+// Practice's 3 signup-bonus credits allow exactly 3 Engagement creations,
+// and that a 4th fails with 402 and writes no new rows.
+func TestCreateHandler_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-sequence"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	seedSignupBonus(t, db, practiceID)
+
+	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	defer srv.Close()
+
+	for i := range 3 {
+		body, err := json.Marshal(engagement.CreateClientRequest{Name: "Client", Email: fmt.Sprintf("client%d@example.com", i)})
+		if err != nil {
+			t.Fatalf("marshal body %d: %v", i, err)
+		}
+		resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("create %d status = %d, want %d", i+1, resp.StatusCode, http.StatusCreated)
+		}
+	}
+
+	var engagementCount int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements WHERE practice_id = $1`, practiceID).Scan(&engagementCount); err != nil {
+		t.Fatalf("count engagements: %v", err)
+	}
+	if engagementCount != 3 {
+		t.Fatalf("engagement count after 3 creates = %d, want 3", engagementCount)
+	}
+
+	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Fourth Client", Email: "fourth@example.com"})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("4th create status = %d, want %d", resp.StatusCode, http.StatusPaymentRequired)
+	}
+
+	var clientCount, ledgerCount int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM engagements WHERE practice_id = $1`, practiceID).Scan(&engagementCount); err != nil {
+		t.Fatalf("count engagements after 4th: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM clients`).Scan(&clientCount); err != nil {
+		t.Fatalf("count clients after 4th: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM credit_ledger WHERE practice_id = $1`, practiceID).Scan(&ledgerCount); err != nil {
+		t.Fatalf("count credit_ledger after 4th: %v", err)
+	}
+	if engagementCount != 3 || clientCount != 3 || ledgerCount != 4 {
+		t.Fatalf("row counts after failed 4th create: engagements=%d clients=%d credit_ledger=%d, want 3, 3, 4 (bonus + 3 consumptions, no new rows)", engagementCount, clientCount, ledgerCount)
 	}
 }
 
