@@ -23,6 +23,8 @@
 	   darker token instead (#99). */
 	--color-input-border: oklch(60% 0.02 320);
 	--color-error: oklch(45% 0.19 25);
+	--color-status: oklch(45% 0.15 145);
+	--color-info: oklch(45% 0.15 250);
 
 	/* Typography */
 	--font-family-base: system-ui, sans-serif;
@@ -69,6 +71,8 @@
 		--color-accent-contrast: oklch(18% 0.02 325);
 		--color-input-border: oklch(55% 0.02 320);
 		--color-error: oklch(72% 0.19 25);
+		--color-status: oklch(72% 0.15 145);
+		--color-info: oklch(72% 0.15 250);
 	}
 }
 
@@ -84,4 +88,6 @@
 	--color-accent-contrast: oklch(18% 0.02 325);
 	--color-input-border: oklch(55% 0.02 320);
 	--color-error: oklch(72% 0.19 25);
+	--color-status: oklch(72% 0.15 145);
+	--color-info: oklch(72% 0.15 250);
 }

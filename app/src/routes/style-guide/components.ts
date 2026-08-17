@@ -3,6 +3,7 @@ export const atomPages = [
 	{ name: 'Checkbox', slug: 'checkbox' },
 	{ name: 'Icon', slug: 'icon' },
 	{ name: 'Link', slug: 'link' },
+	{ name: 'Notice', slug: 'notice' },
 	{ name: 'Select', slug: 'select' },
 	{ name: 'Text input', slug: 'text-input' }
 ] as const;
