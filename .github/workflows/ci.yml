@@ -5,12 +5,21 @@ on:
     branches: [trunk]
   pull_request:
 
-# A new push to the same branch/PR cancels whatever CI run is still in
-# flight for it, so trunk pushed in quick succession (e.g. a fix-up
-# commit) don't queue up redundant runs of a superseded commit.
+# A new push to the same PR cancels whatever CI run is still in flight for
+# it, so a PR pushed in quick succession (e.g. a fix-up commit) doesn't
+# queue up a redundant run of a superseded commit.
+#
+# cancel-in-progress is false for push (trunk), never true -- confirmed
+# experimentally that a workflow-level cancel-in-progress cancels the
+# *entire* prior run, including jobs like `migrate`/`deploy-api`/
+# `deploy-app` that declare their own, differently-named `concurrency:`
+# group below. Those job-level groups are not immunity from this
+# workflow-level cancellation; they only serialize against each other.
+# So trunk must never set cancel-in-progress here, or a quick second
+# trunk push can cancel an in-flight migration or live deploy mid-run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   actionlint:
@@ -345,10 +354,11 @@ jobs:
     if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Own concurrency group, no cancel-in-progress -- overrides the
-    # workflow-level group above, which would otherwise let a second quick
-    # trunk push cancel a migration mid-run against the real instance.
-    # Matches firebase-hosting-merge.yml's rationale for the same problem.
+    # Own concurrency group -- the actual protection from a second quick
+    # trunk push cancelling a migration mid-run is the workflow-level
+    # cancel-in-progress: false for push above; this group additionally
+    # serializes migrate runs against each other rather than letting two
+    # queue in undefined order.
     concurrency:
       group: migrate-${{ github.ref }}
     permissions:
@@ -424,10 +434,10 @@ jobs:
     if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Own concurrency group, no cancel-in-progress -- same rationale as
-    # `migrate` above: a second quick trunk push must not cancel a deploy
-    # that ran after a migration already succeeded, which would leave prod
-    # schema ahead of prod code.
+    # Own concurrency group -- serializes deploy-api runs against each
+    # other; the actual protection from cancellation mid-deploy is the
+    # workflow-level cancel-in-progress: false for push above (see its
+    # comment). Same rationale as `migrate`.
     concurrency:
       group: deploy-api-${{ github.ref }}
     permissions:
@@ -502,9 +512,10 @@ jobs:
     if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Own concurrency group, no cancel-in-progress -- same rationale as
-    # `migrate`/`deploy-api` above: a second quick trunk push must not
-    # cancel a live-site deploy mid-flight.
+    # Own concurrency group -- serializes deploy-app runs against each
+    # other; the actual protection from cancellation mid-deploy is the
+    # workflow-level cancel-in-progress: false for push above (see its
+    # comment). Same rationale as `migrate`/`deploy-api`.
     concurrency:
       group: deploy-app-${{ github.ref }}
     permissions:

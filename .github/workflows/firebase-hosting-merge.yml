@@ -12,9 +12,12 @@ permissions:
   id-token: write
   packages: read
 
-# No cancel-in-progress, unlike ci.yml's group -- this is a live-site
-# deploy, and two quick hugo/** pushes must apply in order, not have the
-# first one cancelled mid-deploy by the second.
+# No cancel-in-progress -- this is a live-site deploy, and two quick
+# hugo/** pushes must apply in order, not have the first one cancelled
+# mid-deploy by the second. (ci.yml's push-triggered jobs now make the
+# same choice, after confirming experimentally that a job's own
+# concurrency group doesn't protect it from a cancel-in-progress: true
+# set anywhere in the same run.)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
