@@ -5,6 +5,11 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	let email = $state('');
 	let password = $state('');
@@ -45,17 +50,35 @@
 <h1>Log in</h1>
 
 <form onsubmit={handleSubmit}>
-	<label>
-		Email
-		<input type="email" bind:value={email} required />
-	</label>
-	<label>
-		Password
-		<input type="password" bind:value={password} required />
-	</label>
-	<button type="submit" disabled={isSubmitting}>Log in</button>
+	<LabeledField label="Email">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				type="email"
+				value={email}
+				onInput={(value) => (email = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Password">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				type="password"
+				value={password}
+				onInput={(value) => (password = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<Button type="submit" label="Log in" loading={isSubmitting} />
 	{#if error}
-		<p role="alert">{error}</p>
+		<Notice variant="error" message={error} />
 	{/if}
 </form>
 
@@ -67,9 +90,10 @@
 		<ul>
 			{#each picker as membership (membership.practiceId)}
 				<li>
-					<a href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}>
-						{membership.practiceName}
-					</a>
+					<Link
+						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
+						label={membership.practiceName}
+					/>
 				</li>
 			{/each}
 		</ul>

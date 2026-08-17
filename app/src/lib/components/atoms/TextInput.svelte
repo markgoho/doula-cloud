@@ -11,7 +11,8 @@
 		required = false,
 		disabled = false,
 		invalid = false,
-		describedBy
+		describedBy,
+		minlength
 	}: {
 		id?: string;
 		value: string;
@@ -23,6 +24,7 @@
 		disabled?: boolean;
 		invalid?: boolean;
 		describedBy?: string;
+		minlength?: number;
 	} = $props();
 </script>
 
@@ -34,6 +36,7 @@
 	{placeholder}
 	{required}
 	{disabled}
+	{minlength}
 	class:invalid
 	aria-invalid={invalid}
 	aria-describedby={describedBy}

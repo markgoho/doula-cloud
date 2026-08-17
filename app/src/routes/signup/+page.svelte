@@ -4,6 +4,10 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	let practiceName = $state('');
 	let staffName = $state('');
@@ -43,24 +47,59 @@
 <h1>Sign up your Practice</h1>
 
 <form onsubmit={handleSubmit}>
-	<label>
-		Practice name
-		<input type="text" bind:value={practiceName} required />
-	</label>
-	<label>
-		Your name
-		<input type="text" bind:value={staffName} required />
-	</label>
-	<label>
-		Email
-		<input type="email" bind:value={email} required />
-	</label>
-	<label>
-		Password
-		<input type="password" bind:value={password} required minlength="6" />
-	</label>
-	<button type="submit" disabled={isSubmitting}>Create Practice</button>
+	<LabeledField label="Practice name">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				value={practiceName}
+				onInput={(value) => (practiceName = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Your name">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				value={staffName}
+				onInput={(value) => (staffName = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Email">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				type="email"
+				value={email}
+				onInput={(value) => (email = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Password">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				type="password"
+				value={password}
+				onInput={(value) => (password = value)}
+				required
+				minlength={6}
+			/>
+		{/snippet}
+	</LabeledField>
+	<Button type="submit" label="Create Practice" loading={isSubmitting} />
 	{#if error}
-		<p role="alert">{error}</p>
+		<Notice variant="error" message={error} />
 	{/if}
 </form>

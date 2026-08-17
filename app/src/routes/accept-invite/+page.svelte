@@ -6,6 +6,11 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 
@@ -66,28 +71,49 @@
 <h1>Accept your Staff invite</h1>
 
 {#if !inviteToken}
-	<p role="alert">Missing invite token</p>
+	<Notice variant="error" message="Missing invite token" />
 {:else}
 	<form onsubmit={handleSubmit}>
-		<label>
-			Email
-			<input type="email" bind:value={email} required />
-		</label>
-		<label>
-			Password
-			<input type="password" bind:value={password} required minlength="6" />
-		</label>
-		<label>
-			<input type="radio" name="mode" value="signup" bind:group={mode} />
-			I'm new here -- create an account
-		</label>
-		<label>
-			<input type="radio" name="mode" value="login" bind:group={mode} />
-			I already have an account -- log in
-		</label>
-		<button type="submit" disabled={isSubmitting}>Accept invite</button>
+		<LabeledField label="Email">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField label="Password">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					value={password}
+					onInput={(value) => (password = value)}
+					required
+					minlength={6}
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField label="I'm new here -- create an account" orientation="inline">
+			{#snippet children({ id })}
+				<input type="radio" {id} name="mode" value="signup" bind:group={mode} />
+			{/snippet}
+		</LabeledField>
+		<LabeledField label="I already have an account -- log in" orientation="inline">
+			{#snippet children({ id })}
+				<input type="radio" {id} name="mode" value="login" bind:group={mode} />
+			{/snippet}
+		</LabeledField>
+		<Button type="submit" label="Accept invite" loading={isSubmitting} />
 		{#if error}
-			<p role="alert">{error}</p>
+			<Notice variant="error" message={error} />
 		{/if}
 	</form>
 {/if}
@@ -97,9 +123,10 @@
 	<ul>
 		{#each picker as membership (membership.practiceId)}
 			<li>
-				<a href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}>
-					{membership.practiceName}
-				</a>
+				<Link
+					href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
+					label={membership.practiceName}
+				/>
 			</li>
 		{/each}
 	</ul>

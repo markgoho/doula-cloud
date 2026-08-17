@@ -75,6 +75,18 @@ describe('TextInput.svelte', () => {
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('required');
 	});
 
+	it('reflects minlength', async () => {
+		await setup({ minlength: 6 });
+
+		await expect.element(page.getByRole('textbox')).toHaveAttribute('minlength', '6');
+	});
+
+	it('omits minlength when not provided', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('minlength');
+	});
+
 	it('sets aria-invalid=false by default', async () => {
 		await setup();
 
