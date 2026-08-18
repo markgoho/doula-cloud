@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { apiBaseURL, apiFetch } from './api';
+import { apiBaseURL, apiErrorMessage, apiFetch } from './api';
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
@@ -22,5 +22,22 @@ describe('apiFetch', () => {
 		);
 
 		vi.unstubAllGlobals();
+	});
+});
+
+describe('apiErrorMessage', () => {
+	it('extracts message from an APIError JSON body', async () => {
+		const response = Response.json({ code: 'CONFLICT', message: 'already invited' });
+		await expect(apiErrorMessage(response)).resolves.toBe('already invited');
+	});
+
+	it('returns the raw body for a plain-text error', async () => {
+		const response = new Response('only a Practice Owner can do that');
+		await expect(apiErrorMessage(response)).resolves.toBe('only a Practice Owner can do that');
+	});
+
+	it('returns the raw body for JSON with no message field', async () => {
+		const response = Response.json({ code: 'CONFLICT' });
+		await expect(apiErrorMessage(response)).resolves.toBe('{"code":"CONFLICT"}');
 	});
 });

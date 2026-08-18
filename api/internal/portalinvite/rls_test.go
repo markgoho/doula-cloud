@@ -173,6 +173,49 @@ func TestRLS_ClientPortalUsersInviteUpdateCannotTouchAcceptedRow(t *testing.T) {
 	}
 }
 
+// TestRLS_ClientPortalUsersInviteUpdateCannotTouchCrossPracticeRow proves
+// the rotation door is scoped to the caller's own Practice, not any
+// pending row -- the same cross-Practice check invite_insert gets, applied
+// to the update door too.
+func TestRLS_ClientPortalUsersInviteUpdateCannotTouchCrossPracticeRow(t *testing.T) {
+	db := testdb.New(t)
+	practiceA := seedPractice(t, db, "Update Cross Practice A")
+	practiceB := seedPractice(t, db, "Update Cross Practice B")
+	clientB, _ := seedClientEngagement(t, db, practiceB, "Client B", "clientb-update@example.com")
+	var rowID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+		clientB,
+	).Scan(&rowID); err != nil {
+		t.Fatalf("seed pending row for client B: %v", err)
+	}
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	result, err := tx.ExecContext(t.Context(),
+		`UPDATE client_portal_users SET invite_token = gen_random_uuid() WHERE id = $1`,
+		rowID,
+	)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		t.Fatalf("rows affected: %v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("expected client B's row to be untouched from practice A's context, got %d rows affected", rows)
+	}
+}
+
 // TestRLS_ClientPortalUsersAcceptFailsClosedWithNoInviteTokenSet proves the
 // accept-side policies deny a pending row with no app.invite_token set,
 // even though a matching row genuinely exists.
@@ -248,5 +291,37 @@ func TestRLS_ClientPortalUsersAcceptSelectSucceedsWithMatchingToken(t *testing.T
 	}
 	if gotClientID != clientID {
 		t.Fatalf("client_id = %q, want %q", gotClientID, clientID)
+	}
+}
+
+// TestRLS_ClientPortalUsersAcceptUpdateRejectsMismatchedIdentity proves
+// client_portal_users_accept_update's WITH CHECK: presenting a valid
+// invite_token isn't enough to claim a row for a different identity_uid
+// than the caller's own -- the update must be rejected even though the
+// USING clause (identity_uid IS NULL AND matching invite_token) is
+// satisfied.
+func TestRLS_ClientPortalUsersAcceptUpdateRejectsMismatchedIdentity(t *testing.T) {
+	db := testdb.New(t)
+	_, inviteToken := seedPendingPortalInvite(t, db)
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "the-real-caller"); err != nil {
+		t.Fatalf("set_config identity: %v", err)
+	}
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.invite_token', $1, true)`, inviteToken); err != nil {
+		t.Fatalf("set_config invite token: %v", err)
+	}
+
+	_, err = tx.ExecContext(t.Context(),
+		`UPDATE client_portal_users SET identity_uid = 'someone-else', invite_token = NULL WHERE invite_token = $1`,
+		inviteToken,
+	)
+	if err == nil {
+		t.Fatal("expected the update to be rejected -- identity_uid must equal the caller's own app.current_identity_uid")
 	}
 }

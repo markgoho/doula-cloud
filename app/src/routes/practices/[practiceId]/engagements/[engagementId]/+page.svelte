@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiErrorMessage, apiFetch } from '#lib/api.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/PlanInstanceForm.svelte';
 	import {
@@ -430,7 +430,7 @@
 
 			const response = await apiFetch(portalInviteURL(), idToken, { method: 'POST' });
 			if (!response.ok) {
-				portalInviteError = await response.text();
+				portalInviteError = await apiErrorMessage(response);
 				return;
 			}
 
