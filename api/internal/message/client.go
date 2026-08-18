@@ -63,6 +63,12 @@ func ClientListHandler() http.Handler {
 // attachment, as the calling Client into the caller's own Engagement
 // thread. On success, notifies the Practice's Staff push subscription(s)
 // (#61) before responding. Must be mounted behind clientauth.Middleware.
+//
+// Not wrapped in idempotency.Wrap (#129): idempotency_keys
+// (00027_idempotency_keys.sql) scopes a key by (practice_id, staff_id),
+// both NOT NULL -- a Client caller has neither. Wiring this endpoint would
+// need a schema change adding ClientID-scoped keys, which #129 left as a
+// follow-up rather than resolving here.
 func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, has := clientauth.Tx(r.Context())

@@ -2,16 +2,49 @@ package idempotency_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
+
+// pngBytes is a minimal valid 1x1 PNG, enough for http.DetectContentType
+// to recognize it as image/png -- mirrors message_test's constant of the
+// same name, kept as its own copy since that one is unexported.
+var pngBytes = []byte{
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+	0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+	0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+	0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+	0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+}
+
+// countingPutStore wraps a MemoryStore and counts Put calls, so a
+// multipart create-Message retry test can prove idempotency.Wrap's replay
+// skips the handler entirely -- no second object upload, not just no
+// second messages row.
+type countingPutStore struct {
+	*objectstore.MemoryStore
+	puts atomic.Int32
+}
+
+func newCountingPutStore() *countingPutStore {
+	return &countingPutStore{MemoryStore: objectstore.NewMemoryStore()}
+}
+
+func (s *countingPutStore) Put(ctx context.Context, path, contentType string, r io.Reader) error {
+	s.puts.Add(1)
+	return s.MemoryStore.Put(ctx, path, contentType, r) //nolint:wrapcheck // test double, callers expect the underlying store's raw error
+}
 
 // fakeVerifier is a test double for authn.Verifier, mirroring
 // portalinvite_test's -- real Identity Platform tokens can't be minted
@@ -115,4 +148,19 @@ func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email s
 		t.Fatalf("seed engagement: %v", err)
 	}
 	return clientID, engagementID
+}
+
+// seedPushSubscription registers a Web Push subscription for ownerType
+// ("staff" or "client") + ownerID, so notifyRecipient (message/push.go) has
+// something to deliver to -- without a row here, push.FakePusher never
+// records a call regardless of whether the handler actually ran.
+func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpoint string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key)
+		 VALUES ($1, $2, $3, 'p256dh', 'auth')`,
+		ownerType, ownerID, endpoint,
+	); err != nil {
+		t.Fatalf("seed push subscription: %v", err)
+	}
 }
