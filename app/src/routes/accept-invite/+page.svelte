@@ -11,6 +11,12 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+
+	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
+		{ value: 'signup', label: "I'm new here -- create an account" },
+		{ value: 'login', label: 'I already have an account -- log in' }
+	];
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 
@@ -101,16 +107,13 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<LabeledField label="I'm new here -- create an account" orientation="inline">
-			{#snippet children({ id })}
-				<input type="radio" {id} name="mode" value="signup" bind:group={mode} />
-			{/snippet}
-		</LabeledField>
-		<LabeledField label="I already have an account -- log in" orientation="inline">
-			{#snippet children({ id })}
-				<input type="radio" {id} name="mode" value="login" bind:group={mode} />
-			{/snippet}
-		</LabeledField>
+		<RadioGroup
+			legend="Account mode"
+			name="mode"
+			options={modeOptions}
+			value={mode}
+			onChange={(value) => (mode = value)}
+		/>
 		<Button type="submit" label="Accept invite" loading={isSubmitting} />
 		{#if error}
 			<Notice variant="error" message={error} />

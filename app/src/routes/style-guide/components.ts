@@ -9,7 +9,10 @@ export const atomPages = [
 	{ name: 'Text input', slug: 'text-input' }
 ] as const;
 
-export const moleculePages = [{ name: 'Labeled field', slug: 'labeled-field' }] as const;
+export const moleculePages = [
+	{ name: 'Labeled field', slug: 'labeled-field' },
+	{ name: 'Radio group', slug: 'radio-group' }
+] as const;
 
 export const organismPages = [
 	{ name: 'Data table', slug: 'data-table' },
