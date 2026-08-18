@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -31,7 +30,7 @@ func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.Verifie
 }
 
 func TestHelloHandler(t *testing.T) {
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/hello", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/hello", nil)
 	rec := httptest.NewRecorder()
 
 	helloHandler(rec, req)
@@ -46,33 +45,24 @@ func TestHelloHandler(t *testing.T) {
 
 // The deployed app reaches the BFF through a Firebase Hosting rewrite that
 // forwards /api/** to Cloud Run with the path unchanged, so the health probe
-// has to answer on the same /api prefix the browser uses. /hello stays
-// registered as well -- the deploy-api smoke test curls the raw Cloud Run URL.
+// has to be registered on the same /api prefix the browser uses. Body shape is
+// TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 	mux := routes(fakeVerifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	for _, path := range []string{"/hello", "/api/hello"} {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+path, nil)
-		if err != nil {
-			t.Fatalf("build request %s: %v", path, err)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request %s: %v", path, err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			t.Fatalf("read body %s: %v", path, err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s status = %d, want 200", path, resp.StatusCode)
-		}
-		if got := string(body); got != `{"message":"hello world"}`+"\n" {
-			t.Fatalf("GET %s body = %q", path, got)
-		}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/hello", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/hello status = %d, want 200", resp.StatusCode)
 	}
 }
 

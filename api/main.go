@@ -33,10 +33,14 @@ import (
 	"doula-cloud/api/internal/visit"
 )
 
+type helloResponse struct {
+	Message string `json:"message"`
+}
+
 func helloHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(map[string]string{"message": "hello world"}); err != nil {
+	if err := json.NewEncoder(w).Encode(helloResponse{Message: "hello world"}); err != nil {
 		log.Printf("helloHandler: encode response: %v", err)
 	}
 }
@@ -91,11 +95,11 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // / payments.Client doubles instead of the real ones main() wires up.
 func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret string) *http.ServeMux {
 	mux := http.NewServeMux()
-	// Both prefixes on purpose: /hello is what deploy-api's smoke test curls
-	// on the raw Cloud Run URL, /api/hello is what reaches the service through
-	// the Firebase Hosting /api/** rewrite, which forwards the path unchanged.
-	mux.HandleFunc("/hello", helloHandler)
-	mux.HandleFunc("/api/hello", helloHandler)
+	// Under /api like every other route: Firebase Hosting rewrites /api/** to
+	// this service with the path unchanged, so a bare /hello would be
+	// unreachable from the browser. CI's two smoke tests curl this same path
+	// against the container and against the raw Cloud Run URL.
+	mux.HandleFunc("GET /api/hello", helloHandler)
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(verifier, db))
 	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))

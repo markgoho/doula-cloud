@@ -312,7 +312,7 @@ jobs:
               docker logs api-smoke
               exit 1
             fi
-            if curl -fsS http://127.0.0.1:18081/hello | grep -q 'hello world'; then
+            if curl -fsS http://127.0.0.1:18081/api/hello | grep -q 'hello world'; then
               answered=true
               break
             fi
@@ -320,7 +320,7 @@ jobs:
           done
 
           if [ "$answered" != "true" ]; then
-            echo "Container never answered on /hello:"
+            echo "Container never answered on /api/hello:"
             docker logs api-smoke
             exit 1
           fi
@@ -488,12 +488,12 @@ jobs:
 
       - name: Smoke test deployed revision
         run: |
-          url="${{ steps.deploy.outputs.url }}/hello"
+          url="${{ steps.deploy.outputs.url }}/api/hello"
           if ! curl -fsS "$url" | grep -q 'hello world'; then
-            echo "Deployed revision did not answer on /hello"
+            echo "Deployed revision did not answer on /api/hello"
             exit 1
           fi
-          echo "Deployed revision answered on /hello."
+          echo "Deployed revision answered on /api/hello."
 
   # Was a standalone workflow (firebase-hosting-app-merge.yml) triggered by
   # its own push+paths filter, so it ran as a separate Actions run with no
@@ -550,30 +550,40 @@ jobs:
       - name: Smoke test deployed site
         run: |
           site=$(bun -e "const c = JSON.parse(require('fs').readFileSync('./.firebaserc', 'utf8')); console.log(c.targets['doula-cloud'].hosting.app[0])")
-          url="https://${site}.web.app/"
-          if ! curl -fsS "$url" | grep -q 'manifest.webmanifest'; then
-            echo "Deployed app/ site ($url) did not serve the expected build output"
-            exit 1
-          fi
-          echo "Deployed app/ site ($url) answered with the expected build output."
+          origin="https://${site}.web.app"
 
-          # The SPA fallback must still catch app routes that have no file of
-          # their own, now that a rule sits ahead of it in firebase.json.
-          deep="https://${site}.web.app/practices"
-          if ! curl -fsS "$deep" | grep -q 'manifest.webmanifest'; then
-            echo "Deployed app/ site did not serve the SPA shell for $deep"
-            exit 1
-          fi
-          echo "SPA fallback still serves $deep."
+          # `firebase deploy` returns before the new release has reached every
+          # edge, so a check that curls immediately can still be answered by the
+          # previous release -- which passes for behaviour both releases share
+          # and fails only for whatever this deploy changed. Retry the whole set
+          # until the edge catches up. reason=... is set by the failing check so
+          # the timeout message names what never converged.
+          check() {
+            reason="/ did not serve the expected build output"
+            curl -fsS "$origin/" | grep -q 'manifest.webmanifest' || return 1
 
-          # /api/** must reach the doula-api Cloud Run service instead of the
-          # SPA fallback. Deliberately asserts "not the SPA shell" rather than a
-          # 200: deploy-api runs in parallel with this job, so a brand-new BFF
-          # route can legitimately still be a 404 here. What must never happen
-          # is Hosting answering an /api path with the app shell.
-          body=$(curl -sS "https://${site}.web.app/api/hello")
-          if grep -q 'manifest.webmanifest' <<<"$body"; then
-            echo "Hosting served the SPA shell for /api/hello -- the /api/** rewrite is missing or ordered after the ** fallback"
-            exit 1
-          fi
-          echo "/api/hello is routed past the SPA fallback: $body"
+            # The SPA fallback must still catch app routes that have no file of
+            # their own, now that a rule sits ahead of it in firebase.json.
+            reason="/practices did not get the SPA shell"
+            curl -fsS "$origin/practices" | grep -q 'manifest.webmanifest' || return 1
+
+            # /api/** must reach the doula-api Cloud Run service, not the SPA
+            # fallback -- the rewrite is missing, ordered after the ** fallback,
+            # or the service is unreachable. deploy-api runs in parallel with
+            # this job, so this proves the *rewrite*, not the freshness of the
+            # revision behind it; /api/hello is a permanent BFF route, so a
+            # non-200 is a real failure however the two jobs interleave.
+            reason="/api/hello did not reach the BFF through the /api/** rewrite"
+            curl -fsS "$origin/api/hello" | grep -q 'hello world' || return 1
+          }
+
+          for attempt in $(seq 1 30); do
+            if check; then
+              echo "Deployed app/ site ($origin) passed all smoke checks on attempt $attempt."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Deployed app/ site ($origin) never converged: $reason"
+          exit 1
