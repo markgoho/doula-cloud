@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
@@ -47,7 +48,7 @@ func TestClientCreateHandler_Success(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(message.CreateRequest{Body: "Question about my next visit."})
@@ -77,7 +78,7 @@ func TestClientCreateHandler_EmptyBodyRejected(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "   "})
@@ -96,7 +97,7 @@ func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPost(t, srv.URL+"/portal/engagements/"+engagementID+"/messages", []byte("not json"))
@@ -122,7 +123,7 @@ func TestClientCreateHandler_NotLinkedToClientForbidden(t *testing.T) {
 	unrelatedClientID, _ := seedClientEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
 	seedPortalUser(t, db, "client-elsewhere", unrelatedClientID)
 
-	srv := newPortalServer(fakeVerifier{uid: "client-elsewhere"}, db)
+	srv := newPortalServer(authntest.Verifier{UID: "client-elsewhere"}, db)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "trying to post anyway"})
@@ -141,7 +142,7 @@ func TestClientListHandler_EmptyThread(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/portal/engagements/"+engagementID+"/messages")
@@ -166,7 +167,7 @@ func TestClientListHandler_InvalidCursorRejected(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/portal/engagements/"+engagementID+"/messages?cursor=not!valid!base64!")
@@ -193,7 +194,7 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 		seedMessage(t, db, engagementID, "client", clientID, "message "+string(rune('A'+i%26)))
 	}
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	firstResp := authedGet(t, srv.URL+"/portal/engagements/"+engagementID+"/messages")
@@ -236,7 +237,7 @@ func TestClientListHandler_NotLinkedToClientForbidden(t *testing.T) {
 	unrelatedClientID, _ := seedClientEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
 	seedPortalUser(t, db, "client-listing-elsewhere", unrelatedClientID)
 
-	srv := newPortalServer(fakeVerifier{uid: "client-listing-elsewhere"}, db)
+	srv := newPortalServer(authntest.Verifier{UID: "client-listing-elsewhere"}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/portal/engagements/"+engagementID+"/messages")
@@ -266,9 +267,9 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUIDClient, clientID)
 
-	staffSrv := newServer(fakeVerifier{uid: identityUIDStaff}, db)
+	staffSrv := newServer(authntest.Verifier{UID: identityUIDStaff}, db)
 	defer staffSrv.Close()
-	portalSrv := newPortalServer(fakeVerifier{uid: identityUIDClient}, db)
+	portalSrv := newPortalServer(authntest.Verifier{UID: identityUIDClient}, db)
 	defer portalSrv.Close()
 
 	staffBody, _ := json.Marshal(message.CreateRequest{Body: bodyFromStaff})
@@ -326,7 +327,7 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedMultipartPost(t, srv.URL+"/portal/engagements/"+engagementID+"/messages",
@@ -366,7 +367,7 @@ func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/portal/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
@@ -385,7 +386,7 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 	ownerClientID, engagementID := seedClientEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
 	seedPortalUser(t, db, "client-owner-of-thread", ownerClientID)
 
-	ownerSrv := newPortalServer(fakeVerifier{uid: "client-owner-of-thread"}, db)
+	ownerSrv := newPortalServer(authntest.Verifier{UID: "client-owner-of-thread"}, db)
 	defer ownerSrv.Close()
 	createResp := authedMultipartPost(t, ownerSrv.URL+"/portal/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
@@ -398,7 +399,7 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 	unrelatedClientID, _ := seedClientEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
 	seedPortalUser(t, db, "client-elsewhere-dl", unrelatedClientID)
 
-	unrelatedSrv := newPortalServer(fakeVerifier{uid: "client-elsewhere-dl"}, db)
+	unrelatedSrv := newPortalServer(authntest.Verifier{UID: "client-elsewhere-dl"}, db)
 	defer unrelatedSrv.Close()
 
 	resp := authedGet(t, unrelatedSrv.URL+"/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")

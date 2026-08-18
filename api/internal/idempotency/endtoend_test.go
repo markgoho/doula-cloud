@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
@@ -31,7 +32,7 @@ func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(fakeVerifier{uid: identityUID}, db.App)(idempotency.Wrap(portalinvite.InviteHandler())))
+		staffauth.Middleware(authntest.Verifier{UID: identityUID}, db.App)(idempotency.Wrap(portalinvite.InviteHandler())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -102,7 +103,7 @@ func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(fakeVerifier{uid: identityUID}, db.App)(idempotency.Wrap(engagement.CreateHandler())))
+		staffauth.Middleware(authntest.Verifier{UID: identityUID}, db.App)(idempotency.Wrap(engagement.CreateHandler())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -199,7 +200,7 @@ func TestEndToEnd_MessageCreateNoDuplicateRowOnRetry(t *testing.T) {
 	pusher := push.NewFakePusher()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(fakeVerifier{uid: identityUID}, db.App)(
+		staffauth.Middleware(authntest.Verifier{UID: identityUID}, db.App)(
 			idempotency.Wrap(message.CreateHandler(objectstore.NewMemoryStore(), pusher))))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -308,7 +309,7 @@ func TestEndToEnd_InviteNoDuplicateRowOnRetry(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/invitations",
-		staffauth.Middleware(fakeVerifier{uid: identityUID}, db.App)(idempotency.Wrap(staffauth.InviteHandler())))
+		staffauth.Middleware(authntest.Verifier{UID: identityUID}, db.App)(idempotency.Wrap(staffauth.InviteHandler())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -416,7 +417,7 @@ func TestEndToEnd_MessageCreateMultipartNoDuplicateUploadOnRetry(t *testing.T) {
 	store := newCountingPutStore()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(fakeVerifier{uid: identityUID}, db.App)(
+		staffauth.Middleware(authntest.Verifier{UID: identityUID}, db.App)(
 			idempotency.Wrap(message.CreateHandler(store, push.NewFakePusher()))))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

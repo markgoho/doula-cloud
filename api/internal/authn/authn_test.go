@@ -1,27 +1,15 @@
 package authn_test
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
 )
-
-type fakeVerifier struct {
-	uid string
-	err error
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 func TestBearerToken(t *testing.T) {
 	tests := []struct {
@@ -58,7 +46,7 @@ func TestBegin_MissingBearerToken(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 
-	tx, uid, ok := authn.Begin(rec, req, fakeVerifier{}, nil)
+	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{}, nil)
 	if ok {
 		t.Fatalf("expected ok=false, got true (tx=%v, uid=%q)", tx, uid)
 	}
@@ -75,7 +63,7 @@ func TestBegin_InvalidToken(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer invalid-token")
 
-	tx, uid, ok := authn.Begin(rec, req, fakeVerifier{err: errors.New("bad token")}, nil)
+	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{Err: errors.New("bad token")}, nil)
 	if ok {
 		t.Fatalf("expected ok=false, got true (tx=%v, uid=%q)", tx, uid)
 	}
@@ -93,7 +81,7 @@ func TestBegin_Success(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
 
-	tx, uid, ok := authn.Begin(rec, req, fakeVerifier{uid: "test-uid"}, db.App)
+	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{UID: "test-uid"}, db.App)
 	if !ok {
 		t.Fatalf("expected ok=true, got false")
 	}

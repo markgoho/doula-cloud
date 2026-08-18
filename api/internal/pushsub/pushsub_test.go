@@ -2,29 +2,18 @@ package pushsub_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/pushsub"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier -- see staffauth's own
-// middleware_test.go for why: real Identity Platform tokens can't be
-// minted without a live GCP project.
-type fakeVerifier struct {
-	uid string
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 // newStaffServer mounts the same push-subscription routes main.go wires
 // up for the Staff population, behind staffauth.Middleware.
@@ -89,7 +78,7 @@ func TestRegisterHandler_Success(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newStaffServer(fakeVerifier{uid: identityUID}, db)
+	srv := newStaffServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/staff-device"
@@ -113,7 +102,7 @@ func TestRegisterHandler_ReregisterSameEndpointUpserts(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newStaffServer(fakeVerifier{uid: identityUID}, db)
+	srv := newStaffServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/staff-rotating-keys"
@@ -139,7 +128,7 @@ func TestRegisterHandler_InvalidJSONBody(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newStaffServer(fakeVerifier{uid: identityUID}, db)
+	srv := newStaffServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedRequest(t, http.MethodPost, srv.URL+"/practices/"+practiceID+"/push-subscriptions", []byte("not json"))
@@ -155,7 +144,7 @@ func TestRegisterHandler_MissingFieldsRejected(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newStaffServer(fakeVerifier{uid: identityUID}, db)
+	srv := newStaffServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, _ := json.Marshal(pushsub.SubscribeRequest{})
@@ -172,7 +161,7 @@ func TestUnregisterHandler_Success(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newStaffServer(fakeVerifier{uid: identityUID}, db)
+	srv := newStaffServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/staff-leaving"
@@ -195,7 +184,7 @@ func TestUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newStaffServer(fakeVerifier{uid: identityUID}, db)
+	srv := newStaffServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedRequest(t, http.MethodDelete, srv.URL+"/practices/"+practiceID+"/push-subscriptions", nil)
@@ -216,12 +205,12 @@ func TestUnregisterHandler_CannotDeleteAnotherStaffMembersSubscription(t *testin
 	seedStaffAtPractice(t, db, practiceID, "staff-b-attacker")
 
 	const endpoint = "https://push.example.com/staff-a-device"
-	srvA := newStaffServer(fakeVerifier{uid: "staff-a-owns-sub"}, db)
+	srvA := newStaffServer(authntest.Verifier{UID: "staff-a-owns-sub"}, db)
 	defer srvA.Close()
 	regResp := authedRequest(t, http.MethodPost, srvA.URL+"/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
 	_ = regResp.Body.Close()
 
-	srvB := newStaffServer(fakeVerifier{uid: "staff-b-attacker"}, db)
+	srvB := newStaffServer(authntest.Verifier{UID: "staff-b-attacker"}, db)
 	defer srvB.Close()
 	unregResp := authedRequest(t, http.MethodDelete, srvB.URL+"/practices/"+practiceID+"/push-subscriptions?endpoint="+endpoint, nil)
 	defer unregResp.Body.Close()
@@ -240,7 +229,7 @@ func TestClientRegisterHandler_Success(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID)
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/client-device"
@@ -261,7 +250,7 @@ func TestClientRegisterHandler_InvalidJSONBody(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID)
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedRequest(t, http.MethodPost, srv.URL+"/portal/engagements/"+engagementID+"/push-subscriptions", []byte("not json"))
@@ -278,7 +267,7 @@ func TestClientUnregisterHandler_Success(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID)
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/client-leaving"
@@ -302,7 +291,7 @@ func TestClientUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID)
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedRequest(t, http.MethodDelete, srv.URL+"/portal/engagements/"+engagementID+"/push-subscriptions", nil)

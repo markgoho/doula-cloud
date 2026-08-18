@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -9,24 +8,10 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier: real Identity
-// Platform tokens can't be minted without a live GCP project, so tests
-// inject this instead of doula-cloud/api/internal/authn.FirebaseVerifier.
-type fakeVerifier struct {
-	uid string
-	err error
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 var errBadToken = errors.New("invalid token")
 
@@ -69,7 +54,7 @@ func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (s
 
 func TestMiddleware_MissingToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{}, db)
+	srv := newServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -89,7 +74,7 @@ func TestMiddleware_MissingToken(t *testing.T) {
 
 func TestMiddleware_EmptyBearerToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{}, db)
+	srv := newServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -107,7 +92,7 @@ func TestMiddleware_EmptyBearerToken(t *testing.T) {
 
 func TestMiddleware_TokenVerificationFailure(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{err: errBadToken}, db)
+	srv := newServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -125,7 +110,7 @@ func TestMiddleware_TokenVerificationFailure(t *testing.T) {
 
 func TestMiddleware_InvalidPracticeID(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{uid: someUID}, db)
+	srv := newServer(authntest.Verifier{UID: someUID}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/not-a-uuid/ping", nil)
@@ -145,7 +130,7 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 	db := testdb.New(t)
 	// A verified uid with no matching staff row: population resolution
 	// fails even though the token itself is valid.
-	srv := newServer(fakeVerifier{uid: "unknown-uid"}, db)
+	srv := newServer(authntest.Verifier{UID: "unknown-uid"}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -175,7 +160,7 @@ func TestMiddleware_NoPracticeMembership(t *testing.T) {
 		t.Fatalf("seed other practice: %v", err)
 	}
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+otherPracticeID+"/ping", nil)
@@ -196,7 +181,7 @@ func TestMiddleware_Success(t *testing.T) {
 	const identityUID = "staff-with-membership"
 	staffID, practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/ping", nil)
@@ -250,7 +235,7 @@ func TestRequireTx(t *testing.T) {
 		var gotTx *sql.Tx
 		var gotPracticeID string
 		var gotOK bool
-		h := staffauth.Middleware(fakeVerifier{uid: someUID}, db.App)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := staffauth.Middleware(authntest.Verifier{UID: someUID}, db.App)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotTx, gotPracticeID, gotOK = staffauth.RequireTx(w, r)
 		}))
 

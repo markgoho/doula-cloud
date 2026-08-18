@@ -1,7 +1,6 @@
 package engagement_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,17 +10,6 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier -- see
-// staffauth's own middleware_test.go for why: real Identity Platform
-// tokens can't be minted without a live GCP project.
-type fakeVerifier struct {
-	uid string
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 // newServer mounts the same routes main.go wires up for this package,
 // behind staffauth.Middleware.

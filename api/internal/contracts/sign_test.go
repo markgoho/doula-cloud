@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/testdb"
@@ -127,7 +128,7 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	before := time.Now().Add(-time.Minute)
@@ -180,7 +181,7 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	spoofed := `{"fullLegalName":"Jordan Client","attestation":true,"signedAt":"1999-01-01T00:00:00Z","signerIp":"10.0.0.1","ip":"10.0.0.1"}`
@@ -213,7 +214,7 @@ func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) 
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
@@ -242,7 +243,7 @@ func TestClientPostSignContractHandler_OtherClientsEngagementRejected(t *testing
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postSignContract(t, srv, otherEngagementID, "Jordan Client", true)
@@ -279,7 +280,7 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 			seedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, testCase.status, mergeFieldProse)
 
-			srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+			srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 			defer srv.Close()
 
 			resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
@@ -301,7 +302,7 @@ func TestClientPostSignContractHandler_NoContractYet404(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
@@ -322,7 +323,7 @@ func TestClientPostSignContractHandler_InvalidBody(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postSignContractRaw(t, srv, engagementID, []byte("not json"))
@@ -356,7 +357,7 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 			seedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-			srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+			srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 			defer srv.Close()
 
 			resp := postSignContract(t, srv, engagementID, testCase.fullLegalName, testCase.attestation)
@@ -389,7 +390,7 @@ func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	store := objectstore.NewMemoryStore()
-	srv := newPortalServerWithStore(fakeVerifier{uid: identityUID}, db, store)
+	srv := newPortalServerWithStore(authntest.Verifier{UID: identityUID}, db, store)
 	defer srv.Close()
 
 	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
@@ -432,7 +433,7 @@ func TestClientPostSignContractHandler_PDFStoreFailureRejected(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServerWithStore(fakeVerifier{uid: identityUID}, db, failingStore{})
+	srv := newPortalServerWithStore(authntest.Verifier{UID: identityUID}, db, failingStore{})
 	defer srv.Close()
 
 	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)

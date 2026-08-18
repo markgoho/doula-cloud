@@ -2,29 +2,18 @@ package contracts_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier -- real Identity
-// Platform tokens can't be minted without a live GCP project. Mirrors
-// staffauth_test's and plans_test's own fakeVerifier; kept package-local
-// since Go test doubles aren't exported across packages.
-type fakeVerifier struct{ uid string }
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 	t.Helper()
@@ -142,25 +131,25 @@ func seedSignedContract(t *testing.T, db *testdb.DB, engagementID, pdfObjectPath
 	}
 }
 
-func newContractServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newContractServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	return newContractServerWithPusherAndStore(verifier, db, push.NewFakePusher(), objectstore.NewMemoryStore())
 }
 
 // newContractServerWithPusher mirrors newContractServer but lets the
 // caller inject pusher, so a test can inspect what Send triggers --
 // mirrors message/handlers_test.go's newServerWithPusher.
-func newContractServerWithPusher(verifier fakeVerifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
+func newContractServerWithPusher(verifier authntest.Verifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
 	return newContractServerWithPusherAndStore(verifier, db, pusher, objectstore.NewMemoryStore())
 }
 
 // newContractServerWithStore mirrors newContractServer but lets the
 // caller inject store, so a test can seed what the Signed PDF endpoint
 // reads back.
-func newContractServerWithStore(verifier fakeVerifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
+func newContractServerWithStore(verifier authntest.Verifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
 	return newContractServerWithPusherAndStore(verifier, db, push.NewFakePusher(), store)
 }
 
-func newContractServerWithPusherAndStore(verifier fakeVerifier, db *testdb.DB, pusher push.Pusher, store objectstore.ObjectStore) *httptest.Server {
+func newContractServerWithPusherAndStore(verifier authntest.Verifier, db *testdb.DB, pusher push.Pusher, store objectstore.ObjectStore) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/contract-template",
 		staffauth.Middleware(verifier, db.App)(contracts.GetTemplateHandler()))
@@ -224,7 +213,7 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 	const uid = "get-not-found"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getTemplate(t, srv, practiceID)
@@ -243,7 +232,7 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	seedTemplate(t, db, practiceID, "Some prose with {{client_name}}")
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getTemplate(t, srv, practiceID)
@@ -267,7 +256,7 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 	const uid = "put-non-owner"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putTemplate(t, srv, practiceID, contracts.TemplateResponse{Prose: "Some prose"})
@@ -283,7 +272,7 @@ func TestPutTemplateHandler_InvalidBody(t *testing.T) {
 	const uid = "put-invalid-body"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putTemplateRaw(t, srv, practiceID, []byte("not json"))
@@ -308,7 +297,7 @@ func TestPutTemplateHandler_BlankProseRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-blank-prose"
 	practiceID := seedOwner(t, db, uid)
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	for _, tc := range cases {
@@ -330,7 +319,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	const uid = "put-success"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	putResp := putTemplate(t, srv, practiceID, contracts.TemplateResponse{Prose: "  Agreement with {{client_name}}  "})
@@ -371,7 +360,7 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	seedTemplate(t, db, practiceID, "Old prose")
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putTemplate(t, srv, practiceID, contracts.TemplateResponse{Prose: "New prose"})

@@ -1,28 +1,17 @@
 package portal_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier -- see
-// clientauth's own middleware_test.go for why: real Identity Platform
-// tokens can't be minted without a live GCP project.
-type fakeVerifier struct {
-	uid string
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 // newServer mounts the same route main.go wires up for this package,
 // behind clientauth.Middleware.
@@ -76,7 +65,7 @@ func TestDetailHandler_Success(t *testing.T) {
 	const identityUID = "portal-detail-uid"
 	engagementID, status := seedClientWithEngagement(t, db, identityUID, "Riverside Doulas")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID, nil)
@@ -113,7 +102,7 @@ func TestDetailHandler_NotLinkedToClient(t *testing.T) {
 	db := testdb.New(t)
 	_, _ = seedClientWithEngagement(t, db, "other-portal-uid", "Other Practice")
 
-	srv := newServer(fakeVerifier{uid: "unrelated-uid"}, db)
+	srv := newServer(authntest.Verifier{UID: "unrelated-uid"}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000", nil)

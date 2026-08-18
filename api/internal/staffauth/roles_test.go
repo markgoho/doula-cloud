@@ -7,11 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-func newRolesServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newRolesServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("PATCH /practices/{practiceId}/staff/{staffId}/roles",
 		staffauth.Middleware(verifier, db.App)(staffauth.AssignRolesHandler()))
@@ -43,7 +44,7 @@ func TestAssignRolesHandler_NonOwnerForbidden(t *testing.T) {
 	const identityUID = "doula-assigning-roles"
 	staffID, practiceID := seedStaffWithMembership(t, db, identityUID) // '{doula}', not owner
 
-	srv := newRolesServer(fakeVerifier{uid: identityUID}, db)
+	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := patchRoles(t, srv, practiceID, staffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
@@ -59,7 +60,7 @@ func TestAssignRolesHandler_UnknownRole(t *testing.T) {
 	const identityUID = "owner-bad-role"
 	ownerID, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newRolesServer(fakeVerifier{uid: identityUID}, db)
+	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := patchRoles(t, srv, practiceID, ownerID, staffauth.AssignRolesRequest{Roles: []string{"admin"}})
@@ -75,7 +76,7 @@ func TestAssignRolesHandler_InvalidBody(t *testing.T) {
 	const identityUID = "owner-invalid-roles-body"
 	ownerID, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newRolesServer(fakeVerifier{uid: identityUID}, db)
+	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
@@ -101,7 +102,7 @@ func TestAssignRolesHandler_NoSuchMembership(t *testing.T) {
 	const identityUID = "owner-no-such-target"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newRolesServer(fakeVerifier{uid: identityUID}, db)
+	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := patchRoles(t, srv, practiceID, "00000000-0000-0000-0000-000000000000", staffauth.AssignRolesRequest{Roles: []string{doulaRole}})
@@ -119,7 +120,7 @@ func TestAssignRolesHandler_Success(t *testing.T) {
 	targetID := seedStaff(t, db, "target-staff")
 	seedMembership(t, db, practiceID, targetID) // starts with '{doula}'
 
-	srv := newRolesServer(fakeVerifier{uid: ownerUID}, db)
+	srv := newRolesServer(authntest.Verifier{UID: ownerUID}, db)
 	defer srv.Close()
 
 	resp := patchRoles(t, srv, practiceID, targetID, staffauth.AssignRolesRequest{Roles: []string{ownerRole, doulaRole}})
@@ -160,7 +161,7 @@ func TestRoleAssignmentUnlocksAccess(t *testing.T) {
 		t.Fatalf("seed zero-role membership: %v", err)
 	}
 
-	inviteSrv := newInviteServer(fakeVerifier{uid: invitedUID}, db)
+	inviteSrv := newInviteServer(authntest.Verifier{UID: invitedUID}, db)
 	defer inviteSrv.Close()
 
 	before := postInvite(t, inviteSrv, practiceID, staffauth.InviteRequest{Email: "someone-else@example.com", Name: "Someone Else"})
@@ -169,7 +170,7 @@ func TestRoleAssignmentUnlocksAccess(t *testing.T) {
 		t.Fatalf("invite before role assignment: status = %d, want %d", before.StatusCode, http.StatusForbidden)
 	}
 
-	rolesSrv := newRolesServer(fakeVerifier{uid: ownerUID}, db)
+	rolesSrv := newRolesServer(authntest.Verifier{UID: ownerUID}, db)
 	defer rolesSrv.Close()
 	assign := patchRoles(t, rolesSrv, practiceID, invitedStaffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
 	_ = assign.Body.Close()

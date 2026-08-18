@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -55,7 +56,7 @@ func TestCreateHandler_Success(t *testing.T) {
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
@@ -80,7 +81,7 @@ func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	seedStaffAtPracticeWithRoles(t, db, practiceID, identityUID, []string{officeManagerRole})
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
@@ -98,7 +99,7 @@ func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	otherPracticeID, _ := seedDoulaWithMembership(t, db, "doula-elsewhere")
 	engagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
@@ -114,7 +115,7 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "doula-bad-engagement"
 	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
@@ -132,7 +133,7 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
@@ -157,7 +158,7 @@ func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(fakeVerifier{uid: "office-manager-bystander"}, db)
+	srv := newServer(authntest.Verifier{UID: "office-manager-bystander"}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
@@ -175,7 +176,7 @@ func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	otherPracticeID, _ := seedDoulaWithMembership(t, db, "doula-list-elsewhere")
 	engagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
@@ -191,7 +192,7 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "doula-list-bad-engagement"
 	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
@@ -210,7 +211,7 @@ func TestReassignHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
@@ -240,7 +241,7 @@ func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
@@ -263,7 +264,7 @@ func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, doulaStaffID)
 
-	srv := newServer(fakeVerifier{uid: "office-manager-reassigning"}, db)
+	srv := newServer(authntest.Verifier{UID: "office-manager-reassigning"}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: doulaStaffID})
@@ -285,7 +286,7 @@ func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: "00000000-0000-0000-0000-000000000000"})
@@ -308,7 +309,7 @@ func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: nonDoulaStaffID})
@@ -329,7 +330,7 @@ func TestReassignHandler_VisitNotFound(t *testing.T) {
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
@@ -351,7 +352,7 @@ func TestReassignHandler_InvalidBody(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, []byte("not json"))
@@ -369,7 +370,7 @@ func TestReassignHandler_InvalidStaffID(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: "not-a-uuid"})
@@ -389,7 +390,7 @@ func TestReassignHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "doula-reassign-bad-engagement-id"
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
@@ -410,7 +411,7 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})

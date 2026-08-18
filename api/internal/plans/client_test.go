@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/testdb"
@@ -46,7 +47,7 @@ func seedPortalUser(t *testing.T, db *testdb.DB, identityUID, clientID string) {
 
 // newPortalServer mounts the same route main.go wires up for the
 // Client-portal Birth Plan view, behind clientauth.Middleware.
-func newPortalServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newPortalServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/birth-plan",
 		clientauth.Middleware(verifier, db.App)(plans.ClientGetBirthPlanHandler()))
@@ -78,7 +79,7 @@ func TestClientGetBirthPlanHandler_Success(t *testing.T) {
 		`{"location":"Hospital"}`,
 	)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientBirthPlan(t, srv, engagementID)
@@ -103,7 +104,7 @@ func TestClientGetBirthPlanHandler_NoInstanceYet404(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientBirthPlan(t, srv, engagementID)
@@ -129,7 +130,7 @@ func TestClientGetBirthPlanHandler_CarePlanNeverReturned(t *testing.T) {
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{"f1":"secret"}`,
 	)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientBirthPlan(t, srv, engagementID)
@@ -148,7 +149,7 @@ func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) 
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientBirthPlan(t, srv, otherEngagementID)

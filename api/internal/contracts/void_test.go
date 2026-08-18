@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/testdb"
 )
@@ -34,7 +35,7 @@ func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "void-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postVoidContract(t, srv, practiceID, "not-a-uuid")
@@ -52,7 +53,7 @@ func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postVoidContract(t, srv, practiceID, otherEngagementID)
@@ -69,7 +70,7 @@ func TestPostVoidContractHandler_NoContract(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postVoidContract(t, srv, practiceID, engagementID)
@@ -92,7 +93,7 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 			engagementID := seedEngagement(t, db, practiceID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
-			srv := newContractServer(fakeVerifier{uid: uid}, db)
+			srv := newContractServer(authntest.Verifier{UID: uid}, db)
 			defer srv.Close()
 
 			resp := postVoidContract(t, srv, practiceID, engagementID)
@@ -119,7 +120,7 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 	objectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, objectPath)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postVoidContract(t, srv, practiceID, engagementID)
@@ -181,7 +182,7 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	oldObjectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, oldObjectPath)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	voidResp := postVoidContract(t, srv, practiceID, engagementID)

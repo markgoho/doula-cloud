@@ -8,11 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-func newAcceptServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newAcceptServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db.App))
 	return httptest.NewServer(mux)
@@ -64,7 +65,7 @@ func seedPendingInvite(t *testing.T, db *testdb.DB) (staffID, inviteToken string
 
 func TestAcceptInviteHandler_MissingToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{}, db)
+	srv := newAcceptServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "", staffauth.AcceptInviteRequest{InviteToken: "whatever"})
@@ -77,7 +78,7 @@ func TestAcceptInviteHandler_MissingToken(t *testing.T) {
 
 func TestAcceptInviteHandler_TokenVerificationFailure(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{err: errBadToken}, db)
+	srv := newAcceptServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "bad", staffauth.AcceptInviteRequest{InviteToken: "whatever"})
@@ -90,7 +91,7 @@ func TestAcceptInviteHandler_TokenVerificationFailure(t *testing.T) {
 
 func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: someUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: someUID}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/accept-invite", bytes.NewReader([]byte("not json")))
@@ -112,7 +113,7 @@ func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 
 func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: someUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: someUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: ""})
@@ -125,7 +126,7 @@ func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 
 func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: someUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: someUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: "00000000-0000-0000-0000-000000000000"})
@@ -140,7 +141,7 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	staffID, inviteToken := seedPendingInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: inviteeIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: inviteeIdentityUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: inviteToken})
@@ -175,7 +176,7 @@ func TestAcceptInviteHandler_TokenAlreadyClaimed(t *testing.T) {
 	db := testdb.New(t)
 	_, inviteToken := seedPendingInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: inviteeIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: inviteeIdentityUID}, db)
 	defer srv.Close()
 
 	first := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: inviteToken})
@@ -201,7 +202,7 @@ func TestAcceptInviteHandler_IdentityAlreadyClaimedElsewhere(t *testing.T) {
 	seedStaffWithMembership(t, db, identityUID)
 	_, inviteToken := seedPendingInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: identityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", staffauth.AcceptInviteRequest{InviteToken: inviteToken})

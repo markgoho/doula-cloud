@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -24,7 +25,7 @@ func seedOwnerMembership(t *testing.T, db *testdb.DB, identityUID string) (staff
 	return staffID, practiceID
 }
 
-func newInviteServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newInviteServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/invitations",
 		staffauth.Middleware(verifier, db.App)(staffauth.InviteHandler()))
@@ -55,7 +56,7 @@ func TestInviteHandler_NonOwnerForbidden(t *testing.T) {
 	const identityUID = "doula-not-owner"
 	_, practiceID := seedStaffWithMembership(t, db, identityUID) // seedMembership grants '{doula}', not owner
 
-	srv := newInviteServer(fakeVerifier{uid: identityUID}, db)
+	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})
@@ -71,7 +72,7 @@ func TestInviteHandler_MissingFields(t *testing.T) {
 	const identityUID = "owner-missing-fields"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newInviteServer(fakeVerifier{uid: identityUID}, db)
+	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "", Name: inviteeName})
@@ -87,7 +88,7 @@ func TestInviteHandler_InvalidBody(t *testing.T) {
 	const identityUID = "owner-invalid-body"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newInviteServer(fakeVerifier{uid: identityUID}, db)
+	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/practices/"+practiceID+"/invitations", bytes.NewReader([]byte("not json")))
@@ -112,7 +113,7 @@ func TestInviteHandler_Success(t *testing.T) {
 	const identityUID = "owner-invites"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newInviteServer(fakeVerifier{uid: identityUID}, db)
+	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})

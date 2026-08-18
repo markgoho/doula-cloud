@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/testdb"
@@ -36,7 +37,7 @@ func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
-	srv := newServerWithPusher(fakeVerifier{uid: identityUID}, db, pusher)
+	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Hi, checking in."})
@@ -82,7 +83,7 @@ func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 
 	pusher := push.NewFakePusher()
-	srv := newPortalServerWithPusher(fakeVerifier{uid: identityUID}, db, pusher)
+	srv := newPortalServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Question about my visit."})
@@ -123,7 +124,7 @@ func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	pusher := push.NewFakePusher()
-	srv := newServerWithPusher(fakeVerifier{uid: identityUID}, db, pusher)
+	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "no subscribers yet"})
@@ -152,7 +153,7 @@ func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")
-	srv := newServerWithPusher(fakeVerifier{uid: identityUID}, db, pusher)
+	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "still gets created"})
@@ -180,7 +181,7 @@ func TestCreateHandler_DoesNotNotifyStaffSubscriptionsForClientRecipient(t *test
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-only")
 
 	pusher := push.NewFakePusher()
-	srv := newServerWithPusher(fakeVerifier{uid: identityUID}, db, pusher)
+	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "checking population filter"})

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/testdb"
 )
@@ -48,7 +49,7 @@ func TestListHandler_ReturnsOnlyClientsAtCurrentPractice(t *testing.T) {
 	seedClientEngagement(t, db, practiceID, "Jamie Client", "jamie@example.com", "intake")
 	seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com", "intake")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/clients")
@@ -77,7 +78,7 @@ func TestListHandler_VisibleToAnyStaffAtSamePractice(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, "staff-bystander")
 	seedClientEngagement(t, db, practiceID, "Shared Client", "shared@example.com", "intake")
 
-	srv := newServer(fakeVerifier{uid: "staff-bystander"}, db)
+	srv := newServer(authntest.Verifier{UID: "staff-bystander"}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/clients")
@@ -101,7 +102,7 @@ func TestCreateHandler_Success(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	seedSignupBonus(t, db, practiceID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "New Client", Email: "new@example.com"})
@@ -166,7 +167,7 @@ func TestCreateHandler_NoCreditsReturnsPaymentRequired(t *testing.T) {
 	const identityUID = "staff-broke"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Broke Client", Email: "broke@example.com"})
@@ -210,7 +211,7 @@ func TestCreateHandler_NegativeBalanceReturnsPaymentRequired(t *testing.T) {
 		t.Fatalf("seed negative balance: %v", err)
 	}
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Negative Client", Email: "negative@example.com"})
@@ -248,7 +249,7 @@ func TestCreateHandler_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	seedSignupBonus(t, db, practiceID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	for i := range 3 {
@@ -301,7 +302,7 @@ func TestCreateHandler_MissingFields(t *testing.T) {
 	const identityUID = "staff-missing-fields"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "", Email: "new@example.com"})
@@ -321,7 +322,7 @@ func TestCreateHandler_InvalidBody(t *testing.T) {
 	const identityUID = "staff-invalid-body"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", []byte("not json"))
@@ -338,7 +339,7 @@ func TestDetailHandler_Success(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Detail Client", "detail@example.com", "active")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
@@ -363,7 +364,7 @@ func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 	otherPracticeID := seedStaffWithMembership(t, db, "staff-owns-engagement")
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Elsewhere Client", "elsewhere@example.com", "intake")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
@@ -379,7 +380,7 @@ func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "staff-bad-id"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid")

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -173,7 +174,7 @@ func TestWrap_DefaultsToStatusOKWhenHandlerOmitsWriteHeader(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/widgets",
-		staffauth.Middleware(fakeVerifier{uid: "no-writeheader-owner"}, db.App)(idempotency.Wrap(http.HandlerFunc(
+		staffauth.Middleware(authntest.Verifier{UID: "no-writeheader-owner"}, db.App)(idempotency.Wrap(http.HandlerFunc(
 			func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte(`{"n":1}`))
 			},

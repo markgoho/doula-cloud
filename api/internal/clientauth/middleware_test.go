@@ -4,12 +4,13 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
 )
 
 func TestMiddleware_MissingToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{}, db)
+	srv := newServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -29,7 +30,7 @@ func TestMiddleware_MissingToken(t *testing.T) {
 
 func TestMiddleware_EmptyBearerToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{}, db)
+	srv := newServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -47,7 +48,7 @@ func TestMiddleware_EmptyBearerToken(t *testing.T) {
 
 func TestMiddleware_TokenVerificationFailure(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{err: errBadToken}, db)
+	srv := newServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -65,7 +66,7 @@ func TestMiddleware_TokenVerificationFailure(t *testing.T) {
 
 func TestMiddleware_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(fakeVerifier{uid: "some-uid"}, db)
+	srv := newServer(authntest.Verifier{UID: "some-uid"}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/not-a-uuid/ping", nil)
@@ -85,7 +86,7 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 	db := testdb.New(t)
 	// A verified uid with no matching client_portal_users row: population
 	// resolution fails even though the token itself is valid.
-	srv := newServer(fakeVerifier{uid: "unknown-uid"}, db)
+	srv := newServer(authntest.Verifier{UID: "unknown-uid"}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
@@ -111,7 +112,7 @@ func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	_, otherEngagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com", "intake")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+otherEngagementID+"/ping", nil)
@@ -132,7 +133,7 @@ func TestMiddleware_Success(t *testing.T) {
 	const identityUID = "client-with-engagement"
 	clientID, engagementID := seedClientWithEngagement(t, db, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/ping", nil)

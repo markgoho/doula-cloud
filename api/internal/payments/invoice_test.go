@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -104,7 +105,7 @@ func invoiceStatus(t *testing.T, db *testdb.DB, invoiceID string) string {
 	return status
 }
 
-func newInvoiceServer(verifier fakeVerifier, db *testdb.DB, client payments.Client) *httptest.Server {
+func newInvoiceServer(verifier authntest.Verifier, db *testdb.DB, client payments.Client) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/invoices",
 		staffauth.Middleware(verifier, db.App)(payments.PostInvoiceHandler(client)))
@@ -168,7 +169,7 @@ func TestPostInvoiceHandler_NotConnectedOwnerGetsConnectRequired(t *testing.T) {
 	seedContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, engagementID, 15000)
@@ -210,7 +211,7 @@ func TestPostInvoiceHandler_NotConnectedNonOwnerGetsAskAnOwnerState(t *testing.T
 	seedContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, engagementID, 15000)
@@ -253,7 +254,7 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	}
 	seedConnectAccount(t, db, practiceID, accountID)
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, engagementID, 15000)
@@ -322,7 +323,7 @@ func TestPostInvoiceHandler_NoContractReturns404(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, engagementID, 15000)
@@ -344,7 +345,7 @@ func TestPostInvoiceHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, "not-a-uuid", 15000)
@@ -363,7 +364,7 @@ func TestPostInvoiceHandler_EngagementNotFoundReturns404(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, "00000000-0000-0000-0000-000000000000", 15000)
@@ -389,7 +390,7 @@ func TestPostInvoiceHandler_InvalidAmountReturns400(t *testing.T) {
 	}
 	seedConnectAccount(t, db, practiceID, accountID)
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	for _, amount := range []int64{0, -100} {
@@ -419,7 +420,7 @@ func TestPostInvoiceHandler_InvalidBodyReturns400(t *testing.T) {
 	}
 	seedConnectAccount(t, db, practiceID, accountID)
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoiceBody(t, srv, practiceID, engagementID, `not-json`)
@@ -447,7 +448,7 @@ func TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing(t *
 	seedConnectAccount(t, db, practiceID, accountID)
 	client.CreateInvoiceErr = errStripeFake
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, engagementID, 15000)
@@ -480,7 +481,7 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 	seedConnectAccount(t, db, practiceID, accountID)
 	client.FinalizeInvoiceErr = errStripeFake
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postInvoice(t, srv, practiceID, engagementID, 15000)
@@ -519,7 +520,7 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 	newInvoiceID := seedInvoice(t, db, practiceID, currentContractID, "in_new", invoiceStatusOpen, 20000, base.Add(time.Minute))
 
 	client := payments.NewFakeClient()
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getInvoices(t, srv, practiceID, engagementID, "")
@@ -561,7 +562,7 @@ func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	}
 
 	client := payments.NewFakeClient()
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getInvoices(t, srv, practiceID, engagementID, "")
@@ -587,7 +588,7 @@ func TestGetInvoicesHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getInvoices(t, srv, practiceID, "not-a-uuid", "")
@@ -606,7 +607,7 @@ func TestGetInvoicesHandler_EngagementNotFoundReturns404(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getInvoices(t, srv, practiceID, "00000000-0000-0000-0000-000000000000", "")
@@ -627,7 +628,7 @@ func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getInvoices(t, srv, practiceID, engagementID, "")
@@ -663,7 +664,7 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	}
 
 	client := payments.NewFakeClient()
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	first := getInvoices(t, srv, practiceID, engagementID, "")
@@ -713,7 +714,7 @@ func TestGetInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 
-	srv := newInvoiceServer(fakeVerifier{uid: uid}, db, client)
+	srv := newInvoiceServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	cases := map[string]string{

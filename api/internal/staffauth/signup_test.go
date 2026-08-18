@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/staffauth"
@@ -28,7 +29,7 @@ const (
 	doulaRole          = "doula"
 )
 
-func newSignupServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
 	return httptest.NewServer(mux)
@@ -57,7 +58,7 @@ func postSignup(t *testing.T, srv *httptest.Server, token string, body any) *htt
 
 func TestSignupHandler_MissingToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{}, db)
+	srv := newSignupServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "", staffauth.SignupRequest{PracticeName: "P", StaffName: "S", StaffEmail: testStaffEmail})
@@ -70,7 +71,7 @@ func TestSignupHandler_MissingToken(t *testing.T) {
 
 func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{err: errBadToken}, db)
+	srv := newSignupServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "bad-token", staffauth.SignupRequest{PracticeName: "P", StaffName: "S", StaffEmail: testStaffEmail})
@@ -83,7 +84,7 @@ func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 
 func TestSignupHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{uid: "bad-body-uid"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "bad-body-uid"}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/signup", bytes.NewReader([]byte("not json")))
@@ -105,7 +106,7 @@ func TestSignupHandler_InvalidBody(t *testing.T) {
 
 func TestSignupHandler_MissingFields(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{uid: "new-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "", StaffName: "S", StaffEmail: testStaffEmail})
@@ -118,7 +119,7 @@ func TestSignupHandler_MissingFields(t *testing.T) {
 
 func TestSignupHandler_Success(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{uid: "new-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
@@ -154,7 +155,7 @@ func TestSignupHandler_Success(t *testing.T) {
 
 func TestSignupHandler_DuplicateSignup(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{uid: "repeat-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "repeat-owner"}, db)
 	defer srv.Close()
 
 	body := staffauth.SignupRequest{PracticeName: "First Practice", StaffName: jamieName, StaffEmail: jamieEmail}
@@ -176,7 +177,7 @@ func TestSignupHandler_DuplicateSignup(t *testing.T) {
 // transaction as the Practice/Staff/membership rows.
 func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{uid: "bonus-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "bonus-owner"}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
@@ -212,7 +213,7 @@ func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
 // transaction as the Practice/Staff/membership rows.
 func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{uid: "seed-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "seed-owner"}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
@@ -257,7 +258,7 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 // goes red instead of shipping a seeded template the API would reject.
 func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	db := testdb.New(t)
-	verifier := fakeVerifier{uid: "roundtrip-owner"}
+	verifier := authntest.Verifier{UID: "roundtrip-owner"}
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
@@ -327,7 +328,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 // Practice/Staff/membership rows.
 func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(fakeVerifier{uid: "seed-contract-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "seed-contract-owner"}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
@@ -360,7 +361,7 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 // goes red instead of shipping a seeded template the API would reject.
 func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *testing.T) {
 	db := testdb.New(t)
-	verifier := fakeVerifier{uid: "roundtrip-contract-owner"}
+	verifier := authntest.Verifier{UID: "roundtrip-contract-owner"}
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))

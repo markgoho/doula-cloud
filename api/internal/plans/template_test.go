@@ -2,23 +2,16 @@ package plans_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier -- real Identity
-// Platform tokens can't be minted without a live GCP project. Mirrors
-// staffauth_test's own fakeVerifier; kept package-local since Go test
-// doubles aren't exported across packages.
-type fakeVerifier struct{ uid string }
 
 // testFieldLabel is a placeholder Label used across many test cases that
 // don't care about its value, just that it's non-empty.
@@ -28,10 +21,6 @@ const shortTextType = "short_text"
 
 const carePlanType = "care_plan"
 const birthPlanType = "birth_plan"
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 	t.Helper()
@@ -128,7 +117,7 @@ func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSO
 	}
 }
 
-func newPlanServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newPlanServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/plan-templates/{planType}",
 		staffauth.Middleware(verifier, db.App)(plans.GetTemplateHandler()))
@@ -242,7 +231,7 @@ func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
 	const uid = "get-unknown-plan-type"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getTemplate(t, srv, practiceID, "not_a_plan_type")
@@ -258,7 +247,7 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 	const uid = "get-not-found"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getTemplate(t, srv, practiceID, "care_plan")
@@ -277,7 +266,7 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getTemplate(t, srv, practiceID, "care_plan")
@@ -304,7 +293,7 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 	const uid = "put-non-owner"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putTemplate(t, srv, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
@@ -322,7 +311,7 @@ func TestPutTemplateHandler_UnknownPlanType(t *testing.T) {
 	const uid = "put-unknown-plan-type"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putTemplate(t, srv, practiceID, "not_a_plan_type", plans.TemplateResponse{Fields: []plans.Field{
@@ -340,7 +329,7 @@ func TestPutTemplateHandler_InvalidBody(t *testing.T) {
 	const uid = "put-invalid-body"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putTemplateRaw(t, srv, practiceID, "care_plan", []byte("not json"))
@@ -375,7 +364,7 @@ func TestPutTemplateHandler_ValidationRejections(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-validation"
 	practiceID := seedOwner(t, db, uid)
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	for _, tc := range cases {
@@ -402,7 +391,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	const uid = "put-success"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	putResp := putTemplate(t, srv, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
@@ -446,7 +435,7 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putTemplate(t, srv, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{

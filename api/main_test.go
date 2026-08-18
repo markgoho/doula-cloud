@@ -2,13 +2,12 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/payments"
@@ -16,18 +15,6 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-type fakeVerifier struct {
-	uid string
-	err error
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 func TestHelloHandler(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/hello", nil)
@@ -48,7 +35,7 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux := routes(fakeVerifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -79,7 +66,7 @@ func TestResolvePort(t *testing.T) {
 }
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
-	mux := routes(fakeVerifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -114,7 +101,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	mux := routes(fakeVerifier{uid: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
+	mux := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

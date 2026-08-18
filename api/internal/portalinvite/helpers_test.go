@@ -2,7 +2,6 @@ package portalinvite_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,21 +13,6 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier: real Identity Platform
-// tokens can't be minted without a live GCP project, so tests inject this
-// instead of authn.FirebaseVerifier.
-type fakeVerifier struct {
-	uid string
-	err error
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 var errBadToken = errors.New("invalid token")
 

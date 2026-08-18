@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/staffauth"
@@ -46,17 +46,6 @@ func (s *countingPutStore) Put(ctx context.Context, path, contentType string, r 
 	return s.MemoryStore.Put(ctx, path, contentType, r) //nolint:wrapcheck // test double, callers expect the underlying store's raw error
 }
 
-// fakeVerifier is a test double for authn.Verifier, mirroring
-// portalinvite_test's -- real Identity Platform tokens can't be minted
-// without a live GCP project.
-type fakeVerifier struct {
-	uid string
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
-
 // countingHandler returns an http.Handler that increments a counter on
 // every invocation and writes a JSON body reporting the call number, at
 // the given status. Used to prove whether Wrap actually re-ran the
@@ -76,7 +65,7 @@ func countingHandler(calls *int, status int) http.Handler {
 func newIdempotencyServer(db *testdb.DB, uid string, calls *int, status int) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/widgets",
-		staffauth.Middleware(fakeVerifier{uid: uid}, db.App)(idempotency.Wrap(countingHandler(calls, status))))
+		staffauth.Middleware(authntest.Verifier{UID: uid}, db.App)(idempotency.Wrap(countingHandler(calls, status))))
 	return httptest.NewServer(mux)
 }
 

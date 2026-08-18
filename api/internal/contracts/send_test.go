@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/testdb"
@@ -44,7 +45,7 @@ func TestPostSendContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "send-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postSendContract(t, srv, practiceID, "not-a-uuid")
@@ -62,7 +63,7 @@ func TestPostSendContractHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postSendContract(t, srv, practiceID, otherEngagementID)
@@ -79,7 +80,7 @@ func TestPostSendContractHandler_NoContract(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postSendContract(t, srv, practiceID, engagementID)
@@ -101,7 +102,7 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 			engagementID := seedEngagement(t, db, practiceID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
-			srv := newContractServer(fakeVerifier{uid: uid}, db)
+			srv := newContractServer(authntest.Verifier{UID: uid}, db)
 			defer srv.Close()
 
 			resp := postSendContract(t, srv, practiceID, engagementID)
@@ -128,7 +129,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
-	srv := newContractServerWithPusher(fakeVerifier{uid: uid}, db, pusher)
+	srv := newContractServerWithPusher(authntest.Verifier{UID: uid}, db, pusher)
 	defer srv.Close()
 
 	resp := postSendContract(t, srv, practiceID, engagementID)
@@ -192,7 +193,7 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	pusher := push.NewFakePusher()
-	srv := newContractServerWithPusher(fakeVerifier{uid: uid}, db, pusher)
+	srv := newContractServerWithPusher(authntest.Verifier{UID: uid}, db, pusher)
 	defer srv.Close()
 
 	resp := postSendContract(t, srv, practiceID, engagementID)
@@ -222,7 +223,7 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")
-	srv := newContractServerWithPusher(fakeVerifier{uid: uid}, db, pusher)
+	srv := newContractServerWithPusher(authntest.Verifier{UID: uid}, db, pusher)
 	defer srv.Close()
 
 	resp := postSendContract(t, srv, practiceID, engagementID)

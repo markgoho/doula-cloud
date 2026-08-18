@@ -1,7 +1,6 @@
 package clientauth_test
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,21 +10,6 @@ import (
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier: real Identity
-// Platform tokens can't be minted without a live GCP project, so tests
-// inject this instead of doula-cloud/api/internal/authn.FirebaseVerifier.
-type fakeVerifier struct {
-	uid string
-	err error
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 var errBadToken = errors.New("invalid token")
 

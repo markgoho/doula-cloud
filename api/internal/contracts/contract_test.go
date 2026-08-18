@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/testdb"
 )
@@ -101,7 +102,7 @@ func TestPostContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "post-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postContract(t, srv, practiceID, "not-a-uuid")
@@ -122,7 +123,7 @@ func TestPostContractHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postContract(t, srv, practiceID, otherEngagementID)
@@ -142,7 +143,7 @@ func TestPostContractHandler_NoTemplate(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postContract(t, srv, practiceID, engagementID)
@@ -164,7 +165,7 @@ func TestPostContractHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postContract(t, srv, practiceID, engagementID)
@@ -205,7 +206,7 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, "Hello {{client_name}}, this agreement is for {{client_name}}.")
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postContract(t, srv, practiceID, engagementID)
@@ -229,7 +230,7 @@ func TestPostContractHandler_Duplicate(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	first := postContract(t, srv, practiceID, engagementID)
@@ -250,7 +251,7 @@ func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "get-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getContract(t, srv, practiceID, "not-a-uuid")
@@ -267,7 +268,7 @@ func TestGetContractHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getContract(t, srv, practiceID, engagementID)
@@ -283,7 +284,7 @@ func TestPutContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "put-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putContract(t, srv, practiceID, "not-a-uuid", contracts.MergeFieldValues{})
@@ -300,7 +301,7 @@ func TestPutContractHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putContract(t, srv, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
@@ -321,7 +322,7 @@ func TestPutContractHandler_NonDraftRejected(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putContract(t, srv, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
@@ -339,7 +340,7 @@ func TestPutContractHandler_InvalidBody(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putContractRaw(t, srv, practiceID, engagementID, []byte("not json"))
@@ -357,7 +358,7 @@ func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putContract(t, srv, practiceID, engagementID, contracts.MergeFieldValues{"not_a_field": "x"})
@@ -378,7 +379,7 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putContractRaw(t, srv, practiceID, engagementID,
@@ -409,7 +410,7 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putContractRaw(t, srv, practiceID, engagementID, []byte(`{}`))
@@ -437,7 +438,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	putResp := putContract(t, srv, practiceID, engagementID,
@@ -470,7 +471,7 @@ func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	postResp := postContract(t, srv, practiceID, engagementID)

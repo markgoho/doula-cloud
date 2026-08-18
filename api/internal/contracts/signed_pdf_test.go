@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/testdb"
@@ -28,7 +29,7 @@ func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 		t.Fatalf("seed stored pdf: %v", err)
 	}
 
-	srv := newContractServerWithStore(fakeVerifier{uid: uid}, db, store)
+	srv := newContractServerWithStore(authntest.Verifier{UID: uid}, db, store)
 	defer srv.Close()
 
 	resp := getContractPDF(t, srv, practiceID, engagementID)
@@ -57,7 +58,7 @@ func TestGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getContractPDFRaw(t, srv, practiceID, engagementID, "")
@@ -81,7 +82,7 @@ func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 	objectPath := contracts.SignedPDFObjectPath(otherEngagementID)
 	seedSignedContract(t, db, otherEngagementID, objectPath)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getContractPDF(t, srv, practiceID, otherEngagementID)
@@ -101,7 +102,7 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getContractPDF(t, srv, practiceID, engagementID)
@@ -123,7 +124,7 @@ func TestGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) 
 	engagementID := seedEngagement(t, db, practiceID)
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 
-	srv := newContractServer(fakeVerifier{uid: uid}, db)
+	srv := newContractServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getContractPDF(t, srv, practiceID, engagementID)
@@ -150,7 +151,7 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 		t.Fatalf("seed stored pdf: %v", err)
 	}
 
-	srv := newPortalServerWithStore(fakeVerifier{uid: identityUID}, db, store)
+	srv := newPortalServerWithStore(authntest.Verifier{UID: identityUID}, db, store)
 	defer srv.Close()
 
 	resp := getClientContractPDF(t, srv, engagementID)
@@ -173,7 +174,7 @@ func TestClientGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContractPDFRaw(t, srv, engagementID, "")
@@ -197,7 +198,7 @@ func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *tes
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContractPDFRaw(t, srv, otherEngagementID, "Bearer tok")
@@ -218,7 +219,7 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContractPDF(t, srv, engagementID)
@@ -240,7 +241,7 @@ func TestClientGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testi
 	seedPortalUser(t, db, identityUID, clientID)
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContractPDF(t, srv, engagementID)

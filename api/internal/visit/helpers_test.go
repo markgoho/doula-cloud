@@ -1,7 +1,6 @@
 package visit_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,17 +16,6 @@ const (
 	doulaRole         = "doula"
 	officeManagerRole = "office_manager"
 )
-
-// fakeVerifier is a test double for authn.Verifier -- see staffauth's own
-// middleware_test.go for why: real Identity Platform tokens can't be
-// minted without a live GCP project.
-type fakeVerifier struct {
-	uid string
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 // newServer mounts the same routes main.go wires up for this package,
 // behind staffauth.Middleware.

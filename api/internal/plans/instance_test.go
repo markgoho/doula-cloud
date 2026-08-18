@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/testdb"
 )
@@ -17,7 +18,7 @@ func TestPostInstanceHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "post-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postInstance(t, srv, practiceID, "not-a-uuid", carePlanType)
@@ -34,7 +35,7 @@ func TestPostInstanceHandler_UnknownPlanType(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postInstance(t, srv, practiceID, engagementID, "not_a_plan_type")
@@ -55,7 +56,7 @@ func TestPostInstanceHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postInstance(t, srv, practiceID, otherEngagementID, carePlanType)
@@ -75,7 +76,7 @@ func TestPostInstanceHandler_NoTemplate(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postInstance(t, srv, practiceID, engagementID, carePlanType)
@@ -97,7 +98,7 @@ func TestPostInstanceHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := postInstance(t, srv, practiceID, engagementID, carePlanType)
@@ -131,7 +132,7 @@ func TestPostInstanceHandler_Duplicate(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, birthPlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	first := postInstance(t, srv, practiceID, engagementID, birthPlanType)
@@ -152,7 +153,7 @@ func TestGetInstanceHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "get-instance-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getInstance(t, srv, practiceID, "not-a-uuid", carePlanType)
@@ -169,7 +170,7 @@ func TestGetInstanceHandler_UnknownPlanType(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getInstance(t, srv, practiceID, engagementID, "not_a_plan_type")
@@ -187,7 +188,7 @@ func TestGetInstanceHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getInstance(t, srv, practiceID, otherEngagementID, carePlanType)
@@ -204,7 +205,7 @@ func TestGetInstanceHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getInstance(t, srv, practiceID, engagementID, carePlanType)
@@ -225,7 +226,7 @@ func TestGetInstanceHandler_Success(t *testing.T) {
 		`{"f1":"Jamie"}`,
 	)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := getInstance(t, srv, practiceID, engagementID, birthPlanType)
@@ -252,7 +253,7 @@ func TestPutInstanceHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "put-instance-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putInstance(t, srv, practiceID, "not-a-uuid", carePlanType, plans.PutInstanceRequest{})
@@ -269,7 +270,7 @@ func TestPutInstanceHandler_UnknownPlanType(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putInstance(t, srv, practiceID, engagementID, "not_a_plan_type", plans.PutInstanceRequest{})
@@ -287,7 +288,7 @@ func TestPutInstanceHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putInstance(t, srv, practiceID, otherEngagementID, carePlanType, plans.PutInstanceRequest{})
@@ -304,7 +305,7 @@ func TestPutInstanceHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putInstance(t, srv, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{})
@@ -322,7 +323,7 @@ func TestPutInstanceHandler_InvalidBody(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putInstanceRaw(t, srv, practiceID, engagementID, carePlanType, []byte("not json"))
@@ -363,7 +364,7 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-validation"
 	practiceID := seedMember(t, db, uid)
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	for _, tc := range cases {
@@ -392,7 +393,7 @@ func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) 
 	engagementID := seedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	resp := putInstanceRaw(t, srv, practiceID, engagementID, carePlanType, []byte(`{}`))
@@ -424,7 +425,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 		`{}`,
 	)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	firstResp := putInstance(t, srv, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
@@ -478,7 +479,7 @@ func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(fakeVerifier{uid: uid}, db)
+	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
 	defer srv.Close()
 
 	postResp := postInstance(t, srv, practiceID, engagementID, carePlanType)

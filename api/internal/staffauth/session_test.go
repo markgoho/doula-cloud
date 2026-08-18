@@ -6,11 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-func newSessionServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newSessionServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /staff/session", staffauth.SessionHandler(verifier, db.App))
 	return httptest.NewServer(mux)
@@ -34,7 +35,7 @@ func getSession(t *testing.T, srv *httptest.Server, token string) *http.Response
 
 func TestSessionHandler_MissingToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSessionServer(fakeVerifier{}, db)
+	srv := newSessionServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	resp := getSession(t, srv, "")
@@ -47,7 +48,7 @@ func TestSessionHandler_MissingToken(t *testing.T) {
 
 func TestSessionHandler_TokenVerificationFailure(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSessionServer(fakeVerifier{err: errBadToken}, db)
+	srv := newSessionServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
 	resp := getSession(t, srv, "bad-token")
@@ -60,7 +61,7 @@ func TestSessionHandler_TokenVerificationFailure(t *testing.T) {
 
 func TestSessionHandler_UnknownStaff(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSessionServer(fakeVerifier{uid: "no-such-staff"}, db)
+	srv := newSessionServer(authntest.Verifier{UID: "no-such-staff"}, db)
 	defer srv.Close()
 
 	resp := getSession(t, srv, "tok")
@@ -76,7 +77,7 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 	const identityUID = "single-practice-staff"
 	staffID, practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newSessionServer(fakeVerifier{uid: identityUID}, db)
+	srv := newSessionServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getSession(t, srv, "tok")
@@ -116,7 +117,7 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 		t.Fatalf("seed last_practice_id: %v", err)
 	}
 
-	srv := newSessionServer(fakeVerifier{uid: identityUID}, db)
+	srv := newSessionServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getSession(t, srv, "tok")

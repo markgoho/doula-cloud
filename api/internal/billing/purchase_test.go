@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -27,7 +28,7 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 	return practiceID
 }
 
-func newPurchaseServer(verifier fakeVerifier, db *testdb.DB, stripeClient billing.StripeClient) *httptest.Server {
+func newPurchaseServer(verifier authntest.Verifier, db *testdb.DB, stripeClient billing.StripeClient) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/billing/purchases",
 		staffauth.Middleware(verifier, db.App)(billing.PostPurchaseHandler(stripeClient)))
@@ -69,7 +70,7 @@ func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
 	defer srv.Close()
 
 	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
@@ -111,7 +112,7 @@ func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) 
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
 	defer srv.Close()
 
 	first := postPurchase(t, srv, practiceID, `{"quantity": 3}`)
@@ -146,7 +147,7 @@ func TestPostPurchaseHandler_NonOwnerForbidden(t *testing.T) {
 	practiceID := seedMember(t, db, uid) // doula role, not owner
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
 	defer srv.Close()
 
 	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
@@ -168,7 +169,7 @@ func TestPostPurchaseHandler_InvalidQuantityRejected(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
 	defer srv.Close()
 
 	resp := postPurchase(t, srv, practiceID, `{"quantity": 0}`)
@@ -190,7 +191,7 @@ func TestPostPurchaseHandler_InvalidBodyRejected(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
 	defer srv.Close()
 
 	resp := postPurchase(t, srv, practiceID, `not json`)
@@ -211,7 +212,7 @@ func TestPostPurchaseHandler_CreateCustomerFailureReturns500(t *testing.T) {
 	stripeClient := billing.NewFakeStripeClient()
 	stripeClient.CreateCustomerErr = errStripeFake
 
-	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
 	defer srv.Close()
 
 	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
@@ -234,7 +235,7 @@ func TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500(t *testing.T
 	stripeClient := billing.NewFakeStripeClient()
 	stripeClient.CreateCheckoutSessionErr = errStripeFake
 
-	srv := newPurchaseServer(fakeVerifier{uid: uid}, db, stripeClient)
+	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
 	defer srv.Close()
 
 	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)

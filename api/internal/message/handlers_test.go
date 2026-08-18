@@ -12,23 +12,13 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
-
-// fakeVerifier is a test double for authn.Verifier -- see staffauth's own
-// middleware_test.go for why: real Identity Platform tokens can't be
-// minted without a live GCP project.
-type fakeVerifier struct {
-	uid string
-}
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 // newServer mounts the same routes main.go wires up for this package,
 // behind staffauth.Middleware, backed by a fresh in-memory ObjectStore and
@@ -162,7 +152,7 @@ func TestCreateHandler_Success(t *testing.T) {
 	staffID := seedStaffAtPracticeNamed(t, db, practiceID, identityUID, "Jamie Doula")
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, err := json.Marshal(message.CreateRequest{Body: "Hi, checking in on your appointment."})
@@ -192,7 +182,7 @@ func TestCreateHandler_EmptyBodyRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "   "})
@@ -211,7 +201,7 @@ func TestCreateHandler_InvalidJSONBody(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", []byte("not json"))
@@ -228,7 +218,7 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "hello"})
@@ -255,7 +245,7 @@ func TestCreateHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 
-	srv := newServer(fakeVerifier{uid: "staff-elsewhere"}, db)
+	srv := newServer(authntest.Verifier{UID: "staff-elsewhere"}, db)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "hello"})
@@ -274,7 +264,7 @@ func TestListHandler_EmptyThread(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
@@ -298,7 +288,7 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages")
@@ -324,7 +314,7 @@ func TestListHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 	seedMessage(t, db, engagementID, "staff", otherStaffID, "not visible across practices")
 
-	srv := newServer(fakeVerifier{uid: "staff-listing-elsewhere"}, db)
+	srv := newServer(authntest.Verifier{UID: "staff-listing-elsewhere"}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages")
@@ -342,7 +332,7 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	// Three distinct ways a cursor can be malformed: not valid base64 at
@@ -377,7 +367,7 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	seedStaffAtPracticeNamed(t, db, practiceID, "staff-b", "Staff B")
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srvA := newServer(fakeVerifier{uid: "staff-a"}, db)
+	srvA := newServer(authntest.Verifier{UID: "staff-a"}, db)
 	defer srvA.Close()
 	bodyA, _ := json.Marshal(message.CreateRequest{Body: messageFromA})
 	respA := authedPost(t, srvA.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bodyA)
@@ -386,7 +376,7 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 		t.Fatalf("Staff A create status = %d, want %d", respA.StatusCode, http.StatusCreated)
 	}
 
-	srvB := newServer(fakeVerifier{uid: "staff-b"}, db)
+	srvB := newServer(authntest.Verifier{UID: "staff-b"}, db)
 	defer srvB.Close()
 
 	listResp := authedGet(t, srvB.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
@@ -440,7 +430,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 		seedMessage(t, db, engagementID, "staff", staffID, "message "+string(rune('A'+i%26)))
 	}
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	firstResp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
@@ -495,7 +485,7 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
@@ -542,7 +532,7 @@ func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
@@ -570,7 +560,7 @@ func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
@@ -597,7 +587,7 @@ func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	pdfBytes := []byte("%PDF-1.4\nfake pdf content for content-type sniffing\n")
@@ -625,7 +615,7 @@ func TestCreateHandler_AttachmentWrongTypeRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
@@ -646,7 +636,7 @@ func TestCreateHandler_AttachmentOversizedRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	oversized := bytes.Repeat([]byte("a"), 10<<20+32<<10) // 10MB + 32KB: over the cap, under the request-body ceiling
@@ -670,7 +660,7 @@ func TestCreateHandler_RequestWayOversizedRejectedAtParse(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	wayOversized := bytes.Repeat([]byte("a"), 11<<20) // past maxCreateRequestBytes entirely
@@ -692,7 +682,7 @@ func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
@@ -722,7 +712,7 @@ func TestCreateHandler_EmptyBodyAndNoAttachmentRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", "", "", nil)
@@ -743,7 +733,7 @@ func TestCreateHandler_StorePutFailureReturns500(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServerWithStore(fakeVerifier{uid: identityUID}, db, failingStore{})
+	srv := newServerWithStore(authntest.Verifier{UID: identityUID}, db, failingStore{})
 	defer srv.Close()
 
 	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
@@ -767,7 +757,7 @@ func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 	messageID := seedMessageWithAttachment(t, db, engagementID, "staff", staffID,
 		"messages/whatever/path", pngContentType, "photo.png", int64(len(pngBytes)))
 
-	srv := newServerWithStore(fakeVerifier{uid: identityUID}, db, failingStore{})
+	srv := newServerWithStore(authntest.Verifier{UID: identityUID}, db, failingStore{})
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
@@ -792,7 +782,7 @@ func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
 		t.Fatalf("query message id: %v", err)
 	}
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
@@ -811,7 +801,7 @@ func TestAttachmentHandler_InvalidMessageID(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
@@ -829,7 +819,7 @@ func TestAttachmentHandler_InvalidEngagementID(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages/00000000-0000-0000-0000-000000000000/attachment")
@@ -851,7 +841,7 @@ func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 
-	srv := newServer(fakeVerifier{uid: "staff-attachment-elsewhere"}, db)
+	srv := newServer(authntest.Verifier{UID: "staff-attachment-elsewhere"}, db)
 	defer srv.Close()
 
 	resp := authedGet(t, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
@@ -873,7 +863,7 @@ func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client One", "one@example.com")
 	_, otherEngagementID := seedClientEngagement(t, db, practiceID, "Client Two", "two@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	createResp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
@@ -901,7 +891,7 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(fakeVerifier{uid: identityUID}, db)
+	srv := newServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "plain JSON, no attachment"})

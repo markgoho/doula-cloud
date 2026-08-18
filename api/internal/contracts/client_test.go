@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/objectstore"
@@ -69,14 +70,14 @@ func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpo
 // newPortalServer mounts the same routes main.go wires up for the
 // Client-portal Contract view, behind clientauth.Middleware, backed by a
 // fresh objectstore.MemoryStore.
-func newPortalServer(verifier fakeVerifier, db *testdb.DB) *httptest.Server {
+func newPortalServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	return newPortalServerWithStore(verifier, db, objectstore.NewMemoryStore())
 }
 
 // newPortalServerWithStore mirrors newPortalServer but lets the caller
 // inject store, so a test can inspect what Sign wrote or force a Put/Get
 // failure.
-func newPortalServerWithStore(verifier fakeVerifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
+func newPortalServerWithStore(verifier authntest.Verifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/contract",
 		clientauth.Middleware(verifier, db.App)(contracts.ClientGetContractHandler()))
@@ -132,7 +133,7 @@ func TestClientGetContractHandler_Success(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContract(t, srv, engagementID)
@@ -162,7 +163,7 @@ func TestClientGetContractHandler_SignedAndVoidedAllowed(t *testing.T) {
 			seedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
-			srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+			srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 			defer srv.Close()
 
 			resp := getClientContract(t, srv, engagementID)
@@ -187,7 +188,7 @@ func TestClientGetContractHandler_DraftNeverReturned404s(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContract(t, srv, engagementID)
@@ -207,7 +208,7 @@ func TestClientGetContractHandler_NoContractYet404(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContract(t, srv, engagementID)
@@ -230,7 +231,7 @@ func TestClientGetContractHandler_OtherClientsEngagementRejected(t *testing.T) {
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(fakeVerifier{uid: identityUID}, db)
+	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
 	defer srv.Close()
 
 	resp := getClientContract(t, srv, otherEngagementID)

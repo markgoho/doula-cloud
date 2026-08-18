@@ -2,14 +2,13 @@ package payments_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -18,16 +17,6 @@ import (
 // errStripeFake is returned by FakeClient methods in tests that exercise a
 // handler's Stripe-failure path.
 var errStripeFake = errors.New("stripe: fake failure")
-
-// fakeVerifier is a test double for authn.Verifier -- real Identity
-// Platform tokens can't be minted without a live GCP project. Mirrors
-// billing_test's own fakeVerifier; kept package-local since Go test
-// doubles aren't exported across packages.
-type fakeVerifier struct{ uid string }
-
-func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: f.uid}, nil
-}
 
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 	t.Helper()
@@ -89,7 +78,7 @@ func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *str
 	return id
 }
 
-func newConnectServer(verifier fakeVerifier, db *testdb.DB, client payments.Client) *httptest.Server {
+func newConnectServer(verifier authntest.Verifier, db *testdb.DB, client payments.Client) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/payments/connect",
 		staffauth.Middleware(verifier, db.App)(payments.PostConnectHandler(client)))
@@ -136,7 +125,7 @@ func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postConnect(t, srv, practiceID)
@@ -179,7 +168,7 @@ func TestPostConnectHandler_SecondAttemptReusesExistingAccount(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	first := postConnect(t, srv, practiceID)
@@ -214,7 +203,7 @@ func TestPostConnectHandler_NonOwnerForbidden(t *testing.T) {
 	practiceID := seedMember(t, db, uid) // doula role, not owner
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postConnect(t, srv, practiceID)
@@ -238,7 +227,7 @@ func TestPostConnectHandler_CreateAccountFailureReturns500(t *testing.T) {
 	client := payments.NewFakeClient()
 	client.CreateAccountErr = errStripeFake
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postConnect(t, srv, practiceID)
@@ -261,7 +250,7 @@ func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
 	client := payments.NewFakeClient()
 	client.CreateAccountLinkErr = errStripeFake
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := postConnect(t, srv, practiceID)
@@ -281,7 +270,7 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getConnectStatus(t, srv, practiceID)
@@ -312,7 +301,7 @@ func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 	practiceID := seedMember(t, db, uid) // doula role, not owner
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	connectResp := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
@@ -347,7 +336,7 @@ func TestGetConnectStatusHandler_Active(t *testing.T) {
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
 	client.Statuses[accountID] = payments.AccountStatus{ChargesEnabled: true, PayoutsEnabled: true, DetailsSubmitted: true}
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getConnectStatus(t, srv, practiceID)
@@ -372,7 +361,7 @@ func TestGetConnectStatusHandler_RetrieveFailureReturns500(t *testing.T) {
 	postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
 	client.RetrieveAccountErr = errStripeFake
 
-	srv := newConnectServer(fakeVerifier{uid: uid}, db, client)
+	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
 	defer srv.Close()
 
 	resp := getConnectStatus(t, srv, practiceID)

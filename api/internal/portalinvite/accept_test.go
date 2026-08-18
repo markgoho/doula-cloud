@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
 )
@@ -15,7 +16,7 @@ const acceptIdentityUID = "portal-invite-accepting-uid"
 
 func TestAcceptInviteHandler_MissingToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{}, db)
+	srv := newAcceptServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "", portalinvite.AcceptInviteRequest{InviteToken: "whatever"})
@@ -28,7 +29,7 @@ func TestAcceptInviteHandler_MissingToken(t *testing.T) {
 
 func TestAcceptInviteHandler_TokenVerificationFailure(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{err: errBadToken}, db)
+	srv := newAcceptServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "bad", portalinvite.AcceptInviteRequest{InviteToken: "whatever"})
@@ -41,7 +42,7 @@ func TestAcceptInviteHandler_TokenVerificationFailure(t *testing.T) {
 
 func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: acceptIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/portal/accept-invite", bytes.NewReader([]byte("not json")))
@@ -63,7 +64,7 @@ func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 
 func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: acceptIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: ""})
@@ -76,7 +77,7 @@ func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 
 func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(fakeVerifier{uid: acceptIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: "00000000-0000-0000-0000-000000000000"})
@@ -91,7 +92,7 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: acceptIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
@@ -126,7 +127,7 @@ func TestAcceptInviteHandler_TokenAlreadyClaimed(t *testing.T) {
 	db := testdb.New(t)
 	_, inviteToken := seedPendingPortalInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: acceptIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
 
 	first := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
@@ -158,7 +159,7 @@ func TestAcceptInviteHandler_IdentityAlreadyClaimedElsewhere(t *testing.T) {
 	}
 	_, inviteToken := seedPendingPortalInvite(t, db)
 
-	srv := newAcceptServer(fakeVerifier{uid: acceptIdentityUID}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
 
 	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
