@@ -31,6 +31,7 @@ import (
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/pushsub"
+	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/visit"
 )
@@ -133,6 +134,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// unreachable from the browser. CI's two smoke tests curl this same path
 	// against the container and against the raw Cloud Run URL.
 	mux.HandleFunc("GET /api/hello", helloHandler)
+	mux.Handle("POST /api/session", session.CreateHandler(verifier))
+	mux.Handle("DELETE /api/session", session.EndHandler())
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(verifier, db))
 	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))

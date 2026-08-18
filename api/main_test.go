@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -59,6 +60,62 @@ func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /api/hello status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestRoutes_CreateAndEndSession drives #144's two new endpoints through
+// the real route table: a valid Bearer token gets a __session cookie
+// from create-session, and end-session clears it -- proving both are
+// wired under /api and reachable with no Practice/Engagement in the
+// path.
+func TestRoutes_CreateAndEndSession(t *testing.T) {
+	mux := routes(authntest.Verifier{UID: "uid-1"}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	createReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/session", nil)
+	if err != nil {
+		t.Fatalf("build create request: %v", err)
+	}
+	createReq.Header.Set("Authorization", "Bearer good-token")
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/session status = %d, want %d", createResp.StatusCode, http.StatusOK)
+	}
+	var createdCookie *http.Cookie
+	for _, c := range createResp.Cookies() {
+		if c.Name == session.CookieName {
+			createdCookie = c
+		}
+	}
+	if createdCookie == nil {
+		t.Fatal("no __session cookie set by POST /api/session")
+	}
+
+	endReq, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/session", nil)
+	if err != nil {
+		t.Fatalf("build end request: %v", err)
+	}
+	endResp, err := http.DefaultClient.Do(endReq)
+	if err != nil {
+		t.Fatalf("end request: %v", err)
+	}
+	defer endResp.Body.Close()
+	if endResp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE /api/session status = %d, want %d", endResp.StatusCode, http.StatusOK)
+	}
+	var clearedCookie *http.Cookie
+	for _, c := range endResp.Cookies() {
+		if c.Name == session.CookieName {
+			clearedCookie = c
+		}
+	}
+	if clearedCookie == nil || clearedCookie.MaxAge >= 0 {
+		t.Fatalf("DELETE /api/session did not clear the cookie: %+v", clearedCookie)
 	}
 }
 
