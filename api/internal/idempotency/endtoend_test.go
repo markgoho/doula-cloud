@@ -295,6 +295,112 @@ func TestEndToEnd_MessageCreateNoDuplicateRowOnRetry(t *testing.T) {
 	}
 }
 
+// TestEndToEnd_InviteNoDuplicateRowOnRetry wires staffauth.InviteHandler
+// behind staffauth.Middleware(...)(idempotency.Wrap(...)) exactly as main.go
+// does, proving a retried invite request with the same Idempotency-Key
+// returns the identical stored staffId/inviteToken and inserts exactly one
+// staff row and one practice_memberships row -- the concrete duplicate-post
+// risk #130 exists to close.
+func TestEndToEnd_InviteNoDuplicateRowOnRetry(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "e2e-invite-owner"
+	practiceID := seedOwnerStaffWithMembership(t, db, identityUID)
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /practices/{practiceId}/invitations",
+		staffauth.Middleware(fakeVerifier{uid: identityUID}, db.App)(idempotency.Wrap(staffauth.InviteHandler())))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	postInvite := func(key string) *http.Response {
+		t.Helper()
+		body, err := json.Marshal(staffauth.InviteRequest{Email: "e2e-invitee@example.com", Name: "E2E Invitee"})
+		if err != nil {
+			t.Fatalf("marshal body: %v", err)
+		}
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/practices/"+practiceID+"/invitations", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer tok")
+		if key != "" {
+			req.Header.Set("Idempotency-Key", key)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		return resp
+	}
+	decode := func(resp *http.Response) staffauth.InviteResponse {
+		t.Helper()
+		var out staffauth.InviteResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
+	}
+	rowCounts := func() (staffCount, membershipCount int) {
+		t.Helper()
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT count(*) FROM staff WHERE email = 'e2e-invitee@example.com'`,
+		).Scan(&staffCount); err != nil {
+			t.Fatalf("count staff rows: %v", err)
+		}
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT count(*) FROM practice_memberships pm JOIN staff s ON s.id = pm.staff_id
+			 WHERE pm.practice_id = $1 AND s.email = 'e2e-invitee@example.com'`,
+			practiceID,
+		).Scan(&membershipCount); err != nil {
+			t.Fatalf("count membership rows: %v", err)
+		}
+		return staffCount, membershipCount
+	}
+
+	first := postInvite("invite-retry-key")
+	defer first.Body.Close()
+	if first.StatusCode != http.StatusCreated {
+		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
+	}
+	firstOut := decode(first)
+	if staffCount, membershipCount := rowCounts(); staffCount != 1 || membershipCount != 1 {
+		t.Fatalf("row counts after first call = (staff=%d, membership=%d), want (1, 1)", staffCount, membershipCount)
+	}
+
+	retried := postInvite("invite-retry-key")
+	defer retried.Body.Close()
+	if retried.StatusCode != http.StatusCreated {
+		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
+	}
+	retriedOut := decode(retried)
+	if retriedOut.StaffID != firstOut.StaffID || retriedOut.InviteToken != firstOut.InviteToken {
+		t.Fatalf("retried response = %+v, want identical stored response %+v -- business logic must not re-run on replay", retriedOut, firstOut)
+	}
+	if staffCount, membershipCount := rowCounts(); staffCount != 1 || membershipCount != 1 {
+		t.Fatalf("row counts after retry = (staff=%d, membership=%d), want (1, 1) (no duplicate rows)", staffCount, membershipCount)
+	}
+
+	noKey := postInvite("")
+	defer noKey.Body.Close()
+	if noKey.StatusCode != http.StatusCreated {
+		t.Fatalf("no-key call status = %d, want %d", noKey.StatusCode, http.StatusCreated)
+	}
+	noKeyOut := decode(noKey)
+	if noKeyOut.StaffID == firstOut.StaffID {
+		t.Fatalf("call with no Idempotency-Key returned the same Staff as the earlier call -- expected the handler to re-run")
+	}
+
+	differentKey := postInvite("invite-retry-key-2")
+	defer differentKey.Body.Close()
+	if differentKey.StatusCode != http.StatusCreated {
+		t.Fatalf("different-key call status = %d, want %d", differentKey.StatusCode, http.StatusCreated)
+	}
+	differentKeyOut := decode(differentKey)
+	if differentKeyOut.StaffID == firstOut.StaffID {
+		t.Fatalf("call with a different Idempotency-Key returned the same Staff as the earlier call -- expected the handler to re-run")
+	}
+}
+
 // TestEndToEnd_MessageCreateMultipartNoDuplicateUploadOnRetry covers the
 // multipart/form-data path (an attachment upload alongside the row insert)
 // that makes message.CreateHandler different from #128's /clients and

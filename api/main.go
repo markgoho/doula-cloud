@@ -98,7 +98,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("GET /api/practices/{practiceId}/session",
 		staffauth.Middleware(verifier, db)(http.HandlerFunc(practiceSessionHandler)))
 	mux.Handle("POST /api/practices/{practiceId}/invitations",
-		staffauth.Middleware(verifier, db)(staffauth.InviteHandler()))
+		staffauth.Middleware(verifier, db)(idempotency.Wrap(staffauth.InviteHandler())))
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
 		staffauth.Middleware(verifier, db)(staffauth.AssignRolesHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/billing",

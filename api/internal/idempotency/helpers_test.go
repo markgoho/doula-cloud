@@ -118,6 +118,22 @@ func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (p
 	return practiceID
 }
 
+// seedOwnerStaffWithMembership mirrors seedStaffWithMembership but promotes
+// the seeded Staff member to the 'owner' role -- the only role
+// staffauth.InviteHandler accepts as authorization, per
+// staffauth_test's seedOwnerMembership helper of the same intent.
+func seedOwnerStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
+	t.Helper()
+	practiceID = seedStaffWithMembership(t, db, identityUID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practice_memberships SET roles = '{owner}' WHERE practice_id = $1`,
+		practiceID,
+	); err != nil {
+		t.Fatalf("promote to owner: %v", err)
+	}
+	return practiceID
+}
+
 // seedSignupBonus grants practiceID the same +3 signup-bonus credit_ledger
 // row staffauth.signup writes for a real Practice, mirroring
 // engagement_test's helper of the same name.
