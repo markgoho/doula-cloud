@@ -1,6 +1,8 @@
-// Package authn verifies GCP Identity Platform ID tokens. It defines a
-// small Verifier interface so HTTP middleware can be tested against a
-// fake implementation instead of a live Identity Platform project.
+// Package authn verifies GCP Identity Platform credentials -- ID tokens
+// and the session cookies minted from them -- and manages their
+// revocation. It defines a small Verifier interface so HTTP middleware
+// can be tested against a fake implementation instead of a live Identity
+// Platform project.
 package authn
 
 import (
@@ -9,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
@@ -68,11 +71,31 @@ type VerifiedToken struct {
 	UID string
 }
 
-// Verifier checks a raw ID token and returns the identity it carries, or
-// an error if the token is missing, expired, malformed, or not signed by
-// the configured Identity Platform project.
+// Verifier checks Identity Platform credentials and manages the session
+// cookies minted from them.
 type Verifier interface {
+	// VerifyIDToken checks a raw ID token and returns the identity it
+	// carries, or an error if the token is missing, expired, malformed,
+	// or not signed by the configured Identity Platform project. Used
+	// only by the bootstrap endpoints, which run before a session cookie
+	// exists.
 	VerifyIDToken(ctx context.Context, idToken string) (*VerifiedToken, error)
+
+	// MintSessionCookie exchanges a verified ID token for an opaque
+	// session cookie value that expires after expiresIn.
+	MintSessionCookie(ctx context.Context, idToken string, expiresIn time.Duration) (string, error)
+
+	// VerifySessionCookie checks a session cookie and returns the
+	// identity it carries. Unlike VerifyIDToken, this always checks
+	// that the credential has not been revoked, since a session cookie
+	// is long-lived and revocation must take effect on the next request.
+	VerifySessionCookie(ctx context.Context, sessionCookie string) (*VerifiedToken, error)
+
+	// RevokeRefreshTokens ends every session held by uid, on every
+	// device, by revoking that person's Identity Platform refresh
+	// tokens. A session cookie already verified before the revocation
+	// takes effect only on its next VerifySessionCookie call.
+	RevokeRefreshTokens(ctx context.Context, uid string) error
 }
 
 // FirebaseVerifier verifies tokens via the GCP Identity Platform Admin
@@ -116,4 +139,42 @@ func (v *FirebaseVerifier) VerifyIDToken(ctx context.Context, idToken string) (*
 	}
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
 	return &VerifiedToken{UID: token.UID}, nil
+}
+
+// MintSessionCookie exchanges idToken for a session cookie via the Admin
+// SDK.
+func (v *FirebaseVerifier) MintSessionCookie(ctx context.Context, idToken string, expiresIn time.Duration) (string, error) {
+	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
+	cookie, err := v.client.SessionCookie(ctx, idToken, expiresIn)
+	if err != nil {
+		// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
+		return "", fmt.Errorf("authn: mint session cookie: %w", err)
+	}
+	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
+	return cookie, nil
+}
+
+// VerifySessionCookie verifies sessionCookie against Identity Platform,
+// checking revocation, and returns the caller's uid.
+func (v *FirebaseVerifier) VerifySessionCookie(ctx context.Context, sessionCookie string) (*VerifiedToken, error) {
+	// coverage:ignore reason: requires a real Identity Platform session cookie, not exercised by unit tests
+	token, err := v.client.VerifySessionCookieAndCheckRevoked(ctx, sessionCookie)
+	if err != nil {
+		// coverage:ignore reason: requires a real Identity Platform session cookie, not exercised by unit tests
+		return nil, fmt.Errorf("authn: verify session cookie: %w", err)
+	}
+	// coverage:ignore reason: requires a real Identity Platform session cookie, not exercised by unit tests
+	return &VerifiedToken{UID: token.UID}, nil
+}
+
+// RevokeRefreshTokens revokes uid's Identity Platform refresh tokens,
+// ending their sessions on every device.
+func (v *FirebaseVerifier) RevokeRefreshTokens(ctx context.Context, uid string) error {
+	// coverage:ignore reason: requires a real Identity Platform user, not exercised by unit tests
+	if err := v.client.RevokeRefreshTokens(ctx, uid); err != nil {
+		// coverage:ignore reason: requires a real Identity Platform user, not exercised by unit tests
+		return fmt.Errorf("authn: revoke refresh tokens: %w", err)
+	}
+	// coverage:ignore reason: requires a real Identity Platform user, not exercised by unit tests
+	return nil
 }
