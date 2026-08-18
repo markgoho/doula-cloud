@@ -91,7 +91,11 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // / payments.Client doubles instead of the real ones main() wires up.
 func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret string) *http.ServeMux {
 	mux := http.NewServeMux()
+	// Both prefixes on purpose: /hello is what deploy-api's smoke test curls
+	// on the raw Cloud Run URL, /api/hello is what reaches the service through
+	// the Firebase Hosting /api/** rewrite, which forwards the path unchanged.
 	mux.HandleFunc("/hello", helloHandler)
+	mux.HandleFunc("/api/hello", helloHandler)
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(verifier, db))
 	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))

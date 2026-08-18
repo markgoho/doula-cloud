@@ -556,3 +556,24 @@ jobs:
             exit 1
           fi
           echo "Deployed app/ site ($url) answered with the expected build output."
+
+          # The SPA fallback must still catch app routes that have no file of
+          # their own, now that a rule sits ahead of it in firebase.json.
+          deep="https://${site}.web.app/practices"
+          if ! curl -fsS "$deep" | grep -q 'manifest.webmanifest'; then
+            echo "Deployed app/ site did not serve the SPA shell for $deep"
+            exit 1
+          fi
+          echo "SPA fallback still serves $deep."
+
+          # /api/** must reach the doula-api Cloud Run service instead of the
+          # SPA fallback. Deliberately asserts "not the SPA shell" rather than a
+          # 200: deploy-api runs in parallel with this job, so a brand-new BFF
+          # route can legitimately still be a 404 here. What must never happen
+          # is Hosting answering an /api path with the app shell.
+          body=$(curl -sS "https://${site}.web.app/api/hello")
+          if grep -q 'manifest.webmanifest' <<<"$body"; then
+            echo "Hosting served the SPA shell for /api/hello -- the /api/** rewrite is missing or ordered after the ** fallback"
+            exit 1
+          fi
+          echo "/api/hello is routed past the SPA fallback: $body"
