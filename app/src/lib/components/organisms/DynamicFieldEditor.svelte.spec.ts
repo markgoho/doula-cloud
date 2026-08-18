@@ -1,8 +1,8 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import PlanTemplateEditor from './PlanTemplateEditor.svelte';
-import type { Field } from './planTemplate.js';
+import DynamicFieldEditor from './DynamicFieldEditor.svelte';
+import type { Field } from '#lib/planTemplate.js';
 
 const defaultFields: Field[] = [
 	{ id: 'a', type: 'short_text', label: 'Support people', order: 0 },
@@ -22,7 +22,7 @@ async function setup({ fields = defaultFields }: SetupOptions = {}) {
 	const onTypeChange = vi.fn();
 	const onOptionsChange = vi.fn();
 
-	await render(PlanTemplateEditor, {
+	await render(DynamicFieldEditor, {
 		fields,
 		onAdd,
 		onRemove,
@@ -36,7 +36,7 @@ async function setup({ fields = defaultFields }: SetupOptions = {}) {
 	return { onAdd, onRemove, onMoveUp, onMoveDown, onLabelChange, onTypeChange, onOptionsChange };
 }
 
-describe('PlanTemplateEditor.svelte', () => {
+describe('DynamicFieldEditor.svelte', () => {
 	it('renders a label input and type select for each field', async () => {
 		await setup();
 

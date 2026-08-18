@@ -11,4 +11,7 @@ export const atomPages = [
 
 export const moleculePages = [{ name: 'Labeled field', slug: 'labeled-field' }] as const;
 
-export const organismPages = [{ name: 'Data table', slug: 'data-table' }] as const;
+export const organismPages = [
+	{ name: 'Data table', slug: 'data-table' },
+	{ name: 'Dynamic field editor', slug: 'dynamic-field-editor' }
+] as const;

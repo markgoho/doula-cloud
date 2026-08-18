@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiFetch } from '#lib/api.js';
-	import PlanTemplateEditor from '#lib/PlanTemplateEditor.svelte';
+	import DynamicFieldEditor from '#lib/components/organisms/DynamicFieldEditor.svelte';
 	import {
 		loadTemplate,
 		saveTemplate,
@@ -96,7 +96,7 @@
 	<p>Saved.</p>
 {/if}
 
-<PlanTemplateEditor
+<DynamicFieldEditor
 	{fields}
 	onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
 	onRemove={(id: string) => (fields = removeField(fields, id))}

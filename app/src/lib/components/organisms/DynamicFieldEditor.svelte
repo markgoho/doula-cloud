@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from './planTemplate.js';
+	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/planTemplate.js';
 
 	let {
 		fields,

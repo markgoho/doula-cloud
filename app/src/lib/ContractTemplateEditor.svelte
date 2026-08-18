@@ -24,7 +24,7 @@
 	<ul>
 		<!-- v8 ignore start: Svelte-compiled keyed-each-diffing branch, same
 		     class of unreachable-from-interaction-tests branch as
-		     PlanTemplateEditor.svelte's bound <select>/<option> pair -->
+		     DynamicFieldEditor.svelte's bound <select>/<option> pair -->
 		{#each MERGE_FIELDS as field (field.token)}
 			<li><code>{field.token}</code> &mdash; {field.label}</li>
 		{/each}
