@@ -45,12 +45,18 @@ const API_BINARY_PATH = path.join(tmpdir(), 'doula-cloud-e2e-api');
 // Sequenced by hand (db, then migrate, then the role, then the BFF)
 // because that used to be compose's own `depends_on` chain; each step
 // still needs the one before it to have actually finished.
-export async function startStack() {
+//
+// appOrigin is the front-end origin this run's caller will actually make
+// requests from -- DEV_SERVER_ORIGIN for `bun run dev:full`,
+// PREVIEW_SERVER_ORIGIN for the Playwright stack (see ports.ts) -- so the
+// BFF's csrf.Wrap (api/internal/csrf) is configured for the one origin
+// that's really going to call it, not a hardcoded union of both.
+export async function startStack(appOrigin: string) {
 	await startEmulator();
 	await startDatabase();
 	runMigrations();
 	seedAppE2ERole();
-	await startAPI();
+	await startAPI(appOrigin);
 }
 
 // Deliberately doesn't use `up --wait` for `db`: under CI's rootless
@@ -191,7 +197,7 @@ async function startEmulator() {
 // (per #61, PushManager.subscribe() doesn't work headless), so
 // Pusher.Send is never actually reached, but this keeps main() from ever
 // depending on real VAPID keys existing to boot.
-async function startAPI() {
+async function startAPI(appOrigin: string) {
 	killPidfile(API_PIDFILE);
 
 	execFileSync('go', ['build', '-o', API_BINARY_PATH, '.'], {
@@ -215,6 +221,7 @@ async function startAPI() {
 			VAPID_PUBLIC_KEY: 'BEOwHFGQTdwLqgkxPeDzvHQAHjqFkfxMVdO8ONFexrHrD4_43Jvr_XPB5LUA6AAdvnGK1sHeo7WYPwCAOfRI9Ow',
 			VAPID_PRIVATE_KEY: 'Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4',
 			VAPID_SUBSCRIBER: 'mailto:e2e@doula-cloud.invalid',
+			EXPECTED_ORIGINS: appOrigin,
 			PORT: String(E2E_API_PORT)
 		}
 	});

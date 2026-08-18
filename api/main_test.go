@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stripe/stripe-go/v86"
+
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/objectstore"
@@ -15,6 +17,13 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
+
+// testExpectedOrigin is the routes() tests' stand-in for whichever origin
+// EXPECTED_ORIGINS would resolve to in a real environment (see
+// resolveExpectedOrigins). None of the pre-existing tests below set an
+// Origin header, so its value only matters to the origin-check tests
+// added alongside it.
+const testExpectedOrigin = "https://app.example.test"
 
 func TestHelloHandler(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/hello", nil)
@@ -35,7 +44,7 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -66,7 +75,7 @@ func TestResolvePort(t *testing.T) {
 }
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
-	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -101,7 +110,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	mux := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test")
+	mux := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -164,5 +173,125 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	}
 	if lastPracticeID != signedUp.PracticeID {
 		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, signedUp.PracticeID)
+	}
+}
+
+func TestResolveExpectedOrigins(t *testing.T) {
+	t.Setenv("EXPECTED_ORIGINS", "")
+	if got := resolveExpectedOrigins(); got != nil {
+		t.Fatalf("resolveExpectedOrigins() = %v, want nil", got)
+	}
+
+	t.Setenv("EXPECTED_ORIGINS", "https://a.example, https://b.example,,")
+	got := resolveExpectedOrigins()
+	want := []string{"https://a.example", "https://b.example"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("resolveExpectedOrigins() = %v, want %v", got, want)
+	}
+}
+
+// TestRoutes_CrossOriginStateChangeRejected drives #142's core case
+// through the real route table: a state-changing request carrying an
+// Origin header that isn't the configured one is rejected before it
+// reaches the handler -- proven by getting 403 rather than the 401 a
+// missing bearer token would otherwise produce.
+func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Origin", "https://evil.example")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+// TestRoutes_MatchingOriginAllowed proves a matching Origin header
+// doesn't get caught by the check -- the request still reaches the
+// handler, which rejects it for its own reason (401, no bearer token),
+// not the origin check's 403.
+func TestRoutes_MatchingOriginAllowed(t *testing.T) {
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Origin", testExpectedOrigin)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestRoutes_StripeWebhooksSucceedWithNoOrigin proves #142's explicit
+// carve-out: both server-to-server Stripe webhook routes, which send no
+// Origin header, still succeed through the real route table rather than
+// being caught by the origin check meant for browser callers.
+func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
+	const stripeWebhookSecret = "whsec_test"
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// An event type PostPurchaseWebhookHandler doesn't act on: proves the
+	// request reached the handler and was acknowledged, with no database
+	// needed (db is nil above).
+	const objectKey = "object"
+	payload, err := json.Marshal(map[string]any{
+		"id":      "evt_other",
+		objectKey: "event",
+		"type":    "payment_intent.succeeded",
+		"data":    map[string]any{objectKey: map[string]any{"id": "pi_test", objectKey: "payment_intent"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: stripeWebhookSecret})
+
+	billingReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/stripe/webhook", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	billingReq.Header.Set("Stripe-Signature", signed.Header)
+	billingResp, err := http.DefaultClient.Do(billingReq)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer billingResp.Body.Close()
+	if billingResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/stripe/webhook status = %d, want %d", billingResp.StatusCode, http.StatusOK)
+	}
+
+	// payments.NewFakeClient's VerifyWebhookSignature accepts anything and
+	// reports an unrecognized event type, which PostConnectWebhookHandler
+	// also just acknowledges -- no signature header needed to prove the
+	// route is reachable with no Origin header.
+	connectReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/stripe/connect-webhook", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	connectResp, err := http.DefaultClient.Do(connectReq)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer connectResp.Body.Close()
+	if connectResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/stripe/connect-webhook status = %d, want %d", connectResp.StatusCode, http.StatusOK)
 	}
 }

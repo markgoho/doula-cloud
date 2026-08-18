@@ -14,3 +14,12 @@ export const E2E_API_HOST = '127.0.0.1';
 export const E2E_API_PORT = 18_080;
 export const E2E_EMULATOR_HOST = '127.0.0.1';
 export const E2E_EMULATOR_PORT = 9099;
+
+// The front-end origin each of the local BFF's two callers runs at --
+// `vite dev`'s default port for `bun run dev:full`, and `vite preview`'s
+// (playwright.config.ts's webServer.port) for the Playwright stack. Each
+// caller passes its own one of these into e2e/stack.ts's startStack, which
+// the BFF's csrf.Wrap (api/internal/csrf) then requires a matching Origin
+// header on state-changing requests.
+export const DEV_SERVER_ORIGIN = 'http://localhost:5173';
+export const PREVIEW_SERVER_ORIGIN = 'http://localhost:4173';

@@ -4,9 +4,9 @@
 // down again on Ctrl-C or if the dev server exits on its own.
 import { spawn } from 'node:child_process';
 import { startStack, stopStack } from '../e2e/stack';
-import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from '../e2e/ports';
+import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, DEV_SERVER_ORIGIN } from '../e2e/ports';
 
-await startStack();
+await startStack(DEV_SERVER_ORIGIN);
 
 const vite = spawn('bun', ['run', 'dev'], {
 	stdio: 'inherit',

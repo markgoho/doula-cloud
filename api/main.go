@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	// Registers the "pgx" driver with database/sql; never referenced by name.
@@ -19,6 +20,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
@@ -50,6 +52,31 @@ func resolvePort() string {
 		return port
 	}
 	return "8080"
+}
+
+// resolveExpectedOrigins reads the comma-separated EXPECTED_ORIGINS env
+// var into the origins csrf.Wrap treats as same-site. A list, not a
+// single value, because the local stack (app/e2e/stack.ts) runs one BFF
+// process behind two different front-end origins depending on which
+// caller started it -- `vite dev` (local development) and `vite
+// preview` (the Playwright stack) -- and both need to pass. Production
+// sets exactly one, the Firebase Hosting site's own origin (see #139).
+// Unset resolves to an empty list, which rejects every state-changing
+// request that carries an Origin header -- fail closed rather than
+// silently accepting any origin if this is ever left unconfigured.
+func resolveExpectedOrigins() []string {
+	raw := os.Getenv("EXPECTED_ORIGINS")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if origin := strings.TrimSpace(part); origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
 }
 
 // practiceSessionResponse confirms to the frontend which Practice the
@@ -93,7 +120,13 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // substitute a fake Identity Platform verifier, a test Postgres instance,
 // an in-memory ObjectStore, an in-memory Pusher, and in-memory billing.StripeClient
 // / payments.Client doubles instead of the real ones main() wires up.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret string) *http.ServeMux {
+//
+// The whole mux is wrapped in csrf.Wrap, rather than only the
+// authenticated routes: the bootstrap endpoints (signup, invitation
+// acceptance) are state-changing too, and both they and the two Stripe
+// webhook routes rely on the same "no Origin header, no rejection" rule
+// -- there is no separate carve-out for either.
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret string, expectedOrigins []string) http.Handler {
 	mux := http.NewServeMux()
 	// Under /api like every other route: Firebase Hosting rewrites /api/** to
 	// this service with the path unchanged, so a bare /hello would be
@@ -195,7 +228,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		clientauth.Middleware(verifier, db)(pushsub.ClientRegisterHandler()))
 	mux.Handle("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
 		clientauth.Middleware(verifier, db)(pushsub.ClientUnregisterHandler()))
-	return mux
+	return csrf.Wrap(expectedOrigins, mux)
 }
 
 func main() {
@@ -235,7 +268,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET")),
+		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), resolveExpectedOrigins()),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
