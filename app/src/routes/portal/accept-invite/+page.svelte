@@ -63,7 +63,7 @@
 			const landing = decidePortalLanding(session);
 			if (landing.type === 'redirect') {
 				await goto(
-					resolve('/portal/engagements/[engagementId]', { engagementId: landing.engagementId })
+					resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: landing.engagementId })
 				);
 			} else {
 				picker = landing.engagements;
@@ -132,7 +132,7 @@
 			{#each picker as engagement (engagement.engagementId)}
 				<li>
 					<Link
-						href={resolve('/portal/engagements/[engagementId]', {
+						href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
 							engagementId: engagement.engagementId
 						})}
 						label={engagement.practiceName}

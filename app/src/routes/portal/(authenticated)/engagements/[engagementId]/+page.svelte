@@ -230,10 +230,10 @@
 		<dd>{new Date(detail.createdAt).toLocaleDateString()}</dd>
 	</dl>
 
-	<a href={resolve('/portal/engagements/[engagementId]/birth-plan', { engagementId: page.params.engagementId! })}
+	<a href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', { engagementId: page.params.engagementId! })}
 		>Birth Plan</a
 	>
-	<a href={resolve('/portal/engagements/[engagementId]/contract', { engagementId: page.params.engagementId! })}
+	<a href={resolve('/portal/(authenticated)/engagements/[engagementId]/contract', { engagementId: page.params.engagementId! })}
 		>Contract</a
 	>
 

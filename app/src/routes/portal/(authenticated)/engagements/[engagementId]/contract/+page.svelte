@@ -45,7 +45,7 @@
 	}
 </script>
 
-<a href={resolve('/portal/engagements/[engagementId]', { engagementId: page.params.engagementId! })}>Back</a>
+<a href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}>Back</a>
 
 {#if error}
 	<p role="alert">{error}</p>

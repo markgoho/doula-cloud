@@ -16,7 +16,7 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // PushEvent is constructable per spec, so no CDP is needed. The service
 // worker (src/service-worker.ts) reacts by posting a content-free message
 // to every open window client, which is what the Client-portal thread
-// page (src/routes/portal/engagements/[engagementId]/+page.svelte) uses
+// page (src/routes/portal/(authenticated)/engagements/[engagementId]/+page.svelte) uses
 // to trigger its own authenticated refetch -- the service worker has no
 // Identity Platform ID token, so it can never call the BFF itself
 // (#lib/push.ts's PUSH_MESSAGE_TYPE doc comment).

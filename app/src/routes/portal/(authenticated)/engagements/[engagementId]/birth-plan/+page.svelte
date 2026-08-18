@@ -32,7 +32,7 @@
 
 <div class="no-print">
 	<a
-		href={resolve('/portal/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
+		href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
 		>Back</a
 	>
 </div>
