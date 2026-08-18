@@ -1,0 +1,151 @@
+package portalinvite_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/testdb"
+)
+
+// fakeVerifier is a test double for authn.Verifier: real Identity Platform
+// tokens can't be minted without a live GCP project, so tests inject this
+// instead of authn.FirebaseVerifier.
+type fakeVerifier struct {
+	uid string
+	err error
+}
+
+func (f fakeVerifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &authn.VerifiedToken{UID: f.uid}, nil
+}
+
+var errBadToken = errors.New("invalid token")
+
+func newInviteServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
+		staffauth.Middleware(verifier, db.App)(portalinvite.InviteHandler()))
+	return httptest.NewServer(mux)
+}
+
+func newAcceptServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.Handle("POST /portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db.App))
+	return httptest.NewServer(mux)
+}
+
+func postInvite(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+	t.Helper()
+	url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer tok")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+func postAccept(t *testing.T, srv *httptest.Server, token string, body any) *http.Response {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/portal/accept-invite", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+// seedPractice inserts a Practice using the superuser Admin connection.
+func seedPractice(t *testing.T, db *testdb.DB, name string) string {
+	t.Helper()
+	var id string
+	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
+		t.Fatalf("seed practice %q: %v", name, err)
+	}
+	return id
+}
+
+// seedStaffWithMembership seeds a Practice and a Staff member holding a
+// membership there. Per #90's scope decision, portal-invite gating is
+// practice-tier, so the doula role (no owner) is enough to exercise it.
+func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
+	t.Helper()
+	practiceID = seedPractice(t, db, "Portal Invite Test Practice")
+	var staffID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
+		identityUID,
+	).Scan(&staffID); err != nil {
+		t.Fatalf("seed staff: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{doula}')`,
+		practiceID, staffID,
+	); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+	return practiceID
+}
+
+// seedClientEngagement inserts a Client and an Engagement linking them to
+// practiceID, using the superuser Admin connection.
+func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email string) (clientID, engagementID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (name, email) VALUES ($1, $2) RETURNING id`,
+		name, email,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id) VALUES ($1, $2) RETURNING id`,
+		clientID, practiceID,
+	).Scan(&engagementID); err != nil {
+		t.Fatalf("seed engagement: %v", err)
+	}
+	return clientID, engagementID
+}
+
+// seedPendingPortalInvite seeds a Practice, a Staff member, a Client with
+// an Engagement at that Practice, and a pending (unclaimed) portal invite
+// for the Client -- the state InviteHandler leaves behind for
+// AcceptInviteHandler to pick up.
+func seedPendingPortalInvite(t *testing.T, db *testdb.DB) (clientID, inviteToken string) {
+	t.Helper()
+	practiceID := seedStaffWithMembership(t, db, "portal-invite-owner")
+	clientID, _ = seedClientEngagement(t, db, practiceID, "Invited Client", "invited@example.com")
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING invite_token::text`,
+		clientID,
+	).Scan(&inviteToken); err != nil {
+		t.Fatalf("seed pending portal invite: %v", err)
+	}
+	return clientID, inviteToken
+}

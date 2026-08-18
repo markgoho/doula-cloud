@@ -63,6 +63,10 @@
 	let visits = $state<Visit[]>([]);
 	let visitsError = $state('');
 	let isCreatingVisit = $state(false);
+
+	let portalInviteLink = $state('');
+	let portalInviteError = $state('');
+	let isSendingPortalInvite = $state(false);
 	let reassignStaffId = $state<Record<string, string>>({});
 	let reassignError = $state<Record<string, string>>({});
 
@@ -126,6 +130,10 @@
 					attachmentPreviewURLs[m.messageId] = URL.createObjectURL(blob);
 				})
 		);
+	}
+
+	function portalInviteURL() {
+		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/portal-invite`;
 	}
 
 	function visitsURL() {
@@ -409,6 +417,32 @@
 		});
 	});
 
+	async function handleSendPortalInvite() {
+		portalInviteError = '';
+		isSendingPortalInvite = true;
+		try {
+			const user = getFirebaseAuth().currentUser;
+			if (!user) {
+				portalInviteError = 'You must be logged in to send a portal invite';
+				return;
+			}
+			const idToken = await user.getIdToken();
+
+			const response = await apiFetch(portalInviteURL(), idToken, { method: 'POST' });
+			if (!response.ok) {
+				portalInviteError = await response.text();
+				return;
+			}
+
+			const created: { inviteToken: string } = await response.json();
+			portalInviteLink = `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
+		} catch (error_) {
+			portalInviteError = error_ instanceof Error ? error_.message : 'Failed to send portal invite';
+		} finally {
+			isSendingPortalInvite = false;
+		}
+	}
+
 	async function handleCreateVisit() {
 		visitsError = '';
 		isCreatingVisit = true;
@@ -570,6 +604,21 @@
 		<dt>Created</dt>
 		<dd>{new Date(detail.createdAt).toLocaleDateString()}</dd>
 	</dl>
+
+	<button type="button" onclick={handleSendPortalInvite} disabled={isSendingPortalInvite}
+		>Send portal invite</button
+	>
+
+	{#if portalInviteError}
+		<p role="alert">{portalInviteError}</p>
+	{/if}
+
+	{#if portalInviteLink}
+		<p>
+			Invited. There is no email sending yet, so share this link with them directly:
+			<code>{portalInviteLink}</code>
+		</p>
+	{/if}
 
 	<h2>Visits</h2>
 

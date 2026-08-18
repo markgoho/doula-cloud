@@ -25,6 +25,7 @@ import (
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/pushsub"
 	"doula-cloud/api/internal/staffauth"
@@ -161,6 +162,9 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(verifier, db)(pushsub.RegisterHandler()))
 	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
 		staffauth.Middleware(verifier, db)(pushsub.UnregisterHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite",
+		staffauth.Middleware(verifier, db)(portalinvite.InviteHandler()))
+	mux.Handle("POST /api/portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(verifier, db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(verifier, db)(portal.DetailHandler()))
