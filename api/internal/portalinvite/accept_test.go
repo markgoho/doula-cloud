@@ -4,15 +4,30 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/testdb"
 )
 
 const acceptIdentityUID = "portal-invite-accepting-uid"
+
+var errMintFail = errors.New("mint failed")
+
+// sessionCookie returns the __session cookie from resp, or nil if none
+// was set.
+func sessionCookie(resp *http.Response) *http.Cookie {
+	for _, c := range resp.Cookies() {
+		if c.Name == session.CookieName {
+			return c
+		}
+	}
+	return nil
+}
 
 func TestAcceptInviteHandler_MissingToken(t *testing.T) {
 	db := testdb.New(t)
@@ -24,6 +39,9 @@ func TestAcceptInviteHandler_MissingToken(t *testing.T) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+	if c := sessionCookie(resp); c != nil {
+		t.Fatalf("cookie set on missing token: %+v", c)
 	}
 }
 
@@ -37,6 +55,9 @@ func TestAcceptInviteHandler_TokenVerificationFailure(t *testing.T) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+	if c := sessionCookie(resp); c != nil {
+		t.Fatalf("cookie set on invalid token: %+v", c)
 	}
 }
 
@@ -120,6 +141,57 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	}
 	if storedToken.Valid {
 		t.Fatalf("expected invite_token cleared after accept, got %q", storedToken.String)
+	}
+
+	// #145: accept-invite sets the session cookie on its own response, same
+	// name/attributes/lifetime as the create-session endpoint's (#144) --
+	// deliberately not asserting on the cookie's value.
+	c := sessionCookie(resp)
+	if c == nil {
+		t.Fatal("no __session cookie set on successful accept")
+	}
+	if c.Value == "" {
+		t.Fatal("cookie value is empty")
+	}
+	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != "/" {
+		t.Errorf("cookie attributes = %+v, want HttpOnly, Secure, SameSite=Lax, Path=/", c)
+	}
+	if wantMaxAge := int(session.Lifetime.Seconds()); c.MaxAge != wantMaxAge {
+		t.Errorf("MaxAge = %d, want %d", c.MaxAge, wantMaxAge)
+	}
+}
+
+// TestAcceptInviteHandler_MintFailure proves a failed accept-invite request
+// -- here, the session cookie failing to mint -- sets no cookie and rolls
+// back the claim: the invite is left exactly as pending as it was before
+// the request, so retrying it is safe (#145).
+func TestAcceptInviteHandler_MintFailure(t *testing.T) {
+	db := testdb.New(t)
+	clientID, inviteToken := seedPendingPortalInvite(t, db)
+
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID, MintErr: errMintFail}, db)
+	defer srv.Close()
+
+	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+	if c := sessionCookie(resp); c != nil {
+		t.Fatalf("cookie set on mint failure: %+v", c)
+	}
+
+	var identityUID sql.NullString
+	var storedToken string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid, invite_token::text FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID, &storedToken); err != nil {
+		t.Fatalf("query portal user row: %v", err)
+	}
+	if identityUID.Valid {
+		t.Fatalf("expected identity_uid to remain unset after rollback, got %q", identityUID.String)
+	}
+	if storedToken != inviteToken {
+		t.Fatalf("expected invite_token to remain %q after rollback, got %q", inviteToken, storedToken)
 	}
 }
 

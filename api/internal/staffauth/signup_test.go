@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -67,6 +68,9 @@ func TestSignupHandler_MissingToken(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
+	if c := sessionCookie(resp); c != nil {
+		t.Fatalf("cookie set on missing token: %+v", c)
+	}
 }
 
 func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
@@ -79,6 +83,9 @@ func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+	if c := sessionCookie(resp); c != nil {
+		t.Fatalf("cookie set on invalid token: %+v", c)
 	}
 }
 
@@ -150,6 +157,58 @@ func TestSignupHandler_Success(t *testing.T) {
 	}
 	if roleCount != 3 {
 		t.Fatalf("expected 3 roles (owner, office_manager, doula), got %d", roleCount)
+	}
+
+	// #145: signup sets the session cookie on its own response, same
+	// name/attributes/lifetime as the create-session endpoint's (#144) --
+	// deliberately not asserting on the cookie's value.
+	c := sessionCookie(resp)
+	if c == nil {
+		t.Fatal("no __session cookie set on successful signup")
+	}
+	if c.Value == "" {
+		t.Fatal("cookie value is empty")
+	}
+	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != "/" {
+		t.Errorf("cookie attributes = %+v, want HttpOnly, Secure, SameSite=Lax, Path=/", c)
+	}
+	if wantMaxAge := int(session.Lifetime.Seconds()); c.MaxAge != wantMaxAge {
+		t.Errorf("MaxAge = %d, want %d", c.MaxAge, wantMaxAge)
+	}
+}
+
+// TestSignupHandler_MintFailure proves a failed signup request -- here,
+// the session cookie failing to mint -- sets no cookie and rolls back the
+// new Practice/Staff rows, so retrying the signup is safe instead of
+// hitting a 409 for a Practice the caller never saw created (#145).
+func TestSignupHandler_MintFailure(t *testing.T) {
+	db := testdb.New(t)
+	const practiceName = "Mint Fail Practice"
+	srv := newSignupServer(authntest.Verifier{UID: "mint-fail-owner", MintErr: errMintFail}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		PracticeName: practiceName,
+		StaffName:    jamieOwnerName,
+		StaffEmail:   jamieEmail,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+	if c := sessionCookie(resp); c != nil {
+		t.Fatalf("cookie set on mint failure: %+v", c)
+	}
+
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practices WHERE name = $1`, practiceName,
+	).Scan(&count); err != nil {
+		t.Fatalf("query practices: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no Practice committed after mint failure, found %d", count)
 	}
 }
 

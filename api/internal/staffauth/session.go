@@ -42,7 +42,7 @@ func SessionHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		resp, status, msg := session(r, tx, uid)
+		resp, status, msg := resolveSession(r, tx, uid)
 		if status != http.StatusOK {
 			http.Error(w, msg, status)
 			return
@@ -56,7 +56,7 @@ func SessionHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	})
 }
 
-func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, int, string) {
+func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, int, string) {
 	ctx := r.Context()
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests

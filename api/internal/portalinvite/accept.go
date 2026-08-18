@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/session"
 )
 
 // AcceptInviteRequest is the body of an accept-invite request: the
@@ -61,12 +62,25 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
+		// idToken was already validated by authn.Begin above; re-extract it
+		// to mint the session cookie before committing, so a mint failure
+		// rolls back the claimed invite instead of leaving it committed
+		// behind a response that reports failure (#145).
+		idToken, _ := authn.BearerToken(r)
+		cookie, err := session.BuildCookie(r.Context(), verifier, idToken)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			return
+		}
+
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
 			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
 			return
 		}
 		committed = true
+
+		http.SetCookie(w, cookie)
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/session"
 )
 
 // MsgInternalError is the response body for any failure the caller can't
@@ -70,12 +71,25 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
+		// idToken was already validated by authn.Begin above; re-extract it
+		// to mint the session cookie before committing, so a mint failure
+		// rolls back the new Practice/Staff rows instead of leaving them
+		// committed behind a response that reports failure (#145).
+		idToken, _ := authn.BearerToken(r)
+		cookie, err := session.BuildCookie(r.Context(), verifier, idToken)
+		if err != nil {
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
+
+		http.SetCookie(w, cookie)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

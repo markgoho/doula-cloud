@@ -7,7 +7,9 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -23,10 +25,11 @@ import (
 // stripping anything.
 const CookieName = "__session"
 
-// lifetime is how long a newly minted session cookie is valid for. #138
+// Lifetime is how long a newly minted session cookie is valid for. #138
 // fixes this at 12 hours for both populations; #147 renews it on use,
-// which this ticket does not implement.
-const lifetime = 12 * time.Hour
+// which this ticket does not implement. Exported so tests can assert a
+// cookie's MaxAge against this constant instead of a repeated literal.
+const Lifetime = 12 * time.Hour
 
 // MsgInternalError is the body a caller sees for a failure that carries
 // no more specific detail.
@@ -55,23 +58,49 @@ func CreateHandler(verifier authn.Verifier) http.Handler {
 			return
 		}
 
-		cookieValue, err := verifier.MintSessionCookie(r.Context(), idToken, lifetime)
-		if err != nil {
+		if err := SetCookie(r.Context(), w, verifier, idToken); err != nil {
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     CookieName,
-			Value:    cookieValue,
-			Path:     "/",
-			MaxAge:   int(lifetime.Seconds()),
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteLaxMode,
-		})
 		writeStatus(w)
 	})
+}
+
+// SetCookie mints a session cookie for idToken and sets it on w, with the
+// same name, attributes, and lifetime CreateHandler uses.
+func SetCookie(ctx context.Context, w http.ResponseWriter, verifier authn.Verifier, idToken string) error {
+	cookie, err := BuildCookie(ctx, verifier, idToken)
+	if err != nil {
+		return err
+	}
+	http.SetCookie(w, cookie)
+	return nil
+}
+
+// BuildCookie mints a session cookie for idToken and returns it, with the
+// same name, attributes, and lifetime CreateHandler's cookie carries, but
+// without writing it to a response. It is the entry point the bootstrap
+// endpoints (#145: Staff signup, Staff invitation acceptance, Client
+// portal invitation acceptance) use: each mints the cookie before
+// committing its own transaction, so a mint failure rolls the transaction
+// back instead of leaving committed rows behind a response that reports
+// failure. A newly created or accepted person then lands signed in
+// without a follow-up call to CreateHandler.
+func BuildCookie(ctx context.Context, verifier authn.Verifier, idToken string) (*http.Cookie, error) {
+	cookieValue, err := verifier.MintSessionCookie(ctx, idToken, Lifetime)
+	if err != nil {
+		return nil, fmt.Errorf("session: mint session cookie: %w", err)
+	}
+
+	return &http.Cookie{
+		Name:     CookieName,
+		Value:    cookieValue,
+		Path:     "/",
+		MaxAge:   int(Lifetime.Seconds()),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	}, nil
 }
 
 // EndHandler clears the session cookie. It is idempotent: called with no

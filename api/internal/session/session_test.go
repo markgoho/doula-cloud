@@ -131,9 +131,9 @@ func TestCreateHandler_Success(t *testing.T) {
 	if c.Path != "/" {
 		t.Errorf("Path = %q, want /", c.Path)
 	}
-	const twelveHoursSeconds = 12 * 60 * 60
-	if c.MaxAge != twelveHoursSeconds {
-		t.Errorf("MaxAge = %d, want %d", c.MaxAge, twelveHoursSeconds)
+	wantMaxAge := int(session.Lifetime.Seconds())
+	if c.MaxAge != wantMaxAge {
+		t.Errorf("MaxAge = %d, want %d", c.MaxAge, wantMaxAge)
 	}
 }
 
