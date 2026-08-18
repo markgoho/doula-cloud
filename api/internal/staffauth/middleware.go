@@ -161,14 +161,20 @@ func setIdentityAndResolveStaff(ctx context.Context, tx *sql.Tx, identityUID str
 	return staffID, true, nil
 }
 
-// setPracticeAndCheckMembership sets app.current_practice_id -- the
-// session variable practice-tier RLS reads for the rest of the request --
-// then checks whether staffID holds a practice_memberships row for
-// practiceID.
+// setPracticeAndCheckMembership sets app.current_practice_id and
+// app.current_staff_id -- the session variables practice/staff-tier RLS
+// reads for the rest of the request -- then checks whether staffID holds a
+// practice_memberships row for practiceID. Both vars are set only here,
+// after identity resolution has already succeeded, so no RLS policy that
+// reads them can be satisfied before that check has passed.
 func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (bool, error) {
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
 		return false, fmt.Errorf("staffauth: set current practice id: %w", err)
+	}
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
+		return false, fmt.Errorf("staffauth: set current staff id: %w", err)
 	}
 
 	var exists bool
