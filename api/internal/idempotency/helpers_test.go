@@ -85,6 +85,19 @@ func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (p
 	return practiceID
 }
 
+// seedSignupBonus grants practiceID the same +3 signup-bonus credit_ledger
+// row staffauth.signup writes for a real Practice, mirroring
+// engagement_test's helper of the same name.
+func seedSignupBonus(t *testing.T, db *testdb.DB, practiceID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'signup_bonus', 3)`,
+		practiceID,
+	); err != nil {
+		t.Fatalf("seed signup bonus: %v", err)
+	}
+}
+
 // seedClientEngagement inserts a Client and an Engagement linking them to
 // practiceID, mirroring portalinvite_test's helper of the same name.
 func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email string) (clientID, engagementID string) {

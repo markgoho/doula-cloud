@@ -114,7 +114,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("GET /api/practices/{practiceId}/clients",
 		staffauth.Middleware(verifier, db)(engagement.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/clients",
-		staffauth.Middleware(verifier, db)(engagement.CreateHandler()))
+		staffauth.Middleware(verifier, db)(idempotency.Wrap(engagement.CreateHandler())))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}",
 		staffauth.Middleware(verifier, db)(engagement.DetailHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/visits",
