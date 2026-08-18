@@ -1,0 +1,471 @@
+<title>GCP Spend Prototype</title>
+<style>
+/* PROTOTYPE — throwaway UI mockup for issue #136. Not production code. */
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f0f0f3;
+  --border: #dcdce0;
+  --text: #1a1a1e;
+  --text-muted: #6b6b74;
+  --accent: #2f5fce;
+  --accent-contrast: #ffffff;
+  --success: #1a7f4b;
+  --success-bg: #e6f6ec;
+  --error: #b3261e;
+  --error-bg: #fbe9e7;
+  --diagnostic: #8c8c94;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131316;
+    --surface: #1c1c20;
+    --surface-2: #232328;
+    --border: #35353c;
+    --text: #e9e9eb;
+    --text-muted: #a3a3ab;
+    --accent: #7fa2f2;
+    --accent-contrast: #0d1424;
+    --success: #4fd18e;
+    --success-bg: #123123;
+    --error: #f28b83;
+    --error-bg: #341717;
+    --diagnostic: #7d7d85;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131316;
+  --surface: #1c1c20;
+  --surface-2: #232328;
+  --border: #35353c;
+  --text: #e9e9eb;
+  --text-muted: #a3a3ab;
+  --accent: #7fa2f2;
+  --accent-contrast: #0d1424;
+  --success: #4fd18e;
+  --success-bg: #123123;
+  --error: #f28b83;
+  --error-bg: #341717;
+  --diagnostic: #7d7d85;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 var(--font);
+  font-variant-numeric: tabular-nums;
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.proto-banner {
+  background: #3a2f00;
+  color: #ffd670;
+  font-size: 12px;
+  padding: 6px 16px;
+  text-align: center;
+  border-bottom: 1px solid #55450a;
+}
+.proto-banner a { color: #ffe9ad; }
+
+main { max-width: 980px; margin: 0 auto; padding: 24px 20px 96px; }
+.variant[hidden] { display: none; }
+
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+.eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* switcher */
+.switcher {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: 999px;
+  padding: 8px 8px 8px 16px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  font-size: 13px;
+  z-index: 100;
+}
+.switcher button {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(128,128,128,0.25);
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.switcher button:hover { background: rgba(128,128,128,0.4); }
+.switcher-label { min-width: 150px; text-align: center; }
+
+/* shared components */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+}
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.zero td { color: var(--text-muted); }
+
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.badge.diagnostic { color: var(--diagnostic); border-color: var(--border); }
+
+.btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+.btn.link { border: none; background: none; color: var(--text-muted); text-decoration: underline; padding: 7px 4px; }
+.btn:disabled { opacity: 0.6; cursor: default; }
+
+.spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid rgba(128,128,128,0.35);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.2s; } }
+
+.freshness {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.freshness strong { color: var(--text); }
+
+.sync-widget { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sync-widget .sync-status { font-size: 13px; color: var(--text-muted); }
+.sync-widget[data-state="idle"] .sync-status .spinner { display: none; }
+.sync-widget[data-state="loading"] .btn { opacity: 0.6; pointer-events: none; }
+.sync-widget:not([data-state="loading"]) .sync-status .spinner { display: none; }
+.sync-widget[data-state="success"] .sync-status { color: var(--success); }
+.sync-widget .error-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid var(--error);
+  border-radius: 5px;
+  padding: 8px 12px;
+  font-size: 13px;
+  width: 100%;
+}
+.sync-widget[data-state="error"] .error-banner { display: flex; }
+.sync-widget .error-banner button { border-color: var(--error); color: var(--error); background: transparent; }
+
+/* variant B — bars + stat grid */
+.bar-row { display: grid; grid-template-columns: 130px 1fr 64px; align-items: center; gap: 10px; font-size: 13px; }
+.bar-row.zero { color: var(--text-muted); }
+.bar-track { background: var(--surface-2); border-radius: 3px; height: 8px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.bar-val { text-align: right; font-variant-numeric: tabular-nums; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stat-num { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-num span { font-size: 11px; font-weight: 400; color: var(--text-muted); margin-left: 3px; }
+.stat-num.diagnostic { color: var(--diagnostic); }
+.stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* variant C — dense ops table */
+.opsbar {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.opsbar .btn { font-family: var(--font-mono); border-radius: 2px; padding: 5px 10px; }
+.ops-total { font-size: 13px; }
+.ops-table { font-family: var(--font-mono); font-size: 12.5px; }
+.ops-table th, .ops-table td { border-bottom: 1px solid var(--border); padding: 6px 10px; }
+.ops-table tbody tr:nth-child(odd) { background: var(--surface-2); }
+.ops-table .diagnostic, span.diagnostic { color: var(--diagnostic); }
+code { font-family: var(--font-mono); background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+</style>
+<main id="app">
+<p class="proto-banner">PROTOTYPE — throwaway mockup for
+  <a href="https://github.com/markgoho/doula-cloud/issues/136">issue #136</a>.
+  Not production code. Fake data. gcp-dashboard/ does not exist yet.</p>
+
+<!-- ================= VARIANT A — Report layout ================= -->
+<section class="variant" id="variant-A" data-variant="A" data-name="Report layout">
+  <header style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px;">
+    <div>
+      <p class="eyebrow">doula-cloud &middot; GCP project</p>
+      <h1>Spend — Aug 1&ndash;18, 2026</h1>
+      <p class="freshness">Costs current through <strong>Aug 16</strong> &middot; billing export lags ~24h behind actual usage.</p>
+    </div>
+    <div class="sync-widget" data-state="idle">
+      <button class="btn primary" data-action="sync">Sync now</button>
+      <button class="btn link" data-action="sync-fail">Simulate error</button>
+      <span class="sync-status"><span class="spinner"></span>Last synced 06:12 UTC</span>
+      <div class="error-banner" role="alert">
+        <span><strong>Sync failed.</strong> BigQuery query timed out after 30s.</span>
+        <button class="btn" data-action="retry">Retry</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="card" style="margin-bottom:20px;">
+    <p class="eyebrow">Total spend, this period</p>
+    <div style="font-size:40px; font-weight:600; line-height:1.1;">$47.82</div>
+    <p class="freshness">across 9 billed services</p>
+  </div>
+
+  <div class="card" style="margin-bottom:20px;">
+    <h2>Cost by service / SKU</h2>
+    <table>
+      <thead><tr><th>Service</th><th class="num">Cost</th><th class="num">% of total</th></tr></thead>
+      <tbody>
+        <tr><td>Cloud Run</td><td class="num">$18.40</td><td class="num">38.5%</td></tr>
+        <tr><td>Cloud SQL</td><td class="num">$14.10</td><td class="num">29.5%</td></tr>
+        <tr><td>Cloud Firestore</td><td class="num">$6.55</td><td class="num">13.7%</td></tr>
+        <tr><td>Cloud Storage</td><td class="num">$3.20</td><td class="num">6.7%</td></tr>
+        <tr><td>Artifact Registry</td><td class="num">$2.85</td><td class="num">6.0%</td></tr>
+        <tr><td>Networking</td><td class="num">$2.30</td><td class="num">4.8%</td></tr>
+        <tr><td>Secret Manager</td><td class="num">$0.42</td><td class="num">0.9%</td></tr>
+        <tr class="zero"><td>Firebase Hosting</td><td class="num">$0.00</td><td class="num">&mdash;</td></tr>
+        <tr class="zero"><td>Firebase Authentication</td><td class="num">$0.00</td><td class="num">&mdash;</td></tr>
+      </tbody>
+    </table>
+    <p class="freshness" style="margin-top:8px;">List is whatever the billing export returns this period &mdash; not a fixed service list.</p>
+  </div>
+
+  <div class="card">
+    <h2>Usage tied to cost</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div>
+        <p class="eyebrow">Cloud Run &middot; $18.40</p>
+        <table>
+          <tbody>
+            <tr><td>Billable instance time</td><td class="num">225.7 hrs</td></tr>
+            <tr><td>CPU allocated</td><td class="num">1,461,600 vCPU&#8209;s</td></tr>
+            <tr><td>Memory allocated</td><td class="num">2,923,200 GiB&#8209;s</td></tr>
+            <tr><td>Requests</td><td class="num">184,320</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <p class="eyebrow">Cloud SQL &middot; $14.10</p>
+        <table>
+          <tbody>
+            <tr><td>Instance uptime (db&#8209;custom&#8209;1&#8209;3840)</td><td class="num">432 hrs</td></tr>
+            <tr><td>Provisioned disk (SSD)</td><td class="num">10 GiB</td></tr>
+            <tr><td>CPU utilization <span class="badge diagnostic">diagnostic, not billed</span></td><td class="num">34%</td></tr>
+            <tr><td>Memory utilization <span class="badge diagnostic">diagnostic, not billed</span></td><td class="num">58%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VARIANT B — Sidebar + panels ================= -->
+<section class="variant" id="variant-B" data-variant="B" data-name="Sidebar + panels" hidden>
+  <div style="display:grid; grid-template-columns:220px 1fr; gap:24px; align-items:start;">
+    <aside class="card" style="position:sticky; top:20px;">
+      <p class="eyebrow">doula-cloud</p>
+      <h1 style="font-size:16px;">Aug 1&ndash;18, 2026</h1>
+      <div style="font-size:32px; font-weight:600; margin:10px 0 2px;">$47.82</div>
+      <p class="freshness">through Aug 16 &middot; ~24h lag</p>
+      <hr style="border:none; border-top:1px solid var(--border); margin:14px 0;">
+      <div class="sync-widget" data-state="idle" style="flex-direction:column; align-items:stretch;">
+        <button class="btn primary" data-action="sync">Sync now</button>
+        <button class="btn link" data-action="sync-fail" style="text-align:left;">Simulate error</button>
+        <span class="sync-status"><span class="spinner"></span>Synced 06:12 UTC</span>
+        <div class="error-banner" role="alert" style="flex-direction:column; align-items:stretch;">
+          <span><strong>Sync failed.</strong> BigQuery timed out (30s).</span>
+          <button class="btn" data-action="retry">Retry</button>
+        </div>
+      </div>
+    </aside>
+
+    <div>
+      <div class="card" style="margin-bottom:20px;">
+        <h2>Cost by service / SKU</h2>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div class="bar-row"><span class="bar-label">Cloud Run</span><span class="bar-track"><span class="bar-fill" style="width:38.5%;"></span></span><span class="bar-val">$18.40</span></div>
+          <div class="bar-row"><span class="bar-label">Cloud SQL</span><span class="bar-track"><span class="bar-fill" style="width:29.5%;"></span></span><span class="bar-val">$14.10</span></div>
+          <div class="bar-row"><span class="bar-label">Cloud Firestore</span><span class="bar-track"><span class="bar-fill" style="width:13.7%;"></span></span><span class="bar-val">$6.55</span></div>
+          <div class="bar-row"><span class="bar-label">Cloud Storage</span><span class="bar-track"><span class="bar-fill" style="width:6.7%;"></span></span><span class="bar-val">$3.20</span></div>
+          <div class="bar-row"><span class="bar-label">Artifact Registry</span><span class="bar-track"><span class="bar-fill" style="width:6.0%;"></span></span><span class="bar-val">$2.85</span></div>
+          <div class="bar-row"><span class="bar-label">Networking</span><span class="bar-track"><span class="bar-fill" style="width:4.8%;"></span></span><span class="bar-val">$2.30</span></div>
+          <div class="bar-row"><span class="bar-label">Secret Manager</span><span class="bar-track"><span class="bar-fill" style="width:0.9%;"></span></span><span class="bar-val">$0.42</span></div>
+          <div class="bar-row zero"><span class="bar-label">Firebase Hosting</span><span class="bar-track"></span><span class="bar-val">$0.00</span></div>
+          <div class="bar-row zero"><span class="bar-label">Firebase Authentication</span><span class="bar-track"></span><span class="bar-val">$0.00</span></div>
+        </div>
+        <p class="freshness" style="margin-top:10px;">9 services billed this period &mdash; list grows automatically as new services turn on.</p>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+        <div class="card">
+          <p class="eyebrow">Cloud Run</p>
+          <div style="font-size:22px; font-weight:600; margin-bottom:10px;">$18.40</div>
+          <div class="stat-grid">
+            <div><div class="stat-num">225.7<span>hrs</span></div><div class="stat-label">billable instance time</div></div>
+            <div><div class="stat-num">1.46M<span>vCPU&#8209;s</span></div><div class="stat-label">CPU allocated</div></div>
+            <div><div class="stat-num">2.92M<span>GiB&#8209;s</span></div><div class="stat-label">memory allocated</div></div>
+            <div><div class="stat-num">184.3K<span></span></div><div class="stat-label">requests</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <p class="eyebrow">Cloud SQL</p>
+          <div style="font-size:22px; font-weight:600; margin-bottom:10px;">$14.10</div>
+          <div class="stat-grid">
+            <div><div class="stat-num">432<span>hrs</span></div><div class="stat-label">instance uptime</div></div>
+            <div><div class="stat-num">10<span>GiB</span></div><div class="stat-label">provisioned disk</div></div>
+            <div><div class="stat-num diagnostic">34<span>%</span></div><div class="stat-label">CPU util &middot; diagnostic only</div></div>
+            <div><div class="stat-num diagnostic">58<span>%</span></div><div class="stat-label">mem util &middot; diagnostic only</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VARIANT C — Dense ops table ================= -->
+<section class="variant" id="variant-C" data-variant="C" data-name="Dense ops table" hidden>
+  <div class="opsbar sync-widget" data-state="idle">
+    <span class="ops-total"><strong>$47.82</strong> &middot; Aug 1&ndash;18, 2026</span>
+    <span class="sync-status"><span class="spinner"></span>through Aug 16, synced 06:12 UTC (~24h lag)</span>
+    <span style="flex:1;"></span>
+    <button class="btn primary" data-action="sync">sync</button>
+    <button class="btn link" data-action="sync-fail">simulate error</button>
+    <div class="error-banner" role="alert" style="width:100%; order:9;">
+      <span><strong>sync failed:</strong> bigquery query timed out after 30s</span>
+      <button class="btn" data-action="retry">retry</button>
+    </div>
+  </div>
+
+  <table class="ops-table">
+    <thead>
+      <tr><th>service</th><th class="num">cost</th><th class="num">share</th><th>usage</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>cloud_run</td><td class="num">$18.40</td><td class="num">38.5%</td>
+        <td>225.7h inst &middot; 1.46M vCPU&#8209;s &middot; 2.92M GiB&#8209;s &middot; 184.3K req</td>
+      </tr>
+      <tr>
+        <td>cloud_sql</td><td class="num">$14.10</td><td class="num">29.5%</td>
+        <td>432h uptime &middot; 10GiB disk &middot; <span class="diagnostic">cpu 34%(diag)</span> &middot; <span class="diagnostic">mem 58%(diag)</span></td>
+      </tr>
+      <tr><td>cloud_firestore</td><td class="num">$6.55</td><td class="num">13.7%</td><td class="diagnostic">&mdash; billing export only</td></tr>
+      <tr><td>cloud_storage</td><td class="num">$3.20</td><td class="num">6.7%</td><td class="diagnostic">&mdash; billing export only</td></tr>
+      <tr><td>artifact_registry</td><td class="num">$2.85</td><td class="num">6.0%</td><td class="diagnostic">&mdash; billing export only</td></tr>
+      <tr><td>networking</td><td class="num">$2.30</td><td class="num">4.8%</td><td class="diagnostic">&mdash; billing export only</td></tr>
+      <tr><td>secret_manager</td><td class="num">$0.42</td><td class="num">0.9%</td><td class="diagnostic">&mdash; billing export only</td></tr>
+      <tr class="zero"><td>firebase_hosting</td><td class="num">$0.00</td><td class="num">&mdash;</td><td class="diagnostic">&mdash;</td></tr>
+      <tr class="zero"><td>firebase_auth</td><td class="num">$0.00</td><td class="num">&mdash;</td><td class="diagnostic">&mdash;</td></tr>
+    </tbody>
+  </table>
+  <p class="freshness" style="margin-top:8px;">rows = whatever <code>service.description</code> the billing export returns this period; nothing hardcoded.</p>
+</section>
+</main>
+
+<nav class="switcher" aria-label="Prototype variant switcher">
+  <button id="switcher-prev" aria-label="Previous variant">&larr;</button>
+  <span class="switcher-label" id="switcher-label"></span>
+  <button id="switcher-next" aria-label="Next variant">&rarr;</button>
+</nav>
+
+<script>
+(function () {
+  var variants = Array.from(document.querySelectorAll('.variant'));
+  var keys = variants.map(function (v) { return v.dataset.variant; });
+  var label = document.getElementById('switcher-label');
+
+  function currentIndex() {
+    var params = new URLSearchParams(location.search);
+    var v = params.get('variant');
+    var i = keys.indexOf(v);
+    return i === -1 ? 0 : i;
+  }
+
+  function show(index) {
+    index = ((index % keys.length) + keys.length) % keys.length;
+    variants.forEach(function (v, i) { v.hidden = i !== index; });
+    var el = variants[index];
+    label.textContent = el.dataset.variant + ' — ' + el.dataset.name;
+    var params = new URLSearchParams(location.search);
+    params.set('variant', el.dataset.variant);
+    history.replaceState(null, '', location.pathname + '?' + params.toString());
+  }
+
+  document.getElementById('switcher-prev').addEventListener('click', function () { show(currentIndex() - 1); });
+  document.getElementById('switcher-next').addEventListener('click', function () { show(currentIndex() + 1); });
+  document.addEventListener('keydown', function (e) {
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.key === 'ArrowLeft') show(currentIndex() - 1);
+    if (e.key === 'ArrowRight') show(currentIndex() + 1);
+  });
+
+  show(currentIndex());
+
+  // sync widget simulation — shared across all three variants
+  function fmtTime(d) {
+    return d.toISOString().substr(11, 5) + ' UTC';
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var widget = btn.closest('.sync-widget');
+    if (!widget) return;
+    var action = btn.dataset.action;
+
+    if (action === 'sync' || action === 'retry') {
+      widget.dataset.state = 'loading';
+      setTimeout(function () {
+        widget.dataset.state = 'success';
+        var status = widget.querySelector('.sync-status');
+        if (status) status.lastChild ? status.replaceChild(document.createTextNode('Synced ' + fmtTime(new Date()) + ' — through Aug 16'), status.lastChild) : null;
+        setTimeout(function () { widget.dataset.state = 'idle'; }, 1800);
+      }, 900);
+    } else if (action === 'sync-fail') {
+      widget.dataset.state = 'loading';
+      setTimeout(function () { widget.dataset.state = 'error'; }, 900);
+    }
+  });
+})();
+</script>
