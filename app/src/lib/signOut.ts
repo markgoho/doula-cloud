@@ -15,6 +15,13 @@ export const SIGN_OUT_FAILED_MESSAGE = 'Sign-out failed. You are still signed in
  */
 export type SignOutOutcome = { ok: true } | { ok: false; message: string };
 
+/**
+ * How long the push unregister gets before sign-out goes ahead without
+ * it. Short on purpose: someone standing at a shared laptop is waiting on
+ * this, and an unregister that has not landed by now is not going to.
+ */
+export const UNREGISTER_TIMEOUT_MS = 3000;
+
 export interface SignOutRequest {
 	/**
 	 * The Practice the current screen is scoped to, which the push
@@ -56,11 +63,15 @@ export async function signOutOfSession({
 	unregisterPush
 }: SignOutRequest): Promise<SignOutOutcome> {
 	if (practiceId !== undefined) {
-		try {
-			await unregisterPush(`/api/practices/${practiceId}/push-subscriptions`, fetcher);
-		} catch {
-			// Best-effort -- see the doc comment above.
-		}
+		// Bounded, not merely guarded: a request that hangs -- the "no
+		// network, BFF down" case -- never rejects, so no catch rescues it,
+		// and this step runs before the end-session request. Left unbounded
+		// it would strand someone on a live session behind a disabled button
+		// with nothing to read.
+		await bestEffort(
+			() => unregisterPush(`/api/practices/${practiceId}/push-subscriptions`, fetcher),
+			UNREGISTER_TIMEOUT_MS
+		);
 	}
 
 	try {
@@ -70,4 +81,22 @@ export async function signOutOfSession({
 		return { ok: false, message: SIGN_OUT_FAILED_MESSAGE };
 	}
 	return { ok: true };
+}
+
+/**
+ * Runs work, giving it milliseconds at most and swallowing whatever it
+ * throws: the caller carries on either way. Work that outlives its
+ * deadline is abandoned, not cancelled -- there is nothing to cancel,
+ * which is the point of it being best-effort.
+ */
+async function bestEffort(work: () => Promise<void>, milliseconds: number): Promise<void> {
+	const { promise: expired, resolve: expire } = Promise.withResolvers<void>();
+	const timer = setTimeout(expire, milliseconds);
+	try {
+		await Promise.race([work(), expired]);
+	} catch {
+		// Swallowed -- see the doc comment above.
+	} finally {
+		clearTimeout(timer);
+	}
 }
