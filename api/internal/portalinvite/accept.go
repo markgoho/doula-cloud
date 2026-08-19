@@ -62,12 +62,11 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
-		// idToken was already validated by authn.Begin above; re-extract it
-		// to mint the session cookie before committing, so a mint failure
-		// rolls back the claimed invite instead of leaving it committed
-		// behind a response that reports failure (#145).
-		idToken, _ := authn.BearerToken(r)
-		cookie, err := session.BuildCookie(r.Context(), verifier, idToken)
+		// Create the session before committing, so a failure rolls the
+		// new rows back instead of leaving them committed behind a
+		// response that reports failure (#145). uid is the identity
+		// authn.Begin already verified.
+		cookie, err := session.BuildCookie(r.Context(), tx, uid)
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
 			return

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"testing"
 
@@ -15,8 +14,6 @@ import (
 )
 
 const acceptIdentityUID = "portal-invite-accepting-uid"
-
-var errMintFail = errors.New("mint failed")
 
 // sessionCookie returns the __session cookie from resp, or nil if none
 // was set.
@@ -161,16 +158,19 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	}
 }
 
-// TestAcceptInviteHandler_MintFailure proves a failed accept-invite request
-// -- here, the session cookie failing to mint -- sets no cookie and rolls
+// TestAcceptInviteHandler_SessionStoreFailure proves a failed accept-invite request
+// -- here, the session row failing to insert -- sets no cookie and rolls
 // back the claim: the invite is left exactly as pending as it was before
 // the request, so retrying it is safe (#145).
-func TestAcceptInviteHandler_MintFailure(t *testing.T) {
+func TestAcceptInviteHandler_SessionStoreFailure(t *testing.T) {
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
 
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID, MintErr: errMintFail}, db)
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
+	if _, err := db.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
+		t.Fatalf("drop sessions: %v", err)
+	}
 
 	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	defer resp.Body.Close()
@@ -179,7 +179,7 @@ func TestAcceptInviteHandler_MintFailure(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 	if c := sessionCookie(resp); c != nil {
-		t.Fatalf("cookie set on mint failure: %+v", c)
+		t.Fatalf("cookie set on session store failure: %+v", c)
 	}
 
 	var identityUID sql.NullString

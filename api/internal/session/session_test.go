@@ -8,23 +8,25 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/session"
+	"doula-cloud/api/internal/testdb"
 )
 
-var (
-	errBadToken = errors.New("invalid token")
-	errMintFail = errors.New("mint failed")
-)
+var errBadToken = errors.New("invalid token")
 
-func newServer(verifier authntest.Verifier) *httptest.Server {
+func newServer(t *testing.T, verifier authntest.Verifier) (*httptest.Server, *testdb.DB) {
+	t.Helper()
+	db := testdb.New(t)
 	mux := http.NewServeMux()
-	mux.Handle("POST /session", session.CreateHandler(verifier))
-	mux.Handle("DELETE /session", session.EndHandler())
-	return httptest.NewServer(mux)
+	mux.Handle("POST /session", session.CreateHandler(verifier, db.App))
+	mux.Handle("DELETE /session", session.EndHandler(db.App))
+	return httptest.NewServer(mux), db
 }
 
-func doRequest(t *testing.T, srv *httptest.Server, method, token string) *http.Response {
+// postCreate sends a create-session request carrying token as a Bearer
+// ID token, or none at all when token is empty.
+func postCreate(t *testing.T, srv *httptest.Server, token string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method, srv.URL+"/session", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/session", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -50,10 +52,10 @@ func sessionCookie(resp *http.Response) *http.Cookie {
 }
 
 func TestCreateHandler_MissingToken(t *testing.T) {
-	srv := newServer(authntest.Verifier{})
+	srv, _ := newServer(t, authntest.Verifier{})
 	defer srv.Close()
 
-	resp := doRequest(t, srv, http.MethodPost, "")
+	resp := postCreate(t, srv, "")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -65,10 +67,10 @@ func TestCreateHandler_MissingToken(t *testing.T) {
 }
 
 func TestCreateHandler_InvalidToken(t *testing.T) {
-	srv := newServer(authntest.Verifier{Err: errBadToken})
+	srv, _ := newServer(t, authntest.Verifier{Err: errBadToken})
 	defer srv.Close()
 
-	resp := doRequest(t, srv, http.MethodPost, "bad-token")
+	resp := postCreate(t, srv, "bad-token")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -79,30 +81,39 @@ func TestCreateHandler_InvalidToken(t *testing.T) {
 	}
 }
 
-func TestCreateHandler_MintFailure(t *testing.T) {
-	srv := newServer(authntest.Verifier{UID: "uid-1", MintErr: errMintFail})
+// TestCreateHandler_SessionStoreFailure covers the 500 path: with the
+// sessions table gone, creating the session row fails, and the caller
+// must be told rather than handed a cookie naming a session that does
+// not exist. Dropping the table is how a per-test cloned database forces
+// a write failure that no fake Verifier can produce any more, now that
+// minting is a database write rather than a call to Identity Platform.
+func TestCreateHandler_SessionStoreFailure(t *testing.T) {
+	srv, db := newServer(t, authntest.Verifier{UID: "uid-1"})
 	defer srv.Close()
+	if _, err := db.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
+		t.Fatalf("drop sessions: %v", err)
+	}
 
-	resp := doRequest(t, srv, http.MethodPost, "good-token")
+	resp := postCreate(t, srv, "good-token")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 	if c := sessionCookie(resp); c != nil {
-		t.Fatalf("cookie set on mint failure: %+v", c)
+		t.Fatalf("cookie set despite session store failure: %+v", c)
 	}
 }
 
 // TestCreateHandler_Success drives #144's core case: a valid ID token
-// gets a __session cookie with the right attributes. It deliberately
-// never asserts on the cookie's value -- that's an opaque server-signed
-// string.
+// gets a __session cookie with the right attributes, backed by a session
+// row. It deliberately never asserts on the cookie's value -- that is an
+// opaque random token, and only its digest is ever stored.
 func TestCreateHandler_Success(t *testing.T) {
-	srv := newServer(authntest.Verifier{UID: "uid-1"})
+	srv, db := newServer(t, authntest.Verifier{UID: "uid-1"})
 	defer srv.Close()
 
-	resp := doRequest(t, srv, http.MethodPost, "good-token")
+	resp := postCreate(t, srv, "good-token")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -135,15 +146,22 @@ func TestCreateHandler_Success(t *testing.T) {
 	if c.MaxAge != wantMaxAge {
 		t.Errorf("MaxAge = %d, want %d", c.MaxAge, wantMaxAge)
 	}
+	// The cookie is only half of it since ADR-0004: the session is the
+	// row, and without one the cookie authenticates nobody.
+	if got := authntest.CountFor(t, db.App, "uid-1"); got != 1 {
+		t.Errorf("session rows for uid-1 = %d, want 1", got)
+	}
 }
 
 // TestEndHandler_ClearsCookie proves ending a session clears the cookie
-// by setting an expiring one under the same name.
+// by setting an expiring one under the same name, and deletes the row
+// behind it so the token is dead even if the browser kept a copy.
 func TestEndHandler_ClearsCookie(t *testing.T) {
-	srv := newServer(authntest.Verifier{})
+	srv, db := newServer(t, authntest.Verifier{})
 	defer srv.Close()
+	token := authntest.SeedSession(t, db.App, "uid-1")
 
-	resp := doRequest(t, srv, http.MethodDelete, "")
+	resp := deleteWithSession(t, srv, token)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -156,13 +174,54 @@ func TestEndHandler_ClearsCookie(t *testing.T) {
 	if c.MaxAge >= 0 {
 		t.Errorf("MaxAge = %d, want negative (expire immediately)", c.MaxAge)
 	}
+	if got := authntest.CountFor(t, db.App, "uid-1"); got != 0 {
+		t.Errorf("session rows for uid-1 = %d, want 0", got)
+	}
+}
+
+// TestEndHandler_LeavesOtherBrowsersAlone covers the AC that ordinary
+// sign-out ends this browser's session only -- ending every session for
+// a person is a separate administrative action (#154).
+func TestEndHandler_LeavesOtherBrowsersAlone(t *testing.T) {
+	srv, db := newServer(t, authntest.Verifier{})
+	defer srv.Close()
+	laptop := authntest.SeedSession(t, db.App, "uid-1")
+	authntest.SeedSession(t, db.App, "uid-1")
+
+	resp := deleteWithSession(t, srv, laptop)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := authntest.CountFor(t, db.App, "uid-1"); got != 1 {
+		t.Errorf("session rows for uid-1 = %d, want 1 (the other browser's)", got)
+	}
+}
+
+// deleteWithSession sends an end-session request carrying token as the
+// __session cookie. It sets the header directly rather than req.AddCookie, which
+// gosec's G124 flags for lacking response-only attributes a request's
+// Cookie header never carries.
+func deleteWithSession(t *testing.T, srv *httptest.Server, token string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/session", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Cookie", session.CookieName+"="+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
 }
 
 // TestEndHandler_NoSessionStillSucceeds proves end-session is idempotent:
 // calling it with no session cookie at all still clears the cookie and
 // reports success.
 func TestEndHandler_NoSessionStillSucceeds(t *testing.T) {
-	srv := newServer(authntest.Verifier{Err: errBadToken})
+	srv, _ := newServer(t, authntest.Verifier{Err: errBadToken})
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/session", nil)

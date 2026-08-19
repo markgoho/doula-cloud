@@ -1,7 +1,6 @@
 package authn_test
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -48,50 +47,76 @@ func TestBearerToken(t *testing.T) {
 // shared across this file's success-path tests.
 const testUID = "test-uid"
 
-func TestBegin_MissingCredential(t *testing.T) {
+// addSessionCookie sets req's Cookie header directly rather than
+// req.AddCookie(&http.Cookie{...}), which gosec's G124 flags for lacking
+// response-only attributes (Secure, HttpOnly, SameSite) that a request's
+// Cookie header never carries in the first place.
+func addSessionCookie(req *http.Request, value string) {
+	req.Header.Set("Cookie", authn.SessionCookieName+"="+value)
+}
+
+// beginRequest runs authn.Begin against db for a request carrying
+// whatever cookie and header the caller set up, rolling back whatever
+// transaction Begin opens.
+func beginRequest(t *testing.T, db *testdb.DB, verifier authn.Verifier, setup func(*http.Request)) (*httptest.ResponseRecorder, string, bool) {
+	t.Helper()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	setup(req)
 
-	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{}, nil)
+	tx, uid, ok := authn.Begin(rec, req, verifier, db.App)
 	if ok {
-		t.Fatalf("expected ok=false, got true (tx=%v, uid=%q)", tx, uid)
+		t.Cleanup(func() { _ = tx.Rollback() })
 	}
+	return rec, uid, ok
+}
+
+// assertUnauthorized fails the test unless rec carries a 401 with body,
+// and no Set-Cookie -- a rejected request must never renew a session.
+func assertUnauthorized(t *testing.T, rec *httptest.ResponseRecorder, body string) {
+	t.Helper()
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
-	if got := rec.Body.String(); got != "missing credential\n" {
-		t.Fatalf("body = %q, want %q", got, "missing credential\n")
+	if got := rec.Body.String(); got != body {
+		t.Fatalf("body = %q, want %q", got, body)
 	}
+	if got := rec.Result().Cookies(); len(got) != 0 {
+		t.Fatalf("Set-Cookie = %v, want none", got)
+	}
+}
+
+func TestBegin_MissingCredential(t *testing.T) {
+	db := testdb.New(t)
+
+	rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(*http.Request) {})
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	assertUnauthorized(t, rec, "missing credential\n")
 }
 
 func TestBegin_InvalidToken(t *testing.T) {
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer invalid-token")
+	db := testdb.New(t)
 
-	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{Err: errors.New("bad token")}, nil)
+	rec, _, ok := beginRequest(t, db, authntest.Verifier{Err: errors.New("bad token")}, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer invalid-token")
+	})
 	if ok {
-		t.Fatalf("expected ok=false, got true (tx=%v, uid=%q)", tx, uid)
+		t.Fatal("expected ok=false, got true")
 	}
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-	if got := rec.Body.String(); got != "invalid token\n" {
-		t.Fatalf("body = %q, want %q", got, "invalid token\n")
-	}
+	assertUnauthorized(t, rec, "invalid token\n")
 }
 
-func TestBegin_Success(t *testing.T) {
+func TestBegin_BearerToken_Success(t *testing.T) {
 	db := testdb.New(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
 
-	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{UID: testUID}, db.App)
+	_, uid, ok := beginRequest(t, db, authntest.Verifier{UID: testUID}, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer valid-token")
+	})
 	if !ok {
-		t.Fatalf("expected ok=true, got false")
+		t.Fatal("expected ok=true, got false")
 	}
-	defer func() { _ = tx.Rollback() }()
 	if uid != testUID {
 		t.Fatalf("uid = %q, want %q", uid, testUID)
 	}
@@ -99,68 +124,78 @@ func TestBegin_Success(t *testing.T) {
 
 func TestBegin_SessionCookie_Success(t *testing.T) {
 	db := testdb.New(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	addSessionCookie(req, "a-session-cookie")
+	token := authntest.SeedSession(t, db.App, testUID)
 
-	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{UID: testUID}, db.App)
+	rec, uid, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
+		addSessionCookie(req, token)
+	})
 	if !ok {
-		t.Fatalf("expected ok=true, got false")
+		t.Fatal("expected ok=true, got false")
 	}
-	defer func() { _ = tx.Rollback() }()
 	if uid != testUID {
 		t.Fatalf("uid = %q, want %q", uid, testUID)
 	}
-}
-
-func TestBegin_SessionCookie_Revoked(t *testing.T) {
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	addSessionCookie(req, "a-revoked-cookie")
-	req.Header.Set("Authorization", "Bearer a-fresh-id-token")
-
-	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{Err: authntest.ErrRevoked}, nil)
-	if ok {
-		t.Fatalf("expected ok=false, got true (tx=%v, uid=%q)", tx, uid)
-	}
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-	if got := rec.Body.String(); got != "invalid session\n" {
-		t.Fatalf("body = %q, want %q", got, "invalid session\n")
-	}
-	// AC: a rejected request never re-mints the cookie, even though the
-	// Authorization header carries an ID token that renewal could
-	// otherwise have used.
+	// AC: a fresh session is not renewed, so nothing is re-set.
 	if got := rec.Result().Cookies(); len(got) != 0 {
 		t.Fatalf("Set-Cookie = %v, want none", got)
 	}
 }
 
-// halfLifeCookie returns the IssuedAt/Expires a Verifier reports so its
-// session cookie sits pastHalf (true: past half its 12-hour life, false:
-// still within the first half) relative to time.Now().
-func halfLifeCookie(pastHalf bool) (issuedAt, expires time.Time) {
-	now := time.Now()
-	if pastHalf {
-		return now.Add(-7 * time.Hour), now.Add(5 * time.Hour)
+// TestBegin_SessionCookie_Rejected covers the three ways a cookie can
+// fail to name a live session. All three are deliberately the same
+// outcome to the caller: 401, and no renewal.
+func TestBegin_SessionCookie_Rejected(t *testing.T) {
+	tests := []struct {
+		name  string
+		token func(t *testing.T, db *testdb.DB) string
+	}{
+		{
+			name:  "unknown token",
+			token: func(*testing.T, *testdb.DB) string { return "never-issued" },
+		},
+		{
+			name: "ended session",
+			token: func(t *testing.T, db *testdb.DB) string {
+				token := authntest.SeedSession(t, db.App, testUID)
+				authntest.EndSession(t, db.App, token)
+				return token
+			},
+		},
+		{
+			name: "expired session",
+			token: func(t *testing.T, db *testdb.DB) string {
+				return authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-authn.SessionLifetime-time.Minute))
+			},
+		},
 	}
-	return now.Add(-1 * time.Hour), now.Add(11 * time.Hour)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := testdb.New(t)
+			token := tt.token(t, db)
+
+			rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
+				addSessionCookie(req, token)
+			})
+			if ok {
+				t.Fatal("expected ok=false, got true")
+			}
+			assertUnauthorized(t, rec, "invalid session\n")
+		})
+	}
 }
 
 func TestBegin_SessionCookie_RenewsPastHalfLife(t *testing.T) {
 	db := testdb.New(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	addSessionCookie(req, "a-stale-cookie")
-	req.Header.Set("Authorization", "Bearer a-fresh-id-token")
+	// Minted seven hours ago, so five of its twelve hours remain.
+	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-7*time.Hour))
 
-	issuedAt, expires := halfLifeCookie(true)
-	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{UID: testUID, IssuedAt: issuedAt, Expires: expires}, db.App)
+	rec, uid, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
+		addSessionCookie(req, token)
+	})
 	if !ok {
-		t.Fatalf("expected ok=true, got false")
+		t.Fatal("expected ok=true, got false")
 	}
-	defer func() { _ = tx.Rollback() }()
 	if uid != testUID {
 		t.Fatalf("uid = %q, want %q", uid, testUID)
 	}
@@ -172,65 +207,73 @@ func TestBegin_SessionCookie_RenewsPastHalfLife(t *testing.T) {
 	if renewed.Path != "/" || !renewed.HttpOnly || !renewed.Secure || renewed.SameSite != http.SameSiteLaxMode {
 		t.Errorf("cookie attributes = %+v, want Path=/, HttpOnly, Secure, SameSite=Lax", renewed)
 	}
+	// AC: renewal extends the session rather than replacing it, so the
+	// browser keeps the token it already holds.
+	if renewed.Value != token {
+		t.Error("renewal changed the cookie's value, want the same token extended")
+	}
+}
+
+// TestBegin_SessionCookie_RenewalExtendsTheRow proves renewal is a
+// database write and not just a fresh MaxAge: the session was minted
+// with one hour left, so only an extended expires_at can carry it past
+// that.
+func TestBegin_SessionCookie_RenewalExtendsTheRow(t *testing.T) {
+	db := testdb.New(t)
+	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-11*time.Hour))
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	addSessionCookie(req, token)
+
+	tx, _, ok := authn.Begin(rec, req, authntest.Verifier{}, db.App)
+	if !ok {
+		t.Fatal("expected ok=true, got false")
+	}
+	var expiresAt time.Time
+	if err := tx.QueryRowContext(t.Context(), `SELECT max(expires_at) FROM sessions`).Scan(&expiresAt); err != nil {
+		t.Fatalf("read expires_at: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if remaining := time.Until(expiresAt); remaining < authn.SessionLifetime-time.Minute {
+		t.Fatalf("expires_at leaves %v, want a full %v", remaining, authn.SessionLifetime)
+	}
 }
 
 func TestBegin_SessionCookie_NoRenewalBeforeHalfLife(t *testing.T) {
 	db := testdb.New(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	addSessionCookie(req, "a-fresh-cookie")
-	req.Header.Set("Authorization", "Bearer a-fresh-id-token")
+	// Minted one hour ago, so eleven of its twelve hours remain.
+	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-time.Hour))
 
-	issuedAt, expires := halfLifeCookie(false)
-	tx, _, ok := authn.Begin(rec, req, authntest.Verifier{UID: testUID, IssuedAt: issuedAt, Expires: expires}, db.App)
+	rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
+		addSessionCookie(req, token)
+	})
 	if !ok {
-		t.Fatalf("expected ok=true, got false")
+		t.Fatal("expected ok=true, got false")
 	}
-	defer func() { _ = tx.Rollback() }()
-
 	if got := rec.Result().Cookies(); len(got) != 0 {
 		t.Fatalf("Set-Cookie = %v, want none", got)
 	}
 }
 
-func TestBegin_SessionCookie_NoRenewalWithoutBearerToken(t *testing.T) {
+// TestBegin_SessionCookie_RenewsWithoutBearerToken is the point of
+// ADR-0004: none of the renewal tests above sets an Authorization
+// header, and this pins that as a requirement rather than an oversight,
+// since #151 removes the header entirely.
+func TestBegin_SessionCookie_RenewsWithoutBearerToken(t *testing.T) {
 	db := testdb.New(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	addSessionCookie(req, "a-stale-cookie")
+	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-7*time.Hour))
 
-	issuedAt, expires := halfLifeCookie(true)
-	tx, _, ok := authn.Begin(rec, req, authntest.Verifier{UID: testUID, IssuedAt: issuedAt, Expires: expires}, db.App)
+	rec, _, ok := beginRequest(t, db, authntest.Verifier{Err: errors.New("VerifyIDToken must not be called")}, func(req *http.Request) {
+		addSessionCookie(req, token)
+	})
 	if !ok {
-		t.Fatalf("expected ok=true, got false")
+		t.Fatal("expected ok=true, got false")
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	if got := rec.Result().Cookies(); len(got) != 0 {
-		t.Fatalf("Set-Cookie = %v, want none", got)
-	}
-}
-
-func TestBegin_SessionCookie_NoRenewalOnMintFailure(t *testing.T) {
-	db := testdb.New(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	addSessionCookie(req, "a-stale-cookie")
-	req.Header.Set("Authorization", "Bearer a-fresh-id-token")
-
-	issuedAt, expires := halfLifeCookie(true)
-	tx, uid, ok := authn.Begin(rec, req, authntest.Verifier{UID: testUID, IssuedAt: issuedAt, Expires: expires, MintErr: errors.New("mint failed")}, db.App)
-	if !ok {
-		t.Fatalf("expected ok=true, got false")
-	}
-	defer func() { _ = tx.Rollback() }()
-	if uid != testUID {
-		t.Fatalf("uid = %q, want %q", uid, testUID)
-	}
-
-	if got := rec.Result().Cookies(); len(got) != 0 {
-		t.Fatalf("Set-Cookie = %v, want none", got)
-	}
+	findSessionCookie(t, rec.Result().Cookies())
 }
 
 // findSessionCookie returns the __session cookie among cookies, failing
@@ -246,54 +289,101 @@ func findSessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
 	return nil
 }
 
+// TestBegin_SessionCookiePreferredOverBearer proves Begin checked the
+// cookie rather than falling back to the Bearer header even though both
+// are present: the Verifier fails every ID token, so reaching the
+// fallback would 401.
 func TestBegin_SessionCookiePreferredOverBearer(t *testing.T) {
 	db := testdb.New(t)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer some-token")
-	addSessionCookie(req, "a-session-cookie")
+	token := authntest.SeedSession(t, db.App, testUID)
 
-	// A Verifier that only succeeds via VerifySessionCookie proves Begin
-	// checked the cookie rather than falling back to the Bearer header
-	// even though both are present.
-	verifier := cookieOnlyVerifier{uid: testUID}
-
-	tx, uid, ok := authn.Begin(rec, req, verifier, db.App)
+	_, uid, ok := beginRequest(t, db, authntest.Verifier{Err: errors.New("VerifyIDToken must not be called")}, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer some-token")
+		addSessionCookie(req, token)
+	})
 	if !ok {
-		t.Fatalf("expected ok=true, got false")
+		t.Fatal("expected ok=true, got false")
 	}
-	defer func() { _ = tx.Rollback() }()
 	if uid != testUID {
 		t.Fatalf("uid = %q, want %q", uid, testUID)
 	}
 }
 
-// addSessionCookie sets req's Cookie header directly rather than
-// req.AddCookie(&http.Cookie{...}), which gosec's G124 flags for lacking
-// response-only attributes (Secure, HttpOnly, SameSite) that a request's
-// Cookie header never carries in the first place.
-func addSessionCookie(req *http.Request, value string) {
-	req.Header.Set("Cookie", authn.SessionCookieName+"="+value)
+// TestMintSession_SweepsExpiredSessions covers the AC that expired rows
+// are removed rather than accumulating: minting is where the sweep runs,
+// and it takes every expired row with it, not just the caller's own.
+func TestMintSession_SweepsExpiredSessions(t *testing.T) {
+	db := testdb.New(t)
+	authntest.SeedSessionAt(t, db.App, "still-here", time.Now().Add(-time.Hour))
+	authntest.SeedSessionAt(t, db.App, "long-gone", time.Now().Add(-authn.SessionLifetime-time.Hour))
+	if got := authntest.CountFor(t, db.App, "long-gone"); got != 1 {
+		t.Fatalf("expired session rows before mint = %d, want 1", got)
+	}
+
+	authntest.SeedSession(t, db.App, "newcomer")
+
+	if got := authntest.CountFor(t, db.App, "long-gone"); got != 0 {
+		t.Fatalf("expired session rows after mint = %d, want 0", got)
+	}
+	if got := authntest.CountFor(t, db.App, "still-here"); got != 1 {
+		t.Fatalf("live session rows after mint = %d, want 1 (the sweep took a live session)", got)
+	}
 }
 
-// cookieOnlyVerifier is a Verifier whose VerifyIDToken always fails, so a
-// test using it can prove a code path never reached the Bearer fallback.
-type cookieOnlyVerifier struct {
-	uid string
+// TestSessions_AreIndependentPerBrowser covers the AC that ending one
+// session leaves that person's other sessions alone -- two sign-ins by
+// the same person are two rows.
+func TestSessions_AreIndependentPerBrowser(t *testing.T) {
+	db := testdb.New(t)
+	laptop := authntest.SeedSession(t, db.App, testUID)
+	phone := authntest.SeedSession(t, db.App, testUID)
+
+	authntest.EndSession(t, db.App, laptop)
+
+	_, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
+		addSessionCookie(req, phone)
+	})
+	if !ok {
+		t.Fatal("ending the laptop's session also ended the phone's")
+	}
 }
 
-func (v cookieOnlyVerifier) VerifyIDToken(context.Context, string) (*authn.VerifiedToken, error) {
-	return nil, errors.New("cookieOnlyVerifier: VerifyIDToken must not be called")
+// TestEndSession_UnknownTokenSucceeds covers the AC that ending a
+// session that is not there is not an error.
+func TestEndSession_UnknownTokenSucceeds(t *testing.T) {
+	db := testdb.New(t)
+
+	if err := authn.EndSession(t.Context(), db.App, "never-issued"); err != nil {
+		t.Fatalf("EndSession on an unknown token: %v", err)
+	}
 }
 
-func (v cookieOnlyVerifier) MintSessionCookie(context.Context, string, time.Duration) (string, error) {
-	return "", errors.New("cookieOnlyVerifier: MintSessionCookie must not be called")
+// TestMintSession_SweepFailure and TestMintSession_InsertFailure cover
+// MintSession's two write failures. Neither can be provoked with a fake
+// -- minting is a database write since ADR-0004 -- so each breaks the
+// sessions table in its own cloned database: dropping it fails the sweep
+// before a token is ever generated, while revoking INSERT lets the sweep
+// through and fails only the write that matters.
+func TestMintSession_SweepFailure(t *testing.T) {
+	db := testdb.New(t)
+	if _, err := db.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
+		t.Fatalf("drop sessions: %v", err)
+	}
+
+	cookie, err := authn.MintSession(t.Context(), db.App, testUID, time.Now())
+	if err == nil {
+		t.Fatalf("MintSession succeeded with no sessions table, cookie = %+v", cookie)
+	}
 }
 
-func (v cookieOnlyVerifier) VerifySessionCookie(context.Context, string) (*authn.VerifiedToken, error) {
-	return &authn.VerifiedToken{UID: v.uid}, nil
-}
+func TestMintSession_InsertFailure(t *testing.T) {
+	db := testdb.New(t)
+	if _, err := db.Admin.ExecContext(t.Context(), `REVOKE INSERT ON sessions FROM app_runtime`); err != nil {
+		t.Fatalf("revoke insert: %v", err)
+	}
 
-func (v cookieOnlyVerifier) RevokeRefreshTokens(context.Context, string) error {
-	return errors.New("cookieOnlyVerifier: RevokeRefreshTokens must not be called")
+	cookie, err := authn.MintSession(t.Context(), db.App, testUID, time.Now())
+	if err == nil {
+		t.Fatalf("MintSession succeeded without INSERT permission, cookie = %+v", cookie)
+	}
 }

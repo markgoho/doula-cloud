@@ -69,7 +69,8 @@ func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 // wired under /api and reachable with no Practice/Engagement in the
 // path.
 func TestRoutes_CreateAndEndSession(t *testing.T) {
-	mux := routes(authntest.Verifier{UID: "uid-1"}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	db := testdb.New(t)
+	mux := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -100,6 +101,7 @@ func TestRoutes_CreateAndEndSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build end request: %v", err)
 	}
+	endReq.Header.Set("Cookie", session.CookieName+"="+createdCookie.Value)
 	endResp, err := http.DefaultClient.Do(endReq)
 	if err != nil {
 		t.Fatalf("end request: %v", err)
@@ -117,6 +119,11 @@ func TestRoutes_CreateAndEndSession(t *testing.T) {
 	if clearedCookie == nil || clearedCookie.MaxAge >= 0 {
 		t.Fatalf("DELETE /api/session did not clear the cookie: %+v", clearedCookie)
 	}
+	// Both endpoints are wired to the same session store, so the row the
+	// create endpoint added is the one the end endpoint removed.
+	if got := authntest.CountFor(t, db.App, "uid-1"); got != 0 {
+		t.Fatalf("session rows for uid-1 = %d, want 0", got)
+	}
 }
 
 func TestResolvePort(t *testing.T) {
@@ -132,7 +139,8 @@ func TestResolvePort(t *testing.T) {
 }
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
-	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	db := testdb.New(t)
+	mux := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -277,7 +285,8 @@ func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
 // handler, which rejects it for its own reason (401, no bearer token),
 // not the origin check's 403.
 func TestRoutes_MatchingOriginAllowed(t *testing.T) {
-	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	db := testdb.New(t)
+	mux := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

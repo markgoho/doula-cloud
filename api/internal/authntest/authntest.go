@@ -1,50 +1,35 @@
 // Package authntest provides a shared test double for authn.Verifier, so
-// the test packages that exercise authenticated HTTP handlers do not each
-// carry their own copy of it. Production code must not import it.
+// every package with an HTTP handler behind authn.Begin can build one the
+// same way, plus helpers for seeding the Postgres session rows the
+// __session cookie now resolves against (ADR-0004).
 package authntest
 
 import (
 	"context"
-	"errors"
+	"testing"
 	"time"
 
 	"doula-cloud/api/internal/authn"
 )
 
-// ErrRevoked stands in for Identity Platform's own revocation error, so
-// a test can report a credential as revoked by setting it as a
-// Verifier's Err -- for example VerifySessionCookie -- without a live
-// project.
-var ErrRevoked = errors.New("authntest: session revoked")
-
 // Verifier is a test double for authn.Verifier. Real Identity Platform
-// token verification needs a live GCP project, so tests substitute this
-// and state the outcome they want directly.
+// ID tokens cannot be minted in a unit test, so this reports a fixed
+// identity for any token.
 type Verifier struct {
-	// UID is the caller identity VerifyIDToken and VerifySessionCookie
-	// report on success.
+	// UID is the caller identity VerifyIDToken reports on success.
 	UID string
-	// Err, when non-nil, is returned instead of a verified token by
-	// VerifyIDToken and VerifySessionCookie. Set it to ErrRevoked to
-	// simulate a revoked credential.
+
+	// Err, when set, is the error VerifyIDToken returns instead of a
+	// verified identity.
 	Err error
-	// MintErr, when non-nil, is returned instead of a session cookie by
-	// MintSessionCookie.
-	MintErr error
-	// IssuedAt and Expires, when non-zero, are reported on the token
-	// VerifySessionCookie returns, so a test can drive authn.Begin's
-	// renewal (#147) by placing the cookie before or after half its
-	// life relative to time.Now().
-	IssuedAt time.Time
-	Expires  time.Time
 }
 
-// Compile-time proof that Verifier still satisfies the interface it doubles.
+// Verifier satisfies authn.Verifier by value, so tests can pass
+// authntest.Verifier{...} directly rather than a pointer to one.
 var _ authn.Verifier = Verifier{}
 
 // VerifyIDToken returns v.Err if it is set, and a token carrying v.UID
-// otherwise. The token argument is ignored — what a test wants back is
-// stated on the Verifier, not encoded in the token it passes.
+// otherwise -- whatever idToken is.
 func (v Verifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedToken, error) {
 	if v.Err != nil {
 		return nil, v.Err
@@ -52,30 +37,51 @@ func (v Verifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedTok
 	return &authn.VerifiedToken{UID: v.UID}, nil
 }
 
-// MintSessionCookie returns v.MintErr if it is set, and a fake cookie
-// value carrying v.UID otherwise. The token and expiry arguments are
-// ignored — what a test wants back is stated on the Verifier.
-func (v Verifier) MintSessionCookie(_ context.Context, _ string, _ time.Duration) (string, error) {
-	if v.MintErr != nil {
-		return "", v.MintErr
-	}
-	return "fake-session-cookie:" + v.UID, nil
+// SeedSession creates a live session for uid and returns the value its
+// __session cookie carries, for a test that needs a request to arrive
+// already signed in. Ending it -- the revoked-session case authn.Begin
+// must reject -- is EndSession below, or just letting SeedSessionAt
+// place the expiry in the past.
+func SeedSession(t *testing.T, q authn.Querier, uid string) string {
+	t.Helper()
+	return SeedSessionAt(t, q, uid, time.Now())
 }
 
-// VerifySessionCookie returns v.Err if it is set, and a token carrying
-// v.UID, v.IssuedAt, and v.Expires otherwise. The cookie argument is
-// ignored — what a test wants back is stated on the Verifier.
-func (v Verifier) VerifySessionCookie(_ context.Context, _ string) (*authn.VerifiedToken, error) {
-	if v.Err != nil {
-		return nil, v.Err
+// SeedSessionAt creates a session as though it had been minted at now,
+// so it expires authn.SessionLifetime after that. A now in the past is
+// how a test puts a session past half its life (to drive renewal) or
+// past its expiry (to drive a 401) without waiting or stubbing a clock.
+func SeedSessionAt(t *testing.T, q authn.Querier, uid string, now time.Time) string {
+	t.Helper()
+	cookie, err := authn.MintSession(t.Context(), q, uid, now)
+	if err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("authntest: seed session: %v", err)
 	}
-	return &authn.VerifiedToken{UID: v.UID, IssuedAt: v.IssuedAt, Expires: v.Expires}, nil
+	return cookie.Value
 }
 
-// RevokeRefreshTokens always succeeds. Tests that need a request made
-// after revocation to fail should construct a Verifier with Err set to
-// ErrRevoked, rather than relying on this call to have a stateful
-// effect.
-func (v Verifier) RevokeRefreshTokens(_ context.Context, _ string) error {
-	return nil
+// EndSession deletes the session token names, so a test can prove a
+// request carrying an ended session is rejected.
+func EndSession(t *testing.T, q authn.Querier, token string) {
+	t.Helper()
+	if err := authn.EndSession(t.Context(), q, token); err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("authntest: end session: %v", err)
+	}
+}
+
+// CountFor returns how many session rows exist for uid, so a test can
+// assert that a session was swept, ended, or left alone. It counts rows,
+// not cookies -- no test asserts on a session cookie's value.
+func CountFor(t *testing.T, q authn.Querier, uid string) int {
+	t.Helper()
+	var count int
+	if err := q.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM sessions WHERE identity_uid = $1`, uid,
+	).Scan(&count); err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("authntest: count sessions: %v", err)
+	}
+	return count
 }

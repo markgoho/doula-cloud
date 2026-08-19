@@ -1,8 +1,10 @@
-// Package authn verifies GCP Identity Platform credentials -- ID tokens
-// and the session cookies minted from them -- and manages their
-// revocation. It defines a small Verifier interface so HTTP middleware
-// can be tested against a fake implementation instead of a live Identity
-// Platform project.
+// Package authn owns the browser session: it reads the __session cookie
+// off a request, verifies it against Postgres, renews it, and opens the
+// request-scoped transaction the rest of the BFF runs in (see store.go
+// and ADR-0004). GCP Identity Platform remains the identity provider but
+// is reduced to one method, VerifyIDToken, behind a small Verifier
+// interface so HTTP middleware can be tested against a fake
+// implementation instead of a live Identity Platform project.
 package authn
 
 import (
@@ -25,24 +27,23 @@ import (
 // local `vite dev` and the Playwright preview server both proxy /api
 // without stripping anything. Defined here, rather than in package
 // session, so this package's own credential-reading seam does not
-// depend on session, which already depends on authn for Verifier and
-// BearerToken.
+// depend on session, which already depends on authn for the session
+// store, Verifier, and BearerToken.
 const SessionCookieName = "__session"
 
-// SessionLifetime is how long a newly minted or renewed session cookie is
-// valid for. #138 fixes this at 12 hours for both populations. Defined
-// here, alongside SessionCookieName, so Begin's renewal path (#147) and
-// package session's minting path build identical cookies without session
-// importing back into authn's credential seam.
+// SessionLifetime is how long a newly minted or renewed session is valid
+// for. #138 fixes this at 12 hours for both populations. It is both the
+// session row's expiry window and the cookie's MaxAge, so the browser
+// and Postgres agree on when a session ends.
 const SessionLifetime = 12 * time.Hour
 
 // NewSessionCookie builds the *http.Cookie every session cookie -- newly
-// minted or renewed -- is sent as, wrapping cookieValue with the shared
-// name, attributes, and SessionLifetime.
-func NewSessionCookie(cookieValue string) *http.Cookie {
+// minted or renewed -- is sent as, wrapping the session's token with the
+// shared name, attributes, and SessionLifetime.
+func NewSessionCookie(token string) *http.Cookie {
 	return &http.Cookie{
 		Name:     SessionCookieName,
-		Value:    cookieValue,
+		Value:    token,
 		Path:     "/",
 		MaxAge:   int(SessionLifetime.Seconds()),
 		HttpOnly: true,
@@ -67,25 +68,21 @@ func BearerToken(r *http.Request) (string, bool) {
 	return token, true
 }
 
-// Begin extracts the caller's credential from r, verifies it with
-// verifier, and opens a transaction on db. It reads the session cookie
-// first, checking revocation on every request since a session cookie is
-// long-lived; a request with no cookie falls back to the Bearer ID
-// token, which is not revocation-checked, so the app keeps working
-// while it migrates off it (removing the fallback is a separate
-// ticket). If the session cookie is past half its life, it re-mints and
-// sets a fresh one on w (#147). It writes the appropriate HTTP error
-// (401 for a missing, invalid, or revoked credential; 500 for DB
-// connection failure) and returns ok=false if any step fails. On
-// success it returns the open *sql.Tx and the verified caller's UID.
-// Callers must ensure the returned transaction is rolled back or
+// Begin opens a transaction on db, resolves the caller's credential
+// inside it, and returns the transaction and the caller's UID. The
+// transaction comes first because the session cookie is verified by
+// reading the sessions table, so the credential check and everything the
+// handler does afterwards share one connection and one round trip
+// budget. It reads the session cookie first, renewing it on the way
+// through if it is past half its life (#147); a request with no cookie
+// falls back to the Bearer ID token, which costs a network verify
+// against Identity Platform while the transaction is held open -- #151
+// removes that fallback. It writes the appropriate HTTP error (401 for a
+// missing, invalid, ended, or expired credential; 500 for DB connection
+// failure), rolls the transaction back, and returns ok=false if any step
+// fails. Callers must ensure a returned transaction is rolled back or
 // committed.
 func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, string, bool) {
-	verified, ok := credential(w, r, verifier)
-	if !ok {
-		return nil, "", false
-	}
-
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
@@ -93,74 +90,74 @@ func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB
 		return nil, "", false
 	}
 
-	return tx, verified.UID, true
+	uid, ok := credential(w, r, verifier, tx)
+	if !ok {
+		_ = tx.Rollback()
+		return nil, "", false
+	}
+
+	return tx, uid, true
 }
 
 // credential resolves the caller's identity from r: the session cookie
 // if one is present, otherwise the Bearer ID token. It writes a 401 and
 // returns ok=false if neither credential is present or the one present
-// fails verification. A verified session cookie past half its life is
-// re-minted onto w before this returns (see renewIfStale); a rejected
-// credential never is.
-func credential(w http.ResponseWriter, r *http.Request, verifier Verifier) (*VerifiedToken, bool) {
+// fails verification. A verified session past half its life is renewed
+// before this returns (see renewIfStale); a rejected credential never
+// is.
+func credential(w http.ResponseWriter, r *http.Request, verifier Verifier, tx *sql.Tx) (string, bool) {
 	if cookie, err := r.Cookie(SessionCookieName); err == nil {
-		verified, err := verifier.VerifySessionCookie(r.Context(), cookie.Value)
+		now := time.Now()
+		uid, expiresAt, err := lookupSession(r.Context(), tx, cookie.Value, now)
 		if err != nil {
 			http.Error(w, "invalid session", http.StatusUnauthorized)
-			return nil, false
+			return "", false
 		}
-		renewIfStale(w, r, verifier, verified)
-		return verified, true
+		renewIfStale(w, r, tx, cookie.Value, expiresAt, now)
+		return uid, true
 	}
 
 	idToken, ok := BearerToken(r)
 	if !ok {
 		http.Error(w, "missing credential", http.StatusUnauthorized)
-		return nil, false
+		return "", false
 	}
 
 	verified, err := verifier.VerifyIDToken(r.Context(), idToken)
 	if err != nil {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
-		return nil, false
+		return "", false
 	}
-	return verified, true
+	return verified.UID, true
 }
 
-// renewIfStale re-mints the session cookie on w when verified's session
-// cookie is already past half its SessionLifetime (#147): a session
-// cookie cannot be exchanged for a fresh one on its own, so this reuses
-// the Bearer ID token the frontend still attaches to every request while
-// the app migrates off it (#149, #150). A request carrying no Bearer
-// token, or a mint failure, leaves the existing cookie in place -- the
-// request still proceeds on the cookie already verified, and the next
-// request past half life tries again.
-func renewIfStale(w http.ResponseWriter, r *http.Request, verifier Verifier, verified *VerifiedToken) {
-	if !pastHalfLife(verified.IssuedAt, verified.Expires, time.Now()) {
+// renewIfStale extends the session's expiry and re-sets the cookie when
+// it is already past half its SessionLifetime (#147). The token value
+// does not change, so this is an UPDATE of one row plus a fresh MaxAge
+// on the browser's copy -- no Bearer ID token is involved, which is what
+// keeps renewal working once #151 removes the Bearer path. The UPDATE
+// rides the request's own transaction, so a request that goes on to fail
+// authorization rolls the renewal back with everything else; the next
+// request simply renews again. A failed UPDATE leaves the existing
+// cookie in place for the same reason.
+func renewIfStale(w http.ResponseWriter, r *http.Request, tx *sql.Tx, token string, expiresAt, now time.Time) {
+	if !pastHalfLife(expiresAt, now) {
 		return
 	}
-
-	idToken, ok := BearerToken(r)
-	if !ok {
+	if err := renewSession(r.Context(), tx, token, now); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return
 	}
-
-	cookieValue, err := verifier.MintSessionCookie(r.Context(), idToken, SessionLifetime)
-	if err != nil {
-		return
-	}
-	http.SetCookie(w, NewSessionCookie(cookieValue))
+	http.SetCookie(w, NewSessionCookie(token))
 }
 
-// pastHalfLife reports whether now has reached the midpoint between
-// issuedAt and expires. A zero issuedAt or expires means the Verifier
-// did not report the cookie's lifetime, so nothing is renewed.
-func pastHalfLife(issuedAt, expires, now time.Time) bool {
-	if issuedAt.IsZero() || expires.IsZero() {
-		return false
-	}
-	midpoint := issuedAt.Add(expires.Sub(issuedAt) / 2)
-	return !now.Before(midpoint)
+// pastHalfLife reports whether a session expiring at expiresAt has less
+// than half of a full SessionLifetime left at now. It is written against
+// the remaining time rather than a stored issue time on purpose: renewal
+// moves expires_at and nothing else, so a midpoint computed from a fixed
+// creation time would drift into the past and re-renew on every request.
+func pastHalfLife(expiresAt, now time.Time) bool {
+	return !now.Before(expiresAt.Add(-SessionLifetime / 2))
 }
 
 // VerifiedToken is the identity a Verifier extracts from a valid ID
@@ -170,44 +167,19 @@ func pastHalfLife(issuedAt, expires, now time.Time) bool {
 // every request.
 type VerifiedToken struct {
 	UID string
-
-	// IssuedAt and Expires are the session cookie's own mint time and
-	// expiry, as VerifySessionCookie reports them. Both are the zero
-	// time for a token VerifyIDToken returns, and for any VerifiedToken
-	// a Verifier does not populate them for -- renewIfStale treats a
-	// zero value as "unknown lifetime, do not renew".
-	IssuedAt time.Time
-	Expires  time.Time
 }
 
-// Verifier checks Identity Platform credentials and manages the session
-// cookies minted from them.
+// Verifier checks an Identity Platform ID token. That is the whole of
+// what the identity provider is asked to do since ADR-0004: the session
+// itself is a row in Postgres (store.go), so nothing here mints,
+// verifies, or revokes a session.
 type Verifier interface {
 	// VerifyIDToken checks a raw ID token and returns the identity it
 	// carries, or an error if the token is missing, expired, malformed,
 	// or not signed by the configured Identity Platform project. Used
-	// only by the bootstrap endpoints, which run before a session cookie
-	// exists.
+	// only by the session-exchange endpoint and the bootstrap endpoints,
+	// which run before a session exists.
 	VerifyIDToken(ctx context.Context, idToken string) (*VerifiedToken, error)
-
-	// MintSessionCookie exchanges a verified ID token for an opaque
-	// session cookie value that expires after expiresIn.
-	MintSessionCookie(ctx context.Context, idToken string, expiresIn time.Duration) (string, error)
-
-	// VerifySessionCookie checks a session cookie and returns the
-	// identity it carries. Unlike VerifyIDToken, this always checks
-	// that the credential has not been revoked, since a session cookie
-	// is long-lived and revocation must take effect on the next request.
-	// The returned token's IssuedAt and Expires report the cookie's own
-	// mint time and expiry, which Begin uses to renew it once it is
-	// past half its life (#147).
-	VerifySessionCookie(ctx context.Context, sessionCookie string) (*VerifiedToken, error)
-
-	// RevokeRefreshTokens ends every session held by uid, on every
-	// device, by revoking that person's Identity Platform refresh
-	// tokens. A session cookie already verified before the revocation
-	// takes effect only on its next VerifySessionCookie call.
-	RevokeRefreshTokens(ctx context.Context, uid string) error
 }
 
 // FirebaseVerifier verifies tokens via the GCP Identity Platform Admin
@@ -251,47 +223,4 @@ func (v *FirebaseVerifier) VerifyIDToken(ctx context.Context, idToken string) (*
 	}
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
 	return &VerifiedToken{UID: token.UID}, nil
-}
-
-// MintSessionCookie exchanges idToken for a session cookie via the Admin
-// SDK.
-func (v *FirebaseVerifier) MintSessionCookie(ctx context.Context, idToken string, expiresIn time.Duration) (string, error) {
-	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
-	cookie, err := v.client.SessionCookie(ctx, idToken, expiresIn)
-	if err != nil {
-		// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
-		return "", fmt.Errorf("authn: mint session cookie: %w", err)
-	}
-	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
-	return cookie, nil
-}
-
-// VerifySessionCookie verifies sessionCookie against Identity Platform,
-// checking revocation, and returns the caller's uid and the cookie's own
-// mint time and expiry.
-func (v *FirebaseVerifier) VerifySessionCookie(ctx context.Context, sessionCookie string) (*VerifiedToken, error) {
-	// coverage:ignore reason: requires a real Identity Platform session cookie, not exercised by unit tests
-	token, err := v.client.VerifySessionCookieAndCheckRevoked(ctx, sessionCookie)
-	if err != nil {
-		// coverage:ignore reason: requires a real Identity Platform session cookie, not exercised by unit tests
-		return nil, fmt.Errorf("authn: verify session cookie: %w", err)
-	}
-	// coverage:ignore reason: requires a real Identity Platform session cookie, not exercised by unit tests
-	return &VerifiedToken{
-		UID:      token.UID,
-		IssuedAt: time.Unix(token.IssuedAt, 0),
-		Expires:  time.Unix(token.Expires, 0),
-	}, nil
-}
-
-// RevokeRefreshTokens revokes uid's Identity Platform refresh tokens,
-// ending their sessions on every device.
-func (v *FirebaseVerifier) RevokeRefreshTokens(ctx context.Context, uid string) error {
-	// coverage:ignore reason: requires a real Identity Platform user, not exercised by unit tests
-	if err := v.client.RevokeRefreshTokens(ctx, uid); err != nil {
-		// coverage:ignore reason: requires a real Identity Platform user, not exercised by unit tests
-		return fmt.Errorf("authn: revoke refresh tokens: %w", err)
-	}
-	// coverage:ignore reason: requires a real Identity Platform user, not exercised by unit tests
-	return nil
 }

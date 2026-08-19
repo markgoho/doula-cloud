@@ -5,10 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/testdb"
 )
 
-const testUID = "staff-uid"
+// testUID is the identity the fake reports, shared across this file.
+const testUID = "test-uid"
 
 func TestVerifyIDToken_ReturnsUID(t *testing.T) {
 	verified, err := authntest.Verifier{UID: testUID}.VerifyIDToken(t.Context(), "any-token")
@@ -28,75 +31,52 @@ func TestVerifyIDToken_ReturnsErr(t *testing.T) {
 		t.Fatalf("err = %v, want %v", err, wantErr)
 	}
 	if verified != nil {
-		t.Fatalf("verified = %v, want nil", verified)
+		t.Fatalf("verified = %+v, want nil", verified)
 	}
 }
 
-func TestMintSessionCookie_ReturnsCookie(t *testing.T) {
-	cookie, err := authntest.Verifier{UID: testUID}.MintSessionCookie(t.Context(), "any-id-token", time.Hour)
-	if err != nil {
-		t.Fatalf("MintSessionCookie: %v", err)
-	}
-	if cookie == "" {
-		t.Fatal("cookie = \"\", want non-empty")
+// TestSeedSession_IsLive proves the seeder produces a session
+// authn.Begin accepts, which is what every other package's tests lean on.
+func TestSeedSession_IsLive(t *testing.T) {
+	db := testdb.New(t)
+
+	authntest.SeedSession(t, db.App, testUID)
+
+	if got := authntest.CountFor(t, db.App, testUID); got != 1 {
+		t.Fatalf("session rows = %d, want 1", got)
 	}
 }
 
-func TestMintSessionCookie_ReturnsMintErr(t *testing.T) {
-	wantErr := errors.New("mint failed")
+// TestSeedSessionAt_Expires covers the seeder's reason for taking a mint
+// time: a session minted longer ago than SessionLifetime is already
+// expired, which is how a test drives the revoked-session case without
+// waiting.
+func TestSeedSessionAt_Expires(t *testing.T) {
+	db := testdb.New(t)
 
-	cookie, err := authntest.Verifier{UID: testUID, MintErr: wantErr}.MintSessionCookie(t.Context(), "any-id-token", time.Hour)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("err = %v, want %v", err, wantErr)
+	authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-authn.SessionLifetime-time.Hour))
+
+	var live int
+	if err := db.App.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM sessions WHERE identity_uid = $1 AND expires_at > now()`, testUID,
+	).Scan(&live); err != nil {
+		t.Fatalf("count live sessions: %v", err)
 	}
-	if cookie != "" {
-		t.Fatalf("cookie = %q, want \"\"", cookie)
+	if live != 0 {
+		t.Fatalf("live session rows = %d, want 0", live)
 	}
 }
 
-func TestVerifySessionCookie_ReturnsUID(t *testing.T) {
-	issuedAt := time.Now().Add(-time.Hour)
-	expires := time.Now().Add(11 * time.Hour)
+// TestEndSession_RemovesTheRow covers the helper that drives the
+// revoked-session case: the row is what makes the token work, so
+// deleting it is what revokes it.
+func TestEndSession_RemovesTheRow(t *testing.T) {
+	db := testdb.New(t)
+	token := authntest.SeedSession(t, db.App, testUID)
 
-	verified, err := authntest.Verifier{UID: testUID, IssuedAt: issuedAt, Expires: expires}.VerifySessionCookie(t.Context(), "any-cookie")
-	if err != nil {
-		t.Fatalf("VerifySessionCookie: %v", err)
-	}
-	if verified.UID != testUID {
-		t.Fatalf("UID = %q, want %q", verified.UID, testUID)
-	}
-	if !verified.IssuedAt.Equal(issuedAt) {
-		t.Fatalf("IssuedAt = %v, want %v", verified.IssuedAt, issuedAt)
-	}
-	if !verified.Expires.Equal(expires) {
-		t.Fatalf("Expires = %v, want %v", verified.Expires, expires)
-	}
-}
+	authntest.EndSession(t, db.App, token)
 
-func TestVerifySessionCookie_ReturnsErr(t *testing.T) {
-	wantErr := errors.New("bad cookie")
-
-	verified, err := authntest.Verifier{UID: testUID, Err: wantErr}.VerifySessionCookie(t.Context(), "any-cookie")
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("err = %v, want %v", err, wantErr)
-	}
-	if verified != nil {
-		t.Fatalf("verified = %v, want nil", verified)
-	}
-}
-
-func TestVerifySessionCookie_ReturnsErrRevoked(t *testing.T) {
-	verified, err := authntest.Verifier{UID: testUID, Err: authntest.ErrRevoked}.VerifySessionCookie(t.Context(), "any-cookie")
-	if !errors.Is(err, authntest.ErrRevoked) {
-		t.Fatalf("err = %v, want %v", err, authntest.ErrRevoked)
-	}
-	if verified != nil {
-		t.Fatalf("verified = %v, want nil", verified)
-	}
-}
-
-func TestRevokeRefreshTokens_Succeeds(t *testing.T) {
-	if err := (authntest.Verifier{UID: testUID}).RevokeRefreshTokens(t.Context(), testUID); err != nil {
-		t.Fatalf("RevokeRefreshTokens: %v", err)
+	if got := authntest.CountFor(t, db.App, testUID); got != 0 {
+		t.Fatalf("session rows = %d, want 0", got)
 	}
 }

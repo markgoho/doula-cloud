@@ -177,15 +177,18 @@ func TestSignupHandler_Success(t *testing.T) {
 	}
 }
 
-// TestSignupHandler_MintFailure proves a failed signup request -- here,
-// the session cookie failing to mint -- sets no cookie and rolls back the
+// TestSignupHandler_SessionStoreFailure proves a failed signup request -- here,
+// the session row failing to insert -- sets no cookie and rolls back the
 // new Practice/Staff rows, so retrying the signup is safe instead of
 // hitting a 409 for a Practice the caller never saw created (#145).
-func TestSignupHandler_MintFailure(t *testing.T) {
+func TestSignupHandler_SessionStoreFailure(t *testing.T) {
 	db := testdb.New(t)
 	const practiceName = "Mint Fail Practice"
-	srv := newSignupServer(authntest.Verifier{UID: "mint-fail-owner", MintErr: errMintFail}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "mint-fail-owner"}, db)
 	defer srv.Close()
+	if _, err := db.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
+		t.Fatalf("drop sessions: %v", err)
+	}
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		PracticeName: practiceName,
@@ -198,7 +201,7 @@ func TestSignupHandler_MintFailure(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 	if c := sessionCookie(resp); c != nil {
-		t.Fatalf("cookie set on mint failure: %+v", c)
+		t.Fatalf("cookie set on session store failure: %+v", c)
 	}
 
 	var count int

@@ -3,14 +3,18 @@
 // cookie, and clearing that cookie on sign-out. Neither endpoint is
 // scoped to a Practice or an Engagement -- both serve the Staff
 // population and the Client population, so this package sits alongside
-// staffauth and clientauth rather than inside either.
+// staffauth and clientauth rather than inside either. The session itself
+// -- token, row, expiry -- belongs to authn (ADR-0004); this package is
+// only its HTTP surface.
 package session
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/authn"
 )
@@ -21,11 +25,9 @@ import (
 // BearerToken, don't have to import authn for it.
 const CookieName = authn.SessionCookieName
 
-// Lifetime is how long a newly minted or renewed session cookie is valid
-// for -- see authn.SessionLifetime, which owns the value so Begin's
-// renewal path (#147) and this package's minting path agree without
-// session importing back into authn's credential seam. Exported so
-// tests can assert a cookie's MaxAge against this constant instead of a
+// Lifetime is how long a newly created or renewed session is valid for
+// -- see authn.SessionLifetime, which owns the value. Exported so tests
+// can assert a cookie's MaxAge against this constant instead of a
 // repeated literal.
 const Lifetime = authn.SessionLifetime
 
@@ -40,10 +42,11 @@ type StatusResponse struct {
 }
 
 // CreateHandler accepts an ID token in the Authorization header --
-// still Bearer at this seam, because no session cookie exists yet --
-// verifies it, and sets the session cookie. This is the one place a
-// Bearer ID token is still read once #138 lands elsewhere.
-func CreateHandler(verifier authn.Verifier) http.Handler {
+// still Bearer at this seam, because no session exists yet -- verifies
+// it with the identity provider, creates the session, and sets the
+// cookie. This is the one place a Bearer ID token is still read once
+// #151 lands elsewhere.
+func CreateHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idToken, ok := authn.BearerToken(r)
 		if !ok {
@@ -51,56 +54,55 @@ func CreateHandler(verifier authn.Verifier) http.Handler {
 			return
 		}
 
-		if _, err := verifier.VerifyIDToken(r.Context(), idToken); err != nil {
+		verified, err := verifier.VerifyIDToken(r.Context(), idToken)
+		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		if err := SetCookie(r.Context(), w, verifier, idToken); err != nil {
+		cookie, err := BuildCookie(r.Context(), db, verified.UID)
+		if err != nil {
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		http.SetCookie(w, cookie)
 		writeStatus(w)
 	})
 }
 
-// SetCookie mints a session cookie for idToken and sets it on w, with the
-// same name, attributes, and lifetime CreateHandler uses.
-func SetCookie(ctx context.Context, w http.ResponseWriter, verifier authn.Verifier, idToken string) error {
-	cookie, err := BuildCookie(ctx, verifier, idToken)
+// BuildCookie creates a session for identityUID on q and returns the
+// cookie carrying it, without writing it to a response. Taking a
+// Querier rather than the pool is what lets the bootstrap endpoints
+// (#145: Staff signup, Staff invitation acceptance, Client portal
+// invitation acceptance) pass their own request-scoped transaction:
+// each creates the session before committing, so a failure rolls the
+// transaction back instead of leaving committed rows behind a response
+// that reports failure. A newly created or accepted person then lands
+// signed in without a follow-up call to CreateHandler.
+func BuildCookie(ctx context.Context, q authn.Querier, identityUID string) (*http.Cookie, error) {
+	cookie, err := authn.MintSession(ctx, q, identityUID, time.Now())
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("session: create session: %w", err)
 	}
-	http.SetCookie(w, cookie)
-	return nil
+	return cookie, nil
 }
 
-// BuildCookie mints a session cookie for idToken and returns it, with the
-// same name, attributes, and lifetime CreateHandler's cookie carries, but
-// without writing it to a response. It is the entry point the bootstrap
-// endpoints (#145: Staff signup, Staff invitation acceptance, Client
-// portal invitation acceptance) use: each mints the cookie before
-// committing its own transaction, so a mint failure rolls the transaction
-// back instead of leaving committed rows behind a response that reports
-// failure. A newly created or accepted person then lands signed in
-// without a follow-up call to CreateHandler.
-func BuildCookie(ctx context.Context, verifier authn.Verifier, idToken string) (*http.Cookie, error) {
-	cookieValue, err := verifier.MintSessionCookie(ctx, idToken, Lifetime)
-	if err != nil {
-		return nil, fmt.Errorf("session: mint session cookie: %w", err)
-	}
+// EndHandler deletes the caller's session row and clears the cookie. It
+// is idempotent: called with no cookie, or one naming a session that has
+// already ended or expired, it still clears the cookie and reports
+// success. It ends only the session in this browser -- the same person's
+// sessions elsewhere are separate rows and are untouched; ending every
+// session for a person is a separate administrative action (#154).
+func EndHandler(db *sql.DB) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if cookie, err := r.Cookie(CookieName); err == nil {
+			// A failed DELETE is not reported: the browser is losing its
+			// only copy of the token either way, and the row expires
+			// within SessionLifetime regardless. Failing sign-out would
+			// leave the caller signed in with no way out.
+			_ = authn.EndSession(r.Context(), db, cookie.Value)
+		}
 
-	return authn.NewSessionCookie(cookieValue), nil
-}
-
-// EndHandler clears the session cookie. It is idempotent: called with no
-// cookie, an expired one, or a revoked one, it still clears the cookie
-// and reports success -- the cookie is the browser's only credential, so
-// nothing about that browser's state can make clearing it fail. It does
-// not revoke Identity Platform refresh tokens; ending every session for
-// a person is a separate administrative action (#154).
-func EndHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name:     CookieName,
 			Value:    "",
