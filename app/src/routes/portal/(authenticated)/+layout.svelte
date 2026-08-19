@@ -3,7 +3,10 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { apiFetch } from '#lib/api.js';
-	import { unregisterPushSubscription } from '#lib/pushRegistration.js';
+	import {
+		portalPushSubscriptionsPath,
+		unregisterPushSubscription
+	} from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import SignOutButton from '#lib/components/molecules/SignOutButton.svelte';
 
@@ -15,7 +18,7 @@
 			// portal screen sits under engagements/[engagementId], so the
 			// Engagement-scoped unregister endpoint always has its scope off
 			// the route -- there is no scope-less screen to guard against.
-			unsubscribeURL: `/api/portal/engagements/${page.params.engagementId}/push-subscriptions`,
+			unsubscribeURL: portalPushSubscriptionsPath(page.params.engagementId!),
 			// apiFetch, not apiFetchWithSession: that helper's 401 handling
 			// would navigate to the login screen on a failure sign-out is
 			// supposed to report in place, and an end-session request that has

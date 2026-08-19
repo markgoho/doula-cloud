@@ -3,7 +3,10 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import { registerPushSubscription } from '#lib/pushRegistration.js';
+	import {
+		practicePushSubscriptionsPath,
+		registerPushSubscription
+	} from '#lib/pushRegistration.js';
 
 	let practiceName = $state('');
 	let roles = $state<string[]>([]);
@@ -28,7 +31,7 @@
 		// sign the person out and redirect on a failure this call is
 		// supposed to swallow silently.
 		void registerPushSubscription(
-			`/api/practices/${page.params.practiceId}/push-subscriptions`,
+			practicePushSubscriptionsPath(page.params.practiceId!),
 			apiFetch
 		);
 	});

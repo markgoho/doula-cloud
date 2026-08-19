@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { urlBase64ToUint8Array, vapidPublicKey } from './pushRegistration.js';
+import {
+	portalPushSubscriptionsPath,
+	practicePushSubscriptionsPath,
+	urlBase64ToUint8Array,
+	vapidPublicKey
+} from './pushRegistration.js';
 
 describe('vapidPublicKey', () => {
 	it('defaults to empty string when unset', () => {
@@ -20,5 +25,19 @@ describe('urlBase64ToUint8Array', () => {
 		// ("+/8=" in standard base64).
 		const bytes = urlBase64ToUint8Array('-_8=');
 		expect([...bytes]).toEqual([0xFB, 0xFF]);
+	});
+});
+
+describe('push-subscriptions paths', () => {
+	it('scopes the Staff endpoint by Practice', () => {
+		expect(practicePushSubscriptionsPath('practice-1')).toBe(
+			'/api/practices/practice-1/push-subscriptions'
+		);
+	});
+
+	it('scopes the Client portal endpoint by Engagement', () => {
+		expect(portalPushSubscriptionsPath('engagement-1')).toBe(
+			'/api/portal/engagements/engagement-1/push-subscriptions'
+		);
 	});
 });

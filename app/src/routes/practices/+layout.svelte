@@ -3,7 +3,10 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { apiFetch } from '#lib/api.js';
-	import { unregisterPushSubscription } from '#lib/pushRegistration.js';
+	import {
+		practicePushSubscriptionsPath,
+		unregisterPushSubscription
+	} from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import SignOutButton from '#lib/components/molecules/SignOutButton.svelte';
 
@@ -11,7 +14,7 @@
 
 	function pushUnsubscribeURL(): string | undefined {
 		const practiceId = page.params.practiceId;
-		return practiceId === undefined ? undefined : `/api/practices/${practiceId}/push-subscriptions`;
+		return practiceId === undefined ? undefined : practicePushSubscriptionsPath(practiceId);
 	}
 
 	async function handleSignOut(): Promise<SignOutOutcome> {

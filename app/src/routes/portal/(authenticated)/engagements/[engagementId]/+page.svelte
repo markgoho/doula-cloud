@@ -3,7 +3,10 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { registerPushSubscription } from '#lib/pushRegistration.js';
+	import {
+		portalPushSubscriptionsPath,
+		registerPushSubscription
+	} from '#lib/pushRegistration.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 
 	type Detail = {
@@ -98,7 +101,7 @@
 		// own 401 handling would sign the person out and redirect on a
 		// failure this call is supposed to swallow silently.
 		void registerPushSubscription(
-			`/api/portal/engagements/${page.params.engagementId}/push-subscriptions`,
+			portalPushSubscriptionsPath(page.params.engagementId!),
 			(path, init) => fetch(apiBaseURL() + path, { ...init, credentials: 'include' })
 		);
 

@@ -28,6 +28,25 @@ export function vapidPublicKey(): string {
 }
 
 /**
+ * Where this device's push subscription lives for a Practice -- the one
+ * endpoint both Staff call sites use: the landing page registers against
+ * it (#61) and the authenticated layout unregisters against it on
+ * sign-out (#152).
+ */
+export function practicePushSubscriptionsPath(practiceId: string): string {
+	return `/api/practices/${practiceId}/push-subscriptions`;
+}
+
+/**
+ * The same endpoint for an Engagement, which is what the Client portal is
+ * scoped by -- register on the thread screen (#61), unregister on
+ * sign-out (#153).
+ */
+export function portalPushSubscriptionsPath(engagementId: string): string {
+	return `/api/portal/engagements/${engagementId}/push-subscriptions`;
+}
+
+/**
  * Registers this device's push subscription with subscribeURL, via the
  * already-registered service worker's PushManager -- "once per device
  * after login" per #61's AC; safe to call on every landing-page mount
