@@ -74,29 +74,29 @@ func BearerToken(r *http.Request) (string, bool) {
 	return token, true
 }
 
-// Begin opens a transaction on db, resolves the caller's credential
+// Begin opens a transaction on db, resolves the caller's session cookie
 // inside it, and returns the transaction and the caller's UID. The
 // transaction comes first because the session cookie is verified by
 // reading the sessions table, so the credential check and everything the
 // handler does afterwards share one connection and one round trip
-// budget. It reads the session cookie first, renewing it on the way
-// through if it is past half its life (#147); a request with no cookie
-// falls back to the Bearer ID token, which costs a network verify
-// against Identity Platform while the transaction is held open -- #151
-// removes that fallback. It writes the appropriate HTTP error (401 for a
-// missing, invalid, ended, or expired credential; 500 for DB connection
-// failure), rolls the transaction back, and returns ok=false if any step
-// fails. Callers must ensure a returned transaction is rolled back or
+// budget. The session cookie is the only credential it reads: since #151
+// no route behind Begin accepts a Bearer ID token, so no request on this
+// path costs a network verify against Identity Platform. The three
+// bootstrap endpoints, which run before a session exists, use
+// BeginBootstrap instead. A cookie past half its life is renewed on the
+// way through (#147). Begin writes the appropriate HTTP error (401 for a
+// missing, invalid, ended, or expired session; 500 for a DB failure),
+// rolls the transaction back, and returns ok=false if any step fails.
+// Callers must ensure a returned transaction is rolled back or
 // committed.
-func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, string, bool) {
-	tx, err := db.BeginTx(r.Context(), nil)
-	if err != nil {
+func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, string, bool) {
+	tx, ok := beginTx(w, r, db)
+	if !ok {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		http.Error(w, msgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 
-	uid, ok := credential(w, r, verifier, tx, db)
+	uid, ok := sessionCredential(w, r, tx, db)
 	if !ok {
 		_ = tx.Rollback()
 		return nil, "", false
@@ -105,30 +105,77 @@ func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB
 	return tx, uid, true
 }
 
-// credential resolves the caller's identity from r: the session cookie
-// if one is present, otherwise the Bearer ID token. It writes a 401 and
-// returns ok=false if neither credential is present or the one present
-// fails verification -- but a session the database could not be asked
-// about is a 500, not a 401: an unreachable database must not read as
-// "you are signed out". A verified session past half its life is renewed
-// before this returns (see renewIfStale); a rejected credential never
-// is.
-func credential(w http.ResponseWriter, r *http.Request, verifier Verifier, tx *sql.Tx, db *sql.DB) (string, bool) {
-	if cookie, err := r.Cookie(SessionCookieName); err == nil {
-		now := time.Now()
-		uid, expiresAt, err := lookupSession(r.Context(), tx, cookie.Value, now)
-		if errors.Is(err, errNoSession) {
-			http.Error(w, "invalid session", http.StatusUnauthorized)
-			return "", false
-		}
-		if err != nil {
-			http.Error(w, msgInternalError, http.StatusInternalServerError)
-			return "", false
-		}
-		renewIfStale(w, r, db, cookie.Value, expiresAt, now)
-		return uid, true
+// BeginBootstrap is Begin for the three endpoints that cannot read a
+// session cookie because they run before a session exists: Staff signup,
+// Staff invitation acceptance, and Client portal invitation acceptance.
+// They read a Bearer ID token and verify it against Identity Platform,
+// which costs a network round trip while the transaction is held open --
+// acceptable at these three seams because each is a once-per-person
+// event, and unacceptable everywhere else, which is why Begin no longer
+// offers it. There is no cookie fallback: a caller holding a session has
+// no reason to bootstrap.
+func BeginBootstrap(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, string, bool) {
+	tx, ok := beginTx(w, r, db)
+	if !ok {
+		// coverage:ignore reason: DB connection failure, not exercised by unit tests
+		return nil, "", false
 	}
 
+	uid, ok := idTokenCredential(w, r, verifier)
+	if !ok {
+		_ = tx.Rollback()
+		return nil, "", false
+	}
+
+	return tx, uid, true
+}
+
+// beginTx opens the request-scoped transaction both entry points run
+// their credential check inside, writing a 500 if the database cannot be
+// reached at all.
+func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool) {
+	tx, err := db.BeginTx(r.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: DB connection failure, not exercised by unit tests
+		http.Error(w, msgInternalError, http.StatusInternalServerError)
+		return nil, false
+	}
+	return tx, true
+}
+
+// sessionCredential resolves the caller's identity from the __session
+// cookie. It writes a 401 and returns ok=false if the cookie is absent
+// or names no live session -- but a session the database could not be
+// asked about is a 500, not a 401: an unreachable database must not read
+// as "you are signed out". A verified session past half its life is
+// renewed before this returns (see renewIfStale); a rejected one never
+// is.
+func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB) (string, bool) {
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		http.Error(w, "missing credential", http.StatusUnauthorized)
+		return "", false
+	}
+
+	now := time.Now()
+	uid, expiresAt, err := lookupSession(r.Context(), tx, cookie.Value, now)
+	if errors.Is(err, errNoSession) {
+		http.Error(w, "invalid session", http.StatusUnauthorized)
+		return "", false
+	}
+	if err != nil {
+		http.Error(w, msgInternalError, http.StatusInternalServerError)
+		return "", false
+	}
+
+	renewIfStale(w, r, db, cookie.Value, expiresAt, now)
+	return uid, true
+}
+
+// idTokenCredential resolves the caller's identity from a Bearer ID
+// token, writing a 401 if the header is absent, malformed, or carries a
+// token Identity Platform rejects.
+func idTokenCredential(w http.ResponseWriter, r *http.Request, verifier Verifier) (string, bool) {
 	idToken, ok := BearerToken(r)
 	if !ok {
 		http.Error(w, "missing credential", http.StatusUnauthorized)
@@ -147,7 +194,8 @@ func credential(w http.ResponseWriter, r *http.Request, verifier Verifier, tx *s
 // it is already past half its SessionLifetime (#147). The token value
 // does not change, so this is an UPDATE of one row plus a fresh MaxAge
 // on the browser's copy -- no Bearer ID token is involved, which is what
-// keeps renewal working once #151 removes the Bearer path.
+// keeps renewal working now that #151 has removed the Bearer path from
+// every route behind Begin.
 //
 // The UPDATE deliberately runs on the pool rather than the request's own
 // transaction. Renewal is about the credential, not about whatever the

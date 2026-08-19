@@ -2,99 +2,111 @@ package clientauth_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
 )
 
-func TestMiddleware_MissingToken(t *testing.T) {
-	db := testdb.New(t)
-	srv := newServer(authntest.Verifier{}, db)
-	defer srv.Close()
+// emptyUUID is a well-formed Engagement id that matches nothing, for the
+// tests whose request never gets far enough for it to matter.
+const emptyUUID = "00000000-0000-0000-0000-000000000000"
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
+// pingURL is the middleware-guarded route every test in this file hits;
+// the engagement id only matters once a credential has been accepted.
+func pingURL(srv *httptest.Server, engagementID string) string {
+	return srv.URL + "/portal/engagements/" + engagementID + "/ping"
+}
+
+// get issues a GET with whatever credential setup applies to req.
+func get(t *testing.T, url string, setup func(*http.Request)) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
+	setup(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer resp.Body.Close()
+	return resp
+}
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+// assertStatus fails the test unless resp carries want.
+func assertStatus(t *testing.T, resp *http.Response, want int) {
+	t.Helper()
+	if resp.StatusCode != want {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, want)
 	}
 }
 
-func TestMiddleware_EmptyBearerToken(t *testing.T) {
+func TestMiddleware_MissingCredential(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(authntest.Verifier{}, db)
+	srv, _ := newServer(t, db, "no-cookie-sent")
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
-	req.Header.Set("Authorization", "Bearer ")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := get(t, pingURL(srv, emptyUUID), func(*http.Request) {})
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	assertStatus(t, resp, http.StatusUnauthorized)
 }
 
-func TestMiddleware_TokenVerificationFailure(t *testing.T) {
+// TestMiddleware_BearerTokenAloneIsRejected is #151's AC on the Client
+// portal: a request carrying only a Bearer ID token gets a 401. The
+// portal user behind the token exists and is linked to the Engagement,
+// so a 401 can only mean the header was never read.
+func TestMiddleware_BearerTokenAloneIsRejected(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(authntest.Verifier{Err: errBadToken}, db)
+	const identityUID = "client-holding-only-a-bearer-token"
+	_, engagementID := seedClientWithEngagement(t, db, identityUID)
+
+	srv, _ := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
-	req.Header.Set("Authorization", "Bearer some-token")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := get(t, pingURL(srv, engagementID), func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer would-verify-fine")
+	})
 	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusUnauthorized)
+}
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+// TestMiddleware_UnknownSession covers a cookie that names no live
+// session -- the shape a stale or forged cookie arrives in.
+func TestMiddleware_UnknownSession(t *testing.T) {
+	db := testdb.New(t)
+	srv, _ := newServer(t, db, "irrelevant")
+	defer srv.Close()
+
+	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, "never-issued")
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusUnauthorized)
 }
 
 func TestMiddleware_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
-	srv := newServer(authntest.Verifier{UID: "some-uid"}, db)
+	srv, session := newServer(t, db, "some-uid")
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/not-a-uuid/ping", nil)
-	req.Header.Set("Authorization", "Bearer some-token")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := get(t, pingURL(srv, "not-a-uuid"), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	assertStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 	db := testdb.New(t)
 	// A verified uid with no matching client_portal_users row: population
 	// resolution fails even though the token itself is valid.
-	srv := newServer(authntest.Verifier{UID: "unknown-uid"}, db)
+	srv, session := newServer(t, db, "unknown-uid")
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000/ping", nil)
-	req.Header.Set("Authorization", "Bearer some-token")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -112,15 +124,12 @@ func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	_, otherEngagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com", "intake")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+otherEngagementID+"/ping", nil)
-	req.Header.Set("Authorization", "Bearer some-token")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := get(t, pingURL(srv, otherEngagementID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -133,15 +142,12 @@ func TestMiddleware_Success(t *testing.T) {
 	const identityUID = "client-with-engagement"
 	clientID, engagementID := seedClientWithEngagement(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/ping", nil)
-	req.Header.Set("Authorization", "Bearer some-token")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := get(t, pingURL(srv, engagementID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

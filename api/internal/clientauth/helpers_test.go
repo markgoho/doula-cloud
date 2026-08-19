@@ -1,25 +1,26 @@
 package clientauth_test
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-var errBadToken = errors.New("invalid token")
-
 // newServer wires the middleware in front of a handler that echoes the
 // resolved Client/Engagement ids and confirms a usable *sql.Tx was placed
 // on the request context, so tests can assert on the middleware's
-// contract with downstream handlers, not just the HTTP status code.
-func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+// contract with downstream handlers, not just the HTTP status code. It
+// also seeds a live session for uid and hands back the token its
+// __session cookie carries, since #151 that cookie is the only
+// credential the middleware reads.
+func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("/portal/engagements/{engagementId}/ping", clientauth.Middleware(verifier, db.App)(
+	mux.Handle("/portal/engagements/{engagementId}/ping", clientauth.Middleware(db.App)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientID, _ := clientauth.ClientID(r.Context())
 			engagementID, _ := clientauth.EngagementID(r.Context())
@@ -33,7 +34,7 @@ func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
 			w.WriteHeader(http.StatusOK)
 		}),
 	))
-	return httptest.NewServer(mux)
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 // seedPractice inserts a Practice using the superuser Admin connection.

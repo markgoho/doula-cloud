@@ -16,13 +16,13 @@ func voidContractURL(srv *httptest.Server, practiceID, engagementID string) stri
 	return srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/contract/void"
 }
 
-func postVoidContract(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+func postVoidContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, voidContractURL(srv, practiceID, engagementID), nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -35,10 +35,10 @@ func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "void-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postVoidContract(t, srv, practiceID, "not-a-uuid")
+	resp := postVoidContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -53,10 +53,10 @@ func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postVoidContract(t, srv, practiceID, otherEngagementID)
+	resp := postVoidContract(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -70,10 +70,10 @@ func TestPostVoidContractHandler_NoContract(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postVoidContract(t, srv, practiceID, engagementID)
+	resp := postVoidContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -93,10 +93,10 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 			engagementID := seedEngagement(t, db, practiceID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
-			srv := newContractServer(authntest.Verifier{UID: uid}, db)
+			srv, session := newContractServer(t, db, uid)
 			defer srv.Close()
 
-			resp := postVoidContract(t, srv, practiceID, engagementID)
+			resp := postVoidContract(t, srv, session, practiceID, engagementID)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusConflict {
@@ -120,10 +120,10 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 	objectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, objectPath)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postVoidContract(t, srv, practiceID, engagementID)
+	resp := postVoidContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -140,7 +140,7 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 		t.Fatalf("prose = %q, want the original snapshot unchanged", out.Prose)
 	}
 
-	getResp := getContract(t, srv, practiceID, engagementID)
+	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var getOut contracts.ContractResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
@@ -182,16 +182,16 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	oldObjectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, oldObjectPath)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	voidResp := postVoidContract(t, srv, practiceID, engagementID)
+	voidResp := postVoidContract(t, srv, session, practiceID, engagementID)
 	defer voidResp.Body.Close()
 	if voidResp.StatusCode != http.StatusOK {
 		t.Fatalf("void status = %d, want %d", voidResp.StatusCode, http.StatusOK)
 	}
 
-	createResp := postContract(t, srv, practiceID, engagementID)
+	createResp := postContract(t, srv, session, practiceID, engagementID)
 	defer createResp.Body.Close()
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create-after-void status = %d, want %d (the recreate flow must not 409 forever)", createResp.StatusCode, http.StatusCreated)
@@ -204,7 +204,7 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 		t.Fatalf("new contract status = %q, want draft", created.Status)
 	}
 
-	sendResp := postSendContract(t, srv, practiceID, engagementID)
+	sendResp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer sendResp.Body.Close()
 	if sendResp.StatusCode != http.StatusOK {
 		t.Fatalf("send-after-recreate status = %d, want %d", sendResp.StatusCode, http.StatusOK)

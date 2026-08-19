@@ -47,20 +47,21 @@ func seedPortalUser(t *testing.T, db *testdb.DB, identityUID, clientID string) {
 
 // newPortalServer mounts the same route main.go wires up for the
 // Client-portal Birth Plan view, behind clientauth.Middleware.
-func newPortalServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/birth-plan",
-		clientauth.Middleware(verifier, db.App)(plans.ClientGetBirthPlanHandler()))
-	return httptest.NewServer(mux)
+		clientauth.Middleware(db.App)(plans.ClientGetBirthPlanHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getClientBirthPlan(t *testing.T, srv *httptest.Server, engagementID string) *http.Response {
+func getClientBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/birth-plan", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -79,10 +80,10 @@ func TestClientGetBirthPlanHandler_Success(t *testing.T) {
 		`{"location":"Hospital"}`,
 	)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientBirthPlan(t, srv, engagementID)
+	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -104,10 +105,10 @@ func TestClientGetBirthPlanHandler_NoInstanceYet404(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientBirthPlan(t, srv, engagementID)
+	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -130,10 +131,10 @@ func TestClientGetBirthPlanHandler_CarePlanNeverReturned(t *testing.T) {
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{"f1":"secret"}`,
 	)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientBirthPlan(t, srv, engagementID)
+	resp := getClientBirthPlan(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -149,10 +150,10 @@ func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) 
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientBirthPlan(t, srv, otherEngagementID)
+	resp := getClientBirthPlan(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {

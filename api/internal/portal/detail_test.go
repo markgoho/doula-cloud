@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/portal"
@@ -15,11 +14,12 @@ import (
 
 // newServer mounts the same route main.go wires up for this package,
 // behind clientauth.Middleware.
-func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}",
-		clientauth.Middleware(verifier, db.App)(portal.DetailHandler()))
-	return httptest.NewServer(mux)
+		clientauth.Middleware(db.App)(portal.DetailHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 // seedClientWithEngagement inserts a Practice, a Client with an
@@ -65,14 +65,14 @@ func TestDetailHandler_Success(t *testing.T) {
 	const identityUID = "portal-detail-uid"
 	engagementID, status := seedClientWithEngagement(t, db, identityUID, "Riverside Doulas")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer some-token")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -102,14 +102,14 @@ func TestDetailHandler_NotLinkedToClient(t *testing.T) {
 	db := testdb.New(t)
 	_, _ = seedClientWithEngagement(t, db, "other-portal-uid", "Other Practice")
 
-	srv := newServer(authntest.Verifier{UID: "unrelated-uid"}, db)
+	srv, session := newServer(t, db, "unrelated-uid")
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer some-token")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)

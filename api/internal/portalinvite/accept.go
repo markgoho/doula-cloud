@@ -34,7 +34,7 @@ type AcceptInviteResponse struct {
 // staffauth.AcceptInviteHandler's shape.
 func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, verifier, db)
+		tx, uid, ok := authn.BeginBootstrap(w, r, verifier, db)
 		if !ok {
 			return
 		}

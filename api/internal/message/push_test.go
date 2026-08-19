@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/testdb"
@@ -37,11 +36,11 @@ func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
-	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
+	srv, session := newServerWithPusher(t, db, identityUID, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Hi, checking in."})
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -83,11 +82,11 @@ func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 
 	pusher := push.NewFakePusher()
-	srv := newPortalServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
+	srv, session := newPortalServerWithPusher(t, db, identityUID, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Question about my visit."})
-	resp := authedPost(t, srv.URL+"/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -124,11 +123,11 @@ func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	pusher := push.NewFakePusher()
-	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
+	srv, session := newServerWithPusher(t, db, identityUID, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "no subscribers yet"})
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -153,11 +152,11 @@ func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")
-	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
+	srv, session := newServerWithPusher(t, db, identityUID, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "still gets created"})
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -181,11 +180,11 @@ func TestCreateHandler_DoesNotNotifyStaffSubscriptionsForClientRecipient(t *test
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-only")
 
 	pusher := push.NewFakePusher()
-	srv := newServerWithPusher(authntest.Verifier{UID: identityUID}, db, pusher)
+	srv, session := newServerWithPusher(t, db, identityUID, pusher)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "checking population filter"})
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)

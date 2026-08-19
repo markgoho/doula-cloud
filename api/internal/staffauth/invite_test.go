@@ -25,14 +25,15 @@ func seedOwnerMembership(t *testing.T, db *testdb.DB, identityUID string) (staff
 	return staffID, practiceID
 }
 
-func newInviteServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+func newInviteServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/invitations",
-		staffauth.Middleware(verifier, db.App)(staffauth.InviteHandler()))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(staffauth.InviteHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func postInvite(t *testing.T, srv *httptest.Server, practiceID string, body any) *http.Response {
+func postInvite(t *testing.T, srv *httptest.Server, session string, practiceID string, body any) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -42,7 +43,7 @@ func postInvite(t *testing.T, srv *httptest.Server, practiceID string, body any)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -56,10 +57,10 @@ func TestInviteHandler_NonOwnerForbidden(t *testing.T) {
 	const identityUID = "doula-not-owner"
 	_, practiceID := seedStaffWithMembership(t, db, identityUID) // seedMembership grants '{doula}', not owner
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})
+	resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -72,10 +73,10 @@ func TestInviteHandler_MissingFields(t *testing.T) {
 	const identityUID = "owner-missing-fields"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "", Name: inviteeName})
+	resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{Email: "", Name: inviteeName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -88,14 +89,14 @@ func TestInviteHandler_InvalidBody(t *testing.T) {
 	const identityUID = "owner-invalid-body"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/practices/"+practiceID+"/invitations", bytes.NewReader([]byte("not json")))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -113,10 +114,10 @@ func TestInviteHandler_Success(t *testing.T) {
 	const identityUID = "owner-invites"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})
+	resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{Email: "invitee@example.com", Name: inviteeName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {

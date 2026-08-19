@@ -137,100 +137,100 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("POST /api/session", session.CreateHandler(verifier, db))
 	mux.Handle("DELETE /api/session", session.EndHandler(db))
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
-	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(verifier, db))
+	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(db))
 	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))
 	mux.Handle("GET /api/practices/{practiceId}/session",
-		staffauth.Middleware(verifier, db)(http.HandlerFunc(practiceSessionHandler)))
+		staffauth.Middleware(db)(http.HandlerFunc(practiceSessionHandler)))
 	mux.Handle("POST /api/practices/{practiceId}/invitations",
-		staffauth.Middleware(verifier, db)(idempotency.Wrap(staffauth.InviteHandler())))
+		staffauth.Middleware(db)(idempotency.Wrap(staffauth.InviteHandler())))
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
-		staffauth.Middleware(verifier, db)(staffauth.AssignRolesHandler()))
+		staffauth.Middleware(db)(staffauth.AssignRolesHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/billing",
-		staffauth.Middleware(verifier, db)(billing.GetBalanceHandler()))
+		staffauth.Middleware(db)(billing.GetBalanceHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/billing/purchases",
-		staffauth.Middleware(verifier, db)(billing.PostPurchaseHandler(stripeClient)))
+		staffauth.Middleware(db)(billing.PostPurchaseHandler(stripeClient)))
 	mux.Handle("POST /api/stripe/webhook", billing.PostPurchaseWebhookHandler(db, stripeWebhookSecret))
 	mux.Handle("POST /api/practices/{practiceId}/payments/connect",
-		staffauth.Middleware(verifier, db)(payments.PostConnectHandler(paymentsClient)))
+		staffauth.Middleware(db)(payments.PostConnectHandler(paymentsClient)))
 	mux.Handle("GET /api/practices/{practiceId}/payments/connect",
-		staffauth.Middleware(verifier, db)(payments.GetConnectStatusHandler(paymentsClient)))
+		staffauth.Middleware(db)(payments.GetConnectStatusHandler(paymentsClient)))
 	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret))
 	mux.Handle("GET /api/practices/{practiceId}/clients",
-		staffauth.Middleware(verifier, db)(engagement.ListHandler()))
+		staffauth.Middleware(db)(engagement.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/clients",
-		staffauth.Middleware(verifier, db)(idempotency.Wrap(engagement.CreateHandler())))
+		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler())))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}",
-		staffauth.Middleware(verifier, db)(engagement.DetailHandler()))
+		staffauth.Middleware(db)(engagement.DetailHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(verifier, db)(visit.ListHandler()))
+		staffauth.Middleware(db)(visit.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(verifier, db)(visit.CreateHandler()))
+		staffauth.Middleware(db)(visit.CreateHandler()))
 	mux.Handle("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
-		staffauth.Middleware(verifier, db)(visit.ReassignHandler()))
+		staffauth.Middleware(db)(visit.ReassignHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db)(message.ListHandler()))
+		staffauth.Middleware(db)(message.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db)(idempotency.Wrap(message.CreateHandler(store, pusher))))
+		staffauth.Middleware(db)(idempotency.Wrap(message.CreateHandler(store, pusher))))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
-		staffauth.Middleware(verifier, db)(message.AttachmentHandler(store)))
+		staffauth.Middleware(db)(message.AttachmentHandler(store)))
 	mux.Handle("GET /api/practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(verifier, db)(plans.GetTemplateHandler()))
+		staffauth.Middleware(db)(plans.GetTemplateHandler()))
 	mux.Handle("PUT /api/practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(verifier, db)(plans.PutTemplateHandler()))
+		staffauth.Middleware(db)(plans.PutTemplateHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(verifier, db)(plans.PostInstanceHandler()))
+		staffauth.Middleware(db)(plans.PostInstanceHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(verifier, db)(plans.GetInstanceHandler()))
+		staffauth.Middleware(db)(plans.GetInstanceHandler()))
 	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(verifier, db)(plans.PutInstanceHandler()))
+		staffauth.Middleware(db)(plans.PutInstanceHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/contract-template",
-		staffauth.Middleware(verifier, db)(contracts.GetTemplateHandler()))
+		staffauth.Middleware(db)(contracts.GetTemplateHandler()))
 	mux.Handle("PUT /api/practices/{practiceId}/contract-template",
-		staffauth.Middleware(verifier, db)(contracts.PutTemplateHandler()))
+		staffauth.Middleware(db)(contracts.PutTemplateHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(verifier, db)(contracts.PostContractHandler()))
+		staffauth.Middleware(db)(contracts.PostContractHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(verifier, db)(contracts.GetContractHandler()))
+		staffauth.Middleware(db)(contracts.GetContractHandler()))
 	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(verifier, db)(contracts.PutContractHandler()))
+		staffauth.Middleware(db)(contracts.PutContractHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
-		staffauth.Middleware(verifier, db)(contracts.PostSendContractHandler(pusher)))
+		staffauth.Middleware(db)(contracts.PostSendContractHandler(pusher)))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
-		staffauth.Middleware(verifier, db)(contracts.PostVoidContractHandler()))
+		staffauth.Middleware(db)(contracts.PostVoidContractHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract/pdf",
-		staffauth.Middleware(verifier, db)(contracts.GetSignedContractPDFHandler(store)))
+		staffauth.Middleware(db)(contracts.GetSignedContractPDFHandler(store)))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices",
-		staffauth.Middleware(verifier, db)(payments.PostInvoiceHandler(paymentsClient)))
+		staffauth.Middleware(db)(payments.PostInvoiceHandler(paymentsClient)))
 	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices",
-		staffauth.Middleware(verifier, db)(payments.GetInvoicesHandler()))
+		staffauth.Middleware(db)(payments.GetInvoicesHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",
-		staffauth.Middleware(verifier, db)(pushsub.RegisterHandler()))
+		staffauth.Middleware(db)(pushsub.RegisterHandler()))
 	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
-		staffauth.Middleware(verifier, db)(pushsub.UnregisterHandler()))
+		staffauth.Middleware(db)(pushsub.UnregisterHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(verifier, db)(idempotency.Wrap(portalinvite.InviteHandler())))
+		staffauth.Middleware(db)(idempotency.Wrap(portalinvite.InviteHandler())))
 	mux.Handle("POST /api/portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db))
-	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(verifier, db))
+	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
-		clientauth.Middleware(verifier, db)(portal.DetailHandler()))
+		clientauth.Middleware(db)(portal.DetailHandler()))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/birth-plan",
-		clientauth.Middleware(verifier, db)(plans.ClientGetBirthPlanHandler()))
+		clientauth.Middleware(db)(plans.ClientGetBirthPlanHandler()))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/contract",
-		clientauth.Middleware(verifier, db)(contracts.ClientGetContractHandler()))
+		clientauth.Middleware(db)(contracts.ClientGetContractHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/contract/sign",
-		clientauth.Middleware(verifier, db)(contracts.ClientPostSignContractHandler(store)))
+		clientauth.Middleware(db)(contracts.ClientPostSignContractHandler(store)))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/contract/pdf",
-		clientauth.Middleware(verifier, db)(contracts.ClientGetSignedContractPDFHandler(store)))
+		clientauth.Middleware(db)(contracts.ClientGetSignedContractPDFHandler(store)))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(verifier, db)(message.ClientListHandler()))
+		clientauth.Middleware(db)(message.ClientListHandler()))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(verifier, db)(message.ClientCreateHandler(store, pusher)))
+		clientauth.Middleware(db)(message.ClientCreateHandler(store, pusher)))
 	mux.Handle("GET /api/portal/engagements/{engagementId}/messages/{messageId}/attachment",
-		clientauth.Middleware(verifier, db)(message.ClientAttachmentHandler(store)))
+		clientauth.Middleware(db)(message.ClientAttachmentHandler(store)))
 	mux.Handle("POST /api/portal/engagements/{engagementId}/push-subscriptions",
-		clientauth.Middleware(verifier, db)(pushsub.ClientRegisterHandler()))
+		clientauth.Middleware(db)(pushsub.ClientRegisterHandler()))
 	mux.Handle("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
-		clientauth.Middleware(verifier, db)(pushsub.ClientUnregisterHandler()))
+		clientauth.Middleware(db)(pushsub.ClientUnregisterHandler()))
 	return csrf.Wrap(expectedOrigins, mux)
 }
 

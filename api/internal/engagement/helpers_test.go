@@ -5,23 +5,26 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
 // newServer mounts the same routes main.go wires up for this package,
-// behind staffauth.Middleware.
-func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+// behind staffauth.Middleware, and seeds a live session for uid --
+// returning the token its __session cookie carries, since #151 the
+// cookie is the only credential the middleware reads.
+func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/clients",
-		staffauth.Middleware(verifier, db.App)(engagement.ListHandler()))
+		staffauth.Middleware(db.App)(engagement.ListHandler()))
 	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(verifier, db.App)(engagement.CreateHandler()))
+		staffauth.Middleware(db.App)(engagement.CreateHandler()))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}",
-		staffauth.Middleware(verifier, db.App)(engagement.DetailHandler()))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(engagement.DetailHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 // seedStaffAtPractice inserts a Staff row bound to identityUID and a

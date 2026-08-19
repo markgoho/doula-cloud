@@ -55,20 +55,21 @@ func seedLedgerRow(t *testing.T, db *testdb.DB, practiceID, origin string, quant
 	}
 }
 
-func newBillingServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+func newBillingServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/billing",
-		staffauth.Middleware(verifier, db.App)(billing.GetBalanceHandler()))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(billing.GetBalanceHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getBalance(t *testing.T, srv *httptest.Server, practiceID string) *http.Response {
+func getBalance(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/billing", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -133,10 +134,10 @@ func TestGetBalanceHandler_AnyMemberAllowed(t *testing.T) {
 	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
 	seedLedgerRow(t, db, practiceID, "purchase", 5)
 
-	srv := newBillingServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newBillingServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getBalance(t, srv, practiceID)
+	resp := getBalance(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -171,10 +172,10 @@ func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 	const uid = "get-empty-ledger"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newBillingServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newBillingServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getBalance(t, srv, practiceID)
+	resp := getBalance(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

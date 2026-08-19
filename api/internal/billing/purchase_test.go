@@ -28,21 +28,22 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 	return practiceID
 }
 
-func newPurchaseServer(verifier authntest.Verifier, db *testdb.DB, stripeClient billing.StripeClient) *httptest.Server {
+func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient billing.StripeClient) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/billing/purchases",
-		staffauth.Middleware(verifier, db.App)(billing.PostPurchaseHandler(stripeClient)))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(billing.PostPurchaseHandler(stripeClient)))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func postPurchase(t *testing.T, srv *httptest.Server, practiceID string, body string) *http.Response {
+func postPurchase(t *testing.T, srv *httptest.Server, session string, practiceID string, body string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
 		srv.URL+"/practices/"+practiceID+"/billing/purchases", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -70,10 +71,10 @@ func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
 	defer srv.Close()
 
-	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -112,17 +113,17 @@ func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) 
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
 	defer srv.Close()
 
-	first := postPurchase(t, srv, practiceID, `{"quantity": 3}`)
+	first := postPurchase(t, srv, session, practiceID, `{"quantity": 3}`)
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first purchase status = %d, want %d", first.StatusCode, http.StatusOK)
 	}
 	firstCustomerID := stripeCustomerID(t, db, practiceID)
 
-	second := postPurchase(t, srv, practiceID, `{"quantity": 10}`)
+	second := postPurchase(t, srv, session, practiceID, `{"quantity": 10}`)
 	_ = second.Body.Close()
 	if second.StatusCode != http.StatusOK {
 		t.Fatalf("second purchase status = %d, want %d", second.StatusCode, http.StatusOK)
@@ -147,10 +148,10 @@ func TestPostPurchaseHandler_NonOwnerForbidden(t *testing.T) {
 	practiceID := seedMember(t, db, uid) // doula role, not owner
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
 	defer srv.Close()
 
-	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -169,10 +170,10 @@ func TestPostPurchaseHandler_InvalidQuantityRejected(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
 	defer srv.Close()
 
-	resp := postPurchase(t, srv, practiceID, `{"quantity": 0}`)
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 0}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -191,10 +192,10 @@ func TestPostPurchaseHandler_InvalidBodyRejected(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	stripeClient := billing.NewFakeStripeClient()
 
-	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
 	defer srv.Close()
 
-	resp := postPurchase(t, srv, practiceID, `not json`)
+	resp := postPurchase(t, srv, session, practiceID, `not json`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -212,10 +213,10 @@ func TestPostPurchaseHandler_CreateCustomerFailureReturns500(t *testing.T) {
 	stripeClient := billing.NewFakeStripeClient()
 	stripeClient.CreateCustomerErr = errStripeFake
 
-	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
 	defer srv.Close()
 
-	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -235,10 +236,10 @@ func TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500(t *testing.T
 	stripeClient := billing.NewFakeStripeClient()
 	stripeClient.CreateCheckoutSessionErr = errStripeFake
 
-	srv := newPurchaseServer(authntest.Verifier{UID: uid}, db, stripeClient)
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
 	defer srv.Close()
 
-	resp := postPurchase(t, srv, practiceID, `{"quantity": 5}`)
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {

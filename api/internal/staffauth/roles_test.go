@@ -12,14 +12,15 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func newRolesServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+func newRolesServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("PATCH /practices/{practiceId}/staff/{staffId}/roles",
-		staffauth.Middleware(verifier, db.App)(staffauth.AssignRolesHandler()))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(staffauth.AssignRolesHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func patchRoles(t *testing.T, srv *httptest.Server, practiceID, staffID string, body any) *http.Response {
+func patchRoles(t *testing.T, srv *httptest.Server, session string, practiceID, staffID string, body any) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -30,7 +31,7 @@ func patchRoles(t *testing.T, srv *httptest.Server, practiceID, staffID string, 
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -44,10 +45,10 @@ func TestAssignRolesHandler_NonOwnerForbidden(t *testing.T) {
 	const identityUID = "doula-assigning-roles"
 	staffID, practiceID := seedStaffWithMembership(t, db, identityUID) // '{doula}', not owner
 
-	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newRolesServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, practiceID, staffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
+	resp := patchRoles(t, srv, session, practiceID, staffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -60,10 +61,10 @@ func TestAssignRolesHandler_UnknownRole(t *testing.T) {
 	const identityUID = "owner-bad-role"
 	ownerID, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newRolesServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, practiceID, ownerID, staffauth.AssignRolesRequest{Roles: []string{"admin"}})
+	resp := patchRoles(t, srv, session, practiceID, ownerID, staffauth.AssignRolesRequest{Roles: []string{"admin"}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -76,7 +77,7 @@ func TestAssignRolesHandler_InvalidBody(t *testing.T) {
 	const identityUID = "owner-invalid-roles-body"
 	ownerID, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newRolesServer(t, db, identityUID)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
@@ -84,7 +85,7 @@ func TestAssignRolesHandler_InvalidBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -102,10 +103,10 @@ func TestAssignRolesHandler_NoSuchMembership(t *testing.T) {
 	const identityUID = "owner-no-such-target"
 	_, practiceID := seedOwnerMembership(t, db, identityUID)
 
-	srv := newRolesServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newRolesServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, practiceID, "00000000-0000-0000-0000-000000000000", staffauth.AssignRolesRequest{Roles: []string{doulaRole}})
+	resp := patchRoles(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", staffauth.AssignRolesRequest{Roles: []string{doulaRole}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -120,10 +121,10 @@ func TestAssignRolesHandler_Success(t *testing.T) {
 	targetID := seedStaff(t, db, "target-staff")
 	seedMembership(t, db, practiceID, targetID) // starts with '{doula}'
 
-	srv := newRolesServer(authntest.Verifier{UID: ownerUID}, db)
+	srv, session := newRolesServer(t, db, ownerUID)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, practiceID, targetID, staffauth.AssignRolesRequest{Roles: []string{ownerRole, doulaRole}})
+	resp := patchRoles(t, srv, session, practiceID, targetID, staffauth.AssignRolesRequest{Roles: []string{ownerRole, doulaRole}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -161,24 +162,24 @@ func TestRoleAssignmentUnlocksAccess(t *testing.T) {
 		t.Fatalf("seed zero-role membership: %v", err)
 	}
 
-	inviteSrv := newInviteServer(authntest.Verifier{UID: invitedUID}, db)
+	inviteSrv, inviteSession := newInviteServer(t, db, invitedUID)
 	defer inviteSrv.Close()
 
-	before := postInvite(t, inviteSrv, practiceID, staffauth.InviteRequest{Email: "someone-else@example.com", Name: "Someone Else"})
+	before := postInvite(t, inviteSrv, inviteSession, practiceID, staffauth.InviteRequest{Email: "someone-else@example.com", Name: "Someone Else"})
 	_ = before.Body.Close()
 	if before.StatusCode != http.StatusForbidden {
 		t.Fatalf("invite before role assignment: status = %d, want %d", before.StatusCode, http.StatusForbidden)
 	}
 
-	rolesSrv := newRolesServer(authntest.Verifier{UID: ownerUID}, db)
+	rolesSrv, session := newRolesServer(t, db, ownerUID)
 	defer rolesSrv.Close()
-	assign := patchRoles(t, rolesSrv, practiceID, invitedStaffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
+	assign := patchRoles(t, rolesSrv, session, practiceID, invitedStaffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
 	_ = assign.Body.Close()
 	if assign.StatusCode != http.StatusOK {
 		t.Fatalf("assign roles: status = %d, want %d", assign.StatusCode, http.StatusOK)
 	}
 
-	after := postInvite(t, inviteSrv, practiceID, staffauth.InviteRequest{Email: "someone-else@example.com", Name: "Someone Else"})
+	after := postInvite(t, inviteSrv, inviteSession, practiceID, staffauth.InviteRequest{Email: "someone-else@example.com", Name: "Someone Else"})
 	defer after.Body.Close()
 	if after.StatusCode != http.StatusCreated {
 		t.Fatalf("invite after role assignment: status = %d, want %d", after.StatusCode, http.StatusCreated)

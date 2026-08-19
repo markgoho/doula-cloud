@@ -24,13 +24,13 @@ func contractURL(srv *httptest.Server, practiceID, engagementID string) string {
 	return srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/contract"
 }
 
-func postContract(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+func postContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, contractURL(srv, practiceID, engagementID), nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -38,13 +38,13 @@ func postContract(t *testing.T, srv *httptest.Server, practiceID, engagementID s
 	return resp
 }
 
-func getContract(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+func getContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, contractURL(srv, practiceID, engagementID), nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -52,14 +52,14 @@ func getContract(t *testing.T, srv *httptest.Server, practiceID, engagementID st
 	return resp
 }
 
-func getContractPDFRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID, authHeader string) *http.Response {
+func getContractPDFRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, contractURL(srv, practiceID, engagementID)+"/pdf", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
+	if session != "" {
+		authntest.AddSessionCookie(req, session)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -68,18 +68,18 @@ func getContractPDFRaw(t *testing.T, srv *httptest.Server, practiceID, engagemen
 	return resp
 }
 
-func getContractPDF(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+func getContractPDF(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	return getContractPDFRaw(t, srv, practiceID, engagementID, "Bearer tok")
+	return getContractPDFRaw(t, srv, session, practiceID, engagementID)
 }
 
-func putContractRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID string, body []byte) *http.Response {
+func putContractRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, contractURL(srv, practiceID, engagementID), bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -88,13 +88,13 @@ func putContractRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID
 	return resp
 }
 
-func putContract(t *testing.T, srv *httptest.Server, practiceID, engagementID string, values contracts.MergeFieldValues) *http.Response {
+func putContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string, values contracts.MergeFieldValues) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(contracts.PutContractRequest{Values: values})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	return putContractRaw(t, srv, practiceID, engagementID, payload)
+	return putContractRaw(t, srv, session, practiceID, engagementID, payload)
 }
 
 func TestPostContractHandler_InvalidEngagementID(t *testing.T) {
@@ -102,10 +102,10 @@ func TestPostContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "post-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postContract(t, srv, practiceID, "not-a-uuid")
+	resp := postContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -123,10 +123,10 @@ func TestPostContractHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postContract(t, srv, practiceID, otherEngagementID)
+	resp := postContract(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -143,10 +143,10 @@ func TestPostContractHandler_NoTemplate(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postContract(t, srv, practiceID, engagementID)
+	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -165,10 +165,10 @@ func TestPostContractHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postContract(t, srv, practiceID, engagementID)
+	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -206,10 +206,10 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, "Hello {{client_name}}, this agreement is for {{client_name}}.")
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postContract(t, srv, practiceID, engagementID)
+	resp := postContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	var out contracts.ContractResponse
@@ -230,16 +230,16 @@ func TestPostContractHandler_Duplicate(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	first := postContract(t, srv, practiceID, engagementID)
+	first := postContract(t, srv, session, practiceID, engagementID)
 	defer first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first POST status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 
-	second := postContract(t, srv, practiceID, engagementID)
+	second := postContract(t, srv, session, practiceID, engagementID)
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second POST status = %d, want %d", second.StatusCode, http.StatusConflict)
@@ -251,10 +251,10 @@ func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "get-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getContract(t, srv, practiceID, "not-a-uuid")
+	resp := getContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -268,10 +268,10 @@ func TestGetContractHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getContract(t, srv, practiceID, engagementID)
+	resp := getContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -284,10 +284,10 @@ func TestPutContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "put-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putContract(t, srv, practiceID, "not-a-uuid", contracts.MergeFieldValues{})
+	resp := putContract(t, srv, session, practiceID, "not-a-uuid", contracts.MergeFieldValues{})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -301,10 +301,10 @@ func TestPutContractHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putContract(t, srv, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
+	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -322,10 +322,10 @@ func TestPutContractHandler_NonDraftRejected(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putContract(t, srv, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
+	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {
@@ -340,10 +340,10 @@ func TestPutContractHandler_InvalidBody(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putContractRaw(t, srv, practiceID, engagementID, []byte("not json"))
+	resp := putContractRaw(t, srv, session, practiceID, engagementID, []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -358,10 +358,10 @@ func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putContract(t, srv, practiceID, engagementID, contracts.MergeFieldValues{"not_a_field": "x"})
+	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{"not_a_field": "x"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -379,10 +379,10 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putContractRaw(t, srv, practiceID, engagementID,
+	resp := putContractRaw(t, srv, session, practiceID, engagementID,
 		[]byte(`{"status":"signed","values":{"client_name":"Jamie"}}`))
 	defer resp.Body.Close()
 
@@ -410,10 +410,10 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putContractRaw(t, srv, practiceID, engagementID, []byte(`{}`))
+	resp := putContractRaw(t, srv, session, practiceID, engagementID, []byte(`{}`))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -438,10 +438,10 @@ func TestPutContractHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	putResp := putContract(t, srv, practiceID, engagementID,
+	putResp := putContract(t, srv, session, practiceID, engagementID,
 		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "$1,200"})
 	defer putResp.Body.Close()
 
@@ -449,7 +449,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
 	}
 
-	getResp := getContract(t, srv, practiceID, engagementID)
+	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var out contracts.ContractResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
@@ -471,23 +471,23 @@ func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	postResp := postContract(t, srv, practiceID, engagementID)
+	postResp := postContract(t, srv, session, practiceID, engagementID)
 	defer postResp.Body.Close()
 	if postResp.StatusCode != http.StatusCreated {
 		t.Fatalf("POST status = %d, want %d", postResp.StatusCode, http.StatusCreated)
 	}
 
-	putTemplateResp := putTemplate(t, srv, practiceID,
+	putTemplateResp := putTemplate(t, srv, session, practiceID,
 		contracts.TemplateResponse{Prose: "Totally different agreement for {{scope_of_service}}."})
 	defer putTemplateResp.Body.Close()
 	if putTemplateResp.StatusCode != http.StatusOK {
 		t.Fatalf("PUT template status = %d, want %d", putTemplateResp.StatusCode, http.StatusOK)
 	}
 
-	getResp := getContract(t, srv, practiceID, engagementID)
+	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var out contracts.ContractResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {

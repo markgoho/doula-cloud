@@ -42,8 +42,9 @@ type StatusResponse struct {
 // CreateHandler accepts an ID token in the Authorization header --
 // still Bearer at this seam, because no session exists yet -- verifies
 // it with the identity provider, creates the session, and sets the
-// cookie. This is the one place a Bearer ID token is still read once
-// #151 lands elsewhere.
+// cookie. Since #151 removed the Bearer path from authn.Begin, the only
+// other places an ID token is read are the three bootstrap endpoints,
+// via authn.BeginBootstrap.
 func CreateHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idToken, ok := authn.BearerToken(r)

@@ -36,16 +36,16 @@ func TestWrap_ReplaysStoredResponseForSameKey(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedStaffWithMembership(t, db, "same-key-owner")
 	var calls int
-	srv := newIdempotencyServer(db, "same-key-owner", &calls, http.StatusCreated)
+	srv, session := newIdempotencyServer(t, db, "same-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()
 
-	first := postWidget(t, srv, practiceID, "retry-key-1")
+	first := postWidget(t, srv, session, practiceID, "retry-key-1")
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 	firstBody := readBody(t, first)
 
-	second := postWidget(t, srv, practiceID, "retry-key-1")
+	second := postWidget(t, srv, session, practiceID, "retry-key-1")
 	if second.StatusCode != http.StatusCreated {
 		t.Fatalf("second call status = %d, want %d", second.StatusCode, http.StatusCreated)
 	}
@@ -70,10 +70,10 @@ func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedStaffWithMembership(t, db, "ttl-owner")
 	var calls int
-	srv := newIdempotencyServer(db, "ttl-owner", &calls, http.StatusCreated)
+	srv, session := newIdempotencyServer(t, db, "ttl-owner", &calls, http.StatusCreated)
 	defer srv.Close()
 
-	first := postWidget(t, srv, practiceID, "ttl-key")
+	first := postWidget(t, srv, session, practiceID, "ttl-key")
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
@@ -88,7 +88,7 @@ func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 		t.Fatalf("backdate stored row: %v", err)
 	}
 
-	second := postWidget(t, srv, practiceID, "ttl-key")
+	second := postWidget(t, srv, session, practiceID, "ttl-key")
 	if second.StatusCode != http.StatusCreated {
 		t.Fatalf("second call status = %d, want %d", second.StatusCode, http.StatusCreated)
 	}
@@ -118,11 +118,11 @@ func TestWrap_RunsHandlerAgainWithNoKey(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedStaffWithMembership(t, db, "no-key-owner")
 	var calls int
-	srv := newIdempotencyServer(db, "no-key-owner", &calls, http.StatusCreated)
+	srv, session := newIdempotencyServer(t, db, "no-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()
 
-	_ = postWidget(t, srv, practiceID, "").Body.Close()
-	_ = postWidget(t, srv, practiceID, "").Body.Close()
+	_ = postWidget(t, srv, session, practiceID, "").Body.Close()
+	_ = postWidget(t, srv, session, practiceID, "").Body.Close()
 
 	if calls != 2 {
 		t.Fatalf("handler invoked %d times, want 2 -- no key means no idempotency protection", calls)
@@ -135,11 +135,11 @@ func TestWrap_RunsHandlerAgainWithDifferentKey(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedStaffWithMembership(t, db, "diff-key-owner")
 	var calls int
-	srv := newIdempotencyServer(db, "diff-key-owner", &calls, http.StatusCreated)
+	srv, session := newIdempotencyServer(t, db, "diff-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()
 
-	_ = postWidget(t, srv, practiceID, "key-a").Body.Close()
-	_ = postWidget(t, srv, practiceID, "key-b").Body.Close()
+	_ = postWidget(t, srv, session, practiceID, "key-a").Body.Close()
+	_ = postWidget(t, srv, session, practiceID, "key-b").Body.Close()
 
 	if calls != 2 {
 		t.Fatalf("handler invoked %d times, want 2 -- different keys must not replay each other", calls)
@@ -153,11 +153,11 @@ func TestWrap_DoesNotPersistServerErrorResponse(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedStaffWithMembership(t, db, "server-error-owner")
 	var calls int
-	srv := newIdempotencyServer(db, "server-error-owner", &calls, http.StatusInternalServerError)
+	srv, session := newIdempotencyServer(t, db, "server-error-owner", &calls, http.StatusInternalServerError)
 	defer srv.Close()
 
-	_ = postWidget(t, srv, practiceID, "error-key").Body.Close()
-	_ = postWidget(t, srv, practiceID, "error-key").Body.Close()
+	_ = postWidget(t, srv, session, practiceID, "error-key").Body.Close()
+	_ = postWidget(t, srv, session, practiceID, "error-key").Body.Close()
 
 	if calls != 2 {
 		t.Fatalf("handler invoked %d times, want 2 -- a 5xx response must not be replayed", calls)
@@ -174,21 +174,22 @@ func TestWrap_DefaultsToStatusOKWhenHandlerOmitsWriteHeader(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/widgets",
-		staffauth.Middleware(authntest.Verifier{UID: "no-writeheader-owner"}, db.App)(idempotency.Wrap(http.HandlerFunc(
+		staffauth.Middleware(db.App)(idempotency.Wrap(http.HandlerFunc(
 			func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte(`{"n":1}`))
 			},
 		))))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
+	session := authntest.SeedSession(t, db.App, "no-writeheader-owner")
 
-	first := postWidget(t, srv, practiceID, "no-writeheader-key")
+	first := postWidget(t, srv, session, practiceID, "no-writeheader-key")
 	defer first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusOK)
 	}
 
-	replayed := postWidget(t, srv, practiceID, "no-writeheader-key")
+	replayed := postWidget(t, srv, session, practiceID, "no-writeheader-key")
 	defer replayed.Body.Close()
 	if replayed.StatusCode != http.StatusOK {
 		t.Fatalf("replayed status = %d, want %d", replayed.StatusCode, http.StatusOK)
@@ -202,12 +203,12 @@ func TestWrap_TreatsOversizedKeyAsAbsent(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedStaffWithMembership(t, db, "oversized-key-owner")
 	var calls int
-	srv := newIdempotencyServer(db, "oversized-key-owner", &calls, http.StatusCreated)
+	srv, session := newIdempotencyServer(t, db, "oversized-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()
 
 	oversized := strings.Repeat("k", 256)
-	_ = postWidget(t, srv, practiceID, oversized).Body.Close()
-	_ = postWidget(t, srv, practiceID, oversized).Body.Close()
+	_ = postWidget(t, srv, session, practiceID, oversized).Body.Close()
+	_ = postWidget(t, srv, session, practiceID, oversized).Body.Close()
 
 	if calls != 2 {
 		t.Fatalf("handler invoked %d times, want 2 -- an oversized key must not be treated as a real key", calls)

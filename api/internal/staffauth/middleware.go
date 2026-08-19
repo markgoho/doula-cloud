@@ -79,10 +79,10 @@ func ParseUUID(w http.ResponseWriter, label, value string) (ok bool) {
 // practice-membership authorization. db must be a connection using the
 // low-privilege app_runtime role -- the role the RLS policies in
 // 00002_practice_staff_tenancy.sql apply to.
-func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Handler {
+func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tx, uid, ok := authn.Begin(w, r, verifier, db)
+			tx, uid, ok := authn.Begin(w, r, db)
 			if !ok {
 				return
 			}

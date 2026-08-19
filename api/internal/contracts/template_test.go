@@ -131,52 +131,56 @@ func seedSignedContract(t *testing.T, db *testdb.DB, engagementID, pdfObjectPath
 	}
 }
 
-func newContractServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
-	return newContractServerWithPusherAndStore(verifier, db, push.NewFakePusher(), objectstore.NewMemoryStore())
+func newContractServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
+	return newContractServerWithPusherAndStore(t, db, uid, push.NewFakePusher(), objectstore.NewMemoryStore())
 }
 
 // newContractServerWithPusher mirrors newContractServer but lets the
 // caller inject pusher, so a test can inspect what Send triggers --
 // mirrors message/handlers_test.go's newServerWithPusher.
-func newContractServerWithPusher(verifier authntest.Verifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
-	return newContractServerWithPusherAndStore(verifier, db, pusher, objectstore.NewMemoryStore())
+func newContractServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (*httptest.Server, string) {
+	t.Helper()
+	return newContractServerWithPusherAndStore(t, db, uid, pusher, objectstore.NewMemoryStore())
 }
 
 // newContractServerWithStore mirrors newContractServer but lets the
 // caller inject store, so a test can seed what the Signed PDF endpoint
 // reads back.
-func newContractServerWithStore(verifier authntest.Verifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
-	return newContractServerWithPusherAndStore(verifier, db, push.NewFakePusher(), store)
+func newContractServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (*httptest.Server, string) {
+	t.Helper()
+	return newContractServerWithPusherAndStore(t, db, uid, push.NewFakePusher(), store)
 }
 
-func newContractServerWithPusherAndStore(verifier authntest.Verifier, db *testdb.DB, pusher push.Pusher, store objectstore.ObjectStore) *httptest.Server {
+func newContractServerWithPusherAndStore(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher, store objectstore.ObjectStore) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/contract-template",
-		staffauth.Middleware(verifier, db.App)(contracts.GetTemplateHandler()))
+		staffauth.Middleware(db.App)(contracts.GetTemplateHandler()))
 	mux.Handle("PUT /practices/{practiceId}/contract-template",
-		staffauth.Middleware(verifier, db.App)(contracts.PutTemplateHandler()))
+		staffauth.Middleware(db.App)(contracts.PutTemplateHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(verifier, db.App)(contracts.PostContractHandler()))
+		staffauth.Middleware(db.App)(contracts.PostContractHandler()))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(verifier, db.App)(contracts.GetContractHandler()))
+		staffauth.Middleware(db.App)(contracts.GetContractHandler()))
 	mux.Handle("PUT /practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(verifier, db.App)(contracts.PutContractHandler()))
+		staffauth.Middleware(db.App)(contracts.PutContractHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/send",
-		staffauth.Middleware(verifier, db.App)(contracts.PostSendContractHandler(pusher)))
+		staffauth.Middleware(db.App)(contracts.PostSendContractHandler(pusher)))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/void",
-		staffauth.Middleware(verifier, db.App)(contracts.PostVoidContractHandler()))
+		staffauth.Middleware(db.App)(contracts.PostVoidContractHandler()))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract/pdf",
-		staffauth.Middleware(verifier, db.App)(contracts.GetSignedContractPDFHandler(store)))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(contracts.GetSignedContractPDFHandler(store)))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getTemplate(t *testing.T, srv *httptest.Server, practiceID string) *http.Response {
+func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/contract-template", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -184,13 +188,13 @@ func getTemplate(t *testing.T, srv *httptest.Server, practiceID string) *http.Re
 	return resp
 }
 
-func putTemplateRaw(t *testing.T, srv *httptest.Server, practiceID string, body []byte) *http.Response {
+func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/practices/"+practiceID+"/contract-template", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -199,13 +203,13 @@ func putTemplateRaw(t *testing.T, srv *httptest.Server, practiceID string, body 
 	return resp
 }
 
-func putTemplate(t *testing.T, srv *httptest.Server, practiceID string, body contracts.TemplateResponse) *http.Response {
+func putTemplate(t *testing.T, srv *httptest.Server, session string, practiceID string, body contracts.TemplateResponse) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	return putTemplateRaw(t, srv, practiceID, payload)
+	return putTemplateRaw(t, srv, session, practiceID, payload)
 }
 
 func TestGetTemplateHandler_NotFound(t *testing.T) {
@@ -213,10 +217,10 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 	const uid = "get-not-found"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getTemplate(t, srv, practiceID)
+	resp := getTemplate(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -232,10 +236,10 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	seedTemplate(t, db, practiceID, "Some prose with {{client_name}}")
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getTemplate(t, srv, practiceID)
+	resp := getTemplate(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -256,10 +260,10 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 	const uid = "put-non-owner"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putTemplate(t, srv, practiceID, contracts.TemplateResponse{Prose: "Some prose"})
+	resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "Some prose"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -272,10 +276,10 @@ func TestPutTemplateHandler_InvalidBody(t *testing.T) {
 	const uid = "put-invalid-body"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putTemplateRaw(t, srv, practiceID, []byte("not json"))
+	resp := putTemplateRaw(t, srv, session, practiceID, []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -297,12 +301,12 @@ func TestPutTemplateHandler_BlankProseRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-blank-prose"
 	practiceID := seedOwner(t, db, uid)
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := putTemplate(t, srv, practiceID, contracts.TemplateResponse{Prose: tc.prose})
+			resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: tc.prose})
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusBadRequest {
@@ -319,10 +323,10 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	const uid = "put-success"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	putResp := putTemplate(t, srv, practiceID, contracts.TemplateResponse{Prose: "  Agreement with {{client_name}}  "})
+	putResp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "  Agreement with {{client_name}}  "})
 	defer putResp.Body.Close()
 
 	if putResp.StatusCode != http.StatusOK {
@@ -337,7 +341,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 		t.Fatalf("PUT prose = %q, want trimmed", putOut.Prose)
 	}
 
-	getResp := getTemplate(t, srv, practiceID)
+	getResp := getTemplate(t, srv, session, practiceID)
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
@@ -360,17 +364,17 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	seedTemplate(t, db, practiceID, "Old prose")
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putTemplate(t, srv, practiceID, contracts.TemplateResponse{Prose: "New prose"})
+	resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "New prose"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	getResp := getTemplate(t, srv, practiceID)
+	getResp := getTemplate(t, srv, session, practiceID)
 	defer getResp.Body.Close()
 	var out contracts.TemplateResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {

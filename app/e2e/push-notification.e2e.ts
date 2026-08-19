@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { signIn } from './auth';
 import { seedClientPortalUser } from './stack';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
@@ -50,8 +51,11 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
+	// Everything after signup is cookie-authenticated (#151).
+	const staffHeaders = await signIn(request, API_URL, staffIdToken);
+
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
-		headers: { Authorization: `Bearer ${staffIdToken}` },
+		headers: staffHeaders,
 		data: { name: 'Pat Client', email: clientEmail }
 	});
 	const createClientBody = await createClient.text();
@@ -88,7 +92,7 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	const messageBody = `push-triggered message ${Date.now()}`;
 	const createMessage = await request.post(
 		`${API_URL}/api/practices/${practiceId}/engagements/${engagementId}/messages`,
-		{ headers: { Authorization: `Bearer ${staffIdToken}` }, data: { body: messageBody } }
+		{ headers: staffHeaders, data: { body: messageBody } }
 	);
 	expect(createMessage.ok()).toBe(true);
 

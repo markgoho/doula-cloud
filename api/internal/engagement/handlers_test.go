@@ -12,13 +12,13 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func authedGet(t *testing.T, url string) *http.Response {
+func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -26,13 +26,13 @@ func authedGet(t *testing.T, url string) *http.Response {
 	return resp
 }
 
-func authedPost(t *testing.T, url string, body []byte) *http.Response {
+func authedPost(t *testing.T, session, url string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -49,10 +49,10 @@ func TestListHandler_ReturnsOnlyClientsAtCurrentPractice(t *testing.T) {
 	seedClientEngagement(t, db, practiceID, "Jamie Client", "jamie@example.com", "intake")
 	seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com", "intake")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -78,10 +78,10 @@ func TestListHandler_VisibleToAnyStaffAtSamePractice(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, "staff-bystander")
 	seedClientEngagement(t, db, practiceID, "Shared Client", "shared@example.com", "intake")
 
-	srv := newServer(authntest.Verifier{UID: "staff-bystander"}, db)
+	srv, session := newServer(t, db, "staff-bystander")
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -102,14 +102,14 @@ func TestCreateHandler_Success(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	seedSignupBonus(t, db, practiceID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "New Client", Email: "new@example.com"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -123,7 +123,7 @@ func TestCreateHandler_Success(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", out)
 	}
 
-	listResp := authedGet(t, srv.URL+"/practices/"+practiceID+"/clients")
+	listResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
 	defer listResp.Body.Close()
 	var list []engagement.ClientEngagement
 	if err := json.NewDecoder(listResp.Body).Decode(&list); err != nil {
@@ -167,14 +167,14 @@ func TestCreateHandler_NoCreditsReturnsPaymentRequired(t *testing.T) {
 	const identityUID = "staff-broke"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Broke Client", Email: "broke@example.com"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPaymentRequired {
@@ -211,14 +211,14 @@ func TestCreateHandler_NegativeBalanceReturnsPaymentRequired(t *testing.T) {
 		t.Fatalf("seed negative balance: %v", err)
 	}
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Negative Client", Email: "negative@example.com"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPaymentRequired {
@@ -249,7 +249,7 @@ func TestCreateHandler_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	seedSignupBonus(t, db, practiceID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	for i := range 3 {
@@ -257,7 +257,7 @@ func TestCreateHandler_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal body %d: %v", i, err)
 		}
-		resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+		resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", body)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusCreated {
 			t.Fatalf("create %d status = %d, want %d", i+1, resp.StatusCode, http.StatusCreated)
@@ -276,7 +276,7 @@ func TestCreateHandler_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusPaymentRequired {
 		t.Fatalf("4th create status = %d, want %d", resp.StatusCode, http.StatusPaymentRequired)
@@ -302,14 +302,14 @@ func TestCreateHandler_MissingFields(t *testing.T) {
 	const identityUID = "staff-missing-fields"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(engagement.CreateClientRequest{Name: "", Email: "new@example.com"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -322,10 +322,10 @@ func TestCreateHandler_InvalidBody(t *testing.T) {
 	const identityUID = "staff-invalid-body"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/clients", []byte("not json"))
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -339,10 +339,10 @@ func TestDetailHandler_Success(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Detail Client", "detail@example.com", "active")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -364,10 +364,10 @@ func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 	otherPracticeID := seedStaffWithMembership(t, db, "staff-owns-engagement")
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Elsewhere Client", "elsewhere@example.com", "intake")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -380,10 +380,10 @@ func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "staff-bad-id"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {

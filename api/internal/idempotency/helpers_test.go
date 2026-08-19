@@ -62,20 +62,21 @@ func countingHandler(calls *int, status int) http.Handler {
 // newIdempotencyServer wires countingHandler behind
 // staffauth.Middleware(...)(idempotency.Wrap(...)), the same composition
 // main.go uses for portal-invite.
-func newIdempotencyServer(db *testdb.DB, uid string, calls *int, status int) *httptest.Server {
+func newIdempotencyServer(t *testing.T, db *testdb.DB, uid string, calls *int, status int) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/widgets",
-		staffauth.Middleware(authntest.Verifier{UID: uid}, db.App)(idempotency.Wrap(countingHandler(calls, status))))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(idempotency.Wrap(countingHandler(calls, status))))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func postWidget(t *testing.T, srv *httptest.Server, practiceID, idempotencyKey string) *http.Response {
+func postWidget(t *testing.T, srv *httptest.Server, session, practiceID, idempotencyKey string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/practices/"+practiceID+"/widgets", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	if idempotencyKey != "" {
 		req.Header.Set("Idempotency-Key", idempotencyKey)
 	}

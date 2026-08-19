@@ -101,7 +101,7 @@ func TestRoutes_CreateAndEndSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build end request: %v", err)
 	}
-	endReq.Header.Set("Cookie", session.CookieName+"="+createdCookie.Value)
+	authntest.AddSessionCookie(endReq, createdCookie.Value)
 	endResp, err := http.DefaultClient.Do(endReq)
 	if err != nil {
 		t.Fatalf("end request: %v", err)
@@ -124,6 +124,33 @@ func TestRoutes_CreateAndEndSession(t *testing.T) {
 	if got := authntest.CountFor(t, db.App, "uid-1"); got != 0 {
 		t.Fatalf("session rows for uid-1 = %d, want 0", got)
 	}
+}
+
+// createSession exchanges a Bearer ID token for a session cookie through
+// the real POST /api/session route, and returns the token that cookie
+// carries so later requests in the same test can present it.
+func createSession(t *testing.T, srv *httptest.Server) string {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/session", nil)
+	if err != nil {
+		t.Fatalf("build create-session request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer tok")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create-session request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/session status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	for _, c := range resp.Cookies() {
+		if c.Name == session.CookieName {
+			return c.Value
+		}
+	}
+	t.Fatal("no __session cookie set by POST /api/session")
+	return ""
 }
 
 func TestResolvePort(t *testing.T) {
@@ -199,8 +226,13 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 		t.Fatalf("decode signup response: %v", err)
 	}
 
+	// Signup runs before a session exists, so it takes a Bearer ID token;
+	// every route after it is cookie-only since #151, so the flow has to
+	// go through create-session exactly as the browser does.
+	sessionCookie := createSession(t, srv)
+
 	sessionReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/staff/session", nil)
-	sessionReq.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(sessionReq, sessionCookie)
 	sessionResp, err := http.DefaultClient.Do(sessionReq)
 	if err != nil {
 		t.Fatalf("session request: %v", err)
@@ -215,7 +247,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	}
 
 	landingReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+signedUp.PracticeID+"/session", nil)
-	landingReq.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(landingReq, sessionCookie)
 	landingResp, err := http.DefaultClient.Do(landingReq)
 	if err != nil {
 		t.Fatalf("landing request: %v", err)

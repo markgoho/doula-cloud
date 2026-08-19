@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +14,13 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
+
+// errBadToken is what a fake Verifier returns for a token Identity
+// Platform would reject. Shared by the three bootstrap endpoints' tests
+// -- signup, invitation acceptance, and (in portalinvite) the Client
+// portal's -- which since #151 are the only ones still reading a Bearer
+// ID token.
+var errBadToken = errors.New("invalid token")
 
 // sessionCookie returns the __session cookie from resp, or nil if none
 // was set. Shared across staffauth_test files.

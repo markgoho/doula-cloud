@@ -26,13 +26,13 @@ func sendContractURL(srv *httptest.Server, practiceID, engagementID string) stri
 	return srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/contract/send"
 }
 
-func postSendContract(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+func postSendContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, sendContractURL(srv, practiceID, engagementID), nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -45,10 +45,10 @@ func TestPostSendContractHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "send-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postSendContract(t, srv, practiceID, "not-a-uuid")
+	resp := postSendContract(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -63,10 +63,10 @@ func TestPostSendContractHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postSendContract(t, srv, practiceID, otherEngagementID)
+	resp := postSendContract(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -80,10 +80,10 @@ func TestPostSendContractHandler_NoContract(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postSendContract(t, srv, practiceID, engagementID)
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -102,10 +102,10 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 			engagementID := seedEngagement(t, db, practiceID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
-			srv := newContractServer(authntest.Verifier{UID: uid}, db)
+			srv, session := newContractServer(t, db, uid)
 			defer srv.Close()
 
-			resp := postSendContract(t, srv, practiceID, engagementID)
+			resp := postSendContract(t, srv, session, practiceID, engagementID)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusConflict {
@@ -129,10 +129,10 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
-	srv := newContractServerWithPusher(authntest.Verifier{UID: uid}, db, pusher)
+	srv, session := newContractServerWithPusher(t, db, uid, pusher)
 	defer srv.Close()
 
-	resp := postSendContract(t, srv, practiceID, engagementID)
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -149,7 +149,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 		t.Fatalf("prose = %q, want the original snapshot unchanged", out.Prose)
 	}
 
-	getResp := getContract(t, srv, practiceID, engagementID)
+	getResp := getContract(t, srv, session, practiceID, engagementID)
 	defer getResp.Body.Close()
 	var getOut contracts.ContractResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
@@ -193,10 +193,10 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	pusher := push.NewFakePusher()
-	srv := newContractServerWithPusher(authntest.Verifier{UID: uid}, db, pusher)
+	srv, session := newContractServerWithPusher(t, db, uid, pusher)
 	defer srv.Close()
 
-	resp := postSendContract(t, srv, practiceID, engagementID)
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -223,10 +223,10 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")
-	srv := newContractServerWithPusher(authntest.Verifier{UID: uid}, db, pusher)
+	srv, session := newContractServerWithPusher(t, db, uid, pusher)
 	defer srv.Close()
 
-	resp := postSendContract(t, srv, practiceID, engagementID)
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

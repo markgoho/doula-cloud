@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/testdb"
@@ -29,10 +28,10 @@ func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 		t.Fatalf("seed stored pdf: %v", err)
 	}
 
-	srv := newContractServerWithStore(authntest.Verifier{UID: uid}, db, store)
+	srv, session := newContractServerWithStore(t, db, uid, store)
 	defer srv.Close()
 
-	resp := getContractPDF(t, srv, practiceID, engagementID)
+	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -51,17 +50,17 @@ func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 }
 
 // TestGetSignedContractPDFHandler_Unauthenticated proves a request with
-// no Authorization header 401s before ever reaching the handler.
+// no credential 401s before ever reaching the handler.
 func TestGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-unauthenticated"
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, _ := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getContractPDFRaw(t, srv, practiceID, engagementID, "")
+	resp := getContractPDFRaw(t, srv, "", practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -82,10 +81,10 @@ func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 	objectPath := contracts.SignedPDFObjectPath(otherEngagementID)
 	seedSignedContract(t, db, otherEngagementID, objectPath)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getContractPDF(t, srv, practiceID, otherEngagementID)
+	resp := getContractPDF(t, srv, session, practiceID, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -102,10 +101,10 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getContractPDF(t, srv, practiceID, engagementID)
+	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -124,10 +123,10 @@ func TestGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) 
 	engagementID := seedEngagement(t, db, practiceID)
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 
-	srv := newContractServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getContractPDF(t, srv, practiceID, engagementID)
+	resp := getContractPDF(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -151,10 +150,10 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 		t.Fatalf("seed stored pdf: %v", err)
 	}
 
-	srv := newPortalServerWithStore(authntest.Verifier{UID: identityUID}, db, store)
+	srv, session := newPortalServerWithStore(t, db, identityUID, store)
 	defer srv.Close()
 
-	resp := getClientContractPDF(t, srv, engagementID)
+	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -166,7 +165,7 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 }
 
 // TestClientGetSignedContractPDFHandler_Unauthenticated proves a request
-// with no Authorization header 401s.
+// with no credential 401s.
 func TestClientGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-get-pdf-unauthenticated"
@@ -174,10 +173,10 @@ func TestClientGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, _ := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContractPDFRaw(t, srv, engagementID, "")
+	resp := getClientContractPDFRaw(t, srv, "", engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -198,10 +197,10 @@ func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *tes
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContractPDFRaw(t, srv, otherEngagementID, "Bearer tok")
+	resp := getClientContractPDFRaw(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -219,10 +218,10 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContractPDF(t, srv, engagementID)
+	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -241,10 +240,10 @@ func TestClientGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testi
 	seedPortalUser(t, db, identityUID, clientID)
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContractPDF(t, srv, engagementID)
+	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {

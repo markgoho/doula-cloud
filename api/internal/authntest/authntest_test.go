@@ -2,6 +2,8 @@ package authntest_test
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -78,5 +80,24 @@ func TestEndSession_RemovesTheRow(t *testing.T) {
 
 	if got := authntest.CountFor(t, db.App, testUID); got != 0 {
 		t.Fatalf("session rows = %d, want 0", got)
+	}
+}
+
+// TestAuthenticate_SignsTheRequestIn proves the one-call helper produces
+// a request authn.Begin accepts, which is the whole reason route tests
+// use it instead of seeding and setting the header themselves.
+func TestAuthenticate_SignsTheRequestIn(t *testing.T) {
+	db := testdb.New(t)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+
+	authntest.Authenticate(t, db.App, req, testUID)
+
+	tx, uid, ok := authn.Begin(httptest.NewRecorder(), req, db.App)
+	if !ok {
+		t.Fatal("Begin rejected an Authenticate'd request")
+	}
+	defer func() { _ = tx.Rollback() }()
+	if uid != testUID {
+		t.Fatalf("uid = %q, want %q", uid, testUID)
 	}
 }

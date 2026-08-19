@@ -35,13 +35,13 @@ func signContractURL(srv *httptest.Server, engagementID string) string {
 	return srv.URL + "/portal/engagements/" + engagementID + "/contract/sign"
 }
 
-func postSignContractRaw(t *testing.T, srv *httptest.Server, engagementID string, body []byte) *http.Response {
+func postSignContractRaw(t *testing.T, srv *httptest.Server, session string, engagementID string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, signContractURL(srv, engagementID), bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -50,13 +50,13 @@ func postSignContractRaw(t *testing.T, srv *httptest.Server, engagementID string
 	return resp
 }
 
-func postSignContractRawWithXFF(t *testing.T, srv *httptest.Server, engagementID string, body []byte, xff string) *http.Response {
+func postSignContractRawWithXFF(t *testing.T, srv *httptest.Server, session string, engagementID string, body []byte, xff string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, signContractURL(srv, engagementID), bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Forwarded-For", xff)
 	resp, err := http.DefaultClient.Do(req)
@@ -66,13 +66,13 @@ func postSignContractRawWithXFF(t *testing.T, srv *httptest.Server, engagementID
 	return resp
 }
 
-func postSignContract(t *testing.T, srv *httptest.Server, engagementID, fullLegalName string, attestation bool) *http.Response {
+func postSignContract(t *testing.T, srv *httptest.Server, session string, engagementID, fullLegalName string, attestation bool) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(contracts.SignContractRequest{FullLegalName: fullLegalName, Attestation: attestation})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	return postSignContractRaw(t, srv, engagementID, payload)
+	return postSignContractRaw(t, srv, session, engagementID, payload)
 }
 
 // signedRow is the row shape sign_test.go reads back via db.Admin to
@@ -128,11 +128,11 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
 	before := time.Now().Add(-time.Minute)
-	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -181,12 +181,12 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
 	spoofed := `{"fullLegalName":"Jordan Client","attestation":true,"signedAt":"1999-01-01T00:00:00Z","signerIp":"10.0.0.1","ip":"10.0.0.1"}`
 	before := time.Now().Add(-time.Minute)
-	resp := postSignContractRawWithXFF(t, srv, engagementID, []byte(spoofed), "203.0.113.7, 10.0.0.1")
+	resp := postSignContractRawWithXFF(t, srv, session, engagementID, []byte(spoofed), "203.0.113.7, 10.0.0.1")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -214,10 +214,10 @@ func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) 
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -243,10 +243,10 @@ func TestClientPostSignContractHandler_OtherClientsEngagementRejected(t *testing
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postSignContract(t, srv, otherEngagementID, "Jordan Client", true)
+	resp := postSignContract(t, srv, session, otherEngagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -280,10 +280,10 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 			seedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, testCase.status, mergeFieldProse)
 
-			srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+			srv, session := newPortalServer(t, db, identityUID)
 			defer srv.Close()
 
-			resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+			resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != testCase.want {
@@ -302,10 +302,10 @@ func TestClientPostSignContractHandler_NoContractYet404(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -323,10 +323,10 @@ func TestClientPostSignContractHandler_InvalidBody(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postSignContractRaw(t, srv, engagementID, []byte("not json"))
+	resp := postSignContractRaw(t, srv, session, engagementID, []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -357,10 +357,10 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 			seedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-			srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+			srv, session := newPortalServer(t, db, identityUID)
 			defer srv.Close()
 
-			resp := postSignContract(t, srv, engagementID, testCase.fullLegalName, testCase.attestation)
+			resp := postSignContract(t, srv, session, engagementID, testCase.fullLegalName, testCase.attestation)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusBadRequest {
@@ -390,10 +390,10 @@ func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	store := objectstore.NewMemoryStore()
-	srv := newPortalServerWithStore(authntest.Verifier{UID: identityUID}, db, store)
+	srv, session := newPortalServerWithStore(t, db, identityUID, store)
 	defer srv.Close()
 
-	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -433,10 +433,10 @@ func TestClientPostSignContractHandler_PDFStoreFailureRejected(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServerWithStore(authntest.Verifier{UID: identityUID}, db, failingStore{})
+	srv, session := newPortalServerWithStore(t, db, identityUID, failingStore{})
 	defer srv.Close()
 
-	resp := postSignContract(t, srv, engagementID, "Jordan Client", true)
+	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {

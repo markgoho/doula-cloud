@@ -11,20 +11,23 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func newSessionServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+// newSessionServer mounts the Staff session route and seeds a live
+// session for uid, returning the token its __session cookie carries.
+func newSessionServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /staff/session", staffauth.SessionHandler(verifier, db.App))
-	return httptest.NewServer(mux)
+	mux.Handle("GET /staff/session", staffauth.SessionHandler(db.App))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getSession(t *testing.T, srv *httptest.Server, token string) *http.Response {
+func getSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/staff/session", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if session != "" {
+		authntest.AddSessionCookie(req, session)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -33,9 +36,9 @@ func getSession(t *testing.T, srv *httptest.Server, token string) *http.Response
 	return resp
 }
 
-func TestSessionHandler_MissingToken(t *testing.T) {
+func TestSessionHandler_MissingCookie(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSessionServer(authntest.Verifier{}, db)
+	srv, _ := newSessionServer(t, db, "no-cookie-sent")
 	defer srv.Close()
 
 	resp := getSession(t, srv, "")
@@ -46,12 +49,14 @@ func TestSessionHandler_MissingToken(t *testing.T) {
 	}
 }
 
-func TestSessionHandler_TokenVerificationFailure(t *testing.T) {
+// TestSessionHandler_UnknownSession covers a cookie that names no live
+// session -- the shape a stale or forged cookie arrives in.
+func TestSessionHandler_UnknownSession(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSessionServer(authntest.Verifier{Err: errBadToken}, db)
+	srv, _ := newSessionServer(t, db, "irrelevant")
 	defer srv.Close()
 
-	resp := getSession(t, srv, "bad-token")
+	resp := getSession(t, srv, "never-issued")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -61,10 +66,10 @@ func TestSessionHandler_TokenVerificationFailure(t *testing.T) {
 
 func TestSessionHandler_UnknownStaff(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSessionServer(authntest.Verifier{UID: "no-such-staff"}, db)
+	srv, session := newSessionServer(t, db, "no-such-staff")
 	defer srv.Close()
 
-	resp := getSession(t, srv, "tok")
+	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -77,10 +82,10 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 	const identityUID = "single-practice-staff"
 	staffID, practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newSessionServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newSessionServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getSession(t, srv, "tok")
+	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -117,10 +122,10 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 		t.Fatalf("seed last_practice_id: %v", err)
 	}
 
-	srv := newSessionServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newSessionServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getSession(t, srv, "tok")
+	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
 	var out staffauth.SessionResponse

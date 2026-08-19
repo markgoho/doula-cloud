@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
 )
@@ -16,10 +15,10 @@ func TestInviteHandler_EngagementNotFound(t *testing.T) {
 	const identityUID = "invite-engagement-not-found"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, "00000000-0000-0000-0000-000000000000")
+	resp := postInvite(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -32,10 +31,10 @@ func TestInviteHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "invite-invalid-engagement-id"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, "not-a-uuid")
+	resp := postInvite(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -49,10 +48,10 @@ func TestInviteHandler_Success(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "New Client", "new@example.com")
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, engagementID)
+	resp := postInvite(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -88,10 +87,10 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Reinvited Client", "reinvited@example.com")
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	first := postInvite(t, srv, practiceID, engagementID)
+	first := postInvite(t, srv, session, practiceID, engagementID)
 	var firstOut portalinvite.InviteResponse
 	if err := json.NewDecoder(first.Body).Decode(&firstOut); err != nil {
 		t.Fatalf("decode first response: %v", err)
@@ -101,7 +100,7 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 
-	second := postInvite(t, srv, practiceID, engagementID)
+	second := postInvite(t, srv, session, practiceID, engagementID)
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusOK {
 		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusOK)
@@ -142,10 +141,10 @@ func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 		t.Fatalf("seed accepted portal user: %v", err)
 	}
 
-	srv := newInviteServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := postInvite(t, srv, practiceID, engagementID)
+	resp := postInvite(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {

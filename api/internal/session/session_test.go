@@ -200,16 +200,14 @@ func TestEndHandler_LeavesOtherBrowsersAlone(t *testing.T) {
 }
 
 // deleteWithSession sends an end-session request carrying token as the
-// __session cookie. It sets the header directly rather than req.AddCookie, which
-// gosec's G124 flags for lacking response-only attributes a request's
-// Cookie header never carries.
+// __session cookie.
 func deleteWithSession(t *testing.T, srv *httptest.Server, token string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/session", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Cookie", session.CookieName+"="+token)
+	authntest.AddSessionCookie(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)

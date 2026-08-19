@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/testdb"
 )
@@ -18,10 +17,10 @@ func TestPostInstanceHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "post-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postInstance(t, srv, practiceID, "not-a-uuid", carePlanType)
+	resp := postInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -35,10 +34,10 @@ func TestPostInstanceHandler_UnknownPlanType(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postInstance(t, srv, practiceID, engagementID, "not_a_plan_type")
+	resp := postInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -56,10 +55,10 @@ func TestPostInstanceHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postInstance(t, srv, practiceID, otherEngagementID, carePlanType)
+	resp := postInstance(t, srv, session, practiceID, otherEngagementID, carePlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -76,10 +75,10 @@ func TestPostInstanceHandler_NoTemplate(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postInstance(t, srv, practiceID, engagementID, carePlanType)
+	resp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -98,10 +97,10 @@ func TestPostInstanceHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := postInstance(t, srv, practiceID, engagementID, carePlanType)
+	resp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -132,16 +131,16 @@ func TestPostInstanceHandler_Duplicate(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, birthPlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	first := postInstance(t, srv, practiceID, engagementID, birthPlanType)
+	first := postInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first POST status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 
-	second := postInstance(t, srv, practiceID, engagementID, birthPlanType)
+	second := postInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second POST status = %d, want %d", second.StatusCode, http.StatusConflict)
@@ -153,10 +152,10 @@ func TestGetInstanceHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "get-instance-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getInstance(t, srv, practiceID, "not-a-uuid", carePlanType)
+	resp := getInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -170,10 +169,10 @@ func TestGetInstanceHandler_UnknownPlanType(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getInstance(t, srv, practiceID, engagementID, "not_a_plan_type")
+	resp := getInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -188,10 +187,10 @@ func TestGetInstanceHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getInstance(t, srv, practiceID, otherEngagementID, carePlanType)
+	resp := getInstance(t, srv, session, practiceID, otherEngagementID, carePlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -205,10 +204,10 @@ func TestGetInstanceHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getInstance(t, srv, practiceID, engagementID, carePlanType)
+	resp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -226,10 +225,10 @@ func TestGetInstanceHandler_Success(t *testing.T) {
 		`{"f1":"Jamie"}`,
 	)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getInstance(t, srv, practiceID, engagementID, birthPlanType)
+	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -253,10 +252,10 @@ func TestPutInstanceHandler_InvalidEngagementID(t *testing.T) {
 	const uid = "put-instance-invalid-engagement-id"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putInstance(t, srv, practiceID, "not-a-uuid", carePlanType, plans.PutInstanceRequest{})
+	resp := putInstance(t, srv, session, practiceID, "not-a-uuid", carePlanType, plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -270,10 +269,10 @@ func TestPutInstanceHandler_UnknownPlanType(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putInstance(t, srv, practiceID, engagementID, "not_a_plan_type", plans.PutInstanceRequest{})
+	resp := putInstance(t, srv, session, practiceID, engagementID, "not_a_plan_type", plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -288,10 +287,10 @@ func TestPutInstanceHandler_EngagementNotFound(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putInstance(t, srv, practiceID, otherEngagementID, carePlanType, plans.PutInstanceRequest{})
+	resp := putInstance(t, srv, session, practiceID, otherEngagementID, carePlanType, plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -305,10 +304,10 @@ func TestPutInstanceHandler_NotFound(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putInstance(t, srv, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{})
+	resp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -323,10 +322,10 @@ func TestPutInstanceHandler_InvalidBody(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putInstanceRaw(t, srv, practiceID, engagementID, carePlanType, []byte("not json"))
+	resp := putInstanceRaw(t, srv, session, practiceID, engagementID, carePlanType, []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -364,7 +363,7 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-validation"
 	practiceID := seedMember(t, db, uid)
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
 	for _, tc := range cases {
@@ -372,7 +371,7 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 			engagementID := seedEngagement(t, db, practiceID)
 			seedInstance(t, db, engagementID, carePlanType, fieldsJSON, `{}`)
 
-			resp := putInstance(t, srv, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{Answers: tc.answers})
+			resp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{Answers: tc.answers})
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusBadRequest {
@@ -393,10 +392,10 @@ func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) 
 	engagementID := seedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putInstanceRaw(t, srv, practiceID, engagementID, carePlanType, []byte(`{}`))
+	resp := putInstanceRaw(t, srv, session, practiceID, engagementID, carePlanType, []byte(`{}`))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -425,10 +424,10 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 		`{}`,
 	)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	firstResp := putInstance(t, srv, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
+	firstResp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
 		Answers: plans.Answers{nameFieldID: jamieAnswer, "consent": true},
 	})
 	defer firstResp.Body.Close()
@@ -446,7 +445,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 		t.Fatalf("answers = %+v, want name=Jamie consent=true", firstOut.Answers)
 	}
 
-	getResp := getInstance(t, srv, practiceID, engagementID, carePlanType)
+	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer getResp.Body.Close()
 	var getOut plans.InstanceResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
@@ -456,7 +455,7 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 		t.Fatalf("GET answers after PUT = %+v, want the just-written answers", getOut.Answers)
 	}
 
-	secondResp := putInstance(t, srv, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
+	secondResp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
 		Answers: plans.Answers{nameFieldID: jamieAnswer},
 	})
 	defer secondResp.Body.Close()
@@ -479,16 +478,16 @@ func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	postResp := postInstance(t, srv, practiceID, engagementID, carePlanType)
+	postResp := postInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer postResp.Body.Close()
 	if postResp.StatusCode != http.StatusCreated {
 		t.Fatalf("POST instance status = %d, want %d", postResp.StatusCode, http.StatusCreated)
 	}
 
-	putResp := putTemplate(t, srv, practiceID, carePlanType, plans.TemplateResponse{Fields: []plans.Field{
+	putResp := putTemplate(t, srv, session, practiceID, carePlanType, plans.TemplateResponse{Fields: []plans.Field{
 		{ID: "f1", Type: shortTextType, Label: testFieldLabel},
 		{ID: "f2", Type: "long_text", Label: "Notes added after the plan was created"},
 	}})
@@ -497,7 +496,7 @@ func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 		t.Fatalf("PUT template status = %d, want %d", putResp.StatusCode, http.StatusOK)
 	}
 
-	getResp := getInstance(t, srv, practiceID, engagementID, carePlanType)
+	getResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
 	defer getResp.Body.Close()
 	var out plans.InstanceResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {

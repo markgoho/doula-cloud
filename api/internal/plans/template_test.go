@@ -117,28 +117,29 @@ func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSO
 	}
 }
 
-func newPlanServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+func newPlanServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(verifier, db.App)(plans.GetTemplateHandler()))
+		staffauth.Middleware(db.App)(plans.GetTemplateHandler()))
 	mux.Handle("PUT /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(verifier, db.App)(plans.PutTemplateHandler()))
+		staffauth.Middleware(db.App)(plans.PutTemplateHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(verifier, db.App)(plans.PostInstanceHandler()))
+		staffauth.Middleware(db.App)(plans.PostInstanceHandler()))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(verifier, db.App)(plans.GetInstanceHandler()))
+		staffauth.Middleware(db.App)(plans.GetInstanceHandler()))
 	mux.Handle("PUT /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(verifier, db.App)(plans.PutInstanceHandler()))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(plans.PutInstanceHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getTemplate(t *testing.T, srv *httptest.Server, practiceID, planType string) *http.Response {
+func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID, planType string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/plan-templates/"+planType, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -146,13 +147,13 @@ func getTemplate(t *testing.T, srv *httptest.Server, practiceID, planType string
 	return resp
 }
 
-func putTemplateRaw(t *testing.T, srv *httptest.Server, practiceID, planType string, body []byte) *http.Response {
+func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID, planType string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/practices/"+practiceID+"/plan-templates/"+planType, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -161,26 +162,26 @@ func putTemplateRaw(t *testing.T, srv *httptest.Server, practiceID, planType str
 	return resp
 }
 
-func putTemplate(t *testing.T, srv *httptest.Server, practiceID, planType string, body plans.TemplateResponse) *http.Response {
+func putTemplate(t *testing.T, srv *httptest.Server, session string, practiceID, planType string, body plans.TemplateResponse) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	return putTemplateRaw(t, srv, practiceID, planType, payload)
+	return putTemplateRaw(t, srv, session, practiceID, planType, payload)
 }
 
 func instancePath(practiceID, engagementID, planType string) string {
 	return "/practices/" + practiceID + "/engagements/" + engagementID + "/plans/" + planType
 }
 
-func postInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string) *http.Response {
+func postInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+instancePath(practiceID, engagementID, planType), nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -188,13 +189,13 @@ func postInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, 
 	return resp
 }
 
-func getInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string) *http.Response {
+func getInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+instancePath(practiceID, engagementID, planType), nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -202,13 +203,13 @@ func getInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, p
 	return resp
 }
 
-func putInstanceRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string, body []byte) *http.Response {
+func putInstanceRaw(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+instancePath(practiceID, engagementID, planType), bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -217,13 +218,13 @@ func putInstanceRaw(t *testing.T, srv *httptest.Server, practiceID, engagementID
 	return resp
 }
 
-func putInstance(t *testing.T, srv *httptest.Server, practiceID, engagementID, planType string, body plans.PutInstanceRequest) *http.Response {
+func putInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string, body plans.PutInstanceRequest) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	return putInstanceRaw(t, srv, practiceID, engagementID, planType, payload)
+	return putInstanceRaw(t, srv, session, practiceID, engagementID, planType, payload)
 }
 
 func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
@@ -231,10 +232,10 @@ func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
 	const uid = "get-unknown-plan-type"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getTemplate(t, srv, practiceID, "not_a_plan_type")
+	resp := getTemplate(t, srv, session, practiceID, "not_a_plan_type")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -247,10 +248,10 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 	const uid = "get-not-found"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getTemplate(t, srv, practiceID, "care_plan")
+	resp := getTemplate(t, srv, session, practiceID, "care_plan")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -266,10 +267,10 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getTemplate(t, srv, practiceID, "care_plan")
+	resp := getTemplate(t, srv, session, practiceID, "care_plan")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -293,10 +294,10 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 	const uid = "put-non-owner"
 	practiceID := seedMember(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putTemplate(t, srv, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
+	resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
 		{ID: "f1", Type: shortTextType, Label: testFieldLabel},
 	}})
 	defer resp.Body.Close()
@@ -311,10 +312,10 @@ func TestPutTemplateHandler_UnknownPlanType(t *testing.T) {
 	const uid = "put-unknown-plan-type"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putTemplate(t, srv, practiceID, "not_a_plan_type", plans.TemplateResponse{Fields: []plans.Field{
+	resp := putTemplate(t, srv, session, practiceID, "not_a_plan_type", plans.TemplateResponse{Fields: []plans.Field{
 		{ID: "f1", Type: shortTextType, Label: testFieldLabel},
 	}})
 	defer resp.Body.Close()
@@ -329,10 +330,10 @@ func TestPutTemplateHandler_InvalidBody(t *testing.T) {
 	const uid = "put-invalid-body"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putTemplateRaw(t, srv, practiceID, "care_plan", []byte("not json"))
+	resp := putTemplateRaw(t, srv, session, practiceID, "care_plan", []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -364,12 +365,12 @@ func TestPutTemplateHandler_ValidationRejections(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-validation"
 	practiceID := seedOwner(t, db, uid)
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := putTemplate(t, srv, practiceID, "care_plan", plans.TemplateResponse{Fields: tc.fields})
+			resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: tc.fields})
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusBadRequest {
@@ -391,10 +392,10 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 	const uid = "put-success"
 	practiceID := seedOwner(t, db, uid)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	putResp := putTemplate(t, srv, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
+	putResp := putTemplate(t, srv, session, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
 		{ID: secondFieldID, Type: "checkbox", Label: "Consent", Order: 99},
 		{ID: firstFieldID, Type: "single_select", Label: "Location", Options: []string{"Home", "Hospital"}, Order: 1},
 	}})
@@ -412,7 +413,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 		t.Fatalf("PUT fields = %+v, want order recomputed from array position", putOut.Fields)
 	}
 
-	getResp := getTemplate(t, srv, practiceID, birthPlanType)
+	getResp := getTemplate(t, srv, session, practiceID, birthPlanType)
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d", getResp.StatusCode, http.StatusOK)
@@ -435,10 +436,10 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
 
-	srv := newPlanServer(authntest.Verifier{UID: uid}, db)
+	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
-	resp := putTemplate(t, srv, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
+	resp := putTemplate(t, srv, session, practiceID, "care_plan", plans.TemplateResponse{Fields: []plans.Field{
 		{ID: "new", Type: shortTextType, Label: "New field"},
 	}})
 	defer resp.Body.Close()
@@ -447,7 +448,7 @@ func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	getResp := getTemplate(t, srv, practiceID, "care_plan")
+	getResp := getTemplate(t, srv, session, practiceID, "care_plan")
 	defer getResp.Body.Close()
 	var out plans.TemplateResponse
 	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {

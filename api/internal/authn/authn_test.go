@@ -48,24 +48,16 @@ func TestBearerToken(t *testing.T) {
 // shared across this file's success-path tests.
 const testUID = "test-uid"
 
-// addSessionCookie sets req's Cookie header directly rather than
-// req.AddCookie(&http.Cookie{...}), which gosec's G124 flags for lacking
-// response-only attributes (Secure, HttpOnly, SameSite) that a request's
-// Cookie header never carries in the first place.
-func addSessionCookie(req *http.Request, value string) {
-	req.Header.Set("Cookie", authn.SessionCookieName+"="+value)
-}
-
 // beginRequest runs authn.Begin against db for a request carrying
 // whatever cookie and header the caller set up, rolling back whatever
 // transaction Begin opens.
-func beginRequest(t *testing.T, db *testdb.DB, verifier authn.Verifier, setup func(*http.Request)) (*httptest.ResponseRecorder, string, bool) {
+func beginRequest(t *testing.T, db *testdb.DB, setup func(*http.Request)) (*httptest.ResponseRecorder, string, bool) {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	setup(req)
 
-	tx, uid, ok := authn.Begin(rec, req, verifier, db.App)
+	tx, uid, ok := authn.Begin(rec, req, db.App)
 	if ok {
 		t.Cleanup(func() { _ = tx.Rollback() })
 	}
@@ -90,45 +82,19 @@ func assertUnauthorized(t *testing.T, rec *httptest.ResponseRecorder, body strin
 func TestBegin_MissingCredential(t *testing.T) {
 	db := testdb.New(t)
 
-	rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(*http.Request) {})
+	rec, _, ok := beginRequest(t, db, func(*http.Request) {})
 	if ok {
 		t.Fatal("expected ok=false, got true")
 	}
 	assertUnauthorized(t, rec, "missing credential\n")
 }
 
-func TestBegin_InvalidToken(t *testing.T) {
-	db := testdb.New(t)
-
-	rec, _, ok := beginRequest(t, db, authntest.Verifier{Err: errors.New("bad token")}, func(req *http.Request) {
-		req.Header.Set("Authorization", "Bearer invalid-token")
-	})
-	if ok {
-		t.Fatal("expected ok=false, got true")
-	}
-	assertUnauthorized(t, rec, "invalid token\n")
-}
-
-func TestBegin_BearerToken_Success(t *testing.T) {
-	db := testdb.New(t)
-
-	_, uid, ok := beginRequest(t, db, authntest.Verifier{UID: testUID}, func(req *http.Request) {
-		req.Header.Set("Authorization", "Bearer valid-token")
-	})
-	if !ok {
-		t.Fatal("expected ok=true, got false")
-	}
-	if uid != testUID {
-		t.Fatalf("uid = %q, want %q", uid, testUID)
-	}
-}
-
 func TestBegin_SessionCookie_Success(t *testing.T) {
 	db := testdb.New(t)
 	token := authntest.SeedSession(t, db.App, testUID)
 
-	rec, uid, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
-		addSessionCookie(req, token)
+	rec, uid, ok := beginRequest(t, db, func(req *http.Request) {
+		authntest.AddSessionCookie(req, token)
 	})
 	if !ok {
 		t.Fatal("expected ok=true, got false")
@@ -175,8 +141,8 @@ func TestBegin_SessionCookie_Rejected(t *testing.T) {
 			db := testdb.New(t)
 			token := tt.token(t, db)
 
-			rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
-				addSessionCookie(req, token)
+			rec, _, ok := beginRequest(t, db, func(req *http.Request) {
+				authntest.AddSessionCookie(req, token)
 			})
 			if ok {
 				t.Fatal("expected ok=false, got true")
@@ -191,8 +157,8 @@ func TestBegin_SessionCookie_RenewsPastHalfLife(t *testing.T) {
 	// Minted seven hours ago, so five of its twelve hours remain.
 	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-7*time.Hour))
 
-	rec, uid, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
-		addSessionCookie(req, token)
+	rec, uid, ok := beginRequest(t, db, func(req *http.Request) {
+		authntest.AddSessionCookie(req, token)
 	})
 	if !ok {
 		t.Fatal("expected ok=true, got false")
@@ -229,9 +195,9 @@ func TestBegin_SessionCookie_RenewalSurvivesRollback(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	addSessionCookie(req, token)
+	authntest.AddSessionCookie(req, token)
 
-	tx, _, ok := authn.Begin(rec, req, authntest.Verifier{}, db.App)
+	tx, _, ok := authn.Begin(rec, req, db.App)
 	if !ok {
 		t.Fatal("expected ok=true, got false")
 	}
@@ -255,8 +221,8 @@ func TestBegin_SessionCookie_NoRenewalBeforeHalfLife(t *testing.T) {
 	// Minted one hour ago, so eleven of its twelve hours remain.
 	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-time.Hour))
 
-	rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
-		addSessionCookie(req, token)
+	rec, _, ok := beginRequest(t, db, func(req *http.Request) {
+		authntest.AddSessionCookie(req, token)
 	})
 	if !ok {
 		t.Fatal("expected ok=true, got false")
@@ -266,21 +232,35 @@ func TestBegin_SessionCookie_NoRenewalBeforeHalfLife(t *testing.T) {
 	}
 }
 
-// TestBegin_SessionCookie_RenewsWithoutBearerToken is the point of
-// ADR-0004: none of the renewal tests above sets an Authorization
-// header, and this pins that as a requirement rather than an oversight,
-// since #151 removes the header entirely.
-func TestBegin_SessionCookie_RenewsWithoutBearerToken(t *testing.T) {
+// TestBegin_SessionCookie_RenewsWithNoBearerTokenAnywhere is the point
+// of ADR-0004 and the AC of #151 that guards it: renewal past half life
+// still works with no Bearer ID token present anywhere. It asserts on
+// expires_at in the store rather than on the Set-Cookie header, so it
+// fails if renewal silently stops -- a browser handed a fresh MaxAge
+// over a row still expiring on the old schedule is exactly the
+// divergence that would otherwise go unnoticed until a session died
+// mid-shift.
+func TestBegin_SessionCookie_RenewsWithNoBearerTokenAnywhere(t *testing.T) {
 	db := testdb.New(t)
 	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-7*time.Hour))
 
-	rec, _, ok := beginRequest(t, db, authntest.Verifier{Err: errors.New("VerifyIDToken must not be called")}, func(req *http.Request) {
-		addSessionCookie(req, token)
+	rec, _, ok := beginRequest(t, db, func(req *http.Request) {
+		authntest.AddSessionCookie(req, token)
 	})
 	if !ok {
 		t.Fatal("expected ok=true, got false")
 	}
 	findSessionCookie(t, rec.Result().Cookies())
+
+	var expiresAt time.Time
+	if err := db.App.QueryRowContext(t.Context(),
+		`SELECT expires_at FROM sessions WHERE identity_uid = $1`, testUID,
+	).Scan(&expiresAt); err != nil {
+		t.Fatalf("read expires_at: %v", err)
+	}
+	if remaining := time.Until(expiresAt); remaining < authn.SessionLifetime-time.Minute {
+		t.Fatalf("expires_at leaves %v, want a full %v -- renewal stopped", remaining, authn.SessionLifetime)
+	}
 }
 
 // findSessionCookie returns the __session cookie among cookies, failing
@@ -296,17 +276,46 @@ func findSessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
 	return nil
 }
 
-// TestBegin_SessionCookiePreferredOverBearer proves Begin checked the
-// cookie rather than falling back to the Bearer header even though both
-// are present: the Verifier fails every ID token, so reaching the
-// fallback would 401.
-func TestBegin_SessionCookiePreferredOverBearer(t *testing.T) {
+// TestBegin_BearerTokenAloneIsRejected is the AC of #151: a request
+// carrying only a Bearer ID token gets a 401 on a cookie-authenticated
+// route. The Verifier here would happily verify the token, so the 401
+// can only come from Begin no longer looking at the header at all --
+// with a failing Verifier this test would pass for the wrong reason.
+func TestBegin_BearerTokenAloneIsRejected(t *testing.T) {
 	db := testdb.New(t)
-	token := authntest.SeedSession(t, db.App, testUID)
 
-	_, uid, ok := beginRequest(t, db, authntest.Verifier{Err: errors.New("VerifyIDToken must not be called")}, func(req *http.Request) {
-		req.Header.Set("Authorization", "Bearer some-token")
-		addSessionCookie(req, token)
+	rec, _, ok := beginRequest(t, db, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer would-verify-fine")
+	})
+	if ok {
+		t.Fatal("expected ok=false, got true -- Begin still accepts a Bearer ID token")
+	}
+	assertUnauthorized(t, rec, "missing credential\n")
+}
+
+// bootstrapRequest runs authn.BeginBootstrap against db for a request
+// the caller sets up, rolling back whatever transaction it opens.
+func bootstrapRequest(t *testing.T, db *testdb.DB, verifier authn.Verifier, setup func(*http.Request)) (*httptest.ResponseRecorder, string, bool) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	setup(req)
+
+	tx, uid, ok := authn.BeginBootstrap(rec, req, verifier, db.App)
+	if ok {
+		t.Cleanup(func() { _ = tx.Rollback() })
+	}
+	return rec, uid, ok
+}
+
+// TestBeginBootstrap_BearerToken_Success covers the AC that the three
+// bootstrap endpoints still accept a Bearer ID token: they run before a
+// session exists, so there is nothing else for them to read.
+func TestBeginBootstrap_BearerToken_Success(t *testing.T) {
+	db := testdb.New(t)
+
+	_, uid, ok := bootstrapRequest(t, db, authntest.Verifier{UID: testUID}, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer valid-token")
 	})
 	if !ok {
 		t.Fatal("expected ok=true, got false")
@@ -314,6 +323,45 @@ func TestBegin_SessionCookiePreferredOverBearer(t *testing.T) {
 	if uid != testUID {
 		t.Fatalf("uid = %q, want %q", uid, testUID)
 	}
+}
+
+func TestBeginBootstrap_MissingCredential(t *testing.T) {
+	db := testdb.New(t)
+
+	rec, _, ok := bootstrapRequest(t, db, authntest.Verifier{UID: testUID}, func(*http.Request) {})
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	assertUnauthorized(t, rec, "missing credential\n")
+}
+
+func TestBeginBootstrap_InvalidToken(t *testing.T) {
+	db := testdb.New(t)
+
+	rec, _, ok := bootstrapRequest(t, db, authntest.Verifier{Err: errors.New("bad token")}, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer invalid-token")
+	})
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	assertUnauthorized(t, rec, "invalid token\n")
+}
+
+// TestBeginBootstrap_SessionCookieIsNotACredential pins that the
+// bootstrap path is Bearer-only in the other direction too: a live
+// session cookie does not stand in for the ID token, because a caller
+// who already holds a session has no reason to bootstrap.
+func TestBeginBootstrap_SessionCookieIsNotACredential(t *testing.T) {
+	db := testdb.New(t)
+	token := authntest.SeedSession(t, db.App, testUID)
+
+	rec, _, ok := bootstrapRequest(t, db, authntest.Verifier{UID: testUID}, func(req *http.Request) {
+		authntest.AddSessionCookie(req, token)
+	})
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	assertUnauthorized(t, rec, "missing credential\n")
 }
 
 // TestMintSession_SweepsExpiredSessions covers the AC that expired rows
@@ -347,8 +395,8 @@ func TestSessions_AreIndependentPerBrowser(t *testing.T) {
 
 	authntest.EndSession(t, db.App, laptop)
 
-	_, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
-		addSessionCookie(req, phone)
+	_, _, ok := beginRequest(t, db, func(req *http.Request) {
+		authntest.AddSessionCookie(req, phone)
 	})
 	if !ok {
 		t.Fatal("ending the laptop's session also ended the phone's")
@@ -406,8 +454,8 @@ func TestBegin_SessionCookie_LookupFailureIs500(t *testing.T) {
 		t.Fatalf("drop sessions: %v", err)
 	}
 
-	rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
-		addSessionCookie(req, token)
+	rec, _, ok := beginRequest(t, db, func(req *http.Request) {
+		authntest.AddSessionCookie(req, token)
 	})
 	if ok {
 		t.Fatal("expected ok=false, got true")
@@ -429,8 +477,8 @@ func TestBegin_SessionCookie_RenewalFailureStillServesTheRequest(t *testing.T) {
 		t.Fatalf("revoke update: %v", err)
 	}
 
-	rec, uid, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
-		addSessionCookie(req, token)
+	rec, uid, ok := beginRequest(t, db, func(req *http.Request) {
+		authntest.AddSessionCookie(req, token)
 	})
 	if !ok {
 		t.Fatal("expected ok=true, got false")
@@ -457,7 +505,7 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 	first := authntest.SeedSessionAt(t, db.App, "first-browser", stale)
 	second := authntest.SeedSessionAt(t, db.App, "second-browser", stale)
 
-	firstTx, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), authntest.Verifier{}, db.App)
+	firstTx, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), db.App)
 	if !ok {
 		t.Fatal("first request: expected ok=true, got false")
 	}
@@ -469,7 +517,7 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 	defer cancel()
 	rec := httptest.NewRecorder()
 
-	secondTx, _, ok := authn.Begin(rec, requestWithSession(ctx, second), authntest.Verifier{}, db.App)
+	secondTx, _, ok := authn.Begin(rec, requestWithSession(ctx, second), db.App)
 	if !ok {
 		t.Fatalf("second request blocked or failed behind the first request's open transaction: status %d, body %q", rec.Code, rec.Body.String())
 	}
@@ -482,6 +530,6 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 // cookie, on ctx.
 func requestWithSession(ctx context.Context, token string) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
-	addSessionCookie(req, token)
+	authntest.AddSessionCookie(req, token)
 	return req
 }

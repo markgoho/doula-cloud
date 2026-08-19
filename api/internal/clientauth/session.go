@@ -33,9 +33,9 @@ type SessionResponse struct {
 // Engagement is chosen, so -- like clientauth.Middleware before it checks
 // Engagement ownership -- it only ever sets app.current_identity_uid and
 // then app.current_client_id, never anything scoped by :engagementId.
-func SessionHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
+func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, verifier, db)
+		tx, uid, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
 		}

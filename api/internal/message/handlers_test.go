@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
@@ -24,33 +23,37 @@ import (
 // behind staffauth.Middleware, backed by a fresh in-memory ObjectStore and
 // a fresh in-memory Pusher -- no real GCS bucket or VAPID/push service
 // reachable from api/ tests, per docs/testing.md.
-func newServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
-	return newServerWithStoreAndPusher(verifier, db, objectstore.NewMemoryStore(), push.NewFakePusher())
+func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
+	return newServerWithStoreAndPusher(t, db, uid, objectstore.NewMemoryStore(), push.NewFakePusher())
 }
 
 // newServerWithStore mirrors newServer but lets the caller inject store
 // directly, so a test can exercise the handler's error-handling around a
 // store failure (e.g. a GCS outage) -- a path MemoryStore's happy path
 // never reaches.
-func newServerWithStore(verifier authn.Verifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
-	return newServerWithStoreAndPusher(verifier, db, store, push.NewFakePusher())
+func newServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (*httptest.Server, string) {
+	t.Helper()
+	return newServerWithStoreAndPusher(t, db, uid, store, push.NewFakePusher())
 }
 
 // newServerWithPusher mirrors newServer but lets the caller inject pusher
 // directly, so a test can inspect what Message creation sent to it.
-func newServerWithPusher(verifier authn.Verifier, db *testdb.DB, pusher push.Pusher) *httptest.Server {
-	return newServerWithStoreAndPusher(verifier, db, objectstore.NewMemoryStore(), pusher)
+func newServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (*httptest.Server, string) {
+	t.Helper()
+	return newServerWithStoreAndPusher(t, db, uid, objectstore.NewMemoryStore(), pusher)
 }
 
-func newServerWithStoreAndPusher(verifier authn.Verifier, db *testdb.DB, store objectstore.ObjectStore, pusher push.Pusher) *httptest.Server {
+func newServerWithStoreAndPusher(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore, pusher push.Pusher) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db.App)(message.ListHandler()))
+		staffauth.Middleware(db.App)(message.ListHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(verifier, db.App)(message.CreateHandler(store, pusher)))
+		staffauth.Middleware(db.App)(message.CreateHandler(store, pusher)))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
-		staffauth.Middleware(verifier, db.App)(message.AttachmentHandler(store)))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(message.AttachmentHandler(store)))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 // failingStore is an objectstore.ObjectStore whose Put and Get always
@@ -65,13 +68,13 @@ func (failingStore) Get(_ context.Context, _ string) (io.ReadCloser, error) {
 	return nil, errors.New("simulated store failure")
 }
 
-func authedGet(t *testing.T, url string) *http.Response {
+func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -79,13 +82,13 @@ func authedGet(t *testing.T, url string) *http.Response {
 	return resp
 }
 
-func authedPost(t *testing.T, url string, body []byte) *http.Response {
+func authedPost(t *testing.T, session, url string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -97,7 +100,7 @@ func authedPost(t *testing.T, url string, body []byte) *http.Response {
 // authedMultipartPost posts a multipart/form-data create-Message request:
 // a "body" text field plus, when filename is non-empty, an "attachment"
 // file field holding content.
-func authedMultipartPost(t *testing.T, url, body, filename string, content []byte) *http.Response {
+func authedMultipartPost(t *testing.T, session, url, body, filename string, content []byte) *http.Response {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -122,7 +125,7 @@ func authedMultipartPost(t *testing.T, url, body, filename string, content []byt
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -152,14 +155,14 @@ func TestCreateHandler_Success(t *testing.T) {
 	staffID := seedStaffAtPracticeNamed(t, db, practiceID, identityUID, "Jamie Doula")
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(message.CreateRequest{Body: "Hi, checking in on your appointment."})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -182,11 +185,11 @@ func TestCreateHandler_EmptyBodyRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "   "})
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -201,10 +204,10 @@ func TestCreateHandler_InvalidJSONBody(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", []byte("not json"))
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -218,11 +221,11 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "hello"})
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -245,11 +248,11 @@ func TestCreateHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 
-	srv := newServer(authntest.Verifier{UID: "staff-elsewhere"}, db)
+	srv, session := newServer(t, db, "staff-elsewhere")
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "hello"})
-	resp := authedPost(t, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -264,10 +267,10 @@ func TestListHandler_EmptyThread(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -288,10 +291,10 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -314,10 +317,10 @@ func TestListHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 	seedMessage(t, db, engagementID, "staff", otherStaffID, "not visible across practices")
 
-	srv := newServer(authntest.Verifier{UID: "staff-listing-elsewhere"}, db)
+	srv, session := newServer(t, db, "staff-listing-elsewhere")
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -332,7 +335,7 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	// Three distinct ways a cursor can be malformed: not valid base64 at
@@ -344,7 +347,7 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 		"YmFkdGltZXxzb21lLWlk", // base64("badtime|some-id")
 	}
 	for _, cursor := range cases {
-		resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages?cursor="+cursor)
+		resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages?cursor="+cursor)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusBadRequest {
@@ -367,19 +370,19 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	seedStaffAtPracticeNamed(t, db, practiceID, "staff-b", "Staff B")
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srvA := newServer(authntest.Verifier{UID: "staff-a"}, db)
+	srvA, sessionA := newServer(t, db, "staff-a")
 	defer srvA.Close()
 	bodyA, _ := json.Marshal(message.CreateRequest{Body: messageFromA})
-	respA := authedPost(t, srvA.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bodyA)
+	respA := authedPost(t, sessionA, srvA.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bodyA)
 	defer respA.Body.Close()
 	if respA.StatusCode != http.StatusCreated {
 		t.Fatalf("Staff A create status = %d, want %d", respA.StatusCode, http.StatusCreated)
 	}
 
-	srvB := newServer(authntest.Verifier{UID: "staff-b"}, db)
+	srvB, sessionB := newServer(t, db, "staff-b")
 	defer srvB.Close()
 
-	listResp := authedGet(t, srvB.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	listResp := authedGet(t, sessionB, srvB.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer listResp.Body.Close()
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("Staff B list status = %d, want %d", listResp.StatusCode, http.StatusOK)
@@ -393,13 +396,13 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	}
 
 	bodyB, _ := json.Marshal(message.CreateRequest{Body: "reply from B"})
-	replyResp := authedPost(t, srvB.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bodyB)
+	replyResp := authedPost(t, sessionB, srvB.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", bodyB)
 	defer replyResp.Body.Close()
 	if replyResp.StatusCode != http.StatusCreated {
 		t.Fatalf("Staff B reply status = %d, want %d", replyResp.StatusCode, http.StatusCreated)
 	}
 
-	finalResp := authedGet(t, srvA.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	finalResp := authedGet(t, sessionA, srvA.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer finalResp.Body.Close()
 	var final message.ListResponse
 	if err := json.NewDecoder(finalResp.Body).Decode(&final); err != nil {
@@ -430,10 +433,10 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 		seedMessage(t, db, engagementID, "staff", staffID, "message "+string(rune('A'+i%26)))
 	}
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer firstResp.Body.Close()
 	if firstResp.StatusCode != http.StatusOK {
 		t.Fatalf("first page status = %d, want %d", firstResp.StatusCode, http.StatusOK)
@@ -447,7 +450,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	if secondResp.StatusCode != http.StatusOK {
 		t.Fatalf("second page status = %d, want %d", secondResp.StatusCode, http.StatusOK)
@@ -485,10 +488,10 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"Here's the photo", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -502,7 +505,7 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 		t.Fatalf("attachment metadata = %+v, want image/png photo.png", created)
 	}
 
-	dlResp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	dlResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
 	defer dlResp.Body.Close()
 	if dlResp.StatusCode != http.StatusOK {
 		t.Fatalf("download status = %d, want %d", dlResp.StatusCode, http.StatusOK)
@@ -532,10 +535,10 @@ func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"text only, sent as multipart", "", nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -560,10 +563,10 @@ func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -587,11 +590,11 @@ func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	pdfBytes := []byte("%PDF-1.4\nfake pdf content for content-type sniffing\n")
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"Here's the contract", "form.pdf", pdfBytes)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -615,10 +618,10 @@ func TestCreateHandler_AttachmentWrongTypeRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"trying to attach a text file", "notes.txt", []byte("just plain text, not an image or PDF"))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -636,11 +639,11 @@ func TestCreateHandler_AttachmentOversizedRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	oversized := bytes.Repeat([]byte("a"), 10<<20+32<<10) // 10MB + 32KB: over the cap, under the request-body ceiling
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"too big", "big.png", oversized)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusRequestEntityTooLarge {
@@ -660,11 +663,11 @@ func TestCreateHandler_RequestWayOversizedRejectedAtParse(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	wayOversized := bytes.Repeat([]byte("a"), 11<<20) // past maxCreateRequestBytes entirely
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"way too big", "big.png", wayOversized)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusRequestEntityTooLarge {
@@ -682,7 +685,7 @@ func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
@@ -690,7 +693,7 @@ func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=doesnotmatch")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -712,10 +715,10 @@ func TestCreateHandler_EmptyBodyAndNoAttachmentRejected(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", "", "", nil)
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", "", "", nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -733,10 +736,10 @@ func TestCreateHandler_StorePutFailureReturns500(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServerWithStore(authntest.Verifier{UID: identityUID}, db, failingStore{})
+	srv, session := newServerWithStore(t, db, identityUID, failingStore{})
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -757,10 +760,10 @@ func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 	messageID := seedMessageWithAttachment(t, db, engagementID, "staff", staffID,
 		"messages/whatever/path", pngContentType, "photo.png", int64(len(pngBytes)))
 
-	srv := newServerWithStore(authntest.Verifier{UID: identityUID}, db, failingStore{})
+	srv, session := newServerWithStore(t, db, identityUID, failingStore{})
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
@@ -782,10 +785,10 @@ func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
 		t.Fatalf("query message id: %v", err)
 	}
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -801,10 +804,10 @@ func TestAttachmentHandler_InvalidMessageID(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -819,10 +822,10 @@ func TestAttachmentHandler_InvalidEngagementID(t *testing.T) {
 	practiceID := seedPractice(t, db, "Practice")
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages/00000000-0000-0000-0000-000000000000/attachment")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -841,10 +844,10 @@ func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 
-	srv := newServer(authntest.Verifier{UID: "staff-attachment-elsewhere"}, db)
+	srv, session := newServer(t, db, "staff-attachment-elsewhere")
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
+	resp := authedGet(t, session, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -863,10 +866,10 @@ func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client One", "one@example.com")
 	_, otherEngagementID := seedClientEngagement(t, db, practiceID, "Client Two", "two@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	createResp := authedMultipartPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+	createResp := authedMultipartPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
 	defer createResp.Body.Close()
 	var created message.Message
@@ -874,7 +877,7 @@ func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 		t.Fatalf("decode create response: %v", err)
 	}
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+otherEngagementID+"/messages/"+created.MessageID+"/attachment")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+otherEngagementID+"/messages/"+created.MessageID+"/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -891,11 +894,11 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 	seedStaffAtPractice(t, db, practiceID, identityUID)
 	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "plain JSON, no attachment"})
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)

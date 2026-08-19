@@ -62,10 +62,10 @@ func Tx(ctx context.Context) (*sql.Tx, bool) {
 // resolution and Engagement-ownership authorization. db must be a
 // connection using the low-privilege app_runtime role -- the role the RLS
 // policies in 00006_client_portal_users.sql apply to.
-func Middleware(verifier authn.Verifier, db *sql.DB) func(http.Handler) http.Handler {
+func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tx, uid, ok := authn.Begin(w, r, verifier, db)
+			tx, uid, ok := authn.Begin(w, r, db)
 			if !ok {
 				return
 			}

@@ -25,6 +25,7 @@ const (
 	// package-wide, not just within one file.
 	someUID            = "some-uid"
 	inviteeIdentityUID = "invitee-identity"
+	roundtripOwnerUID  = "roundtrip-owner"
 	inviteeName        = "Invitee"
 	ownerRole          = "owner"
 	doulaRole          = "doula"
@@ -322,16 +323,20 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 // goes red instead of shipping a seeded template the API would reject.
 func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	db := testdb.New(t)
-	verifier := authntest.Verifier{UID: "roundtrip-owner"}
+	verifier := authntest.Verifier{UID: roundtripOwnerUID}
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
 	mux.Handle("GET /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(verifier, db.App)(plans.GetTemplateHandler()))
+		staffauth.Middleware(db.App)(plans.GetTemplateHandler()))
 	mux.Handle("PUT /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(verifier, db.App)(plans.PutTemplateHandler()))
+		staffauth.Middleware(db.App)(plans.PutTemplateHandler()))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
+
+	// Signup itself still takes a Bearer ID token (it runs before a
+	// session exists); everything behind the middleware takes the cookie.
+	session := authntest.SeedSession(t, db.App, roundtripOwnerUID)
 
 	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		PracticeName: "Roundtrip Practice", StaffName: jamieName, StaffEmail: jamieEmail,
@@ -348,7 +353,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 		if err != nil {
 			t.Fatalf("build GET request: %v", err)
 		}
-		getReq.Header.Set("Authorization", "Bearer tok")
+		authntest.AddSessionCookie(getReq, session)
 		getResp, err := http.DefaultClient.Do(getReq)
 		if err != nil {
 			t.Fatalf("GET request: %v", err)
@@ -374,7 +379,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 		if err != nil {
 			t.Fatalf("build PUT request: %v", err)
 		}
-		putReq.Header.Set("Authorization", "Bearer tok")
+		authntest.AddSessionCookie(putReq, session)
 		putReq.Header.Set("Content-Type", "application/json")
 		putResp, err := http.DefaultClient.Do(putReq)
 		if err != nil {
@@ -425,16 +430,21 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 // goes red instead of shipping a seeded template the API would reject.
 func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *testing.T) {
 	db := testdb.New(t)
-	verifier := authntest.Verifier{UID: "roundtrip-contract-owner"}
+	const ownerUID = "roundtrip-contract-owner"
+	verifier := authntest.Verifier{UID: ownerUID}
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
 	mux.Handle("GET /practices/{practiceId}/contract-template",
-		staffauth.Middleware(verifier, db.App)(contracts.GetTemplateHandler()))
+		staffauth.Middleware(db.App)(contracts.GetTemplateHandler()))
 	mux.Handle("PUT /practices/{practiceId}/contract-template",
-		staffauth.Middleware(verifier, db.App)(contracts.PutTemplateHandler()))
+		staffauth.Middleware(db.App)(contracts.PutTemplateHandler()))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
+
+	// Signup itself still takes a Bearer ID token (it runs before a
+	// session exists); everything behind the middleware takes the cookie.
+	session := authntest.SeedSession(t, db.App, ownerUID)
 
 	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		PracticeName: "Roundtrip Contract Practice", StaffName: jamieName, StaffEmail: jamieEmail,
@@ -450,7 +460,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	if err != nil {
 		t.Fatalf("build GET request: %v", err)
 	}
-	getReq.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(getReq, session)
 	getResp, err := http.DefaultClient.Do(getReq)
 	if err != nil {
 		t.Fatalf("GET request: %v", err)
@@ -476,7 +486,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	if err != nil {
 		t.Fatalf("build PUT request: %v", err)
 	}
-	putReq.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(putReq, session)
 	putReq.Header.Set("Content-Type", "application/json")
 	putResp, err := http.DefaultClient.Do(putReq)
 	if err != nil {

@@ -11,13 +11,13 @@ import (
 	"doula-cloud/api/internal/visit"
 )
 
-func authedGet(t *testing.T, url string) *http.Response {
+func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -25,23 +25,23 @@ func authedGet(t *testing.T, url string) *http.Response {
 	return resp
 }
 
-func authedPost(t *testing.T, url string) *http.Response {
+func authedPost(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	return authedBody(t, http.MethodPost, url, nil)
+	return authedBody(t, session, http.MethodPost, url, nil)
 }
 
-func authedPatch(t *testing.T, url string, body []byte) *http.Response {
+func authedPatch(t *testing.T, session, url string, body []byte) *http.Response {
 	t.Helper()
-	return authedBody(t, http.MethodPatch, url, body)
+	return authedBody(t, session, http.MethodPatch, url, body)
 }
 
-func authedBody(t *testing.T, method, url string, body []byte) *http.Response {
+func authedBody(t *testing.T, session, method, url string, body []byte) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), method, url, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -56,10 +56,10 @@ func TestCreateHandler_Success(t *testing.T) {
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -81,10 +81,10 @@ func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	seedStaffAtPracticeWithRoles(t, db, practiceID, identityUID, []string{officeManagerRole})
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -99,10 +99,10 @@ func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	otherPracticeID, _ := seedDoulaWithMembership(t, db, "doula-elsewhere")
 	engagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -115,10 +115,10 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "doula-bad-engagement"
 	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -133,10 +133,10 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -158,10 +158,10 @@ func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(authntest.Verifier{UID: "office-manager-bystander"}, db)
+	srv, session := newServer(t, db, "office-manager-bystander")
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -176,10 +176,10 @@ func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	otherPracticeID, _ := seedDoulaWithMembership(t, db, "doula-list-elsewhere")
 	engagementID := seedEngagement(t, db, otherPracticeID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -192,10 +192,10 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "doula-list-bad-engagement"
 	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -211,14 +211,14 @@ func TestReassignHandler_Success(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -241,14 +241,14 @@ func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -264,14 +264,14 @@ func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, doulaStaffID)
 
-	srv := newServer(authntest.Verifier{UID: "office-manager-reassigning"}, db)
+	srv, session := newServer(t, db, "office-manager-reassigning")
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: doulaStaffID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -286,14 +286,14 @@ func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: "00000000-0000-0000-0000-000000000000"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -309,14 +309,14 @@ func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: nonDoulaStaffID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -330,14 +330,14 @@ func TestReassignHandler_VisitNotFound(t *testing.T) {
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000", body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -352,10 +352,10 @@ func TestReassignHandler_InvalidBody(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, []byte("not json"))
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -370,14 +370,14 @@ func TestReassignHandler_InvalidStaffID(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: "not-a-uuid"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -390,14 +390,14 @@ func TestReassignHandler_InvalidEngagementID(t *testing.T) {
 	const identityUID = "doula-reassign-bad-engagement-id"
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000", body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -411,14 +411,14 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
 	engagementID := seedEngagement(t, db, practiceID)
 
-	srv := newServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid", body)
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {

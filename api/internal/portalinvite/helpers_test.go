@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -16,27 +17,34 @@ import (
 
 var errBadToken = errors.New("invalid token")
 
-func newInviteServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+// newInviteServer mounts the Staff-side portal-invite route behind
+// staffauth.Middleware and seeds a live session for uid, returning the
+// token its __session cookie carries.
+func newInviteServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(verifier, db.App)(portalinvite.InviteHandler()))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(portalinvite.InviteHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
+// newAcceptServer mounts the Client-portal invitation-acceptance route.
+// It is one of the three bootstrap endpoints, so it still reads a Bearer
+// ID token: it runs before a session exists.
 func newAcceptServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db.App))
 	return httptest.NewServer(mux)
 }
 
-func postInvite(t *testing.T, srv *httptest.Server, practiceID, engagementID string) *http.Response {
+func postInvite(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string) *http.Response {
 	t.Helper()
 	url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(nil))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)

@@ -78,23 +78,24 @@ func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *str
 	return id
 }
 
-func newConnectServer(verifier authntest.Verifier, db *testdb.DB, client payments.Client) *httptest.Server {
+func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/payments/connect",
-		staffauth.Middleware(verifier, db.App)(payments.PostConnectHandler(client)))
+		staffauth.Middleware(db.App)(payments.PostConnectHandler(client)))
 	mux.Handle("GET /practices/{practiceId}/payments/connect",
-		staffauth.Middleware(verifier, db.App)(payments.GetConnectStatusHandler(client)))
-	return httptest.NewServer(mux)
+		staffauth.Middleware(db.App)(payments.GetConnectStatusHandler(client)))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func postConnect(t *testing.T, srv *httptest.Server, practiceID string) *http.Response {
+func postConnect(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
 		srv.URL+"/practices/"+practiceID+"/payments/connect", bytes.NewBufferString(``))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -102,13 +103,13 @@ func postConnect(t *testing.T, srv *httptest.Server, practiceID string) *http.Re
 	return resp
 }
 
-func getConnectStatus(t *testing.T, srv *httptest.Server, practiceID string) *http.Response {
+func getConnectStatus(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/payments/connect", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -125,10 +126,10 @@ func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postConnect(t, srv, practiceID)
+	resp := postConnect(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -168,17 +169,17 @@ func TestPostConnectHandler_SecondAttemptReusesExistingAccount(t *testing.T) {
 	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	first := postConnect(t, srv, practiceID)
+	first := postConnect(t, srv, session, practiceID)
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first connect status = %d, want %d", first.StatusCode, http.StatusOK)
 	}
 	firstAccountID := stripeConnectAccountID(t, db, practiceID)
 
-	second := postConnect(t, srv, practiceID)
+	second := postConnect(t, srv, session, practiceID)
 	_ = second.Body.Close()
 	if second.StatusCode != http.StatusOK {
 		t.Fatalf("second connect status = %d, want %d", second.StatusCode, http.StatusOK)
@@ -203,10 +204,10 @@ func TestPostConnectHandler_NonOwnerForbidden(t *testing.T) {
 	practiceID := seedMember(t, db, uid) // doula role, not owner
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postConnect(t, srv, practiceID)
+	resp := postConnect(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -227,10 +228,10 @@ func TestPostConnectHandler_CreateAccountFailureReturns500(t *testing.T) {
 	client := payments.NewFakeClient()
 	client.CreateAccountErr = errStripeFake
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postConnect(t, srv, practiceID)
+	resp := postConnect(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -250,10 +251,10 @@ func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
 	client := payments.NewFakeClient()
 	client.CreateAccountLinkErr = errStripeFake
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postConnect(t, srv, practiceID)
+	resp := postConnect(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -270,10 +271,10 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 	practiceID := seedMember(t, db, uid)
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := getConnectStatus(t, srv, practiceID)
+	resp := getConnectStatus(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -301,13 +302,13 @@ func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 	practiceID := seedMember(t, db, uid) // doula role, not owner
 	client := payments.NewFakeClient()
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
 	connectResp := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
 	client.Statuses[connectResp] = payments.AccountStatus{ChargesEnabled: true, PayoutsEnabled: false, DetailsSubmitted: true}
 
-	resp := getConnectStatus(t, srv, practiceID)
+	resp := getConnectStatus(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -336,10 +337,10 @@ func TestGetConnectStatusHandler_Active(t *testing.T) {
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
 	client.Statuses[accountID] = payments.AccountStatus{ChargesEnabled: true, PayoutsEnabled: true, DetailsSubmitted: true}
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := getConnectStatus(t, srv, practiceID)
+	resp := getConnectStatus(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	var out payments.ConnectStatusResponse
@@ -361,10 +362,10 @@ func TestGetConnectStatusHandler_RetrieveFailureReturns500(t *testing.T) {
 	postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
 	client.RetrieveAccountErr = errStripeFake
 
-	srv := newConnectServer(authntest.Verifier{UID: uid}, db, client)
+	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := getConnectStatus(t, srv, practiceID)
+	resp := getConnectStatus(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {

@@ -70,31 +70,33 @@ func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpo
 // newPortalServer mounts the same routes main.go wires up for the
 // Client-portal Contract view, behind clientauth.Middleware, backed by a
 // fresh objectstore.MemoryStore.
-func newPortalServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
-	return newPortalServerWithStore(verifier, db, objectstore.NewMemoryStore())
+func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
+	return newPortalServerWithStore(t, db, uid, objectstore.NewMemoryStore())
 }
 
 // newPortalServerWithStore mirrors newPortalServer but lets the caller
 // inject store, so a test can inspect what Sign wrote or force a Put/Get
 // failure.
-func newPortalServerWithStore(verifier authntest.Verifier, db *testdb.DB, store objectstore.ObjectStore) *httptest.Server {
+func newPortalServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (*httptest.Server, string) {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/contract",
-		clientauth.Middleware(verifier, db.App)(contracts.ClientGetContractHandler()))
+		clientauth.Middleware(db.App)(contracts.ClientGetContractHandler()))
 	mux.Handle("POST /portal/engagements/{engagementId}/contract/sign",
-		clientauth.Middleware(verifier, db.App)(contracts.ClientPostSignContractHandler(store)))
+		clientauth.Middleware(db.App)(contracts.ClientPostSignContractHandler(store)))
 	mux.Handle("GET /portal/engagements/{engagementId}/contract/pdf",
-		clientauth.Middleware(verifier, db.App)(contracts.ClientGetSignedContractPDFHandler(store)))
-	return httptest.NewServer(mux)
+		clientauth.Middleware(db.App)(contracts.ClientGetSignedContractPDFHandler(store)))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getClientContract(t *testing.T, srv *httptest.Server, engagementID string) *http.Response {
+func getClientContract(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/contract", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
+	authntest.AddSessionCookie(req, session)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -102,14 +104,14 @@ func getClientContract(t *testing.T, srv *httptest.Server, engagementID string) 
 	return resp
 }
 
-func getClientContractPDFRaw(t *testing.T, srv *httptest.Server, engagementID, authHeader string) *http.Response {
+func getClientContractPDFRaw(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/contract/pdf", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
+	if session != "" {
+		authntest.AddSessionCookie(req, session)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -118,9 +120,9 @@ func getClientContractPDFRaw(t *testing.T, srv *httptest.Server, engagementID, a
 	return resp
 }
 
-func getClientContractPDF(t *testing.T, srv *httptest.Server, engagementID string) *http.Response {
+func getClientContractPDF(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	return getClientContractPDFRaw(t, srv, engagementID, "Bearer tok")
+	return getClientContractPDFRaw(t, srv, session, engagementID)
 }
 
 // TestClientGetContractHandler_Success proves a Client-portal caller can
@@ -133,10 +135,10 @@ func TestClientGetContractHandler_Success(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContract(t, srv, engagementID)
+	resp := getClientContract(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -163,10 +165,10 @@ func TestClientGetContractHandler_SignedAndVoidedAllowed(t *testing.T) {
 			seedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
-			srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+			srv, session := newPortalServer(t, db, identityUID)
 			defer srv.Close()
 
-			resp := getClientContract(t, srv, engagementID)
+			resp := getClientContract(t, srv, session, engagementID)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
@@ -188,10 +190,10 @@ func TestClientGetContractHandler_DraftNeverReturned404s(t *testing.T) {
 	seedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContract(t, srv, engagementID)
+	resp := getClientContract(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -208,10 +210,10 @@ func TestClientGetContractHandler_NoContractYet404(t *testing.T) {
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContract(t, srv, engagementID)
+	resp := getClientContract(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -231,10 +233,10 @@ func TestClientGetContractHandler_OtherClientsEngagementRejected(t *testing.T) {
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 
-	srv := newPortalServer(authntest.Verifier{UID: identityUID}, db)
+	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := getClientContract(t, srv, otherEngagementID)
+	resp := getClientContract(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {

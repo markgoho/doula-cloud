@@ -34,9 +34,9 @@ type SessionResponse struct {
 // their Practice memberships. It runs before any Practice is chosen, so
 // -- like SignupHandler -- it only ever sets app.current_identity_uid,
 // never app.current_practice_id.
-func SessionHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
+func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, verifier, db)
+		tx, uid, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
 		}
