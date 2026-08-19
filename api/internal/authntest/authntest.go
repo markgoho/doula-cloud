@@ -31,6 +31,12 @@ type Verifier struct {
 	// MintErr, when non-nil, is returned instead of a session cookie by
 	// MintSessionCookie.
 	MintErr error
+	// IssuedAt and Expires, when non-zero, are reported on the token
+	// VerifySessionCookie returns, so a test can drive authn.Begin's
+	// renewal (#147) by placing the cookie before or after half its
+	// life relative to time.Now().
+	IssuedAt time.Time
+	Expires  time.Time
 }
 
 // Compile-time proof that Verifier still satisfies the interface it doubles.
@@ -57,13 +63,13 @@ func (v Verifier) MintSessionCookie(_ context.Context, _ string, _ time.Duration
 }
 
 // VerifySessionCookie returns v.Err if it is set, and a token carrying
-// v.UID otherwise. The cookie argument is ignored — what a test wants
-// back is stated on the Verifier.
+// v.UID, v.IssuedAt, and v.Expires otherwise. The cookie argument is
+// ignored — what a test wants back is stated on the Verifier.
 func (v Verifier) VerifySessionCookie(_ context.Context, _ string) (*authn.VerifiedToken, error) {
 	if v.Err != nil {
 		return nil, v.Err
 	}
-	return &authn.VerifiedToken{UID: v.UID}, nil
+	return &authn.VerifiedToken{UID: v.UID, IssuedAt: v.IssuedAt, Expires: v.Expires}, nil
 }
 
 // RevokeRefreshTokens always succeeds. Tests that need a request made

@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/authn"
 )
@@ -22,11 +21,13 @@ import (
 // BearerToken, don't have to import authn for it.
 const CookieName = authn.SessionCookieName
 
-// Lifetime is how long a newly minted session cookie is valid for. #138
-// fixes this at 12 hours for both populations; #147 renews it on use,
-// which this ticket does not implement. Exported so tests can assert a
-// cookie's MaxAge against this constant instead of a repeated literal.
-const Lifetime = 12 * time.Hour
+// Lifetime is how long a newly minted or renewed session cookie is valid
+// for -- see authn.SessionLifetime, which owns the value so Begin's
+// renewal path (#147) and this package's minting path agree without
+// session importing back into authn's credential seam. Exported so
+// tests can assert a cookie's MaxAge against this constant instead of a
+// repeated literal.
+const Lifetime = authn.SessionLifetime
 
 // MsgInternalError is the body a caller sees for a failure that carries
 // no more specific detail.
@@ -89,15 +90,7 @@ func BuildCookie(ctx context.Context, verifier authn.Verifier, idToken string) (
 		return nil, fmt.Errorf("session: mint session cookie: %w", err)
 	}
 
-	return &http.Cookie{
-		Name:     CookieName,
-		Value:    cookieValue,
-		Path:     "/",
-		MaxAge:   int(Lifetime.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	}, nil
+	return authn.NewSessionCookie(cookieValue), nil
 }
 
 // EndHandler clears the session cookie. It is idempotent: called with no

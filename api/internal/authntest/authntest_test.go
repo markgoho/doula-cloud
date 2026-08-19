@@ -55,12 +55,21 @@ func TestMintSessionCookie_ReturnsMintErr(t *testing.T) {
 }
 
 func TestVerifySessionCookie_ReturnsUID(t *testing.T) {
-	verified, err := authntest.Verifier{UID: testUID}.VerifySessionCookie(t.Context(), "any-cookie")
+	issuedAt := time.Now().Add(-time.Hour)
+	expires := time.Now().Add(11 * time.Hour)
+
+	verified, err := authntest.Verifier{UID: testUID, IssuedAt: issuedAt, Expires: expires}.VerifySessionCookie(t.Context(), "any-cookie")
 	if err != nil {
 		t.Fatalf("VerifySessionCookie: %v", err)
 	}
 	if verified.UID != testUID {
 		t.Fatalf("UID = %q, want %q", verified.UID, testUID)
+	}
+	if !verified.IssuedAt.Equal(issuedAt) {
+		t.Fatalf("IssuedAt = %v, want %v", verified.IssuedAt, issuedAt)
+	}
+	if !verified.Expires.Equal(expires) {
+		t.Fatalf("Expires = %v, want %v", verified.Expires, expires)
 	}
 }
 
