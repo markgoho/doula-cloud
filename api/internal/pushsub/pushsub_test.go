@@ -16,7 +16,7 @@ import (
 
 // newStaffServer mounts the same push-subscription routes main.go wires
 // up for the Staff population, behind staffauth.Middleware.
-func newStaffServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newStaffServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/push-subscriptions",
@@ -28,7 +28,7 @@ func newStaffServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, 
 
 // newPortalServer mirrors newStaffServer for the Client-portal population,
 // behind clientauth.Middleware.
-func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /portal/engagements/{engagementId}/push-subscriptions",

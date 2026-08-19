@@ -131,7 +131,7 @@ func seedSignedContract(t *testing.T, db *testdb.DB, engagementID, pdfObjectPath
 	}
 }
 
-func newContractServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newContractServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newContractServerWithPusherAndStore(t, db, uid, push.NewFakePusher(), objectstore.NewMemoryStore())
 }
@@ -139,7 +139,7 @@ func newContractServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Serve
 // newContractServerWithPusher mirrors newContractServer but lets the
 // caller inject pusher, so a test can inspect what Send triggers --
 // mirrors message/handlers_test.go's newServerWithPusher.
-func newContractServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (*httptest.Server, string) {
+func newContractServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newContractServerWithPusherAndStore(t, db, uid, pusher, objectstore.NewMemoryStore())
 }
@@ -147,12 +147,12 @@ func newContractServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher
 // newContractServerWithStore mirrors newContractServer but lets the
 // caller inject store, so a test can seed what the Signed PDF endpoint
 // reads back.
-func newContractServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (*httptest.Server, string) {
+func newContractServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newContractServerWithPusherAndStore(t, db, uid, push.NewFakePusher(), store)
 }
 
-func newContractServerWithPusherAndStore(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher, store objectstore.ObjectStore) (*httptest.Server, string) {
+func newContractServerWithPusherAndStore(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/contract-template",

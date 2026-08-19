@@ -17,7 +17,7 @@ import (
 // also seeds a live session for uid and hands back the token its
 // __session cookie carries, since #151 that cookie is the only
 // credential the middleware reads.
-func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("/portal/engagements/{engagementId}/ping", clientauth.Middleware(db.App)(

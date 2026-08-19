@@ -88,19 +88,11 @@ func CountFor(t *testing.T, q authn.Querier, uid string) int {
 }
 
 // AddSessionCookie sets req's Cookie header to carry token as the
-// __session cookie. It writes the header directly rather than calling
+// __session cookie -- the only credential authn.Begin reads since #151,
+// so this plus SeedSession is what gets a route test signed in. It writes the header directly rather than calling
 // req.AddCookie(&http.Cookie{...}), which gosec's G124 flags for lacking
 // the response-only attributes (Secure, HttpOnly, SameSite) that a
 // request's Cookie header never carries in the first place.
 func AddSessionCookie(req *http.Request, token string) {
 	req.Header.Set("Cookie", authn.SessionCookieName+"="+token)
-}
-
-// Authenticate makes req arrive signed in as uid: it seeds a live
-// session and puts that session's token on the request as the __session
-// cookie. It is the one call a route test needs to get past authn.Begin,
-// which since #151 reads nothing but this cookie.
-func Authenticate(t *testing.T, q authn.Querier, req *http.Request, uid string) {
-	t.Helper()
-	AddSessionCookie(req, SeedSession(t, q, uid))
 }

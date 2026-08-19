@@ -55,7 +55,7 @@ func seedLedgerRow(t *testing.T, db *testdb.DB, practiceID, origin string, quant
 	}
 }
 
-func newBillingServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newBillingServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/billing",

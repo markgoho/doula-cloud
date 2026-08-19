@@ -23,7 +23,7 @@ import (
 // behind staffauth.Middleware, backed by a fresh in-memory ObjectStore and
 // a fresh in-memory Pusher -- no real GCS bucket or VAPID/push service
 // reachable from api/ tests, per docs/testing.md.
-func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newServerWithStoreAndPusher(t, db, uid, objectstore.NewMemoryStore(), push.NewFakePusher())
 }
@@ -32,19 +32,19 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, strin
 // directly, so a test can exercise the handler's error-handling around a
 // store failure (e.g. a GCS outage) -- a path MemoryStore's happy path
 // never reaches.
-func newServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (*httptest.Server, string) {
+func newServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newServerWithStoreAndPusher(t, db, uid, store, push.NewFakePusher())
 }
 
 // newServerWithPusher mirrors newServer but lets the caller inject pusher
 // directly, so a test can inspect what Message creation sent to it.
-func newServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (*httptest.Server, string) {
+func newServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newServerWithStoreAndPusher(t, db, uid, objectstore.NewMemoryStore(), pusher)
 }
 
-func newServerWithStoreAndPusher(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore, pusher push.Pusher) (*httptest.Server, string) {
+func newServerWithStoreAndPusher(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore, pusher push.Pusher) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages",

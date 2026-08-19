@@ -21,7 +21,7 @@ import (
 // backed by a fresh in-memory ObjectStore and a fresh in-memory Pusher --
 // no real GCS bucket or VAPID/push service reachable from api/ tests, per
 // docs/testing.md.
-func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newPortalServerWithPusher(t, db, uid, push.NewFakePusher())
 }
@@ -29,7 +29,7 @@ func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server,
 // newPortalServerWithPusher mirrors newPortalServer but lets the caller
 // inject pusher directly, so a test can inspect what Message creation
 // sent to it.
-func newPortalServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (*httptest.Server, string) {
+func newPortalServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher) (srv *httptest.Server, session string) {
 	t.Helper()
 	store := objectstore.NewMemoryStore()
 	mux := http.NewServeMux()

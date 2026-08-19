@@ -14,7 +14,7 @@ import (
 
 // newServer mounts the same route main.go wires up for this package,
 // behind clientauth.Middleware.
-func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}",

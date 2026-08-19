@@ -105,7 +105,7 @@ func invoiceStatus(t *testing.T, db *testdb.DB, invoiceID string) string {
 	return status
 }
 
-func newInvoiceServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (*httptest.Server, string) {
+func newInvoiceServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/invoices",

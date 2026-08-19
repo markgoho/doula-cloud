@@ -83,18 +83,18 @@ func TestEndSession_RemovesTheRow(t *testing.T) {
 	}
 }
 
-// TestAuthenticate_SignsTheRequestIn proves the one-call helper produces
-// a request authn.Begin accepts, which is the whole reason route tests
-// use it instead of seeding and setting the header themselves.
-func TestAuthenticate_SignsTheRequestIn(t *testing.T) {
+// TestAddSessionCookie_SignsTheRequestIn proves the header this writes is
+// one authn.Begin actually accepts -- the assumption every converted
+// route test rests on, pinned once here rather than rediscovered in each.
+func TestAddSessionCookie_SignsTheRequestIn(t *testing.T) {
 	db := testdb.New(t)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 
-	authntest.Authenticate(t, db.App, req, testUID)
+	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, testUID))
 
 	tx, uid, ok := authn.Begin(httptest.NewRecorder(), req, db.App)
 	if !ok {
-		t.Fatal("Begin rejected an Authenticate'd request")
+		t.Fatal("Begin rejected a request carrying a seeded session cookie")
 	}
 	defer func() { _ = tx.Rollback() }()
 	if uid != testUID {

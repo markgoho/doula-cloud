@@ -117,7 +117,7 @@ func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSO
 	}
 }
 
-func newPlanServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newPlanServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/plan-templates/{planType}",

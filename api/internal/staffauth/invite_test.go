@@ -25,7 +25,7 @@ func seedOwnerMembership(t *testing.T, db *testdb.DB, identityUID string) (staff
 	return staffID, practiceID
 }
 
-func newInviteServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/invitations",

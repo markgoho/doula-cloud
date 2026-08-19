@@ -13,7 +13,7 @@ import (
 
 // newSessionServer mounts the Staff session route and seeds a live
 // session for uid, returning the token its __session cookie carries.
-func newSessionServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /staff/session", staffauth.SessionHandler(db.App))

@@ -62,7 +62,7 @@ func countingHandler(calls *int, status int) http.Handler {
 // newIdempotencyServer wires countingHandler behind
 // staffauth.Middleware(...)(idempotency.Wrap(...)), the same composition
 // main.go uses for portal-invite.
-func newIdempotencyServer(t *testing.T, db *testdb.DB, uid string, calls *int, status int) (*httptest.Server, string) {
+func newIdempotencyServer(t *testing.T, db *testdb.DB, uid string, calls *int, status int) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/widgets",

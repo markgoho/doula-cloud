@@ -126,30 +126,17 @@ func TestRoutes_CreateAndEndSession(t *testing.T) {
 	}
 }
 
-// createSession exchanges a Bearer ID token for a session cookie through
-// the real POST /api/session route, and returns the token that cookie
-// carries so later requests in the same test can present it.
-func createSession(t *testing.T, srv *httptest.Server) string {
+// sessionCookieValue returns the token the __session cookie on resp
+// carries, failing the test if the response set no such cookie. It is a
+// credential to resend, never something to assert on.
+func sessionCookieValue(t *testing.T, resp *http.Response) string {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/session", nil)
-	if err != nil {
-		t.Fatalf("build create-session request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer tok")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("create-session request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/session status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
 	for _, c := range resp.Cookies() {
 		if c.Name == session.CookieName {
 			return c.Value
 		}
 	}
-	t.Fatal("no __session cookie set by POST /api/session")
+	t.Fatalf("no %s cookie on the response", session.CookieName)
 	return ""
 }
 
@@ -226,10 +213,13 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 		t.Fatalf("decode signup response: %v", err)
 	}
 
-	// Signup runs before a session exists, so it takes a Bearer ID token;
-	// every route after it is cookie-only since #151, so the flow has to
-	// go through create-session exactly as the browser does.
-	sessionCookie := createSession(t, srv)
+	// Signup runs before a session exists, so it takes a Bearer ID token
+	// -- and hands back the session cookie (#145) that every route after
+	// it reads, since #151 left them nothing else to read. Carrying that
+	// cookie forward, rather than minting a second session, is what
+	// proves the one signup issued actually authenticates the rest of the
+	// flow.
+	sessionCookie := sessionCookieValue(t, signupResp)
 
 	sessionReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/staff/session", nil)
 	authntest.AddSessionCookie(sessionReq, sessionCookie)

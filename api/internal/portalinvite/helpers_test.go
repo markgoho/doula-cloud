@@ -20,7 +20,7 @@ var errBadToken = errors.New("invalid token")
 // newInviteServer mounts the Staff-side portal-invite route behind
 // staffauth.Middleware and seeds a live session for uid, returning the
 // token its __session cookie carries.
-func newInviteServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",

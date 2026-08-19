@@ -47,7 +47,7 @@ func seedPortalUser(t *testing.T, db *testdb.DB, identityUID, clientID string) {
 
 // newPortalServer mounts the same route main.go wires up for the
 // Client-portal Birth Plan view, behind clientauth.Middleware.
-func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/birth-plan",

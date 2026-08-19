@@ -18,7 +18,7 @@ import (
 // a live session for uid and hands back the token its __session cookie
 // carries, since #151 that cookie is the only credential the
 // middleware reads.
-func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(
@@ -243,7 +243,7 @@ func TestRequireTx(t *testing.T) {
 		_, practiceID := seedStaffWithMembership(t, db, someUID)
 		testReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/practices/"+practiceID+"/ping", nil)
 		testReq.SetPathValue("practiceId", practiceID)
-		authntest.Authenticate(t, db.App, testReq, someUID)
+		authntest.AddSessionCookie(testReq, authntest.SeedSession(t, db.App, someUID))
 		h.ServeHTTP(rec, testReq)
 
 		if !gotOK {

@@ -70,7 +70,7 @@ func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpo
 // newPortalServer mounts the same routes main.go wires up for the
 // Client-portal Contract view, behind clientauth.Middleware, backed by a
 // fresh objectstore.MemoryStore.
-func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newPortalServerWithStore(t, db, uid, objectstore.NewMemoryStore())
 }
@@ -78,7 +78,7 @@ func newPortalServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server,
 // newPortalServerWithStore mirrors newPortalServer but lets the caller
 // inject store, so a test can inspect what Sign wrote or force a Put/Get
 // failure.
-func newPortalServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (*httptest.Server, string) {
+func newPortalServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /portal/engagements/{engagementId}/contract",

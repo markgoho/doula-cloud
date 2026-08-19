@@ -12,7 +12,7 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func newRolesServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newRolesServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("PATCH /practices/{practiceId}/staff/{staffId}/roles",

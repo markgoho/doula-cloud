@@ -21,7 +21,7 @@ const (
 // behind staffauth.Middleware, and seeds a live session for uid --
 // returning the token its __session cookie carries, since #151 the
 // cookie is the only credential the middleware reads.
-func newServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/visits",

@@ -28,7 +28,7 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 	return practiceID
 }
 
-func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient billing.StripeClient) (*httptest.Server, string) {
+func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient billing.StripeClient) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/billing/purchases",

@@ -78,7 +78,7 @@ func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *str
 	return id
 }
 
-func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (*httptest.Server, string) {
+func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/payments/connect",
