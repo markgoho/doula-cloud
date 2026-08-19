@@ -17,6 +17,18 @@ import (
 	"firebase.google.com/go/v4/auth"
 )
 
+// SessionCookieName is the name of the session cookie Begin reads. It
+// must be exactly this value: since #139 the deployed app reaches the
+// BFF through a Firebase Hosting rewrite of /api/** to Cloud Run, and
+// Hosting strips every incoming Cookie header on that hop except one
+// named exactly "__session". Any other name fails only in production --
+// local `vite dev` and the Playwright preview server both proxy /api
+// without stripping anything. Defined here, rather than in package
+// session, so this package's own credential-reading seam does not
+// depend on session, which already depends on authn for Verifier and
+// BearerToken.
+const SessionCookieName = "__session"
+
 // BearerToken extracts the token from an HTTP Authorization header of the
 // form "Bearer <token>". It returns ("", false) if the header is missing,
 // malformed, or contains an empty token.
@@ -33,22 +45,20 @@ func BearerToken(r *http.Request) (string, bool) {
 	return token, true
 }
 
-// Begin extracts the Bearer token from r, verifies it with verifier, and
-// opens a transaction on db. It writes the appropriate HTTP error (401 for
-// missing or invalid token, 500 for DB connection failure) and returns
-// ok=false if any step fails. On success it returns the open *sql.Tx and
-// the verified caller's UID. Callers must ensure the returned transaction is
-// rolled back or committed.
+// Begin extracts the caller's credential from r, verifies it with
+// verifier, and opens a transaction on db. It reads the session cookie
+// first, checking revocation on every request since a session cookie is
+// long-lived; a request with no cookie falls back to the Bearer ID
+// token, which is not revocation-checked, so the app keeps working
+// while it migrates off it (removing the fallback is a separate
+// ticket). It writes the appropriate HTTP error (401 for a missing,
+// invalid, or revoked credential; 500 for DB connection failure) and
+// returns ok=false if any step fails. On success it returns the open
+// *sql.Tx and the verified caller's UID. Callers must ensure the
+// returned transaction is rolled back or committed.
 func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, string, bool) {
-	idToken, ok := BearerToken(r)
+	verified, ok := credential(w, r, verifier)
 	if !ok {
-		http.Error(w, "missing bearer token", http.StatusUnauthorized)
-		return nil, "", false
-	}
-
-	verified, err := verifier.VerifyIDToken(r.Context(), idToken)
-	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return nil, "", false
 	}
 
@@ -60,6 +70,34 @@ func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB
 	}
 
 	return tx, verified.UID, true
+}
+
+// credential resolves the caller's identity from r: the session cookie
+// if one is present, otherwise the Bearer ID token. It writes a 401 and
+// returns ok=false if neither credential is present or the one present
+// fails verification.
+func credential(w http.ResponseWriter, r *http.Request, verifier Verifier) (*VerifiedToken, bool) {
+	if cookie, err := r.Cookie(SessionCookieName); err == nil {
+		verified, err := verifier.VerifySessionCookie(r.Context(), cookie.Value)
+		if err != nil {
+			http.Error(w, "invalid session", http.StatusUnauthorized)
+			return nil, false
+		}
+		return verified, true
+	}
+
+	idToken, ok := BearerToken(r)
+	if !ok {
+		http.Error(w, "missing credential", http.StatusUnauthorized)
+		return nil, false
+	}
+
+	verified, err := verifier.VerifyIDToken(r.Context(), idToken)
+	if err != nil {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return nil, false
+	}
+	return verified, true
 }
 
 // VerifiedToken is the identity a Verifier extracts from a valid ID

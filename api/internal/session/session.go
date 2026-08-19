@@ -16,14 +16,11 @@ import (
 	"doula-cloud/api/internal/authn"
 )
 
-// CookieName is the session cookie's name. It must be exactly this
-// value: since #139 the deployed app reaches the BFF through a Firebase
-// Hosting rewrite of /api/** to Cloud Run, and Hosting strips every
-// incoming Cookie header on that hop except one named exactly
-// "__session". Any other name fails only in production -- local `vite
-// dev` and the Playwright preview server both proxy /api without
-// stripping anything.
-const CookieName = "__session"
+// CookieName is the session cookie's name -- see authn.SessionCookieName
+// for why it must be exactly this value. Aliased here so callers that
+// only need the cookie's name, not the Verifier interface or
+// BearerToken, don't have to import authn for it.
+const CookieName = authn.SessionCookieName
 
 // Lifetime is how long a newly minted session cookie is valid for. #138
 // fixes this at 12 hours for both populations; #147 renews it on use,
