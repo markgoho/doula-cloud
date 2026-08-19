@@ -5,7 +5,11 @@ import { render } from 'vitest-browser-svelte';
 import type { SignOutOutcome } from '#lib/signOut.js';
 import Layout from './+layout.svelte';
 
-vi.mock('$app/state', () => ({ page: { params: { practiceId: 'practice-1' } } }));
+// Mutable rather than a fixed literal: the layout skips the push
+// unregister on a screen with no Practice in its route, and that branch
+// needs a test that can take practiceId away.
+const pageState = vi.hoisted(() => ({ params: {} as { practiceId?: string } }));
+vi.mock('$app/state', () => ({ page: pageState }));
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -15,9 +19,14 @@ vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
 
 interface SetupOptions {
 	outcome?: SignOutOutcome;
+	routeParameters?: { practiceId?: string };
 }
 
-async function setup({ outcome = { ok: true } }: SetupOptions = {}) {
+async function setup({
+	outcome = { ok: true },
+	routeParameters = { practiceId: 'practice-1' }
+}: SetupOptions = {}) {
+	pageState.params = routeParameters;
 	goto.mockReset();
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
@@ -46,7 +55,20 @@ describe('Staff authenticated layout', () => {
 		await signOutButton.click();
 
 		expect(signOutOfSession).toHaveBeenCalledWith(
-			expect.objectContaining({ practiceId: 'practice-1' })
+			expect.objectContaining({
+				unsubscribeURL: '/api/practices/practice-1/push-subscriptions'
+			})
+		);
+		expect(goto).toHaveBeenCalledWith('/login');
+	});
+
+	it('signs out without an unregister when the route carries no Practice', async () => {
+		const { signOutButton } = await setup({ routeParameters: {} });
+
+		await signOutButton.click();
+
+		expect(signOutOfSession).toHaveBeenCalledWith(
+			expect.objectContaining({ unsubscribeURL: undefined })
 		);
 		expect(goto).toHaveBeenCalledWith('/login');
 	});

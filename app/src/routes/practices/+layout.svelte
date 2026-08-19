@@ -9,13 +9,18 @@
 
 	let { children } = $props();
 
+	function pushUnsubscribeURL(): string | undefined {
+		const practiceId = page.params.practiceId;
+		return practiceId === undefined ? undefined : `/api/practices/${practiceId}/push-subscriptions`;
+	}
+
 	async function handleSignOut(): Promise<SignOutOutcome> {
 		const outcome = await signOutOfSession({
 			// Every authenticated Staff screen sits under
 			// practices/[practiceId], so the push unregister endpoint gets its
 			// scope straight off the route; a screen without one skips the
 			// unregister rather than blocking sign-out (#152).
-			practiceId: page.params.practiceId,
+			unsubscribeURL: pushUnsubscribeURL(),
 			// apiFetch, not apiFetchWithSession: that helper's 401 handling
 			// would navigate to the login screen on a failure sign-out is
 			// supposed to report in place, and an end-session request that has

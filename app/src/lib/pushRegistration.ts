@@ -74,8 +74,9 @@ export async function registerPushSubscription(subscribeURL: string, fetcher: Fe
 /**
  * Takes this device off push for unsubscribeURL's owner, by deleting the
  * subscription the BFF holds for this browser's push endpoint. Called on
- * sign-out (#152) so the next person on a shared laptop does not see the
- * previous doula's Clients on the lock screen.
+ * sign-out -- Staff (#152) and the Client portal (#153) alike -- so the
+ * next person on a shared laptop or a borrowed phone does not see the
+ * previous person's pushes on the lock screen.
  *
  * The browser's own PushSubscription is left in place: the server row is
  * gone, so nothing can push to it, and the register endpoint upserts by

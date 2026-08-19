@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SIGN_OUT_FAILED_MESSAGE, UNREGISTER_TIMEOUT_MS, signOutOfSession } from './signOut.js';
 
+/**
+ * A push-subscriptions endpoint of the shape a caller passes in -- the
+ * Staff one here; the module treats it as opaque, so the Client portal's
+ * Engagement-scoped URL takes the same path through it.
+ */
+const UNSUBSCRIBE_URL = '/api/practices/practice-1/push-subscriptions';
+
 function response(isOk: boolean): Response {
 	return { ok: isOk } as Response;
 }
@@ -44,21 +51,18 @@ describe('signOutOfSession', () => {
 	it('unregisters this device push subscription before ending the session', async () => {
 		const { order, unregisterPush, fetcher } = stubs();
 
-		const outcome = await signOutOfSession({ practiceId: 'practice-1', fetcher, unregisterPush });
+		const outcome = await signOutOfSession({ unsubscribeURL: UNSUBSCRIBE_URL, fetcher, unregisterPush });
 
 		expect(outcome).toEqual({ ok: true });
-		expect(unregisterPush).toHaveBeenCalledWith(
-			'/api/practices/practice-1/push-subscriptions',
-			fetcher
-		);
+		expect(unregisterPush).toHaveBeenCalledWith(UNSUBSCRIBE_URL, fetcher);
 		expect(fetcher).toHaveBeenCalledWith('/api/session', { method: 'DELETE' });
 		expect(order).toEqual(['unregister', 'end']);
 	});
 
-	it('skips the unregister when the screen carries no Practice scope', async () => {
+	it('skips the unregister when the screen carries no push scope', async () => {
 		const { order, unregisterPush, fetcher } = stubs();
 
-		const outcome = await signOutOfSession({ practiceId: undefined, fetcher, unregisterPush });
+		const outcome = await signOutOfSession({ unsubscribeURL: undefined, fetcher, unregisterPush });
 
 		expect(outcome).toEqual({ ok: true });
 		expect(unregisterPush).not.toHaveBeenCalled();
@@ -68,7 +72,7 @@ describe('signOutOfSession', () => {
 	it('still ends the session when the unregister fails', async () => {
 		const { order, fetcher, unregisterPush } = stubs({ unregisterThrows: true });
 
-		const outcome = await signOutOfSession({ practiceId: 'practice-1', fetcher, unregisterPush });
+		const outcome = await signOutOfSession({ unsubscribeURL: UNSUBSCRIBE_URL, fetcher, unregisterPush });
 
 		expect(outcome).toEqual({ ok: true });
 		expect(order).toEqual(['unregister', 'end']);
@@ -78,7 +82,7 @@ describe('signOutOfSession', () => {
 		vi.useFakeTimers();
 		const { order, fetcher, unregisterPush } = stubs({ unregisterHangs: true });
 
-		const pending = signOutOfSession({ practiceId: 'practice-1', fetcher, unregisterPush });
+		const pending = signOutOfSession({ unsubscribeURL: UNSUBSCRIBE_URL, fetcher, unregisterPush });
 		await vi.advanceTimersByTimeAsync(UNREGISTER_TIMEOUT_MS);
 
 		await expect(pending).resolves.toEqual({ ok: true });
@@ -88,7 +92,7 @@ describe('signOutOfSession', () => {
 	it('reports a failure the BFF refuses rather than reporting success', async () => {
 		const { fetcher, unregisterPush } = stubs({ endSessionOk: false });
 
-		const outcome = await signOutOfSession({ practiceId: 'practice-1', fetcher, unregisterPush });
+		const outcome = await signOutOfSession({ unsubscribeURL: UNSUBSCRIBE_URL, fetcher, unregisterPush });
 
 		expect(outcome).toEqual({ ok: false, message: SIGN_OUT_FAILED_MESSAGE });
 	});
@@ -96,7 +100,7 @@ describe('signOutOfSession', () => {
 	it('reports a failure the network never delivered rather than reporting success', async () => {
 		const { fetcher, unregisterPush } = stubs({ endSessionThrows: true });
 
-		const outcome = await signOutOfSession({ practiceId: 'practice-1', fetcher, unregisterPush });
+		const outcome = await signOutOfSession({ unsubscribeURL: UNSUBSCRIBE_URL, fetcher, unregisterPush });
 
 		expect(outcome).toEqual({ ok: false, message: SIGN_OUT_FAILED_MESSAGE });
 	});

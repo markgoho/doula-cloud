@@ -17,20 +17,23 @@ export type SignOutOutcome = { ok: true } | { ok: false; message: string };
 
 /**
  * How long the push unregister gets before sign-out goes ahead without
- * it. Short on purpose: someone standing at a shared laptop is waiting on
- * this, and an unregister that has not landed by now is not going to.
+ * it. Short on purpose: someone standing at a shared laptop or a borrowed
+ * phone is waiting on this, and an unregister that has not landed by now
+ * is not going to.
  */
 export const UNREGISTER_TIMEOUT_MS = 3000;
 
 export interface SignOutRequest {
 	/**
-	 * The Practice the current screen is scoped to, which the push
-	 * unregister endpoint is keyed by. Every authenticated Staff screen
-	 * sits under practices/[practiceId], so this is normally set; where a
-	 * screen has no such scope the unregister is skipped rather than
-	 * blocking sign-out.
+	 * Where to take this device off push -- the push-subscriptions
+	 * endpoint scoped to whatever the current screen belongs to: a
+	 * Practice for Staff (#152), an Engagement for a Client (#153). Built
+	 * by the caller, the same way the register call sites build their own
+	 * subscribe URL, so this module stays out of the routing table.
+	 * Undefined where a screen carries no such scope, which skips the
+	 * unregister rather than blocking sign-out.
 	 */
-	practiceId: string | undefined;
+	unsubscribeURL: string | undefined;
 	/**
 	 * Sends the request with the browser's session cookie.
 	 */
@@ -46,32 +49,30 @@ export interface SignOutRequest {
  * Ends this browser's session, after taking this device off push.
  *
  * The order is mandatory, not tidiness: the unregister endpoint
- * authenticates by the same session cookie (staffauth.Middleware), which
- * ending the session clears -- run it second and it 401s, leaving a
- * colleague who picks the laptop up later seeing this doula's Clients on
- * the lock screen. The unregister is still best-effort: it must never
- * keep someone signed in.
+ * authenticates by the same session cookie (staffauth.Middleware for
+ * Staff, clientauth.Middleware for the Client portal), which ending the
+ * session clears -- run it second and it 401s, leaving whoever picks the
+ * device up later reading the last person's pushes on the lock screen.
+ * The unregister is still best-effort: it must never keep someone signed
+ * in.
  *
  * Only this browser's session ends. The same person's sessions on other
- * devices are separate rows and no refresh token is revoked, so her own
+ * devices are separate rows and no refresh token is revoked, so their own
  * phone stays signed in; cutting every device off is a separate
  * administrative action.
  */
 export async function signOutOfSession({
-	practiceId,
+	unsubscribeURL,
 	fetcher,
 	unregisterPush
 }: SignOutRequest): Promise<SignOutOutcome> {
-	if (practiceId !== undefined) {
+	if (unsubscribeURL !== undefined) {
 		// Bounded, not merely guarded: a request that hangs -- the "no
 		// network, BFF down" case -- never rejects, so no catch rescues it,
 		// and this step runs before the end-session request. Left unbounded
 		// it would strand someone on a live session behind a disabled button
 		// with nothing to read.
-		await bestEffort(
-			() => unregisterPush(`/api/practices/${practiceId}/push-subscriptions`, fetcher),
-			UNREGISTER_TIMEOUT_MS
-		);
+		await bestEffort(() => unregisterPush(unsubscribeURL, fetcher), UNREGISTER_TIMEOUT_MS);
 	}
 
 	try {
