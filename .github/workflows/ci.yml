@@ -222,9 +222,25 @@ jobs:
       # On a cache hit the headless shell binary is already restored, but
       # the OS-level libraries it links against live outside the cached
       # path and still need installing on every fresh runner.
+      #
+      # Each attempt is bounded by `timeout`: confirmed on trunk that
+      # apt-get can hang indefinitely against an unresponsive mirror
+      # (azure.archive.ubuntu.com stalled for 17+ minutes and ate the
+      # whole 20-minute job budget) rather than failing fast the way the
+      # curl/npm flakes the retry loops elsewhere in this file guard
+      # against -- a retry loop alone doesn't help a hang, only a bounded
+      # attempt does.
       - name: Install Playwright OS dependencies only
         working-directory: app
-        run: bunx playwright install-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 180 bunx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "OS dependency install attempt ${attempt} failed; retrying in 10s..."
+            sleep 10
+          done
+          exit 1
         if: steps.playwright-cache.outputs.cache-hit == 'true'
 
       - name: Unit test with coverage gate
