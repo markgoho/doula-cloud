@@ -208,10 +208,11 @@ func TestBegin_SessionCookie_RenewsPastHalfLife(t *testing.T) {
 	if renewed.Path != "/" || !renewed.HttpOnly || !renewed.Secure || renewed.SameSite != http.SameSiteLaxMode {
 		t.Errorf("cookie attributes = %+v, want Path=/, HttpOnly, Secure, SameSite=Lax", renewed)
 	}
-	// AC: renewal extends the session rather than replacing it, so the
-	// browser keeps the token it already holds.
-	if renewed.Value != token {
-		t.Error("renewal changed the cookie's value, want the same token extended")
+	// AC: renewal extends the one session rather than minting a second
+	// one. Asserted on the store, not on the cookie's value -- a re-mint
+	// would leave the original row live alongside a new one.
+	if got := authntest.CountFor(t, db.App, testUID); got != 1 {
+		t.Errorf("session rows for %s = %d, want 1 -- renewal minted a new session instead of extending", testUID, got)
 	}
 }
 
