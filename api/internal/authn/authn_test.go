@@ -1,6 +1,7 @@
 package authn_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -439,4 +440,47 @@ func TestBegin_SessionCookie_RenewalFailureStillServesTheRequest(t *testing.T) {
 	if got := rec.Result().Cookies(); len(got) != 0 {
 		t.Fatalf("Set-Cookie = %v, want none (renewal failed, so nothing to promise)", got)
 	}
+}
+
+// TestBegin_ConcurrentRenewalsDoNotBlock pins the one hazard in renewing
+// on the pool rather than the request's transaction: the transaction has
+// already SELECTed the session row and stays open for the whole handler,
+// while renewal UPDATEs that same table on a second connection. A plain
+// SELECT takes no row lock, so nothing should wait -- but a wait here
+// would be a hung request in production, not a failing assertion, so the
+// second request runs under a deadline that turns a block into a
+// failure.
+func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
+	db := testdb.New(t)
+	stale := time.Now().Add(-7 * time.Hour)
+	first := authntest.SeedSessionAt(t, db.App, "first-browser", stale)
+	second := authntest.SeedSessionAt(t, db.App, "second-browser", stale)
+
+	firstTx, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), authntest.Verifier{}, db.App)
+	if !ok {
+		t.Fatal("first request: expected ok=true, got false")
+	}
+	// Deliberately left open: this is the state a real handler is in for
+	// the whole of its work.
+	defer func() { _ = firstTx.Rollback() }()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	rec := httptest.NewRecorder()
+
+	secondTx, _, ok := authn.Begin(rec, requestWithSession(ctx, second), authntest.Verifier{}, db.App)
+	if !ok {
+		t.Fatalf("second request blocked or failed behind the first request's open transaction: status %d, body %q", rec.Code, rec.Body.String())
+	}
+	defer func() { _ = secondTx.Rollback() }()
+
+	findSessionCookie(t, rec.Result().Cookies())
+}
+
+// requestWithSession builds a request carrying token as its __session
+// cookie, on ctx.
+func requestWithSession(ctx context.Context, token string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+	addSessionCookie(req, token)
+	return req
 }
