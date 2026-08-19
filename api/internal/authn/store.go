@@ -72,6 +72,18 @@ func EndSession(ctx context.Context, q Querier, token string) error {
 	return nil
 }
 
+// EndAllSessions deletes every session row identityUID holds -- every
+// device that person is signed in from, not just one token. This is the
+// administrative "end their sessions everywhere" action (#154); ordinary
+// sign-out is EndSession, by token, above.
+func EndAllSessions(ctx context.Context, q Querier, identityUID string) error {
+	if _, err := q.ExecContext(ctx, `DELETE FROM sessions WHERE identity_uid = $1`, identityUID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("authn: delete all sessions: %w", err)
+	}
+	return nil
+}
+
 // lookupSession resolves token to the identity holding it and that
 // session's expiry, or errNoSession if no row is live at now. Expired
 // rows are filtered here rather than deleted, because this read runs

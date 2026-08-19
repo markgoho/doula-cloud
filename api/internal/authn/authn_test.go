@@ -413,6 +413,40 @@ func TestEndSession_UnknownTokenSucceeds(t *testing.T) {
 	}
 }
 
+// TestEndAllSessions_RemovesEveryDeviceButOnlyThatPerson covers #154's
+// core behavior: every session row a person holds is gone -- laptop and
+// phone alike -- while a different person's session, seeded alongside
+// theirs, is untouched.
+func TestEndAllSessions_RemovesEveryDeviceButOnlyThatPerson(t *testing.T) {
+	db := testdb.New(t)
+	authntest.SeedSession(t, db.App, testUID)
+	authntest.SeedSession(t, db.App, testUID)
+	const otherUID = "someone-else"
+	authntest.SeedSession(t, db.App, otherUID)
+
+	if err := authn.EndAllSessions(t.Context(), db.App, testUID); err != nil {
+		t.Fatalf("EndAllSessions: %v", err)
+	}
+
+	if got := authntest.CountFor(t, db.App, testUID); got != 0 {
+		t.Fatalf("session rows for %q = %d, want 0", testUID, got)
+	}
+	if got := authntest.CountFor(t, db.App, otherUID); got != 1 {
+		t.Fatalf("session rows for %q = %d, want 1 (untouched)", otherUID, got)
+	}
+}
+
+// TestEndAllSessions_UnknownIdentitySucceeds mirrors EndSession's
+// idempotence: ending sessions for someone with no live session is not
+// an error.
+func TestEndAllSessions_UnknownIdentitySucceeds(t *testing.T) {
+	db := testdb.New(t)
+
+	if err := authn.EndAllSessions(t.Context(), db.App, "never-signed-in"); err != nil {
+		t.Fatalf("EndAllSessions on an identity with no sessions: %v", err)
+	}
+}
+
 // TestMintSession_SweepFailure and TestMintSession_InsertFailure cover
 // MintSession's two write failures. Neither can be provoked with a fake
 // -- minting is a database write since ADR-0004 -- so each breaks the

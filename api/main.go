@@ -145,6 +145,10 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		staffauth.Middleware(db)(idempotency.Wrap(staffauth.InviteHandler())))
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
 		staffauth.Middleware(db)(staffauth.AssignRolesHandler()))
+	mux.Handle("GET /api/practices/{practiceId}/staff",
+		staffauth.Middleware(db)(staffauth.ListStaffHandler()))
+	mux.Handle("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
+		staffauth.Middleware(db)(staffauth.EndSessionsHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/billing",
 		staffauth.Middleware(db)(billing.GetBalanceHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/billing/purchases",
