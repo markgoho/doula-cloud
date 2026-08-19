@@ -11,7 +11,8 @@ export const atomPages = [
 
 export const moleculePages = [
 	{ name: 'Labeled field', slug: 'labeled-field' },
-	{ name: 'Radio group', slug: 'radio-group' }
+	{ name: 'Radio group', slug: 'radio-group' },
+	{ name: 'Sign out button', slug: 'sign-out-button' }
 ] as const;
 
 export const organismPages = [

@@ -70,3 +70,37 @@ export async function registerPushSubscription(subscribeURL: string, fetcher: Fe
 	}
 }
 /* v8 ignore stop */
+
+/**
+ * Takes this device off push for unsubscribeURL's owner, by deleting the
+ * subscription the BFF holds for this browser's push endpoint. Called on
+ * sign-out (#152) so the next person on a shared laptop does not see the
+ * previous doula's Clients on the lock screen.
+ *
+ * The browser's own PushSubscription is left in place: the server row is
+ * gone, so nothing can push to it, and the register endpoint upserts by
+ * endpoint, so the next person to sign in on this device takes the same
+ * endpoint over. Best-effort and never fatal, the same as its register
+ * sibling -- a device that cannot be unregistered must not keep someone
+ * signed in.
+ */
+/* v8 ignore start -- requires the Service Worker/PushManager browser APIs, exercised by Playwright e2e not Vitest */
+export async function unregisterPushSubscription(
+	unsubscribeURL: string,
+	fetcher: Fetcher
+): Promise<void> {
+	try {
+		if (!('serviceWorker' in navigator) || !('PushManager' in globalThis)) return;
+
+		const registration = await navigator.serviceWorker.ready;
+		const subscription = await registration.pushManager.getSubscription();
+		if (!subscription) return;
+
+		await fetcher(`${unsubscribeURL}?endpoint=${encodeURIComponent(subscription.endpoint)}`, {
+			method: 'DELETE'
+		});
+	} catch {
+		// Best-effort unregistration -- see the doc comment above.
+	}
+}
+/* v8 ignore stop */
