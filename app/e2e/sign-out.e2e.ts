@@ -107,3 +107,49 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 	await expect(staleTab).toHaveURL(/\/login$/);
 	await expect(staleTab.getByRole('alert')).toHaveCount(0);
 });
+
+// #155: the other half of the two-tab guarantee -- a tab that never signs
+// itself out still loses access once the *first* tab has ended the shared
+// session, because both tabs carry the same __session cookie.
+test('a second tab loses access once the first tab signs out, without itself signing out', async ({
+	page,
+	request
+}) => {
+	const email = `signout-second-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const password = 'password123';
+
+	const signUp = await request.post(
+		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
+		{ data: { email, password, returnSecureToken: true } }
+	);
+	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
+	const { idToken } = await signUp.json();
+
+	const signup = await request.post(`${API_URL}/api/staff/signup`, {
+		headers: { Authorization: `Bearer ${idToken}` },
+		data: { practiceName: 'Elm Street Doulas', staffName: 'Robin Owner', staffEmail: email }
+	});
+	const signupBody = await signup.text();
+	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
+	const { practiceId } = JSON.parse(signupBody);
+
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(email);
+	await page.getByLabel('Password').fill(password);
+	await page.getByRole('button', { name: 'Log in' }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+
+	const secondTab = await page.context().newPage();
+	await secondTab.goto(`/practices/${practiceId}`);
+	await expect(secondTab.locator('h1')).toHaveText('Welcome to Elm Street Doulas');
+
+	await page.getByRole('button', { name: 'Sign out' }).click();
+	await expect(page).toHaveURL(/\/login$/);
+
+	// No click, no reload of the tab's own doing -- a fresh navigation is
+	// the case that matters: no tab is left holding live access once the
+	// shared cookie is gone.
+	await secondTab.goto(`/practices/${practiceId}`);
+	await expect(secondTab).toHaveURL(/\/login\?sessionEnded=true$/);
+	await expect(secondTab.getByRole('heading', { name: 'Log in' })).toBeVisible();
+});

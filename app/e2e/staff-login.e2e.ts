@@ -76,6 +76,12 @@ test('Staff login lands on their practice-scoped URL', async ({ page, request })
 	);
 	expect(authRecordCount, 'Identity Platform credential left behind in IndexedDB after Staff sign-in').toBe(0);
 
+	// HttpOnly means no script on the page -- including one smuggled in by
+	// an XSS bug -- can read the session credential this way. Name only,
+	// never a value: see session-cookie.e2e.ts for the attribute checks.
+	const readableCookies = await page.evaluate(() => document.cookie);
+	expect(readableCookies, 'session cookie is readable from document.cookie').not.toContain('__session');
+
 	// Closing the tab and returning within the session lifetime leaves the
 	// person signed in: the __session cookie lives on the browser context,
 	// not the tab, so a fresh page navigating straight to the practice URL
