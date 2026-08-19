@@ -1,3 +1,8 @@
+import { goto } from '$app/navigation';
+import { resolve } from '$app/paths';
+import { signOut } from 'firebase/auth';
+import { getFirebaseAuth } from './firebase.js';
+
 /**
 The Go BFF's origin. Set by Playwright/dev; a real deploy serves both from the same origin.
 */
@@ -17,6 +22,29 @@ export async function apiFetch(
 		...init,
 		headers: { ...init.headers, Authorization: `Bearer ${idToken}` }
 	});
+}
+
+/**
+Fetches an API path with the browser's session cookie, instead of a
+caller-supplied ID token -- the expand half of #138's migration off
+hand-fetched ID tokens. On a 401 (no session, expired, or revoked) it
+clears the signed-in Identity Platform user, if any, and sends the
+browser to the login screen for whichever population the current route
+belongs to, carrying `sessionEnded=true` so that screen can read this as
+"your session ended" rather than an ordinary visit.
+*/
+export async function apiFetchWithSession(path: string, init: RequestInit = {}): Promise<Response> {
+	const response = await fetch(apiBaseURL() + path, { ...init, credentials: 'include' });
+	if (response.status === 401) {
+		await handleExpiredSession();
+	}
+	return response;
+}
+
+async function handleExpiredSession(): Promise<void> {
+	await signOut(getFirebaseAuth());
+	const loginPath = resolve(location.pathname.startsWith('/portal') ? '/portal/login' : '/login');
+	await goto(`${loginPath}?sessionEnded=true`);
 }
 
 /**
