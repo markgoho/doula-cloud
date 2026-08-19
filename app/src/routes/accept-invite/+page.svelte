@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -44,9 +44,12 @@
 					: await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
 			const idToken = await credential.user.getIdToken();
 
-			const acceptResponse = await apiFetch('/api/staff/accept-invite', idToken, {
+			// A plain, one-off fetch: this token makes one trip and is never
+			// carried around the way apiFetchWithSession's cookie is (#150
+			// deleted the shared ID-token helper).
+			const acceptResponse = await fetch(`${apiBaseURL()}/api/staff/accept-invite`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
 				body: JSON.stringify({ inviteToken })
 			});
 			if (!acceptResponse.ok) {

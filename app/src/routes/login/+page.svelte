@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -29,8 +29,13 @@
 			// Exchange the Identity Platform ID token for the session cookie
 			// before signing out of the JS SDK -- the Staff session probe
 			// right below this authenticates by cookie, so the exchange must
-			// land first (#149).
-			const exchangeResponse = await apiFetch('/api/session', idToken, { method: 'POST' });
+			// land first (#149). A plain, one-off fetch: this token makes one
+			// trip and is never carried around the way apiFetchWithSession's
+			// cookie is (#150 deleted the shared ID-token helper).
+			const exchangeResponse = await fetch(`${apiBaseURL()}/api/session`, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${idToken}` }
+			});
 			if (!exchangeResponse.ok) {
 				error = 'Login failed';
 				await signOut(getFirebaseAuth());

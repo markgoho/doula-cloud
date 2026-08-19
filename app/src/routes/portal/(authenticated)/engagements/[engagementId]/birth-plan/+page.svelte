@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClientBirthPlan, type Instance } from '#lib/planInstance.js';
 	import BirthPlanView from '#lib/BirthPlanView.svelte';
 
@@ -12,18 +10,8 @@
 	let error = $state('');
 
 	onMount(async () => {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			await goto(resolve('/portal/login'));
-			return;
-		}
-
-		const idToken = await user.getIdToken();
 		try {
-			instance = await loadClientBirthPlan(
-				(path) => apiFetch(path, idToken),
-				page.params.engagementId!
-			);
+			instance = await loadClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Birth Plan';
 		}

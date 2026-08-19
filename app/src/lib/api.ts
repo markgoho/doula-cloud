@@ -11,23 +11,12 @@ export function apiBaseURL(): string {
 }
 
 /**
-Fetches an API path with the caller's Identity Platform ID token attached.
-*/
-export async function apiFetch(
-	path: string,
-	idToken: string,
-	init: RequestInit = {}
-): Promise<Response> {
-	return fetch(apiBaseURL() + path, {
-		...init,
-		headers: { ...init.headers, Authorization: `Bearer ${idToken}` }
-	});
-}
-
-/**
-Fetches an API path with the browser's session cookie, instead of a
-caller-supplied ID token -- the expand half of #138's migration off
-hand-fetched ID tokens. On a 401 (no session, expired, or revoked) it
+Fetches an API path with the browser's session cookie. Every feature
+call site uses this -- the sign-in/signup/accept-invite bootstrap
+exchanges are the only places left that send an ID token, and they do
+so with a plain `fetch` of their own, since that token only ever makes
+one trip (to mint the cookie) rather than being a credential feature
+code carries around. On a 401 (no session, expired, or revoked) this
 clears the signed-in Identity Platform user, if any, and sends the
 browser to the login screen for whichever population the current route
 belongs to, carrying `sessionEnded=true` so that screen can read this as

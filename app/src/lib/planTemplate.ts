@@ -46,7 +46,7 @@ export interface Template {
 /** A minimal fetch-shaped function, injected rather than imported, so
  * load/save can be unit-tested without mocking the global fetch or
  * SvelteKit's `$app` modules -- the route wires this to `#lib/api.js`'s
- * `apiFetch` bound to the caller's ID token. */
+ * `apiFetchWithSession`. */
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function templatePath(practiceId: string, planType: string): string {

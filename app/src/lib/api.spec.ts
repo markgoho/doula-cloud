@@ -9,29 +9,11 @@ vi.mock('firebase/auth', () => ({ signOut }));
 const getFirebaseAuth = vi.fn(() => 'the-auth-instance');
 vi.mock('./firebase.js', () => ({ getFirebaseAuth }));
 
-const { apiBaseURL, apiErrorMessage, apiFetch, apiFetchWithSession } = await import('./api');
+const { apiBaseURL, apiErrorMessage, apiFetchWithSession } = await import('./api');
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
 		expect(apiBaseURL()).toBe('');
-	});
-});
-
-describe('apiFetch', () => {
-	it('attaches the bearer token and merges caller headers', async () => {
-		const fetchMock = vi.fn(async () => new Response(undefined, { status: 200 }));
-		vi.stubGlobal('fetch', fetchMock);
-
-		await apiFetch('/api/staff/session', 'tok-123', { headers: { 'X-Test': 'yes' } });
-
-		expect(fetchMock).toHaveBeenCalledWith(
-			'/api/staff/session',
-			expect.objectContaining({
-				headers: { 'X-Test': 'yes', Authorization: 'Bearer tok-123' }
-			})
-		);
-
-		vi.unstubAllGlobals();
 	});
 });
 

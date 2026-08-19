@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { signInWithEmailAndPassword } from 'firebase/auth';
+	import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -26,7 +26,24 @@
 			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
 			const idToken = await credential.user.getIdToken();
 
-			const response = await apiFetch('/api/portal/session', idToken);
+			// Exchange the Identity Platform ID token for the session cookie
+			// before signing out of the JS SDK -- the portal session probe
+			// right below this authenticates by cookie, so the exchange must
+			// land first (#150). A plain, one-off fetch: this token makes one
+			// trip and is never carried around the way apiFetchWithSession's
+			// cookie is (#150 deleted the shared ID-token helper).
+			const exchangeResponse = await fetch(`${apiBaseURL()}/api/session`, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${idToken}` }
+			});
+			if (!exchangeResponse.ok) {
+				error = 'Login failed';
+				await signOut(getFirebaseAuth());
+				return;
+			}
+			await signOut(getFirebaseAuth());
+
+			const response = await apiFetchWithSession('/api/portal/session');
 			if (!response.ok) {
 				error = await response.text();
 				return;
@@ -41,8 +58,11 @@
 			} else {
 				picker = landing.engagements;
 			}
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Login failed';
+		} catch {
+			// A clear, non-technical failure message -- not whatever Identity
+			// Platform's SDK throws (e.g. "Firebase: Error
+			// (auth/invalid-credential).").
+			error = 'Login failed';
 		} finally {
 			isSubmitting = false;
 		}

@@ -76,8 +76,8 @@
 	let isSendingMessage = $state(false);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
-	// apiFetch since the attachment endpoint requires the caller's auth
-	// header, which a plain <img src> can't send.
+	// apiFetchWithSession since the attachment endpoint requires the
+	// caller's session cookie, which a plain <img src> can't send.
 	let attachmentPreviewURLs = $state<Record<string, string>>({});
 	let unsubscribePushMessages: () => void = () => {};
 

@@ -71,26 +71,6 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	// test switches to the Client-portal session below.
 	await expect(saveButton).toBeEnabled();
 
-	// Staff's own login now leaves a __session cookie in the browser
-	// (#149), and the Client-portal login below still authenticates by
-	// Bearer token only (#150 migrates it next) -- authn.Begin prefers a
-	// present cookie over a Bearer token, so without clearing it here the
-	// Client-portal probe would resolve to the Staff identity instead and
-	// 404 with "no matching client account". This is a real, if narrow,
-	// production risk for the same browser mixing both populations during
-	// the window between #149 and #150 shipping (also true, symmetrically,
-	// within one population when two different people share a browser and
-	// device before signing out -- see docs/adr/0004-bff-owned-sessions.md,
-	// which is why a proper fix belongs to the session-storage redesign
-	// there rather than a frontend patch here: `credentials: 'omit'` on
-	// apiFetch looks like the obvious fix but also blocks the browser from
-	// storing the Set-Cookie these same bootstrap responses send back,
-	// confirmed by trying it -- every Staff login/signup/accept-invite
-	// flow broke). #150 removes this specific case, since Client-portal
-	// login will then mint its own cookie and overwrite this one, the same
-	// way any fresh sign-in supersedes a stale session.
-	await page.context().clearCookies();
-
 	// Client side: a separate Identity Platform account, linked to the same
 	// Client via client_portal_users, viewing the read-only Birth Plan.
 	const clientSignUp = await request.post(

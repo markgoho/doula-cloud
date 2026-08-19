@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { registerPushSubscription } from '#lib/pushRegistration.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 
@@ -39,8 +37,8 @@
 	let isSendingMessage = $state(false);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
-	// apiFetch since the attachment endpoint requires the caller's auth
-	// header, which a plain <img src> can't send.
+	// apiFetchWithSession since the attachment endpoint requires the
+	// caller's session cookie, which a plain <img src> can't send.
 	let attachmentPreviewURLs = $state<Record<string, string>>({});
 	let unsubscribePushMessages: () => void = () => {};
 
@@ -55,14 +53,14 @@
 		return `/api/portal/engagements/${page.params.engagementId}/messages`;
 	}
 
-	async function loadAttachmentPreviews(idToken: string, items: Message[]) {
+	async function loadAttachmentPreviews(items: Message[]) {
 		await Promise.all(
 			items
 				.filter(
 					(m) => m.attachmentContentType?.startsWith('image/') && !Object.hasOwn(attachmentPreviewURLs, m.messageId)
 				)
 				.map(async (m) => {
-					const response = await apiFetch(`${messagesURL()}/${m.messageId}/attachment`, idToken);
+					const response = await apiFetchWithSession(`${messagesURL()}/${m.messageId}/attachment`);
 					if (!response.ok) return;
 					const blob = await response.blob();
 					attachmentPreviewURLs[m.messageId] = URL.createObjectURL(blob);
@@ -70,8 +68,8 @@
 		);
 	}
 
-	async function loadMessages(idToken: string) {
-		const response = await apiFetch(messagesURL(), idToken);
+	async function loadMessages() {
+		const response = await apiFetchWithSession(messagesURL());
 		if (!response.ok) {
 			messagesError = await response.text();
 			return;
@@ -80,32 +78,28 @@
 		messages = data.items.toReversed();
 		messagesCursor = data.nextCursor ?? '';
 		isMessagesHasMore = data.hasMore;
-		await loadAttachmentPreviews(idToken, messages);
+		await loadAttachmentPreviews(messages);
 	}
 
 	onMount(async () => {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			await goto(resolve('/portal/login'));
-			return;
-		}
-
-		const idToken = await user.getIdToken();
-		const response = await apiFetch(`/api/portal/engagements/${page.params.engagementId}`, idToken);
+		const response = await apiFetchWithSession(`/api/portal/engagements/${page.params.engagementId}`);
 		if (!response.ok) {
 			error = await response.text();
 			return;
 		}
 
 		detail = await response.json();
-		await loadMessages(idToken);
+		await loadMessages();
 
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
-		// thread (see pushRegistration.ts's doc comment).
+		// thread (see pushRegistration.ts's doc comment) -- a plain
+		// credentialed fetch, not apiFetchWithSession, since that helper's
+		// own 401 handling would sign the person out and redirect on a
+		// failure this call is supposed to swallow silently.
 		void registerPushSubscription(
 			`/api/portal/engagements/${page.params.engagementId}/push-subscriptions`,
-			(path, init) => apiFetch(path, idToken, init)
+			(path, init) => fetch(apiBaseURL() + path, { ...init, credentials: 'include' })
 		);
 
 		// #61: an open service worker push message ("a new Message arrived
@@ -113,11 +107,7 @@
 		// PUSH_MESSAGE_TYPE doc comment for why the service worker can't
 		// just fetch this itself.
 		unsubscribePushMessages = subscribeToThreadPushMessages(page.params.engagementId!, () => {
-			void (async () => {
-				const current = getFirebaseAuth().currentUser;
-				if (!current) return;
-				await loadMessages(await current.getIdToken());
-			})();
+			void loadMessages();
 		});
 	});
 
@@ -125,17 +115,7 @@
 		messagesError = '';
 		isLoadingOlderMessages = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				messagesError = 'You must be logged in to load messages';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
-			const response = await apiFetch(
-				`${messagesURL()}?cursor=${encodeURIComponent(messagesCursor)}`,
-				idToken
-			);
+			const response = await apiFetchWithSession(`${messagesURL()}?cursor=${encodeURIComponent(messagesCursor)}`);
 			if (!response.ok) {
 				messagesError = await response.text();
 				return;
@@ -145,7 +125,7 @@
 			messages = [...data.items.toReversed(), ...messages];
 			messagesCursor = data.nextCursor ?? '';
 			isMessagesHasMore = data.hasMore;
-			await loadAttachmentPreviews(idToken, messages);
+			await loadAttachmentPreviews(messages);
 		} catch (error_) {
 			messagesError = error_ instanceof Error ? error_.message : 'Failed to load older messages';
 		} finally {
@@ -158,21 +138,14 @@
 		messagesError = '';
 		isSendingMessage = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				messagesError = 'You must be logged in to send a message';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
 			let response: Response;
 			if (newMessageAttachment) {
 				const form = new FormData();
 				form.set('body', newMessageBody);
 				form.set('attachment', newMessageAttachment);
-				response = await apiFetch(messagesURL(), idToken, { method: 'POST', body: form });
+				response = await apiFetchWithSession(messagesURL(), { method: 'POST', body: form });
 			} else {
-				response = await apiFetch(messagesURL(), idToken, {
+				response = await apiFetchWithSession(messagesURL(), {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ body: newMessageBody })
@@ -187,7 +160,7 @@
 			messages = [...messages, created];
 			newMessageBody = '';
 			newMessageAttachment = undefined;
-			await loadAttachmentPreviews(idToken, [created]);
+			await loadAttachmentPreviews([created]);
 		} catch (error_) {
 			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
 		} finally {
@@ -196,14 +169,7 @@
 	}
 
 	async function handleDownloadAttachment(messageId: string, filename: string) {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			messagesError = 'You must be logged in to download an attachment';
-			return;
-		}
-		const idToken = await user.getIdToken();
-
-		const response = await apiFetch(`${messagesURL()}/${messageId}/attachment`, idToken);
+		const response = await apiFetchWithSession(`${messagesURL()}/${messageId}/attachment`);
 		if (!response.ok) {
 			messagesError = await response.text();
 			return;

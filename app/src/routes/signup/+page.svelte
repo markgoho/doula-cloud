@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiBaseURL } from '#lib/api.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -24,9 +24,12 @@
 			const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
 			const idToken = await credential.user.getIdToken();
 
-			const response = await apiFetch('/api/staff/signup', idToken, {
+			// A plain, one-off fetch: this token makes one trip and is never
+			// carried around the way apiFetchWithSession's cookie is (#150
+			// deleted the shared ID-token helper).
+			const response = await fetch(`${apiBaseURL()}/api/staff/signup`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
 				body: JSON.stringify({ practiceName, staffName, staffEmail: email })
 			});
 			if (!response.ok) {

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+	import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiErrorMessage, apiFetch } from '#lib/api.js';
+	import { apiBaseURL, apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -44,17 +44,26 @@
 					: await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
 			const idToken = await credential.user.getIdToken();
 
-			const acceptResponse = await apiFetch('/api/portal/accept-invite', idToken, {
+			// A plain, one-off fetch: this token makes one trip and is never
+			// carried around the way apiFetchWithSession's cookie is (#150
+			// deleted the shared ID-token helper).
+			const acceptResponse = await fetch(`${apiBaseURL()}/api/portal/accept-invite`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
 				body: JSON.stringify({ inviteToken })
 			});
 			if (!acceptResponse.ok) {
 				error = await apiErrorMessage(acceptResponse);
+				await signOut(getFirebaseAuth());
 				return;
 			}
 
-			const sessionResponse = await apiFetch('/api/portal/session', idToken);
+			// AcceptInviteHandler already set the session cookie on its own
+			// response (#145) -- no separate exchange needed, just drop the
+			// JS SDK credential before the session probe reads the cookie.
+			await signOut(getFirebaseAuth());
+
+			const sessionResponse = await apiFetchWithSession('/api/portal/session');
 			if (!sessionResponse.ok) {
 				error = await apiErrorMessage(sessionResponse);
 				return;
@@ -68,8 +77,12 @@
 			} else {
 				picker = landing.engagements;
 			}
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Accept invite failed';
+		} catch {
+			// A clear, non-technical failure message -- not whatever Identity
+			// Platform's SDK throws (e.g. "Firebase: Error
+			// (auth/invalid-credential).") -- covers both account-creation
+			// and sign-in errors, since this form handles both modes.
+			error = 'Accept invite failed';
 		} finally {
 			isSubmitting = false;
 		}

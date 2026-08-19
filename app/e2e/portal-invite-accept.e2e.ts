@@ -60,4 +60,40 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 	await expect(page.locator('h1')).toHaveText('Welcome to Riverside Doulas');
+
+	// #150: AcceptInviteHandler sets the session cookie on its own
+	// response, and the app signs out of the Firebase JS SDK locally
+	// either way -- see staff-login.e2e.ts's IndexedDB assertion for why
+	// this is how a lingering credential would show up.
+	const authRecordCount = await page.evaluate(
+		() =>
+			new Promise<number>((resolve) => {
+				const openRequest = indexedDB.open('firebaseLocalStorageDb');
+				openRequest.addEventListener('error', () => resolve(0));
+				openRequest.addEventListener('success', () => {
+					const database = openRequest.result;
+					if (!database.objectStoreNames.contains('firebaseLocalStorage')) {
+						database.close();
+						resolve(0);
+						return;
+					}
+					const countRequest = database
+						.transaction('firebaseLocalStorage', 'readonly')
+						.objectStore('firebaseLocalStorage')
+						.count();
+					countRequest.addEventListener('success', () => {
+						database.close();
+						resolve(countRequest.result);
+					});
+					countRequest.addEventListener('error', () => {
+						database.close();
+						resolve(0);
+					});
+				});
+			})
+	);
+	expect(
+		authRecordCount,
+		'Identity Platform credential left behind in IndexedDB after portal invite acceptance'
+	).toBe(0);
 });
