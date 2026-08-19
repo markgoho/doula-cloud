@@ -9,10 +9,8 @@
 package session
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -60,7 +58,7 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
-		cookie, err := BuildCookie(r.Context(), db, verified.UID)
+		cookie, err := authn.MintSession(r.Context(), db, verified.UID, time.Now())
 		if err != nil {
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
@@ -68,23 +66,6 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		http.SetCookie(w, cookie)
 		writeStatus(w)
 	})
-}
-
-// BuildCookie creates a session for identityUID on q and returns the
-// cookie carrying it, without writing it to a response. Taking a
-// Querier rather than the pool is what lets the bootstrap endpoints
-// (#145: Staff signup, Staff invitation acceptance, Client portal
-// invitation acceptance) pass their own request-scoped transaction:
-// each creates the session before committing, so a failure rolls the
-// transaction back instead of leaving committed rows behind a response
-// that reports failure. A newly created or accepted person then lands
-// signed in without a follow-up call to CreateHandler.
-func BuildCookie(ctx context.Context, q authn.Querier, identityUID string) (*http.Cookie, error) {
-	cookie, err := authn.MintSession(ctx, q, identityUID, time.Now())
-	if err != nil {
-		return nil, fmt.Errorf("session: create session: %w", err)
-	}
-	return cookie, nil
 }
 
 // EndHandler deletes the caller's session row and clears the cookie. It

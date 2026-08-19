@@ -177,10 +177,12 @@ func TestSignupHandler_Success(t *testing.T) {
 	}
 }
 
-// TestSignupHandler_SessionStoreFailure proves a failed signup request -- here,
-// the session row failing to insert -- sets no cookie and rolls back the
-// new Practice/Staff rows, so retrying the signup is safe instead of
-// hitting a 409 for a Practice the caller never saw created (#145).
+// TestSignupHandler_SessionStoreFailure proves a signup that cannot
+// create its session commits nothing: no cookie, and no Practice/Staff
+// rows, so retrying the signup is safe instead of hitting a 409 for a
+// Practice the caller never saw created (#145). Creating the session is
+// the last thing the handler does before committing, which is what
+// makes that ordering hold.
 func TestSignupHandler_SessionStoreFailure(t *testing.T) {
 	db := testdb.New(t)
 	const practiceName = "Mint Fail Practice"

@@ -214,11 +214,14 @@ func TestBegin_SessionCookie_RenewsPastHalfLife(t *testing.T) {
 	}
 }
 
-// TestBegin_SessionCookie_RenewalExtendsTheRow proves renewal is a
-// database write and not just a fresh MaxAge: the session was minted
-// with one hour left, so only an extended expires_at can carry it past
-// that.
-func TestBegin_SessionCookie_RenewalExtendsTheRow(t *testing.T) {
+// TestBegin_SessionCookie_RenewalSurvivesRollback proves renewal is a
+// database write that outlives the request transaction. The session was
+// minted with one hour left, and the transaction Begin opened is rolled
+// back -- exactly what staffauth.SessionHandler and
+// clientauth.SessionHandler do on every request, since they only read.
+// If the UPDATE rode that transaction, the browser would get a cookie
+// with a fresh 12-hour MaxAge over a row still expiring within the hour.
+func TestBegin_SessionCookie_RenewalSurvivesRollback(t *testing.T) {
 	db := testdb.New(t)
 	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-11*time.Hour))
 
@@ -230,16 +233,18 @@ func TestBegin_SessionCookie_RenewalExtendsTheRow(t *testing.T) {
 	if !ok {
 		t.Fatal("expected ok=true, got false")
 	}
-	var expiresAt time.Time
-	if err := tx.QueryRowContext(t.Context(), `SELECT max(expires_at) FROM sessions`).Scan(&expiresAt); err != nil {
-		t.Fatalf("read expires_at: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
+	if err := tx.Rollback(); err != nil {
+		t.Fatalf("rollback: %v", err)
 	}
 
+	var expiresAt time.Time
+	if err := db.App.QueryRowContext(t.Context(),
+		`SELECT expires_at FROM sessions WHERE identity_uid = $1`, testUID,
+	).Scan(&expiresAt); err != nil {
+		t.Fatalf("read expires_at: %v", err)
+	}
 	if remaining := time.Until(expiresAt); remaining < authn.SessionLifetime-time.Minute {
-		t.Fatalf("expires_at leaves %v, want a full %v", remaining, authn.SessionLifetime)
+		t.Fatalf("expires_at leaves %v, want a full %v -- the renewal was rolled back", remaining, authn.SessionLifetime)
 	}
 }
 
@@ -385,5 +390,53 @@ func TestMintSession_InsertFailure(t *testing.T) {
 	cookie, err := authn.MintSession(t.Context(), db.App, testUID, time.Now())
 	if err == nil {
 		t.Fatalf("MintSession succeeded without INSERT permission, cookie = %+v", cookie)
+	}
+}
+
+// TestBegin_SessionCookie_LookupFailureIs500 pins the difference between
+// "this session is not valid" and "the database could not be asked": an
+// unreachable sessions table must not read to the caller as being
+// signed out, or a database blip would sign out every browser at once.
+func TestBegin_SessionCookie_LookupFailureIs500(t *testing.T) {
+	db := testdb.New(t)
+	token := authntest.SeedSession(t, db.App, testUID)
+	if _, err := db.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
+		t.Fatalf("drop sessions: %v", err)
+	}
+
+	rec, _, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
+		addSessionCookie(req, token)
+	})
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+// TestBegin_SessionCookie_RenewalFailureStillServesTheRequest proves a
+// failed renewal is not a failed request: the session is still valid
+// until its current expiry, so the caller is served and the cookie they
+// already hold is left alone rather than re-set with a MaxAge no row
+// backs.
+func TestBegin_SessionCookie_RenewalFailureStillServesTheRequest(t *testing.T) {
+	db := testdb.New(t)
+	token := authntest.SeedSessionAt(t, db.App, testUID, time.Now().Add(-7*time.Hour))
+	if _, err := db.Admin.ExecContext(t.Context(), `REVOKE UPDATE ON sessions FROM app_runtime`); err != nil {
+		t.Fatalf("revoke update: %v", err)
+	}
+
+	rec, uid, ok := beginRequest(t, db, authntest.Verifier{}, func(req *http.Request) {
+		addSessionCookie(req, token)
+	})
+	if !ok {
+		t.Fatal("expected ok=true, got false")
+	}
+	if uid != testUID {
+		t.Fatalf("uid = %q, want %q", uid, testUID)
+	}
+	if got := rec.Result().Cookies(); len(got) != 0 {
+		t.Fatalf("Set-Cookie = %v, want none (renewal failed, so nothing to promise)", got)
 	}
 }

@@ -26,10 +26,12 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// ErrNoSession is returned when a token matches no live session row --
-// it was never issued, it was ended, or it has expired. The three are
-// deliberately indistinguishable to the caller: all three mean 401.
-var ErrNoSession = errors.New("authn: no live session for this token")
+// errNoSession is what lookupSession returns when a token matches no
+// live session row -- it was never issued, it was ended, or it has
+// expired. Unexported because the three are deliberately
+// indistinguishable outside this package: all three mean 401, and no
+// caller has a reason to tell them apart.
+var errNoSession = errors.New("authn: no live session for this token")
 
 // MintSession creates a session for identityUID that expires
 // SessionLifetime after now, and returns the cookie carrying its token.
@@ -71,7 +73,7 @@ func EndSession(ctx context.Context, q Querier, token string) error {
 }
 
 // lookupSession resolves token to the identity holding it and that
-// session's expiry, or ErrNoSession if no row is live at now. Expired
+// session's expiry, or errNoSession if no row is live at now. Expired
 // rows are filtered here rather than deleted, because this read runs
 // inside a transaction that a failed authorization check later rolls
 // back; MintSession's sweep is what actually removes them.
@@ -81,10 +83,9 @@ func lookupSession(ctx context.Context, q Querier, token string, now time.Time) 
 		tokenHash(token), now,
 	).Scan(&identityUID, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", time.Time{}, ErrNoSession
+		return "", time.Time{}, errNoSession
 	}
 	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", time.Time{}, fmt.Errorf("authn: look up session: %w", err)
 	}
 	return identityUID, expiresAt, nil

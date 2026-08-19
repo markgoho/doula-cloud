@@ -10,6 +10,7 @@ package authn
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -36,6 +37,11 @@ const SessionCookieName = "__session"
 // session row's expiry window and the cookie's MaxAge, so the browser
 // and Postgres agree on when a session ends.
 const SessionLifetime = 12 * time.Hour
+
+// msgInternalError is the body a caller sees when the failure is the
+// BFF's own, not theirs -- an unreachable database, not a bad
+// credential.
+const msgInternalError = "internal error"
 
 // NewSessionCookie builds the *http.Cookie every session cookie -- newly
 // minted or renewed -- is sent as, wrapping the session's token with the
@@ -86,11 +92,11 @@ func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, msgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 
-	uid, ok := credential(w, r, verifier, tx)
+	uid, ok := credential(w, r, verifier, tx, db)
 	if !ok {
 		_ = tx.Rollback()
 		return nil, "", false
@@ -102,18 +108,24 @@ func Begin(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB
 // credential resolves the caller's identity from r: the session cookie
 // if one is present, otherwise the Bearer ID token. It writes a 401 and
 // returns ok=false if neither credential is present or the one present
-// fails verification. A verified session past half its life is renewed
+// fails verification -- but a session the database could not be asked
+// about is a 500, not a 401: an unreachable database must not read as
+// "you are signed out". A verified session past half its life is renewed
 // before this returns (see renewIfStale); a rejected credential never
 // is.
-func credential(w http.ResponseWriter, r *http.Request, verifier Verifier, tx *sql.Tx) (string, bool) {
+func credential(w http.ResponseWriter, r *http.Request, verifier Verifier, tx *sql.Tx, db *sql.DB) (string, bool) {
 	if cookie, err := r.Cookie(SessionCookieName); err == nil {
 		now := time.Now()
 		uid, expiresAt, err := lookupSession(r.Context(), tx, cookie.Value, now)
-		if err != nil {
+		if errors.Is(err, errNoSession) {
 			http.Error(w, "invalid session", http.StatusUnauthorized)
 			return "", false
 		}
-		renewIfStale(w, r, tx, cookie.Value, expiresAt, now)
+		if err != nil {
+			http.Error(w, msgInternalError, http.StatusInternalServerError)
+			return "", false
+		}
+		renewIfStale(w, r, db, cookie.Value, expiresAt, now)
 		return uid, true
 	}
 
@@ -135,16 +147,22 @@ func credential(w http.ResponseWriter, r *http.Request, verifier Verifier, tx *s
 // it is already past half its SessionLifetime (#147). The token value
 // does not change, so this is an UPDATE of one row plus a fresh MaxAge
 // on the browser's copy -- no Bearer ID token is involved, which is what
-// keeps renewal working once #151 removes the Bearer path. The UPDATE
-// rides the request's own transaction, so a request that goes on to fail
-// authorization rolls the renewal back with everything else; the next
-// request simply renews again. A failed UPDATE leaves the existing
-// cookie in place for the same reason.
-func renewIfStale(w http.ResponseWriter, r *http.Request, tx *sql.Tx, token string, expiresAt, now time.Time) {
+// keeps renewal working once #151 removes the Bearer path.
+//
+// The UPDATE deliberately runs on the pool rather than the request's own
+// transaction. Renewal is about the credential, not about whatever the
+// handler goes on to do with it, and several handlers (the two
+// SessionHandlers, which only read) never commit at all -- riding their
+// transaction would send the browser a cookie with a fresh MaxAge while
+// expires_at silently stayed put, which is the browser/Postgres
+// divergence this design exists to remove. A failed UPDATE leaves the
+// existing cookie in place: the session is still valid until its
+// current expiry, and the next request past half life tries again.
+func renewIfStale(w http.ResponseWriter, r *http.Request, q Querier, token string, expiresAt, now time.Time) {
 	if !pastHalfLife(expiresAt, now) {
 		return
 	}
-	if err := renewSession(r.Context(), tx, token, now); err != nil {
+	if err := renewSession(r.Context(), q, token, now); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return
 	}

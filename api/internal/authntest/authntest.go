@@ -72,8 +72,8 @@ func EndSession(t *testing.T, q authn.Querier, token string) {
 }
 
 // CountFor returns how many session rows exist for uid, so a test can
-// assert that a session was swept, ended, or left alone. It counts rows,
-// not cookies -- no test asserts on a session cookie's value.
+// assert that a session was swept, ended, or left alone by counting
+// rows rather than reaching for the cookie a request carried.
 func CountFor(t *testing.T, q authn.Querier, uid string) int {
 	t.Helper()
 	var count int

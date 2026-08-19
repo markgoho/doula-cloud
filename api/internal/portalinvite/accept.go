@@ -6,11 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/session"
 )
 
 // AcceptInviteRequest is the body of an accept-invite request: the
@@ -66,7 +66,7 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// new rows back instead of leaving them committed behind a
 		// response that reports failure (#145). uid is the identity
 		// authn.Begin already verified.
-		cookie, err := session.BuildCookie(r.Context(), tx, uid)
+		cookie, err := authn.MintSession(r.Context(), tx, uid, time.Now())
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
 			return

@@ -207,10 +207,11 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	}
 }
 
-// TestAcceptInviteHandler_SessionStoreFailure proves a failed accept-invite request
-// -- here, the session row failing to insert -- sets no cookie and rolls
-// back the claim: the invite is left exactly as pending as it was before
-// the request, so retrying it is safe (#145).
+// TestAcceptInviteHandler_SessionStoreFailure proves an accept that
+// cannot create its session commits nothing: no cookie, and the invite
+// left exactly as pending as it was before the request, so retrying it
+// is safe (#145). Creating the session is the last thing the handler
+// does before committing, which is what makes that ordering hold.
 func TestAcceptInviteHandler_SessionStoreFailure(t *testing.T) {
 	db := testdb.New(t)
 	staffID, inviteToken := seedPendingInvite(t, db)
