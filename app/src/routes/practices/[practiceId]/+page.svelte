@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { registerPushSubscription } from '#lib/pushRegistration.js';
 
 	let practiceName = $state('');
@@ -23,12 +23,13 @@
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
 		// Practice page, or navigate the page away, on any failure (see
-		// pushRegistration.ts's doc comment) -- a plain credentialed fetch,
-		// not apiFetchWithSession, since that helper's own 401 handling
-		// would sign the person out and redirect on a failure this call is
+		// pushRegistration.ts's doc comment) -- apiFetch, not
+		// apiFetchWithSession, since that helper's own 401 handling would
+		// sign the person out and redirect on a failure this call is
 		// supposed to swallow silently.
-		void registerPushSubscription(`/api/practices/${page.params.practiceId}/push-subscriptions`, (path, init) =>
-			fetch(apiBaseURL() + path, { ...init, credentials: 'include' })
+		void registerPushSubscription(
+			`/api/practices/${page.params.practiceId}/push-subscriptions`,
+			apiFetch
 		);
 	});
 </script>

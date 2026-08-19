@@ -9,7 +9,7 @@ vi.mock('firebase/auth', () => ({ signOut }));
 const getFirebaseAuth = vi.fn(() => 'the-auth-instance');
 vi.mock('./firebase.js', () => ({ getFirebaseAuth }));
 
-const { apiBaseURL, apiErrorMessage, apiFetchWithSession } = await import('./api');
+const { apiBaseURL, apiErrorMessage, apiFetch, apiFetchWithSession } = await import('./api');
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
@@ -82,6 +82,23 @@ describe('apiFetchWithSession', () => {
 		await apiFetchWithSession('/api/portal/engagements/eng-1/session');
 
 		expect(goto).toHaveBeenCalledWith('/portal/login?sessionEnded=true');
+	});
+});
+
+describe('apiFetch', () => {
+	it('hands a 401 straight back instead of sending the caller to the login screen', async () => {
+		goto.mockClear();
+		signOut.mockClear();
+		vi.stubGlobal('fetch', vi.fn(async () => new Response(undefined, { status: 401 })));
+
+		const response = await apiFetch('/api/practices/prac-1/push-subscriptions', {
+			method: 'DELETE'
+		});
+
+		expect(response.status).toBe(401);
+		expect(goto).not.toHaveBeenCalled();
+		expect(signOut).not.toHaveBeenCalled();
+		vi.unstubAllGlobals();
 	});
 });
 

@@ -84,7 +84,7 @@ export async function registerPushSubscription(subscribeURL: string, fetcher: Fe
  * sibling -- a device that cannot be unregistered must not keep someone
  * signed in.
  */
-/* v8 ignore start -- requires the Service Worker/PushManager browser APIs, exercised by Playwright e2e not Vitest */
+/* v8 ignore start -- requires the Service Worker/PushManager browser APIs, which headless Vitest/Chromium does not give a subscription to drive */
 export async function unregisterPushSubscription(
 	unsubscribeURL: string,
 	fetcher: Fetcher
@@ -92,8 +92,13 @@ export async function unregisterPushSubscription(
 	try {
 		if (!('serviceWorker' in navigator) || !('PushManager' in globalThis)) return;
 
-		const registration = await navigator.serviceWorker.ready;
-		const subscription = await registration.pushManager.getSubscription();
+		// getRegistration(), not the `ready` its register sibling awaits:
+		// `ready` never settles when no worker ever activates -- it does not
+		// reject, so no catch can rescue it -- and this call runs *before*
+		// the end-session request, so hanging here would leave someone stuck
+		// on a live session with a spinning button and no message.
+		const registration = await navigator.serviceWorker.getRegistration();
+		const subscription = await registration?.pushManager.getSubscription();
 		if (!subscription) return;
 
 		await fetcher(`${unsubscribeURL}?endpoint=${encodeURIComponent(subscription.endpoint)}`, {

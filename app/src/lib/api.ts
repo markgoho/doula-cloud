@@ -23,11 +23,24 @@ belongs to, carrying `sessionEnded=true` so that screen can read this as
 "your session ended" rather than an ordinary visit.
 */
 export async function apiFetchWithSession(path: string, init: RequestInit = {}): Promise<Response> {
-	const response = await fetch(apiBaseURL() + path, { ...init, credentials: 'include' });
+	const response = await apiFetch(path, init);
 	if (response.status === 401) {
 		await handleExpiredSession();
 	}
 	return response;
+}
+
+/**
+The same credentialed fetch with the 401 handling left off, for the two
+calls that have to swallow their own failures instead of being sent to
+the login screen: registering this device for push (#61) and
+unregistering it on sign-out (#152). Both are best-effort, and the
+unregister runs against a session sign-out is about to end anyway --
+routing either through apiFetchWithSession would navigate the page away
+mid-flight. Feature code wants apiFetchWithSession, not this.
+*/
+export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+	return fetch(apiBaseURL() + path, { ...init, credentials: 'include' });
 }
 
 async function handleExpiredSession(): Promise<void> {

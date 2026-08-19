@@ -64,30 +64,46 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 	await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
 });
 
-// Double-clicking sign-out, or a stale tab signing out after another tab
-// already did, must not read as an error: the end-session endpoint is
-// idempotent.
-test('signing out twice in a row reports success both times', async ({ page }) => {
+// The stale-tab case from #152: two tabs share one cookie, so the second
+// tab signs out against a session the first already ended. It must land
+// on the login screen like any other sign-out, not report an error --
+// the end-session endpoint is idempotent.
+test('a second tab signing out after the first shows no error', async ({ page, request }) => {
 	const email = `signout-twice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
-	const signUp = await page.request.post(
+	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken } = await signUp.json();
 
-	const created = await page.request.post(`${API_URL}/api/session`, {
-		headers: { Authorization: `Bearer ${idToken}` }
+	const signup = await request.post(`${API_URL}/api/staff/signup`, {
+		headers: { Authorization: `Bearer ${idToken}` },
+		data: { practiceName: 'Hillcrest Doulas', staffName: 'Sam Owner', staffEmail: email }
 	});
-	expect(created.ok(), `create-session failed: ${created.status()}`).toBe(true);
+	const signupBody = await signup.text();
+	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
+	const { practiceId } = JSON.parse(signupBody);
 
-	const first = await page.request.delete(`${API_URL}/api/session`);
-	expect(first.ok(), `first end-session failed: ${first.status()} ${await first.text()}`).toBe(true);
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(email);
+	await page.getByLabel('Password').fill(password);
+	await page.getByRole('button', { name: 'Log in' }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
-	const second = await page.request.delete(`${API_URL}/api/session`);
-	expect(second.ok(), `second end-session failed: ${second.status()} ${await second.text()}`).toBe(
-		true
-	);
+	// A second tab on the same browser context, so it carries the same
+	// __session cookie -- and holds it after the first tab signs out.
+	const staleTab = await page.context().newPage();
+	await staleTab.goto(`/practices/${practiceId}`);
+	await expect(staleTab.getByRole('button', { name: 'Sign out' })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Sign out' }).click();
+	await expect(page).toHaveURL(/\/login$/);
+
+	await staleTab.getByRole('button', { name: 'Sign out' }).click();
+
+	await expect(staleTab).toHaveURL(/\/login$/);
+	await expect(staleTab.getByRole('alert')).toHaveCount(0);
 });
