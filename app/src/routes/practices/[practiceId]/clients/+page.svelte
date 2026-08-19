@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 
 	type ClientEngagement = {
 		clientId: string;
@@ -19,14 +17,7 @@
 	let isLoaded = $state(false);
 
 	onMount(async () => {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			await goto(resolve('/login'));
-			return;
-		}
-
-		const idToken = await user.getIdToken();
-		const response = await apiFetch(`/api/practices/${page.params.practiceId}/clients`, idToken);
+		const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/clients`);
 		if (!response.ok) {
 			error = await response.text();
 			return;

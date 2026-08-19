@@ -105,7 +105,7 @@
 		// thread (see pushRegistration.ts's doc comment).
 		void registerPushSubscription(
 			`/api/portal/engagements/${page.params.engagementId}/push-subscriptions`,
-			idToken
+			(path, init) => apiFetch(path, idToken, init)
 		);
 
 		// #61: an open service worker push message ("a new Message arrived

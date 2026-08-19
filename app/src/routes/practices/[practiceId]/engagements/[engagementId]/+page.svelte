@@ -1,10 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiErrorMessage, apiFetch } from '#lib/api.js';
+	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/PlanInstanceForm.svelte';
 	import {
@@ -13,8 +10,7 @@
 		saveAnswers,
 		setAnswer,
 		toggleMultiSelectOption,
-		type Instance,
-		type Fetcher
+		type Instance
 	} from '#lib/planInstance.js';
 	import ContractForm from '#lib/ContractForm.svelte';
 	import ContractStatus from '#lib/ContractStatus.svelte';
@@ -117,14 +113,14 @@
 		unsubscribePushMessages();
 	});
 
-	async function loadAttachmentPreviews(idToken: string, items: Message[]) {
+	async function loadAttachmentPreviews(items: Message[]) {
 		await Promise.all(
 			items
 				.filter(
 					(m) => m.attachmentContentType?.startsWith('image/') && !Object.hasOwn(attachmentPreviewURLs, m.messageId)
 				)
 				.map(async (m) => {
-					const response = await apiFetch(`${messagesURL()}/${m.messageId}/attachment`, idToken);
+					const response = await apiFetchWithSession(`${messagesURL()}/${m.messageId}/attachment`);
 					if (!response.ok) return;
 					const blob = await response.blob();
 					attachmentPreviewURLs[m.messageId] = URL.createObjectURL(blob);
@@ -140,8 +136,8 @@
 		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/visits`;
 	}
 
-	async function loadVisits(idToken: string) {
-		const response = await apiFetch(visitsURL(), idToken);
+	async function loadVisits() {
+		const response = await apiFetchWithSession(visitsURL());
 		if (!response.ok) {
 			visitsError = await response.text();
 			return;
@@ -153,8 +149,8 @@
 		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/messages`;
 	}
 
-	async function loadMessages(idToken: string) {
-		const response = await apiFetch(messagesURL(), idToken);
+	async function loadMessages() {
+		const response = await apiFetchWithSession(messagesURL());
 		if (!response.ok) {
 			messagesError = await response.text();
 			return;
@@ -163,18 +159,14 @@
 		messages = data.items.toReversed();
 		messagesCursor = data.nextCursor ?? '';
 		isMessagesHasMore = data.hasMore;
-		await loadAttachmentPreviews(idToken, messages);
+		await loadAttachmentPreviews(messages);
 	}
 
-	function planFetcher(idToken: string): Fetcher {
-		return (path, init) => apiFetch(path, idToken, init);
-	}
-
-	async function loadPlan(idToken: string, planType: PlanType) {
+	async function loadPlan(planType: PlanType) {
 		planError[planType] = '';
 		try {
 			planInstances[planType] = await loadInstance(
-				planFetcher(idToken),
+				apiFetchWithSession,
 				page.params.practiceId!,
 				page.params.engagementId!,
 				planType
@@ -190,14 +182,8 @@
 		planError[planType] = '';
 		planBusy[planType] = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				planError[planType] = 'You must be logged in to create a plan';
-				return;
-			}
-			const idToken = await user.getIdToken();
 			planInstances[planType] = await createInstance(
-				planFetcher(idToken),
+				apiFetchWithSession,
 				page.params.practiceId!,
 				page.params.engagementId!,
 				planType
@@ -227,14 +213,8 @@
 		planError[planType] = '';
 		planBusy[planType] = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				planError[planType] = 'You must be logged in to save a plan';
-				return;
-			}
-			const idToken = await user.getIdToken();
 			planInstances[planType] = await saveAnswers(
-				planFetcher(idToken),
+				apiFetchWithSession,
 				page.params.practiceId!,
 				page.params.engagementId!,
 				planType,
@@ -247,10 +227,10 @@
 		}
 	}
 
-	async function loadContractSection(idToken: string) {
+	async function loadContractSection() {
 		contractError = '';
 		try {
-			contract = await loadContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+			contract = await loadContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		} catch (error_) {
 			contractError = error_ instanceof Error ? error_.message : 'Failed to load contract';
 		} finally {
@@ -262,13 +242,7 @@
 		contractError = '';
 		isContractBusy = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				contractError = 'You must be logged in to create a contract';
-				return;
-			}
-			const idToken = await user.getIdToken();
-			contract = await createContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+			contract = await createContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		} catch (error_) {
 			contractError = error_ instanceof Error ? error_.message : 'Failed to create contract';
 		} finally {
@@ -286,14 +260,8 @@
 		contractError = '';
 		isContractBusy = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				contractError = 'You must be logged in to save the contract';
-				return;
-			}
-			const idToken = await user.getIdToken();
 			contract = await saveContractValues(
-				planFetcher(idToken),
+				apiFetchWithSession,
 				page.params.practiceId!,
 				page.params.engagementId!,
 				contract.values
@@ -310,13 +278,7 @@
 		contractError = '';
 		isContractBusy = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				contractError = 'You must be logged in to send the contract';
-				return;
-			}
-			const idToken = await user.getIdToken();
-			contract = await sendContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+			contract = await sendContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		} catch (error_) {
 			contractError = error_ instanceof Error ? error_.message : 'Failed to send contract';
 		} finally {
@@ -327,22 +289,16 @@
 	// ContractStatus.svelte owns the error display for Void (it awaits
 	// the onVoid callback prop itself and renders whatever it throws) --
 	// unlike the other Contract handlers above, this one deliberately
-	// doesn't set contractError, so it throws rather than swallowing the
-	// "not logged in" case into a variable no one reads.
+	// doesn't set contractError.
 	async function handleVoidContract() {
 		if (!contract) return;
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			throw new Error('You must be logged in to void the contract');
-		}
-		const idToken = await user.getIdToken();
-		contract = await voidContract(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+		contract = await voidContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 	}
 
-	async function loadInvoicesSection(idToken: string) {
+	async function loadInvoicesSection() {
 		invoicesError = '';
 		try {
-			invoices = await loadInvoices(planFetcher(idToken), page.params.practiceId!, page.params.engagementId!);
+			invoices = await loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		} catch (error_) {
 			invoicesError = error_ instanceof Error ? error_.message : 'Failed to load invoices';
 		}
@@ -352,13 +308,8 @@
 	// for why it owns the resulting state change (invoices list vs.
 	// connectGate) rather than the component itself.
 	async function handleCreateInvoice(amountCents: number) {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			throw new Error('You must be logged in to create an invoice');
-		}
-		const idToken = await user.getIdToken();
 		const result = await createInvoice(
-			planFetcher(idToken),
+			apiFetchWithSession,
 			page.params.practiceId!,
 			page.params.engagementId!,
 			amountCents
@@ -370,26 +321,13 @@
 	}
 
 	async function handleConnectInvoicing() {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			throw new Error('You must be logged in to connect Stripe');
-		}
-		const idToken = await user.getIdToken();
-		const onboardingUrl = await connectStripe(planFetcher(idToken), page.params.practiceId!);
+		const onboardingUrl = await connectStripe(apiFetchWithSession, page.params.practiceId!);
 		location.assign(onboardingUrl);
 	}
 
 	onMount(async () => {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			await goto(resolve('/login'));
-			return;
-		}
-
-		const idToken = await user.getIdToken();
-		const response = await apiFetch(
-			`/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}`,
-			idToken
+		const response = await apiFetchWithSession(
+			`/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}`
 		);
 		if (!response.ok) {
 			error = await response.text();
@@ -397,11 +335,11 @@
 		}
 
 		detail = await response.json();
-		await loadVisits(idToken);
-		await loadMessages(idToken);
-		await Promise.all(planSections.map((section) => loadPlan(idToken, section.type)));
-		await loadContractSection(idToken);
-		await loadInvoicesSection(idToken);
+		await loadVisits();
+		await loadMessages();
+		await Promise.all(planSections.map((section) => loadPlan(section.type)));
+		await loadContractSection();
+		await loadInvoicesSection();
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -409,11 +347,7 @@
 		// ADR-0002 describes -- see push.ts's PUSH_MESSAGE_TYPE doc comment
 		// for why the service worker can't just fetch this itself.
 		unsubscribePushMessages = subscribeToThreadPushMessages(page.params.engagementId!, () => {
-			void (async () => {
-				const current = getFirebaseAuth().currentUser;
-				if (!current) return;
-				await loadMessages(await current.getIdToken());
-			})();
+			void loadMessages();
 		});
 	});
 
@@ -421,14 +355,7 @@
 		portalInviteError = '';
 		isSendingPortalInvite = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				portalInviteError = 'You must be logged in to send a portal invite';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
-			const response = await apiFetch(portalInviteURL(), idToken, { method: 'POST' });
+			const response = await apiFetchWithSession(portalInviteURL(), { method: 'POST' });
 			if (!response.ok) {
 				portalInviteError = await apiErrorMessage(response);
 				return;
@@ -447,20 +374,13 @@
 		visitsError = '';
 		isCreatingVisit = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				visitsError = 'You must be logged in to add a Visit';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
-			const response = await apiFetch(visitsURL(), idToken, { method: 'POST' });
+			const response = await apiFetchWithSession(visitsURL(), { method: 'POST' });
 			if (!response.ok) {
 				visitsError = await response.text();
 				return;
 			}
 
-			await loadVisits(idToken);
+			await loadVisits();
 		} catch (error_) {
 			visitsError = error_ instanceof Error ? error_.message : 'Failed to add Visit';
 		} finally {
@@ -472,14 +392,7 @@
 		event.preventDefault();
 		reassignError[visitId] = '';
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				reassignError[visitId] = 'You must be logged in to reassign a Visit';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
-			const response = await apiFetch(`${visitsURL()}/${visitId}`, idToken, {
+			const response = await apiFetchWithSession(`${visitsURL()}/${visitId}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ staffId: reassignStaffId[visitId] ?? '' })
@@ -490,7 +403,7 @@
 			}
 
 			reassignStaffId[visitId] = '';
-			await loadVisits(idToken);
+			await loadVisits();
 		} catch (error_) {
 			reassignError[visitId] = error_ instanceof Error ? error_.message : 'Failed to reassign Visit';
 		}
@@ -500,17 +413,7 @@
 		messagesError = '';
 		isLoadingOlderMessages = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				messagesError = 'You must be logged in to load messages';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
-			const response = await apiFetch(
-				`${messagesURL()}?cursor=${encodeURIComponent(messagesCursor)}`,
-				idToken
-			);
+			const response = await apiFetchWithSession(`${messagesURL()}?cursor=${encodeURIComponent(messagesCursor)}`);
 			if (!response.ok) {
 				messagesError = await response.text();
 				return;
@@ -520,7 +423,7 @@
 			messages = [...data.items.toReversed(), ...messages];
 			messagesCursor = data.nextCursor ?? '';
 			isMessagesHasMore = data.hasMore;
-			await loadAttachmentPreviews(idToken, messages);
+			await loadAttachmentPreviews(messages);
 		} catch (error_) {
 			messagesError = error_ instanceof Error ? error_.message : 'Failed to load older messages';
 		} finally {
@@ -533,21 +436,14 @@
 		messagesError = '';
 		isSendingMessage = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				messagesError = 'You must be logged in to send a message';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
 			let response: Response;
 			if (newMessageAttachment) {
 				const form = new FormData();
 				form.set('body', newMessageBody);
 				form.set('attachment', newMessageAttachment);
-				response = await apiFetch(messagesURL(), idToken, { method: 'POST', body: form });
+				response = await apiFetchWithSession(messagesURL(), { method: 'POST', body: form });
 			} else {
-				response = await apiFetch(messagesURL(), idToken, {
+				response = await apiFetchWithSession(messagesURL(), {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ body: newMessageBody })
@@ -562,7 +458,7 @@
 			messages = [...messages, created];
 			newMessageBody = '';
 			newMessageAttachment = undefined;
-			await loadAttachmentPreviews(idToken, [created]);
+			await loadAttachmentPreviews([created]);
 		} catch (error_) {
 			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
 		} finally {
@@ -571,14 +467,7 @@
 	}
 
 	async function handleDownloadAttachment(messageId: string, filename: string) {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			messagesError = 'You must be logged in to download an attachment';
-			return;
-		}
-		const idToken = await user.getIdToken();
-
-		const response = await apiFetch(`${messagesURL()}/${messageId}/attachment`, idToken);
+		const response = await apiFetchWithSession(`${messagesURL()}/${messageId}/attachment`);
 		if (!response.ok) {
 			messagesError = await response.text();
 			return;

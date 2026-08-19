@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
 
 	let status = $state<ConnectStatusResult | undefined>();
@@ -15,16 +14,8 @@
 	let isConnecting = $state(false);
 
 	onMount(async () => {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			error = 'You must be logged in to view payments settings';
-			return;
-		}
-		const idToken = await user.getIdToken();
-
 		try {
-			const fetch = (path: string, init?: RequestInit) => apiFetch(path, idToken, init);
-			status = await loadConnectStatus(fetch, page.params.practiceId!);
+			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
 			return;
@@ -33,7 +24,7 @@
 		// The connect button's enabled state mirrors the "owner"-role gating
 		// the billing page already uses -- server-side enforcement
 		// (RequireOwner) is what actually matters, this is UX only.
-		const sessionResponse = await apiFetch(`/api/practices/${page.params.practiceId}/session`, idToken);
+		const sessionResponse = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
 		if (sessionResponse.ok) {
 			const body: { roles: string[] } = await sessionResponse.json();
 			roles = body.roles;
@@ -44,14 +35,7 @@
 		connectError = '';
 		isConnecting = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				connectError = 'You must be logged in to connect Stripe';
-				return;
-			}
-			const idToken = await user.getIdToken();
-			const fetch = (path: string, init?: RequestInit) => apiFetch(path, idToken, init);
-			const onboardingUrl = await connect(fetch, page.params.practiceId!);
+			const onboardingUrl = await connect(apiFetchWithSession, page.params.practiceId!);
 			location.assign(onboardingUrl);
 		} catch (error_) {
 			connectError = error_ instanceof Error ? error_.message : 'Failed to start Stripe Connect onboarding';

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+	import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -51,10 +51,16 @@
 			});
 			if (!acceptResponse.ok) {
 				error = await acceptResponse.text();
+				await signOut(getFirebaseAuth());
 				return;
 			}
 
-			const sessionResponse = await apiFetch('/api/staff/session', idToken);
+			// AcceptInviteHandler already set the session cookie on its own
+			// response (#145) -- no separate exchange needed, just drop the
+			// JS SDK credential before the session probe reads the cookie.
+			await signOut(getFirebaseAuth());
+
+			const sessionResponse = await apiFetchWithSession('/api/staff/session');
 			if (!sessionResponse.ok) {
 				error = await sessionResponse.text();
 				return;
@@ -66,8 +72,12 @@
 			} else {
 				picker = landing.memberships;
 			}
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Accept invite failed';
+		} catch {
+			// A clear, non-technical failure message -- not whatever Identity
+			// Platform's SDK throws (e.g. "Firebase: Error
+			// (auth/invalid-credential).") -- covers both account-creation
+			// and sign-in errors, since this form handles both modes.
+			error = 'Accept invite failed';
 		} finally {
 			isSubmitting = false;
 		}

@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadBalance, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
 
 	let balance = $state<number | undefined>();
@@ -17,16 +16,8 @@
 	let isPurchasing = $state(false);
 
 	onMount(async () => {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			error = 'You must be logged in to view billing';
-			return;
-		}
-		const idToken = await user.getIdToken();
-
 		try {
-			const fetch = (path: string, init?: RequestInit) => apiFetch(path, idToken, init);
-			const result = await loadBalance(fetch, page.params.practiceId!);
+			const result = await loadBalance(apiFetchWithSession, page.params.practiceId!);
 			balance = result.balance;
 			ledger = result.ledger;
 		} catch (error_) {
@@ -38,7 +29,7 @@
 		// gating the root Practice page already uses -- server-side
 		// enforcement (RequireOwner) is what actually matters, this is UX
 		// only.
-		const sessionResponse = await apiFetch(`/api/practices/${page.params.practiceId}/session`, idToken);
+		const sessionResponse = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
 		if (sessionResponse.ok) {
 			const body: { roles: string[] } = await sessionResponse.json();
 			roles = body.roles;
@@ -50,14 +41,7 @@
 		purchaseError = '';
 		isPurchasing = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				purchaseError = 'You must be logged in to buy credits';
-				return;
-			}
-			const idToken = await user.getIdToken();
-			const fetch = (path: string, init?: RequestInit) => apiFetch(path, idToken, init);
-			const checkoutUrl = await purchaseCredits(fetch, page.params.practiceId!, quantity);
+			const checkoutUrl = await purchaseCredits(apiFetchWithSession, page.params.practiceId!, quantity);
 			location.assign(checkoutUrl);
 		} catch (error_) {
 			purchaseError = error_ instanceof Error ? error_.message : 'Failed to start credit purchase';

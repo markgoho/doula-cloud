@@ -1,4 +1,9 @@
-import { apiFetch } from '#lib/api.js';
+/**
+ * A path-and-init fetch function, already carrying whatever credential
+ * the caller authenticates with -- mirrors billing.ts's Fetcher so this
+ * module stays agnostic to Bearer-token vs. session-cookie callers.
+ */
+export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /**
  * Converts a URL-safe base64 VAPID public key (the shape
@@ -34,7 +39,7 @@ export function vapidPublicKey(): string {
  * surfaced to the caller or the page.
  */
 /* v8 ignore start -- requires the Service Worker/PushManager browser APIs, exercised by Playwright e2e not Vitest */
-export async function registerPushSubscription(subscribeURL: string, idToken: string): Promise<void> {
+export async function registerPushSubscription(subscribeURL: string, fetcher: Fetcher): Promise<void> {
 	try {
 		if (!('serviceWorker' in navigator) || !('PushManager' in globalThis)) return;
 		const publicKey = vapidPublicKey();
@@ -55,7 +60,7 @@ export async function registerPushSubscription(subscribeURL: string, idToken: st
 			}));
 
 		const json = subscription.toJSON();
-		await apiFetch(subscribeURL, idToken, {
+		await fetcher(subscribeURL, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys })

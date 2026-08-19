@@ -2,8 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 
 	let name = $state('');
 	let email = $state('');
@@ -15,14 +14,7 @@
 		error = '';
 		isSubmitting = true;
 		try {
-			const user = getFirebaseAuth().currentUser;
-			if (!user) {
-				error = 'You must be logged in to add a Client';
-				return;
-			}
-			const idToken = await user.getIdToken();
-
-			const response = await apiFetch(`/api/practices/${page.params.practiceId}/clients`, idToken, {
+			const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/clients`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name, email })

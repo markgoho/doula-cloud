@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { signInWithEmailAndPassword } from 'firebase/auth';
+	import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -26,7 +26,19 @@
 			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
 			const idToken = await credential.user.getIdToken();
 
-			const response = await apiFetch('/api/staff/session', idToken);
+			// Exchange the Identity Platform ID token for the session cookie
+			// before signing out of the JS SDK -- the Staff session probe
+			// right below this authenticates by cookie, so the exchange must
+			// land first (#149).
+			const exchangeResponse = await apiFetch('/api/session', idToken, { method: 'POST' });
+			if (!exchangeResponse.ok) {
+				error = 'Login failed';
+				await signOut(getFirebaseAuth());
+				return;
+			}
+			await signOut(getFirebaseAuth());
+
+			const response = await apiFetchWithSession('/api/staff/session');
 			if (!response.ok) {
 				error = await response.text();
 				return;
@@ -39,8 +51,11 @@
 			} else {
 				picker = landing.memberships;
 			}
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Login failed';
+		} catch {
+			// A clear, non-technical failure message -- not whatever Identity
+			// Platform's SDK throws (e.g. "Firebase: Error
+			// (auth/invalid-credential).").
+			error = 'Login failed';
 		} finally {
 			isSubmitting = false;
 		}

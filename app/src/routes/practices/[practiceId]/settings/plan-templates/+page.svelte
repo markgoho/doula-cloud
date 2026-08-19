@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import DynamicFieldEditor from '#lib/components/organisms/DynamicFieldEditor.svelte';
 	import {
 		loadTemplate,
@@ -12,8 +11,7 @@
 		moveField,
 		validateFields,
 		type Field,
-		type FieldType,
-		type Fetcher
+		type FieldType
 	} from '#lib/planTemplate.js';
 
 	const planTypes = [
@@ -26,21 +24,11 @@
 	let error = $state('');
 	let isSaved = $state(false);
 
-	async function fetcher(): Promise<Fetcher> {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			throw new Error('You must be logged in to manage plan templates');
-		}
-		const idToken = await user.getIdToken();
-		return (path, init) => apiFetch(path, idToken, init);
-	}
-
 	async function load() {
 		error = '';
 		isSaved = false;
 		try {
-			const fetch = await fetcher();
-			const template = await loadTemplate(fetch, page.params.practiceId!, planType);
+			const template = await loadTemplate(apiFetchWithSession, page.params.practiceId!, planType);
 			fields = template.fields;
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load plan template';
@@ -56,8 +44,7 @@
 			return;
 		}
 		try {
-			const fetch = await fetcher();
-			const template = await saveTemplate(fetch, page.params.practiceId!, planType, fields);
+			const template = await saveTemplate(apiFetchWithSession, page.params.practiceId!, planType, fields);
 			fields = template.fields;
 			isSaved = true;
 		} catch (error_) {

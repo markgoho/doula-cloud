@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiFetch } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { registerPushSubscription } from '#lib/pushRegistration.js';
 
 	let practiceName = $state('');
@@ -12,14 +10,7 @@
 	let error = $state('');
 
 	onMount(async () => {
-		const user = getFirebaseAuth().currentUser;
-		if (!user) {
-			await goto(resolve('/login'));
-			return;
-		}
-
-		const idToken = await user.getIdToken();
-		const response = await apiFetch(`/api/practices/${page.params.practiceId}/session`, idToken);
+		const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
 		if (!response.ok) {
 			error = await response.text();
 			return;
@@ -31,8 +22,14 @@
 
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
-		// Practice page (see pushRegistration.ts's doc comment).
-		void registerPushSubscription(`/api/practices/${page.params.practiceId}/push-subscriptions`, idToken);
+		// Practice page, or navigate the page away, on any failure (see
+		// pushRegistration.ts's doc comment) -- a plain credentialed fetch,
+		// not apiFetchWithSession, since that helper's own 401 handling
+		// would sign the person out and redirect on a failure this call is
+		// supposed to swallow silently.
+		void registerPushSubscription(`/api/practices/${page.params.practiceId}/push-subscriptions`, (path, init) =>
+			fetch(apiBaseURL() + path, { ...init, credentials: 'include' })
+		);
 	});
 </script>
 

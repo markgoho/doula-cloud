@@ -10,12 +10,8 @@ vi.mock('$app/state', () => ({
 	}
 }));
 
-vi.mock('#lib/firebase.js', () => ({
-	getFirebaseAuth: () => ({ currentUser: { getIdToken: () => Promise.resolve('id-token') } })
-}));
-
-const apiFetch = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetch }));
+const apiFetchWithSession = vi.hoisted(() => vi.fn());
+vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 // eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
 function jsonResponse(body: unknown, ok = true): Response {
@@ -29,7 +25,7 @@ interface MockOptions {
 }
 
 function mockApi({ status = 'not_connected', roles = [], sessionOk = true }: MockOptions = {}) {
-	apiFetch.mockImplementation((path: string) => {
+	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.endsWith('/session')) {
 			return Promise.resolve(jsonResponse({ roles }, sessionOk));
 		}
@@ -40,7 +36,7 @@ function mockApi({ status = 'not_connected', roles = [], sessionOk = true }: Moc
 }
 
 beforeEach(() => {
-	apiFetch.mockReset();
+	apiFetchWithSession.mockReset();
 });
 
 describe('payments settings screen', () => {

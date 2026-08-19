@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createUserWithEmailAndPassword } from 'firebase/auth';
+	import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
@@ -31,10 +31,17 @@
 			});
 			if (!response.ok) {
 				error = await response.text();
+				await signOut(getFirebaseAuth());
 				return;
 			}
 
 			const created: { practiceId: string } = await response.json();
+
+			// SignupHandler already set the session cookie on its own
+			// response (#145) -- just drop the JS SDK credential before
+			// landing (#149).
+			await signOut(getFirebaseAuth());
+
 			await goto(resolve('/practices/[practiceId]', { practiceId: created.practiceId }));
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Signup failed';
