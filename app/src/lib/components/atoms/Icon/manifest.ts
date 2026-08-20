@@ -9,7 +9,8 @@ export const iconManifest = [
 	'info',
 	'arrow-right',
 	'arrow-square-out',
-	'minus-circle'
+	'minus-circle',
+	'paperclip'
 ] as const;
 
 export type IconName = (typeof iconManifest)[number];

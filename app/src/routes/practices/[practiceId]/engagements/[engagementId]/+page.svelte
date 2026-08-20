@@ -26,6 +26,7 @@
 	import InvoiceSection from '#lib/InvoiceSection.svelte';
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
 	import { connect as connectStripe } from '#lib/payments.js';
+	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -39,17 +40,6 @@
 		visitId: string;
 		staffId: string;
 		staffName: string;
-		createdAt: string;
-	};
-
-	type Message = {
-		messageId: string;
-		senderType: 'staff' | 'client';
-		senderId: string;
-		senderName: string;
-		body: string;
-		attachmentFilename?: string;
-		attachmentContentType?: string;
 		createdAt: string;
 	};
 
@@ -71,8 +61,6 @@
 	let messagesCursor = $state('');
 	let isMessagesHasMore = $state(false);
 	let isLoadingOlderMessages = $state(false);
-	let newMessageBody = $state('');
-	let newMessageAttachment = $state<File | undefined>();
 	let isSendingMessage = $state(false);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
@@ -431,36 +419,35 @@
 		}
 	}
 
-	async function handleSendMessage(event: SubmitEvent) {
-		event.preventDefault();
+	async function didSendMessage(body: string, attachment: File | undefined): Promise<boolean> {
 		messagesError = '';
 		isSendingMessage = true;
 		try {
 			let response: Response;
-			if (newMessageAttachment) {
+			if (attachment) {
 				const form = new FormData();
-				form.set('body', newMessageBody);
-				form.set('attachment', newMessageAttachment);
+				form.set('body', body);
+				form.set('attachment', attachment);
 				response = await apiFetchWithSession(messagesURL(), { method: 'POST', body: form });
 			} else {
 				response = await apiFetchWithSession(messagesURL(), {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ body: newMessageBody })
+					body: JSON.stringify({ body })
 				});
 			}
 			if (!response.ok) {
 				messagesError = await response.text();
-				return;
+				return false;
 			}
 
 			const created = await response.json();
 			messages = [...messages, created];
-			newMessageBody = '';
-			newMessageAttachment = undefined;
 			await loadAttachmentPreviews([created]);
+			return true;
 		} catch (error_) {
 			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
+			return false;
 		} finally {
 			isSendingMessage = false;
 		}
@@ -601,60 +588,15 @@
 
 	<h2>Messages</h2>
 
-	{#if messagesError}
-		<p role="alert">{messagesError}</p>
-	{/if}
-
-	{#if isMessagesHasMore}
-		<button type="button" onclick={handleLoadOlderMessages} disabled={isLoadingOlderMessages}>
-			Load older messages
-		</button>
-	{/if}
-
-	{#if messages.length === 0}
-		<p>No messages yet.</p>
-	{:else}
-		<ul>
-			{#each messages as message (message.messageId)}
-				<li>
-					<strong>{message.senderName}</strong> ({message.senderType}) —
-					{new Date(message.createdAt).toLocaleString()}
-					{#if message.body}
-						<p>{message.body}</p>
-					{/if}
-					{#if message.attachmentFilename}
-						{#if attachmentPreviewURLs[message.messageId]}
-							<img
-								src={attachmentPreviewURLs[message.messageId]}
-								alt={message.attachmentFilename}
-								style="max-width: 240px; max-height: 240px; display: block;"
-							/>
-						{/if}
-						<button
-							type="button"
-							onclick={() => handleDownloadAttachment(message.messageId, message.attachmentFilename ?? '')}
-						>
-							📎 {message.attachmentFilename}
-						</button>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
-
-	<form onsubmit={handleSendMessage}>
-		<label>
-			Message
-			<textarea bind:value={newMessageBody}></textarea>
-		</label>
-		<label>
-			Attachment (image or PDF, up to 10MB)
-			<input
-				type="file"
-				accept="image/*,application/pdf"
-				onchange={(event) => (newMessageAttachment = event.currentTarget.files?.[0])}
-			/>
-		</label>
-		<button type="submit" disabled={isSendingMessage}>Send</button>
-	</form>
+	<MessageThread
+		{messages}
+		error={messagesError}
+		hasMore={isMessagesHasMore}
+		isLoadingOlder={isLoadingOlderMessages}
+		isSending={isSendingMessage}
+		onLoadOlder={handleLoadOlderMessages}
+		onSend={didSendMessage}
+		onDownloadAttachment={handleDownloadAttachment}
+		{attachmentPreviewURLs}
+	/>
 {/if}

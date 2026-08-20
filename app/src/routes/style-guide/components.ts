@@ -17,5 +17,6 @@ export const moleculePages = [
 
 export const organismPages = [
 	{ name: 'Data table', slug: 'data-table' },
-	{ name: 'Dynamic field editor', slug: 'dynamic-field-editor' }
+	{ name: 'Dynamic field editor', slug: 'dynamic-field-editor' },
+	{ name: 'Message thread', slug: 'message-thread' }
 ] as const;
