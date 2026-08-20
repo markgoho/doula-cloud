@@ -3,6 +3,11 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	let name = $state('');
 	let email = $state('');
@@ -39,19 +44,36 @@
 	}
 </script>
 
-<h1>Add a Client</h1>
+<Heading level={1} text="Add a Client" />
 
 <form onsubmit={handleSubmit}>
-	<label>
-		Their name
-		<input type="text" bind:value={name} required />
-	</label>
-	<label>
-		Their email
-		<input type="email" bind:value={email} required />
-	</label>
-	<button type="submit" disabled={isSubmitting}>Add Client</button>
+	<LabeledField label="Their name">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				value={name}
+				onInput={(value) => (name = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Their email">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				type="email"
+				value={email}
+				onInput={(value) => (email = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<Button type="submit" label="Add Client" loading={isSubmitting} />
 	{#if error}
-		<p role="alert">{error}</p>
+		<Notice variant="error" message={error} />
 	{/if}
 </form>

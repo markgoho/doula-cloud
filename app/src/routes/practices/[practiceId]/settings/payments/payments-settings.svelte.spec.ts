@@ -44,15 +44,16 @@ describe('payments settings screen', () => {
 		mockApi({ status: 'not_connected', roles: ['owner'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Stripe Connect status: Not connected')).toBeInTheDocument();
-		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeInTheDocument();
+		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Not connected')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
 	});
 
 	it('tells a non-Owner to ask an Owner instead of showing a button', async () => {
 		mockApi({ status: 'not_connected', roles: ['doula'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeInTheDocument();
+		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 	});
 
@@ -60,7 +61,8 @@ describe('payments settings screen', () => {
 		mockApi({ status: 'active', roles: ['owner'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Stripe Connect status: Active')).toBeInTheDocument();
+		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: /Stripe/ })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).not.toBeInTheDocument();
 	});
@@ -69,14 +71,14 @@ describe('payments settings screen', () => {
 		mockApi({ status: 'onboarding_incomplete', roles: ['owner'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 	});
 
 	it('falls back to no-Owner UI if the session roles fetch fails, even for an actual Owner', async () => {
 		mockApi({ status: 'not_connected', roles: [], sessionOk: false });
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeInTheDocument();
+		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 	});
 });

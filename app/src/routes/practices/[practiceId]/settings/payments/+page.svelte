@@ -3,6 +3,11 @@
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Badge from '#lib/components/atoms/Badge.svelte';
 
 	let status = $state<ConnectStatusResult | undefined>();
 	let error = $state('');
@@ -49,29 +54,43 @@
 		onboarding_incomplete: 'Onboarding incomplete',
 		active: 'Active'
 	};
+
+	const statusBadgeVariants: Record<ConnectStatus, 'neutral' | 'warning' | 'success'> = {
+		not_connected: 'neutral',
+		onboarding_incomplete: 'warning',
+		active: 'success'
+	};
 </script>
 
-<h1>Payments</h1>
+<Heading level={1} text="Payments" />
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {:else if status}
-	<p>Stripe Connect status: {statusLabels[status.status]}</p>
+	<cluster-l>
+		<Text text="Stripe Connect status:" />
+		<Badge label={statusLabels[status.status]} variant={statusBadgeVariants[status.status]} />
+	</cluster-l>
 
 	{#if connectParameter === 'return'}
-		<p role="status">Stripe onboarding finished. Status updates once Stripe confirms your account is active.</p>
+		<Notice
+			variant="status"
+			message="Stripe onboarding finished. Status updates once Stripe confirms your account is active."
+		/>
 	{:else if connectParameter === 'refresh'}
-		<p role="status">Your Stripe onboarding link expired. Start again below.</p>
+		<Notice variant="status" message="Your Stripe onboarding link expired. Start again below." />
 	{/if}
 
 	{#if isOwner && status.status !== 'active'}
-		<button type="button" onclick={handleConnect} disabled={isConnecting}>
-			{status.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
-		</button>
+		<Button
+			label={status.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
+			onClick={handleConnect}
+			loading={isConnecting}
+		/>
 		{#if connectError}
-			<p role="alert">{connectError}</p>
+			<Notice variant="error" message={connectError} />
 		{/if}
 	{:else if !isOwner && status.status !== 'active'}
-		<p>Ask a Practice Owner to connect Stripe.</p>
+		<Text text="Ask a Practice Owner to connect Stripe." />
 	{/if}
 {/if}

@@ -7,6 +7,9 @@
 		practicePushSubscriptionsPath,
 		registerPushSubscription
 	} from '#lib/pushRegistration.js';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 
 	let practiceName = $state('');
 	let roles = $state<string[]>([]);
@@ -38,36 +41,43 @@
 </script>
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {:else if practiceName}
-	<h1>Welcome to {practiceName}</h1>
-	<a href={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })}
-		>Clients</a
-	>
-	<a href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
-		>Billing</a
-	>
+	<Heading level={1} text={`Welcome to ${practiceName}`} />
+	<Link
+		href={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })}
+		label="Clients"
+	/>
+	<Link
+		href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
+		label="Billing"
+	/>
 	{#if roles.includes('owner')}
-		<a href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
-			>Invite a Staff member</a
-		>
-		<a href={resolve('/practices/[practiceId]/staff', { practiceId: page.params.practiceId! })}
-			>Staff</a
-		>
-		<a
+		<Link
+			href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
+			label="Invite a Staff member"
+		/>
+		<Link
+			href={resolve('/practices/[practiceId]/staff', { practiceId: page.params.practiceId! })}
+			label="Staff"
+		/>
+		<Link
 			href={resolve('/practices/[practiceId]/settings/plan-templates', {
 				practiceId: page.params.practiceId!
-			})}>Plan Templates</a
-		>
-		<a
+			})}
+			label="Plan Templates"
+		/>
+		<Link
 			href={resolve('/practices/[practiceId]/settings/contract-template', {
 				practiceId: page.params.practiceId!
-			})}>Contract Template</a
-		>
+			})}
+			label="Contract Template"
+		/>
 	{/if}
-	<a
+	<Link
 		href={resolve('/practices/[practiceId]/settings/payments', {
 			practiceId: page.params.practiceId!
-		})}>Payments</a
-	>
+		})}
+		label="Payments"
+	/>
 {/if}
