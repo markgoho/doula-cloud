@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadBalance, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
+	import DataTable from '#lib/components/organisms/DataTable.svelte';
 
 	let balance = $state<number | undefined>();
 	let ledger = $state<LedgerEntry[]>([]);
@@ -10,6 +11,15 @@
 	let roles = $state<string[]>([]);
 	let isOwner = $derived(roles.includes('owner'));
 	let checkoutStatus = $derived(page.url.searchParams.get('checkout'));
+
+	const columns = [
+		{ label: 'Date', accessor: (entry: LedgerEntry) => new Date(entry.createdAt).toLocaleString() },
+		{ label: 'Origin', accessor: (entry: LedgerEntry) => entry.origin },
+		{
+			label: 'Quantity',
+			accessor: (entry: LedgerEntry) => `${entry.quantity > 0 ? '+' : ''}${entry.quantity}`
+		}
+	];
 
 	let quantity = $state(1);
 	let purchaseError = $state('');
@@ -58,28 +68,7 @@
 {:else if balance !== undefined}
 	<p>Credit balance: {balance}</p>
 
-	{#if ledger.length === 0}
-		<p>No ledger history yet.</p>
-	{:else}
-		<table>
-			<thead>
-				<tr>
-					<th>Date</th>
-					<th>Origin</th>
-					<th>Quantity</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each ledger as entry (entry.createdAt + entry.origin + entry.quantity)}
-					<tr>
-						<td>{new Date(entry.createdAt).toLocaleString()}</td>
-						<td>{entry.origin}</td>
-						<td>{entry.quantity > 0 ? '+' : ''}{entry.quantity}</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-	{/if}
+	<DataTable {columns} rows={ledger} emptyMessage="No ledger history yet." />
 
 	{#if checkoutStatus === 'success'}
 		<p role="status">Credit purchase complete. The balance updates once Stripe confirms payment.</p>
