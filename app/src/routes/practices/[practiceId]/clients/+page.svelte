@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import DataTable from '#lib/components/organisms/DataTable.svelte';
 
 	type ClientEngagement = {
 		clientId: string;
@@ -15,6 +16,11 @@
 	let clients = $state<ClientEngagement[]>([]);
 	let error = $state('');
 	let isLoaded = $state(false);
+
+	const columns = [
+		{ label: 'Name', accessor: (client: ClientEngagement) => client.name },
+		{ label: 'Status', accessor: (client: ClientEngagement) => client.status }
+	];
 
 	onMount(async () => {
 		const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/clients`);
@@ -37,23 +43,14 @@
 {#if error}
 	<p role="alert">{error}</p>
 {:else if isLoaded}
-	{#if clients.length === 0}
-		<p>No Clients yet.</p>
-	{:else}
-		<ul>
-			{#each clients as client (client.engagementId)}
-				<li>
-					<a
-						href={resolve('/practices/[practiceId]/engagements/[engagementId]', {
-							practiceId: page.params.practiceId!,
-							engagementId: client.engagementId
-						})}
-					>
-						{client.name}
-					</a>
-					— {client.status}
-				</li>
-			{/each}
-		</ul>
-	{/if}
+	<DataTable
+		{columns}
+		rows={clients}
+		rowHref={(client) =>
+			resolve('/practices/[practiceId]/engagements/[engagementId]', {
+				practiceId: page.params.practiceId!,
+				engagementId: client.engagementId
+			})}
+		emptyMessage="No Clients yet."
+	/>
 {/if}
