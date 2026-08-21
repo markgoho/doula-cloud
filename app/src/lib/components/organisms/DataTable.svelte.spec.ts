@@ -1,3 +1,4 @@
+import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -6,6 +7,20 @@ import DataTable from './DataTable.svelte';
 interface Row {
 	name: string;
 	status: string;
+}
+
+function removeActionSnippet(onRemove: (row: Row) => void) {
+	return createRawSnippet<[Row]>((row) => {
+		const handler = () => onRemove(row());
+		return {
+			render: () => `<button type="button">Remove</button>`,
+			setup: (element) => {
+				const button = element as HTMLButtonElement;
+				button.addEventListener('click', handler);
+				return () => button.removeEventListener('click', handler);
+			}
+		};
+	});
 }
 
 const columns = [
@@ -21,6 +36,7 @@ const rows: Row[] = [
 interface SetupOptions {
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
+	rowActions?: { label: string; onRemove: (row: Row) => void };
 	hasMore?: boolean;
 	onLoadMore?: () => void;
 	emptyMessage?: string;
@@ -29,6 +45,7 @@ interface SetupOptions {
 async function setup({
 	rows: rowsOption = rows,
 	rowHref,
+	rowActions,
 	hasMore = false,
 	onLoadMore,
 	emptyMessage = 'No records yet.'
@@ -37,6 +54,10 @@ async function setup({
 		columns,
 		rows: rowsOption,
 		rowHref,
+		rowActions: rowActions && {
+			label: rowActions.label,
+			content: removeActionSnippet(rowActions.onRemove)
+		},
 		hasMore,
 		onLoadMore,
 		emptyMessage
@@ -105,5 +126,30 @@ describe('DataTable.svelte', () => {
 		await setup({ hasMore: true });
 
 		await expect.element(page.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+	});
+
+	it('renders no trailing action column when rowActions is omitted', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelectorAll('th')).toHaveLength(2);
+	});
+
+	it('renders a trailing header and per-row action content when rowActions is provided', async () => {
+		const onRemove = vi.fn();
+		await setup({ rowActions: { label: 'Actions', onRemove } });
+
+		await expect.element(page.getByRole('columnheader', { name: 'Actions' })).toBeVisible();
+
+		const buttons = page.getByRole('button', { name: 'Remove' });
+		await expect.element(buttons.nth(0)).toBeVisible();
+		await buttons.nth(1).click();
+
+		expect(onRemove).toHaveBeenCalledExactlyOnceWith(rows[1]);
+	});
+
+	it('spans the action column too when rowActions is provided and rows is empty', async () => {
+		const { container } = await setup({ rows: [], rowActions: { label: 'Actions', onRemove: vi.fn() } });
+
+		expect(container.querySelector('td[colspan]')).toHaveAttribute('colspan', '3');
 	});
 });

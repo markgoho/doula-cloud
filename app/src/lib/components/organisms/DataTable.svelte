@@ -1,4 +1,5 @@
 <script lang="ts" generics="T">
+	import type { Snippet } from 'svelte';
 	import Button from '../atoms/Button.svelte';
 
 	interface Column<T> {
@@ -6,16 +7,23 @@
 		accessor: (row: T) => string;
 	}
 
+	interface RowActions<T> {
+		label: string;
+		content: Snippet<[row: T]>;
+	}
+
 	interface Properties<T> {
 		columns: Column<T>[];
 		rows: T[];
 		rowHref?: (row: T) => string;
+		rowActions?: RowActions<T>;
 		hasMore?: boolean;
 		onLoadMore?: () => void;
 		emptyMessage: string;
 	}
 
-	let { columns, rows, rowHref, hasMore = false, onLoadMore, emptyMessage }: Properties<T> = $props();
+	let { columns, rows, rowHref, rowActions, hasMore = false, onLoadMore, emptyMessage }: Properties<T> =
+		$props();
 </script>
 
 <stack-l>
@@ -25,12 +33,15 @@
 				{#each columns as column (column.label)}
 					<th scope="col">{column.label}</th>
 				{/each}
+				{#if rowActions}
+					<th scope="col">{rowActions.label}</th>
+				{/if}
 			</tr>
 		</thead>
 		<tbody>
 			{#if rows.length === 0}
 				<tr>
-					<td colspan={columns.length}>{emptyMessage}</td>
+					<td colspan={columns.length + (rowActions ? 1 : 0)}>{emptyMessage}</td>
 				</tr>
 			{:else}
 				{#each rows as row, index (index)}
@@ -44,6 +55,11 @@
 								{/if}
 							</td>
 						{/each}
+						{#if rowActions}
+							<td>
+								{@render rowActions.content(row)}
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			{/if}

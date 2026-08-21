@@ -1,5 +1,6 @@
 <script lang="ts">
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 
 	interface Client {
 		name: string;
@@ -21,7 +22,13 @@
 	function onLoadMore() {
 		hasMore = false;
 	}
+
+	const noop = () => {};
 </script>
+
+{#snippet removeAction()}
+	<Button label="Remove" variant="destructive" size="sm" onClick={noop} />
+{/snippet}
 
 <stack-l space="var(--space-6)">
 	<h1>Data table</h1>
@@ -49,5 +56,15 @@
 	<section>
 		<h2>Empty</h2>
 		<DataTable {columns} rows={[]} emptyMessage="No clients yet." />
+	</section>
+
+	<section>
+		<h2>Row actions</h2>
+		<DataTable
+			{columns}
+			rows={clients}
+			rowActions={{ label: 'Actions', content: removeAction }}
+			emptyMessage="No clients yet."
+		/>
 	</section>
 </stack-l>
