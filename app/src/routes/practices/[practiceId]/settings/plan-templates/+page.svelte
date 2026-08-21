@@ -3,6 +3,10 @@
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DynamicFieldEditor from '#lib/components/organisms/DynamicFieldEditor.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import {
 		loadTemplate,
 		saveTemplate,
@@ -66,21 +70,19 @@
 	});
 </script>
 
-<h1>Plan Templates</h1>
+<Heading level={1} text="Plan Templates" />
 
 <nav>
 	{#each planTypes as pt (pt.value)}
-		<button type="button" onclick={() => selectPlanType(pt.value)} disabled={planType === pt.value}>
-			{pt.label}
-		</button>
+		<Button label={pt.label} onClick={() => selectPlanType(pt.value)} disabled={planType === pt.value} />
 	{/each}
 </nav>
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {/if}
 {#if isSaved}
-	<p>Saved.</p>
+	<Text text="Saved." />
 {/if}
 
 <DynamicFieldEditor
@@ -94,4 +96,4 @@
 	onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
 />
 
-<button type="button" onclick={save}>Save</button>
+<Button label="Save" onClick={save} />
