@@ -4,6 +4,10 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import ContractTemplateEditor from '#lib/ContractTemplateEditor.svelte';
 	import { loadContractTemplate, saveContractTemplate, validateProse } from '#lib/contractTemplate.js';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 
 	let prose = $state('');
 	let error = $state('');
@@ -42,15 +46,15 @@
 	});
 </script>
 
-<h1>Contract Template</h1>
+<Heading level={1} text="Contract Template" />
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {/if}
 {#if isSaved}
-	<p>Saved.</p>
+	<Text text="Saved." />
 {/if}
 
 <ContractTemplateEditor {prose} onProseChange={(value: string) => (prose = value)} />
 
-<button type="button" onclick={save}>Save</button>
+<Button label="Save" onClick={save} />
