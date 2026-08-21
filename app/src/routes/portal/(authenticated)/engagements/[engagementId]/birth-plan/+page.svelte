@@ -5,6 +5,11 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClientBirthPlan, type Instance } from '#lib/planInstance.js';
 	import BirthPlanView from '#lib/BirthPlanView.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 
 	let instance = $state<Instance | null | undefined>();
 	let error = $state('');
@@ -19,21 +24,21 @@
 </script>
 
 <div class="no-print">
-	<a
+	<Link
 		href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
-		>Back</a
-	>
+		label="Back"
+	/>
 </div>
 
 {#if error}
-	<p role="alert" class="no-print">{error}</p>
+	<div class="no-print"><Notice variant="error" message={error} /></div>
 {:else if instance === undefined}
-	<p class="no-print">Loading...</p>
+	<div class="no-print"><Text text="Loading..." /></div>
 {:else if instance === null}
-	<p class="no-print">No Birth Plan has been created for this Engagement yet.</p>
+	<div class="no-print"><Text text="No Birth Plan has been created for this Engagement yet." /></div>
 {:else}
-	<h1>Birth Plan</h1>
-	<button type="button" class="no-print" onclick={() => print()}>Print</button>
+	<Heading level={1} text="Birth Plan" />
+	<div class="no-print"><Button label="Print" onClick={() => print()} /></div>
 	<BirthPlanView fields={instance.fields} answers={instance.answers} />
 {/if}
 

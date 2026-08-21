@@ -7,6 +7,10 @@
 	import ContractView from '#lib/ContractView.svelte';
 	import ContractStatus from '#lib/ContractStatus.svelte';
 	import SignContract from '#lib/SignContract.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 
 	let contract = $state<Contract | null | undefined>();
 	let error = $state('');
@@ -24,16 +28,19 @@
 	}
 </script>
 
-<a href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}>Back</a>
+<Link
+	href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
+	label="Back"
+/>
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {:else if contract === undefined}
-	<p>Loading...</p>
+	<Text text="Loading..." />
 {:else if contract === null}
-	<p>No Contract has been sent for this Engagement yet.</p>
+	<Text text="No Contract has been sent for this Engagement yet." />
 {:else}
-	<h1>Contract</h1>
+	<Heading level={1} text="Contract" />
 	<ContractStatus status={contract.status} />
 	<ContractView prose={contract.prose} values={contract.values} />
 	{#if contract.status === 'sent'}
