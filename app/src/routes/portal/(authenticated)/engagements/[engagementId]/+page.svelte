@@ -9,6 +9,10 @@
 	} from '#lib/pushRegistration.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -176,22 +180,24 @@
 </script>
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {:else if detail}
-	<h1>Welcome to {detail.practiceName}</h1>
-	<dl>
-		<dt>Status</dt>
-		<dd>{detail.status}</dd>
-		<dt>Created</dt>
-		<dd>{new Date(detail.createdAt).toLocaleDateString()}</dd>
-	</dl>
+	<Heading level={1} text={`Welcome to ${detail.practiceName}`} />
+	<DescriptionList
+		items={[
+			{ label: 'Status', value: detail.status },
+			{ label: 'Created', value: new Date(detail.createdAt).toLocaleDateString() }
+		]}
+	/>
 
-	<a href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', { engagementId: page.params.engagementId! })}
-		>Birth Plan</a
-	>
-	<a href={resolve('/portal/(authenticated)/engagements/[engagementId]/contract', { engagementId: page.params.engagementId! })}
-		>Contract</a
-	>
+	<Link
+		href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', { engagementId: page.params.engagementId! })}
+		label="Birth Plan"
+	/>
+	<Link
+		href={resolve('/portal/(authenticated)/engagements/[engagementId]/contract', { engagementId: page.params.engagementId! })}
+		label="Contract"
+	/>
 
 	<h2>Messages</h2>
 

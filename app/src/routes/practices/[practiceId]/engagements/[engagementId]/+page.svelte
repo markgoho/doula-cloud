@@ -27,6 +27,11 @@
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
 	import { connect as connectStripe } from '#lib/payments.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -471,29 +476,25 @@
 </script>
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {:else if detail}
-	<h1>{detail.clientName}</h1>
-	<dl>
-		<dt>Status</dt>
-		<dd>{detail.status}</dd>
-		<dt>Created</dt>
-		<dd>{new Date(detail.createdAt).toLocaleDateString()}</dd>
-	</dl>
+	<Heading level={1} text={detail.clientName} />
+	<DescriptionList
+		items={[
+			{ label: 'Status', value: detail.status },
+			{ label: 'Created', value: new Date(detail.createdAt).toLocaleDateString() }
+		]}
+	/>
 
-	<button type="button" onclick={handleSendPortalInvite} disabled={isSendingPortalInvite}
-		>Send portal invite</button
-	>
+	<Button label="Send portal invite" onClick={handleSendPortalInvite} loading={isSendingPortalInvite} />
 
 	{#if portalInviteError}
-		<p role="alert">{portalInviteError}</p>
+		<Notice variant="error" message={portalInviteError} />
 	{/if}
 
 	{#if portalInviteLink}
-		<p>
-			Invited. There is no email sending yet, so share this link with them directly:
-			<code>{portalInviteLink}</code>
-		</p>
+		<Text text="Invited. There is no email sending yet, so share this link with them directly:" />
+		<div><code>{portalInviteLink}</code></div>
 	{/if}
 
 	<h2>Visits</h2>
