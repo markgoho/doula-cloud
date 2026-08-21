@@ -9,9 +9,9 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "firebase-tools": "^15.26.0"
+    "firebase-tools": "^15.28.1"
   },
   "peerDependencies": {
-    "typescript": "6"
+    "typescript": "6.0.3"
   }
 }
