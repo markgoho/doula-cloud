@@ -156,6 +156,24 @@ Invoice section — are covered up to the redirect and from the redirect
 back. What happens in between is walked by hand, per the run logs in
 `docs/test-plans/`.
 
+## Account posture: platform, not merchant of record
+
+Stripe's onboarding offers Managed Payments, where Stripe becomes the
+merchant of record: legally the seller, registering for and remitting
+sales tax and VAT, absorbing chargebacks, for 3.5% on top of the card
+fee. Doula Cloud does not take it.
+
+It suits a business that only ever sells its own product. Doula Cloud has
+a second surface where the Practice is the merchant and we are the
+platform, and every merged Stripe code path assumes the platform posture:
+our own Price, our own Checkout Session, our own Customer, our own
+webhook, and Standard connected accounts underneath. Stripe Tax and Radar
+for Fraud Teams are both left off for the same reason — neither is needed
+in test mode, and SaaS sales tax is a launch question, not a test-mode
+one.
+
+Stripe says this is changeable later, and it is.
+
 ## First-time setup
 
 ```
