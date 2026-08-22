@@ -63,8 +63,11 @@ the link either (RA-G1), so Renata pastes a URL into a text.
 
 - **1.1** — Open the invite link at `/accept-invite`.
 - **1.2** — Sign in as herself and submit
-  (`POST /api/staff/accept-invite`). Expected: a unique-constraint failure surfacing
-  as a 500, not a second membership.
+  (`POST /api/staff/accept-invite`). Expected: a **409**, "a staff account already
+  exists for this identity" — `accept.go:104` catches the unique violation
+  deliberately (`isUniqueViolation`) rather than letting it surface as a 500. The
+  refusal is clean; what is missing is the second membership behind it, not error
+  handling.
 - **1.3** — The membership, if it were created, would carry `roles = '{}'`
   (`invite.go:67`) and no employment type, because there is no column for one
   (RA-G8, LV-G1).

@@ -17,8 +17,16 @@ A tenant business. May be a solo doula or a multi-doula business with non-doula 
 _Avoid_: Business, tenant, org
 
 **Staff**:
-A person who works at a Practice. Holds one or more roles (e.g. Doula, Admin, Owner) via their membership at that Practice; the same person's roles may differ across Practices.
+A person who works at a Practice. One person is one Staff record, however many Practices they work at; what they are at each Practice is a separate Membership. Holds one or more roles (e.g. Doula, Admin, Owner) via that Membership; the same person's roles may differ across Practices.
 _Avoid_: User, employee, member
+
+**Membership**:
+What one Staff person is to one Practice — the roles they hold there and their Employment type. A person holds a separate Membership per Practice, and working at more than one Practice is normal, not an oddity: a contractor Doula is the ordinary case. A Membership always carries at least one role; it is created by accepting an Invitation, and it is the only thing that makes a person Staff at that Practice.
+_Avoid_: Seat, account, affiliation
+
+**Invitation**:
+A Practice asking one person to join it as Staff, naming the email address it is sent to and the roles and Employment type the Membership will carry. Accepting it creates that Membership; the person supplies their own name. An Invitation expires, may be revoked by an Owner, and may be accepted only once. Distinct from an Offer, which is about a single Engagement, not about joining the Practice.
+_Avoid_: Invite link, signup, Offer (an Offer is work, not membership)
 
 **Doula**:
 A role a Staff member holds, not a separate entity. A Staff member with the Doula role is the one who works Engagements and Visits with Clients.

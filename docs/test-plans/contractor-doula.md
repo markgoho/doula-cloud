@@ -31,7 +31,7 @@ below is what lets the later stages be walked at all.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `manual` |
-| 1.2 | Sign in as herself and submit | **Expected failure**: `InviteHandler` inserted a fresh `staff` row and acceptance writes her identity onto it, but `staff.identity_uid` is `UNIQUE` and hers is on the other agency's row. A unique-constraint violation, surfacing as a `500` | `manual` |
+| 1.2 | Sign in as herself and submit | **Expected failure**: `InviteHandler` inserted a fresh `staff` row and acceptance writes her identity onto it, but `staff.identity_uid` is `UNIQUE` and hers is on the other agency's row. A unique-constraint violation, caught at `accept.go:104` and surfacing as a **`409`**, "a staff account already exists for this identity" | `manual` |
 | 1.2-a | Check for a second membership | None exists. A person cannot be Staff at two Practices through the only route that reaches her | `missing-feature (LV-G2)` |
 | 1.3 | Record that she is a contractor, not an employee | `practice_memberships` is `(practice_id, staff_id, roles, created_at)` — no column holds it | `missing-feature (LV-G1)` |
 
