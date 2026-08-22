@@ -160,6 +160,7 @@ it, because there is no click to record.
 | RA-G5 | 8 | Experience | No coverage or availability view, and no dated Visits to build one from. Her stated anxiety has no surface at all. |
 | RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. |
 | RA-G7 | 7 | Interaction | No Practice-wide Invoice or unpaid list. Invoices are reachable only inside a single Engagement's Contract. |
+| RA-G8 | 2 | Interaction | An invitation carries no roles. `InviteHandler` takes a name and an email and inserts a membership with `roles = '{}'` (`api/internal/staffauth/invite.go:67`), so a zero-role membership is the only possible outcome of inviting anyone. Distinct root from RA-G2: a role-assignment UI alone would not fix the endpoint's contract. [ADR-0006](../adr/0006-read-follows-the-role.md) abolishes the zero-role state by putting roles on the invitation. |
 
 Also hit here, filed on their owning maps: **MO-G4** (an Engagement's status never
 changes, so her one status column is dead), **MO-G1** (dateless Visits, which is

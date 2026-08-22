@@ -32,6 +32,10 @@ _Avoid_: Admin, superuser, account holder
 A role a Staff member holds, covering the business side of a Practice — Clients, Contracts, Invoices, and scheduling. Narrower than Owner despite the name, and independent of Doula: an Admin may hold neither, either, or both of the other roles.
 _Avoid_: Office manager, Administrator, superuser
 
+**Employment type**:
+What a Staff member is to a Practice — `employee` or `contractor` — held on their membership, independent of their roles. A role says what a person does; employment type says what they are to the business, so the two are orthogonal and either value may pair with any roles. It governs how much of a Practice a contractor Doula may read. See [ADR-0006](docs/adr/0006-read-follows-the-role.md).
+_Avoid_: Staff type, worker type (both read as a role)
+
 **Client**:
 The pregnant/birthing person a Practice serves. Does not (yet) cover a partner or support person — portal access for a second person is a future extension of Client, not a new entity.
 _Avoid_: Patient, customer, mom
@@ -47,7 +51,7 @@ _Client says_: no client-facing surface today — the portal shows no Visit, so 
 _Avoid_: Appointment (reads clinical/medical-provider)
 
 **Care Plan**:
-Internal working notes on how the Practice will support a Client's Engagement. Structure is defined per-Practice via a Plan Template (see below); staff-only, never shown in the Client portal.
+Internal working notes on how the Practice will support a Client's Engagement. Structure is defined per-Practice via a Plan Template (see below); staff-only, never shown in the Client portal. **Staff-only** means not the Client — it does not exclude any Staff role, and an Admin reads it ([ADR-0006](docs/adr/0006-read-follows-the-role.md)).
 _Avoid_: Plan, notes
 
 **Birth Plan**:
@@ -78,6 +82,10 @@ _Avoid_: Transaction
 **Message**:
 Staff-to-client, bidirectional, in-app communication tied to an Engagement — one continuous thread per Engagement, not split by topic. May carry an image or PDF attachment. Immutable once sent (no edit, no delete) and kept indefinitely as part of the Engagement's permanent record. Delivered via push-triggered fetch: a content-free push notification wakes the client, which then fetches the real content — not a substitute for a phone call in a time-critical situation. See [ADR-0002](docs/adr/0002-message-transport-push-triggered-fetch.md).
 _Avoid_: Chat, DM (implies a general-purpose messenger, not an Engagement-scoped record)
+
+**Credit**:
+A unit of Doula Cloud's own billing, owned by the **Practice** — never by a Staff member, whatever their roles or Employment type. Only an Owner buys them. Held as an append-only ledger, so a balance is always a sum and never a stored number. What a Credit is spent on is not yet settled (TB-G3).
+_Avoid_: Token, seat, point
 
 **Persona**:
 One of eight named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).

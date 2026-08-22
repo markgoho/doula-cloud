@@ -159,9 +159,9 @@ button.
 | ID | Stage | Layer | Gap |
 | --- | --- | --- | --- |
 | PR-G1 | 4 | Interaction | She sees every Client in the Practice. The list handler is Practice-scoped by design ("v1 has no restricted-visibility model"), so her scope requirement fails outright. |
-| PR-G2 | 5 | Both | She can read any Engagement's Contract amount and Invoice history, for any Client. Read paths carry no role checks. |
+| PR-G2 | 5 | Both | She can read any Engagement's Contract amount and Invoice history, for any Client. Read paths carry no role checks. [ADR-0006](../adr/0006-read-follows-the-role.md) settles the rule: an **employed** Doula reads a Contract's scope but not its money, so the Contract read must be able to return one without the other. |
 | PR-G3 | 2 | Interaction | The `doula` role is never read anywhere in the codebase. Holding it changes nothing. |
-| PR-G4 | Permission boundary | Interaction | No route has a load-time guard. The Plan Template, Contract Template, and Billing screens gate on write only (`GET` is ungated on all three), so she reaches the page, reads real Practice data, and is refused only at the save button. |
+| PR-G4 | Permission boundary | Interaction | No route has a load-time guard. The Plan Template, Contract Template, and Billing screens gate on write only (`GET` is ungated on all three), so she reaches the page, reads real Practice data, and is refused only at the save button. [ADR-0006](../adr/0006-read-follows-the-role.md) puts the refusal on the read endpoint, not the guard, and rules the Templates readable by any Staff role — so of these three, only Billing is a refusal for her. |
 | PR-G5 | 6 | Experience | The Birth Plan is a section partway down a long single-page Engagement view, with no deep link and no phone-first path, at the exact moment she is standing in a corridor. |
 | PR-G6 | 7 | Experience | A Visit carries no type, so the three kinds she distinguishes — prenatal, birth, postpartum — are one undifferentiated row. Dateless and note-less Visits are **MO-G1** and **MO-G2**. |
 | PR-G7 | 1 | Experience | Her first impression is a raw URL pasted into a text message, which she cannot verify is genuine. This is the experience half of **RA-G1**; the missing email itself is filed there. |

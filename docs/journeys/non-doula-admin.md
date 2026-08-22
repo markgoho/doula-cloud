@@ -182,7 +182,8 @@ Doula on an Engagement), **MO-G3** (Client takes name and email only).
 Not gaps, and not `journey-gap` issues. This journey exposes them; it cannot
 settle them alone.
 
-- **May an Admin read a filled Care Plan or Birth Plan?** Today they can — no role
-  check guards `GET .../plans/{planType}`. `CONTEXT.md` calls the Care Plan
-  staff-only internal notes, which does not by itself exclude an Admin. Wants its
-  own decision ticket.
+- ~~**May an Admin read a filled Care Plan or Birth Plan?**~~ **Settled: yes, both.**
+  [ADR-0006](../adr/0006-read-follows-the-role.md) reads "staff-only" as *not the
+  Client*, which does not exclude any Staff role. Today's ungated behaviour is
+  correct for Dee — but not for a Doula, who under the same ADR loses the Contract's
+  money and the credit ledger. See DW-G4.
