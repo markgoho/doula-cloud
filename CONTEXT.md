@@ -84,7 +84,7 @@ Staff-to-client, bidirectional, in-app communication tied to an Engagement — o
 _Avoid_: Chat, DM (implies a general-purpose messenger, not an Engagement-scoped record)
 
 **Credit**:
-A unit of Doula Cloud's own billing, owned by the **Practice** — never by a Staff member, whatever their roles or Employment type. Only an Owner buys them. Held as an append-only ledger, so a balance is always a sum and never a stored number. What a Credit is spent on is not yet settled (TB-G3).
+A unit of Doula Cloud's own billing, owned by the **Practice** — never by a Staff member, whatever their roles or Employment type. Only an Owner buys them. What a Credit is spent on is not yet settled (TB-G3).
 _Avoid_: Token, seat, point
 
 **Persona**:
