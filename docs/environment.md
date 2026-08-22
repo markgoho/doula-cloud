@@ -172,7 +172,20 @@ for Fraud Teams are both left off for the same reason — neither is needed
 in test mode, and SaaS sales tax is a launch question, not a test-mode
 one.
 
-Stripe says this is changeable later, and it is.
+Stripe then pre-ticks three products. Only **Send invoices** stays on.
+**Create subscriptions** is off because #45 settled that there is no
+subscription and no tiers — a Practice prepays per Engagement, and the
+purchase is a one-time Checkout Session in `mode=payment`. **Collect
+tax** is off because Stripe Tax wants an origin address and a tax code
+per Price before it does anything, and SaaS sales tax is a launch
+question rather than a test-mode one.
+
+The same screen offers **"Connect to a platform instead"**. That link
+reads backwards: it makes this account a *connected account* under
+someone else's platform, which is the role a Practice plays. Connect is
+enabled separately, on its own dashboard page.
+
+Stripe says all of this is changeable later, and it is.
 
 ## First-time setup
 
