@@ -127,5 +127,14 @@ route, which no spec walks.
 
 ## Run log
 
-Not yet run. First execution is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
+
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
+Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
+migration, the Go BFF and the Firebase Auth emulator, all local.
+
+This plan has **no** `automated` step, so the suite says nothing about it.
+Every step below stage 1 waits on the walk.
+
+The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
+That is [#236](https://github.com/markgoho/doula-cloud/issues/236).

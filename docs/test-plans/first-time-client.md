@@ -126,5 +126,22 @@ Contract and the suite never does.
 
 ## Run log
 
-Not yet run. First execution is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
+
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
+Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
+migration, the Go BFF and the Firebase Auth emulator, all local.
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| 2.1-a | `portal-invite-accept.e2e.ts` | pass |
+| 2.2 | `portal-invite-accept.e2e.ts` | pass |
+| 2.3 | `portal-invite-accept.e2e.ts` | pass |
+| 3.1 | `portal-invite-accept.e2e.ts` | pass |
+| 5.1-a | `birth-plan.e2e.ts` | pass |
+| 7.2 | `push-notification.e2e.ts` | pass |
+
+**6 automated steps: all pass.**
+
+The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
+That is [#240](https://github.com/markgoho/doula-cloud/issues/240).

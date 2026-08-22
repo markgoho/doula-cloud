@@ -126,5 +126,18 @@ and what it hands back is the finding.
 
 ## Run log
 
-Not yet run. First execution is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
+
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
+Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
+migration, the Go BFF and the Firebase Auth emulator, all local.
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| 3.1 | `staff-login.e2e.ts` | pass |
+| 8.2-a | `push-notification.e2e.ts` | pass |
+
+**2 automated steps: all pass.**
+
+The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
+That is [#237](https://github.com/markgoho/doula-cloud/issues/237).

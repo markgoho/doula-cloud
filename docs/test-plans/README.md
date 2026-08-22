@@ -6,8 +6,15 @@ slug, which matches its [persona](../personas/) file slug, one-to-one.
 A test plan is the **runnable form of a journey map's interaction layer**. The
 experience layer does not become steps — it becomes `journey-gap` issues on the
 map itself. A plan therefore proves or disproves the map: every step below is a
-claim about the product read out of the code, and **no plan has been executed
-yet**. The first run is [#209](https://github.com/markgoho/doula-cloud/issues/209).
+claim about the product read out of the code.
+
+**Run status (2026-08-22):** the automated steps of all nine plans are run and
+**all pass** — `bun run test:e2e`, 16 passed, 0 failed. Every `manual`,
+`blocked` and `missing-feature` step is still unwalked; one walk ticket per plan
+carries that ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
+and each plan's **Run log** names its own. Filing the `journey-gap` issues stays
+[#209](https://github.com/markgoho/doula-cloud/issues/209), which now waits on
+all nine walks.
 
 ## Fixed structure
 
