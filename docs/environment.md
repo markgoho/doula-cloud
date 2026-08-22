@@ -189,7 +189,11 @@ for Fraud Teams are both left off for the same reason — neither is needed
 in the Sandbox, and SaaS sales tax is a launch question, not a Sandbox
 one.
 
-Stripe then pre-ticks three products. Only **Send invoices** stays on.
+Stripe then offers four products, and two stay on: **Send invoices** and
+**Build a platform**. The second is Connect, described in plain words —
+"let your customers accept payments and receive payouts through your
+product". It appears only inside the Sandbox, so the same screen shown
+before entering one offers three options and hides it.
 **Create subscriptions** is off because #45 settled that there is no
 subscription and no tiers — a Practice prepays per Engagement, and the
 purchase is a one-time Checkout Session in `mode=payment`. **Collect
