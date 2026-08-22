@@ -8,13 +8,44 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// The three connection statuses GetConnectStatusHandler can report, per
-// #79's ticket body: not connected / onboarding incomplete / active.
+// The connection statuses GetConnectStatusHandler can report. #79 defined
+// three -- not connected / onboarding incomplete / active -- against v1's
+// three booleans. Accounts v2 reports two four-valued capability statuses
+// instead (#247), which the three cannot express, so two are added:
+//
+//   - StatusPending is Stripe reviewing what the Owner has already
+//     supplied. It is not "onboarding incomplete" (there is nothing left
+//     to fill in) and not "active" (no Client can be charged yet), which
+//     is exactly the case a boolean could not represent.
+//   - StatusPayoutsRestricted is card_payments active while payouts is
+//     not: Clients can pay, and the money is stuck in Stripe rather than
+//     reaching the Practice's bank. Under v1 this collapsed into
+//     "onboarding incomplete" and read as if invoicing were broken, which
+//     it is not.
 const (
 	StatusNotConnected         = "not_connected"
 	StatusOnboardingIncomplete = "onboarding_incomplete"
+	StatusPending              = "pending"
+	StatusPayoutsRestricted    = "payouts_restricted"
 	StatusActive               = "active"
 )
+
+// deriveStatus projects a v2 AccountStatus onto the single status the
+// Payments screen shows. card_payments leads, because being payable at all
+// is the thing the Practice is here for; payouts only refines an otherwise
+// active account.
+func deriveStatus(status AccountStatus) string {
+	switch {
+	case status.CardPayments == CapabilityActive && status.Payouts == CapabilityActive:
+		return StatusActive
+	case status.CardPayments == CapabilityActive:
+		return StatusPayoutsRestricted
+	case status.CardPayments == CapabilityPending || status.Payouts == CapabilityPending:
+		return StatusPending
+	default:
+		return StatusOnboardingIncomplete
+	}
+}
 
 // ConnectResponse is the body of PostConnectHandler's response: the
 // Stripe-hosted Account Link onboarding page the caller's browser should
@@ -26,14 +57,21 @@ type ConnectResponse struct {
 // ConnectStatusResponse is the body of GetConnectStatusHandler's response:
 // a Practice's current Stripe Connect status, read live from Stripe.
 type ConnectStatusResponse struct {
-	Status           string `json:"status"`
-	ChargesEnabled   bool   `json:"chargesEnabled"`
-	PayoutsEnabled   bool   `json:"payoutsEnabled"`
-	DetailsSubmitted bool   `json:"detailsSubmitted"`
+	Status string `json:"status"`
+	// The two raw capability statuses behind Status, so the screen can say
+	// which half of the account is held up rather than only that something
+	// is. Both are "unsupported" when the Practice has no Connect account
+	// at all.
+	CardPaymentsStatus CapabilityStatus `json:"cardPaymentsStatus"`
+	PayoutsStatus      CapabilityStatus `json:"payoutsStatus"`
+	// The Stripe field paths still awaiting the Owner. Never null -- an
+	// empty list rather than a missing one, so the client needs no
+	// null-check.
+	RequirementsDue []string `json:"requirementsDue"`
 }
 
 // PostConnectHandler lets a Practice Owner start (or resume) Stripe
-// Connect Standard onboarding: it lazily creates the Practice's Connect
+// Connect merchant onboarding: it lazily creates the Practice's Connect
 // account on its first attempt and returns an Account Link URL to
 // onboard, reusing the stored account id on any later attempt so
 // onboarding can be resumed instead of starting over. Must be mounted
@@ -101,7 +139,7 @@ func PostConnectHandler(client Client) http.Handler {
 // Practice with no stored account id is reported not_connected without any
 // Stripe call; otherwise status is read live via an on-demand Account
 // retrieve (#79's ticket body: this is deliberately not backed by the
-// webhook-synced booleans on practices). Must be mounted behind
+// webhook-synced columns on practices). Must be mounted behind
 // staffauth.Middleware.
 func GetConnectStatusHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -120,23 +158,24 @@ func GetConnectStatusHandler(client Client) http.Handler {
 			return
 		}
 
-		var out ConnectStatusResponse
-		if !accountID.Valid {
-			out.Status = StatusNotConnected
-		} else {
+		out := ConnectStatusResponse{
+			Status:             StatusNotConnected,
+			CardPaymentsStatus: CapabilityUnsupported,
+			PayoutsStatus:      CapabilityUnsupported,
+			RequirementsDue:    []string{},
+		}
+		if accountID.Valid {
 			status, err := client.RetrieveAccount(r.Context(), accountID.String)
 			if err != nil {
 				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			out.ChargesEnabled = status.ChargesEnabled
-			out.PayoutsEnabled = status.PayoutsEnabled
-			out.DetailsSubmitted = status.DetailsSubmitted
-			if status.ChargesEnabled && status.PayoutsEnabled && status.DetailsSubmitted {
-				out.Status = StatusActive
-			} else {
-				out.Status = StatusOnboardingIncomplete
+			out.CardPaymentsStatus = status.CardPayments
+			out.PayoutsStatus = status.Payouts
+			if status.RequirementsDue != nil {
+				out.RequirementsDue = status.RequirementsDue
 			}
+			out.Status = deriveStatus(status)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

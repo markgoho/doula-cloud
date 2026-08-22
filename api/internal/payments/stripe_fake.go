@@ -139,6 +139,14 @@ func (f *FakeClient) VerifyWebhookSignature(_ []byte, _, _ string) (WebhookEvent
 	return WebhookEvent{}, nil
 }
 
+// ParseAccountEvent is likewise not faked for signature verification --
+// PostAccountWebhookHandler's tests inject the real StripeAPIClient so a
+// genuinely signed thin event is what reaches the handler. It returns a
+// zero-value AccountEvent and no error.
+func (f *FakeClient) ParseAccountEvent(_ []byte, _, _ string) (AccountEvent, error) {
+	return AccountEvent{}, nil
+}
+
 // AccountCallCount returns how many times CreateAccount has been called so
 // far -- tests use this to prove a second connection attempt reuses the
 // Practice's already-stored stripe_connect_account_id instead of creating

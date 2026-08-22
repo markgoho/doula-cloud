@@ -1,18 +1,35 @@
 /**
- * A Practice's Stripe Connect (Standard tier) linkage (#79): an Owner
- * starts hosted onboarding via `connect`, and any Staff member reads the
- * current not_connected / onboarding_incomplete / active status via
- * `loadConnectStatus`. Both are read live from Stripe -- see
+ * A Practice's Stripe Connect linkage (#79): an Owner starts hosted
+ * onboarding via `connect`, and any Staff member reads the current status
+ * via `loadConnectStatus`. Both are read live from Stripe -- see
  * api/internal/payments/connect.go's doc comments.
  */
 
-export type ConnectStatus = 'not_connected' | 'onboarding_incomplete' | 'active';
+export type ConnectStatus =
+	| 'not_connected'
+	| 'onboarding_incomplete'
+	| 'pending'
+	| 'payouts_restricted'
+	| 'active';
+
+/** The status Stripe reports for one capability on a v2 Account's merchant
+ * configuration. Accounts v1 reported booleans; v2 reports four values, and
+ * `pending` is the one a boolean could not express -- Stripe is reviewing,
+ * and there is nothing left for the Owner to do (#247). */
+export type CapabilityStatus = 'active' | 'pending' | 'restricted' | 'unsupported';
 
 export interface ConnectStatusResult {
 	status: ConnectStatus;
-	chargesEnabled: boolean;
-	payoutsEnabled: boolean;
-	detailsSubmitted: boolean;
+	/**
+	Whether the Practice can be paid by card at all.
+	*/
+	cardPaymentsStatus: CapabilityStatus;
+	/** Whether that money can reach the Practice's bank. Moves
+	 * independently of cardPaymentsStatus. */
+	payoutsStatus: CapabilityStatus;
+	/** Stripe field paths still awaiting the Owner. Always present -- the
+	 * backend sends an empty list rather than omitting it. */
+	requirementsDue: string[];
 }
 
 /** A minimal fetch-shaped function, injected rather than imported, so load

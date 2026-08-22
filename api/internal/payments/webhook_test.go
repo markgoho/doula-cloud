@@ -2,8 +2,10 @@ package payments_test
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,15 +17,24 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// errRetrieveFailed stands in for any failure to reach Stripe.
+var errRetrieveFailed = errors.New("stripe unreachable")
+
 const (
-	stripeObjectEvent                   = "event"
+	stripeObjectEvent   = "event"
+	stripeObjectV2Event = "v2.core.event"
+	// requirementMCC is one real Stripe requirement path, used across
+	// both the status-read and webhook-persist tests.
+	requirementMCC                      = "configuration.merchant.mcc"
 	stripeObjectAccount                 = "account"
 	stripeObjectInvoice                 = "invoice"
-	stripeEventTypeAccountUpdated       = "account.updated"
+	stripeEventTypeCapabilityStatus     = "v2.core.account[configuration.merchant].capability_status_updated"
+	stripeEventTypeAccountCreated       = "v2.core.account.created"
 	stripeEventTypeInvoicePaid          = "invoice.paid"
 	stripeEventTypeInvoicePaymentFailed = "invoice.payment_failed"
 	stripeEventTypeUnhandled            = "customer.updated"
 	stripeConnectWebhookSecret          = webhookTestSecret
+	stripeAccountWebhookSecret          = webhookTestSecret
 	objectKey                           = "object"
 	typeKey                             = "type"
 	dataKey                             = "data"
@@ -56,19 +67,38 @@ func buildConnectEventPayload(t *testing.T, eventID, eventType, accountID string
 	return b
 }
 
-// accountUpdatedPayload builds a raw account.updated event body with all
-// three capability booleans set to true on its data.object -- the only
-// combination this file's tests need; partial-capability states are
-// already covered by connect_test.go's GetConnectStatusHandler tests.
-func accountUpdatedPayload(t *testing.T, eventID, accountID string) []byte {
+// accountEventPayload builds a raw v2 thin event notification. A thin
+// notification carries no object at all -- only the header fields and a
+// related_object pointing at what changed -- which is exactly why the
+// handler has to fetch the account rather than read the payload.
+func accountEventPayload(t *testing.T, eventID, eventType, accountID string) []byte {
 	t.Helper()
-	return buildConnectEventPayload(t, eventID, stripeEventTypeAccountUpdated, accountID, map[string]any{
-		"id":                accountID,
-		objectKey:           stripeObjectAccount,
-		"charges_enabled":   true,
-		"payouts_enabled":   true,
-		"details_submitted": true,
-	})
+	body := map[string]any{
+		"id": eventID,
+		// A thin notification's object discriminator, not "event" --
+		// stripe-go refuses to parse one as the other in either
+		// direction (v2_events.go's EventNotificationFromJSON).
+		objectKey: stripeObjectV2Event,
+		typeKey:   eventType,
+		"created": time.Now().UTC().Format(time.RFC3339),
+		"related_object": map[string]any{
+			"id":    accountID,
+			typeKey: "v2.core.account",
+			"url":   "/v2/core/accounts/" + accountID,
+		},
+	}
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return b
+}
+
+// capabilityStatusPayload builds the one thin event
+// PostAccountWebhookHandler acts on.
+func capabilityStatusPayload(t *testing.T, eventID, accountID string) []byte {
+	t.Helper()
+	return accountEventPayload(t, eventID, stripeEventTypeCapabilityStatus, accountID)
 }
 
 // otherConnectEventPayload builds a raw event of a type this endpoint
@@ -129,13 +159,26 @@ func postConnectWebhook(t *testing.T, srv *httptest.Server, payload []byte, sign
 	return resp
 }
 
-func capabilities(t *testing.T, db *testdb.DB, practiceID string) (charges, payouts, details bool) {
+// connectState reads the persisted v2 Connect state directly via the
+// superuser Admin connection, bypassing RLS. eventID is what makes a
+// change traceable back to the delivery that caused it (the audit-trail
+// expectation in CLAUDE.md).
+func connectState(t *testing.T, db *testdb.DB, practiceID string) (cardPayments, payouts string, requirements []string, eventID sql.NullString) {
 	t.Helper()
+	// The text[] column comes back through array_to_json rather than
+	// scanned directly: database/sql has no array type, so the shape a
+	// plain Scan gets depends on the driver rather than on what was
+	// stored. JSON is the same bytes on any of them.
+	var requirementsJSON string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT stripe_connect_charges_enabled, stripe_connect_payouts_enabled, stripe_connect_details_submitted
+		`SELECT stripe_connect_card_payments_status, stripe_connect_payouts_status,
+			array_to_json(stripe_connect_requirements_due)::text, stripe_connect_status_event_id
 		FROM practices WHERE id = $1`, practiceID,
-	).Scan(&charges, &payouts, &details); err != nil {
-		t.Fatalf("query capabilities: %v", err)
+	).Scan(&cardPayments, &payouts, &requirementsJSON, &eventID); err != nil {
+		t.Fatalf("query connect state: %v", err)
+	}
+	if err := json.Unmarshal([]byte(requirementsJSON), &requirements); err != nil {
+		t.Fatalf("decode requirements array: %v", err)
 	}
 	return
 }
@@ -200,99 +243,221 @@ func seedConnectedPractice(t *testing.T, db *testdb.DB, name, accountID string) 
 	return practiceID
 }
 
-// TestPostConnectWebhookHandler_UpdatesCapabilitiesForRecognizedAccount
-// proves a validly-signed account.updated event for a known
-// stripe_connect_account_id updates all three capability booleans.
-func TestPostConnectWebhookHandler_UpdatesCapabilitiesForRecognizedAccount(t *testing.T) {
+// accountFetchClient is the seam PostAccountWebhookHandler's tests need:
+// real signature verification (the embedded StripeAPIClient's
+// ParseAccountEvent, which is a pure computation) over a fake account
+// fetch, because a thin event carries no state and the handler must go
+// and get it. Embedding promotes every other Client method unchanged.
+type accountFetchClient struct {
+	*payments.StripeAPIClient
+	status  payments.AccountStatus
+	err     error
+	fetched []string
+}
+
+func (c *accountFetchClient) RetrieveAccount(_ context.Context, accountID string) (payments.AccountStatus, error) {
+	c.fetched = append(c.fetched, accountID)
+	if c.err != nil {
+		return payments.AccountStatus{}, c.err
+	}
+	return c.status, nil
+}
+
+func newAccountWebhookServer(db *testdb.DB, client payments.Client) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.Handle("POST /stripe/account-webhook", payments.PostAccountWebhookHandler(db.App, client, stripeAccountWebhookSecret))
+	return httptest.NewServer(mux)
+}
+
+func postAccountWebhook(t *testing.T, srv *httptest.Server, payload []byte, signingSecret string) *http.Response {
+	t.Helper()
+	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: signingSecret})
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/stripe/account-webhook", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Stripe-Signature", signed.Header)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+// activeAccountClient is the common fixture: a fully onboarded account
+// with nothing outstanding.
+func activeAccountClient() *accountFetchClient {
+	return &accountFetchClient{
+		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
+		status: payments.AccountStatus{
+			CardPayments:    payments.CapabilityActive,
+			Payouts:         payments.CapabilityActive,
+			RequirementsDue: []string{},
+		},
+	}
+}
+
+// TestPostAccountWebhookHandler_PersistsFetchedCapabilityStatuses proves
+// the whole point of the thin-event path: the event says only that
+// *something* changed, so the handler fetches the account and writes
+// what Stripe actually reports, tagged with the event id that caused it.
+func TestPostAccountWebhookHandler_PersistsFetchedCapabilityStatuses(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedConnectedPractice(t, db, "Webhook Practice", "acct_recognized")
-	srv := newConnectWebhookServer(db)
+	practiceID := seedConnectedPractice(t, db, "Account Webhook Practice", "acct_recognized")
+	client := activeAccountClient()
+	srv := newAccountWebhookServer(db, client)
 	defer srv.Close()
 
-	payload := accountUpdatedPayload(t, "evt_update_once", "acct_recognized")
-	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	payload := capabilityStatusPayload(t, "evt_capability_once", "acct_recognized")
+	resp := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	charges, payouts, details := capabilities(t, db, practiceID)
-	if !charges || !payouts || !details {
-		t.Fatalf("capabilities = (%v, %v, %v), want all true", charges, payouts, details)
+	if len(client.fetched) != 1 || client.fetched[0] != "acct_recognized" {
+		t.Fatalf("fetched = %v, want one retrieve of the account named in related_object", client.fetched)
+	}
+	cardPayments, payouts, requirements, eventID := connectState(t, db, practiceID)
+	if cardPayments != string(payments.CapabilityActive) || payouts != string(payments.CapabilityActive) {
+		t.Fatalf("statuses = (%q, %q), want both active", cardPayments, payouts)
+	}
+	if len(requirements) != 0 {
+		t.Fatalf("requirements = %v, want none outstanding", requirements)
+	}
+	if !eventID.Valid || eventID.String != "evt_capability_once" {
+		t.Fatalf("event id = %+v, want the delivering event recorded for audit", eventID)
 	}
 }
 
-// TestPostConnectWebhookHandler_ReplayedEventIsNoOp is the explicit
-// idempotency test AC calls for: replaying the same Stripe event id must
-// not re-apply the status transition (an earlier "false" state should
-// stay false, not flip to whatever a stale duplicate delivery carries).
-func TestPostConnectWebhookHandler_ReplayedEventIsNoOp(t *testing.T) {
+// TestPostAccountWebhookHandler_PersistsOutstandingRequirements proves
+// the replacement for v1's details_submitted: what is still owed, not
+// merely that something is.
+func TestPostAccountWebhookHandler_PersistsOutstandingRequirements(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedConnectedPractice(t, db, "Replay Practice", "acct_replay")
-	srv := newConnectWebhookServer(db)
+	practiceID := seedConnectedPractice(t, db, "Requirements Practice", "acct_requirements")
+	client := activeAccountClient()
+	client.status = payments.AccountStatus{
+		CardPayments:    payments.CapabilityRestricted,
+		Payouts:         payments.CapabilityRestricted,
+		RequirementsDue: []string{requirementMCC, "identity.business_details.registered_name"},
+	}
+	srv := newAccountWebhookServer(db, client)
 	defer srv.Close()
 
-	payload := accountUpdatedPayload(t, "evt_replayed", "acct_replay")
+	payload := capabilityStatusPayload(t, "evt_requirements", "acct_requirements")
+	resp := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
+	defer resp.Body.Close()
 
-	first := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	_, _, requirements, _ := connectState(t, db, practiceID)
+	if len(requirements) != 2 || requirements[0] != requirementMCC {
+		t.Fatalf("requirements = %v, want both outstanding field paths in order", requirements)
+	}
+}
+
+// TestPostAccountWebhookHandler_NilRequirementsPersistAsEmptyArray
+// proves a Client implementation that leaves RequirementsDue nil does
+// not violate the column's NOT NULL.
+func TestPostAccountWebhookHandler_NilRequirementsPersistAsEmptyArray(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Nil Requirements Practice", "acct_nil_reqs")
+	client := activeAccountClient()
+	client.status = payments.AccountStatus{
+		CardPayments:    payments.CapabilityActive,
+		Payouts:         payments.CapabilityActive,
+		RequirementsDue: nil,
+	}
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	resp := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_nil_reqs", "acct_nil_reqs"), stripeAccountWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	_, _, requirements, _ := connectState(t, db, practiceID)
+	if requirements == nil || len(requirements) != 0 {
+		t.Fatalf("requirements = %v, want an empty array", requirements)
+	}
+}
+
+// TestPostAccountWebhookHandler_ReplayedEventIsNoOp is the idempotency
+// test: replaying the same Stripe event id must not re-apply anything.
+func TestPostAccountWebhookHandler_ReplayedEventIsNoOp(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Account Replay Practice", "acct_replay")
+	client := activeAccountClient()
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	payload := capabilityStatusPayload(t, "evt_account_replayed", "acct_replay")
+
+	first := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first delivery status = %d, want %d", first.StatusCode, http.StatusOK)
 	}
 
-	// Directly revert the capabilities to prove a second delivery of the
-	// same event id is a genuine no-op, not just idempotent because the
-	// values already matched.
+	// Move the row back behind what the event carried. A replay that
+	// re-applied would flip it forward again.
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_charges_enabled = false WHERE id = $1`, practiceID,
+		`UPDATE practices SET stripe_connect_card_payments_status = 'restricted' WHERE id = $1`, practiceID,
 	); err != nil {
-		t.Fatalf("revert capability: %v", err)
+		t.Fatalf("reset status: %v", err)
 	}
 
-	second := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
-	_ = second.Body.Close()
+	second := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
+	defer second.Body.Close()
 	if second.StatusCode != http.StatusOK {
-		t.Fatalf("replayed delivery status = %d, want %d", second.StatusCode, http.StatusOK)
+		t.Fatalf("replay status = %d, want %d", second.StatusCode, http.StatusOK)
 	}
-
-	charges, _, _ := capabilities(t, db, practiceID)
-	if charges {
-		t.Fatal("charges_enabled = true after replay, want false (replay must be a no-op)")
+	cardPayments, _, _, _ := connectState(t, db, practiceID)
+	if cardPayments != string(payments.CapabilityRestricted) {
+		t.Fatalf("card_payments = %q after replay, want the reset value to stand", cardPayments)
 	}
 }
 
-// TestPostConnectWebhookHandler_InvalidSignatureRejected proves a payload
-// signed with the wrong secret is rejected without touching the DB.
-func TestPostConnectWebhookHandler_InvalidSignatureRejected(t *testing.T) {
+// TestPostAccountWebhookHandler_InvalidSignatureRejected proves an
+// unsigned or wrongly-signed thin event never reaches the database.
+func TestPostAccountWebhookHandler_InvalidSignatureRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedConnectedPractice(t, db, "Bad Signature Practice", "acct_bad_sig")
-	srv := newConnectWebhookServer(db)
+	practiceID := seedConnectedPractice(t, db, "Account Bad Signature Practice", "acct_bad_sig")
+	client := activeAccountClient()
+	srv := newAccountWebhookServer(db, client)
 	defer srv.Close()
 
-	payload := accountUpdatedPayload(t, "evt_bad_sig", "acct_bad_sig")
-	resp := postConnectWebhook(t, srv, payload, "whsec_wrong_secret")
+	payload := capabilityStatusPayload(t, "evt_account_bad_sig", "acct_bad_sig")
+	resp := postAccountWebhook(t, srv, payload, "whsec_wrong_secret")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	charges, payouts, details := capabilities(t, db, practiceID)
-	if charges || payouts || details {
-		t.Fatalf("capabilities = (%v, %v, %v), want all false (DB untouched)", charges, payouts, details)
+	if len(client.fetched) != 0 {
+		t.Fatalf("fetched = %v, want no Stripe call on a rejected signature", client.fetched)
+	}
+	cardPayments, _, _, _ := connectState(t, db, practiceID)
+	if cardPayments != string(payments.CapabilityUnsupported) {
+		t.Fatalf("card_payments = %q, want the default to stand", cardPayments)
 	}
 }
 
-// TestPostConnectWebhookHandler_UnrecognizedAccountDroppedButAcknowledged
-// proves an account.updated event for an account id no Practice has
-// stored is logged and dropped, not treated as an error -- the webhook
-// still returns 200 so Stripe doesn't retry indefinitely.
-func TestPostConnectWebhookHandler_UnrecognizedAccountDroppedButAcknowledged(t *testing.T) {
+// TestPostAccountWebhookHandler_UnrecognizedAccountDroppedButAcknowledged
+// proves an event for an account no Practice claims is dropped with a
+// 200 -- Stripe retries indefinitely on anything else.
+func TestPostAccountWebhookHandler_UnrecognizedAccountDroppedButAcknowledged(t *testing.T) {
 	db := testdb.New(t)
-	srv := newConnectWebhookServer(db)
+	seedConnectedPractice(t, db, "Account Unrecognized Practice", "acct_known")
+	client := activeAccountClient()
+	srv := newAccountWebhookServer(db, client)
 	defer srv.Close()
 
-	payload := accountUpdatedPayload(t, "evt_unrecognized", "acct_unrecognized")
-	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	resp := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_account_unrecognized", "acct_unrecognized"), stripeAccountWebhookSecret)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -300,31 +465,79 @@ func TestPostConnectWebhookHandler_UnrecognizedAccountDroppedButAcknowledged(t *
 	}
 }
 
-// TestPostConnectWebhookHandler_OtherEventTypesAcknowledgedNotProcessed
-// proves an event type other than account.updated is acknowledged with
-// 200 but never updates any Practice's capabilities.
-func TestPostConnectWebhookHandler_OtherEventTypesAcknowledgedNotProcessed(t *testing.T) {
+// TestPostAccountWebhookHandler_OtherEventTypesAcknowledgedNotProcessed
+// proves the account events Stripe also sends -- created,
+// [identity].updated and the rest -- are dropped without a Stripe fetch.
+func TestPostAccountWebhookHandler_OtherEventTypesAcknowledgedNotProcessed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedConnectedPractice(t, db, "Other Event Practice", "acct_other_event")
-	srv := newConnectWebhookServer(db)
+	practiceID := seedConnectedPractice(t, db, "Account Other Event Practice", "acct_other_event")
+	client := activeAccountClient()
+	srv := newAccountWebhookServer(db, client)
 	defer srv.Close()
 
-	payload := otherConnectEventPayload(t, "evt_other_type", "acct_other_event")
-	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	payload := accountEventPayload(t, "evt_account_created", stripeEventTypeAccountCreated, "acct_other_event")
+	resp := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	charges, payouts, details := capabilities(t, db, practiceID)
-	if charges || payouts || details {
-		t.Fatalf("capabilities = (%v, %v, %v), want all false (untouched)", charges, payouts, details)
+	if len(client.fetched) != 0 {
+		t.Fatalf("fetched = %v, want no Stripe call for an unhandled event type", client.fetched)
+	}
+	cardPayments, _, _, _ := connectState(t, db, practiceID)
+	if cardPayments != string(payments.CapabilityUnsupported) {
+		t.Fatalf("card_payments = %q, want the default to stand", cardPayments)
 	}
 }
 
-// TestPostConnectWebhookHandler_OversizedBodyRejected proves a request
-// body over maxWebhookBodyBytes is rejected rather than read without
-// bound.
+// TestPostAccountWebhookHandler_RetrieveFailureReturns500 proves a
+// failure to reach Stripe is a 500 and claims nothing, so Stripe's retry
+// is not swallowed later as a replay.
+func TestPostAccountWebhookHandler_RetrieveFailureReturns500(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Account Retrieve Failure Practice", "acct_retrieve_fail")
+	client := activeAccountClient()
+	client.err = errRetrieveFailed
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	payload := capabilityStatusPayload(t, "evt_retrieve_fail", "acct_retrieve_fail")
+	resp := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	// The retry succeeds, proving the failed delivery claimed no event id.
+	client.err = nil
+	retry := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
+	defer retry.Body.Close()
+	if retry.StatusCode != http.StatusOK {
+		t.Fatalf("retry status = %d, want %d", retry.StatusCode, http.StatusOK)
+	}
+	cardPayments, _, _, _ := connectState(t, db, practiceID)
+	if cardPayments != string(payments.CapabilityActive) {
+		t.Fatalf("card_payments = %q after retry, want active", cardPayments)
+	}
+}
+
+// TestPostAccountWebhookHandler_OversizedBodyRejected mirrors the
+// Connect endpoint's own body bound.
+func TestPostAccountWebhookHandler_OversizedBodyRejected(t *testing.T) {
+	db := testdb.New(t)
+	seedConnectedPractice(t, db, "Account Oversized Practice", "acct_account_oversized")
+	srv := newAccountWebhookServer(db, activeAccountClient())
+	defer srv.Close()
+
+	resp := postAccountWebhook(t, srv, bytes.Repeat([]byte("a"), (1<<20)+1), stripeAccountWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
 func TestPostConnectWebhookHandler_OversizedBodyRejected(t *testing.T) {
 	db := testdb.New(t)
 	srv := newConnectWebhookServer(db)
@@ -347,24 +560,39 @@ func TestPostConnectWebhookHandler_OversizedBodyRejected(t *testing.T) {
 	}
 }
 
-// TestPostConnectWebhookHandler_MalformedAccountObjectRejected proves an
-// account.updated event whose data.object can't be unmarshaled into the
-// expected shape is rejected rather than silently applying zero values.
-func TestPostConnectWebhookHandler_MalformedAccountObjectRejected(t *testing.T) {
+// TestPostConnectWebhookHandler_InvalidSignatureRejected proves a
+// wrongly-signed snapshot event never reaches the database. It uses an
+// invoice event because the Connect endpoint no longer carries account
+// events at all -- Accounts v2 sends those as thin events to
+// PostAccountWebhookHandler (#247).
+func TestPostConnectWebhookHandler_InvalidSignatureRejected(t *testing.T) {
 	db := testdb.New(t)
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
 
-	// charges_enabled as a string (instead of a bool) fails to unmarshal
-	// into accountUpdatedObject.
-	payload := buildConnectEventPayload(t, "evt_malformed", stripeEventTypeAccountUpdated, "acct_malformed",
-		map[string]any{"charges_enabled": "not-a-bool"})
-
-	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	payload := invoicePaymentFailedPayload(t, "evt_bad_sig", "acct_bad_sig", "in_bad_sig")
+	resp := postConnectWebhook(t, srv, payload, "whsec_wrong_secret")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+// TestPostConnectWebhookHandler_OtherEventTypesAcknowledgedNotProcessed
+// proves a genuinely unhandled snapshot event type is acknowledged and
+// dropped rather than erroring, since Stripe retries on anything but a
+// 2xx.
+func TestPostConnectWebhookHandler_OtherEventTypesAcknowledgedNotProcessed(t *testing.T) {
+	db := testdb.New(t)
+	srv := newConnectWebhookServer(db)
+	defer srv.Close()
+
+	resp := postConnectWebhook(t, srv, otherConnectEventPayload(t, "evt_other", "acct_other"), stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
 
@@ -608,5 +836,29 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedMalformedObjectRejected(t
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+}
+
+// TestPostAccountWebhookHandler_FakeClientEventIsDroppedNotApplied covers
+// the FakeClient path other packages' route tests go through: the double
+// verifies nothing and reports a zero-value AccountEvent, whose empty
+// type must be dropped and acknowledged rather than mistaken for a
+// capability update. Injecting the double is what lets a caller with no
+// database prove the route is mounted.
+func TestPostAccountWebhookHandler_FakeClientEventIsDroppedNotApplied(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Fake Client Practice", "acct_fake_client")
+	srv := newAccountWebhookServer(db, payments.NewFakeClient())
+	defer srv.Close()
+
+	resp := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_fake_client", "acct_fake_client"), stripeAccountWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	cardPayments, _, _, _ := connectState(t, db, practiceID)
+	if cardPayments != string(payments.CapabilityUnsupported) {
+		t.Fatalf("card_payments = %q, want the default to stand", cardPayments)
 	}
 }

@@ -45,7 +45,7 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -70,7 +70,7 @@ func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 // path.
 func TestRoutes_CreateAndEndSession(t *testing.T) {
 	db := testdb.New(t)
-	mux := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	mux := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -154,7 +154,7 @@ func TestResolvePort(t *testing.T) {
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
 	db := testdb.New(t)
-	mux := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	mux := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -189,7 +189,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	mux := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	mux := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -283,7 +283,7 @@ func TestResolveExpectedOrigins(t *testing.T) {
 // reaches the handler -- proven by getting 403 rather than the 401 a
 // missing bearer token would otherwise produce.
 func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
-	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -308,7 +308,7 @@ func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
 // not the origin check's 403.
 func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 	db := testdb.New(t)
-	mux := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	mux := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -328,12 +328,15 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 }
 
 // TestRoutes_StripeWebhooksSucceedWithNoOrigin proves #142's explicit
-// carve-out: both server-to-server Stripe webhook routes, which send no
-// Origin header, still succeed through the real route table rather than
-// being caught by the origin check meant for browser callers.
+// carve-out: all three server-to-server Stripe webhook routes, which send
+// no Origin header, still succeed through the real route table rather than
+// being caught by the origin check meant for browser callers. The third is
+// the v2 account event destination (#247) -- a separate route from the
+// Connect one because a Stripe destination carries one payload type, thin
+// or snapshot, never both.
 func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
-	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", []string{testExpectedOrigin})
+	mux := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -381,5 +384,22 @@ func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	defer connectResp.Body.Close()
 	if connectResp.StatusCode != http.StatusOK {
 		t.Fatalf("POST /api/stripe/connect-webhook status = %d, want %d", connectResp.StatusCode, http.StatusOK)
+	}
+
+	// Same shape for the thin-event route: the fake's ParseAccountEvent
+	// accepts anything and reports an unrecognized event type, which
+	// PostAccountWebhookHandler acknowledges without touching the
+	// database.
+	accountReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/stripe/account-webhook", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	accountResp, err := http.DefaultClient.Do(accountReq)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer accountResp.Body.Close()
+	if accountResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/stripe/account-webhook status = %d, want %d", accountResp.StatusCode, http.StatusOK)
 	}
 }

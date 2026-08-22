@@ -25,7 +25,8 @@ except `.env.example`. A Sandbox key is still a key.
 | `STRIPE_API_KEY` | `sk_test_…` in `.env.local` | unset | Secret Manager `doula-cloud-stripe-api-key` |
 | `STRIPE_CREDIT_PRICE_ID` | `price_…` in `.env.local` | unset | plain env var |
 | `STRIPE_WEBHOOK_SECRET` | the `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-webhook-secret` |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | unset — waits on [#247](https://github.com/markgoho/doula-cloud/issues/247) |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-connect-webhook-secret` |
+| `STRIPE_ACCOUNT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-account-webhook-secret` |
 | `GCP_PROJECT_ID` | `doula-cloud` | same | ambient |
 | `STORAGE_EMULATOR_HOST` | the compose `gcs` service | same | unset (real GCS) |
 | `GCS_ATTACHMENTS_BUCKET` | `doula-cloud-e2e-attachments` | same | the real bucket |
@@ -55,9 +56,9 @@ key for the wrong place, and it fails later as a signature error or a
 "no such price" — both of which read like code bugs and are not.
 
 Whether a sandbox carries every Connect capability is not something to
-take on trust. `scripts/stripe-setup.sh` stage 6 settles it by creating a
-throwaway Standard account over the API and deleting it again, so a
-missing capability surfaces there rather than an hour later in a walk.
+take on trust. Create a throwaway v2 Account over the API and read its
+`configuration.merchant.capabilities` back, so a missing capability
+surfaces there rather than an hour later in a walk.
 
 ## Stripe: two surfaces, one key
 
@@ -67,12 +68,28 @@ Checkout Session over one flat Price. One event matters:
 `api/internal/billing/webhook.go` and by nothing else — never by the
 browser redirect.
 
-**Connect.** The Client pays the Practice. A Standard connected account
-per Practice, onboarded through a hosted Account Link, with Invoices
-raised on-behalf-of using the `Stripe-Account` header. Three events
-matter: `account.updated`, `invoice.paid`, `invoice.payment_failed`.
+**Connect.** The Client pays the Practice. An **Accounts v2** connected
+account per Practice carrying the `merchant` configuration, onboarded
+through a hosted v2 Account Link, with Invoices raised on-behalf-of using
+the `Stripe-Account` header. Three events matter, and they no longer
+arrive the same way:
 
-They share `STRIPE_API_KEY` and nothing else. Two endpoints, two secrets.
+| Event | Kind | Route |
+| --- | --- | --- |
+| `v2.core.account[configuration.merchant].capability_status_updated` | thin | `/api/stripe/account-webhook` |
+| `invoice.paid` | snapshot | `/api/stripe/connect-webhook` |
+| `invoice.payment_failed` | snapshot | `/api/stripe/connect-webhook` |
+
+`account.updated` is gone. A v2 account emits no v1 snapshot event at all
+(#247 verified this in the Sandbox: creating one produced six `v2.core.*`
+thin events and nothing on `/v1/events`), and one Stripe event destination
+carries one `event_payload` — subscribing a single destination to both a
+thin and a snapshot event type is rejected outright. Hence two Connect
+routes, not one.
+
+All three surfaces share `STRIPE_API_KEY` and nothing else. **Three
+endpoints, three secrets**: `STRIPE_WEBHOOK_SECRET`,
+`STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_WEBHOOK_SECRET`.
 
 Connect is configured for **direct charges** — Stripe's "your merchants
 collect payments directly", the Customer → Merchant → You shape. Every
@@ -81,6 +98,15 @@ connected account (`payments/stripe_api_client.go`), so the Client's money
 lands in the Practice's balance and never passes through ours. The
 alternative — the platform collecting and then paying recipients — would
 put Client funds on our balance sheet and make us a money transmitter.
+
+Accounts v2 makes that explicit where v1 left it implied. Account creation
+sets `defaults.responsibilities.fees_collector` and `losses_collector` to
+`stripe` — both are mandatory for a merchant configuration and have no
+default — meaning the Practice's own account is billed Stripe's processing
+fee and absorbs a disputed charge. `identity.country` is likewise required
+at create time and is hardcoded `us`, matching the USD credit Price and the
+USD invoice currency. See
+[ADR-0007](adr/0007-connect-account-state-is-two-capabilities-and-a-requirements-list.md).
 
 Doula Cloud takes **no per-transaction cut**: there is no
 `ApplicationFeeAmount` anywhere. Practices pay for credits in a separate
@@ -114,12 +140,18 @@ bash scripts/stripe-listen.sh  # terminal 2
 through the vite proxy: a signature check reads the exact request bytes,
 and one hop fewer is one fewer thing to have rewritten them.
 
-**Both local secrets are the same value, on purpose.** A single `stripe
-listen` session signs everything it forwards with its own one secret,
-whether the event goes to `--forward-to` or `--forward-connect-to`
+**All three local secrets are the same value, on purpose.** A single
+`stripe listen` session signs everything it forwards with its own one
+secret, whichever of `--forward-to`, `--forward-connect-to` or
+`--forward-thin-connect-to` the event goes to
 ([CLI reference](https://docs.stripe.com/cli/listen)). The secret does not
-change between restarts. Deployed, they really are two different secrets,
-because they come from two separately created endpoints.
+change between restarts. Deployed, they really are three different secrets,
+because they come from three separately created destinations.
+
+Thin events need naming. `stripe listen` forwards nothing to
+`--forward-thin-connect-to` unless the event type is also listed in
+`--thin-events`; `stripe-listen.sh` already passes the one type the account
+route handles.
 
 Read the current one back at any time with `stripe listen --print-secret`.
 
@@ -137,21 +169,28 @@ so the rewrite buys nothing here.
 `csrf.Wrap` lets them through: a Stripe POST carries no `Origin` header,
 and the rule is "no Origin, no rejection" (`api/main.go:125-129`).
 
-| Endpoint | Events | `connect` | State |
-| --- | --- | --- | --- |
-| `/api/stripe/webhook` | `checkout.session.completed` | false | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
-| `/api/stripe/connect-webhook` | see [#247](https://github.com/markgoho/doula-cloud/issues/247) | — | **not created** |
+| Endpoint | Events | Payload | `events_from` | State |
+| --- | --- | --- | --- | --- |
+| `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
+| `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@accounts` | `ed_test_61VGma0wEKcK6gNt916VGl100QSQI7KSJpC2tKXrsA8e`, enabled |
+| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
 
-The Connect endpoint is deliberately absent. Accounts v2 delivers account events
-as **thin events** to an **event destination**, not as v1 snapshot events to a
-webhook endpoint, so creating one in the v1 shape would only mean deleting it.
-`STRIPE_CONNECT_WEBHOOK_SECRET` is therefore unset on the deployed service, and
-the Connect webhook route rejects everything — which is correct while nothing
-sends to it.
+The two Connect rows are one feature, split by Stripe's own constraint: an
+event destination has one `event_payload`, and the account events are thin
+while the Invoice events are snapshot. The snapshot destination pins
+`snapshot_api_version` to `2026-07-29.dahlia`, the version
+`stripe-go v86.3.0` sends on every request (`api_version.go`), so a
+delivered object always deserializes into the structs the SDK ships.
 
-A webhook endpoint's signing secret is returned **once**, in the create
-response. Neither retrieve nor list ever shows it again. If it is lost,
-roll it in the dashboard and add a new Secret Manager version.
+Both are created over `/v2/core/event_destinations`, not the v1
+`/v1/webhook_endpoints` surface, and neither carries a `connect=true`
+flag — v2 replaced that with `events_from: ["@accounts"]`.
+
+A signing secret is returned **once**, in the create response — for an
+event destination, only if the request asks for it by name via
+`include: ["webhook_endpoint.signing_secret"]`. Neither retrieve nor list
+ever shows it again. If it is lost, roll it in the dashboard and add a new
+Secret Manager version.
 
 ## Why the deployed Stripe values are set out of band
 

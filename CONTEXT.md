@@ -109,6 +109,28 @@ still start `sk_test_`, and older tickets and Stripe's own URLs still say
 Sandbox" is always a real question. See [docs/environment.md](docs/environment.md).
 _Avoid_: Test mode, test account, staging
 
+**Connected account**:
+The Stripe account a Practice owns and Doula Cloud onboards it into, so
+Clients can pay that Practice directly. A Stripe **Accounts v2** Account
+carrying the **merchant** configuration and a full Stripe dashboard —
+Stripe refuses to create the older Accounts v1 shape for a new
+integration. Its state is two capability statuses, `card_payments` and
+`stripe_balance.payouts`, each one of `active` / `pending` / `restricted`
+/ `unsupported`, plus a list of outstanding **requirements**. There is no
+single "connected / not connected" fact to read, which is why the Payments
+screen reports five states rather than two. See
+[ADR-0007](docs/adr/0007-connect-account-state-is-two-capabilities-and-a-requirements-list.md).
+_Avoid_: Standard account, merchant account, Stripe account (ambiguous — the platform has one too)
+
+**Thin event**:
+A Stripe v2 webhook delivery that carries no object — only an event id, a
+type, and a reference to the resource that changed. The receiver fetches
+the current state itself. Distinct from a v1 **snapshot event**, which
+embeds the object. A Stripe event destination carries one payload kind or
+the other, never both, which is why Doula Cloud has two Connect webhook
+routes.
+_Avoid_: Webhook payload, notification (both blur the thin/snapshot distinction that matters here)
+
 **Persona**:
 One of eight named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
 _Avoid_: User type, actor, role

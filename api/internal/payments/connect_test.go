@@ -293,9 +293,9 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 }
 
 // TestGetConnectStatusHandler_OnboardingIncomplete proves a connected
-// account whose capabilities are not all enabled yet reports
-// onboarding_incomplete, and that any Staff member (not just an Owner) can
-// read it.
+// account that still owes Stripe information reports
+// onboarding_incomplete, carries the outstanding requirement paths, and
+// that any Staff member (not just an Owner) can read it.
 func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-incomplete"
@@ -306,7 +306,11 @@ func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 	defer srv.Close()
 
 	connectResp := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[connectResp] = payments.AccountStatus{ChargesEnabled: true, PayoutsEnabled: false, DetailsSubmitted: true}
+	client.Statuses[connectResp] = payments.AccountStatus{
+		CardPayments:    payments.CapabilityRestricted,
+		Payouts:         payments.CapabilityRestricted,
+		RequirementsDue: []string{requirementMCC},
+	}
 
 	resp := getConnectStatus(t, srv, session, practiceID)
 	defer resp.Body.Close()
@@ -321,8 +325,77 @@ func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 	if out.Status != payments.StatusOnboardingIncomplete {
 		t.Fatalf("status = %q, want %q", out.Status, payments.StatusOnboardingIncomplete)
 	}
-	if !out.ChargesEnabled || out.PayoutsEnabled || !out.DetailsSubmitted {
-		t.Fatalf("response = %+v, want charges+details enabled, payouts not", out)
+	if out.CardPaymentsStatus != payments.CapabilityRestricted || out.PayoutsStatus != payments.CapabilityRestricted {
+		t.Fatalf("response = %+v, want both capabilities restricted", out)
+	}
+	if len(out.RequirementsDue) != 1 || out.RequirementsDue[0] != requirementMCC {
+		t.Fatalf("requirementsDue = %v, want the one outstanding Stripe field path", out.RequirementsDue)
+	}
+}
+
+// TestGetConnectStatusHandler_Pending proves the state v1's booleans
+// could not express: Stripe is reviewing what the Owner already
+// supplied, so nothing is outstanding and nothing works yet. It must not
+// read as onboarding_incomplete -- there is nothing left to fill in.
+func TestGetConnectStatusHandler_Pending(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "status-pending"
+	practiceID := seedOwner(t, db, uid)
+	client := payments.NewFakeClient()
+
+	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
+	client.Statuses[accountID] = payments.AccountStatus{
+		CardPayments: payments.CapabilityPending,
+		Payouts:      payments.CapabilityPending,
+	}
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := getConnectStatus(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	var out payments.ConnectStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != payments.StatusPending {
+		t.Fatalf("status = %q, want %q", out.Status, payments.StatusPending)
+	}
+	if out.RequirementsDue == nil {
+		t.Fatalf("requirementsDue = nil, want an empty list rather than a missing one")
+	}
+}
+
+// TestGetConnectStatusHandler_PayoutsRestricted proves the other state a
+// single boolean pair collapsed: Clients can pay, but the money cannot
+// reach the Practice's bank yet. Reporting this as onboarding_incomplete
+// would read as if invoicing were broken, which it is not.
+func TestGetConnectStatusHandler_PayoutsRestricted(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "status-payouts-restricted"
+	practiceID := seedOwner(t, db, uid)
+	client := payments.NewFakeClient()
+
+	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
+	client.Statuses[accountID] = payments.AccountStatus{
+		CardPayments:    payments.CapabilityActive,
+		Payouts:         payments.CapabilityRestricted,
+		RequirementsDue: []string{"configuration.merchant.bank_account"},
+	}
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := getConnectStatus(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	var out payments.ConnectStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != payments.StatusPayoutsRestricted {
+		t.Fatalf("status = %q, want %q", out.Status, payments.StatusPayoutsRestricted)
 	}
 }
 
@@ -335,7 +408,10 @@ func TestGetConnectStatusHandler_Active(t *testing.T) {
 	client := payments.NewFakeClient()
 
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
-	client.Statuses[accountID] = payments.AccountStatus{ChargesEnabled: true, PayoutsEnabled: true, DetailsSubmitted: true}
+	client.Statuses[accountID] = payments.AccountStatus{
+		CardPayments: payments.CapabilityActive,
+		Payouts:      payments.CapabilityActive,
+	}
 
 	srv, session := newConnectServer(t, db, uid, client)
 	defer srv.Close()

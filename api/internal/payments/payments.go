@@ -1,11 +1,18 @@
-// Package payments owns a Practice's Stripe Connect (Standard tier)
-// linkage -- the Client -> Practice side of Doula Cloud's Stripe
-// integration, distinct from billing's Practice -> Doula Cloud side. #79
-// establishes the schema (three columns on practices, mirroring billing's
-// stripe_customer_id pattern), the Client Stripe-client port, and
-// Owner-only onboarding via a Stripe-hosted Account Link. #80 adds the
-// Connect webhook that keeps the capability booleans live. Later tickets
-// in #78 (#81/#82) add Invoice creation.
+// Package payments owns a Practice's Stripe Connect linkage -- the
+// Client -> Practice side of Doula Cloud's Stripe integration, distinct
+// from billing's Practice -> Doula Cloud side. #79 establishes the schema
+// (columns on practices, mirroring billing's stripe_customer_id pattern),
+// the Client Stripe-client port, and Owner-only onboarding via a
+// Stripe-hosted Account Link. #80 adds the webhook that keeps the
+// capability state live. #81/#82 add Invoice creation.
+//
+// #247 moved the account leg from Stripe's Accounts v1 to Accounts v2:
+// Stripe refuses to create v1 accounts for new integrations. A v2 Account
+// carries named *configurations* rather than a single `type`, and this
+// package uses exactly one of them, `merchant` -- the Merchant of Record
+// shape that direct charges require, matching the Params.StripeAccount
+// header every Invoice call already sets. The Invoice leg stays on v1
+// APIs, which accept a v2 account id unchanged.
 package payments
 
 import "context"
@@ -21,14 +28,44 @@ import "context"
 // request-supplied, is what actually reaches Stripe.
 const InvoiceLineItemDescription = "Professional services"
 
-// AccountStatus mirrors the subset of Stripe's Account object payments
-// cares about -- the same three capabilities persisted (by #80's webhook
-// handler) on practices.stripe_connect_charges_enabled,
-// stripe_connect_payouts_enabled, and stripe_connect_details_submitted.
+// CapabilityStatus is the status Stripe reports for one capability on a
+// v2 Account's merchant configuration -- four-valued, where v1's
+// equivalent was a boolean. Only Active means the capability actually
+// works; Pending is Stripe reviewing something the Owner has already
+// supplied, and Restricted means something is still outstanding (see
+// AccountStatus.RequirementsDue).
+type CapabilityStatus string
+
+// The four values Stripe's capability `status` field takes.
+const (
+	CapabilityActive      CapabilityStatus = "active"
+	CapabilityPending     CapabilityStatus = "pending"
+	CapabilityRestricted  CapabilityStatus = "restricted"
+	CapabilityUnsupported CapabilityStatus = "unsupported"
+)
+
+// AccountStatus mirrors the subset of Stripe's v2 Account object payments
+// cares about, and is what practices.stripe_connect_card_payments_status,
+// stripe_connect_payouts_status and stripe_connect_requirements_due hold
+// (00029_stripe_connect_accounts_v2.sql).
+//
+// CardPayments is
+// configuration.merchant.capabilities.card_payments.status -- whether the
+// Practice can be paid by card at all, replacing v1's charges_enabled.
+// Payouts is
+// configuration.merchant.capabilities.stripe_balance.payouts.status --
+// whether that money can reach the Practice's bank, replacing v1's
+// payouts_enabled. They move independently: an account can take cards
+// while its payouts are still restricted.
+//
+// RequirementsDue is what replaces v1's details_submitted, which has no v2
+// equivalent. It holds the `description` of every requirements entry still
+// awaiting the account holder -- dotted Stripe field paths such as
+// "configuration.merchant.mcc". Empty means nothing is outstanding.
 type AccountStatus struct {
-	ChargesEnabled   bool
-	PayoutsEnabled   bool
-	DetailsSubmitted bool
+	CardPayments    CapabilityStatus
+	Payouts         CapabilityStatus
+	RequirementsDue []string
 }
 
 // Client is the seam over the outbound Stripe API calls the payments
@@ -57,21 +94,24 @@ type AccountStatus struct {
 // outbound Stripe API port) should reuse this Client interface rather than
 // inventing a third one.
 type Client interface {
-	// CreateAccount creates a Stripe Connect Standard Account for
-	// practiceID and returns its Stripe account id. Called at most once
-	// per Practice -- the caller persists the id on
+	// CreateAccount creates a Stripe Connect v2 Account with the merchant
+	// configuration for practiceID and returns its Stripe account id.
+	// Called at most once per Practice -- the caller persists the id on
 	// practices.stripe_connect_account_id and reuses it on every later
 	// onboarding attempt.
 	CreateAccount(ctx context.Context, practiceID string) (accountID string, err error)
-	// CreateAccountLink creates a single-use Stripe Account Link for
-	// accountID's hosted Standard onboarding flow, tagged so its
+	// CreateAccountLink creates a single-use Stripe v2 Account Link for
+	// accountID's hosted merchant onboarding flow, tagged so its
 	// return/refresh redirects land back on practiceID's payments settings
 	// screen. Returns the onboarding URL the Owner's browser should be
 	// sent to.
 	CreateAccountLink(ctx context.Context, accountID, practiceID string) (onboardingURL string, err error)
-	// RetrieveAccount fetches accountID's current capability status
-	// directly from Stripe -- an on-demand read, not backed by the
-	// webhook-synced booleans on practices (see #79's ticket body).
+	// RetrieveAccount fetches accountID's current capability statuses and
+	// outstanding requirements directly from Stripe. It serves two
+	// callers: GetConnectStatusHandler's on-demand read (#79 --
+	// deliberately not backed by the persisted columns), and the account
+	// webhook, which gets only an account id from a thin event and must
+	// fetch the state itself (#247).
 	RetrieveAccount(ctx context.Context, accountID string) (AccountStatus, error)
 	// CreateInvoice creates a Stripe Invoice (draft, not yet finalized) on
 	// behalf of accountID's connected account, billing
@@ -85,8 +125,30 @@ type Client interface {
 	FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (hostedInvoiceURL string, err error)
 	// VerifyWebhookSignature verifies payload was sent by Stripe using
 	// secret and the Stripe-Signature header value sigHeader, returning
-	// the decoded event's raw JSON on success.
+	// the decoded event's raw JSON on success. This is the v1 *snapshot*
+	// event path only -- it carries the Invoice events surface B still
+	// receives in the v1 shape. stripe.ConstructEvent rejects a v2 thin
+	// event outright, so account events go through ParseAccountEvent
+	// instead.
 	VerifyWebhookSignature(payload []byte, sigHeader, secret string) (WebhookEvent, error)
+	// ParseAccountEvent verifies payload as a Stripe v2 *thin* event
+	// notification, delivered to an event destination rather than a v1
+	// webhook endpoint. A thin notification carries no object -- only an
+	// id, a type, and a reference to the resource that changed -- so this
+	// returns the account id to fetch rather than any capability state.
+	ParseAccountEvent(payload []byte, sigHeader, secret string) (AccountEvent, error)
+}
+
+// AccountEvent is a verified v2 thin event notification about one Connect
+// account: its id (for the same stripe_webhook_events idempotency the
+// snapshot path uses), its type, and the account the change concerns,
+// read off the notification's related_object. There is no payload to
+// unmarshal -- Stripe sends none, by design, so the handler calls
+// RetrieveAccount for the current state.
+type AccountEvent struct {
+	ID        string
+	Type      string
+	AccountID string
 }
 
 // WebhookEvent is the subset of a verified Stripe event #80's Connect

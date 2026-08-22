@@ -62,3 +62,44 @@ func TestStripeAPIClient_VerifyWebhookSignature_InvalidSignatureRejected(t *test
 		t.Fatal("expected an error verifying a payload signed with the wrong secret, got nil")
 	}
 }
+
+// TestParseAccountEvent_ReadsHeaderAndRelatedObject proves the thin-event
+// path: a v2 notification carries no object, so the only things to
+// recover are the event's own id and type and the id of the account it
+// points at. stripe.ConstructEvent -- the snapshot path above -- rejects
+// this same payload, which is why the second method exists at all (#247).
+func TestParseAccountEvent_ReadsHeaderAndRelatedObject(t *testing.T) {
+	client := payments.NewStripeAPIClient("sk_test_unused", "https://app.test")
+	payload := []byte(`{"id":"evt_thin_1","object":"v2.core.event","type":"v2.core.account[configuration.merchant].capability_status_updated","created":"2026-08-22T23:24:51.000Z","livemode":false,"related_object":{"id":"acct_thin_1","type":"v2.core.account","url":"/v2/core/accounts/acct_thin_1"}}`)
+	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: webhookTestSecret})
+
+	event, err := client.ParseAccountEvent(payload, signed.Header, webhookTestSecret)
+	if err != nil {
+		t.Fatalf("ParseAccountEvent: %v", err)
+	}
+	if event.ID != "evt_thin_1" {
+		t.Fatalf("ID = %q, want %q", event.ID, "evt_thin_1")
+	}
+	if event.Type != "v2.core.account[configuration.merchant].capability_status_updated" {
+		t.Fatalf("Type = %q, want the merchant capability_status_updated type", event.Type)
+	}
+	if event.AccountID != "acct_thin_1" {
+		t.Fatalf("AccountID = %q, want %q", event.AccountID, "acct_thin_1")
+	}
+}
+
+// TestParseAccountEvent_RejectsWrongSecret proves a thin event signed
+// with another destination's secret is refused -- the two Connect
+// surfaces have separate secrets precisely because one destination
+// cannot carry both payload types.
+func TestParseAccountEvent_RejectsWrongSecret(t *testing.T) {
+	client := payments.NewStripeAPIClient("sk_test_unused", "https://app.test")
+	payload := []byte(`{"id":"evt_thin_2","object":"v2.core.event","type":"v2.core.account.created","created":"2026-08-22T23:24:51.000Z","related_object":{"id":"acct_thin_2","type":"v2.core.account","url":"/v2/core/accounts/acct_thin_2"}}`)
+	// #nosec G101 -- a made-up signing secret for a test fixture, standing in for the *other* destination's secret
+	const otherDestinationSecret = "whsec_other_destination"
+	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: otherDestinationSecret})
+
+	if _, err := client.ParseAccountEvent(payload, signed.Header, webhookTestSecret); err == nil {
+		t.Fatal("ParseAccountEvent accepted a payload signed with another secret, want an error")
+	}
+}

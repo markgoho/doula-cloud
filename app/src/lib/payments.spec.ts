@@ -14,9 +14,9 @@ describe('loadConnectStatus', () => {
 	it('fetches the practice payments connect path and returns the decoded status', async () => {
 		const status = {
 			status: 'active',
-			chargesEnabled: true,
-			payoutsEnabled: true,
-			detailsSubmitted: true
+			cardPaymentsStatus: 'active',
+			payoutsStatus: 'active',
+			requirementsDue: []
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(status));
 

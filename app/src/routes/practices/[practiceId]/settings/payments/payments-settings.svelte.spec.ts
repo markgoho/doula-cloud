@@ -22,15 +22,21 @@ interface MockOptions {
 	status?: string;
 	roles?: string[];
 	sessionOk?: boolean;
+	requirementsDue?: string[];
 }
 
-function mockApi({ status = 'not_connected', roles = [], sessionOk = true }: MockOptions = {}) {
+function mockApi({ status = 'not_connected', roles = [], sessionOk = true, requirementsDue = [] }: MockOptions = {}) {
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.endsWith('/session')) {
 			return Promise.resolve(jsonResponse({ roles }, sessionOk));
 		}
 		return Promise.resolve(
-			jsonResponse({ status, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false })
+			jsonResponse({
+				status,
+				cardPaymentsStatus: 'unsupported',
+				payoutsStatus: 'unsupported',
+				requirementsDue
+			})
 		);
 	});
 }
@@ -80,5 +86,43 @@ describe('payments settings screen', () => {
 
 		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+	});
+});
+
+describe('payments settings screen: the states Accounts v1 could not report', () => {
+	it('offers no onboarding button while Stripe is reviewing', async () => {
+		mockApi({ status: 'pending', roles: ['owner'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Stripe is reviewing the details you submitted. Nothing is needed from you.'))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).not.toBeInTheDocument();
+	});
+
+	it('says invoicing works when only payouts are held up', async () => {
+		mockApi({ status: 'payouts_restricted', roles: ['owner'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
+		await expect
+			.element(
+				testPage.getByText('Clients can pay their invoices, but Stripe cannot send the money to your bank yet.')
+			)
+			.toBeVisible();
+	});
+
+	it('lists what Stripe is still waiting on', async () => {
+		mockApi({
+			status: 'onboarding_incomplete',
+			roles: ['owner'],
+			requirementsDue: ['configuration.merchant.mcc', 'configuration.merchant.support.phone']
+		});
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Stripe is still waiting on:')).toBeVisible();
+		await expect.element(testPage.getByText('configuration.merchant.mcc')).toBeVisible();
+		await expect.element(testPage.getByText('configuration.merchant.support.phone')).toBeVisible();
 	});
 });

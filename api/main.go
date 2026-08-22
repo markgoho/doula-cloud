@@ -127,7 +127,7 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // acceptance) are state-changing too, and both they and the two Stripe
 // webhook routes rely on the same "no Origin header, no rejection" rule
 // -- there is no separate carve-out for either.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret string, expectedOrigins []string) http.Handler {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, expectedOrigins []string) http.Handler {
 	mux := http.NewServeMux()
 	// Under /api like every other route: Firebase Hosting rewrites /api/** to
 	// this service with the path unchanged, so a bare /hello would be
@@ -159,6 +159,10 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("GET /api/practices/{practiceId}/payments/connect",
 		staffauth.Middleware(db)(payments.GetConnectStatusHandler(paymentsClient)))
 	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret))
+	// A second Connect route, not a second feature: Stripe's v2 account
+	// events are thin and a destination carries one payload type, so they
+	// cannot share connect-webhook's endpoint or its secret (#247).
+	mux.Handle("POST /api/stripe/account-webhook", payments.PostAccountWebhookHandler(db, paymentsClient, paymentsAccountWebhookSecret))
 	mux.Handle("GET /api/practices/{practiceId}/clients",
 		staffauth.Middleware(db)(engagement.ListHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/clients",
@@ -275,7 +279,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), resolveExpectedOrigins()),
+		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), resolveExpectedOrigins()),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
