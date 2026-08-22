@@ -67,3 +67,11 @@ _Avoid_: Transaction
 **Message**:
 Staff-to-client, bidirectional, in-app communication tied to an Engagement — one continuous thread per Engagement, not split by topic. May carry an image or PDF attachment. Immutable once sent (no edit, no delete) and kept indefinitely as part of the Engagement's permanent record. Delivered via push-triggered fetch: a content-free push notification wakes the client, which then fetches the real content — not a substitute for a phone call in a time-critical situation. See [ADR-0002](docs/adr/0002-message-transport-push-triggered-fetch.md).
 _Avoid_: Chat, DM (implies a general-purpose messenger, not an Engagement-scoped record)
+
+**Persona**:
+One of eight named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
+_Avoid_: User type, actor, role
+
+**Journey**:
+The path one Persona takes toward a single goal, from where they arrive to a stated end state. Each Persona has exactly one primary Journey. Defined in [docs/journeys/](docs/journeys/).
+_Avoid_: Flow, use case, scenario
