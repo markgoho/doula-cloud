@@ -91,6 +91,14 @@ untouched.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 8.1 | `POST .../contract/invoices` | `connectRequired` with `isOwner: false`. The endpoint is **not** owner-gated — Stripe is the blocker, not the role | `blocked` |
+
+**8.1 re-checked 2026-08-22.** Still `blocked`, for a changed reason. The Sandbox
+exists now ([#242](https://github.com/markgoho/doula-cloud/issues/242)) and Credits
+cleared, but Connect did not: Stripe refuses `POST /v1/accounts` for new
+integrations and every merged Connect path is Accounts v1
+([#247](https://github.com/markgoho/doula-cloud/issues/247)). No Practice can reach
+`charges_enabled`, so `connectRequired` is still the honest answer here. Not walked
+against a connected account yet — Dee's own walk ticket still owns that observation.
 | 8.2 | Read the message the UI shows | "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume (DW-G2) | `manual` |
 
 ### Stage 9 — Record the Payment (moment of truth)
@@ -114,7 +122,7 @@ gap; the missing capability is manual Payment recording.
 | --- | --- |
 | `automated` | 0 |
 | `manual` | 19 |
-| `blocked` | 1 (8.1, Stripe) |
+| `blocked` | 1 (8.1, Connect — [#247](https://github.com/markgoho/doula-cloud/issues/247)) |
 | `missing-feature` | 4 (RA-G2, RA-G4, DW-G3, DW-G5) |
 
 Stages 8 and 9 sit either side of the `blocked` / `missing-feature` line and are
