@@ -74,6 +74,18 @@ matter: `account.updated`, `invoice.paid`, `invoice.payment_failed`.
 
 They share `STRIPE_API_KEY` and nothing else. Two endpoints, two secrets.
 
+Connect is configured for **direct charges** — Stripe's "your merchants
+collect payments directly", the Customer → Merchant → You shape. Every
+Invoice is created with `Params.StripeAccount` set to the Practice's
+connected account (`payments/stripe_api_client.go`), so the Client's money
+lands in the Practice's balance and never passes through ours. The
+alternative — the platform collecting and then paying recipients — would
+put Client funds on our balance sheet and make us a money transmitter.
+
+Doula Cloud takes **no per-transaction cut**: there is no
+`ApplicationFeeAmount` anywhere. Practices pay for credits in a separate
+transaction, which is what surface A is.
+
 ### One credit costs $5.00
 
 Sandbox Price, USD, one-time. One credit is one Engagement, which is
