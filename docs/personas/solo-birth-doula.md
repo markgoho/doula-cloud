@@ -25,8 +25,8 @@ chasing payment by text.
 ## Primary journey
 
 From an empty account to one live Engagement: create the Practice, add a Client, send
-and countersign the Contract, fill the Care Plan and Birth Plan, schedule Visits, and
-invoice.
+and countersign the Contract, fill the Care Plan and Birth Plan, get her Visits into
+the app, and invoice.
 
 ## Done looks like
 
@@ -44,6 +44,13 @@ She did all of it without asking anyone for help.
 - Signup, Practice creation, and the seeded default Plan Templates are her first three
   minutes. If the seeded templates are wrong for her, she must be able to edit them
   before she has any Client.
-- She is the only Staff member, so every "assign to a Doula" step must default to her.
+- She is the only Staff member, so wherever the app asks which Doula, the answer must
+  default to her. Today the only such place is a Visit's `staffId`.
+- **A Visit cannot be scheduled.** `visits` is `(engagement_id, staff_id, created_at)`
+  — no date, no type, no notes (`00007_visit.sql`). Her Visits can be recorded after
+  the fact and nothing more.
+- **Signup grants 3 free credits** (`signup.go:144`) and creating a Client consumes one
+  (`billing.ConsumeCredit`). She carries four to six Clients, so she hits a paywall on
+  her fourth — and no Stripe account exists to take her money.
 - Billing setup (Stripe Connect) sits between her and getting paid, and no Stripe
   account exists yet — expect this leg to be blocked rather than broken.

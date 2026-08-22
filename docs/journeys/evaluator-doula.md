@@ -97,7 +97,9 @@ do not appear. Nothing here is about supporting a birth.
 - **5.1** — `/practices/[practiceId]/clients/new`, enter a name and an email.
 - **5.2** — Press **Add Client** (`POST /api/practices/{id}/clients`). This creates
   a Client **and** an Engagement at status `intake`; there is no way to create one
-  without the other.
+  without the other. It also silently spends one of the three credits signup gave
+  her (MO-G9) — so a two-doula practice trialling the product with real Clients
+  hits a paywall on the fourth, and nothing warned her a trial had a size.
 - **5.3** — Open the Engagement from the Clients list.
 - **5.4** — See Visits, Care Plan, Birth Plan, Contract, Invoices, and Messages on
   one page. This is the first moment the product looks like doula work — and it is

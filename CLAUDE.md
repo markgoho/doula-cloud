@@ -1,5 +1,24 @@
 This is a project called Doula Cloud, it includes a Svelte application and a Hugo website (for marketing)
 
+## Status: pre-launch
+
+**Doula Cloud has not launched. It has no users, and no production data.** The
+target launch is **January 2027**.
+
+This changes how findings are handled:
+
+- **Everything found will be fixed before launch.** A missing capability is work
+  not yet done, not a defect to triage against a live system.
+- **Do not rank work by user impact or severity.** There are no users to impact.
+  Where order matters at all, it is because one piece of work depends on another,
+  not because one gap hurts more. Do not spend a session producing a priority
+  ranking unless asked for one directly.
+- **There is no backwards compatibility to preserve** and no migration of live
+  data to plan. Schema and API changes are cheap right now, and get expensive in
+  January.
+- Nothing is in front of a customer, so a broken or absent path is not an
+  incident.
+
 ## Agent skills
 
 ### Issue tracker

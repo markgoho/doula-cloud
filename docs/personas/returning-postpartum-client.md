@@ -23,9 +23,9 @@ way to lose her.
 
 ## Primary journey
 
-A second Engagement with the same Practice, postpartum only: her old Engagement is
-`completed`, a new one opens, and it starts at postpartum work rather than at intake and
-birth planning.
+A second Engagement with the same Practice, postpartum only: her first Engagement is
+finished and on the record, a new one opens, and it starts at postpartum work rather
+than at intake and birth planning.
 
 ## Done looks like
 
@@ -38,6 +38,14 @@ as a record.
 - **`clients` is a global table with no `practice_id`**, so one person holding two
   Engagements at one Practice is supported by the schema. Confirm the portal actually
   shows both, and that she does not need a second account.
+- **The API cannot open a second Engagement for an existing person.**
+  `POST /api/practices/{id}/clients` always inserts a brand-new `clients` row
+  (`engagement/create.go`); there is no lookup by email and no
+  add-an-Engagement-to-this-Client endpoint. Camille comes back as a duplicate
+  stranger. The schema allows her journey; the API does not.
+- **An Engagement's status never changes** — no code runs `UPDATE engagements` — so her
+  first Engagement cannot be marked `completed` and her second cannot start anywhere but
+  `intake`.
 - **There is no Engagement type or kind column.** `engagement_status` is
   `intake | active | postpartum | completed`, so "postpartum-only" cannot be declared —
   it can only be approximated by moving status forward. CONTEXT.md claims Engagement is

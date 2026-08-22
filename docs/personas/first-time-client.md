@@ -29,8 +29,8 @@ notified of new messages, and reach postpartum.
 ## Done looks like
 
 She has a portal account, a signed Contract, a Birth Plan she has read and can print,
-a message thread with real traffic in both directions, and an Engagement that has moved
-through `intake` → `active` → `postpartum`.
+a message thread with real traffic in both directions, and an Engagement that reflects
+where she actually is — pregnant, then birthed, then postpartum.
 
 ## Watch for
 
@@ -42,6 +42,11 @@ through `intake` → `active` → `postpartum`.
   is genuinely absent from the portal.
 - Her partner will want access and cannot have it. CONTEXT.md names this as a future
   extension of Client; capture it as a gap line, not a persona.
+- **An Engagement's status never changes.** No code anywhere runs `UPDATE engagements`,
+  so every Engagement stays at `intake` for its whole life. The
+  `intake → active → postpartum` arc her journey needs cannot happen today.
+- The print stylesheet **does** exist, on the portal's Birth Plan page
+  (`portal/(authenticated)/engagements/[engagementId]/birth-plan/+page.svelte`).
 - There is no first-class due date on `engagements`. A Practice could record one as a
   Plan Template field (the field types are text, select, checkbox, and section header —
   there is no date type), but nothing in the app can then treat it as a date. Note what

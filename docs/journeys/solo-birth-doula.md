@@ -77,8 +77,13 @@ hospital, a partner's name, and a page of intake notes. The form takes two field
 - **3.1** — Open `/practices/[practiceId]/clients/new`.
 - **3.2** — Enter name and email; press **Add Client**
   (`POST /api/practices/{id}/clients`). A Client and an Engagement at status
-  `intake` are created together.
+  `intake` are created together, and **one credit is consumed**
+  (`billing.ConsumeCredit`).
 - **3.3** — Open the Engagement from the Clients list.
+- **3.4** — Repeat for her second and third Clients. Signup granted three credits
+  (`signup.go:144`), so her **fourth** Client returns `402` with "no credits
+  remaining, ask a Practice Owner to buy more". She *is* the Practice Owner, and
+  no Stripe account exists to take her money.
 
 ### Stage 4 — Fill the Care Plan and the Birth Plan
 
@@ -163,3 +168,4 @@ substitute for a phone call in labour.
 | MO-G6 | 5 | Experience | The Client cannot sign until a portal invite is sent, and nothing in the Contract section says so. The ordering is implicit. |
 | MO-G7 | 7 | Experience | "Billing" (credits she buys) and "Payments" (Stripe Connect, so she gets paid) are two unexplained money screens whose names invite the wrong click. |
 | MO-G8 | 7 | Interaction | Stripe Connect is not configured, so getting paid is blocked. Expected — record it, do not chase it. |
+| MO-G9 | 3 | Both | Three signup credits, one consumed per Client. She carries four to six Clients, so she is hard-stopped at her fourth with a `402` — and the only way past it is a Stripe purchase that cannot complete. The wall lands on her moment of truth. |

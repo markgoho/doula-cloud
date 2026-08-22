@@ -22,14 +22,15 @@ without texting Renata.
 
 ## Primary journey
 
-From invitation to caring for an assigned Client: accept the invite, sign in, open the
-Engagement assigned to her, read the Birth Plan, log Visits, and message the Client.
+From invitation to caring for a Client of her own: accept the invite, sign in, find the
+Engagement she is meant to be carrying, read the Birth Plan, log Visits, and message the
+Client.
 
 ## Done looks like
 
-She has an active membership with the `doula` role, has opened an Engagement assigned to
-her, logged a Visit, and exchanged messages with the Client. She never saw a screen she
-had no right to see.
+She has an active membership with the `doula` role, has opened her Client's Engagement,
+logged a Visit, and exchanged messages with the Client. She never saw a screen she had
+no right to see.
 
 ## Watch for
 
@@ -44,8 +45,12 @@ had no right to see.
 - She is reachable as a distinct persona only through the invite route: `invite.go`
   creates the membership with zero roles (`'{}'`) and an Owner then assigns just Doula.
   Signup grants all three roles at once, so a self-signed-up account can never be her.
-- Her scope is her Engagements. Confirm whether she can see Practice Engagements
-  assigned to other doulas; if she can, that is a finding.
+- **Her Engagements are not marked as hers.** `engagements` has no staff column
+  (`00005_client_engagement.sql`), so "the Engagement assigned to her" does not exist as
+  a thing the app can express.
+- Her scope is meant to be her own Clients, and it is not: `engagement.ListHandler`
+  returns every Client at the Practice "regardless of which Staff member created it --
+  v1 has no restricted-visibility model". Confirmed, not suspected.
 - Invitation acceptance is her first impression, and it happens on whatever device the
   email opened on.
 - She reads Care Plans and Birth Plans far more often than she writes them.
