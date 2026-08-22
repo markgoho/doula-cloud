@@ -37,7 +37,10 @@ She did all of it without asking anyone for help.
 ## Watch for
 
 - She holds three roles at once. Nothing in the UI should make her switch context or
-  re-authenticate to move between owner work, admin work, and Doula work.
+  re-authenticate to move between Owner work, Admin work, and Doula work.
+- **She is not a test of role separation.** Signup grants all three roles in one
+  statement (`signup.go:152`), so every permission boundary rides on Renata's invite
+  flow instead. Do not let Maya's journey stand in for Priya's or Dee's.
 - Signup, Practice creation, and the seeded default Plan Templates are her first three
   minutes. If the seeded templates are wrong for her, she must be able to edit them
   before she has any Client.

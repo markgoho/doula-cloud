@@ -36,9 +36,14 @@ had no right to see.
 - She is the negative-permission persona. Every owner-only and admin-only surface —
   Staff management, billing, Plan Template settings, invitations — must be absent for
   her, not merely unlinked.
-- **Expect this to fail.** Only the `'owner'` role is enforced anywhere in the app or
-  the API; the `doula` role is never checked. Whatever an owner can reach that is not
-  explicitly owner-gated, Priya can probably reach too, by URL if not by link.
+- **Expect this to fail.** The permission model is binary owner / non-owner: `owner` is
+  checked in four places (`payments/invoice.go`, `plans/template.go`,
+  `contracts/template.go`, `staffauth/roles.go`), and the Doula role is never checked at
+  all. Those four surfaces will correctly refuse her. Everything else that is not
+  owner-gated, she can probably reach by URL if not by link.
+- She is reachable as a distinct persona only through the invite route: `invite.go`
+  creates the membership with zero roles (`'{}'`) and an Owner then assigns just Doula.
+  Signup grants all three roles at once, so a self-signed-up account can never be her.
 - Her scope is her Engagements. Confirm whether she can see Practice Engagements
   assigned to other doulas; if she can, that is a finding.
 - Invitation acceptance is her first impression, and it happens on whatever device the

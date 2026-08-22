@@ -32,17 +32,24 @@ recorded Payment — all without Dee ever opening a Care Plan or logging a Visit
 
 ## Watch for
 
-- **The Admin role is not implemented as a permission.** The app branches on `'owner'`
-  only; `office_manager` and `doula` are never read client-side, and API-side
-  `office_manager` appears only in `staffauth`'s valid-role list and in the signup grant.
-  Dee is therefore indistinguishable from any other non-owner Staff member today. That
-  is a first-order finding for the practice-side test plan, not a naming quibble.
+- **The permission model is binary owner / non-owner, so the Admin role grants nothing.**
+  `owner` is checked in four places (`payments/invoice.go`, `plans/template.go`,
+  `contracts/template.go`, `staffauth/roles.go`) and the app gates on `'owner'`
+  client-side. Neither `office_manager` nor `doula` is read anywhere. Dee is therefore
+  indistinguishable from any other non-owner Staff member today. That is a first-order
+  finding for the practice-side test plan, not a naming quibble.
 - **Admin is the settled word** (CONTEXT.md), and the code has not caught up: the enum
   value is still `office_manager`, and the Staff list renders roles as raw strings
   (`member.roles.join(', ')`), so Dee shows up on screen as `office_manager`. Journey
   maps, test plans, and gap-issue titles all say **Admin**.
+- Dee is reachable as a distinct persona because the invite path grants zero roles
+  (`invite.go` inserts `'{}'`), and an Owner then assigns a subset. Signup is the
+  opposite: it grants all three at once. Only the invite route produces an Admin.
 - Their permissions are the mirror image of Priya's: business screens yes, care records
-  arguably no. Whether an `office_manager` should read a Care Plan or a Birth Plan is
-  an open question this journey must answer, not assume.
+  arguably no. Two separate questions, and only one is open:
+  - **Editing Plan Templates is already settled** — `plans/template.go:220` gates on
+    `owner`, so Dee cannot. Assert it; do not re-litigate it.
+  - **Reading a Client's filled Care Plan or Birth Plan is genuinely undecided.** No
+    role check guards the Plan Instance read path. This journey must answer it.
 - They act on Engagements they are not assigned to, so any mine-only scoping breaks them.
 - Payment recording is where the missing Stripe account bites hardest.
