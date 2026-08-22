@@ -10,11 +10,17 @@
 
 ## Moment of truth
 
-**Stage 5 — the Contract comes back signed without her leaving the app.** If she
-still has to print, email, and chase a signature, the folder has not been
-replaced and nothing else in the product matters. Her other make-or-break moment,
-the 3 a.m. retrieval of a Birth Plan, sits after this journey ends; it is the test
-of whether she *stays*, not of whether she starts.
+**Stage 3 — she finds out the folder does not fit.** Her stated why is "one place
+that holds the Client record, the Contract, the Birth Plan, and the messages".
+The Client record is the first of those four and it holds two fields, name and
+email. No due date, no phone number, no address, no intake notes.
+
+Maya is the most motivated Persona in the cast and will push through friction, so
+the question is what makes her stop. At minute five she learns she must keep the
+paper folder anyway — and the premise of the product dies there, before a
+Contract exists. The Contract signature round trip (Stage 5) is the visible
+payoff, and the 3 a.m. Birth Plan retrieval is the test of whether she *stays*,
+but neither is the break point.
 
 ## Words
 
@@ -62,7 +68,7 @@ point where she is least invested.
   (`signup.go:160`, `signup.go:168`) — so no Practice ever has to create one
   before sending its first Contract.
 
-### Stage 3 — Add the first Client
+### Stage 3 — Add the first Client — moment of truth
 
 **Thinking**: "Everything in the folder goes in here."
 **Pain points**: the folder holds a due date, a phone number, an address, a
@@ -86,7 +92,7 @@ needing a laptop and twenty quiet minutes will not get done.
   snapshots the template's field definitions at creation, so a later template edit
   cannot alter it.
 
-### Stage 5 — Contract and signature — moment of truth
+### Stage 5 — Contract and signature
 
 **Thinking**: "If she can sign this on her phone tonight, I am sold."
 **Pain points**: the ordering is not obvious. The Client cannot sign anything

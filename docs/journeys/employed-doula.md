@@ -123,28 +123,30 @@ stated need — "what was I told last time" — is unanswerable (MO-G1, MO-G2).
 > says to walk Nadia Haddad's journey first where it overlaps another, so both
 > stages may need revision once her map exists (blocked behind #210 and #206).
 
-### Stage 9 — Confirm the walls hold
+## Permission boundary
 
-**Thinking**: nothing — she would never try. This stage exists for the test plan,
-not for her.
+**Not a stage.** Priya would never type these URLs, so none of this belongs in the
+numbered interaction layer — a journey map records what the Persona does. It is a
+test matrix, kept on this map because this is where the finding was made, and
+`docs/test-plans/employed-doula.md` will derive from it directly.
 
 No owner-only route has a `+page.ts` load guard — every one is a `+page.svelte`
 that renders, fetches on mount, and shows whatever the API returns. So the page
 always appears; what differs is whether the API hands over data.
 
-- **9.1** — `/practices/[practiceId]/staff` — the `GET` requires Owner
+- **PR-B1** — `/practices/[practiceId]/staff` — the `GET` requires Owner
   (`staffauth/staff.go:25`). **Expected to hold**: the page renders its heading,
   then shows an error instead of the roster.
-- **9.2** — `/practices/[practiceId]/invite` — the form renders; only
+- **PR-B2** — `/practices/[practiceId]/invite` — the form renders; only
   `POST .../invitations` requires Owner. **Expected to hold on submit.**
-- **9.3** — `/practices/[practiceId]/settings/plan-templates` — **expected to
+- **PR-B3** — `/practices/[practiceId]/settings/plan-templates` — **expected to
   fail on read**. `GET` is ungated (`plans/template.go:81`); only `PUT` checks
   Owner (line 130). She sees the Practice's real template definitions.
-- **9.4** — `/practices/[practiceId]/settings/contract-template` — same shape,
+- **PR-B4** — `/practices/[practiceId]/settings/contract-template` — same shape,
   same expected failure (`contracts/template.go:31` ungated, `:75` gated).
-- **9.5** — `/practices/[practiceId]/settings/payments` — `POST .../connect`
+- **PR-B5** — `/practices/[practiceId]/settings/payments` — `POST .../connect`
   requires Owner. **Expected to hold.**
-- **9.6** — `/practices/[practiceId]/billing` — **expected to fail on read**: the
+- **PR-B6** — `/practices/[practiceId]/billing` — **expected to fail on read**: the
   balance and ledger take any Staff member (`billing/balance.go:86`). Buying
   credits is correctly refused (`billing/purchase.go:33`).
 
@@ -159,7 +161,7 @@ button.
 | PR-G1 | 4 | Interaction | She sees every Client in the Practice. The list handler is Practice-scoped by design ("v1 has no restricted-visibility model"), so her scope requirement fails outright. |
 | PR-G2 | 5 | Both | She can read any Engagement's Contract amount and Invoice history, for any Client. Read paths carry no role checks. |
 | PR-G3 | 2 | Interaction | The `doula` role is never read anywhere in the codebase. Holding it changes nothing. |
-| PR-G4 | 9 | Interaction | No route has a load-time guard. The Plan Template, Contract Template, and Billing screens gate on write only (`GET` is ungated on all three), so she reaches the page, reads real Practice data, and is refused only at the save button. |
+| PR-G4 | Permission boundary | Interaction | No route has a load-time guard. The Plan Template, Contract Template, and Billing screens gate on write only (`GET` is ungated on all three), so she reaches the page, reads real Practice data, and is refused only at the save button. |
 | PR-G5 | 6 | Experience | The Birth Plan is a section partway down a long single-page Engagement view, with no deep link and no phone-first path, at the exact moment she is standing in a corridor. |
 | PR-G6 | 7 | Experience | A Visit carries no type, so the three kinds she distinguishes — prenatal, birth, postpartum — are one undifferentiated row. Dateless and note-less Visits are **MO-G1** and **MO-G2**. |
 | PR-G7 | 1 | Experience | Her first impression is a raw URL pasted into a text message, which she cannot verify is genuine. This is the experience half of **RA-G1**; the missing email itself is filed there. |

@@ -10,11 +10,19 @@
 
 ## Moment of truth
 
-**Stage 5 — assigning the Doula.** Dee's whole reason for existing is to move an
-Engagement forward while the doula is unreachable. Assignment is the one step in
-their journey that hands work to someone else, and it is the step that does not
-exist (RA-G4). Everything before it they can do; the handoff is where their
-journey stops.
+**Stage 9 — recording the Payment.** Their journey is named "first call to signed
+and **billed**", and their "Done looks like" requires an Invoice with a recorded
+Payment. Payments are written only by the Stripe webhook, so a cheque, a bank
+transfer, or a cash deposit — the normal case for a small practice — cannot be
+recorded at all. There is no workaround.
+
+This is **not** the out-of-scope Stripe gap. A live Stripe account would not fix
+it. The missing capability is manual Payment recording (DW-G3).
+
+The competing candidate was Stage 5, assigning the Doula (RA-G4). It loses
+because Dee has a human workaround there — they tell the doula out of band, the
+same way they do today. A missing capability with a workaround is friction. A book
+they cannot close is a break.
 
 ## Words
 
@@ -78,7 +86,7 @@ product was meant to solve.
   Engagement are created together at status `intake`. Not owner-gated, so this
   **passes** for Dee.
 
-### Stage 5 — Assign a Doula — moment of truth
+### Stage 5 — Assign a Doula
 
 **Thinking**: "Priya has room in March."
 **Pain points**: there is no assignment. See RA-G4.
@@ -132,7 +140,7 @@ by an infrastructure gap wearing the costume of a permission error.
 > is imprecise: the file computes `isOwner` only to choose which message to show.
 > The persona note should be corrected.
 
-### Stage 9 — Record the Payment
+### Stage 9 — Record the Payment — moment of truth
 
 **Thinking**: "She paid by bank transfer. Mark it paid."
 **Pain points**: there is no way to. Payments are written only by the Stripe

@@ -30,6 +30,20 @@ A `Watch for` list ends each file. Those are the friction points the journey map
 expected to hit; several are known gaps in the current schema, not oversights in the
 persona.
 
+## Needs, never capabilities
+
+A persona file states what the person **needs**. It must never state what the product
+**does** — not in "Primary journey", not in "Done looks like". Those two sections
+describe the person's own goal and their own idea of finished, and a reader must be
+able to trust that none of it is a claim about the code.
+
+Every claim about what the code does belongs in `Watch for`, with a `file:line` or a
+migration name. Two files broke this rule and were corrected while the practice-side
+journey maps were drafted: `practice-owner.md` asserted that a Doula is assigned to
+an Engagement (no such column exists), and `non-doula-admin.md` named
+`payments/invoice.go` as owner-gated (it is not). Both errors read as settled fact
+and would have sent a test plan looking for a screen that was never built.
+
 ## Practice side
 
 | File | Archetype | Person |

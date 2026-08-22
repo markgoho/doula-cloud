@@ -24,14 +24,15 @@ unsigned, which Invoices are unpaid — without asking four people.
 
 ## Primary journey
 
-Grow and run the roster: invite a new Doula, set that Doula's roles, assign her to
-Engagements, then review the Practice's Engagements and money across all Staff.
+Grow and run the roster: invite a new Doula, set that Doula's roles, put her on the
+Engagements she will carry, then review the Practice's Engagements and money across
+all Staff.
 
 ## Done looks like
 
-A new Doula has accepted an invitation, holds the Doula role, and appears as the
-assigned Doula on a live Engagement. Renata can see, in one place, every Engagement in
-the Practice and its Contract and Invoice state.
+A new Doula has accepted an invitation, holds the Doula role, and Renata can tell at
+a glance which live Engagements are hers. Renata can see, in one place, every
+Engagement in the Practice and its Contract and Invoice state.
 
 ## Watch for
 
@@ -39,7 +40,12 @@ the Practice and its Contract and Invoice state.
   Engagements" fails her.
 - Invite, accept, and role assignment span two people and two sessions. This journey
   cannot be walked by one browser context alone.
+- **An Engagement has no assigned Doula.** `engagements` holds no staff column
+  (`00005_client_engagement.sql`); only `visits.staff_id` exists, and a Visit carries
+  no date. The need above is real; the capability is absent. See
+  [her journey map](../journeys/practice-owner.md), RA-G4.
 - Reassigning an Engagement from one Doula to another is a normal event for her (leave,
-  illness, a Client who asks). Confirm it is possible.
+  illness, a Client who asks). Today `PATCH .../visits/{visitId}` reassigns a Visit,
+  which is the only form of it that exists.
 - She edits Plan Templates for the whole Practice, which changes what every new Plan
   Instance looks like — but must not alter plans already filled in.

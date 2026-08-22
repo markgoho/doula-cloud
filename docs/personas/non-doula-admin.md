@@ -33,8 +33,9 @@ recorded Payment — all without Dee ever opening a Care Plan or logging a Visit
 ## Watch for
 
 - **The permission model is binary owner / non-owner, so the Admin role grants nothing.**
-  `owner` is checked in four places (`payments/invoice.go`, `plans/template.go`,
-  `contracts/template.go`, `staffauth/roles.go`) and the app gates on `'owner'`
+  `owner` is required by `payments/connect.go`, `plans/template.go:130`,
+  `contracts/template.go:75`, `staffauth/roles.go`, `staffauth/invite.go`,
+  `staffauth/staff.go:25`, and `billing/purchase.go:33`, and the app gates on `'owner'`
   client-side. Neither `office_manager` nor `doula` is read anywhere. Dee is therefore
   indistinguishable from any other non-owner Staff member today. That is a first-order
   finding for the practice-side test plan, not a naming quibble.
@@ -52,4 +53,10 @@ recorded Payment — all without Dee ever opening a Care Plan or logging a Visit
   - **Reading a Client's filled Care Plan or Birth Plan is genuinely undecided.** No
     role check guards the Plan Instance read path. This journey must answer it.
 - They act on Engagements they are not assigned to, so any mine-only scoping breaks them.
-- Payment recording is where the missing Stripe account bites hardest.
+- Raising an Invoice is **not** owner-gated. `payments/invoice.go` computes `isOwner`
+  only to choose which message to show when Stripe Connect is missing, so Dee is
+  stopped by infrastructure wearing the costume of a permission error.
+- There is no way to record a Payment by hand at all — Payments are written only by
+  the Stripe webhook, so a cheque or a bank transfer cannot be entered. This is
+  separate from the missing Stripe account, and it is the make-or-break moment of
+  [their journey map](../journeys/non-doula-admin.md).
