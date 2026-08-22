@@ -120,8 +120,12 @@ stated need — "what was I told last time" — is unanswerable (MO-G1, MO-G2).
 > **Nadia crossing.** Stages 7 and 8 are where an Engagement that ends in loss
 > lands on the Doula's side: the Visit that becomes a bereavement visit, and the
 > message thread that must not carry on as if nothing changed. The method standard
-> says to walk Nadia Haddad's journey first where it overlaps another, so both
-> stages may need revision once her map exists (blocked behind #210 and #206).
+> says to walk Nadia Haddad's journey first where it overlaps another.
+> [Her map](loss-client.md) now exists and **these stages are unchanged**: her
+> stage 7 records the bereavement Visit against **PR-G6**, **MO-G1** and
+> **MO-G2**, already owned here, and the thread with no way to mark that its
+> subject has changed is hers to own (**NH-G7**). Nothing she needs contradicts a
+> step here.
 
 ## Permission boundary
 

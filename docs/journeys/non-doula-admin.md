@@ -121,8 +121,11 @@ contract list (RA-G6).
 > practice-side map exercises it. Voiding a Contract is the practice-side surface
 > of an Engagement that ends early — which is Nadia Haddad's path. The method
 > standard says to walk her journey first where it overlaps another. Stages 7–9
-> here, and Priya's Stages 7–8, are the crossing points and may need revision once
-> her map exists (blocked behind #210 and #206).
+> here, and Priya's Stages 7–8, are the crossing points.
+> [Her map](loss-client.md) now exists and **these stages are unchanged**: what
+> she adds is what the void looks like from the Client's side — the bare word
+> `voided` (**NH-G5**) — and the absence of any Invoice surface in the portal
+> (**NH-G6**), both hers to own. The Staff steps here stand.
 
 ### Stage 8 — Raise the Invoice
 
