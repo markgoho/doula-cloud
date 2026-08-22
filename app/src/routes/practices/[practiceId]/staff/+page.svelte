@@ -2,6 +2,11 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 
 	type StaffSummary = {
 		staffId: string;
@@ -16,6 +21,15 @@
 	let endingSessionsFor = $state<Record<string, boolean>>({});
 	let endSessionsError = $state<Record<string, string>>({});
 	let endSessionsDone = $state<Record<string, boolean>>({});
+
+	const columns = [
+		{ label: 'Name', accessor: (member: StaffSummary) => member.name },
+		{ label: 'Email', accessor: (member: StaffSummary) => member.email },
+		{
+			label: 'Roles',
+			accessor: (member: StaffSummary) => member.roles.join(', ') || 'no roles yet'
+		}
+	];
 
 	onMount(async () => {
 		const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/staff`);
@@ -54,33 +68,35 @@
 	}
 </script>
 
-<h1>Staff</h1>
+{#snippet staffActions(member: StaffSummary)}
+	<Button
+		label="End sessions everywhere"
+		variant="secondary"
+		size="sm"
+		onClick={() => handleEndSessions(member.staffId)}
+		loading={endingSessionsFor[member.staffId]}
+	/>
+	{#if endSessionsDone[member.staffId]}
+		<Notice variant="status" message="Sessions ended." />
+	{/if}
+	{#if endSessionsError[member.staffId]}
+		<Notice variant="error" message={endSessionsError[member.staffId]} />
+	{/if}
+{/snippet}
+
+<Heading level={1} text="Staff" />
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice variant="error" message={error} />
 {:else if isLoaded}
 	{#if staff.length === 0}
-		<p>No Staff yet.</p>
+		<Text text="No Staff yet." />
 	{:else}
-		<ul>
-			{#each staff as member (member.staffId)}
-				<li>
-					{member.name} — {member.email} — {member.roles.join(', ') || 'no roles yet'}
-					<button
-						type="button"
-						onclick={() => handleEndSessions(member.staffId)}
-						disabled={endingSessionsFor[member.staffId]}
-					>
-						End sessions everywhere
-					</button>
-					{#if endSessionsDone[member.staffId]}
-						<span role="status">Sessions ended.</span>
-					{/if}
-					{#if endSessionsError[member.staffId]}
-						<span role="alert">{endSessionsError[member.staffId]}</span>
-					{/if}
-				</li>
-			{/each}
-		</ul>
+		<DataTable
+			{columns}
+			rows={staff}
+			rowActions={{ label: 'Actions', content: staffActions }}
+			emptyMessage="No Staff yet."
+		/>
 	{/if}
 {/if}
