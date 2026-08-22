@@ -16,6 +16,14 @@ _Avoid_: User, employee, member
 A role a Staff member holds, not a separate entity. A Staff member with the Doula role is the one who works Engagements and Visits with Clients.
 _Avoid_: Provider, practitioner
 
+**Owner**:
+A role a Staff member holds, carrying full authority over a Practice — its Staff, its Plan Templates, and its billing. A Practice has at least one Owner.
+_Avoid_: Admin, superuser, account holder
+
+**Admin**:
+A role a Staff member holds, covering the business side of a Practice — Clients, Contracts, Invoices, and scheduling. Narrower than Owner despite the name, and independent of Doula: an Admin may hold neither, either, or both of the other roles.
+_Avoid_: Office manager, Administrator, superuser
+
 **Client**:
 The pregnant/birthing person a Practice serves. Does not (yet) cover a partner or support person — portal access for a second person is a future extension of Client, not a new entity.
 _Avoid_: Patient, customer, mom

@@ -3,7 +3,7 @@
 - **Archetype**: Owner + Admin + Doula in one person
 - **Pronouns**: she/her
 - **Surface**: staff app
-- **Roles**: `owner`, `office_manager`, `doula` — all three on one membership
+- **Roles**: **Owner**, **Admin**, and **Doula** — all three on one membership
 - **Entry point**: cold signup at `/signup`, then creates her own Practice
 
 ## Who she is

@@ -3,7 +3,8 @@
 - **Archetype**: Owner of a Practice with several Staff
 - **Pronouns**: she/her
 - **Surface**: staff app
-- **Roles**: `owner`, `doula` — she still takes two births a year, but runs the business
+- **Roles**: **Owner** and **Doula** — she still takes two births a year, but runs the
+  business
 - **Entry point**: already has a Practice; signs in at `/login` and works from the
   Practice's Staff and Engagement screens
 

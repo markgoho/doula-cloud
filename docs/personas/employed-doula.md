@@ -3,7 +3,7 @@
 - **Archetype**: Staff who works Engagements and nothing else
 - **Pronouns**: she/her
 - **Surface**: staff app, narrowed to her own Engagements
-- **Roles**: `doula` only — no `owner`, no `office_manager`
+- **Roles**: **Doula** only — no Owner, no Admin
 - **Entry point**: an emailed invitation from Renata, accepted at `/accept-invite`
 
 ## Who she is
