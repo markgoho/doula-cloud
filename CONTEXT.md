@@ -41,7 +41,7 @@ A role a Staff member holds, covering the business side of a Practice — Client
 _Avoid_: Office manager, Administrator, superuser
 
 **Employment type**:
-What a Staff member is to a Practice — `employee` or `contractor` — held on their membership, independent of their roles. A role says what a person does; employment type says what they are to the business, so the two are orthogonal and either value may pair with any roles. It governs how much of a Practice a contractor Doula may read. See [ADR-0006](docs/adr/0006-read-follows-the-role.md).
+What a Staff member is to a Practice — `employee` or `contractor` — held on their Membership, independent of their roles. Every Membership carries one, including the founding Owner's: `employee` means *inside the business*, not literally on a payroll. A role says what a person does; employment type says what they are to the business, so the two are orthogonal and either value may pair with any roles. An Owner may change it, and the change takes effect at once — it grants and withdraws the ambient reach over the whole Practice, and never touches an Engagement the person is attached to. See [ADR-0006](docs/adr/0006-read-follows-the-role.md).
 _Avoid_: Staff type, worker type (both read as a role)
 
 **Client**:

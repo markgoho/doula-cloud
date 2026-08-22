@@ -19,6 +19,22 @@ This changes how findings are handled:
 - Nothing is in front of a customer, so a broken or absent path is not an
   incident.
 
+## Cross-cutting expectations
+
+Every feature carries these. They are not separate work items, they are not
+ranked against the feature, and no ticket has to ask for them.
+
+- **Audit trail.** A user must be able to answer "how did this thing come to
+  be?" — who sent the invoice, when a person accepted an invitation, when an
+  employment type changed. Anything that changes state records who did it and
+  when. Design each feature so that question has an answer; the shape of the
+  record is the feature's own choice.
+- **Accessibility.** What is built is usable by everyone who has to use it.
+- **Performance.** What is built stays quick under a real Practice's data, not
+  only a fixture's.
+- **Security.** What is built refuses what it should refuse, at the boundary
+  that can actually enforce it.
+
 ## Agent skills
 
 ### Issue tracker
