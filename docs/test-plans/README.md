@@ -11,8 +11,9 @@ claim about the product read out of the code.
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
 carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
-and each plan's **Run log** names its own. **Tasha Bell's plan is walked**
-([#233](https://github.com/markgoho/doula-cloud/issues/233)); the other eight are
+and each plan's **Run log** names its own. **Tasha Bell's and Maya Okonkwo's plans are walked**
+([#233](https://github.com/markgoho/doula-cloud/issues/233),
+[#234](https://github.com/markgoho/doula-cloud/issues/234)); the other seven are
 not. Filing the `journey-gap` issues stays
 [#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
 nine walks.
@@ -57,11 +58,23 @@ Every step carries exactly one mark.
   remaining`, a raw enum on screen). A step is `manual` when it can be performed
   and the result observed, whatever the result is.
 - **`blocked`** — the code path is complete and the step can be attempted, but it
-  cannot finish because third-party infrastructure that has not been set up is
-  absent. Today that is **only Stripe**: no account exists (`CLAUDE.md`). The
-  expected result is still the real as-built response (`connectRequired`), so the
-  step is walked and observed like a `manual` one — the mark exists so the first
-  run's numbers do not read a bill we have not paid as a hole in the product.
+  cannot finish because third-party infrastructure the walking stack does not
+  have is absent. Two of them, found by the walks:
+  - **Stripe** — no account exists (`CLAUDE.md`). Credits, Connect, and Invoices.
+  - **The object store** — Contract signing writes the signed PDF to GCS before
+    it writes the status (`api/internal/contracts/sign.go:85-89`), and
+    `app/e2e/stack.ts:220` points the SDK at `storage-emulator-disabled.invalid:1`
+    on purpose. The bucket is real in the deployed service
+    (`.github/workflows/ci.yml:516`), so this one is absent from the *stack*, not
+    from the product, and a fake GCS in `stack.ts` would clear it
+    ([#234](https://github.com/markgoho/doula-cloud/issues/234)).
+
+  The expected result is still the real as-built response, so the step is walked
+  and observed like a `manual` one — the mark exists so the first run's numbers do
+  not read a bill we have not paid, or a service the harness switched off, as a
+  hole in the product. **That response is not always graceful**: the Invoice leg
+  answers `connectRequired`, but Buy credits and Connect Stripe both answer a bare
+  `internal error` (HTTP 500), and Contract signing does too.
 - **`missing-feature (<gap id>)`** — the step cannot be performed at all: no
   screen, no endpoint, no column. It cites the gap ID **owned by a journey map**.
   A test plan never mints a gap ID. If a run exposes a gap no map owns, it goes
@@ -71,8 +84,9 @@ The line between `manual` and `missing-feature` is *can the step be attempted*,
 not *does it give a good answer*. A step whose honest as-built result is a refusal
 (`402 no credits remaining`, a role refusal, a raw enum on screen) is `manual`.
 
-The line between `blocked` and `missing-feature` is **would connecting a live
-Stripe account clear it**. It clears every `blocked` step and not one
+The line between `blocked` and `missing-feature` is **would connecting the
+third-party infrastructure clear it** — a live Stripe account, or a reachable
+object store. It clears every `blocked` step and not one
 `missing-feature` step — Dee's stage 9 is the case that fixes the rule in mind:
 recording a bank transfer stays impossible with Stripe connected, so it is
 `missing-feature (DW-G3)`, while the Invoice she cannot raise one stage earlier is

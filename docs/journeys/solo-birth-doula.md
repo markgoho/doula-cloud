@@ -108,7 +108,8 @@ until a portal invite has been sent, and nothing on the Contract section says so
   account to sign in with.
 - **5.2** — Build the Contract from the Practice's contract template
   (`POST /api/practices/{id}/engagements/{id}/contract`), status `draft`.
-- **5.3** — Send it (`.../contract/send`), status `sent`.
+- **5.3** — Send it (`.../contract/send`), status `sent`. Nothing checks that
+  the merge fields carry values, so a Contract can be sent blank (**MO-G10**).
 - **5.4** — The Client signs in the portal
   (`POST /api/portal/engagements/{id}/contract/sign`), status `signed`.
 - **5.5** — Maya sees `signed` on the Engagement page without leaving the app.
@@ -169,3 +170,4 @@ substitute for a phone call in labour.
 | MO-G7 | 7 | Experience | "Billing" (credits she buys) and "Payments" (Stripe Connect, so she gets paid) are two unexplained money screens whose names invite the wrong click. |
 | MO-G8 | 7 | Interaction | Stripe Connect is not configured, so getting paid is blocked. Expected — record it, do not chase it. |
 | MO-G9 | 3 | Both | Three signup credits, one consumed per Client. She carries four to six Clients, so she is hard-stopped at her fourth with a `402` — and the only way past it is a Stripe purchase that cannot complete. The wall lands on her moment of truth. |
+| MO-G10 | 5 | Both | A Contract resolves no merge field. `POST .../contract` snapshots the template prose and sets every value empty (`api/internal/contracts/contract.go:124`), so Maya retypes the Practice name and the Client name the product already holds — and **Send** accepts a Contract with all six values blank, which the Client then reads as "This agreement is between  and  for doula services." Found by the [#234](https://github.com/markgoho/doula-cloud/issues/234) walk. |

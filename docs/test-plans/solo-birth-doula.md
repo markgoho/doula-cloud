@@ -60,11 +60,11 @@ whole suite.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 5.1 | Send the portal invite from the Engagement page | `POST .../portal-invite` returns a token; **no email is sent** and the link must be delivered by hand | `manual` |
-| 5.2 | Build the Contract from the Practice template | `POST .../contract` creates it at status `draft`, merge fields resolved | `manual` |
+| 5.2 | Build the Contract from the Practice template | `POST .../contract` creates it at status `draft` with the template prose snapshotted — and **no merge field resolved**: every value comes back empty and must be typed by hand, `practice_name` and `client_name` included (MO-G10) | `manual` |
 | 5.3 | Press **Send** | Status moves to `sent` | `manual` |
 | 5.4 | As the Client, accept the invite and sign in | The accept → login path lands on `/portal/engagements/{engagementId}` | `automated (portal-invite-accept.e2e.ts)` |
-| 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` sets status `signed` | `manual` |
-| 5.5 | Back as Maya, reload the Engagement | The Contract reads `signed`, without leaving the app | `manual` |
+| 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` renders the signed PDF and puts it in the object store **before** it writes the status, so with no object store reachable it answers `internal error` (HTTP 500) and the Contract stays `sent` | `blocked` |
+| 5.5 | Back as Maya, reload the Engagement | The Contract reads `signed`, without leaving the app — unreachable while 5.4-a is `blocked`; it reads `sent` | `blocked` |
 | 5.5-a | Look for a way to move the Engagement past `intake` | No update path exists anywhere; the status is fixed for the Engagement's whole life | `missing-feature (MO-G4)` |
 
 ### Stage 6 — Schedule Visits
@@ -97,8 +97,8 @@ whole suite.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 9 |
-| `manual` | 19 |
-| `blocked` | 3 (all Stripe: 3.4-a, 7.1, 7.2) |
+| `manual` | 17 |
+| `blocked` | 5 — Stripe: 3.4-a, 7.1, 7.2; the object store: 5.4-a, 5.5 |
 | `missing-feature` | 4 (MO-G1, MO-G2, MO-G3, MO-G4) |
 
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
@@ -128,3 +128,68 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
 That is [#234](https://github.com/markgoho/doula-cloud/issues/234).
+
+### 2026-08-22 — manual walk ([#234](https://github.com/markgoho/doula-cloud/issues/234))
+
+`bun run dev:full` in `app/`, walked in a desktop browser at 1280x900 as Maya
+Okonkwo, with a second 390x844 context for the Client. Preconditions: none, as
+the plan says — signed up from `/signup` with no fixture, twice (one pass for
+stages 1–8, a second to observe 4.2-a's template edit, 7.2's Invoice with an
+amount, and stage 8). The 9 `automated` steps were **not** re-run.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 1.1 | `manual` | as expected | `Sign up your Practice`, four fields — `Practice name`, `Your name`, `Email`, `Password` — and **Create Practice**. Nothing else on the screen |
+| 1.2 | `manual` | as expected | `POST /api/staff/signup` -> `201 {"staffId":…,"practiceId":…}`. One request, no confirmation step |
+| 1.3 | `manual` | as expected | `Welcome to {practice name}` and seven links: Clients, Billing, Invite a Staff member, Staff, Plan Templates, Contract Template, Payments, plus `Sign out` |
+| 3.1 | `manual` | as expected | `Add a Client`: exactly two fields, `Their name` and `Their email` |
+| 3.1-a | `missing-feature (MO-G3)` | as expected | Confirmed unwalkable. No due date, phone, address, hospital, partner, or notes field exists on the form or anywhere behind it. The paper folder cannot be transcribed |
+| 3.2 | `manual` | as expected | `201 {"clientId":…,"engagementId":…,"status":"intake"}`, and the browser lands **straight on the Engagement page** — the Clients list is never passed through, as Tasha's walk also found |
+| 3.2-a | `manual` | as expected | `Credit balance: 2`, ledger `consumption / -1` above `signup_bonus / +3`. Nothing on the Add Client screen had said a credit would be spent |
+| 3.4 | `manual` | as expected | Clients 2 and 3 -> `201`. The fourth -> `402 no credits remaining, ask a Practice Owner to buy more`, printed verbatim under the form. Maya is the Owner it tells her to ask |
+| 3.4-a | `blocked` | as expected, and **worse than `connectRequired`** | **Buy credits** -> `POST .../billing/purchases` -> `500 internal error`, rendered on screen as `internal error`. The stack log carries the cause: `[ERROR] Request error from Stripe (status 401): You did not provide an API key`. Confirms the fact [#233](https://github.com/markgoho/doula-cloud/issues/233) handed forward (`api/internal/billing/purchase.go:69-72`) |
+| 4.1 | `manual` | as expected | **Create Care Plan** -> `201` with the seeded field set (Support People, pain management, requests, backup-doula checkbox). Filled, **Save Care Plan** -> `PUT … 200`, and the value survived a reload |
+| 4.2-a | `manual` | as expected | Added a field to the **Birth Plan** template afterwards (`PUT .../plan-templates/birth_plan` -> `200`, `Saved.`), reopened the filled plan: the new field is **absent**. The Plan Instance snapshot holds, exactly as claimed |
+| 5.1 | `manual` | as expected | `201 {"clientPortalUserId":…,"inviteToken":…}` and the screen says it plainly: `Invited. There is no email sending yet, so share this link with them directly:` followed by the raw URL in a `<code>` block. Maya must copy it out by hand (**MO-G6** territory) |
+| 5.2 | `manual` | **falsified** | `201`, status `draft`, prose snapshotted — but **no merge field is resolved**. The form shows six empty text inputs, `Practice name` and `Client name` among them, and the create handler sets `Values: MergeFieldValues{}` unconditionally (`api/internal/contracts/contract.go:124`). The product knows the Practice name and the Client name and asks her to retype both. New gap **MO-G10** on the journey map |
+| 5.3 | `manual` | as expected, with a second finding | **Send Contract** -> `200`, status `sent`. It sent with **every merge field blank** — no validation, no warning — and the Client's portal then rendered `This agreement is between  and  for doula services.` Folded into **MO-G10** |
+| 5.4-a | `blocked` (was `manual`) | **re-marked** | `POST /api/portal/engagements/{id}/contract/sign` -> `500 internal error`. Not a missing feature: signing renders the PDF and calls `store.Put` **before** the status write (`api/internal/contracts/sign.go:85-89`), and the walking stack points the object store at an unreachable host on purpose (`app/e2e/stack.ts:220`, `STORAGE_EMULATOR_HOST: 'storage-emulator-disabled.invalid:1'`). The bucket itself is real in the deployed service (`.github/workflows/ci.yml:516`). Infrastructure absent from the stack, not from the product |
+| 5.5 | `blocked` (was `manual`) | **re-marked** | Unreachable while 5.4-a is. Maya's Engagement reads `Status: sent` |
+| 5.5-a | `missing-feature (MO-G4)` | as expected | Confirmed unwalkable. Every control on the Engagement page was enumerated: nothing anywhere reads or writes the Engagement's status. It shows `intake` in a read-only description list and stays there |
+| 6.1 | `manual` | as expected | A `Visits` heading, an **Add a Visit** button, and a table of `Staff` / `Date` / `Reassign`, empty message `No Visits yet.` |
+| 6.2 | `manual` | as expected | `201 {"visitId":…,"staffId":…}`, one row: `Maya Okonkwo / 8/22/2026`. No prompt, no form — the button *is* the Visit |
+| 6.2-a | `missing-feature (MO-G1)` | as expected | Confirmed unwalkable. The only input the Visits section carries is `Reassign to Staff id`, a free-text box for a UUID. No date, no time. The `Date` column renders `visit.createdAt` |
+| 6.2-b | `missing-feature (MO-G2)` | as expected | Confirmed unwalkable. No notes field anywhere in the section |
+| 7.1 | `blocked` | as expected, and **worse than `connectRequired`** | `Payments` reads `Stripe Connect status: Not connected` with a **Connect Stripe** button. Pressing it -> `POST .../payments/connect` -> `500 internal error`, printed raw. Same Stripe-401 cause as 3.4-a. Two of the three Stripe legs answer a bare 500; only 7.2 refuses in the shape the plan predicted |
+| 7.2 | `blocked` | as expected | With an amount (`1800`): `POST .../contract/invoices` -> `200 {"connectRequired":true,"isOwner":true}`, and the section replaces its form with `Connect Stripe to create an Invoice.` and a **Connect Stripe** button. No Invoice is created. **The gate appears only after she tries** — before that the section shows an `Amount (USD)` field and **Create Invoice**, so nothing warns her the leg is closed |
+| 7.2-a | `manual` | as expected | Side by side: **Billing** is `Credit balance: 0`, a ledger, `Quantity`, **Buy credits**. **Payments** is `Stripe Connect status: Not connected`, **Connect Stripe**. Neither screen carries one word about what it is for, or that the other exists. **MO-G7** stands as written |
+| 8.1 | `manual` | as expected | `201`, and the message renders as `Maya Okonkwo (staff) — 8/22/2026, 2:04:28 PM`. No edit and no delete control on the message, as claimed |
+| 8.2 | `manual` | as expected | The Client replied from the portal (`201`, `senderType: "client"`), and Maya's reloaded thread showed both in order, staff then client, each labelled with its sender type |
+
+**17 `manual` steps walked; 4 `missing-feature` steps confirmed unwalkable; 5
+`blocked` steps attempted and their real responses recorded (2 re-marked from
+`manual`).** One expected result was falsified (5.2), minting **MO-G10** on the
+journey map. No `journey-gap` issue was filed — that is
+[#209](https://github.com/markgoho/doula-cloud/issues/209).
+
+**Verdict against "a pass means"**: **it does not pass, and one of the two
+reasons is not the product's fault.** One Client carries a filled Birth Plan the
+Client can read in the portal, a Visit, an open two-way message thread, and a
+Contract — all reached by one person with no help. The Contract is **not
+signed**, because the walking stack has no object store; that is the harness, and
+the deployed service has the bucket. The **Invoice does not exist**, and that is
+the product's own missing leg, blocked on a Stripe account nobody has opened.
+
+Her moment of truth landed where the map put it. The Add Client form takes a name
+and an email, so at minute five the paper folder survives the move — and the walk
+found the same shape one stage later, in a Contract that asks her to retype the
+Practice name and the Client name the product already holds, and then lets her
+send it blank.
+
+**For the walks behind this one** ([#235](https://github.com/markgoho/doula-cloud/issues/235)–[#241](https://github.com/markgoho/doula-cloud/issues/241)):
+every plan with a Contract-signing step meets the same 500. To walk it, run a
+fake GCS (`fsouza/fake-gcs-server`) and point `STORAGE_EMULATOR_HOST` at it in
+`app/e2e/stack.ts` instead of `storage-emulator-disabled.invalid:1`. That is test
+infrastructure, not a product change, and it belongs to
+[#209](https://github.com/markgoho/doula-cloud/issues/209) rather than to any one
+walk.
