@@ -31,7 +31,7 @@ one Practice.
 | Contract — money, and Invoice history | ✓ | ✓ | ✗ | ✓ on her Engagements |
 | Plan Template and Contract Template | ✓ | ✓ | ✓ | ✓ |
 | Credit balance and ledger | ✓ | ✓ | ✗ | ✗ |
-| Staff roster | ✓ | ✗ | ✗ | ✗ |
+| Staff roster | ✓ | ✓ | ✗ | ✗ |
 
 Two alternatives were live and are recorded because both are defensible. **Read
 follows write** — you may read only what some role of yours lets you change — is
@@ -41,6 +41,16 @@ any Staff member reads everything, only writes are gated — is what the code do
 today, and choosing it would have made today's behaviour deliberate. It was
 rejected because it leaves the phrase "staff-only internal notes" with no work to
 do and no rule for #207 to assert.
+
+The Staff roster is readable by an **Admin** and not by a Doula. This one cell was
+first written the other way and corrected: `CONTEXT.md` gives an Admin *scheduling*,
+and assignment exists only per Visit, so booking a Visit means picking a Doula — an
+Admin who cannot read the roster cannot do the job the glossary gives her. The
+alternative was a second, narrower Doula list for the scheduling screen, which builds
+a list to avoid showing a list, to protect a colleague's name from a colleague.
+Changing the roster stays Owner-only. A Doula keeps `✗` because no journey has yet
+given her a reason to need it, not because reading it would harm anyone; if one does,
+this is a cheap cell to move.
 
 Templates are readable by everyone because a Template holds no person's
 information: it is the Practice's own blank stationery, and only the Owner may
