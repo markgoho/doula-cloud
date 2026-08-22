@@ -457,7 +457,20 @@ say ""
 say "Checking that Connect really is enabled, by creating a throwaway"
 say "account and deleting it again..."
 probe_account=$(stripe_post accounts -d "type=standard" | json_field id) || {
-  warn "Connect is not enabled yet. Finish the platform profile and re-run."
+  warn "The probe failed. Read the refusal above: it has two common causes,"
+  warn "and they need different fixes."
+  say ""
+  note "  'Stripe no longer recommends Accounts v1...' -- Connect IS enabled."
+  note "  Stripe blocks v1 account creation on new accounts by default, and"
+  note "  every merged Connect code path is v1 (V1Accounts.Create with"
+  note "  type=standard, V1AccountLinks.Create, V1Accounts.GetByID in"
+  note "  payments/stripe_api_client.go). Turn on Accounts v1 support at"
+  note "  https://dashboard.stripe.com/settings/features/feat_accounts_v1_support"
+  note "  and re-run. Moving to Accounts v2 is real work and its own ticket:"
+  note "  v2 accounts carry configurations, not type=standard."
+  say ""
+  note "  Anything else -- the platform profile is unfinished. Answer"
+  note "  'Choose your business model' in the Setup guide and re-run."
   exit 1
 }
 curl -sS -X DELETE "https://api.stripe.com/v1/accounts/$probe_account" \
