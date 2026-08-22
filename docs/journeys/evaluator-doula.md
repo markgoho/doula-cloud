@@ -73,6 +73,10 @@ explained (TB-G3).
 This stage is genuinely cheap and is the strongest leg of her journey. One screen,
 four fields, no email confirmation step.
 
+- **3.3-a** — Look for anything telling her roles exist. Nothing at signup or on
+  the first screen does; the **Staff** link does, one click away, and it names all
+  three (TB-G7).
+
 **Abandon point**: "Practice name" asks her to name a business she may not think
 of as one. Low risk, worth watching.
 
@@ -138,7 +142,7 @@ cannot be reproduced even manually.
 | TB-G4 | 4 | Experience | The first screen after Practice creation is an admin link menu. It shows no doula-specific value at the moment of truth. |
 | TB-G5 | 6 | Interaction | No data export. "Can I get out again?" is unanswerable. |
 | TB-G6 | 7 | Interaction | No data import for a migrating owner, and Client creation accepts only name and email. |
-| TB-G7 | 3 | Experience | Signup grants Owner + Admin + Doula silently. She never learns that roles exist, so she cannot evaluate the product for her second doula. |
+| TB-G7 | 3 | Experience | Signup grants Owner + Admin + Doula silently and nothing signposts the roster model. The Staff screen does hold it (`app/src/routes/practices/[practiceId]/staff/+page.svelte`) — one unprompted click away — but it speaks the schema's word, `owner, office_manager, doula`, not the team's **Admin** (#204), so what she finds there does not answer "can I set my second doula up as a doula only?" either. Narrowed by the [2026-08-22 walk](../test-plans/evaluator-doula.md#2026-08-22--manual-walk-233). |
 
 Also hit here, filed on their owning maps: **MO-G3** (Client takes name and email
 only — which is also why TB-G6 cannot be worked around by hand).

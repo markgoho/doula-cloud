@@ -9,12 +9,19 @@ map itself. A plan therefore proves or disproves the map: every step below is a
 claim about the product read out of the code.
 
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
-**all pass** — `bun run test:e2e`, 16 passed, 0 failed. Every `manual`,
-`blocked` and `missing-feature` step is still unwalked; one walk ticket per plan
-carries that ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
-and each plan's **Run log** names its own. Filing the `journey-gap` issues stays
-[#209](https://github.com/markgoho/doula-cloud/issues/209), which now waits on
-all nine walks.
+**all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
+carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
+and each plan's **Run log** names its own. **Tasha Bell's plan is walked**
+([#233](https://github.com/markgoho/doula-cloud/issues/233)); the other eight are
+not. Filing the `journey-gap` issues stays
+[#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
+nine walks.
+
+A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
+to `manual` once the Staff screen turned out to answer it — the rule that a mark
+is a claim read out of the code cuts both ways, and the run is what settles it.
+Re-marking is not minting: the gap ID stays owned by its journey map, and its
+wording is corrected there.
 
 ## Fixed structure
 

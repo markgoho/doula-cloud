@@ -45,7 +45,7 @@ marketing site is out of scope for this map).
 | 3.1 | Open `/signup` | One screen, four fields, no email confirmation step. This is the strongest leg of her journey | `manual` |
 | 3.2 | Fill Practice name, Your name, Email, Password | "Practice name" asks her to name a business she may not think of as one | `manual` |
 | 3.3 | Press **Create Practice** | `POST /api/staff/signup` creates the Practice, the Staff row, and a membership holding Owner + Admin + Doula in one statement | `manual` |
-| 3.3-a | Look for anything telling her roles exist, or that she now holds three | Nothing does. She cannot evaluate the product for her second doula because she never learns the roster model is there | `missing-feature (TB-G7)` |
+| 3.3-a | Look for anything telling her roles exist, or that she now holds three | Nothing at signup or on the first screen does. The **Staff** screen does, one unprompted click away, and it reads `owner, office_manager, doula` — the schema's word, not **Admin** | `manual` |
 
 **Abandon check**: low risk. Time the whole stage — under a minute is the claim.
 
@@ -92,12 +92,16 @@ cannot come with her.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 1 |
-| `manual` | 12 |
-| `missing-feature` | 6 steps over 5 gaps (TB-G1, TB-G2, TB-G5, TB-G6, TB-G7) |
+| `manual` | 13 |
+| `missing-feature` | 5 steps over 4 gaps (TB-G1, TB-G2, TB-G5, TB-G6) |
 
-TB-G3 (unexplained credits) and TB-G4 (the admin-menu first screen) are observed at
-2.1-a and 4.1-a: both screens open, and what they show is the finding. TB-G1 backs
-two steps.
+TB-G3 (unexplained credits), TB-G4 (the admin-menu first screen) and TB-G7 (the
+unsignposted roster model) are observed at 2.1-a, 4.1-a and 3.3-a: all three
+screens open, and what they show is the finding. TB-G1 backs two steps.
+
+3.3-a moved from `missing-feature (TB-G7)` to `manual` in the 2026-08-22 walk
+below: the step can be performed, and what the Staff screen hands back is the
+result.
 
 Her plan is the least automatable of the six, and for a reason worth keeping: two
 of her seven stages happen before the product exists, and a Playwright spec cannot
@@ -117,5 +121,66 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 **1 automated steps: all pass.**
 
-The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
-That is [#233](https://github.com/markgoho/doula-cloud/issues/233).
+### 2026-08-22 — manual walk ([#233](https://github.com/markgoho/doula-cloud/issues/233))
+
+`bun run dev:full` in `app/`, walked once end to end in a desktop browser at
+1280x900 as Tasha Bell. Preconditions: none, as the plan says — signed up from
+`/signup` with no fixture. Practice `Bell & Co Birth Support`, one Client
+`Test Client One`. The 1 `automated` step was **not** re-run.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 1.1 | `missing-feature (TB-G1)` | as expected | Unwalkable, and the gap needs one word changed: a Hugo **scaffold** exists (`hugo/hugo.toml`, `hugo/layouts/index.html`), it is wired to its own Firebase Hosting target (`firebase.json`, target `hugo`), and what it publishes is `<h1>Hello, World!</h1>` and nothing else (`hugo/public/index.html`). There is no `content/` directory. So the site is not absent — it is empty, which is the same nowhere to arrive at |
+| 1.2 | `missing-feature (TB-G1)` | as expected | The words "doula" and "birth plan" appear nowhere in `hugo/` |
+| 2.1 | `missing-feature (TB-G2)` | as expected | No price in `hugo/`, and none in the app. **Sharper than the plan claimed**: the one screen that sells credits shows no price either — see 2.1-a |
+| 2.1-a | `manual` | as expected | `Billing` — `Credit balance: 3`, one ledger row `8/22/2026, 12:43:58 PM / signup_bonus / +3`, then `Quantity [1]` and a **Buy credits** button. Nothing says what a credit buys, what one costs, or what `signup_bonus` is — the origin is printed as the raw enum. Pressing **Buy credits** returns `internal error` (HTTP 500), because with no Stripe key `stripeClient.CreateCustomer` fails and the handler answers `MsgInternalError` (`api/internal/billing/purchase.go:69-72`) |
+| 3.1 | `manual` | as expected | `/signup`: heading `Sign up your Practice`, four fields, one **Create Practice** button. No email confirmation, no terms, no link back to anything |
+| 3.2 | `manual` | as expected | The first field is labelled `Practice name`, exactly as the abandon check predicted |
+| 3.3 | `manual` | as expected | Landed on `/practices/{id}`. DB after: **one** `practices` row, **one** `staff` row, one `practice_memberships` row with `{owner,office_manager,doula}` — the three roles in one statement, as claimed. **The stage-3 timing claim ("under a minute") was not tested**: a driven browser types faster than a person, so any number here would be fiction |
+| 3.3-a | `manual` (was `missing-feature (TB-G7)`) | **falsified** | The **Staff** link on the first screen opens a roster with a `Roles` column reading `owner, office_manager, doula`. She *can* learn that roles exist, in one click. TB-G7 is narrowed, not deleted: nothing signposts it, the only Action offered is `End sessions everywhere` (no role can be changed — RA-G2, owned by Renata's map), and the word on screen is `office_manager`, which is the schema's word and not **Admin** (#204). See the journey map's revised TB-G7 row |
+| 4.1 | `manual` | as expected | `Welcome to Bell & Co Birth Support` and the seven links in the order the plan lists them. One control the plan does not name: a `Sign out` button in the banner. That is the whole screen |
+| 4.1-a | `manual` | as expected | The complete body text is `Sign out / Welcome to Bell & Co Birth Support / Clients Billing Invite a Staff member Staff Plan Templates Contract Template Payments`. Neither "birth plan" nor "visit" appears |
+| 4.2 | `manual` | as expected | Seven links, flat, no descriptions, no empty-state prompt, no ordering cue |
+| 5.1 | `manual` | as expected | `Add a Client`: two fields, `Their name` and `Their email`. Nothing on the screen mentions credits |
+| 5.2 | `manual` | as expected | One `clients` row, one `engagements` row at `intake`, and a `credit_ledger` row `consumption / -1` at the identical timestamp. Nothing on screen said a credit was spent. **The plan's route is one click long, not two**: **Add Client** lands straight on the Engagement page — she never passes through the Clients list |
+| 5.2-a | `manual` | as expected | No warning of any kind, on either screen |
+| 5.4 | `manual` | as expected, with one correction | The Engagement page shows `Test Client One`, `Status intake` (raw enum), `Created`, `Send portal invite`, Visits, Care Plan, Birth Plan, Contract, Messages. **Three clicks from the first screen, not four** (Clients → Add a Client → Add Client), because 5.2 lands her here. The Visits table's `Date` column is `visit.createdAt` (`app/src/routes/practices/[practiceId]/engagements/[engagementId]/+page.svelte:525`) — a column labelled Date that holds when the row was typed. Corroborates **MO-G1**; no new gap |
+| 6.1 | `missing-feature (TB-G5)` | as expected | Unwalkable and confirmed at the route table: `api/main.go:137-236` registers no export, no download, and no account deletion. The seven links carry no account or settings screen, and the Clients list offers no export |
+| 7.1 | `missing-feature (TB-G6)` | as expected | Same route table: no import endpoint exists |
+| 7.1-a | `manual` | as expected | Walked and impossible, as claimed: `Add a Client` accepts a name and an email and nothing else (**MO-G3**) |
+
+**12 `manual` steps walked, 1 re-marked from `missing-feature`; 5 remaining
+`missing-feature` steps confirmed unwalkable; 0 `blocked` steps (this plan has
+none).** One gap wording was falsified and rewritten (TB-G7); two were sharpened
+in place (TB-G1, TB-G2). No gap ID was minted, and no `journey-gap` issue was
+filed — that is
+[#209](https://github.com/markgoho/doula-cloud/issues/209).
+
+#### Abandon checks — what a real evaluator would do
+
+Recorded as judgement, in Tasha's words, not as pass or fail.
+
+- **Stage 1** — She never arrives. Nothing to close the tab on.
+- **Stage 2** — "What does it cost?" is unanswered before signup *and* after it.
+  The Billing screen is worse than silence: it names a currency she has never
+  heard of, prints `signup_bonus` at her, and the one button that might explain
+  the price returns `internal error`. She would not put a card near this.
+- **Stage 3** — She would not leave here. Four fields, one screen, no
+  confirmation email. This is the strongest leg, exactly as the map says.
+- **Stage 4** — **This is where she closes the tab.** Seven links and a Sign out
+  button. She came to see whether it is built for doulas; the screen answers with
+  a filing cabinet. Nothing on it says the word she was shopping for.
+- **Stage 5** — If she pushes past stage 4, the Engagement page rescues her:
+  Birth Plan is on it, in her own words, at three clicks. The finding is not that
+  the page is bad — it is that it sits behind the screen she would have left at,
+  and that reaching it costs her a credit and a Client she had to invent.
+- **Stage 6** — "Can I get out again?" — no. Half her stated question has no
+  answer anywhere in the product.
+- **Stage 7** — Her spreadsheet cannot come with her, and cannot be retyped
+  either. For a two-doula practice with two years of history, this is the
+  expensive half of switching and the product has nothing to say about it.
+
+**Verdict against "a pass means"**: a Practice with one test Client in it exists,
+so the mechanical half passed. The intention to come back does not — she leaves
+at stage 4, for a recorded reason. Both close the journey, and this journey
+closes on the second one.
