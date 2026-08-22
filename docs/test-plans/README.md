@@ -59,22 +59,25 @@ Every step carries exactly one mark.
   and the result observed, whatever the result is.
 - **`blocked`** — the code path is complete and the step can be attempted, but it
   cannot finish because third-party infrastructure the walking stack does not
-  have is absent. Two of them, found by the walks:
-  - **Stripe** — no account exists (`CLAUDE.md`). Credits, Connect, and Invoices.
-  - **The object store** — Contract signing writes the signed PDF to GCS before
-    it writes the status (`api/internal/contracts/sign.go:85-89`), and
-    `app/e2e/stack.ts:220` points the SDK at `storage-emulator-disabled.invalid:1`
-    on purpose. The bucket is real in the deployed service
-    (`.github/workflows/ci.yml:516`), so this one is absent from the *stack*, not
-    from the product, and a fake GCS in `stack.ts` would clear it
-    ([#234](https://github.com/markgoho/doula-cloud/issues/234)).
+  have is absent. Today that is **only Stripe** again: no account exists
+  (`CLAUDE.md`), so Credits, Connect, and Invoices are all `blocked`.
+
+  It was briefly two. Maya's walk found Contract signing answering a bare 500,
+  because signing writes the PDF to the object store before it writes the status
+  (`api/internal/contracts/sign.go:85-89`) and the stack pointed the SDK at
+  `storage-emulator-disabled.invalid:1`. That was the harness, not the product —
+  the deployed service has the real bucket — so `compose.e2e.yaml` gained a
+  `fake-gcs-server` and the steps went back to `manual`
+  ([#234](https://github.com/markgoho/doula-cloud/issues/234)). **Prefer that fix
+  to the mark**: where the missing infrastructure can be stood up locally, stand
+  it up, and keep `blocked` for the one thing that cannot be (a Stripe account is
+  a business relationship, not a container).
 
   The expected result is still the real as-built response, so the step is walked
   and observed like a `manual` one — the mark exists so the first run's numbers do
-  not read a bill we have not paid, or a service the harness switched off, as a
-  hole in the product. **That response is not always graceful**: the Invoice leg
-  answers `connectRequired`, but Buy credits and Connect Stripe both answer a bare
-  `internal error` (HTTP 500), and Contract signing does too.
+  not read a bill we have not paid as a hole in the product. **That response is
+  not always graceful**: the Invoice leg answers `connectRequired`, but Buy
+  credits and Connect Stripe both answer a bare `internal error` (HTTP 500).
 - **`missing-feature (<gap id>)`** — the step cannot be performed at all: no
   screen, no endpoint, no column. It cites the gap ID **owned by a journey map**.
   A test plan never mints a gap ID. If a run exposes a gap no map owns, it goes

@@ -63,8 +63,8 @@ whole suite.
 | 5.2 | Build the Contract from the Practice template | `POST .../contract` creates it at status `draft` with the template prose snapshotted — and **no merge field resolved**: every value comes back empty and must be typed by hand, `practice_name` and `client_name` included (MO-G10) | `manual` |
 | 5.3 | Press **Send** | Status moves to `sent` | `manual` |
 | 5.4 | As the Client, accept the invite and sign in | The accept → login path lands on `/portal/engagements/{engagementId}` | `automated (portal-invite-accept.e2e.ts)` |
-| 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` renders the signed PDF and puts it in the object store **before** it writes the status, so with no object store reachable it answers `internal error` (HTTP 500) and the Contract stays `sent` | `blocked` |
-| 5.5 | Back as Maya, reload the Engagement | The Contract reads `signed`, without leaving the app — unreachable while 5.4-a is `blocked`; it reads `sent` | `blocked` |
+| 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` renders the signed PDF, puts it in the object store, **then** sets status `signed` | `manual` |
+| 5.5 | Back as Maya, reload the Engagement | The Contract reads `signed`, without leaving the app, and a **Void Contract** action appears | `manual` |
 | 5.5-a | Look for a way to move the Engagement past `intake` | No update path exists anywhere; the status is fixed for the Engagement's whole life | `missing-feature (MO-G4)` |
 
 ### Stage 6 — Schedule Visits
@@ -97,8 +97,8 @@ whole suite.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 9 |
-| `manual` | 17 |
-| `blocked` | 5 — Stripe: 3.4-a, 7.1, 7.2; the object store: 5.4-a, 5.5 |
+| `manual` | 19 |
+| `blocked` | 3 (all Stripe: 3.4-a, 7.1, 7.2) |
 | `missing-feature` | 4 (MO-G1, MO-G2, MO-G3, MO-G4) |
 
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
@@ -193,3 +193,27 @@ fake GCS (`fsouza/fake-gcs-server`) and point `STORAGE_EMULATOR_HOST` at it in
 infrastructure, not a product change, and it belongs to
 [#209](https://github.com/markgoho/doula-cloud/issues/209) rather than to any one
 walk.
+
+#### Addendum, same day — the two `blocked` steps walked
+
+The walk above left 5.4-a and 5.5 `blocked` on an object store the stack did not
+have, and recommended standing one up. That was done the same day:
+`app/compose.e2e.yaml` gained a pinned `fsouza/fake-gcs-server`, `stack.ts`
+creates the bucket and points the BFF at it. Both steps went back to `manual` and
+were walked.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 5.4-a | `manual` (was `blocked`) | as the plan originally claimed | `POST /api/portal/engagements/{id}/contract/sign` -> `200`, `"status":"signed"`, and the portal screen changed from `Status: sent` to `Status: signed` and dropped the signing form. The signed PDF is really in the store: `contracts/{engagementId}/signed.pdf`, 1245 bytes, `application/pdf` |
+| 5.5 | `manual` (was `blocked`) | as expected, plus one control the plan does not name | Maya's Engagement reads `Status: signed` without leaving the app, and the Contract section now offers **Void Contract** — the button Dee's plan walks at 7.1-a |
+
+**Final marks for this plan: 9 `automated`, 19 `manual`, 3 `blocked` (all
+Stripe), 4 `missing-feature`.** The Contract leg of "a pass means" now passes
+end to end — invite, build, send, sign, and Maya sees it — and the only leg still
+short is the Invoice, which is blocked on a Stripe account nobody has opened.
+
+One thing the fix made visible that the first walk could not: with the merge
+fields **filled**, the Client reads `This agreement is between Okonkwo Birth
+Support and Hannah Sorensen for doula services.` The prose resolves correctly the
+moment values exist — which is what makes **MO-G10** a gap about the product not
+filling in what it already knows, rather than a broken template.

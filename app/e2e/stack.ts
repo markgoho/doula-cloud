@@ -7,10 +7,19 @@ import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 
 const DB_HOST = '127.0.0.1';
 const DB_PORT = 15_432;
+// The fake-gcs-server in compose.e2e.yaml, and the one bucket the BFF is
+// pointed at. Both halves matter to the Go storage SDK: it reads
+// STORAGE_EMULATOR_HOST as a bare host:port (see the SDK's own doc.go
+// example) and builds an http endpoint from it, and it will not create a
+// missing bucket on first write -- seedGCSBucket below does that.
+const GCS_HOST = '127.0.0.1';
+const GCS_PORT = 14_443;
+const GCS_BUCKET = 'doula-cloud-e2e-attachments';
 const READY_TIMEOUT_MS = 60_000;
-// `db` (compose.e2e.yaml) just pulls/starts a pinned postgres:16-alpine
-// image -- no build involved -- so it doesn't need the long budget a Go
-// image build used to require here.
+// `db` and `gcs` (compose.e2e.yaml) just pull/start pinned
+// postgres:16-alpine and fake-gcs-server images -- no build involved --
+// so they don't need the long budget a Go image build used to require
+// here.
 const DB_UP_TIMEOUT_MS = 60_000;
 // `go run ./cmd/migrate` and `go build` (below) both compile from
 // scratch on a cold module/build cache; actions/setup-go's cache (see
@@ -56,6 +65,7 @@ export async function startStack(appOrigin: string) {
 	await startDatabase();
 	runMigrations();
 	seedAppE2ERole();
+	await seedGCSBucket();
 	await startAPI(appOrigin);
 }
 
@@ -70,6 +80,23 @@ async function startDatabase() {
 		timeout: DB_UP_TIMEOUT_MS
 	});
 	await waitForPort(DB_HOST, DB_PORT, READY_TIMEOUT_MS);
+	await waitForPort(GCS_HOST, GCS_PORT, READY_TIMEOUT_MS);
+}
+
+// Creates the one bucket the BFF writes to, the same way seedAppE2ERole
+// creates the one role it logs in as -- a compose service comes up empty,
+// and neither the SDK nor the BFF creates its own container. Idempotent
+// by way of fake-gcs-server answering 409 for a bucket that already
+// exists, which a re-run against a still-warm stack will hit.
+async function seedGCSBucket() {
+	const response = await fetch(`http://${GCS_HOST}:${GCS_PORT}/storage/v1/b?project=doula-cloud`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ name: GCS_BUCKET })
+	});
+	if (!response.ok && response.status !== 409) {
+		throw new Error(`could not create the ${GCS_BUCKET} bucket: ${response.status} ${await response.text()}`);
+	}
 }
 
 // Runs api/cmd/migrate as a host process against the compose `db`,
@@ -185,12 +212,18 @@ async function startEmulator() {
 // loopback addresses in place of compose service names/host-gateway
 // hostnames (a host process reaches Postgres, the emulator, and its own
 // listener over 127.0.0.1 directly -- no container-to-host routing to
-// work around). STORAGE_EMULATOR_HOST is unreachable on purpose (no e2e
-// test exercises the attachment endpoints, per #60) -- it makes the GCS
-// SDK skip Application Default Credentials discovery at startup, which
-// otherwise blocks on a real metadata-server probe with no route to
-// succeed here, delaying main()'s listener past the point Playwright
-// starts hitting it. VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are a throwaway
+// work around). STORAGE_EMULATOR_HOST points at the compose `gcs`
+// service: setting it at all is what makes the GCS SDK skip Application
+// Default Credentials discovery at startup (which otherwise blocks on a
+// real metadata-server probe with no route to succeed here, delaying
+// main()'s listener past the point Playwright starts hitting it), and
+// pointing it somewhere real is what makes the object store *work*. It
+// used to be `storage-emulator-disabled.invalid:1` on the grounds that no
+// e2e test touches the attachment endpoints (#60) -- but Contract signing
+// puts the signed PDF in the store before it writes the status
+// (api/internal/contracts/sign.go), so an unreachable store made every
+// signing step, automated or hand-walked, a 500 (#234).
+// VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are a throwaway
 // keypair (generated once via webpush.GenerateVAPIDKeys(), not a real
 // secret) purely so push.NewVAPIDPusher constructs cleanly at startup --
 // no e2e test registers a real push_subscriptions row through the UI
@@ -216,8 +249,8 @@ async function startAPI(appOrigin: string) {
 			DATABASE_URL: `postgres://app_e2e:app_e2e@${DB_HOST}:${DB_PORT}/app?sslmode=disable`,
 			FIREBASE_AUTH_EMULATOR_HOST: `${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`,
 			GCP_PROJECT_ID: 'doula-cloud',
-			STORAGE_EMULATOR_HOST: 'storage-emulator-disabled.invalid:1',
-			GCS_ATTACHMENTS_BUCKET: 'doula-cloud-e2e-unused',
+			STORAGE_EMULATOR_HOST: `${GCS_HOST}:${GCS_PORT}`,
+			GCS_ATTACHMENTS_BUCKET: GCS_BUCKET,
 			VAPID_PUBLIC_KEY: 'BEOwHFGQTdwLqgkxPeDzvHQAHjqFkfxMVdO8ONFexrHrD4_43Jvr_XPB5LUA6AAdvnGK1sHeo7WYPwCAOfRI9Ow',
 			VAPID_PRIVATE_KEY: 'Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4',
 			VAPID_SUBSCRIBER: 'mailto:e2e@doula-cloud.invalid',

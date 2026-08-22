@@ -137,10 +137,19 @@ migration fails. It's not yet wired to a real instance (none is
 provisioned in the `doula-cloud` GCP project); see the script's header for
 the required env vars.
 
-## `app/`: e2e stack — Postgres in compose, migrate/BFF/emulator as host processes
+## `app/`: e2e stack — Postgres and the object store in compose, migrate/BFF/emulator as host processes
 
-`app/compose.e2e.yaml` now defines exactly one backing service: a pinned
-`postgres:16-alpine`. Everything else Playwright e2e tests run against —
+`app/compose.e2e.yaml` defines two backing services: a pinned
+`postgres:16-alpine`, and a pinned `fsouza/fake-gcs-server` on
+`127.0.0.1:14443` standing in for the GCS bucket the BFF writes signed
+Contract PDFs and message attachments to. `stack.ts` creates the one
+bucket (`seedGCSBucket`) the same way it creates the one login role, and
+points the BFF's `STORAGE_EMULATOR_HOST`/`GCS_ATTACHMENTS_BUCKET` at it.
+The store used to be aimed at an unreachable host on the grounds that no
+spec touches the attachment endpoints — which also made Contract signing
+answer a bare 500, since it puts the PDF in the store before it writes the
+status (`api/internal/contracts/sign.go`). Everything else Playwright e2e
+tests run against —
 the goose migration step, the `app_e2e` login role, the Go BFF, and the
 Firebase Auth emulator — runs as a plain host process, started/stopped by
 `app/e2e/stack.ts` (`startStack`/`stopStack`), which `app/playwright.config.ts`
@@ -155,8 +164,8 @@ sharing between them; running them as host processes instead lets CI's
 `app` job share a single warm Go build cache (via `actions/setup-go`,
 keyed on `api/go.sum`) with everything else that touches `api/`.
 
-Postgres itself stays in `compose.e2e.yaml` (image pinning matters more
-than build cost there) and is brought up/down via `$CONTAINER_ENGINE
+Postgres and the object store stay in `compose.e2e.yaml` (image pinning
+matters more than build cost there) and are brought up/down via `$CONTAINER_ENGINE
 compose` (`docker compose` and `podman compose` share the same v2 CLI
 syntax) — CI sets `CONTAINER_ENGINE=docker` (preinstalled, no
 rootless-socket setup needed on `ubuntu-latest`); it defaults to `podman`

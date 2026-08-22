@@ -15,3 +15,21 @@ services:
       POSTGRES_DB: app
     ports:
       - '15432:5432'
+
+  # The object store the BFF writes signed Contract PDFs and message
+  # attachments to. Containerized for the same reason `db` is: a pinned
+  # image beats whatever the runner has, and there is no host-process
+  # equivalent worth running. Held in memory -- `down -v` between runs is
+  # the whole cleanup story, and no run should ever depend on an object a
+  # previous one left behind.
+  #
+  # `-external-url` has to match the address the Go SDK is pointed at
+  # (STORAGE_EMULATOR_HOST in e2e/stack.ts's startAPI), because it is what
+  # fake-gcs-server puts in the Location header of a resumable upload --
+  # get it wrong and a large enough upload follows a redirect to a host
+  # that does not exist.
+  gcs:
+    image: docker.io/fsouza/fake-gcs-server:1.52.2
+    command: ['-scheme', 'http', '-port', '4443', '-backend', 'memory', '-external-url', 'http://127.0.0.1:14443']
+    ports:
+      - '14443:4443'
