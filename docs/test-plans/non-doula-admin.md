@@ -90,7 +90,7 @@ untouched.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 8.1 | `POST .../contract/invoices` | `connectRequired` with `isOwner: false`. The endpoint is **not** owner-gated — Stripe is the blocker, not the role | `blocked` |
+| 8.1 | `POST .../contract/invoices` | `connectRequired` with `isOwner: false`. The endpoint is **not** owner-gated — Stripe is the blocker, not the role. Since #247 the blocker is narrower: the Connect code leg is built and the Sandbox is wired, so this waits only on a Practice actually completing Stripe's hosted onboarding | `blocked` |
 
 **8.1 re-checked 2026-08-22.** Still `blocked`, for a changed reason. The Sandbox
 exists now ([#242](https://github.com/markgoho/doula-cloud/issues/242)) and Credits

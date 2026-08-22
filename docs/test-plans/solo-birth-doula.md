@@ -80,7 +80,7 @@ whole suite.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Open `/practices/[practiceId]/settings/payments` and start Connect onboarding | `POST .../payments/connect` is owner-gated and passes for Maya; onboarding cannot complete — no Stripe account exists (MO-G8) | `blocked` |
+| 7.1 | Open `/practices/[practiceId]/settings/payments` and start Connect onboarding | `POST .../payments/connect` is owner-gated and passes for Maya, and now returns a real v2 Account Link (#247). Blocked only because nobody has filled in Stripe's hosted form yet — not, as this row said before, because no Stripe account exists (MO-G8) | `blocked` |
 | 7.2 | Raise an Invoice against the signed Contract | `connectRequired` with `isOwner: true`; no Invoice is created | `blocked` |
 | 7.2-a | Compare the **Billing** and **Settings → Payments** screens | Two money screens, neither explaining that one buys credits from Doula Cloud and the other takes money from Clients | `manual` |
 
@@ -160,7 +160,7 @@ amount, and stage 8). The 9 `automated` steps were **not** re-run.
 | 6.2 | `manual` | as expected | `201 {"visitId":…,"staffId":…}`, one row: `Maya Okonkwo / 8/22/2026`. No prompt, no form — the button *is* the Visit |
 | 6.2-a | `missing-feature (MO-G1)` | as expected | Confirmed unwalkable. The only input the Visits section carries is `Reassign to Staff id`, a free-text box for a UUID. No date, no time. The `Date` column renders `visit.createdAt` |
 | 6.2-b | `missing-feature (MO-G2)` | as expected | Confirmed unwalkable. No notes field anywhere in the section |
-| 7.1 | `blocked` | as expected, and **worse than `connectRequired`** | `Payments` reads `Stripe Connect status: Not connected` with a **Connect Stripe** button. Pressing it -> `POST .../payments/connect` -> `500 internal error`, printed raw. Same Stripe-401 cause as 3.4-a. Two of the three Stripe legs answer a bare 500; only 7.2 refuses in the shape the plan predicted |
+| 7.1 | `blocked` | as expected, and **worse than `connectRequired`** | `Payments` reads `Stripe Connect status: Not connected` with a **Connect Stripe** button. Pressing it -> `POST .../payments/connect` -> `500 internal error`, printed raw. Same Stripe-401 cause as 3.4-a. Two of the three Stripe legs answer a bare 500; only 7.2 refuses in the shape the plan predicted. **Superseded by #247**: the 401 is gone (the key works and the account is v2), and the screen now reports five states rather than two. The 500 observation above is stale and this step needs re-running, not re-reading |
 | 7.2 | `blocked` | as expected | With an amount (`1800`): `POST .../contract/invoices` -> `200 {"connectRequired":true,"isOwner":true}`, and the section replaces its form with `Connect Stripe to create an Invoice.` and a **Connect Stripe** button. No Invoice is created. **The gate appears only after she tries** — before that the section shows an `Amount (USD)` field and **Create Invoice**, so nothing warns her the leg is closed |
 | 7.2-a | `manual` | as expected | Side by side: **Billing** is `Credit balance: 0`, a ledger, `Quantity`, **Buy credits**. **Payments** is `Stripe Connect status: Not connected`, **Connect Stripe**. Neither screen carries one word about what it is for, or that the other exists. **MO-G7** stands as written |
 | 8.1 | `manual` | as expected | `201`, and the message renders as `Maya Okonkwo (staff) — 8/22/2026, 2:04:28 PM`. No edit and no delete control on the message, as claimed |

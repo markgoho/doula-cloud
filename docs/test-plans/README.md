@@ -8,10 +8,17 @@ experience layer does not become steps — it becomes `journey-gap` issues on th
 map itself. A plan therefore proves or disproves the map: every step below is a
 claim about the product read out of the code.
 
-**Stripe status (2026-08-22):** the Sandbox exists and **Buy credits is walked
-and passing** — see Maya's 3.4-a. Connect and Invoices stay `blocked`, now on
-[#247](https://github.com/markgoho/doula-cloud/issues/247) (Accounts v1 -> v2)
-rather than on a missing account.
+**Stripe status (2026-08-22, second update):** the Sandbox exists and **Buy
+credits is walked and passing** — see Maya's 3.4-a. Connect's code leg is now
+built too: [#247](https://github.com/markgoho/doula-cloud/issues/247) moved it
+to Accounts v2 and both Sandbox event destinations are created, so
+`POST .../payments/connect` no longer 401s.
+
+Connect and Invoices stay `blocked`, but **the reason has changed**. It is no
+longer "a Stripe account nobody has opened" or "Stripe refuses Accounts v1" —
+both are cleared. What remains is that nobody has yet sat at a browser and
+filled in Stripe's hosted onboarding form. That is a walk, not a build, and it
+is the only thing between these steps and a `manual` mark.
 
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
