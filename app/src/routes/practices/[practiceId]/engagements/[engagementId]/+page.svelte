@@ -32,6 +32,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import DataTable from '#lib/components/organisms/DataTable.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -505,27 +506,28 @@
 		<p role="alert">{visitsError}</p>
 	{/if}
 
-	{#if visits.length === 0}
-		<p>No Visits yet.</p>
-	{:else}
-		<ul>
-			{#each visits as visit (visit.visitId)}
-				<li>
-					{visit.staffName} — {new Date(visit.createdAt).toLocaleDateString()}
-					<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-						<label>
-							Reassign to Staff id
-							<input type="text" bind:value={reassignStaffId[visit.visitId]} required />
-						</label>
-						<button type="submit">Reassign</button>
-					</form>
-					{#if reassignError[visit.visitId]}
-						<p role="alert">{reassignError[visit.visitId]}</p>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
+	{#snippet reassignAction(visit: Visit)}
+		<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
+			<label>
+				Reassign to Staff id
+				<input type="text" bind:value={reassignStaffId[visit.visitId]} required />
+			</label>
+			<button type="submit">Reassign</button>
+		</form>
+		{#if reassignError[visit.visitId]}
+			<p role="alert">{reassignError[visit.visitId]}</p>
+		{/if}
+	{/snippet}
+
+	<DataTable
+		columns={[
+			{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
+			{ label: 'Date', accessor: (visit: Visit) => new Date(visit.createdAt).toLocaleDateString() }
+		]}
+		rows={visits}
+		rowActions={{ label: 'Reassign', content: reassignAction }}
+		emptyMessage="No Visits yet."
+	/>
 
 	{#each planSections as section (section.type)}
 		<h2>{section.heading}</h2>
