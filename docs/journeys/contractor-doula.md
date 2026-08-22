@@ -1,10 +1,11 @@
-# Lena Vasquez — from an offer over the phone to a finished, paid job
+# Lena Vasquez — from an offered job to a finished, paid one
 
 - **Persona**: [contractor-doula.md](../personas/contractor-doula.md)
 - **Goal**: carry one Client for a Practice she does not belong to, see the money on
   that job, and see nothing else of the Practice
-- **Entry point**: Renata's phone call offering a February birth, then an emailed
-  invitation to Rooted Birth Collective — on an account Lena already holds elsewhere
+- **Entry point**: an emailed invitation to Rooted Birth Collective, accepted on an
+  account Lena already holds at another agency — after which jobs are offered to her
+  one at a time, and she takes them or refuses them
 - **Done looks like**: the Engagement she took is finished, she can point to what she
   agreed and what she was paid, and she never saw a Client who was not hers
 
@@ -12,26 +13,29 @@ She is the second negative-permission Persona and the tighter one. Priya Raman i
 refused the money; Lena is refused the Practice.
 
 > **Assign or invite?** [#211](https://github.com/markgoho/doula-cloud/issues/211)
-> left it to this map. It is decided here as **assigned** — see
-> [Decided here](#decided-here-assigned-not-invited), below the stages. The stages
-> are written to that decision.
+> left it to this map. It is decided here as **offered — she accepts or declines** —
+> see [Decided here](#decided-here-offered-not-assigned), below the stages. The
+> stages are written to that decision.
 
 ## Moment of truth
 
-**Stage 5 — the fee on the job, months after the phone call.** Everything before it
-she could do by text message with Renata. This is the one thing only the product can
-give her: a durable, shared record of what she agreed to, readable by both sides,
-that she does not have to keep herself. If she has to maintain her own spreadsheet
-of what each agency owes her, the Practice's record and hers drift apart, and she
-stops trusting the one she did not write.
+**Stage 3 — the offer, before she has said yes.** This is the screen that decides
+whether Doula Cloud is worth anything to a contractor, and it is the hardest screen
+in her journey to get right: it must tell her enough to take or refuse the job — who
+the Client is, when, and for how much — while she is still an outsider with no claim
+on any of it. Too little and she goes back to the phone and the product is a
+notification service. Too much and the agency's book is open to someone who has not
+agreed to anything.
 
-It is a design finding, not a priority signal.
+Her second-hardest moment is stage 5, reading back the fee months later; it is the
+durable-record half of the same need. Both are design findings, not priority signals.
 
 ## Words
 
 | Domain term | What Lena says | Note |
 | --- | --- | --- |
 | Engagement | "a job", "the February birth" | Priya says "my client"; Lena says "a job". The same noun, two relationships to it |
+| Offer | "what Renata sent me", "the February one" | New to the model as of this map. She has no special word for it and does not need one — but she does need to tell an offer she has not answered from one she has taken |
 | Practice | "the agency", "Renata's" | She belongs to none of them |
 | Staff | — she rejects the word | "I'm not staff, I just work with them." `CONTEXT.md` calls every member Staff, and the roster screen will show her among the employees. The divergence is the finding, not the wording: the model has no way to say what she is |
 | Employment type | "I'm a contractor", "I'm 1099" | A term she uses about herself daily and the schema cannot hold at all |
@@ -41,18 +45,11 @@ It is a design finding, not a priority signal.
 
 ## Stages
 
-### Stage 1 — The offer, on the phone
+### Stage 1 — Join the agency, on an account she already has
 
-**Thinking**: "Do I want this, and is the money worth it?"
-**Pain points**: none in the product, because the product is not here. The whole
-negotiation — Client, dates, on-call window, fee — happens in a phone call, and the
-app learns of it only after Lena has said yes. This is the stage that decides the
-assign-or-invite question below: everything that would make an in-app offer worth
-reacting to is settled before there is anything to react to.
-
-- **1.1** — No product step. Renata calls; Lena says yes.
-
-### Stage 2 — Accept the invitation, on an account she already has
+Joining is not taking a job. She becomes a member of Rooted Birth Collective once;
+jobs are offered to her afterwards, one at a time, in stage 3. Renata phones her
+first, but nothing said in that call has to reach the product.
 
 **Thinking**: "I already sign in to this thing for the other agency."
 **Pain points**: **this stage is expected to fail outright.** `InviteHandler` always
@@ -64,27 +61,49 @@ more than one Practice via separate `practice_memberships` rows" (lines 16–18)
 cannot be created through the only route that reaches her (LV-G2). No email carries
 the link either (RA-G1), so Renata pastes a URL into a text.
 
-- **2.1** — Open the invite link at `/accept-invite`.
-- **2.2** — Sign in as herself and submit
+- **1.1** — Open the invite link at `/accept-invite`.
+- **1.2** — Sign in as herself and submit
   (`POST /api/staff/accept-invite`). Expected: a unique-constraint failure surfacing
   as a 500, not a second membership.
-- **2.3** — The membership, if it were created, would carry `roles = '{}'`
+- **1.3** — The membership, if it were created, would carry `roles = '{}'`
   (`invite.go:67`) and no employment type, because there is no column for one
   (RA-G8, LV-G1).
 
-### Stage 3 — Sign in and choose the agency
+### Stage 2 — Sign in and choose the agency
 
 **Thinking**: "Which one is this — Renata's or the other one?"
 **Pain points**: she is the only Persona who meets the Practice picker as a real
 decision rather than a formality, and she meets it every time. Nothing on it says
 what she is at each Practice.
 
-- **3.1** — `/login` (`POST /api/session`).
-- **3.2** — Choose Rooted Birth Collective from the list.
-- **3.3** — Land on `/practices/[practiceId]`. Owner-only tiles are hidden by
+- **2.1** — `/login` (`POST /api/session`).
+- **2.2** — Choose Rooted Birth Collective from the list.
+- **2.3** — Land on `/practices/[practiceId]`. Owner-only tiles are hidden by
   `{#if roles.includes('owner')}`; **Clients and Billing remain**, exactly as they do
   for Priya. Billing is the Practice's own credit spending, which is not her business
   at all — she is not even the employee it was already wrong for (DW-G4).
+
+### Stage 3 — The offer — moment of truth
+
+**Thinking**: "Who is she, when is it, and what does it pay? Do I want it?"
+**Pain points**: **none of this stage exists.** An Engagement cannot be offered to
+anybody: it carries no Doula at all (RA-G4), so there is no attachment for an offer
+to lead to, and no Offer to lead there with (LV-G6). Nor is there a rule for what she
+may read while she decides — [ADR-0006](../adr/0006-read-follows-the-role.md)'s read
+table has four columns and none of them is *offered, not yet accepted*, which this
+map has just made a real state of the model (LV-G7). This is the stage her whole
+relationship with the product is built on, and it is a hole.
+
+The tension is the design problem, and it is not resolvable by leaving it to the
+phone call: an offer must say enough to be taken or refused — Client, dates, on-call
+terms, fee — while she is still an outsider with no claim on any of it. If she has to
+ring Renata to find out what she is being offered, the offer screen is a notification
+and the decision never left the phone.
+
+- **3.1** — Receive the offer of the February Engagement.
+- **3.2** — Read enough to decide.
+- **3.3** — Accept, which is what attaches her — or decline, which must be recorded,
+  so Renata can see the refusal and offer the work on.
 
 ### Stage 4 — Find the one job she took
 
@@ -98,9 +117,9 @@ agency's entire client list.
 
 - **4.1** — Open `/practices/[practiceId]/clients`.
 - **4.2** — Read every Client at Rooted Birth Collective, and pick hers out by
-  remembering the name from the phone call.
+  remembering the name from the offer.
 
-### Stage 5 — Check the terms and the fee — moment of truth
+### Stage 5 — Check the terms and the fee
 
 **Thinking**: "Three prenatals, on call from the 8th, and the number we said."
 **Pain points**: the Contract read hands back prose, merge fields and values in one
@@ -160,53 +179,61 @@ RA-G4 is that attachment cannot be *made*; LV-G4 is that it cannot be *ended*
 
 - **8.1** — No product step.
 
-## Decided here: assigned, not invited
+## Decided here: offered, not assigned
 
 **Not a stage.** [#211](https://github.com/markgoho/doula-cloud/issues/211) settled
 that a contractor Doula reads *the Engagements she is attached to* and deliberately
 left open how she becomes attached: an Owner **assigns** her, taking effect at once,
-or the Practice **invites** her to a job and she accepts or declines. Either way the
-read set is the same. The difference is whether "offered" is a state the model holds.
+or the Practice **offers** her the job and she accepts or declines. Either way the
+read set once she is attached is the same. The difference is whether *offered* is a
+state the model holds.
 
-**Decided: an Owner attaches her. There is no in-app offer, and no acceptance.**
+**Decided: the Practice offers, and Lena accepts or declines. Her acceptance is what
+attaches her.**
 
-Four reasons, in the order they carried weight:
+The reason is what she is. She is outside the business, and a person outside the
+business is not someone work happens to — the difference between a contractor and an
+employee is precisely that she may refuse. A record that shows her carrying a job she
+never agreed to is not a record of a contract; it is the agency writing down its own
+version of an agreement it has not yet got. Assignment would have modelled her as a
+smaller Priya Raman, and she is not one.
 
-1. **An offer she cannot read is not a decision.** An offer worth accepting or
-   declining must show her the Client, the dates and the money. She may not read any
-   of that until she is attached — that is the whole rule. So an in-app offer needs a
-   *fifth* read state that ADR-0006 does not have: what a not-yet-attached Doula may
-   see about an Engagement she has been offered. Building the offer means building
-   that state, and it exists only to serve a conversation that has already happened.
-2. **Stage 1 is where the yes happens, and it is outside the product.** Renata calls
-   and names the fee. By the time anything could appear on Lena's screen, she has
-   already said yes. The app's job is to record the agreement, not to collect it.
-3. **The product already has exactly one assignment concept** — a Visit's `staff_id`
-   — and it is a bare assignment with no handshake. A second, richer one would make
-   two ways of saying who is doing the work.
-4. **Declining stays real.** She says no on the phone, and no attachment is made.
-   Nothing about assignment obliges her to take work; it obliges the Owner to wait
-   for the yes before recording it.
+Assignment was the cheaper option and it was argued for: the negotiation happens on
+the phone, so attachment would only record a yes already given; the product already
+has exactly one assignment concept (a Visit's `staff_id`) with no handshake; and
+declining stays real either way, because she can always say no before anything is
+recorded. It loses because it makes the phone call load-bearing. A product that can
+only record agreements reached elsewhere cannot be the place two businesses agree.
 
-**The cost, accepted.** The model cannot tell "offered" from "agreed", and the
-Practice's record shows Lena attached to a job she never touched a button for. If a
-Practice ever needs the app itself to carry the offer — a marketplace of open work
-rather than a phone call between two people who know each other — this decision is
-what gets revisited, and it is a new question, not this one reopened.
+**What it obliges — the price, and it is not small.**
 
-**What it obliges.** Assignment is only half a lifecycle. Because there is no
-acceptance to withdraw, detachment has to be a first-class operation, not an
-afterthought — see LV-G4.
+1. **An Offer is a new concept in the model** (LV-G6), with its own terminal states:
+   accepted, declined, and probably withdrawn. Declined has to be durable, or Renata
+   cannot tell "she said no" from "she has not looked yet".
+2. **A fifth read state.** ADR-0006's table describes what each role reads about a
+   Practice's Engagements. It now needs a column for a Doula who has been *offered*
+   an Engagement and has not accepted: enough to decide on, no more (LV-G7). That
+   column is the hardest part of this decision and the reason it is the moment of
+   truth.
+3. **Detachment is still separate.** Acceptance is not its own undo — a job that ends
+   in June must stop granting reads, and nothing expresses that (LV-G4). Offering
+   solves how attachment begins; it says nothing about how it ends.
+
+**Not reopened by**: an Owner wanting to skip the handshake for her own employees.
+Employed Doulas read every Engagement at the Practice already ([ADR-0006](../adr/0006-read-follows-the-role.md));
+offering is the contractor's route, not a step added to everyone's.
 
 ## Gaps found
 
 | ID | Stage | Layer | Gap |
 | --- | --- | --- | --- |
-| LV-G1 | 2 | Both | A membership carries no **employment type**. `practice_memberships` is `(practice_id, staff_id, roles, created_at)` (`00002_practice_staff_tenancy.sql:29`), and nothing anywhere distinguishes an employed Doula from a contracted one, so neither half of the contractor read rule in [ADR-0006](../adr/0006-read-follows-the-role.md) — the money she may see, the Practice she may not — is expressible. Distinct root from RA-G8: putting roles on the invitation does not add an attribute that is not a role. On the experience layer it is why she appears on the Staff roster among employees, under a word she does not use about herself. |
-| LV-G2 | 2 | Interaction | A person cannot be Staff at two Practices. `InviteHandler` always inserts a fresh `staff` row (`invite.go:58`) and acceptance writes the caller's identity onto it (`accept.go:101`), but `staff.identity_uid` is `UNIQUE` (`00002_practice_staff_tenancy.sql:21`) — so inviting someone who already has an account cannot produce a second membership. `00002` promises multi-Practice membership in its own comment (lines 16–18). The contractor is the first Persona for whom this is the normal case rather than an oddity. |
+| LV-G1 | 1 | Both | A membership carries no **employment type**. `practice_memberships` is `(practice_id, staff_id, roles, created_at)` (`00002_practice_staff_tenancy.sql:29`), and nothing anywhere distinguishes an employed Doula from a contracted one, so neither half of the contractor read rule in [ADR-0006](../adr/0006-read-follows-the-role.md) — the money she may see, the Practice she may not — is expressible. Distinct root from RA-G8: putting roles on the invitation does not add an attribute that is not a role. On the experience layer it is why she appears on the Staff roster among employees, under a word she does not use about herself. |
+| LV-G2 | 1 | Interaction | A person cannot be Staff at two Practices. `InviteHandler` always inserts a fresh `staff` row (`invite.go:58`) and acceptance writes the caller's identity onto it (`accept.go:101`), but `staff.identity_uid` is `UNIQUE` (`00002_practice_staff_tenancy.sql:21`) — so inviting someone who already has an account cannot produce a second membership. `00002` promises multi-Practice membership in its own comment (lines 16–18). The contractor is the first Persona for whom this is the normal case rather than an oddity. |
 | LV-G3 | 5, 7 | Both | Nothing records what a Practice owes a doula. `invoices` is `(practice_id, contract_id, amount_cents, …)` (`00024_invoices.sql:16`) — the Practice billing the Client. A contractor's own rate is not on the Contract, which prices the Client's care, and there is no other place for it, so half of her "done looks like" cannot be reached and the two sides keep separate books. |
 | LV-G4 | 8 | Interaction | An attachment cannot end. Nothing expresses a Doula ceasing to be attached to an Engagement, so a contractor's read never lapses when the job does — and the only available lever, removing her membership, erases her from the Visits she worked. The mirror of RA-G4, not a restatement: RA-G4 is that attachment cannot be **made**. Both are settled together or neither is. |
 | LV-G5 | 4 | Experience | An outside contractor reads the agency's entire client list. Same root as PR-G1 on the interaction layer, but a different finding: for Priya it is a scope failure inside one team; for Lena it is one business reading another's book. It is the reason "restricted visibility" cannot stay a v1 deferral — it is filed here as the experience-layer consequence, and fixing PR-G1 fixes it. |
+| LV-G6 | 3 | Interaction | An Engagement cannot be **offered**. This map decides that a contractor is attached by accepting an offer, and the model holds no such thing: no Offer, no acceptance, and no durable record of a decline — so Renata cannot tell a refusal from silence, and cannot offer the work on. Distinct root from RA-G4, which is that attachment cannot be recorded at all: an Offer is the transition RA-G4's attachment would be the result of, and building one without the other is impossible in either order. |
+| LV-G7 | 3 | Both | There is no read rule for a Doula who has been offered an Engagement and has not accepted. [ADR-0006](../adr/0006-read-follows-the-role.md)'s table has four columns — Owner, Admin, employee Doula, contractor Doula — and this map adds a fifth state to the model that none of them describes. The rule must let her decide (Client, dates, on-call terms, fee) without opening the Practice to someone who has agreed to nothing, and it is what makes the offer screen a decision rather than a notification. Amends ADR-0006; distinct from LV-G6, which is the concept, not the permission. |
 
 Also hit here, filed on their owning maps: **RA-G1** (no invite email), **RA-G4** (no
 Doula on an Engagement — which is the whole of her read scope), **RA-G8** (an

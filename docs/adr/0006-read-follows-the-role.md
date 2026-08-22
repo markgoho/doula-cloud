@@ -124,6 +124,15 @@ carries no employment type at all, and an Engagement carries no assigned Doula
 compute. The practice-side test plan asserts the employed case, which is the only
 case the model can currently produce; the contractor case lands on her journey map.
 
+**A fifth state, added after this ADR was written.** This ADR left open how a
+contractor Doula becomes attached to an Engagement, and
+[Lena Vasquez's journey map](../journeys/contractor-doula.md) decided it: the
+Practice **offers** her the job and her acceptance is what attaches her. That puts a
+state in the model the table above does not describe — a Doula who has been offered
+an Engagement and has not yet accepted — and she must read enough to decide (Client,
+dates, on-call terms, fee) without the Practice being open to someone who has agreed
+to nothing. The column is **LV-G7**, and it amends this table.
+
 Stating a rule whose second half is not yet buildable is deliberate, and it follows
 [ADR-0005](0005-one-context-client-register-at-the-ui-edge.md): state the true rule
 and name the thing the model is missing, rather than bending the rule to fit what

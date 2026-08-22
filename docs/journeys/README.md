@@ -60,7 +60,7 @@ first run (`docs/test-plans/`) is the first real evidence.
 | [practice-owner.md](practice-owner.md) | Renata Alvarez | Two Clients in labour the same night — who is free? |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | Finishing the paperwork without the doula |
 | [employed-doula.md](employed-doula.md) | Priya Raman | The Birth Plan, on a phone, in a hospital corridor |
-| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | The fee on the job, months after the phone call |
+| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | The offer, before she has said yes |
 
 ## Client side
 

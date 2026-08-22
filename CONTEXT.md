@@ -45,6 +45,11 @@ The relationship between a Client and a Practice, spanning intake through postpa
 _Client says_: my care ("Your care" as a heading). Never "my pregnancy" — too narrow for postpartum-only work, and wrong for a Client whose pregnancy ended in loss. Each status has one fixed Client label, the same for every Client: `intake` → Getting started, `active` → Ongoing, `postpartum` → Postpartum, `completed` → Care ended. A status that cannot be labelled kindly for **every** Client means the status set is missing a value; that is a gap in the model, never a conditional label.
 _Avoid_: Pregnancy (too narrow — excludes postpartum-only work), Case, Relationship
 
+**Offer**:
+A Practice proposing an Engagement to a contractor Doula, which she accepts or declines. Her acceptance is what attaches her to the Engagement, and attachment is what she reads by ([ADR-0006](docs/adr/0006-read-follows-the-role.md)). Only contractors are offered work: an employed Doula reads every Engagement at the Practice already, so there is nothing for her to accept. A refusal is durable — a Practice must be able to tell "she said no" from "she has not answered". Not yet in the model (LV-G6); decided on [Lena Vasquez's journey map](docs/journeys/contractor-doula.md).
+_Client says_: nothing — the Client never meets the term, and never learns which Doulas refused her Engagement.
+_Avoid_: Assignment (the product's other word for who is doing the work, and it carries no agreement — a Visit's `staff_id` is assigned, not offered), Invitation (already means joining a Practice)
+
 **Visit**:
 A scheduled meeting between a Doula and a Client within an Engagement. May be the birth itself.
 _Client says_: no client-facing surface today — the portal shows no Visit, so no Client word is settled.

@@ -6,15 +6,15 @@
 - **Surface**: staff app, at more than one Practice
 - **Roles**: **Doula** only — no Owner, no Admin
 - **Employment type**: **contractor** (see `CONTEXT.md`, "Employment type")
-- **Entry point**: a phone call from Renata offering a February birth, followed by an
-  emailed invitation to Rooted Birth Collective — accepted on an account she already
-  holds at a different Practice
+- **Entry point**: an emailed invitation to Rooted Birth Collective, accepted on an
+  account she already holds at a different Practice — after which individual jobs are
+  offered to her, one at a time
 
 ## Who she is
 
 Lena is nine years in and runs her own book. She is not employed by anybody. Two or
-three times a year she takes overflow work from Rooted Birth Collective: Renata calls,
-names the Client, the dates, and the fee, and Lena says yes or no. She also takes work
+three times a year she takes overflow work from Rooted Birth Collective: she is
+offered a Client, the dates, and a fee, and she says yes or no. She also takes work
 from a second agency across town, and carries her own private Clients besides.
 
 She is not "one of Renata's doulas". She is a business talking to another business,
@@ -29,8 +29,8 @@ to and what she is owed.
 
 ## Primary journey
 
-From an offer over the phone to a finished, paid piece of contracted work: accept the
-invitation, find the one Engagement she took, confirm the terms and the fee match what
+From an offered job to a finished, paid one: join the agency, weigh a job she is
+offered and take it, find it again afterwards, confirm the terms and the fee are what
 she agreed, do the care work, and close the job out.
 
 ## Done looks like
@@ -66,6 +66,9 @@ paid, and she never saw a Client who was not hers.
 - **What the Practice owes *her* is absent.** `invoices` rows point at a `practice_id`
   and a `contract_id` (`00024_invoices.sql:16`) — a Practice billing a Client. No table
   records a payment from a Practice to a doula.
+- **She may refuse.** Nothing in the schema expresses a job being offered, taken, or
+  turned down — the only assignment the product has is a Visit's `staff_id`
+  (`00007_visit.sql:8`), which is a bare fact with no one agreeing to it.
 - A contracted job ends. Nothing in the schema expresses an attachment ending, so
   whatever grants her a read has no observed way to stop granting it.
 - She works across Practices in one session and will land on the Practice picker more
