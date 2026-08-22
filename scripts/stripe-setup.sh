@@ -181,7 +181,7 @@ finish() {
 
 # ──────────────────────────────────────────────────────────────────────────
 # STAGES: author this section. One stage() per step the human takes.
-# Authored for #242: stand up the Stripe test-mode account every already-
+# Authored for #242: stand up the Stripe Sandbox every already-
 # merged Stripe code path (#73, #77-#82) has been waiting on.
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -214,7 +214,7 @@ readonly CREDIT_UNIT_AMOUNT=500
   exit 1
 }
 
-banner "Doula Cloud · Stripe test-mode setup"
+banner "Doula Cloud · Stripe Sandbox setup"
 
 # ── 1 ─────────────────────────────────────────────────────────────────────
 stage "A mailbox on doula.cloud to own the account"
@@ -236,7 +236,7 @@ write_env STRIPE_ACCOUNT_EMAIL "$STRIPE_ACCOUNT_EMAIL"
 
 # ── 2 ─────────────────────────────────────────────────────────────────────
 stage "Create the Stripe account"
-say "Test mode is a full sandbox: the real API, real webhooks, fake card"
+say "A Sandbox is a full environment: the real API, real webhooks, fake card"
 say "numbers, and no money movement. Nothing here needs a bank account."
 say ""
 open_url "https://dashboard.stripe.com/register"
@@ -289,14 +289,14 @@ note "  AI-tool path would be guidance for work that is done."
 step "The last screen offers 'Get your live account now' and 'Go to"
 note "  sandbox'. Go to sandbox."
 say ""
-note "  Stripe renamed test mode. What #242 calls test mode, the dashboard"
-note "  now calls a SANDBOX: a separate environment with its own data and"
+note "  Stripe renamed test mode, and CONTEXT.md follows the new name. A"
+note "  SANDBOX is a separate environment with its own data and"
 note "  its own API keys. Keys from it still start sk_test_, so nothing the"
 note "  code expects changes -- but a sandbox is an environment, not a"
 note "  toggle, and that matters at stage 4."
 say ""
 warn "Every key you copy from here on must start sk_test_ or whsec_."
-pause "Account created and Test mode is on?"
+pause "Account created?"
 
 # ── 3 ─────────────────────────────────────────────────────────────────────
 stage "Install and log in to the Stripe CLI"
@@ -348,7 +348,7 @@ warn "to app/.env.local, which git ignores. Never paste it into an issue."
 ask_secret STRIPE_API_KEY "Paste the secret key:"
 case "$STRIPE_API_KEY" in
   sk_test_*) : ;;
-  sk_live_*) warn "That is a LIVE key. #242 is test mode only."; exit 1 ;;
+  sk_live_*) warn "That is a LIVE key. #242 is Sandbox only."; exit 1 ;;
   *)         warn "That does not look like a Stripe secret key."; exit 1 ;;
 esac
 write_env STRIPE_API_KEY "$STRIPE_API_KEY"
@@ -495,7 +495,7 @@ if [[ "$create_endpoints" == yes ]]; then
   DEPLOYED_WHSEC=$(stripe_post webhook_endpoints \
     -d "url=$CLOUD_RUN_URL/api/stripe/webhook" \
     -d "enabled_events[]=checkout.session.completed" \
-    -d "description=Doula Cloud platform billing (credits) - test mode" \
+    -d "description=Doula Cloud platform billing (credits) - Sandbox" \
     | json_field secret)
   write_env DEPLOYED_STRIPE_WEBHOOK_SECRET "$DEPLOYED_WHSEC"
   say ""
@@ -508,7 +508,7 @@ if [[ "$create_endpoints" == yes ]]; then
     -d "enabled_events[]=account.updated" \
     -d "enabled_events[]=invoice.paid" \
     -d "enabled_events[]=invoice.payment_failed" \
-    -d "description=Doula Cloud Connect (client payments) - test mode" \
+    -d "description=Doula Cloud Connect (client payments) - Sandbox" \
     | json_field secret)
   write_env DEPLOYED_STRIPE_CONNECT_WEBHOOK_SECRET "$DEPLOYED_CONNECT_WHSEC"
 fi
@@ -633,7 +633,7 @@ say ""
 step "Go to Settings -> Payments. It reads 'Stripe Connect status: Not connected'."
 step "Press Connect Stripe. Stripe's hosted onboarding opens."
 say ""
-note "Test-mode onboarding takes fake data, and Stripe offers to fill it in:"
+note "Sandbox onboarding takes fake data, and Stripe offers to fill it in:"
 note "  look for the 'Use test data' or 'Skip this form' link at the top."
 note "If you fill it by hand:"
 note "  Phone 000 000 0000, and the SMS code is 000000"
@@ -657,7 +657,7 @@ say "Now the Invoice."
 step "Open a Client, then their Engagement, then the Contract section."
 step "The Contract must be signed before an Invoice can be raised."
 step "Enter an amount (say 1800) and press Create Invoice."
-step "Stripe emails the hosted invoice. In test mode nothing really sends,"
+step "Stripe emails the hosted invoice. In a Sandbox nothing really sends,"
 note "  so open it from the dashboard instead:"
 open_url "https://dashboard.stripe.com/test/connect/accounts/overview"
 step "Open the connected account, find the Invoice, open its payment page,"

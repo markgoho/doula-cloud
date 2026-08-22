@@ -186,14 +186,14 @@ with `docker/build-push-action` and runs a boot smoke test against it —
 container stays running and answers on its port — in parallel with `app`,
 off the critical path (see PR #108 for measured before/after timings).
 
-## Stripe: fakes in CI, test mode by hand
+## Stripe: fakes in CI, the Sandbox by hand
 
 `bun run test:e2e` sets no Stripe variables, so both Stripe clients run
 against their injected fakes (`api/internal/billing/stripe_fake.go`,
 `api/internal/payments/stripe_fake.go`). That is the deliberate choice,
 not a gap: a GitHub-hosted runner has no public URL for Stripe to deliver
-a webhook to, and Stripe's test mode is one shared, stateful account that
-parallel runs would trample.
+a webhook to, and the Stripe Sandbox is one shared, stateful environment
+that parallel runs would trample.
 
 Driving the real thing — a real Checkout Session, real Connect
 onboarding, real `invoice.paid` — is a local, by-hand job. `bun run

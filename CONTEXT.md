@@ -100,6 +100,15 @@ _Avoid_: Chat, DM (implies a general-purpose messenger, not an Engagement-scoped
 A unit of Doula Cloud's own billing, owned by the **Practice** — never by a Staff member, whatever their roles or Employment type. Only an Owner buys them. What a Credit is spent on is not yet settled (TB-G3).
 _Avoid_: Token, seat, point
 
+**Sandbox**:
+The Stripe environment Doula Cloud develops and walks against — separate
+data, separate API keys, real API and real webhooks, no money movement.
+Stripe used to call this **test mode** and renamed it; keys from a Sandbox
+still start `sk_test_`, and older tickets and Stripe's own URLs still say
+`test`. Say Sandbox. A Sandbox is an environment, not a toggle, so "which
+Sandbox" is always a real question. See [docs/environment.md](docs/environment.md).
+_Avoid_: Test mode, test account, staging
+
 **Persona**:
 One of eight named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
 _Avoid_: User type, actor, role

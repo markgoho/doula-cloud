@@ -13,7 +13,7 @@ template; `scripts/stripe-setup.sh` fills the Stripe half of it in.
 | Deployed (Cloud Run `doula-api`) | Secret Manager for credentials, plain env vars for the rest |
 
 `app/.gitignore` and the repo root `.gitignore` both exclude `.env*`
-except `.env.example`. A test-mode key is still a key.
+except `.env.example`. A Sandbox key is still a key.
 
 ## The variables
 
@@ -42,10 +42,10 @@ Account Link returns to `/practices/{id}/settings/payments?connect=return|refres
 A tunnelled local walk needs `APP_BASE_URL` overridden and
 `EXPECTED_ORIGINS` left alone.
 
-## Test mode is a sandbox now
+## Say Sandbox, not test mode
 
-Stripe renamed it. What this repo and #242 call test mode, the dashboard
-calls a **sandbox**: a separate environment with its own data and its own
+Stripe renamed it. What #242 and older tickets call test mode, the
+dashboard now calls a **Sandbox** (`CONTEXT.md`): a separate environment with its own data and its own
 API keys, rather than a toggle over one account. Keys from it still start
 `sk_test_`, so nothing the code expects changes.
 
@@ -76,7 +76,7 @@ They share `STRIPE_API_KEY` and nothing else. Two endpoints, two secrets.
 
 ### One credit costs $5.00
 
-Test-mode Price, USD, one-time. One credit is one Engagement, which is
+Sandbox Price, USD, one-time. One credit is one Engagement, which is
 one birth; the first three per Practice are free forever (#45). $5 is a
 deliberate pilot number: low enough that a 14-doula agency can try the
 platform without a procurement conversation, and a real amount rather
@@ -155,13 +155,13 @@ and `api/internal/payments` run against their injected fakes
 
 - A GitHub-hosted runner has no public URL, so Stripe could not deliver a
   webhook to it without a tunnel process inside the job.
-- Test mode is a shared, stateful account. Parallel CI runs would create
+- The Sandbox is one shared, stateful environment. Parallel CI runs would create
   Customers, Checkout Sessions and connected accounts in the same place
   and read each other's rows.
 - It would make a green suite depend on a third party being up.
 
-The fakes are the thing under test in CI. Test mode is the thing a human
-walks, once, when the code changes.
+The fakes are the thing under test in CI. The Sandbox is the thing a
+human walks, once, when the code changes.
 
 ## No Playwright spec drives a Stripe page
 
@@ -186,7 +186,7 @@ platform, and every merged Stripe code path assumes the platform posture:
 our own Price, our own Checkout Session, our own Customer, our own
 webhook, and Standard connected accounts underneath. Stripe Tax and Radar
 for Fraud Teams are both left off for the same reason — neither is needed
-in test mode, and SaaS sales tax is a launch question, not a test-mode
+in the Sandbox, and SaaS sales tax is a launch question, not a Sandbox
 one.
 
 Stripe then pre-ticks three products. Only **Send invoices** stays on.
@@ -195,7 +195,7 @@ subscription and no tiers — a Practice prepays per Engagement, and the
 purchase is a one-time Checkout Session in `mode=payment`. **Collect
 tax** is off because Stripe Tax wants an origin address and a tax code
 per Price before it does anything, and SaaS sales tax is a launch
-question rather than a test-mode one.
+question rather than a Sandbox one.
 
 The same screen offers **"Connect to a platform instead"**. That link
 reads backwards: it makes this account a *connected account* under
