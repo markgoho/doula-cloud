@@ -160,6 +160,10 @@ and "Engagement" in portal copy).
 
 ## Open decisions
 
+Not gaps, and not `journey-gap` issues. Model questions here are out of scope for
+this effort and are parked on
+[#224](https://github.com/markgoho/doula-cloud/issues/224).
+
 - **Is "postpartum-only" a kind of Engagement, a Plan Template choice, or a
   Practice's own service list?** CB-G2 says the fact cannot be recorded. It does
   not say where the fact belongs, and the answer changes CB-G5 (which links the

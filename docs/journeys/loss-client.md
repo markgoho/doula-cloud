@@ -174,7 +174,9 @@ no Client detail), and [#212](https://github.com/markgoho/doula-cloud/issues/212
 
 ## Open decisions
 
-Not gaps, and not `journey-gap` issues.
+Not gaps, and not `journey-gap` issues. Model questions here are out of scope for
+this effort and are parked on
+[#224](https://github.com/markgoho/doula-cloud/issues/224).
 
 - **Every future scheduling, reminder, or automated-copy feature inherits this
   journey.** The product is safe today only because those features do not exist.

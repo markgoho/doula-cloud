@@ -186,6 +186,10 @@ and "Engagement" in portal copy).
 
 ## Open decisions
 
+Not gaps, and not `journey-gap` issues. Model questions here are out of scope for
+this effort and are parked on
+[#224](https://github.com/markgoho/doula-cloud/issues/224).
+
 - **Who authors a Birth Plan?** HS-G2 says she cannot. It does not say whether the
   fix is client-editable fields, a suggest-and-approve loop, or an
   acknowledgement-only signal. This is a product decision, not a missing button,
