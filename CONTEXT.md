@@ -21,7 +21,7 @@ A person who works at a Practice. One person is one Staff record, however many P
 _Avoid_: User, employee, member
 
 **Membership**:
-What one Staff person is to one Practice — the roles they hold there and their Employment type. A person holds a separate Membership per Practice, and working at more than one Practice is normal, not an oddity: a contractor Doula is the ordinary case. A Membership always carries at least one role; it is created by accepting an Invitation, and it is the only thing that makes a person Staff at that Practice.
+What one Staff person is to one Practice — the roles they hold there and their Employment type. A person holds a separate Membership per Practice, and working at more than one Practice is normal, not an oddity: a contractor Doula is the ordinary case. A Membership always carries at least one role, and it is the only thing that makes a person Staff at that Practice. It is created at Practice signup for the founding Owner, or by accepting an Invitation.
 _Avoid_: Seat, account, affiliation
 
 **Invitation**:
