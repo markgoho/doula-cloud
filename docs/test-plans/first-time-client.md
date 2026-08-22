@@ -7,8 +7,9 @@
   where she actually is. The last of the five is unreachable.
 
 She is the full-arc Client and the only Persona who walks every client-facing
-screen the product has, so this plan carries the most `automated` steps of any in
-the suite — every portal spec was written along her path. Where her path crosses
+screen the product has, so it carries the most `automated` steps of any client-side
+plan — every portal spec was written along her path. Only Maya's, at nine, carries
+more, and hers are the Staff side of the same walk. Where her path crosses
 Nadia Haddad's, Nadia's plan was written first
 ([loss-client.md](loss-client.md)).
 
