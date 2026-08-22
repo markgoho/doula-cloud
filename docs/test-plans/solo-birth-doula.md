@@ -62,7 +62,8 @@ whole suite.
 | 5.1 | Send the portal invite from the Engagement page | `POST .../portal-invite` returns a token; **no email is sent** and the link must be delivered by hand | `manual` |
 | 5.2 | Build the Contract from the Practice template | `POST .../contract` creates it at status `draft`, merge fields resolved | `manual` |
 | 5.3 | Press **Send** | Status moves to `sent` | `manual` |
-| 5.4 | As the Client, accept the invite, sign in, and sign | The portal accept → login → Engagement path holds; `POST /api/portal/engagements/{id}/contract/sign` sets `signed` | `manual` (accept and login only: `automated (portal-invite-accept.e2e.ts)`) |
+| 5.4 | As the Client, accept the invite and sign in | The accept → login path lands on `/portal/engagements/{engagementId}` | `automated (portal-invite-accept.e2e.ts)` |
+| 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` sets status `signed` | `manual` |
 | 5.5 | Back as Maya, reload the Engagement | The Contract reads `signed`, without leaving the app | `manual` |
 | 5.5-a | Look for a way to move the Engagement past `intake` | No update path exists anywhere; the status is fixed for the Engagement's whole life | `missing-feature (MO-G4)` |
 
@@ -95,7 +96,7 @@ whole suite.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 8 |
+| `automated` | 9 |
 | `manual` | 22 |
 | `missing-feature` | 4 (MO-G1, MO-G2, MO-G3, MO-G4) |
 
