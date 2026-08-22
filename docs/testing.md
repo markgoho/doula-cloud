@@ -185,3 +185,20 @@ CI's `api-image` job (`.github/workflows/ci.yml`) now builds that image
 with `docker/build-push-action` and runs a boot smoke test against it —
 container stays running and answers on its port — in parallel with `app`,
 off the critical path (see PR #108 for measured before/after timings).
+
+## Stripe: fakes in CI, test mode by hand
+
+`bun run test:e2e` sets no Stripe variables, so both Stripe clients run
+against their injected fakes (`api/internal/billing/stripe_fake.go`,
+`api/internal/payments/stripe_fake.go`). That is the deliberate choice,
+not a gap: a GitHub-hosted runner has no public URL for Stripe to deliver
+a webhook to, and Stripe's test mode is one shared, stateful account that
+parallel runs would trample.
+
+Driving the real thing — a real Checkout Session, real Connect
+onboarding, real `invoice.paid` — is a local, by-hand job. `bun run
+dev:full` picks up `app/.env.local`, and `bash scripts/stripe-listen.sh`
+forwards Stripe's events to the local BFF beside it. Everything about
+that setup, including which variable holds what in each environment, is
+in [docs/environment.md](environment.md). First-time setup is `bash
+scripts/stripe-setup.sh`.

@@ -511,10 +511,20 @@ jobs:
           project_id: doula-cloud
           image: us-central1-docker.pkg.dev/doula-cloud/api/doula-api:${{ github.sha }}
           secrets: DATABASE_URL=doula-cloud-pg-app-runtime-dsn:latest
-          # merge, not this action's replace-everything default: the live
-          # service also carries APP_BASE_URL, the Stripe/VAPID vars, and
-          # GCS_ATTACHMENTS_BUCKET, set out-of-band and not managed here --
-          # an unqualified env_vars would wipe all of them on the next push.
+          # merge, not this action's replace-everything default. The live
+          # service also carries APP_BASE_URL and STRIPE_CREDIT_PRICE_ID as
+          # env vars, plus STRIPE_API_KEY / STRIPE_WEBHOOK_SECRET /
+          # STRIPE_CONNECT_WEBHOOK_SECRET as Secret Manager references --
+          # all set out of band by scripts/stripe-setup.sh, because naming
+          # them here would make a green deploy depend on secrets that only
+          # exist once a human has run that wizard (docs/environment.md).
+          # `secrets` merges by default too, so DATABASE_URL above does not
+          # displace them either. An unqualified env_vars would wipe the
+          # env-var half on the next push.
+          #
+          # Not a claim that every var the BFF reads is set: VAPID_* and
+          # GCS_ATTACHMENTS_BUCKET are still unset on the live service, and
+          # belong to their own tickets, not to this line.
           env_vars: EXPECTED_ORIGINS=${{ steps.app-origin.outputs.origin }}
           env_vars_update_strategy: merge
           flags: --min-instances=1 --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg

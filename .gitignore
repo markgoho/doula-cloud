@@ -53,3 +53,9 @@ Thumbs.db
 hugo/public
 hugo/resources
 hugo/.hugo_build.lock
+# Env — never commit a key, test-mode or otherwise. app/.gitignore
+# carries the same rule for app/.env.local, which is where the Stripe
+# test-mode values live for `bun run dev:full` (see docs/environment.md).
+.env
+.env.*
+!.env.example

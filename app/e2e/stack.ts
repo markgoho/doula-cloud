@@ -255,6 +255,15 @@ async function startAPI(appOrigin: string) {
 			VAPID_PRIVATE_KEY: 'Vb9fJN9OddK_iRPHqg4We5I2KIcppbZS9_-aoAELXI4',
 			VAPID_SUBSCRIBER: 'mailto:e2e@doula-cloud.invalid',
 			EXPECTED_ORIGINS: appOrigin,
+			// Every Stripe redirect target is built off this (Checkout's
+			// success/cancel URLs, the Connect Account Link's
+			// return/refresh URLs -- api/internal/billing and
+			// api/internal/payments), so it has to be the origin the
+			// browser walking this stack is actually on, not a fixed
+			// value. Same string as EXPECTED_ORIGINS by default; a
+			// tunnelled walk (see docs/environment.md) overrides it via
+			// app/.env.local, which bun loads before this file runs.
+			APP_BASE_URL: process.env.APP_BASE_URL ?? appOrigin,
 			PORT: String(E2E_API_PORT)
 		}
 	});

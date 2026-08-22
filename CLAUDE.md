@@ -54,6 +54,12 @@ Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents
 100% line coverage gate (with justified inline exceptions), the Podman-based
 test infra for `api/` and `app/`, and goose migrations. See `docs/testing.md`.
 
+### Environment variables
+
+Every variable the BFF reads, and what it holds locally, in CI, and on
+Cloud Run — including the Stripe test-mode setup and its two webhook
+surfaces. See `docs/environment.md`.
+
 ### API design
 
 Go BFF HTTP endpoint standards (DTOs, contract stability, idempotency, cursor pagination, rate limits, error structures). See `docs/api-design.md`.
