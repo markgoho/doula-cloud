@@ -29,7 +29,7 @@ Engagements, then review the Practice's Engagements and money across all Staff.
 
 ## Done looks like
 
-A new Doula has accepted an invitation, holds the `doula` role, and appears as the
+A new Doula has accepted an invitation, holds the Doula role, and appears as the
 assigned Doula on a live Engagement. Renata can see, in one place, every Engagement in
 the Practice and its Contract and Invoice state.
 
