@@ -330,11 +330,13 @@ say ""
 note "One credit = one Engagement = one birth. First 3 per Practice are free."
 note "Pilot amount: \$$((CREDIT_UNIT_AMOUNT / 100)).$(printf '%02d' $((CREDIT_UNIT_AMOUNT % 100))) per credit."
 say ""
-if existing_price=$(_existing STRIPE_CREDIT_PRICE_ID) && [[ -n "$existing_price" ]]; then
-  note "A Price is already recorded: $existing_price"
-  confirm "Create a second one anyway?" || existing_price="keep"
+STRIPE_CREDIT_PRICE_ID=$(_existing STRIPE_CREDIT_PRICE_ID || true)
+create_price=yes
+if [[ -n "$STRIPE_CREDIT_PRICE_ID" ]]; then
+  note "A Price is already recorded: $STRIPE_CREDIT_PRICE_ID"
+  confirm "Create a second one anyway?" || create_price=no
 fi
-if [[ "${existing_price:-}" != "keep" ]]; then
+if [[ "$create_price" == yes ]]; then
   say "Creating the Product..."
   product_id=$(stripe_post products \
     -d "name=Engagement credit" \
@@ -422,26 +424,41 @@ say "The deployed BFF is reachable from the internet, so Stripe posts to it"
 say "directly. Each endpoint gets its own signing secret, returned once, at"
 say "creation, and never shown again by the API."
 say ""
-say "Platform endpoint (a Practice buying credits)..."
-DEPLOYED_WHSEC=$(stripe_post webhook_endpoints \
-  -d "url=$CLOUD_RUN_URL/api/stripe/webhook" \
-  -d "enabled_events[]=checkout.session.completed" \
-  -d "description=Doula Cloud platform billing (credits) - test mode" \
-  | json_field secret)
-say "  created"
+warn "A secret returned once is a secret that can be lost. Each one below is"
+warn "written to $ENV_FILE the instant it arrives, so a failure in a later"
+warn "stage cannot strand you with two endpoints you can no longer sign for."
 say ""
-say "Connect endpoint (a Practice's own account and invoices)..."
-say "  connect=true is what makes it receive events from connected accounts"
-say "  rather than from ours."
-DEPLOYED_CONNECT_WHSEC=$(stripe_post webhook_endpoints \
-  -d "url=$CLOUD_RUN_URL/api/stripe/connect-webhook" \
-  -d "connect=true" \
-  -d "enabled_events[]=account.updated" \
-  -d "enabled_events[]=invoice.paid" \
-  -d "enabled_events[]=invoice.payment_failed" \
-  -d "description=Doula Cloud Connect (client payments) - test mode" \
-  | json_field secret)
-say "  created"
+DEPLOYED_WHSEC=$(_existing DEPLOYED_STRIPE_WEBHOOK_SECRET || true)
+DEPLOYED_CONNECT_WHSEC=$(_existing DEPLOYED_STRIPE_CONNECT_WEBHOOK_SECRET || true)
+create_endpoints=yes
+if [[ -n "$DEPLOYED_WHSEC" && -n "$DEPLOYED_CONNECT_WHSEC" ]]; then
+  note "Both endpoints were already created by an earlier run, and both"
+  note "secrets are still in $ENV_FILE. Creating them again would leave"
+  note "duplicate endpoints delivering every event twice."
+  confirm "Create a second pair anyway?" || create_endpoints=no
+fi
+if [[ "$create_endpoints" == yes ]]; then
+  say "Platform endpoint (a Practice buying credits)..."
+  DEPLOYED_WHSEC=$(stripe_post webhook_endpoints \
+    -d "url=$CLOUD_RUN_URL/api/stripe/webhook" \
+    -d "enabled_events[]=checkout.session.completed" \
+    -d "description=Doula Cloud platform billing (credits) - test mode" \
+    | json_field secret)
+  write_env DEPLOYED_STRIPE_WEBHOOK_SECRET "$DEPLOYED_WHSEC"
+  say ""
+  say "Connect endpoint (a Practice's own account and invoices)..."
+  say "  connect=true is what makes it receive events from connected accounts"
+  say "  rather than from ours."
+  DEPLOYED_CONNECT_WHSEC=$(stripe_post webhook_endpoints \
+    -d "url=$CLOUD_RUN_URL/api/stripe/connect-webhook" \
+    -d "connect=true" \
+    -d "enabled_events[]=account.updated" \
+    -d "enabled_events[]=invoice.paid" \
+    -d "enabled_events[]=invoice.payment_failed" \
+    -d "description=Doula Cloud Connect (client payments) - test mode" \
+    | json_field secret)
+  write_env DEPLOYED_STRIPE_CONNECT_WEBHOOK_SECRET "$DEPLOYED_CONNECT_WHSEC"
+fi
 say ""
 open_url "https://dashboard.stripe.com/test/workbench/webhooks"
 note "Both endpoints should be listed there now."
@@ -453,6 +470,19 @@ say "The deployed service reads its three credentials from Google Secret"
 say "Manager, the same way it already reads DATABASE_URL. Nothing secret"
 say "goes into ci.yml, and nothing secret goes into a Cloud Run env var."
 say ""
+# A gcloud session can expire during a wizard this long. Fail here, where
+# nothing is half-done, rather than three commands in.
+if ! gcloud auth print-access-token >/dev/null 2>&1; then
+  warn "gcloud is not authenticated. In another terminal, run:"
+  note "  gcloud auth login"
+  pause "Press Enter once that is done"
+  gcloud auth print-access-token >/dev/null || {
+    warn "Still not authenticated. Nothing is lost: both deployed secrets are"
+    warn "already in $ENV_FILE. Fix gcloud and re-run this wizard."
+    exit 1
+  }
+fi
+
 put_secret() {
   local name="$1" value="$2"
   if gcloud secrets describe "$name" --project "$GCP_PROJECT" >/dev/null 2>&1; then
