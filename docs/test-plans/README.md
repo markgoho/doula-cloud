@@ -25,7 +25,7 @@ A step keeps the id it has on the journey map (`3.2` is Maya 3.2), so a plan and
 map can be read side by side. Where a test needs a check the map's step does not
 name, the check is appended as `3.2-a`. A plan never renumbers a map.
 
-## The three marks
+## The four marks
 
 Every step carries exactly one mark.
 
@@ -42,14 +42,27 @@ Every step carries exactly one mark.
   or an error where that is the honest answer (`connectRequired`, `402 no credits
   remaining`, a raw enum on screen). A step is `manual` when it can be performed
   and the result observed, whatever the result is.
+- **`blocked`** — the code path is complete and the step can be attempted, but it
+  cannot finish because third-party infrastructure that has not been set up is
+  absent. Today that is **only Stripe**: no account exists (`CLAUDE.md`). The
+  expected result is still the real as-built response (`connectRequired`), so the
+  step is walked and observed like a `manual` one — the mark exists so the first
+  run's numbers do not read a bill we have not paid as a hole in the product.
 - **`missing-feature (<gap id>)`** — the step cannot be performed at all: no
   screen, no endpoint, no column. It cites the gap ID **owned by a journey map**.
   A test plan never mints a gap ID. If a run exposes a gap no map owns, it goes
   back to the map that owns the stage.
 
 The line between `manual` and `missing-feature` is *can the step be attempted*,
-not *does it give a good answer*. Stripe-gated steps are `manual`: the endpoint
-answers, and the answer (`connectRequired`) is the thing under test.
+not *does it give a good answer*. A step whose honest as-built result is a refusal
+(`402 no credits remaining`, a role refusal, a raw enum on screen) is `manual`.
+
+The line between `blocked` and `missing-feature` is **would connecting a live
+Stripe account clear it**. It clears every `blocked` step and not one
+`missing-feature` step — Dee's stage 9 is the case that fixes the rule in mind:
+recording a bank transfer stays impossible with Stripe connected, so it is
+`missing-feature (DW-G3)`, while the Invoice she cannot raise one stage earlier is
+`blocked`.
 
 ## Running
 

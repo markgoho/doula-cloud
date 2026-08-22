@@ -85,7 +85,7 @@ client-side plans land ([#208](https://github.com/markgoho/doula-cloud/issues/20
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 8.1 | `POST .../contract/invoices` | `connectRequired` with `isOwner: false`. The endpoint is **not** owner-gated — Stripe is the blocker, not the role | `manual` |
+| 8.1 | `POST .../contract/invoices` | `connectRequired` with `isOwner: false`. The endpoint is **not** owner-gated — Stripe is the blocker, not the role | `blocked` |
 | 8.2 | Read the message the UI shows | "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume (DW-G2) | `manual` |
 
 ### Stage 9 — Record the Payment (moment of truth)
@@ -108,8 +108,13 @@ gap; the missing capability is manual Payment recording.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 0 |
-| `manual` | 19 |
+| `manual` | 18 |
+| `blocked` | 1 (8.1, Stripe) |
 | `missing-feature` | 4 (RA-G2, RA-G4, DW-G3, DW-G5) |
+
+Stages 8 and 9 sit either side of the `blocked` / `missing-feature` line and are
+the pair that fixes it: connecting a live Stripe account would clear 8.1 and would
+not touch 9.1, because recording a bank transfer has no code path at all.
 
 Dee's is the only practice-side plan with **no automated step**. Every spec in the
 suite runs as an Owner who signed up, and the Admin exists only past the invite

@@ -45,7 +45,7 @@ whole suite.
 | 3.2-a | Re-read the Billing balance | `Credit balance: 2` and a consumption ledger row | `manual` |
 | 3.3 | Open the Engagement from the Clients list | The Engagement page shows Visits, Care Plan, Birth Plan, Contract, Invoices and Messages on one page | `automated (birth-plan.e2e.ts)` |
 | 3.4 | Add a second and third Client, then attempt a fourth | The fourth returns `402` with "no credits remaining, ask a Practice Owner to buy more" — to Maya, who *is* the Owner | `manual` |
-| 3.4-a | Follow that instruction and try to buy credits | Purchase cannot complete; no Stripe account exists | `manual` |
+| 3.4-a | Follow that instruction and try to buy credits | Purchase cannot complete; no Stripe account exists | `blocked` |
 
 ### Stage 4 — Fill the Care Plan and the Birth Plan
 
@@ -80,8 +80,8 @@ whole suite.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Open `/practices/[practiceId]/settings/payments` and start Connect onboarding | `POST .../payments/connect` is owner-gated and passes for Maya; onboarding cannot complete — no Stripe account exists (MO-G8) | `manual` |
-| 7.2 | Raise an Invoice against the signed Contract | `connectRequired` with `isOwner: true`; no Invoice is created | `manual` |
+| 7.1 | Open `/practices/[practiceId]/settings/payments` and start Connect onboarding | `POST .../payments/connect` is owner-gated and passes for Maya; onboarding cannot complete — no Stripe account exists (MO-G8) | `blocked` |
+| 7.2 | Raise an Invoice against the signed Contract | `connectRequired` with `isOwner: true`; no Invoice is created | `blocked` |
 | 7.2-a | Compare the **Billing** and **Settings → Payments** screens | Two money screens, neither explaining that one buys credits from Doula Cloud and the other takes money from Clients | `manual` |
 
 ### Stage 8 — Message the Client
@@ -97,7 +97,8 @@ whole suite.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 9 |
-| `manual` | 22 |
+| `manual` | 19 |
+| `blocked` | 3 (all Stripe: 3.4-a, 7.1, 7.2) |
 | `missing-feature` | 4 (MO-G1, MO-G2, MO-G3, MO-G4) |
 
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
