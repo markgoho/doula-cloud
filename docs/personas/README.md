@@ -1,6 +1,6 @@
 # Personas
 
-Eight people the journey maps (`docs/journeys/`) and test plans (`docs/test-plans/`)
+Nine people the journey maps (`docs/journeys/`) and test plans (`docs/test-plans/`)
 refer to by name. Each file names one archetype. Rename the person freely; keep the
 file slug, because journey and test-plan files correspond to it one-to-one.
 
@@ -51,6 +51,7 @@ and would have sent a test plan looking for a screen that was never built.
 | [solo-birth-doula.md](solo-birth-doula.md) | Owner + Admin + Doula in one person | Maya Okonkwo |
 | [practice-owner.md](practice-owner.md) | Multi-doula practice owner | Renata Alvarez |
 | [employed-doula.md](employed-doula.md) | Employed doula, no admin rights | Priya Raman |
+| [contractor-doula.md](contractor-doula.md) | Contracted doula, outside the business | Lena Vasquez |
 | [non-doula-admin.md](non-doula-admin.md) | Office manager who never works a Visit | Dee Whitlock |
 | [evaluator-doula.md](evaluator-doula.md) | Prospect deciding whether to sign up | Tasha Bell |
 
