@@ -109,6 +109,13 @@ contract list (RA-G6).
 - **7.1** — Open the Engagement and read the Contract status
   (`draft` / `sent` / `signed` / `voided`).
 
+> **Nadia crossing.** `POST .../contract/void` exists and no stage in any
+> practice-side map exercises it. Voiding a Contract is the practice-side surface
+> of an Engagement that ends early — which is Nadia Haddad's path. The method
+> standard says to walk her journey first where it overlaps another. Stages 7–9
+> here, and Priya's Stages 7–8, are the crossing points and may need revision once
+> her map exists (blocked behind #210 and #206).
+
 ### Stage 8 — Raise the Invoice
 
 **Thinking**: "Bill the deposit."
@@ -155,7 +162,19 @@ Record it as an open decision, not as a pass or a failure.
 | DW-G1 | 3 | Both | The Admin role grants nothing. The permission model is binary owner / non-owner, and `office_manager` is never read. Dee is indistinguishable from any other non-owner. |
 | DW-G2 | 8 | Experience | Missing Stripe infrastructure surfaces to a non-owner as "ask a Practice Owner" — an infrastructure gap that reads as a permission error. |
 | DW-G3 | 9 | Interaction | No manual Payment recording. Payments are written only by the Stripe webhook, so a cheque or bank transfer cannot be recorded. |
-| DW-G4 | 4 | Both | An intake call's content has nowhere to go: Client creation takes name and email only. (Same root as MO-G3.) |
-| DW-G5 | 10 | — | **Open decision, not a gap**: whether an Admin may read a filled Care Plan or Birth Plan. Today they can — no role check guards the read path. |
-| DW-G6 | 3 | Interaction | The Billing balance and ledger are not owner-gated in the UI or the API (`billing/balance.go` takes any Staff member), so any non-owner sees the Practice's spending. Buying credits is correctly owner-gated (`billing/purchase.go`). |
-| DW-G7 | 7 | Both | No unsigned-contract or outstanding-work list. Chasing signatures means opening every Engagement in turn. |
+| DW-G4 | 3 | Interaction | The Billing balance and ledger are not owner-gated in the UI or the API (`billing/balance.go:86` takes any Staff member), so any non-owner sees the Practice's spending. Buying credits is correctly owner-gated (`billing/purchase.go:33`). |
+| DW-G5 | 7 | Both | No unsigned-contract or outstanding-work list. Chasing signatures means opening every Engagement in turn. |
+
+Also hit here, filed on their owning maps: **RA-G1** (no invite email),
+**RA-G2** (no role UI), **RA-G3** (`office_manager` on screen), **RA-G4** (no
+Doula on an Engagement), **MO-G3** (Client takes name and email only).
+
+## Open decisions
+
+Not gaps, and not `journey-gap` issues. This journey exposes them; it cannot
+settle them alone.
+
+- **May an Admin read a filled Care Plan or Birth Plan?** Today they can — no role
+  check guards `GET .../plans/{planType}`. `CONTEXT.md` calls the Care Plan
+  staff-only internal notes, which does not by itself exclude an Admin. Wants its
+  own decision ticket.

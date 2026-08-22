@@ -137,3 +137,6 @@ cannot be reproduced even manually.
 | TB-G5 | 6 | Interaction | No data export. "Can I get out again?" is unanswerable. |
 | TB-G6 | 7 | Interaction | No data import for a migrating owner, and Client creation accepts only name and email. |
 | TB-G7 | 3 | Experience | Signup grants Owner + Admin + Doula silently. She never learns that roles exist, so she cannot evaluate the product for her second doula. |
+
+Also hit here, filed on their owning maps: **MO-G3** (Client takes name and email
+only — which is also why TB-G6 cannot be worked around by hand).

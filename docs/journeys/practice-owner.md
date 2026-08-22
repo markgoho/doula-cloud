@@ -160,4 +160,7 @@ it, because there is no click to record.
 | RA-G5 | 8 | Experience | No coverage or availability view, and no dated Visits to build one from. Her stated anxiety has no surface at all. |
 | RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. |
 | RA-G7 | 7 | Interaction | No Practice-wide Invoice or unpaid list. Invoices are reachable only inside a single Engagement's Contract. |
-| RA-G8 | 6 | Both | The Status column is dead: no code ever updates an Engagement's status, so every row reads `intake`. |
+
+Also hit here, filed on their owning maps: **MO-G4** (an Engagement's status never
+changes, so her one status column is dead), **MO-G1** (dateless Visits, which is
+why RA-G5 has no data to read).

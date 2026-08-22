@@ -56,6 +56,11 @@ point where she is least invested.
 - **2.2** — Review the seeded default Care Plan and Birth Plan fields.
 - **2.3** — Edit and save (`PUT /api/practices/{id}/plan-templates/{planType}`),
   owner-gated at `plans/template.go:220`. She is Owner, so this passes.
+- **2.4** — Review the seeded Contract Template at
+  `/practices/[practiceId]/settings/contract-template`. Signup seeds all three
+  templates in one transaction — Care Plan, Birth Plan, and Contract
+  (`signup.go:160`, `signup.go:168`) — so no Practice ever has to create one
+  before sending its first Contract.
 
 ### Stage 3 — Add the first Client
 

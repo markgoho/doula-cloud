@@ -32,6 +32,18 @@ step by id (`Renata 3.2`) and a gap by id (`RA-G4`):
 5. **Gaps found** — a table of `<initials>-G<n>` rows, each naming its stage and
    which layer it came from.
 
+A sixth section, **Open decisions**, is optional: questions a journey exposes but
+cannot answer alone. These are not gaps and must not become `journey-gap` issues.
+
+### One gap, one ID
+
+A gap gets its ID on the map that **owns** it — normally the first map where it
+bites hardest. Every other map that hits the same root **cites that ID** and never
+mints a new one. This is what makes the deduplicated `journey-gap` backlog
+possible; without it the same missing capability arrives three times under three
+names. A gap that is genuinely a different question, even on the same screen, gets
+its own ID.
+
 ## Status
 
 These are drafts against **proto-personas** — assumptions grounded in the schema

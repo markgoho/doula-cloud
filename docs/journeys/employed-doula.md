@@ -57,7 +57,7 @@ in the codebase reads it. The role is decorative.
 - **3.3** — Land on `/practices/[practiceId]`. The owner-only tiles (Invite,
   Staff, Plan Templates, Contract Template, Payments) are hidden by
   `{#if roles.includes('owner')}`. **Clients and Billing remain**, and Billing is
-  the Practice's credit spending (DW-G6).
+  the Practice's credit spending (DW-G4).
 
 ### Stage 4 — Find her Clients
 
@@ -117,29 +117,40 @@ stated need — "what was I told last time" — is unanswerable (MO-G1, MO-G2).
 - **8.1** — Send a message (`POST .../messages`).
 - **8.2** — Receive the reply in the same continuous thread.
 
+> **Nadia crossing.** Stages 7 and 8 are where an Engagement that ends in loss
+> lands on the Doula's side: the Visit that becomes a bereavement visit, and the
+> message thread that must not carry on as if nothing changed. The method standard
+> says to walk Nadia Haddad's journey first where it overlaps another, so both
+> stages may need revision once her map exists (blocked behind #210 and #206).
+
 ### Stage 9 — Confirm the walls hold
 
 **Thinking**: nothing — she would never try. This stage exists for the test plan,
 not for her.
 
-- **9.1** — Navigate directly to `/practices/[practiceId]/staff`. The API requires
-  Owner (`staffauth/staff.go:25`), so the page should show an error. **Expected to
-  hold.**
-- **9.2** — `/practices/[practiceId]/invite` — `POST .../invitations` requires
-  Owner. **Expected to hold**, but only on submit; the form itself renders.
-- **9.3** — `/practices/[practiceId]/settings/plan-templates` — `PUT` requires
-  Owner (`plans/template.go:220`). **Expected to hold on write**; the `GET` is
-  not owner-gated, so she can read the Practice's template definitions.
-- **9.4** — `/practices/[practiceId]/settings/contract-template` — same shape
-  (`contracts/template.go:75`).
+No owner-only route has a `+page.ts` load guard — every one is a `+page.svelte`
+that renders, fetches on mount, and shows whatever the API returns. So the page
+always appears; what differs is whether the API hands over data.
+
+- **9.1** — `/practices/[practiceId]/staff` — the `GET` requires Owner
+  (`staffauth/staff.go:25`). **Expected to hold**: the page renders its heading,
+  then shows an error instead of the roster.
+- **9.2** — `/practices/[practiceId]/invite` — the form renders; only
+  `POST .../invitations` requires Owner. **Expected to hold on submit.**
+- **9.3** — `/practices/[practiceId]/settings/plan-templates` — **expected to
+  fail on read**. `GET` is ungated (`plans/template.go:81`); only `PUT` checks
+  Owner (line 130). She sees the Practice's real template definitions.
+- **9.4** — `/practices/[practiceId]/settings/contract-template` — same shape,
+  same expected failure (`contracts/template.go:31` ungated, `:75` gated).
 - **9.5** — `/practices/[practiceId]/settings/payments` — `POST .../connect`
   requires Owner. **Expected to hold.**
-- **9.6** — `/practices/[practiceId]/billing` — **expected to fail**: the balance
-  and ledger are readable by any Staff member.
+- **9.6** — `/practices/[practiceId]/billing` — **expected to fail on read**: the
+  balance and ledger take any Staff member (`billing/balance.go:86`). Buying
+  credits is correctly refused (`billing/purchase.go:33`).
 
-The pattern to test for: owner-only surfaces are hidden as links but reachable as
-URLs, and their protection is on the write endpoint rather than the read. Every
-one of them shows her a screen she has no right to see, then refuses the button.
+The pattern to test for: protection sits on the write endpoint, not the read. On
+three of these six she is shown data she has no right to see, then refused at the
+button.
 
 ## Gaps found
 
@@ -148,7 +159,12 @@ one of them shows her a screen she has no right to see, then refuses the button.
 | PR-G1 | 4 | Interaction | She sees every Client in the Practice. The list handler is Practice-scoped by design ("v1 has no restricted-visibility model"), so her scope requirement fails outright. |
 | PR-G2 | 5 | Both | She can read any Engagement's Contract amount and Invoice history, for any Client. Read paths carry no role checks. |
 | PR-G3 | 2 | Interaction | The `doula` role is never read anywhere in the codebase. Holding it changes nothing. |
-| PR-G4 | 9 | Interaction | Owner-only screens are hidden as links but reachable by URL, and gated on write rather than read — so she reaches the page, sees the data, and is refused only at the button. |
+| PR-G4 | 9 | Interaction | No route has a load-time guard. The Plan Template, Contract Template, and Billing screens gate on write only (`GET` is ungated on all three), so she reaches the page, reads real Practice data, and is refused only at the save button. |
 | PR-G5 | 6 | Experience | The Birth Plan is a section partway down a long single-page Engagement view, with no deep link and no phone-first path, at the exact moment she is standing in a corridor. |
-| PR-G6 | 7 | Both | A Visit records no date, type, or notes, so "what was I told last time" — her stated reason for using the product — cannot be answered. |
-| PR-G7 | 1 | Experience | Her first impression is a raw URL pasted into a text message, which she cannot verify is genuine. |
+| PR-G6 | 7 | Experience | A Visit carries no type, so the three kinds she distinguishes — prenatal, birth, postpartum — are one undifferentiated row. Dateless and note-less Visits are **MO-G1** and **MO-G2**. |
+| PR-G7 | 1 | Experience | Her first impression is a raw URL pasted into a text message, which she cannot verify is genuine. This is the experience half of **RA-G1**; the missing email itself is filed there. |
+
+Also hit here, filed on their owning maps: **RA-G1** (no invite email),
+**RA-G2** (no role UI), **RA-G4** (no Doula on an Engagement — which is why she
+cannot tell which Clients are hers), **MO-G1** and **MO-G2** (dateless, note-less
+Visits), **DW-G4** (Billing readable by any Staff member).
