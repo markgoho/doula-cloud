@@ -32,8 +32,15 @@ recorded Payment — all without Dee ever opening a Care Plan or logging a Visit
 
 ## Watch for
 
-- The naming mismatch is real: the database enum is `office_manager`, CONTEXT.md says
-  **Admin**. Note whatever the UI actually shows; do not silently normalise it.
+- **The `office_manager` role is not implemented as a permission.** The app branches on
+  `'owner'` only; `office_manager` and `doula` are never read client-side, and API-side
+  `office_manager` appears only in `staffauth`'s valid-role list and in the signup grant.
+  Dee is therefore indistinguishable from any other non-owner Staff member today. That
+  is a first-order finding for the practice-side test plan, not a naming quibble.
+- The Staff list renders roles as raw strings (`member.roles.join(', ')`), so Dee shows
+  up as `office_manager` on screen.
+- The naming mismatch is unresolved: the enum is `office_manager`, CONTEXT.md says
+  **Admin**. Journey maps, test plans, and gap-issue titles must all pick the same side.
 - Their permissions are the mirror image of Priya's: business screens yes, care records
   arguably no. Whether an `office_manager` should read a Care Plan or a Birth Plan is
   an open question this journey must answer, not assume.

@@ -36,6 +36,9 @@ had no right to see.
 - She is the negative-permission persona. Every owner-only and admin-only surface —
   Staff management, billing, Plan Template settings, invitations — must be absent for
   her, not merely unlinked.
+- **Expect this to fail.** Only the `'owner'` role is enforced anywhere in the app or
+  the API; the `doula` role is never checked. Whatever an owner can reach that is not
+  explicitly owner-gated, Priya can probably reach too, by URL if not by link.
 - Her scope is her Engagements. Confirm whether she can see Practice Engagements
   assigned to other doulas; if she can, that is a finding.
 - Invitation acceptance is her first impression, and it happens on whatever device the

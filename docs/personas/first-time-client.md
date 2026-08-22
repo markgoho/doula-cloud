@@ -42,4 +42,7 @@ through `intake` → `active` → `postpartum`.
   is genuinely absent from the portal.
 - Her partner will want access and cannot have it. CONTEXT.md names this as a future
   extension of Client; capture it as a gap line, not a persona.
-- Her Engagement has no due date field to show her. Note what the portal shows instead.
+- There is no first-class due date on `engagements`. A Practice could record one as a
+  Plan Template field (the field types are text, select, checkbox, and section header —
+  there is no date type), but nothing in the app can then treat it as a date. Note what
+  the portal shows her instead before calling this a gap.
