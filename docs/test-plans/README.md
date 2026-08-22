@@ -8,6 +8,11 @@ experience layer does not become steps — it becomes `journey-gap` issues on th
 map itself. A plan therefore proves or disproves the map: every step below is a
 claim about the product read out of the code.
 
+**Stripe status (2026-08-22):** the Sandbox exists and **Buy credits is walked
+and passing** — see Maya's 3.4-a. Connect and Invoices stay `blocked`, now on
+[#247](https://github.com/markgoho/doula-cloud/issues/247) (Accounts v1 -> v2)
+rather than on a missing account.
+
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
 carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
@@ -59,8 +64,28 @@ Every step carries exactly one mark.
   and the result observed, whatever the result is.
 - **`blocked`** — the code path is complete and the step can be attempted, but it
   cannot finish because third-party infrastructure the walking stack does not
-  have is absent. Today that is **only Stripe** again: no account exists
-  (`CLAUDE.md`), so Credits, Connect, and Invoices are all `blocked`.
+  have is absent.
+
+  **The Stripe account now exists** ([#242](https://github.com/markgoho/doula-cloud/issues/242)),
+  and Credits went `blocked` -> `manual` on 2026-08-22: Maya's 3.4-a buys two
+  credits through Stripe Checkout and the ledger is credited by the
+  `checkout.session.completed` webhook. Connect and Invoices did **not** clear,
+  and the reason has changed in a way the mark does not fit cleanly.
+
+  **The rule needs restating, because reality moved.** The old test — *would
+  connecting the third-party infrastructure clear it* — assumed the only way a
+  complete code path can fail is that the infrastructure is missing. Connecting
+  Stripe did not clear Connect: Stripe now refuses `POST /v1/accounts` for new
+  integrations, and every merged Connect path is Accounts v1
+  ([#247](https://github.com/markgoho/doula-cloud/issues/247)). The
+  infrastructure is present and our code cannot use it.
+
+  So `blocked` now means: **the step cannot finish for a reason outside the
+  screen it is walked from, and no product decision is missing.** A step whose
+  code targets a withdrawn third-party API is `blocked`, not
+  `missing-feature` — the feature was specified and built, and what it needs is
+  a migration, not a decision. A walk that meets one records *which* of the two
+  reasons applies, because they clear on completely different work.
 
   It was briefly two. Maya's walk found Contract signing answering a bare 500,
   because signing writes the PDF to the object store before it writes the status
@@ -87,10 +112,10 @@ The line between `manual` and `missing-feature` is *can the step be attempted*,
 not *does it give a good answer*. A step whose honest as-built result is a refusal
 (`402 no credits remaining`, a role refusal, a raw enum on screen) is `manual`.
 
-The line between `blocked` and `missing-feature` is **would connecting the
-third-party infrastructure clear it** — a live Stripe account, or a reachable
-object store. It clears every `blocked` step and not one
-`missing-feature` step — Dee's stage 9 is the case that fixes the rule in mind:
+The line between `blocked` and `missing-feature` is **is a product decision
+missing** — if not, it is `blocked`, whether what it waits on is infrastructure
+we have not stood up or a third-party API we have not migrated to. Dee's stage 9
+is the case that fixes the rule in mind:
 recording a bank transfer stays impossible with Stripe connected, so it is
 `missing-feature (DW-G3)`, while the Invoice she cannot raise one stage earlier is
 `blocked`.

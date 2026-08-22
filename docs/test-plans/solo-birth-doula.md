@@ -45,7 +45,7 @@ whole suite.
 | 3.2-a | Re-read the Billing balance | `Credit balance: 2` and a consumption ledger row | `manual` |
 | 3.3 | Open the Engagement from the Clients list | The Engagement page shows Visits, Care Plan, Birth Plan, Contract, Invoices and Messages on one page | `automated (birth-plan.e2e.ts)` |
 | 3.4 | Add a second and third Client, then attempt a fourth | The fourth returns `402` with "no credits remaining, ask a Practice Owner to buy more" — to Maya, who *is* the Owner | `manual` |
-| 3.4-a | Follow that instruction and try to buy credits | Purchase cannot complete; no Stripe account exists | `blocked` |
+| 3.4-a | Follow that instruction and try to buy credits | Stripe Checkout opens for the chosen quantity; paying credits the ledger | `manual` |
 
 ### Stage 4 — Fill the Care Plan and the Birth Plan
 
@@ -98,7 +98,7 @@ whole suite.
 | --- | --- |
 | `automated` | 9 |
 | `manual` | 19 |
-| `blocked` | 3 (all Stripe: 3.4-a, 7.1, 7.2) |
+| `blocked` | 2 (Connect only: 7.1, 7.2 — see [#247](https://github.com/markgoho/doula-cloud/issues/247)) |
 | `missing-feature` | 4 (MO-G1, MO-G2, MO-G3, MO-G4) |
 
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
@@ -147,7 +147,7 @@ amount, and stage 8). The 9 `automated` steps were **not** re-run.
 | 3.2 | `manual` | as expected | `201 {"clientId":…,"engagementId":…,"status":"intake"}`, and the browser lands **straight on the Engagement page** — the Clients list is never passed through, as Tasha's walk also found |
 | 3.2-a | `manual` | as expected | `Credit balance: 2`, ledger `consumption / -1` above `signup_bonus / +3`. Nothing on the Add Client screen had said a credit would be spent |
 | 3.4 | `manual` | as expected | Clients 2 and 3 -> `201`. The fourth -> `402 no credits remaining, ask a Practice Owner to buy more`, printed verbatim under the form. Maya is the Owner it tells her to ask |
-| 3.4-a | `blocked` | as expected, and **worse than `connectRequired`** | **Buy credits** -> `POST .../billing/purchases` -> `500 internal error`, rendered on screen as `internal error`. The stack log carries the cause: `[ERROR] Request error from Stripe (status 401): You did not provide an API key`. Confirms the fact [#233](https://github.com/markgoho/doula-cloud/issues/233) handed forward (`api/internal/billing/purchase.go:69-72`) |
+| 3.4-a | `manual` (was `blocked`) | **better than the plan claimed** | The Sandbox exists now ([#242](https://github.com/markgoho/doula-cloud/issues/242)), and the leg runs end to end. **Buy credits** with `Quantity 2` -> Stripe Checkout, `$10.00`, `Engagement credit`, `Qty 2, $5.00 each`. Paid with `4242 4242 4242 4242` -> back to `?checkout=success`, `Credit balance: 5`, ledger row `purchase / +2`. **The webhook is what credited it**: four events were delivered and all answered `200`, but only `checkout.session.completed` was recorded in `stripe_webhook_events` — `payment_intent.created`, `payment_intent.succeeded` and `charge.updated` were acknowledged and ignored, so the single purchase credited once. The 500 this step used to answer (`You did not provide an API key`) is gone |
 | 4.1 | `manual` | as expected | **Create Care Plan** -> `201` with the seeded field set (Support People, pain management, requests, backup-doula checkbox). Filled, **Save Care Plan** -> `PUT … 200`, and the value survived a reload |
 | 4.2-a | `manual` | as expected | Added a field to the **Birth Plan** template afterwards (`PUT .../plan-templates/birth_plan` -> `200`, `Saved.`), reopened the filled plan: the new field is **absent**. The Plan Instance snapshot holds, exactly as claimed |
 | 5.1 | `manual` | as expected | `201 {"clientPortalUserId":…,"inviteToken":…}` and the screen says it plainly: `Invited. There is no email sending yet, so share this link with them directly:` followed by the raw URL in a `<code>` block. Maya must copy it out by hand (**MO-G6** territory) |
