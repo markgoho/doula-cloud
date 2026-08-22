@@ -63,4 +63,11 @@ first run (`docs/test-plans/`) is the first real evidence.
 
 ## Client side
 
-Not yet written — see issue #206.
+| Map | Persona | Moment of truth |
+| --- | --- | --- |
+| [loss-client.md](loss-client.md) | Nadia Haddad | The first screen after three weeks away |
+| [first-time-client.md](first-time-client.md) | Hannah Sorensen | Printing the Birth Plan and handing it to a stranger in scrubs |
+| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | "A portal account already exists for this identity" |
+
+Nadia's map was written **first**, ahead of the two it overlaps, per the method
+standard: walk the stress case before the journeys it crosses.
