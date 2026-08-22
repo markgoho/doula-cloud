@@ -42,6 +42,23 @@ Account Link returns to `/practices/{id}/settings/payments?connect=return|refres
 A tunnelled local walk needs `APP_BASE_URL` overridden and
 `EXPECTED_ORIGINS` left alone.
 
+## Test mode is a sandbox now
+
+Stripe renamed it. What this repo and #242 call test mode, the dashboard
+calls a **sandbox**: a separate environment with its own data and its own
+API keys, rather than a toggle over one account. Keys from it still start
+`sk_test_`, so nothing the code expects changes.
+
+What does change is where a key comes from. A key copied while the
+dashboard's environment switcher is on some other environment is a valid
+key for the wrong place, and it fails later as a signature error or a
+"no such price" — both of which read like code bugs and are not.
+
+Whether a sandbox carries every Connect capability is not something to
+take on trust. `scripts/stripe-setup.sh` stage 6 settles it by creating a
+throwaway Standard account over the API and deleting it again, so a
+missing capability surfaces there rather than an hour later in a walk.
+
 ## Stripe: two surfaces, one key
 
 **Platform billing.** The Practice pays us. A Stripe Customer plus a
