@@ -105,6 +105,11 @@ the invite flow for Staff, or any refusal by role.
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | [journey](../journeys/non-doula-admin.md) |
 | [employed-doula.md](employed-doula.md) | Priya Raman | [journey](../journeys/employed-doula.md) |
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | [journey](../journeys/contractor-doula.md) |
+| [loss-client.md](loss-client.md) | Nadia Haddad | [journey](../journeys/loss-client.md) |
+| [first-time-client.md](first-time-client.md) | Hannah Sorensen | [journey](../journeys/first-time-client.md) |
+| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | [journey](../journeys/returning-postpartum-client.md) |
 
-Client-side plans follow the client-side journey maps
-([#208](https://github.com/markgoho/doula-cloud/issues/208)).
+The first six are practice-side ([#207](https://github.com/markgoho/doula-cloud/issues/207)),
+the last three client-side ([#208](https://github.com/markgoho/doula-cloud/issues/208)).
+**No plan carries a `blocked` step on the client side**: Stripe never reaches the
+Client portal, so every hole a Client meets is a hole in the product.

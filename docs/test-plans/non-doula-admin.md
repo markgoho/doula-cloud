@@ -74,12 +74,17 @@ as a non-owner, which is the case that matters here.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 7.1 | Open the Engagement and read the Contract status | One of `draft` / `sent` / `signed` / `voided` | `manual` |
+| 7.1-a | Void a **signed** Contract from the Engagement page | The **Void** button renders only on a `signed` Contract (`ContractStatus.svelte`) and `POST .../contract/void` succeeds for a non-owner. The Contract becomes `voided`, terminal, and still renders in full | `manual` |
 | 7.2 | Find every Engagement whose Contract is unsigned | No such list; every Engagement must be opened in turn | `missing-feature (DW-G5)` |
 
-**Nadia crossing.** `POST .../contract/void` exists and no step here exercises it.
-Voiding is the practice-side surface of an Engagement that ends early, which is
-Nadia Haddad's path — so this stage, and stages 8 and 9, may gain steps once the
-client-side plans land ([#208](https://github.com/markgoho/doula-cloud/issues/208)).
+**Nadia crossing, settled.** `POST .../contract/void` had no step here.
+[Her plan](loss-client.md) needs a voided Contract for its stage 6, and the only
+control that produces one is on this screen — so **7.1-a is added** and the void
+path is walked once, on the Staff side that owns it. Stages 8 and 9 are
+**unchanged**: what she adds there is the Client's side of the same moment — the
+bare word `voided` (**NH-G5**) and the absence of any Invoice surface in the portal
+(**NH-G6**) — and both gaps are hers to own. The step ids here are otherwise
+untouched.
 
 ### Stage 8 — Raise the Invoice
 
@@ -108,7 +113,7 @@ gap; the missing capability is manual Payment recording.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 0 |
-| `manual` | 18 |
+| `manual` | 19 |
 | `blocked` | 1 (8.1, Stripe) |
 | `missing-feature` | 4 (RA-G2, RA-G4, DW-G3, DW-G5) |
 

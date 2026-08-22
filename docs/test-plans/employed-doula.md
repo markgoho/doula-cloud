@@ -85,10 +85,12 @@ than anything Priya would do.
 | 8.2 | Have the Client reply | One continuous thread, in order, immutable | `manual` |
 | 8.2-a | With the Client's thread open, deliver a push event | The tab refetches and shows the message; the push itself carries no content (ADR-0002) | `automated (push-notification.e2e.ts)` |
 
-**Nadia crossing.** Stages 7 and 8 are where an Engagement ending in loss lands on
-the Doula's side — a bereavement Visit, and a thread that must not carry on
-unchanged. Both may gain steps once the client-side plans land
-([#208](https://github.com/markgoho/doula-cloud/issues/208)).
+**Nadia crossing, settled.** Stages 7 and 8 are where an Engagement ending in loss
+lands on the Doula's side — a bereavement Visit, and a thread that must not carry
+on unchanged. [Her plan](loss-client.md) now exists and **neither stage changes**:
+her 7.1 walks the bereavement Visit against **PR-G6**, **MO-G1** and **MO-G2**,
+already given steps here, and the thread with no way to mark that its subject has
+changed is hers to own (**NH-G7**). No step id here moves.
 
 ## Permission boundary
 
