@@ -4,6 +4,14 @@ Multi-tenant CRM for doula practices — Practices employ Staff who work Engagem
 
 ## Language
 
+Each entry may carry a `_Client says_:` line. This is the **Client register** — the
+word a Client reads in the portal for a term the team says differently. Doula Cloud is
+**one bounded context**; the register translates at the UI edge and does not create a
+second model. It is **binding on the client portal** and advisory everywhere else. It
+holds single words and short phrases, never sentences. Where the model cannot hold a
+fact at all, the register stays silent and the fact becomes a `journey-gap` issue. See
+[ADR-0005](docs/adr/0005-one-context-client-register-at-the-ui-edge.md).
+
 **Practice**:
 A tenant business. May be a solo doula or a multi-doula business with non-doula Staff.
 _Avoid_: Business, tenant, org
@@ -29,11 +37,13 @@ The pregnant/birthing person a Practice serves. Does not (yet) cover a partner o
 _Avoid_: Patient, customer, mom
 
 **Engagement**:
-The relationship between a Client and a Practice, spanning intake through postpartum, centered on one baby (born or unborn). Deliberately generic so it fits both birth-doula and postpartum-doula work.
+The relationship between a Client and a Practice, spanning intake through postpartum, centered on one baby (born or unborn). Deliberately generic so it fits both birth-doula and postpartum-doula work. Carries a status: `intake`, `active`, `postpartum`, or `completed`.
+_Client says_: my care ("Your care" as a heading). Never "my pregnancy" — too narrow for postpartum-only work, and wrong for a Client whose pregnancy ended in loss. Each status has one fixed Client label, the same for every Client: `intake` → Getting started, `active` → Ongoing, `postpartum` → Postpartum, `completed` → Care ended. A status that cannot be labelled kindly for **every** Client means the status set is missing a value; that is a gap in the model, never a conditional label.
 _Avoid_: Pregnancy (too narrow — excludes postpartum-only work), Case, Relationship
 
 **Visit**:
 A scheduled meeting between a Doula and a Client within an Engagement. May be the birth itself.
+_Client says_: no client-facing surface today — the portal shows no Visit, so no Client word is settled.
 _Avoid_: Appointment (reads clinical/medical-provider)
 
 **Care Plan**:
@@ -50,6 +60,7 @@ _Avoid_: Form, schema (schema is an implementation term, not domain language)
 
 **Plan Instance**:
 A Client's filled-out Care Plan or Birth Plan for an Engagement. Stores a snapshot of the Plan Template's field definitions as they were at creation, so later template edits never alter or break an already-completed plan.
+_Client says_: nothing — the term is internal. A Client reads the Birth Plan Instance and calls it her Birth Plan; she never meets the concept itself.
 _Avoid_: Response, submission
 
 **Contract**:
@@ -73,5 +84,5 @@ One of eight named people the product is designed and tested against, each stand
 _Avoid_: User type, actor, role
 
 **Journey**:
-The path one Persona takes toward a single goal, from where they arrive to a stated end state. Each Persona has exactly one primary Journey. Defined in [docs/journeys/](docs/journeys/).
+The path one Persona takes toward a single goal, from where they arrive to a stated end state, described in two layers: an **experience layer** (what the Persona thinks and feels, and what hurts) and an **interaction layer** (the concrete steps through the product). A Journey is not a task flow — the interaction layer alone is a task flow. Each Persona has exactly one primary Journey. Defined in [docs/journeys/](docs/journeys/).
 _Avoid_: Flow, use case, scenario
