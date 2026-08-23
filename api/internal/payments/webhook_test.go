@@ -42,10 +42,34 @@ const (
 )
 
 func newConnectWebhookServer(db *testdb.DB) *httptest.Server {
-	client := payments.NewStripeAPIClient("sk_test_unused", "https://app.test")
+	return newConnectWebhookServerWith(db, payments.NewStripeAPIClient("sk_test_unused", "https://app.test"))
+}
+
+// newConnectWebhookServerWith is newConnectWebhookServer with the Client
+// chosen by the caller. invoice.paid now reads the Stripe payment
+// reference back through the port (the event no longer carries one), so
+// those tests need a Client that can answer that call as well as verify
+// the signature.
+func newConnectWebhookServerWith(db *testdb.DB, client payments.Client) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.Handle("POST /stripe/connect-webhook", payments.PostConnectWebhookHandler(db.App, client, stripeConnectWebhookSecret))
 	return httptest.NewServer(mux)
+}
+
+// referenceClient answers RetrieveInvoicePaymentReference while leaving
+// real signature verification to the embedded StripeAPIClient -- the same
+// seam accountFetchClient uses for the thin-event route.
+type referenceClient struct {
+	*payments.StripeAPIClient
+	reference string
+	err       error
+}
+
+func (c *referenceClient) RetrieveInvoicePaymentReference(_ context.Context, _, _ string) (string, error) {
+	if c.err != nil {
+		return "", c.err
+	}
+	return c.reference, nil
 }
 
 // buildConnectEventPayload assembles a raw Stripe event envelope around
@@ -116,16 +140,20 @@ func otherConnectEventPayload(t *testing.T, eventID, accountID string) []byte {
 const invoicePaidAmountCents = 5000
 
 // invoicePaidPayload builds a raw invoice.paid event body referencing
-// stripeInvoiceID, with the amount actually paid, a payment reference,
-// and the Unix paid-at timestamp on its data.object -- mirrors
-// accountUpdatedPayload.
-func invoicePaidPayload(t *testing.T, eventID, accountID, stripeInvoiceID, paymentReference string, paidAt time.Time) []byte {
+// stripeInvoiceID, with the amount actually paid and the Unix paid-at
+// timestamp on its data.object.
+//
+// There is deliberately no payment_intent here. A real invoice.paid body
+// under API version 2026-07-29.dahlia carries none -- nor a charge, nor a
+// payments list (checked against the Sandbox during #247's walk) -- so a
+// fixture that included one would let a handler pass a test it could not
+// pass in production. The reference comes from the Client port instead.
+func invoicePaidPayload(t *testing.T, eventID, accountID, stripeInvoiceID string, paidAt time.Time) []byte {
 	t.Helper()
 	return buildConnectEventPayload(t, eventID, stripeEventTypeInvoicePaid, accountID, map[string]any{
-		"id":             stripeInvoiceID,
-		objectKey:        stripeObjectInvoice,
-		"amount_paid":    invoicePaidAmountCents,
-		"payment_intent": paymentReference,
+		"id":          stripeInvoiceID,
+		objectKey:     stripeObjectInvoice,
+		"amount_paid": invoicePaidAmountCents,
 		"status_transitions": map[string]any{
 			"paid_at": paidAt.Unix(),
 		},
@@ -607,11 +635,14 @@ func TestPostConnectWebhookHandler_InvoicePaidCreatesPaymentAndFlipsStatus(t *te
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_test", invoiceStatusOpen, 5000, time.Now())
-	srv := newConnectWebhookServer(db)
+	srv := newConnectWebhookServerWith(db, &referenceClient{
+		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
+		reference:       "pi_test_1",
+	})
 	defer srv.Close()
 
 	paidAt := time.Now().Truncate(time.Second).UTC()
-	payload := invoicePaidPayload(t, "evt_invoice_paid", "acct_invoice_paid", "in_paid_test", "pi_test_1", paidAt)
+	payload := invoicePaidPayload(t, "evt_invoice_paid", "acct_invoice_paid", "in_paid_test", paidAt)
 	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
 	defer resp.Body.Close()
 
@@ -648,7 +679,7 @@ func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
 
-	payload := invoicePaidPayload(t, "evt_invoice_paid_replay", "acct_invoice_paid_replay", "in_paid_replay", "pi_test_replay", time.Now())
+	payload := invoicePaidPayload(t, "evt_invoice_paid_replay", "acct_invoice_paid_replay", "in_paid_replay", time.Now())
 
 	first := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
 	_ = first.Body.Close()
@@ -758,7 +789,7 @@ func TestPostConnectWebhookHandler_InvoicePaidUnknownInvoiceDroppedButAcknowledg
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
 
-	payload := invoicePaidPayload(t, "evt_unknown_invoice", "acct_unknown_invoice", "in_does_not_exist", "pi_unknown", time.Now())
+	payload := invoicePaidPayload(t, "evt_unknown_invoice", "acct_unknown_invoice", "in_does_not_exist", time.Now())
 	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
 	defer resp.Body.Close()
 
@@ -780,7 +811,7 @@ func TestPostConnectWebhookHandler_InvoicePaidUnrecognizedAccountDroppedButAckno
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
 
-	payload := invoicePaidPayload(t, "evt_wrong_account", "acct_unrecognized_for_invoice", "in_wrong_account", "pi_wrong_account", time.Now())
+	payload := invoicePaidPayload(t, "evt_wrong_account", "acct_unrecognized_for_invoice", "in_wrong_account", time.Now())
 	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
 	defer resp.Body.Close()
 
@@ -860,5 +891,83 @@ func TestPostAccountWebhookHandler_FakeClientEventIsDroppedNotApplied(t *testing
 	cardPayments, _, _, _ := connectState(t, db, practiceID)
 	if cardPayments != string(payments.CapabilityUnsupported) {
 		t.Fatalf("card_payments = %q, want the default to stand", cardPayments)
+	}
+}
+
+// TestPostConnectWebhookHandler_InvoicePaidRecordsFetchedPaymentReference
+// pins the fix for what #247's walk found: under API version
+// 2026-07-29.dahlia an Invoice carries no payment_intent and no charge,
+// and the invoice.paid body carries no payments list, so the old
+// `payment_intent` JSON tag silently unmarshaled to "" and every payments
+// row was written with an empty Stripe reference. The reference now comes
+// through the port.
+func TestPostConnectWebhookHandler_InvoicePaidRecordsFetchedPaymentReference(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Reference Practice", "acct_reference")
+	engagementID := seedEngagement(t, db, practiceID, "Ref Client", "ref@example.com")
+	contractID := seedContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_reference", invoiceStatusOpen, invoicePaidAmountCents, time.Now())
+	client := &referenceClient{
+		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
+		reference:       "pi_from_stripe",
+	}
+	srv := newConnectWebhookServerWith(db, client)
+	defer srv.Close()
+
+	payload := invoicePaidPayload(t, "evt_reference", "acct_reference", "in_reference", time.Unix(1_700_000_000, 0))
+	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var reference string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT stripe_payment_reference FROM payments WHERE invoice_id = $1`, invoiceID,
+	).Scan(&reference); err != nil {
+		t.Fatalf("read payment reference: %v", err)
+	}
+	if reference != "pi_from_stripe" {
+		t.Fatalf("stripe_payment_reference = %q, want the fetched PaymentIntent id", reference)
+	}
+}
+
+// TestPostConnectWebhookHandler_InvoicePaidSurvivesReferenceLookupFailure
+// proves a failure to fetch the reference does not lose the payment. The
+// money has already moved; answering 500 would make Stripe redeliver an
+// event we cannot improve on, so the row is written with an empty
+// reference and the failure is logged.
+func TestPostConnectWebhookHandler_InvoicePaidSurvivesReferenceLookupFailure(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Reference Failure Practice", "acct_ref_fail")
+	engagementID := seedEngagement(t, db, practiceID, "Fail Client", "fail@example.com")
+	contractID := seedContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_ref_fail", invoiceStatusOpen, invoicePaidAmountCents, time.Now())
+	client := &referenceClient{
+		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
+		err:             errRetrieveFailed,
+	}
+	srv := newConnectWebhookServerWith(db, client)
+	defer srv.Close()
+
+	payload := invoicePaidPayload(t, "evt_ref_fail", "acct_ref_fail", "in_ref_fail", time.Unix(1_700_000_000, 0))
+	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d -- the payment must not be lost", resp.StatusCode, http.StatusOK)
+	}
+	var reference string
+	var amount int64
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT stripe_payment_reference, amount_cents FROM payments WHERE invoice_id = $1`, invoiceID,
+	).Scan(&reference, &amount); err != nil {
+		t.Fatalf("read payment: %v", err)
+	}
+	if reference != "" {
+		t.Fatalf("stripe_payment_reference = %q, want empty", reference)
+	}
+	if amount != invoicePaidAmountCents {
+		t.Fatalf("amount_cents = %d, want %d", amount, invoicePaidAmountCents)
 	}
 }

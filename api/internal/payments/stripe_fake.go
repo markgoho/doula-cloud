@@ -35,7 +35,11 @@ type FakeClient struct {
 	mu     sync.Mutex
 	nextID int
 
-	AccountCalls       []string
+	AccountCalls []string
+	// AccountNames records the display name passed alongside each
+	// CreateAccount call, so a test can prove the Practice's own name is
+	// what reaches Stripe (#247).
+	AccountNames       []string
 	AccountLinkCalls   []FakeAccountLinkCall
 	RetrieveCalls      []string
 	CreateInvoiceCalls []FakeCreateInvoiceCall
@@ -46,24 +50,30 @@ type FakeClient struct {
 	// incomplete / active" status GetConnectStatusHandler reports.
 	Statuses map[string]AccountStatus
 
+	// PaymentReferences, keyed by Stripe invoice id, is what
+	// RetrieveInvoicePaymentReference returns.
+	PaymentReferences map[string]string
+
 	CreateAccountErr     error
 	CreateAccountLinkErr error
 	RetrieveAccountErr   error
 	CreateInvoiceErr     error
 	FinalizeInvoiceErr   error
+	PaymentReferenceErr  error
 }
 
 // NewFakeClient returns a FakeClient with no recorded calls.
 func NewFakeClient() *FakeClient {
-	return &FakeClient{Statuses: map[string]AccountStatus{}}
+	return &FakeClient{Statuses: map[string]AccountStatus{}, PaymentReferences: map[string]string{}}
 }
 
 // CreateAccount returns a deterministic fake Stripe Connect account id, or
 // CreateAccountErr if a test set one.
-func (f *FakeClient) CreateAccount(_ context.Context, practiceID string) (string, error) {
+func (f *FakeClient) CreateAccount(_ context.Context, practiceID, practiceName string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.AccountCalls = append(f.AccountCalls, practiceID)
+	f.AccountNames = append(f.AccountNames, practiceName)
 	if f.CreateAccountErr != nil {
 		return "", f.CreateAccountErr
 	}
@@ -145,6 +155,23 @@ func (f *FakeClient) VerifyWebhookSignature(_ []byte, _, _ string) (WebhookEvent
 // zero-value AccountEvent and no error.
 func (f *FakeClient) ParseAccountEvent(_ []byte, _, _ string) (AccountEvent, error) {
 	return AccountEvent{}, nil
+}
+
+// RetrieveInvoicePaymentReference returns the reference a test set in
+// PaymentReferences for the invoice id (empty if unset), or
+// PaymentReferenceErr if a test set one.
+// coverage:ignore reason: PostConnectWebhookHandler's tests inject referenceClient (real signature verification over a stubbed lookup) rather than FakeClient, so this double's implementation is never called
+func (f *FakeClient) RetrieveInvoicePaymentReference(_ context.Context, _, invoiceID string) (string, error) {
+	// coverage:ignore reason: PostConnectWebhookHandler's tests inject referenceClient rather than FakeClient, so this double's implementation is never called
+	f.mu.Lock()
+	// coverage:ignore reason: PostConnectWebhookHandler's tests inject referenceClient rather than FakeClient, so this double's implementation is never called
+	defer f.mu.Unlock()
+	// coverage:ignore reason: PostConnectWebhookHandler's tests inject referenceClient rather than FakeClient, so this double's implementation is never called
+	if f.PaymentReferenceErr != nil {
+		return "", f.PaymentReferenceErr
+	}
+	// coverage:ignore reason: PostConnectWebhookHandler's tests inject referenceClient rather than FakeClient, so this double's implementation is never called
+	return f.PaymentReferences[invoiceID], nil
 }
 
 // AccountCallCount returns how many times CreateAccount has been called so

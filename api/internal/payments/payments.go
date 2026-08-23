@@ -109,7 +109,13 @@ type Client interface {
 	// Called at most once per Practice -- the caller persists the id on
 	// practices.stripe_connect_account_id and reuses it on every later
 	// onboarding attempt.
-	CreateAccount(ctx context.Context, practiceID string) (accountID string, err error)
+	//
+	// practiceName becomes the Account's display_name, which is what a
+	// Client sees as the "From" on their hosted invoice. Without it Stripe
+	// falls back to the statement descriptor, and the Client is billed by
+	// something like "DOULA.CLOU" rather than the Practice they hired
+	// (found in #247's walk).
+	CreateAccount(ctx context.Context, practiceID, practiceName string) (accountID string, err error)
 	// CreateAccountLink creates a single-use Stripe v2 Account Link for
 	// accountID's hosted merchant onboarding flow, tagged so its
 	// return/refresh redirects land back on practiceID's payments settings
@@ -137,6 +143,18 @@ type Client interface {
 	// FinalizeInvoice finalizes invoiceID on accountID's connected
 	// account, making it payable, and returns its hosted payment page URL.
 	FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (hostedInvoiceURL string, err error)
+	// RetrieveInvoicePaymentReference reports the Stripe id that identifies
+	// how invoiceID was actually paid -- the PaymentIntent id -- for the
+	// payments row's audit trail.
+	//
+	// It is a separate call because the invoice.paid *event* no longer
+	// carries it. Under API version 2026-07-29.dahlia an Invoice object has
+	// no payment_intent and no charge field at all; the mapping moved to
+	// the InvoicePayment object, which webhook payloads never include
+	// (verified against the Sandbox, #247). Returns an empty string, and no
+	// error, if Stripe reports no payment for the invoice -- a missing
+	// reference must not fail an otherwise good webhook.
+	RetrieveInvoicePaymentReference(ctx context.Context, accountID, invoiceID string) (reference string, err error)
 	// VerifyWebhookSignature verifies payload was sent by Stripe using
 	// secret and the Stripe-Signature header value sigHeader, returning
 	// the decoded event's raw JSON on success. This is the v1 *snapshot*

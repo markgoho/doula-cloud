@@ -110,16 +110,20 @@ func PostConnectHandler(client Client) http.Handler {
 		}
 
 		var accountID sql.NullString
+		var practiceName string
 		if err := tx.QueryRowContext(r.Context(),
-			`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
-		).Scan(&accountID); err != nil {
+			`SELECT stripe_connect_account_id, name FROM practices WHERE id = $1`, practiceID,
+		).Scan(&accountID, &practiceName); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if !accountID.Valid {
-			id, err := client.CreateAccount(r.Context(), practiceID)
+			// practiceName travels with the id so the Client's invoice
+			// reads "From <the Practice>" rather than a statement
+			// descriptor (#247).
+			id, err := client.CreateAccount(r.Context(), practiceID, practiceName)
 			if err != nil {
 				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return

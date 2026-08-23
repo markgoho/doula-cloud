@@ -523,7 +523,7 @@ func TestGetConnectStatusHandler_RetrieveFailureReturns500(t *testing.T) {
 // FakeClient.Statuses reports for it.
 func postConnectAsOwnerForStatusFixture(t *testing.T, db *testdb.DB, client *payments.FakeClient, practiceID string) string {
 	t.Helper()
-	accountID, err := client.CreateAccount(t.Context(), practiceID)
+	accountID, err := client.CreateAccount(t.Context(), practiceID, "Fixture Practice")
 	if err != nil {
 		t.Fatalf("CreateAccount fixture: %v", err)
 	}
@@ -533,4 +533,36 @@ func postConnectAsOwnerForStatusFixture(t *testing.T, db *testdb.DB, client *pay
 		t.Fatalf("seed stripe_connect_account_id: %v", err)
 	}
 	return accountID
+}
+
+// TestPostConnectHandler_PassesPracticeNameToStripe pins what #247's walk
+// found the hard way: with no display_name on the v2 Account, Stripe
+// falls back to the statement descriptor, and the Client's hosted invoice
+// said it was "From DOULA.CLOU" rather than from the Practice they hired.
+// The Practice's own name has to reach CreateAccount.
+func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-display-name"
+	practiceID := seedOwner(t, db, uid)
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	if len(client.AccountNames) != 1 {
+		t.Fatalf("AccountNames = %v, want exactly one CreateAccount call", client.AccountNames)
+	}
+	var want string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&want); err != nil {
+		t.Fatalf("read practice name: %v", err)
+	}
+	if client.AccountNames[0] != want {
+		t.Fatalf("display name sent to Stripe = %q, want the Practice's own name %q", client.AccountNames[0], want)
+	}
 }

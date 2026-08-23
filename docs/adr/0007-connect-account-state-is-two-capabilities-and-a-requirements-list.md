@@ -129,6 +129,30 @@ during onboarding. Hardcoded `us`, matching the USD credit Price and the USD
 currency on every InvoiceItem. A non-US Practice needs a country on the Practice
 itself, which nothing in the pilot asks for.
 
+## Two things the walk found that the API reference did not
+
+Both were invisible until a real Client paid a real invoice.
+
+**The Client saw the statement descriptor, not the Practice.** With no
+`display_name` on the v2 Account, Stripe falls back to the statement
+descriptor, so a walked invoice read **"From DOULA.CLOU"** — the platform's
+truncated descriptor — rather than the Practice the Client hired.
+`CreateAccount` now takes the Practice's name and sets `display_name`.
+
+**Every `payments` row was written with an empty Stripe reference.** Under
+API version `2026-07-29.dahlia` an Invoice carries neither `payment_intent`
+nor `charge`, and the `invoice.paid` event body carries no `payments` list
+either. The handler's `payment_intent` JSON tag therefore unmarshaled to
+`""` silently, and nothing failed. The mapping now lives on the
+InvoicePayment object, which webhook payloads never include, so the handler
+fetches it through the port. A failure to fetch logs and stores an empty
+reference rather than 500-ing: the money has already moved, and Stripe
+redelivering cannot improve on it.
+
+That second one is the argument for walking rather than reading. The field
+was gone from the API, the struct still had a tag for it, and the tests
+passed because the fixture supplied a field production never sends.
+
 ## What did not change
 
 The Invoice leg stays on v1 APIs. Stripe accepts a v2 account id on a v1 endpoint

@@ -53,10 +53,16 @@ const eventTypeMerchantCapabilityStatusUpdated = "v2.core.account[configuration.
 // Invoice's own amount_cents in principle, though v1 models no partial
 // payment), a Stripe reference for the payment itself, and the Unix
 // timestamp Stripe recorded the payment at.
+// The Stripe reference for the payment itself is deliberately absent
+// here. Under API version 2026-07-29.dahlia an Invoice carries neither
+// payment_intent nor charge, and the invoice.paid event body carries no
+// payments list either -- all three verified against the Sandbox during
+// #247's walk, where the old `payment_intent` field silently unmarshaled
+// to "" and every payments row was written with an empty reference. The
+// handler fetches it through the port instead.
 type invoicePaidObject struct {
 	ID                string `json:"id"`
 	AmountPaid        int64  `json:"amount_paid"`
-	PaymentIntentID   string `json:"payment_intent"`
 	StatusTransitions struct {
 		PaidAt int64 `json:"paid_at"`
 	} `json:"status_transitions"`
@@ -111,7 +117,7 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string) 
 
 		switch event.Type {
 		case eventTypeInvoicePaid:
-			handleInvoicePaid(w, r, db, event)
+			handleInvoicePaid(w, r, db, client, event)
 		case eventTypeInvoicePaymentFailed:
 			handleInvoicePaymentFailed(w, r, db, event)
 		default:
@@ -204,7 +210,7 @@ func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, ac
 // handleInvoicePaid applies #82's invoice.paid handling: resolves the
 // matching invoices row, creates exactly one payments row recording the
 // amount actually paid and when, and flips the Invoice's status to paid.
-func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) {
+func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent) {
 	var inv invoicePaidObject
 	if err := json.Unmarshal(event.Data, &inv); err != nil {
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -248,9 +254,19 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, event
 
 	paidAt := time.Unix(inv.StatusTransitions.PaidAt, 0).UTC()
 
+	// The reference is what makes a payments row traceable back to Stripe,
+	// and it is not in the event. A failure to fetch it must not lose the
+	// payment: log it and store an empty reference rather than 500 and
+	// have Stripe redeliver an event whose money already moved.
+	reference, err := client.RetrieveInvoicePaymentReference(r.Context(), event.Account, inv.ID)
+	if err != nil {
+		log.Printf("payments: connect webhook: invoice.paid %s recorded without a Stripe payment reference: %v", inv.ID, err)
+		reference = ""
+	}
+
 	if _, err := tx.ExecContext(r.Context(),
 		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, $2, $3, $4)`,
-		invoiceID, inv.PaymentIntentID, inv.AmountPaid, paidAt,
+		invoiceID, reference, inv.AmountPaid, paidAt,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)

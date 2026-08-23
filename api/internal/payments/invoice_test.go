@@ -249,7 +249,7 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedContract(t, db, engagementID)
 	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), practiceID)
+	accountID, err := client.CreateAccount(t.Context(), practiceID, "Fixture Practice")
 	if err != nil {
 		t.Fatalf("fixture CreateAccount: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestPostInvoiceHandler_InvalidAmountReturns400(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedContract(t, db, engagementID)
 	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), practiceID)
+	accountID, err := client.CreateAccount(t.Context(), practiceID, "Fixture Practice")
 	if err != nil {
 		t.Fatalf("fixture CreateAccount: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestPostInvoiceHandler_InvalidBodyReturns400(t *testing.T) {
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedContract(t, db, engagementID)
 	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), practiceID)
+	accountID, err := client.CreateAccount(t.Context(), practiceID, "Fixture Practice")
 	if err != nil {
 		t.Fatalf("fixture CreateAccount: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing(t *
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedContract(t, db, engagementID)
 	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), practiceID)
+	accountID, err := client.CreateAccount(t.Context(), practiceID, "Fixture Practice")
 	if err != nil {
 		t.Fatalf("fixture CreateAccount: %v", err)
 	}
@@ -475,7 +475,7 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedContract(t, db, engagementID)
 	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), practiceID)
+	accountID, err := client.CreateAccount(t.Context(), practiceID, "Fixture Practice")
 	if err != nil {
 		t.Fatalf("fixture CreateAccount: %v", err)
 	}

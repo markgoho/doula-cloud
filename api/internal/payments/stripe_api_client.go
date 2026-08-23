@@ -52,9 +52,14 @@ const connectMerchantConfiguration = "merchant"
 // That is what v1's type=standard did implicitly, and it is what keeps
 // Doula Cloud off the money-transmitter path -- there is no
 // ApplicationFeeAmount anywhere in this package (docs/environment.md).
-func (c *StripeAPIClient) CreateAccount(ctx context.Context, practiceID string) (string, error) {
+func (c *StripeAPIClient) CreateAccount(ctx context.Context, practiceID, practiceName string) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	acct, err := c.client.V2CoreAccounts.Create(ctx, &stripe.V2CoreAccountCreateParams{
+		// The Practice's own name, so the Client's hosted invoice reads
+		// "From <the Practice they hired>". Stripe falls back to the
+		// statement descriptor when this is unset, which showed a walked
+		// invoice as being from "DOULA.CLOU" (#247).
+		DisplayName: stripe.String(practiceName),
 		Identity: &stripe.V2CoreAccountCreateIdentityParams{
 			Country: stripe.String(connectAccountCountry),
 		},
@@ -292,6 +297,31 @@ func (c *StripeAPIClient) FinalizeInvoice(ctx context.Context, accountID, invoic
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	return inv.HostedInvoiceURL, nil
+}
+
+// RetrieveInvoicePaymentReference reports the PaymentIntent id behind
+// invoiceID's payment, read from the InvoicePayment list rather than the
+// Invoice itself: under this SDK's API version an Invoice carries neither
+// payment_intent nor charge.
+func (c *StripeAPIClient) RetrieveInvoicePaymentReference(ctx context.Context, accountID, invoiceID string) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params := &stripe.InvoicePaymentListParams{Invoice: stripe.String(invoiceID)}
+	params.StripeAccount = stripe.String(accountID)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	for payment, err := range c.client.V1InvoicePayments.List(ctx, params).All(ctx) {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if err != nil {
+			return "", fmt.Errorf("payments: list invoice payments: %w", err)
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if payment.Payment != nil && payment.Payment.PaymentIntent != nil {
+			return payment.Payment.PaymentIntent.ID, nil
+		}
+	}
+	// No payment recorded against the invoice. Not an error -- the caller
+	// stores an empty reference rather than rejecting the webhook.
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return "", nil
 }
 
 // VerifyWebhookSignature verifies payload against Stripe's HMAC-SHA256
