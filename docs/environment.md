@@ -80,12 +80,17 @@ arrive the same way:
 | `invoice.paid` | snapshot | `/api/stripe/connect-webhook` |
 | `invoice.payment_failed` | snapshot | `/api/stripe/connect-webhook` |
 
-`account.updated` is gone. A v2 account emits no v1 snapshot event at all
-(#247 verified this in the Sandbox: creating one produced six `v2.core.*`
-thin events and nothing on `/v1/events`), and one Stripe event destination
-carries one `event_payload` — subscribing a single destination to both a
-thin and a snapshot event type is rejected outright. Hence two Connect
-routes, not one.
+`account.updated` is no longer what we act on. A v2 account **does** still
+emit v1 snapshot `account.updated` on the connected account — an earlier
+#247 note claimed otherwise, from a check that listed the *platform's*
+`/v1/events` where connected-account events never appear. What is true is
+that the v1 payload carries the v1 model (three booleans), which cannot
+express the four-valued capability statuses the `practices` columns now
+hold. The authoritative v2 state comes as a thin event.
+
+One Stripe event destination also carries one `event_payload` —
+subscribing a single destination to both a thin and a snapshot event type
+is rejected outright. Hence two Connect routes, not one.
 
 All three surfaces share `STRIPE_API_KEY` and nothing else. **Three
 endpoints, three secrets**: `STRIPE_WEBHOOK_SECRET`,

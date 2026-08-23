@@ -89,10 +89,14 @@ Two smaller decisions fell out of the same question:
 
 Verified against the Sandbox rather than assumed:
 
-- **A v2 account emits no v1 snapshot event.** Creating a v2 Account produced six
-  `v2.core.*` thin events and nothing at all on `/v1/events`. `account.updated` is
-  gone; `v2.core.account[configuration.merchant].capability_status_updated` replaces
-  it.
+- **The v1 payload cannot carry the v2 model.** A v2 account *does* still emit v1
+  snapshot `account.updated` on the connected account — an earlier draft of this
+  ADR said it emitted none, which was wrong: that check listed the platform's
+  `/v1/events`, where connected-account events never appear, and the walk later
+  showed `account.updated` arriving. What holds is the reason that matters: the v1
+  payload is the three booleans, which cannot express four-valued capability
+  statuses or a requirements list. `v2.core.account[configuration.merchant].capability_status_updated`
+  is the event that can.
 - **One destination cannot carry both.** Subscribing one destination to a thin
   and a snapshot event type is rejected: *"Enabled events list contains 'thin'
   event types when event_payload is 'snapshot'."*

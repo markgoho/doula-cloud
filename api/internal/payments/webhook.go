@@ -27,11 +27,14 @@ const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 // abstracts away *stripe.Event), so stripe-go's own typed constants are
 // converted once here rather than hand-rolling the literals.
 //
-// #80's account.updated is gone. Accounts v2 emits no v1 snapshot event
-// for a connected account at all -- verified against the Sandbox on #247,
-// where creating a v2 Account produced six v2 thin events and nothing on
-// /v1/events. Account state now arrives at PostAccountWebhookHandler
-// below.
+// #80's account.updated is no longer what this endpoint acts on. A v2
+// account does still emit v1 snapshot account.updated on the connected
+// account, but its payload is the v1 model -- the three booleans -- which
+// cannot express the four-valued capability statuses the practices
+// columns now hold. The authoritative v2 state arrives as a thin event at
+// PostAccountWebhookHandler below. Any v1 account event that still
+// reaches this endpoint falls through to the default branch and is
+// logged and dropped.
 const (
 	eventTypeInvoicePaid          = string(stripe.EventTypeInvoicePaid)
 	eventTypeInvoicePaymentFailed = string(stripe.EventTypeInvoicePaymentFailed)
