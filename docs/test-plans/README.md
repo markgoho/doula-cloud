@@ -280,6 +280,8 @@ Every `automated` step passed. **No plan carries a `blocked` step any more** —
 One `journey-gap` issue per missing or broken capability, deduplicated across the nine plans — a capability that fails on several journeys has one issue, not one per plan. None carries a severity or a priority: the project is pre-launch and everything here is fixed before launch.
 
 
+**One entry point**: [#328](https://github.com/markgoho/doula-cloud/issues/328) holds the whole backlog and carries the dependency reading — which fixes close several tickets at once, and which decisions gate the rest. Behind all of it, [#329](https://github.com/markgoho/doula-cloud/issues/329) walks these nine plans **again** once every gap is closed, because a closed gap issue says a capability exists, not that the Persona can get through.
+
 **Grouped by Persona.** Each gap issue is a GitHub sub-issue of the parent for the journey that found it, so the tracker shows one progress bar per Persona:
 
 | Parent | Persona | Gaps here |
