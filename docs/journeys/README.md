@@ -47,9 +47,20 @@ its own ID.
 ## Status
 
 These are drafts against **proto-personas** — assumptions grounded in the schema
-and handlers, not in research. Every gap below is a hypothesis about the product,
-written from reading the code, and **not one of them has been executed yet**. The
-first run (`docs/test-plans/`) is the first real evidence.
+and handlers, not in research.
+
+**All nine have now been walked** ([#209](https://github.com/markgoho/doula-cloud/issues/209)),
+so the gaps below are no longer hypotheses read out of the code: each one was
+attempted against the running product. The walks minted eleven new gap IDs,
+narrowed three, and falsified one map's reasoning outright (Dee's stage 5).
+
+Every gap now carries an **Issue** column in its map's `## Gaps found` table,
+pointing at the `journey-gap` issue that owns the work — except where another
+wayfinding map owns the capability outright
+([#225](https://github.com/markgoho/doula-cloud/issues/225) for roles,
+employment type, attachment and Offer;
+[#212](https://github.com/markgoho/doula-cloud/issues/212) for the Client
+register).
 
 ## Practice side
 

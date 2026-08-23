@@ -39,7 +39,7 @@ the stage belongs to her even where the click does not.
 | --- | --- | --- | --- |
 | 1.1 | Sign in at `/portal/login` | `GET /api/portal/session` resolves one Engagement and lands on `/portal/engagements/[engagementId]` | `automated (client-portal-login.e2e.ts)` |
 | 1.2 | Read the thread and send a message | One continuous thread, in order, immutable (ADR-0002). Attachments upload both ways | `manual` |
-| 1.2-a | Find anything on screen saying this care is four months old | `Status: intake` and a **Created** date. No due date, no gestation, no Client detail of any kind | `missing-feature (MO-G3)` |
+| 1.2-a | Find anything on screen saying this care is four months old | `Status: intake` and a **Created** date. No due date, no gestation, no Client detail of any kind | `missing-feature (MO-G3)` [#252](https://github.com/markgoho/doula-cloud/issues/252) |
 
 ### Stage 2 — The loss; the Practice tries to mark it
 
@@ -47,9 +47,9 @@ Walked as Maya. Nadia is not in the app.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | Record **what happened** against the Engagement | `engagements` is `(id, client_id, practice_id, status, created_at)`. There is nowhere an outcome can live except a message | `missing-feature (NH-G3)` |
-| 2.1-a | Choose a status that is true after a loss | Four values. `active` says the pregnancy continues, `completed` says the work finished, `postpartum` describes a birth with a baby at the end of it, `intake` is where it already sits | `missing-feature (NH-G1)` |
-| 2.1-b | Set the status to any value at all | No handler writes `UPDATE engagements`. Even a true value could not be reached | `missing-feature (MO-G4)` |
+| 2.1 | Record **what happened** against the Engagement | `engagements` is `(id, client_id, practice_id, status, created_at)`. There is nowhere an outcome can live except a message | `missing-feature (NH-G3)` [#295](https://github.com/markgoho/doula-cloud/issues/295) |
+| 2.1-a | Choose a status that is true after a loss | Four values. `active` says the pregnancy continues, `completed` says the work finished, `postpartum` describes a birth with a baby at the end of it, `intake` is where it already sits | `missing-feature (NH-G1)` [#293](https://github.com/markgoho/doula-cloud/issues/293) |
+| 2.1-b | Set the status to any value at all | No handler writes `UPDATE engagements`. Even a true value could not be reached | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
 
 ### Stage 3 — Three weeks of not opening the portal
 
@@ -57,16 +57,16 @@ Walked as Maya. Nadia is not in the app.
 | --- | --- | --- | --- |
 | 3.1 | With her thread open, have Maya send a message | The tab refetches and the message appears. The push itself carries no content (ADR-0002) — asserted at the in-app fetch level, which is where the map draws the transport boundary | `automated (push-notification.e2e.ts)` |
 | 3.1-a | Close the tab and repeat | Nothing arrives carrying content. Real device delivery is out of scope for this effort | `manual` |
-| 3.2 | Wait, and watch for a reminder, a nudge, or a countdown | **Nothing happens**, and that is the finding. No reminder code exists in `api/`, a Visit carries no date (**MO-G1**), and the only push fires on a Message | `manual` |
+| 3.2 | Wait, and watch for a reminder, a nudge, or a countdown | **Nothing happens**, and that is the finding. No reminder code exists in `api/`, a Visit carries no date (**[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**), and the only push fires on a Message | `manual` |
 
 ### Stage 4 — She opens the portal — moment of truth
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 4.1 | Open `/portal/engagements/[engagementId]` after three weeks away | `GET /api/portal/engagements/{id}` returns `practiceName`, `status`, `createdAt` and the page renders | `automated (client-portal-login.e2e.ts)` |
-| 4.2 | Read the `<h1>` | **"Welcome to Rooted Birth Collective"** — a first-visit greeting, rendered unconditionally, naming the Practice rather than her (NH-G4) | `manual` |
+| 4.2 | Read the `<h1>` | **"Welcome to Rooted Birth Collective"** — a first-visit greeting, rendered unconditionally, naming the Practice rather than her ([NH-G4](https://github.com/markgoho/doula-cloud/issues/296)) | `manual` |
 | 4.2-a | Confirm the greeting is not gated on a first visit | The spec re-asserts the same `<h1>` on a fresh page in the same session. That proves it is not visit-gated; it does not prove what three weeks look like, which is 4.2's job | `automated (client-portal-login.e2e.ts)` |
-| 4.2-b | Read the status line and the date under it | `Status: intake` — the raw enum ([#212](https://github.com/markgoho/doula-cloud/issues/212)), still `intake` because status never moves — and **Created**, the only date the portal holds (**MO-G3**) | `manual` |
+| 4.2-b | Read the status line and the date under it | `Status: intake` — the raw enum ([#212](https://github.com/markgoho/doula-cloud/issues/212)), still `intake` because status never moves — and **Created**, the only date the portal holds (**[MO-G3](https://github.com/markgoho/doula-cloud/issues/252)**) | `manual` |
 | 4.3 | Read what is offered below | Two links, **Birth Plan** first, then **Contract**; then the thread | `manual` |
 
 ### Stage 5 — The Birth Plan will not go away
@@ -74,7 +74,7 @@ Walked as Maya. Nadia is not in the app.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 5.1 | Look at the portal home without tapping anything | The **Birth Plan** link is rendered unconditionally, second from the top | `manual` |
-| 5.1-a | Retire, hide, archive or dismiss it — from her side or Maya's | None of the four exist. A Plan Instance can be overwritten by Staff and nothing else; deletion is correctly ruled out | `missing-feature (NH-G2)` |
+| 5.1-a | Retire, hide, archive or dismiss it — from her side or Maya's | None of the four exist. A Plan Instance can be overwritten by Staff and nothing else; deletion is correctly ruled out | `missing-feature (NH-G2)` [#294](https://github.com/markgoho/doula-cloud/issues/294) |
 | 5.2 | Tap the link | The filled Instance renders read-only | `automated (birth-plan.e2e.ts)` |
 | 5.2-a | Press **Print** | The print stylesheet hides the Back link, the Print button and the chrome. The mechanism works | `manual` |
 
@@ -83,24 +83,24 @@ Walked as Maya. Nadia is not in the app.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 6.1 | Open the Contract link | The full signed prose renders. A `voided` Contract is not withheld; only the **Sign** form is, and only because it keys on `status === 'sent'` | `manual` |
-| 6.2 | Read the status | `Status: voided`, then "Voided — this Contract is no longer active." The Client portal reuses the Staff `ContractStatus` component and passes no `onVoid`, so she gets the ledger's word with no Void button and no human context (NH-G5) | `manual` |
-| 6.2-a | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` 404s outright once the Contract is `voided` — `serveSignedPDF` (`signed_pdf.go:66-69`) queries `WHERE status = 'signed'`, so linking it (HS-G3) would not be enough | `missing-feature (HS-G3, NH-G8)` |
-| 6.2-b | Find what she still owes, or what was refunded | The portal has no Invoice, balance or payment surface at all. The question she is most likely to have cannot be asked on screen | `missing-feature (NH-G6)` |
+| 6.2 | Read the status | `Status: voided`, then "Voided — this Contract is no longer active." The Client portal reuses the Staff `ContractStatus` component and passes no `onVoid`, so she gets the ledger's word with no Void button and no human context ([NH-G5](https://github.com/markgoho/doula-cloud/issues/212)) | `manual` |
+| 6.2-a | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` 404s outright once the Contract is `voided` — `serveSignedPDF` (`signed_pdf.go:66-69`) queries `WHERE status = 'signed'`, so linking it (HS-G3) would not be enough | `missing-feature (HS-G3, NH-G8)` [#302](https://github.com/markgoho/doula-cloud/issues/302) [#299](https://github.com/markgoho/doula-cloud/issues/299) |
+| 6.2-b | Find what she still owes, or what was refunded | The portal has no Invoice, balance or payment surface at all. The question she is most likely to have cannot be asked on screen | `missing-feature (NH-G6)` [#297](https://github.com/markgoho/doula-cloud/issues/297) |
 
 ### Stage 7 — Postpartum support continues anyway
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | As Maya, log a bereavement Visit | A row of a Staff name and a creation timestamp — no date (**MO-G1**), no type (**PR-G6**), no notes (**MO-G2**). Indistinguishable from the prenatal ones | `manual` |
+| 7.1 | As Maya, log a bereavement Visit | A row of a Staff name and a creation timestamp — no date (**[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**), no type (**[PR-G6](https://github.com/markgoho/doula-cloud/issues/281)**), no notes (**[MO-G2](https://github.com/markgoho/doula-cloud/issues/251)**). Indistinguishable from the prenatal ones | `manual` |
 | 7.1-a | As Nadia, find any trace of that Visit | None. There is no client-facing Visit surface (`CONTEXT.md`), by design. The support is real; the record of it is empty on both sides | `manual` |
 | 7.2 | Continue the thread both ways | Unchanged and unchangeable — immutable by design, which is correct here | `manual` |
-| 7.2-a | Mark that the thread's subject has changed, or pause push | Neither exists. Push unregistration happens only at sign-out, so her only mute is to leave | `missing-feature (NH-G7)` |
+| 7.2-a | Mark that the thread's subject has changed, or pause push | Neither exists. Push unregistration happens only at sign-out, so her only mute is to leave | `missing-feature (NH-G7)` [#298](https://github.com/markgoho/doula-cloud/issues/298) |
 
 ### Stage 8 — The record closes without erasing her
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 8.1 | Close the Engagement truthfully | It sits at `intake` forever. "Done looks like" is unreachable: the record is permanent, which is right, and permanently wrong, which is not | `missing-feature (NH-G1)` |
+| 8.1 | Close the Engagement truthfully | It sits at `intake` forever. "Done looks like" is unreachable: the record is permanent, which is right, and permanently wrong, which is not | `missing-feature (NH-G1)` [#293](https://github.com/markgoho/doula-cloud/issues/293) |
 
 8.1 is 2.1-a and 2.1-b met a second time, from her side rather than Maya's. Both
 stages are kept because the map keeps both, and because the run should record that
@@ -112,7 +112,7 @@ the same absence is hit twice by two different people.
 | --- | --- |
 | `automated` | 5 |
 | `manual` | 13 |
-| `missing-feature` | 9 (MO-G3, NH-G3, NH-G1 ×2, MO-G4, NH-G2, HS-G3 + NH-G8, NH-G6, NH-G7) |
+| `missing-feature` | 9 ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [NH-G3](https://github.com/markgoho/doula-cloud/issues/295), [NH-G1](https://github.com/markgoho/doula-cloud/issues/293) ×2, [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [NH-G2](https://github.com/markgoho/doula-cloud/issues/294), [HS-G3](https://github.com/markgoho/doula-cloud/issues/302) + [NH-G8](https://github.com/markgoho/doula-cloud/issues/299), [NH-G6](https://github.com/markgoho/doula-cloud/issues/297), [NH-G7](https://github.com/markgoho/doula-cloud/issues/298)) |
 
 No step is `blocked`. Stripe never reaches the Client portal, so nothing here waits
 on an account nobody has opened — **NH-G6** is a hole in the product, not a bill.
@@ -170,27 +170,27 @@ whichever side was about to act, immediately before each of its steps.
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
 | 1.2 | `manual` | as expected | One continuous thread; Maya's and Nadia's messages both appear in order, immutable |
-| 1.2-a | `missing-feature (MO-G3)` | confirmed | Engagement page (both sides) shows only `Status` and `Created` — no due date, no gestation, no other Client detail |
-| 2.1 | `missing-feature (NH-G3)` | confirmed | No control anywhere on the Engagement page records an outcome |
-| 2.1-a | `missing-feature (NH-G1)` | confirmed | No status value is offered anywhere in the UI — there is no status control to read a value from |
-| 2.1-b | `missing-feature (MO-G4)` | confirmed | Same absence — no status control exists to set any value with |
+| 1.2-a | `missing-feature (MO-G3)` [#252](https://github.com/markgoho/doula-cloud/issues/252) | confirmed | Engagement page (both sides) shows only `Status` and `Created` — no due date, no gestation, no other Client detail |
+| 2.1 | `missing-feature (NH-G3)` [#295](https://github.com/markgoho/doula-cloud/issues/295) | confirmed | No control anywhere on the Engagement page records an outcome |
+| 2.1-a | `missing-feature (NH-G1)` [#293](https://github.com/markgoho/doula-cloud/issues/293) | confirmed | No status value is offered anywhere in the UI — there is no status control to read a value from |
+| 2.1-b | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) | confirmed | Same absence — no status control exists to set any value with |
 | 3.1-a | `manual` | as expected, confirmed by inspection not by walking | Closing the tab was not exercised live; grounded instead in the same fact the journey map already cites (no reminder machinery in `api/`, content-free push by design, ADR-0002) — nothing was found to contradict it |
 | 3.2 | `manual` | as expected, confirmed by inspection not by walking | Not literally waited out; grounded the same way as 3.1-a — no reminder/nudge/countdown code exists anywhere in `api/` |
-| 4.2 | `manual` | as expected, one correction | `<h1>` reads **"Welcome to Willow Creek Doula Care"** — the actual Practice name, confirming NH-G4's `{practiceName}` template. (The plan's illustrative text names "Rooted Birth Collective", a different Practice used as the shared fixture in other personas' plans; the mechanism, not the literal string, is what NH-G4 claims, and it holds.) |
+| 4.2 | `manual` | as expected, one correction | `<h1>` reads **"Welcome to Willow Creek Doula Care"** — the actual Practice name, confirming [NH-G4](https://github.com/markgoho/doula-cloud/issues/296)'s `{practiceName}` template. (The plan's illustrative text names "Rooted Birth Collective", a different Practice used as the shared fixture in other personas' plans; the mechanism, not the literal string, is what NH-G4 claims, and it holds.) |
 | 4.2-b | `manual` | as expected | `Status: intake`, `Created: 8/23/2026` — the only date the portal holds |
 | 4.3 | `manual` | as expected | **Birth Plan** then **Contract**, then the thread — same order every time |
 | 5.1 | `manual` | as expected | **Birth Plan** link renders unconditionally, second from the top |
-| 5.1-a | `missing-feature (NH-G2)` | confirmed | No retire/hide/archive/dismiss control on either side — Staff's Birth Plan section offers only **Save Birth Plan** |
+| 5.1-a | `missing-feature (NH-G2)` [#294](https://github.com/markgoho/doula-cloud/issues/294) | confirmed | No retire/hide/archive/dismiss control on either side — Staff's Birth Plan section offers only **Save Birth Plan** |
 | 5.2-a | `manual` | as expected | `page.emulateMedia({ media: 'print' })` hides both **Back** and **Print** (`isVisible()` false for both); the print mechanism works |
 | 6.1 | `manual` | as expected | A voided Contract still renders its full signed prose on the Client side |
-| 6.2 | `manual` | as expected | `Status: voided`, then "Voided — this Contract is no longer active." — the ledger's word, no Void button, no human context (NH-G5) |
-| 6.2-a | `missing-feature (HS-G3)`, reasoning corrected, new gap **NH-G8** minted | **falsified in part** | The plan's claim was that the endpoint is merely unlinked. It is worse: `GET /api/portal/engagements/{id}/contract/pdf` itself 404s ("no signed contract found for this engagement") once the Contract is `voided`, confirmed with a direct `fetch()` from the page. `serveSignedPDF` (`api/internal/contracts/signed_pdf.go:66-69`) queries `WHERE ... AND status = $2::contract_status` bound to `statusSigned` — a Contract that has since moved to any other status, voided included, can never resolve a row, even though `signed_pdf_object_path` is still set and the PDF still exists in the store. Fixing HS-G3 (adding a link) would not fix this: the endpoint itself refuses. Distinct root from HS-G3, which is about the missing link on a Contract that is still `signed`; this is about the query excluding every Contract that is not. Same shared function backs the Staff-side signed-PDF route (`main.go:208`), so a Practice loses its own copy of a voided Contract too, once it is voided — noted here since this map owns the void transition, not asserted as a Staff-side finding of this plan. |
-| 6.2-b | `missing-feature (NH-G6)` | confirmed | No Invoice, balance, or payment surface anywhere in the portal — the portal's links are Birth Plan and Contract only |
+| 6.2 | `manual` | as expected | `Status: voided`, then "Voided — this Contract is no longer active." — the ledger's word, no Void button, no human context ([NH-G5](https://github.com/markgoho/doula-cloud/issues/212)) |
+| 6.2-a | `missing-feature (HS-G3)` [#302](https://github.com/markgoho/doula-cloud/issues/302), reasoning corrected, new gap **[NH-G8](https://github.com/markgoho/doula-cloud/issues/299)** minted | **falsified in part** | The plan's claim was that the endpoint is merely unlinked. It is worse: `GET /api/portal/engagements/{id}/contract/pdf` itself 404s ("no signed contract found for this engagement") once the Contract is `voided`, confirmed with a direct `fetch()` from the page. `serveSignedPDF` (`api/internal/contracts/signed_pdf.go:66-69`) queries `WHERE ... AND status = $2::contract_status` bound to `statusSigned` — a Contract that has since moved to any other status, voided included, can never resolve a row, even though `signed_pdf_object_path` is still set and the PDF still exists in the store. Fixing HS-G3 (adding a link) would not fix this: the endpoint itself refuses. Distinct root from HS-G3, which is about the missing link on a Contract that is still `signed`; this is about the query excluding every Contract that is not. Same shared function backs the Staff-side signed-PDF route (`main.go:208`), so a Practice loses its own copy of a voided Contract too, once it is voided — noted here since this map owns the void transition, not asserted as a Staff-side finding of this plan. |
+| 6.2-b | `missing-feature (NH-G6)` [#297](https://github.com/markgoho/doula-cloud/issues/297) | confirmed | No Invoice, balance, or payment surface anywhere in the portal — the portal's links are Birth Plan and Contract only |
 | 7.1 | `manual` | as expected | A fourth Visit row: `Maya Okonkwo`, `8/23/2026` — indistinguishable from the first three |
 | 7.1-a | `manual` | as expected | No Visit surface on the Client side at all — the portal home's only links remain Birth Plan and Contract |
 | 7.2 | `manual` | as expected | The thread continues both ways; nothing marks that its subject has changed |
-| 7.2-a | `missing-feature (NH-G7)` | confirmed | No mute, pause, or subject-change control on either side's Messages section |
-| 8.1 | `missing-feature (NH-G1)` | confirmed | Same absence as 2.1-a/2.1-b, observed a second time from the Client's own side |
+| 7.2-a | `missing-feature (NH-G7)` [#298](https://github.com/markgoho/doula-cloud/issues/298) | confirmed | No mute, pause, or subject-change control on either side's Messages section |
+| 8.1 | `missing-feature (NH-G1)` [#293](https://github.com/markgoho/doula-cloud/issues/293) | confirmed | Same absence as 2.1-a/2.1-b, observed a second time from the Client's own side |
 
 **22 steps walked: 13 `manual`, 9 `missing-feature`. Every mark holds; one
 reasoning corrected (6.2-a) and one new gap minted (NH-G8, added to

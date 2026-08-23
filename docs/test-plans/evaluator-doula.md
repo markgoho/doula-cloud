@@ -24,8 +24,8 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 1.1 | Follow a link from a search result or a Facebook group | There is nowhere to arrive. No marketing site exists | `missing-feature (TB-G1)` |
-| 1.2 | Read what the product is for, looking for "doula" and "birth plan" before giving anyone an email address | No such page exists in or out of the product | `missing-feature (TB-G1)` |
+| 1.1 | Follow a link from a search result or a Facebook group | There is nowhere to arrive. No marketing site exists | `missing-feature (TB-G1)` [#284](https://github.com/markgoho/doula-cloud/issues/284) |
+| 1.2 | Read what the product is for, looking for "doula" and "birth plan" before giving anyone an email address | No such page exists in or out of the product | `missing-feature (TB-G1)` [#284](https://github.com/markgoho/doula-cloud/issues/284) |
 
 **Abandon check**: she never arrives at all.
 
@@ -33,7 +33,7 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | Look for a price, per month, for two doulas | No price is published anywhere, inside the product or outside it | `missing-feature (TB-G2)` |
+| 2.1 | Look for a price, per month, for two doulas | No price is published anywhere, inside the product or outside it | `missing-feature (TB-G2)` [#285](https://github.com/markgoho/doula-cloud/issues/285) |
 | 2.1-a | Open the only money surface that does exist, `/practices/[practiceId]/billing`, once signed up | It sells "credits" and nothing says what a credit buys | `manual` |
 
 **Abandon check**: an unanswered price reads as expensive.
@@ -65,7 +65,7 @@ marketing site is out of scope for this map).
 | --- | --- | --- | --- |
 | 5.1 | Open `/practices/[practiceId]/clients/new` and enter a made-up name and email | Two fields; she must invent a Client to see any real screen | `manual` |
 | 5.2 | Press **Add Client** | A Client **and** an Engagement at `intake` are created — there is no way to make one without the other — and one of her three credits is silently spent | `manual` |
-| 5.2-a | Look for any warning that the trial has a size | None. The wall arrives at her fourth Client with a `402` (MO-G9) | `manual` |
+| 5.2-a | Look for any warning that the trial has a size | None. The wall arrives at her fourth Client with a `402` ([MO-G9](https://github.com/markgoho/doula-cloud/issues/257)) | `manual` |
 | 5.3 | Open the Engagement from the Clients list | The Engagement page renders | `automated (birth-plan.e2e.ts)` |
 | 5.4 | Read the page | Visits, Care Plan, Birth Plan, Contract, Invoices and Messages. **The first moment the product looks like doula work** — four clicks past where she was deciding whether to leave | `manual` |
 
@@ -73,7 +73,7 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 6.1 | Export her data — any format — or delete the account | No export of any kind and no account deletion. "Can I get out again?" is unanswerable | `missing-feature (TB-G5)` |
+| 6.1 | Export her data — any format — or delete the account | No export of any kind and no account deletion. "Can I get out again?" is unanswerable | `missing-feature (TB-G5)` [#288](https://github.com/markgoho/doula-cloud/issues/288) |
 
 **Abandon check**: half her stated question has no answer.
 
@@ -81,8 +81,8 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Import two years of Clients from a spreadsheet | No import exists | `missing-feature (TB-G6)` |
-| 7.1-a | Reproduce one spreadsheet row by hand instead | Impossible: only name and email can be typed, so the row cannot be carried across even manually (MO-G3) | `manual` |
+| 7.1 | Import two years of Clients from a spreadsheet | No import exists | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) |
+| 7.1-a | Reproduce one spreadsheet row by hand instead | Impossible: only name and email can be typed, so the row cannot be carried across even manually ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252)) | `manual` |
 
 **Abandon check**: her existing data is the reason switching is expensive, and it
 cannot come with her.
@@ -93,7 +93,7 @@ cannot come with her.
 | --- | --- |
 | `automated` | 1 |
 | `manual` | 13 |
-| `missing-feature` | 5 steps over 4 gaps (TB-G1, TB-G2, TB-G5, TB-G6) |
+| `missing-feature` | 5 steps over 4 gaps ([TB-G1](https://github.com/markgoho/doula-cloud/issues/284), [TB-G2](https://github.com/markgoho/doula-cloud/issues/285), [TB-G5](https://github.com/markgoho/doula-cloud/issues/288), [TB-G6](https://github.com/markgoho/doula-cloud/issues/289)) |
 
 TB-G3 (unexplained credits), TB-G4 (the admin-menu first screen) and TB-G7 (the
 unsignposted roster model) are observed at 2.1-a, 4.1-a and 3.3-a: all three
@@ -130,24 +130,24 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
-| 1.1 | `missing-feature (TB-G1)` | as expected | Unwalkable, and the gap needs one word changed: a Hugo **scaffold** exists (`hugo/hugo.toml`, `hugo/layouts/index.html`), it is wired to its own Firebase Hosting target (`firebase.json`, target `hugo`), and what it publishes is `<h1>Hello, World!</h1>` and nothing else (`hugo/public/index.html`). There is no `content/` directory. So the site is not absent — it is empty, which is the same nowhere to arrive at |
-| 1.2 | `missing-feature (TB-G1)` | as expected | The words "doula" and "birth plan" appear nowhere in `hugo/` |
-| 2.1 | `missing-feature (TB-G2)` | as expected | No price in `hugo/`, and none in the app. **Sharper than the plan claimed**: the one screen that sells credits shows no price either — see 2.1-a |
-| 2.1-a | `manual` | as expected | `Billing` — `Credit balance: 3`, one ledger row `8/22/2026, 12:43:58 PM / signup_bonus / +3`, then `Quantity [1]` and a **Buy credits** button. Nothing says what a credit buys, what one costs, or what `signup_bonus` is — the origin is printed as the raw enum. Pressing **Buy credits** used to return `internal error` (HTTP 500) with no Stripe key. Re-run 2026-08-22 against the Sandbox ([#242](https://github.com/markgoho/doula-cloud/issues/242)): it now opens Stripe Checkout and a paid Session credits the ledger from the `checkout.session.completed` webhook. **TB-G2 and TB-G3 stand unchanged** — a credit costs $5.00 and the screen still never says so, nor what a credit buys; the price is visible only once the Practice has already left for Stripe |
+| 1.1 | `missing-feature (TB-G1)` [#284](https://github.com/markgoho/doula-cloud/issues/284) | as expected | Unwalkable, and the gap needs one word changed: a Hugo **scaffold** exists (`hugo/hugo.toml`, `hugo/layouts/index.html`), it is wired to its own Firebase Hosting target (`firebase.json`, target `hugo`), and what it publishes is `<h1>Hello, World!</h1>` and nothing else (`hugo/public/index.html`). There is no `content/` directory. So the site is not absent — it is empty, which is the same nowhere to arrive at |
+| 1.2 | `missing-feature (TB-G1)` [#284](https://github.com/markgoho/doula-cloud/issues/284) | as expected | The words "doula" and "birth plan" appear nowhere in `hugo/` |
+| 2.1 | `missing-feature (TB-G2)` [#285](https://github.com/markgoho/doula-cloud/issues/285) | as expected | No price in `hugo/`, and none in the app. **Sharper than the plan claimed**: the one screen that sells credits shows no price either — see 2.1-a |
+| 2.1-a | `manual` | as expected | `Billing` — `Credit balance: 3`, one ledger row `8/22/2026, 12:43:58 PM / signup_bonus / +3`, then `Quantity [1]` and a **Buy credits** button. Nothing says what a credit buys, what one costs, or what `signup_bonus` is — the origin is printed as the raw enum. Pressing **Buy credits** used to return `internal error` (HTTP 500) with no Stripe key. Re-run 2026-08-22 against the Sandbox ([#242](https://github.com/markgoho/doula-cloud/issues/242)): it now opens Stripe Checkout and a paid Session credits the ledger from the `checkout.session.completed` webhook. **[TB-G2](https://github.com/markgoho/doula-cloud/issues/285) and [TB-G3](https://github.com/markgoho/doula-cloud/issues/286) stand unchanged** — a credit costs $5.00 and the screen still never says so, nor what a credit buys; the price is visible only once the Practice has already left for Stripe |
 | 3.1 | `manual` | as expected | `/signup`: heading `Sign up your Practice`, four fields, one **Create Practice** button. No email confirmation, no terms, no link back to anything |
 | 3.2 | `manual` | as expected | The first field is labelled `Practice name`, exactly as the abandon check predicted |
 | 3.3 | `manual` | as expected | Landed on `/practices/{id}`. DB after: **one** `practices` row, **one** `staff` row, one `practice_memberships` row with `{owner,office_manager,doula}` — the three roles in one statement, as claimed. **The stage-3 timing claim ("under a minute") was not tested**: a driven browser types faster than a person, so any number here would be fiction |
-| 3.3-a | `manual` (was `missing-feature (TB-G7)`) | **falsified** | The **Staff** link on the first screen opens a roster with a `Roles` column reading `owner, office_manager, doula`. She *can* learn that roles exist, in one click. TB-G7 is narrowed, not deleted: nothing signposts it, the only Action offered is `End sessions everywhere` (no role can be changed — RA-G2, owned by Renata's map), and the word on screen is `office_manager`, which is the schema's word and not **Admin** (#204). See the journey map's revised TB-G7 row |
+| 3.3-a | `manual` (was `missing-feature (TB-G7)` [#290](https://github.com/markgoho/doula-cloud/issues/290)) | **falsified** | The **Staff** link on the first screen opens a roster with a `Roles` column reading `owner, office_manager, doula`. She *can* learn that roles exist, in one click. TB-G7 is narrowed, not deleted: nothing signposts it, the only Action offered is `End sessions everywhere` (no role can be changed — [RA-G2](https://github.com/markgoho/doula-cloud/issues/261), owned by Renata's map), and the word on screen is `office_manager`, which is the schema's word and not **Admin** (#204). See the journey map's revised TB-G7 row |
 | 4.1 | `manual` | as expected | `Welcome to Bell & Co Birth Support` and the seven links in the order the plan lists them. One control the plan does not name: a `Sign out` button in the banner. That is the whole screen |
 | 4.1-a | `manual` | as expected | The complete body text is `Sign out / Welcome to Bell & Co Birth Support / Clients Billing Invite a Staff member Staff Plan Templates Contract Template Payments`. Neither "birth plan" nor "visit" appears |
 | 4.2 | `manual` | as expected | Seven links, flat, no descriptions, no empty-state prompt, no ordering cue |
 | 5.1 | `manual` | as expected | `Add a Client`: two fields, `Their name` and `Their email`. Nothing on the screen mentions credits |
 | 5.2 | `manual` | as expected | One `clients` row, one `engagements` row at `intake`, and a `credit_ledger` row `consumption / -1` at the identical timestamp. Nothing on screen said a credit was spent. **The plan's route is one click long, not two**: **Add Client** lands straight on the Engagement page — she never passes through the Clients list |
 | 5.2-a | `manual` | as expected | No warning of any kind, on either screen |
-| 5.4 | `manual` | as expected, with one correction | The Engagement page shows `Test Client One`, `Status intake` (raw enum), `Created`, `Send portal invite`, Visits, Care Plan, Birth Plan, Contract, Messages. **Three clicks from the first screen, not four** (Clients → Add a Client → Add Client), because 5.2 lands her here. The Visits table's `Date` column is `visit.createdAt` (`app/src/routes/practices/[practiceId]/engagements/[engagementId]/+page.svelte:525`) — a column labelled Date that holds when the row was typed. Corroborates **MO-G1**; no new gap |
-| 6.1 | `missing-feature (TB-G5)` | as expected | Unwalkable and confirmed at the route table: `api/main.go:137-236` registers no export, no download, and no account deletion. The seven links carry no account or settings screen, and the Clients list offers no export |
-| 7.1 | `missing-feature (TB-G6)` | as expected | Same route table: no import endpoint exists |
-| 7.1-a | `manual` | as expected | Walked and impossible, as claimed: `Add a Client` accepts a name and an email and nothing else (**MO-G3**) |
+| 5.4 | `manual` | as expected, with one correction | The Engagement page shows `Test Client One`, `Status intake` (raw enum), `Created`, `Send portal invite`, Visits, Care Plan, Birth Plan, Contract, Messages. **Three clicks from the first screen, not four** (Clients → Add a Client → Add Client), because 5.2 lands her here. The Visits table's `Date` column is `visit.createdAt` (`app/src/routes/practices/[practiceId]/engagements/[engagementId]/+page.svelte:525`) — a column labelled Date that holds when the row was typed. Corroborates **[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**; no new gap |
+| 6.1 | `missing-feature (TB-G5)` [#288](https://github.com/markgoho/doula-cloud/issues/288) | as expected | Unwalkable and confirmed at the route table: `api/main.go:137-236` registers no export, no download, and no account deletion. The seven links carry no account or settings screen, and the Clients list offers no export |
+| 7.1 | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) | as expected | Same route table: no import endpoint exists |
+| 7.1-a | `manual` | as expected | Walked and impossible, as claimed: `Add a Client` accepts a name and an email and nothing else (**[MO-G3](https://github.com/markgoho/doula-cloud/issues/252)**) |
 
 **12 `manual` steps walked, 1 re-marked from `missing-feature`; 5 remaining
 `missing-feature` steps confirmed unwalkable; 0 `blocked` steps (this plan has

@@ -162,18 +162,18 @@ it, because there is no click to record.
 
 ## Gaps found
 
-| ID | Stage | Layer | Gap |
-| --- | --- | --- | --- |
-| RA-G1 | 2 | Both | Invitations send no email. The Owner must copy a link and deliver it out of band. |
-| RA-G2 | 3 | Interaction | No role-assignment UI. The `PATCH .../roles` endpoint exists but nothing calls it, so the roster cannot be built in the product. |
-| RA-G3 | 3 | Both | The Staff list renders raw enum values, so an Admin shows on screen as `office_manager` — the word `CONTEXT.md` ruled out. |
-| RA-G4 | 4 | Interaction | An Engagement has no assigned Doula. No column, no endpoint, no screen. Assignment exists only per Visit. |
-| RA-G5 | 8 | Experience | No coverage or availability view, and no dated Visits to build one from. Her stated anxiety has no surface at all. |
-| RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. |
-| RA-G7 | 7 | Interaction | No Practice-wide Invoice or unpaid list. Invoices are reachable only inside a single Engagement's Contract. |
-| RA-G8 | 2 | Interaction | An invitation carries no roles. `InviteHandler` takes a name and an email and inserts a membership with `roles = '{}'` (`api/internal/staffauth/invite.go:67`), so a zero-role membership is the only possible outcome of inviting anyone. Distinct root from RA-G2: a role-assignment UI alone would not fix the endpoint's contract. [ADR-0006](../adr/0006-read-follows-the-role.md) abolishes the zero-role state by putting roles on the invitation. |
-| RA-G9 | 1 | Interaction | The **Payments** tile is not owner-gated, and `GET .../payments/connect` carries no role gate either (`api/internal/payments/connect.go:163-165`, unlike its `POST` sibling at line 96). So every Staff member — including the zero-role member RA-G8 says an invitation must produce — is *offered* the Practice's Stripe account state and reads it: a Doula's `GET` answered `200 {"status":"not_connected",…}`. [ADR-0006](../adr/0006-read-follows-the-role.md)'s table has no row for Stripe Connect state, so this is a read rule the ADR cannot yet be implemented against, not only a mis-placed link. |
-| RA-G10 | 4 | Both | A Visit cannot be created for a colleague, only reassigned to one — and reassignment asks for a staff UUID by hand. `POST .../visits` takes no body and assigns the caller; the only way to put Jo on a Visit is to paste her id into a free-text box, and no screen in the product prints a staff id. Distinct root from RA-G4: even the Visit-level assignment the model *does* have is unreachable for anyone but yourself. |
+| ID | Stage | Layer | Gap | Issue |
+| --- | --- | --- | --- | --- |
+| RA-G1 | 2 | Both | Invitations send no email. The Owner must copy a link and deliver it out of band. | [#260](https://github.com/markgoho/doula-cloud/issues/260) |
+| RA-G2 | 3 | Interaction | No role-assignment UI. The `PATCH .../roles` endpoint exists but nothing calls it, so the roster cannot be built in the product. | [#261](https://github.com/markgoho/doula-cloud/issues/261) |
+| RA-G3 | 3 | Both | The Staff list renders raw enum values, so an Admin shows on screen as `office_manager` — the word `CONTEXT.md` ruled out. | [#262](https://github.com/markgoho/doula-cloud/issues/262) |
+| RA-G4 | 4 | Interaction | An Engagement has no assigned Doula. No column, no endpoint, no screen. Assignment exists only per Visit. | [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| RA-G5 | 8 | Experience | No coverage or availability view, and no dated Visits to build one from. Her stated anxiety has no surface at all. | [#263](https://github.com/markgoho/doula-cloud/issues/263) |
+| RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. | [#264](https://github.com/markgoho/doula-cloud/issues/264) |
+| RA-G7 | 7 | Interaction | No Practice-wide Invoice or unpaid list. Invoices are reachable only inside a single Engagement's Contract. | [#265](https://github.com/markgoho/doula-cloud/issues/265) |
+| RA-G8 | 2 | Interaction | An invitation carries no roles. `InviteHandler` takes a name and an email and inserts a membership with `roles = '{}'` (`api/internal/staffauth/invite.go:67`), so a zero-role membership is the only possible outcome of inviting anyone. Distinct root from RA-G2: a role-assignment UI alone would not fix the endpoint's contract. [ADR-0006](../adr/0006-read-follows-the-role.md) abolishes the zero-role state by putting roles on the invitation. | [#266](https://github.com/markgoho/doula-cloud/issues/266) |
+| RA-G9 | 1 | Interaction | The **Payments** tile is not owner-gated, and `GET .../payments/connect` carries no role gate either (`api/internal/payments/connect.go:163-165`, unlike its `POST` sibling at line 96). So every Staff member — including the zero-role member RA-G8 says an invitation must produce — is *offered* the Practice's Stripe account state and reads it: a Doula's `GET` answered `200 {"status":"not_connected",…}`. [ADR-0006](../adr/0006-read-follows-the-role.md)'s table has no row for Stripe Connect state, so this is a read rule the ADR cannot yet be implemented against, not only a mis-placed link. | [#267](https://github.com/markgoho/doula-cloud/issues/267) |
+| RA-G10 | 4 | Both | A Visit cannot be created for a colleague, only reassigned to one — and reassignment asks for a staff UUID by hand. `POST .../visits` takes no body and assigns the caller; the only way to put Jo on a Visit is to paste her id into a free-text box, and no screen in the product prints a staff id. Distinct root from RA-G4: even the Visit-level assignment the model *does* have is unreachable for anyone but yourself. | [#268](https://github.com/markgoho/doula-cloud/issues/268) |
 
 Also hit here, filed on their owning maps: **MO-G4** (an Engagement's status never
 changes, so her one status column is dead), **MO-G1** (dateless Visits, which is

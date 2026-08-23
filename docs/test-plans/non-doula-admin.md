@@ -25,22 +25,22 @@
 | --- | --- | --- | --- |
 | 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `manual` |
 | 1.2 | Set email and password, press **Accept invite** | `POST /api/staff/accept-invite` creates the membership with zero roles | `manual` |
-| 1.3 | Choose the Practice from the membership list | **Nothing to choose** — one membership, so `decideLanding` redirects straight to `/practices/[practiceId]` (`app/src/lib/landing.ts:24-26`) and the picker never renders. Unwalkable for anyone until LV-G2 | `manual` |
+| 1.3 | Choose the Practice from the membership list | **Nothing to choose** — one membership, so `decideLanding` redirects straight to `/practices/[practiceId]` (`app/src/lib/landing.ts:24-26`) and the picker never renders. Unwalkable for anyone until [LV-G2](https://github.com/markgoho/doula-cloud/issues/225) | `manual` |
 
 ### Stage 2 — Receive the Admin role
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | As the Owner, set `office_manager` on Dee's membership from a screen | No screen does this | `missing-feature (RA-G2)` |
-| 2.1-a | Set it with `PATCH .../staff/{staffId}/roles` instead | Succeeds for an Owner; the Staff screen then prints `office_manager`, not "Admin" (RA-G3) | `manual` |
+| 2.1 | As the Owner, set `office_manager` on Dee's membership from a screen | No screen does this | `missing-feature (RA-G2)` [#261](https://github.com/markgoho/doula-cloud/issues/261) |
+| 2.1-a | Set it with `PATCH .../staff/{staffId}/roles` instead | Succeeds for an Owner; the Staff screen then prints `office_manager`, not "Admin" ([RA-G3](https://github.com/markgoho/doula-cloud/issues/262)) | `manual` |
 
 ### Stage 3 — Discover what the Admin role grants
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 3.1 | Land on `/practices/[practiceId]` | **Three** tiles: Clients, Billing and **Payments**. Four tiles are owner-gated; Payments sits outside the block (RA-G9) | `manual` |
+| 3.1 | Land on `/practices/[practiceId]` | **Three** tiles: Clients, Billing and **Payments**. Four tiles are owner-gated; Payments sits outside the block ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) | `manual` |
 | 3.1-a | Compare this run against the zero-role run | **Identical.** `office_manager` is read nowhere in the codebase; the role grants nothing and withholds nothing | `manual` |
-| 3.2 | Open Billing | The Practice's credit balance and purchase ledger render for a non-owner — `billing/balance.go` takes any Staff member (DW-G4) | `manual` |
+| 3.2 | Open Billing | The Practice's credit balance and purchase ledger render for a non-owner — `billing/balance.go` takes any Staff member ([DW-G4](https://github.com/markgoho/doula-cloud/issues/272)) | `manual` |
 | 3.2-a | Attempt to buy credits | Refused: `billing/purchase.go` requires Owner. **This refusal is correct** | `manual` |
 
 The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads it
@@ -50,15 +50,15 @@ as a non-owner, which is the case that matters here.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Open `/practices/[practiceId]/clients/new` | Two fields, Name and Email — against a page of notes from the call (MO-G3) | `manual` |
+| 4.1 | Open `/practices/[practiceId]/clients/new` | Two fields, Name and Email — against a page of notes from the call ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252)) | `manual` |
 | 4.2 | Press **Add Client** | `POST .../clients` is not owner-gated, so it **passes** for Dee; Client and Engagement are created at `intake` | `manual` |
 
 ### Stage 5 — Assign a Doula
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 5.1 | Open the Engagement and look for an assignment control | None exists | `missing-feature (RA-G4)` |
-| 5.2 | Create a Visit naming the Doula instead | **Refused.** `POST .../visits` requires the Doula role (`api/internal/visit/roles.go:41`); **Add a Visit** renders for Dee and answers `403 only a Staff member with the Doula role can do that` (DW-G6) | `manual` |
+| 5.1 | Open the Engagement and look for an assignment control | None exists | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 5.2 | Create a Visit naming the Doula instead | **Refused.** `POST .../visits` requires the Doula role (`api/internal/visit/roles.go:41`); **Add a Visit** renders for Dee and answers `403 only a Staff member with the Doula role can do that` ([DW-G6](https://github.com/markgoho/doula-cloud/issues/274)) | `manual` |
 
 ### Stage 6 — Send the Contract
 
@@ -67,7 +67,7 @@ as a non-owner, which is the case that matters here.
 | 6.1 | Send the portal invite | `POST .../portal-invite` succeeds for a non-owner | `manual` |
 | 6.2 | Build the Contract | `POST .../contract` creates it at `draft` — not owner-gated | `manual` |
 | 6.3 | Send it | Status `sent` | `manual` |
-| 6.3-a | Try to edit the Practice's **Contract Template** | Refused: `contracts/template.go:75` requires Owner. The page still renders and shows the real template first (PR-G4) | `manual` |
+| 6.3-a | Try to edit the Practice's **Contract Template** | Refused: `contracts/template.go:75` requires Owner. The page still renders and shows the real template first ([PR-G4](https://github.com/markgoho/doula-cloud/issues/279)) | `manual` |
 
 ### Stage 7 — Track the signature
 
@@ -75,8 +75,8 @@ as a non-owner, which is the case that matters here.
 | --- | --- | --- | --- |
 | 7.1 | Open the Engagement and read the Contract status | One of `draft` / `sent` / `signed` / `voided` | `manual` |
 | 7.1-a | Void a **signed** Contract from the Engagement page | The **Void** button renders only on a `signed` Contract (`ContractStatus.svelte`) and `POST .../contract/void` succeeds for a non-owner — `contracts/void.go:30` has no role check, only `staffauth.Middleware`. `signed` is the only status it accepts; anything else 409s. The Contract becomes `voided`, terminal, and still renders in full | `manual` |
-| 7.2 | Find every Engagement whose Contract is unsigned | No such list; every Engagement must be opened in turn | `missing-feature (DW-G5)` |
-| 7.2-a | Raise an Invoice against the Contract just voided | **It is not refused.** `POST .../contract/invoices` does not read the Contract's status and goes straight to the Connect gate, while **Create Invoice** keeps rendering on a `voided` Contract (DW-G7) | `manual` |
+| 7.2 | Find every Engagement whose Contract is unsigned | No such list; every Engagement must be opened in turn | `missing-feature (DW-G5)` [#273](https://github.com/markgoho/doula-cloud/issues/273) |
+| 7.2-a | Raise an Invoice against the Contract just voided | **It is not refused.** `POST .../contract/invoices` does not read the Contract's status and goes straight to the Connect gate, while **Create Invoice** keeps rendering on a `voided` Contract ([DW-G7](https://github.com/markgoho/doula-cloud/issues/275)) | `manual` |
 
 **Nadia crossing, settled.** `POST .../contract/void` had no step here.
 [Her plan](loss-client.md) needs a voided Contract for its stage 6, and the only
@@ -92,7 +92,7 @@ untouched.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 8.1 | `POST .../contract/invoices` | **Creates the Invoice.** `201 {"connectRequired":false,"invoice":{…,"status":"open"}}` on a Practice whose Stripe account is connected, for Dee, who is not an Owner — the endpoint never was owner-gated. On a Practice that has *not* connected it answers `200 {"connectRequired":true}` instead; `IsOwner` carries `omitempty` (`api/internal/payments/invoice.go:51`), so for a non-owner the field is absent rather than `false`, and the client defaults it (`+page.svelte:311`) | `manual` |
-| 8.2 | Read the message the UI shows | On an unconnected Practice: "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume (DW-G2). The same sentence is on the **Payments** screen for a non-owner, so DW-G2 is not confined to this stage | `manual` |
+| 8.2 | Read the message the UI shows | On an unconnected Practice: "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume ([DW-G2](https://github.com/markgoho/doula-cloud/issues/270)). The same sentence is on the **Payments** screen for a non-owner, so DW-G2 is not confined to this stage | `manual` |
 
 **8.1 was `blocked` for most of 2026-08-22, and cleared on Dee's own walk.** The
 reason changed four times in a day, which is worth keeping because each change was
@@ -117,7 +117,7 @@ re-derives it.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 9.1 | Mark an Invoice paid after a bank transfer | No screen, no endpoint. Payments are written only by the Stripe webhook, so the normal case for a small practice cannot be recorded at all | `missing-feature (DW-G3)` |
+| 9.1 | Mark an Invoice paid after a bank transfer | No screen, no endpoint. Payments are written only by the Stripe webhook, so the normal case for a small practice cannot be recorded at all | `missing-feature (DW-G3)` [#271](https://github.com/markgoho/doula-cloud/issues/271) |
 
 A live Stripe account would not fix this step. It is not the out-of-scope Stripe
 gap; the missing capability is manual Payment recording.
@@ -135,7 +135,7 @@ gap; the missing capability is manual Payment recording.
 | `automated` | 0 |
 | `manual` | 21 |
 | `blocked` | 0 (8.1 cleared on the walk — Connect completed) |
-| `missing-feature` | 4 (RA-G2, RA-G4, DW-G3, DW-G5) |
+| `missing-feature` | 4 ([RA-G2](https://github.com/markgoho/doula-cloud/issues/261), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [DW-G3](https://github.com/markgoho/doula-cloud/issues/271), [DW-G5](https://github.com/markgoho/doula-cloud/issues/273)) |
 
 Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and the
 walk proved the line was drawn in the right place: connecting a live Stripe account
@@ -176,28 +176,28 @@ call, recorded here rather than asked.
 | --- | --- | --- | --- |
 | 1.1 | `manual` | as expected | `Accept your Staff invite`, an email box, a password box, and an **Account mode** radio pair — `I'm new here -- create an account` / `I already have an account -- log in`. One button, **Accept invite** |
 | 1.2 | `manual` | as expected | `200 POST /api/staff/accept-invite`, and `GET .../staff` then showed `{"name":"Dee Whitlock","roles":[]}`. Zero roles, as claimed |
-| 1.3 | `manual` | **falsified** | There is nothing to choose. One membership, so the browser went straight to `/practices/{id}` and `Welcome to Rooted Birth Collective`; no picker rendered. Identical to Renata's 1.2 and unwalkable for anyone until LV-G2 |
-| 2.1 | `missing-feature (RA-G2)` | as expected | Confirmed unwalkable. The Staff screen has no editable control; the roster is read-only |
-| 2.1-a | `manual` | as expected | `PATCH .../staff/{staffId}/roles` with `["office_manager"]` -> `200`, and the roster then read `office_manager` — the raw enum, not **Admin** (RA-G3). The staff id came from `GET .../staff`, which no screen prints |
-| 3.1 | `manual` | **falsified** | **Three** tiles, not two: `Clients Billing Payments`. Payments sits outside `{#if roles.includes('owner')}` — RA-G9, which #235 found from Jo Mercer's zero-role membership and this walk confirms from Dee's |
-| 3.1-a | `manual` | as expected — **and this is the strongest result on the plan** | The battery was run at `roles = '{}'` and again at `["office_manager"]` and the two are **byte-identical**: 10 endpoint responses the same status and the same body, 7 screens the same headings, links, buttons, inputs and text. `office_manager` changed nothing anywhere. DW-G1 is not an inference from reading the code; it is a measured null result |
-| 3.2 | `manual` | as expected | `Credit balance: 3`, and a Date / Origin / Quantity ledger showing `signup_bonus +3`. A non-owner reads what the Practice spends (DW-G4) |
+| 1.3 | `manual` | **falsified** | There is nothing to choose. One membership, so the browser went straight to `/practices/{id}` and `Welcome to Rooted Birth Collective`; no picker rendered. Identical to Renata's 1.2 and unwalkable for anyone until [LV-G2](https://github.com/markgoho/doula-cloud/issues/225) |
+| 2.1 | `missing-feature (RA-G2)` [#261](https://github.com/markgoho/doula-cloud/issues/261) | as expected | Confirmed unwalkable. The Staff screen has no editable control; the roster is read-only |
+| 2.1-a | `manual` | as expected | `PATCH .../staff/{staffId}/roles` with `["office_manager"]` -> `200`, and the roster then read `office_manager` — the raw enum, not **Admin** ([RA-G3](https://github.com/markgoho/doula-cloud/issues/262)). The staff id came from `GET .../staff`, which no screen prints |
+| 3.1 | `manual` | **falsified** | **Three** tiles, not two: `Clients Billing Payments`. Payments sits outside `{#if roles.includes('owner')}` — [RA-G9](https://github.com/markgoho/doula-cloud/issues/267), which #235 found from Jo Mercer's zero-role membership and this walk confirms from Dee's |
+| 3.1-a | `manual` | as expected — **and this is the strongest result on the plan** | The battery was run at `roles = '{}'` and again at `["office_manager"]` and the two are **byte-identical**: 10 endpoint responses the same status and the same body, 7 screens the same headings, links, buttons, inputs and text. `office_manager` changed nothing anywhere. [DW-G1](https://github.com/markgoho/doula-cloud/issues/269) is not an inference from reading the code; it is a measured null result |
+| 3.2 | `manual` | as expected | `Credit balance: 3`, and a Date / Origin / Quantity ledger showing `signup_bonus +3`. A non-owner reads what the Practice spends ([DW-G4](https://github.com/markgoho/doula-cloud/issues/272)) |
 | 3.2-a | `manual` | as expected — **correct refusal** | `POST .../billing/purchases` -> `403 only a Practice Owner can do that`, though **Buy credits** and its Quantity box render for her first |
-| 4.1 | `manual` | as expected | Two fields, `Their name` and `Their email`, and **Add Client**. Nothing about a due date, a referral, or the call (MO-G3) |
+| 4.1 | `manual` | as expected | Two fields, `Their name` and `Their email`, and **Add Client**. Nothing about a due date, a referral, or the call ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252)) |
 | 4.2 | `manual` | as expected, plus one fact | `201`, and it lands **straight on the Engagement page** — not back on the list — reading `Marisol Vega / Status intake / Created 8/22/2026`. Same landing Tasha's walk found |
-| 5.1 | `missing-feature (RA-G4)` | as expected | Confirmed unwalkable. Every control on the page: `Send portal invite`, `Add a Visit`, `Create Care Plan`, `Create Birth Plan`, `Create Draft Contract`, `Send`. Nothing names a Doula |
-| 5.2 | `manual` | **falsified** | The workaround does not exist. **Add a Visit** renders for Dee and answers `403 only a Staff member with the Doula role can do that`, in the page and on a direct `POST` alike — `visit/roles.go:41` requires `doula`, which she does not hold. New gap **DW-G6** on the journey map, and the map's moment-of-truth argument is re-stated, because it rested on this step working |
+| 5.1 | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) | as expected | Confirmed unwalkable. Every control on the page: `Send portal invite`, `Add a Visit`, `Create Care Plan`, `Create Birth Plan`, `Create Draft Contract`, `Send`. Nothing names a Doula |
+| 5.2 | `manual` | **falsified** | The workaround does not exist. **Add a Visit** renders for Dee and answers `403 only a Staff member with the Doula role can do that`, in the page and on a direct `POST` alike — `visit/roles.go:41` requires `doula`, which she does not hold. New gap **[DW-G6](https://github.com/markgoho/doula-cloud/issues/274)** on the journey map, and the map's moment-of-truth argument is re-stated, because it rested on this step working |
 | 6.1 | `manual` | as expected | `201` for a non-owner, and the screen prints `Invited. There is no email sending yet, so share this link with them directly:` with a raw `/portal/accept-invite?token=<uuid>` URL |
-| 6.2 | `manual` | as expected | `201`, `Status: draft`, and six blank merge-field inputs — `Practice name`, `Client name`, `Scope of service`, two dates and `Price` (**MO-G10**, Maya's) |
+| 6.2 | `manual` | as expected | `201`, `Status: draft`, and six blank merge-field inputs — `Practice name`, `Client name`, `Scope of service`, two dates and `Price` (**[MO-G10](https://github.com/markgoho/doula-cloud/issues/258)**, Maya's) |
 | 6.3 | `manual` | as expected | `PUT` then `POST .../contract/send` -> `200`, `Status: sent`. With the fields filled by hand the Client's portal read the prose resolved: `This agreement is between Rooted Birth Collective and Marisol Vega for doula services.` |
-| 6.3-a | `manual` | as expected | The page renders the Practice's real template prose and the whole merge-field legend to Dee first; **Save** -> `403 only a Practice Owner can do that`. Read open, write shut — PR-G4's shape, and under ADR-0006 the read is correct |
+| 6.3-a | `manual` | as expected | The page renders the Practice's real template prose and the whole merge-field legend to Dee first; **Save** -> `403 only a Practice Owner can do that`. Read open, write shut — [PR-G4](https://github.com/markgoho/doula-cloud/issues/279)'s shape, and under ADR-0006 the read is correct |
 | 7.1 | `manual` | as expected | After the Client signed (two-step: an electronic-signature disclosure, then full legal name plus a checkbox) the Engagement page read `Status: signed` and offered **Void Contract** |
 | 7.1-a | `manual` | as expected | **Dee, a non-owner, voided a signed Contract**: `200`, `Status: voided`, `Voided — this Contract is no longer active.` Terminal as claimed — a second void `409`s and so does `send`. The prose and all six fields still render |
-| 7.2 | `missing-feature (DW-G5)` | as expected | Confirmed unwalkable. The Clients screen is two columns, `Name` and `Status`, and the Status is the *Engagement's* (`intake`), not the Contract's. No cross-Engagement view of signature state exists |
-| 7.2-a | `manual` | **new** | The void does not close the till. **Create Invoice** and its Amount box keep rendering on the `voided` Contract, and `POST .../contract/invoices` answers `200 {"connectRequired":true}` — the Connect gate, not a refusal. The handler never reads the Contract's status, so with a connected account the next thing it meets is Stripe. New gap **DW-G7** |
+| 7.2 | `missing-feature (DW-G5)` [#273](https://github.com/markgoho/doula-cloud/issues/273) | as expected | Confirmed unwalkable. The Clients screen is two columns, `Name` and `Status`, and the Status is the *Engagement's* (`intake`), not the Contract's. No cross-Engagement view of signature state exists |
+| 7.2-a | `manual` | **new** | The void does not close the till. **Create Invoice** and its Amount box keep rendering on the `voided` Contract, and `POST .../contract/invoices` answers `200 {"connectRequired":true}` — the Connect gate, not a refusal. The handler never reads the Contract's status, so with a connected account the next thing it meets is Stripe. New gap **[DW-G7](https://github.com/markgoho/doula-cloud/issues/275)** |
 | 8.1 | `manual` (was `blocked`) | **re-marked — it clears** | Pre-connect: `200 {"connectRequired":true}`. The Owner then completed Stripe's hosted onboarding (see the addendum below), and the same call as Dee answered `201 {"connectRequired":false,"invoice":{…,"status":"open","amountCents":90000}}`. A non-owner Admin raised a $900 Invoice on a connected account |
-| 8.2 | `manual` | as expected | `Ask a Practice Owner to connect Stripe.` — and the same sentence is on the **Payments** screen for a non-owner. DW-G2 is not confined to the Invoice |
-| 9.1 | `missing-feature (DW-G3)` | as expected | Confirmed unwalkable. No control on the Engagement page matches pay / paid / mark / record, and `api/main.go` has no route that writes a Payment. The only writer is the `invoice.paid` webhook |
+| 8.2 | `manual` | as expected | `Ask a Practice Owner to connect Stripe.` — and the same sentence is on the **Payments** screen for a non-owner. [DW-G2](https://github.com/markgoho/doula-cloud/issues/270) is not confined to the Invoice |
+| 9.1 | `missing-feature (DW-G3)` [#271](https://github.com/markgoho/doula-cloud/issues/271) | as expected | Confirmed unwalkable. No control on the Engagement page matches pay / paid / mark / record, and `api/main.go` has no route that writes a Payment. The only writer is the `invoice.paid` webhook |
 | 10.1 | `manual` | as expected — **and correct** | Dee opened the Engagement and read both filled plans in full: the Care Plan's support people, pain management and backup-doula checkbox, and the Birth Plan's setting, people to notify and atmosphere. Per ADR-0006 an Admin reading both is right, not a leak |
 
 **21 `manual` steps walked (8.1 among them, after the addendum below); 4

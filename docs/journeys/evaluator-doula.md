@@ -134,15 +134,15 @@ cannot be reproduced even manually.
 
 ## Gaps found
 
-| ID | Stage | Layer | Gap |
-| --- | --- | --- | --- |
-| TB-G1 | 1 | Both | No marketing site exists. Her journey starts on a page that has not been built. |
-| TB-G2 | 2 | Experience | No price is published anywhere, in the product or outside it. |
-| TB-G3 | 2 | Interaction | The Billing screen sells "credits" with no explanation of what a credit buys. |
-| TB-G4 | 4 | Experience | The first screen after Practice creation is an admin link menu. It shows no doula-specific value at the moment of truth. |
-| TB-G5 | 6 | Interaction | No data export. "Can I get out again?" is unanswerable. |
-| TB-G6 | 7 | Interaction | No data import for a migrating owner, and Client creation accepts only name and email. |
-| TB-G7 | 3 | Experience | Signup grants Owner + Admin + Doula silently and nothing signposts the roster model. The Staff screen does hold it (`app/src/routes/practices/[practiceId]/staff/+page.svelte`) — one unprompted click away — but it speaks the schema's word, `owner, office_manager, doula`, not the team's **Admin** (#204), so what she finds there does not answer "can I set my second doula up as a doula only?" either. Narrowed by the [2026-08-22 walk](../test-plans/evaluator-doula.md#2026-08-22--manual-walk-233). |
+| ID | Stage | Layer | Gap | Issue |
+| --- | --- | --- | --- | --- |
+| TB-G1 | 1 | Both | No marketing site exists. Her journey starts on a page that has not been built. | [#284](https://github.com/markgoho/doula-cloud/issues/284) |
+| TB-G2 | 2 | Experience | No price is published anywhere, in the product or outside it. | [#285](https://github.com/markgoho/doula-cloud/issues/285) |
+| TB-G3 | 2 | Interaction | The Billing screen sells "credits" with no explanation of what a credit buys. | [#286](https://github.com/markgoho/doula-cloud/issues/286) |
+| TB-G4 | 4 | Experience | The first screen after Practice creation is an admin link menu. It shows no doula-specific value at the moment of truth. | [#287](https://github.com/markgoho/doula-cloud/issues/287) |
+| TB-G5 | 6 | Interaction | No data export. "Can I get out again?" is unanswerable. | [#288](https://github.com/markgoho/doula-cloud/issues/288) |
+| TB-G6 | 7 | Interaction | No data import for a migrating owner, and Client creation accepts only name and email. | [#289](https://github.com/markgoho/doula-cloud/issues/289) |
+| TB-G7 | 3 | Experience | Signup grants Owner + Admin + Doula silently and nothing signposts the roster model. The Staff screen does hold it (`app/src/routes/practices/[practiceId]/staff/+page.svelte`) — one unprompted click away — but it speaks the schema's word, `owner, office_manager, doula`, not the team's **Admin** (#204), so what she finds there does not answer "can I set my second doula up as a doula only?" either. Narrowed by the [2026-08-22 walk](../test-plans/evaluator-doula.md#2026-08-22--manual-walk-233). | [#290](https://github.com/markgoho/doula-cloud/issues/290) |
 
 Also hit here, filed on their owning maps: **MO-G3** (Client takes name and email
 only — which is also why TB-G6 cannot be worked around by hand).

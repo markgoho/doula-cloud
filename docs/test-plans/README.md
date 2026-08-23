@@ -255,3 +255,102 @@ The first six are practice-side ([#207](https://github.com/markgoho/doula-cloud/
 the last three client-side ([#208](https://github.com/markgoho/doula-cloud/issues/208)).
 **No plan carries a `blocked` step on the client side**: Stripe never reaches the
 Client portal, so every hole a Client meets is a hole in the product.
+
+## The run, and the gap issues
+
+Every plan has been executed once ([#209](https://github.com/markgoho/doula-cloud/issues/209)): the automated specs in one suite run, then nine manual walks, one per plan ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)). Each plan carries its own dated **Run log**.
+
+| Plan | Persona | `automated` | `manual` | `blocked` | `missing-feature` |
+| --- | --- | --- | --- | --- | --- |
+| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 1 | 13 | 0 | 5 |
+| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 9 | 19 | 0 | 4 |
+| [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 16 | 0 | 7 |
+| [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 4 |
+| [employed-doula.md](employed-doula.md) | Priya Raman | 2 | 22 | 0 | 6 |
+| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 17 | 0 | 9 |
+| [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 13 | 0 | 9 |
+| [first-time-client.md](first-time-client.md) | Hannah Sorensen | 6 | 18 | 0 | 8 |
+| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 1 | 9 | 0 | 9 |
+| **Total** | | **30** | **148** | **0** | **61** |
+
+Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
+
+### Gap issues
+
+One `journey-gap` issue per missing or broken capability, deduplicated across the nine plans — a capability that fails on several journeys has one issue, not one per plan. None carries a severity or a priority: the project is pre-launch and everything here is fixed before launch.
+
+| Gap | Issue | Owning map |
+| --- | --- | --- |
+| MO-G1 | [#250](https://github.com/markgoho/doula-cloud/issues/250) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G2 | [#251](https://github.com/markgoho/doula-cloud/issues/251) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G3 | [#252](https://github.com/markgoho/doula-cloud/issues/252) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G4 | [#253](https://github.com/markgoho/doula-cloud/issues/253) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G5 | [#254](https://github.com/markgoho/doula-cloud/issues/254) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G6 | [#255](https://github.com/markgoho/doula-cloud/issues/255) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G7 | [#256](https://github.com/markgoho/doula-cloud/issues/256) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G9 | [#257](https://github.com/markgoho/doula-cloud/issues/257) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G10 | [#258](https://github.com/markgoho/doula-cloud/issues/258) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| MO-G11 | [#259](https://github.com/markgoho/doula-cloud/issues/259) | [Maya Okonkwo](../journeys/solo-birth-doula.md) |
+| RA-G1 | [#260](https://github.com/markgoho/doula-cloud/issues/260) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G2 | [#261](https://github.com/markgoho/doula-cloud/issues/261) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G3 | [#262](https://github.com/markgoho/doula-cloud/issues/262) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G5 | [#263](https://github.com/markgoho/doula-cloud/issues/263) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G6 | [#264](https://github.com/markgoho/doula-cloud/issues/264) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G7 | [#265](https://github.com/markgoho/doula-cloud/issues/265) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G8 | [#266](https://github.com/markgoho/doula-cloud/issues/266) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G9 | [#267](https://github.com/markgoho/doula-cloud/issues/267) | [Renata Alvarez](../journeys/practice-owner.md) |
+| RA-G10 | [#268](https://github.com/markgoho/doula-cloud/issues/268) | [Renata Alvarez](../journeys/practice-owner.md) |
+| DW-G1 | [#269](https://github.com/markgoho/doula-cloud/issues/269) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| DW-G2 | [#270](https://github.com/markgoho/doula-cloud/issues/270) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| DW-G3 | [#271](https://github.com/markgoho/doula-cloud/issues/271) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| DW-G4 | [#272](https://github.com/markgoho/doula-cloud/issues/272) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| DW-G5 | [#273](https://github.com/markgoho/doula-cloud/issues/273) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| DW-G6 | [#274](https://github.com/markgoho/doula-cloud/issues/274) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| DW-G7 | [#275](https://github.com/markgoho/doula-cloud/issues/275) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| DW-G8 | [#276](https://github.com/markgoho/doula-cloud/issues/276) | [Dee Whitlock](../journeys/non-doula-admin.md) |
+| PR-G2 | [#277](https://github.com/markgoho/doula-cloud/issues/277) | [Priya Raman](../journeys/employed-doula.md) |
+| PR-G3 | [#278](https://github.com/markgoho/doula-cloud/issues/278) | [Priya Raman](../journeys/employed-doula.md) |
+| PR-G4 | [#279](https://github.com/markgoho/doula-cloud/issues/279) | [Priya Raman](../journeys/employed-doula.md) |
+| PR-G5 | [#280](https://github.com/markgoho/doula-cloud/issues/280) | [Priya Raman](../journeys/employed-doula.md) |
+| PR-G6 | [#281](https://github.com/markgoho/doula-cloud/issues/281) | [Priya Raman](../journeys/employed-doula.md) |
+| PR-G8 | [#282](https://github.com/markgoho/doula-cloud/issues/282) | [Priya Raman](../journeys/employed-doula.md) |
+| PR-G9 | [#283](https://github.com/markgoho/doula-cloud/issues/283) | [Priya Raman](../journeys/employed-doula.md) |
+| TB-G1 | [#284](https://github.com/markgoho/doula-cloud/issues/284) | [Tasha Bell](../journeys/evaluator-doula.md) |
+| TB-G2 | [#285](https://github.com/markgoho/doula-cloud/issues/285) | [Tasha Bell](../journeys/evaluator-doula.md) |
+| TB-G3 | [#286](https://github.com/markgoho/doula-cloud/issues/286) | [Tasha Bell](../journeys/evaluator-doula.md) |
+| TB-G4 | [#287](https://github.com/markgoho/doula-cloud/issues/287) | [Tasha Bell](../journeys/evaluator-doula.md) |
+| TB-G5 | [#288](https://github.com/markgoho/doula-cloud/issues/288) | [Tasha Bell](../journeys/evaluator-doula.md) |
+| TB-G6 | [#289](https://github.com/markgoho/doula-cloud/issues/289) | [Tasha Bell](../journeys/evaluator-doula.md) |
+| TB-G7 | [#290](https://github.com/markgoho/doula-cloud/issues/290) | [Tasha Bell](../journeys/evaluator-doula.md) |
+| LV-G8 | [#291](https://github.com/markgoho/doula-cloud/issues/291) | [Lena Vasquez](../journeys/contractor-doula.md) |
+| LV-G9 | [#292](https://github.com/markgoho/doula-cloud/issues/292) | [Lena Vasquez](../journeys/contractor-doula.md) |
+| NH-G1 | [#293](https://github.com/markgoho/doula-cloud/issues/293) | [Nadia Haddad](../journeys/loss-client.md) |
+| NH-G2 | [#294](https://github.com/markgoho/doula-cloud/issues/294) | [Nadia Haddad](../journeys/loss-client.md) |
+| NH-G3 | [#295](https://github.com/markgoho/doula-cloud/issues/295) | [Nadia Haddad](../journeys/loss-client.md) |
+| NH-G4 | [#296](https://github.com/markgoho/doula-cloud/issues/296) | [Nadia Haddad](../journeys/loss-client.md) |
+| NH-G6 | [#297](https://github.com/markgoho/doula-cloud/issues/297) | [Nadia Haddad](../journeys/loss-client.md) |
+| NH-G7 | [#298](https://github.com/markgoho/doula-cloud/issues/298) | [Nadia Haddad](../journeys/loss-client.md) |
+| NH-G8 | [#299](https://github.com/markgoho/doula-cloud/issues/299) | [Nadia Haddad](../journeys/loss-client.md) |
+| HS-G1 | [#300](https://github.com/markgoho/doula-cloud/issues/300) | [Hannah Sorensen](../journeys/first-time-client.md) |
+| HS-G2 | [#301](https://github.com/markgoho/doula-cloud/issues/301) | [Hannah Sorensen](../journeys/first-time-client.md) |
+| HS-G3 | [#302](https://github.com/markgoho/doula-cloud/issues/302) | [Hannah Sorensen](../journeys/first-time-client.md) |
+| HS-G4 | [#303](https://github.com/markgoho/doula-cloud/issues/303) | [Hannah Sorensen](../journeys/first-time-client.md) |
+| HS-G5 | [#304](https://github.com/markgoho/doula-cloud/issues/304) | [Hannah Sorensen](../journeys/first-time-client.md) |
+| HS-G6 | [#305](https://github.com/markgoho/doula-cloud/issues/305) | [Hannah Sorensen](../journeys/first-time-client.md) |
+| HS-G7 | [#306](https://github.com/markgoho/doula-cloud/issues/306) | [Hannah Sorensen](../journeys/first-time-client.md) |
+| CB-G1 | [#307](https://github.com/markgoho/doula-cloud/issues/307) | [Camille Boyd](../journeys/returning-postpartum-client.md) |
+| CB-G2 | [#308](https://github.com/markgoho/doula-cloud/issues/308) | [Camille Boyd](../journeys/returning-postpartum-client.md) |
+| CB-G3 | [#309](https://github.com/markgoho/doula-cloud/issues/309) | [Camille Boyd](../journeys/returning-postpartum-client.md) |
+| CB-G4 | [#310](https://github.com/markgoho/doula-cloud/issues/310) | [Camille Boyd](../journeys/returning-postpartum-client.md) |
+| CB-G5 | [#311](https://github.com/markgoho/doula-cloud/issues/311) | [Camille Boyd](../journeys/returning-postpartum-client.md) |
+| CB-G6 | [#312](https://github.com/markgoho/doula-cloud/issues/312) | [Camille Boyd](../journeys/returning-postpartum-client.md) |
+
+**Not filed here, and why:**
+
+| Gap | Where it lives instead |
+| --- | --- |
+| LV-G1, LV-G2, LV-G3, LV-G4, LV-G5, LV-G6, LV-G7, RA-G4, PR-G1 | [Who a Staff member is to a Practice, and which work is theirs](https://github.com/markgoho/doula-cloud/issues/225) owns these outright and carries execution; its tickets are their issues |
+| NH-G5 | Folded into [#212](https://github.com/markgoho/doula-cloud/issues/212), which already owns the Client register, with two acceptance criteria added for it |
+| MO-G8 | Not a product capability. A Stripe Sandbox account exists ([#242](https://github.com/markgoho/doula-cloud/issues/242)) and a Practice was onboarded to `card_payments: active` on Dee's walk |
+
+**PR-G7** is folded into **RA-G1** ([#260](https://github.com/markgoho/doula-cloud/issues/260)) — the experience half of the same missing email, as Priya's own map directs. The sending capability is being charted separately at [#213](https://github.com/markgoho/doula-cloud/issues/213); #260 is the journey record that both invitations need it.

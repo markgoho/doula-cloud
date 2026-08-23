@@ -141,14 +141,14 @@ There is no view — for her or for Priya — of a person's Engagements over tim
 
 ## Gaps found
 
-| ID | Stage | Layer | Gap |
-| --- | --- | --- | --- |
-| CB-G1 | 3 | Interaction | A returning Client cannot be re-used. `POST /api/practices/{id}/clients` always inserts a new `clients` row — no lookup by email, no client search, no add-an-Engagement-to-this-Client endpoint — so one person becomes two Client records and consumes two credits. |
-| CB-G2 | 4, 7 | Both | An Engagement cannot declare what kind of work it is. No type or kind column; every Engagement is created at `intake` with no create-time alternative. `CONTEXT.md`'s claim that Engagement "fits both birth-doula and postpartum-doula work" holds only if nobody needs to know which it is. |
-| CB-G3 | 5 | Interaction | A person who already has a portal account cannot accept a second invite. `client_portal_users.identity_uid` is `UNIQUE`, so the second claim 409s with "a portal account already exists for this identity" and the only workaround is a second account under a different email. |
-| CB-G4 | 6 | Interaction | There is no Engagement switcher inside the portal. The chooser appears only on the login and accept-invite screens, the authenticated layout offers only sign-out, and the chooser labels an Engagement by `practiceName` alone — so two at one Practice would be indistinguishable. |
-| CB-G5 | 7 | Both | The Birth Plan link is unconditional. An Engagement with no birth in it still shows it, and the empty state ("No Birth Plan has been created for this Engagement yet") reads as a promise rather than as *not applicable*. |
-| CB-G6 | 8 | Both | Nothing shows a person's Engagements over time. Messages and Plan Instances are correctly Engagement-scoped, and nothing sits above them — so neither Camille nor her Practice can see that this is the second time. |
+| ID | Stage | Layer | Gap | Issue |
+| --- | --- | --- | --- | --- |
+| CB-G1 | 3 | Interaction | A returning Client cannot be re-used. `POST /api/practices/{id}/clients` always inserts a new `clients` row — no lookup by email, no client search, no add-an-Engagement-to-this-Client endpoint — so one person becomes two Client records and consumes two credits. | [#307](https://github.com/markgoho/doula-cloud/issues/307) |
+| CB-G2 | 4, 7 | Both | An Engagement cannot declare what kind of work it is. No type or kind column; every Engagement is created at `intake` with no create-time alternative. `CONTEXT.md`'s claim that Engagement "fits both birth-doula and postpartum-doula work" holds only if nobody needs to know which it is. | [#308](https://github.com/markgoho/doula-cloud/issues/308) |
+| CB-G3 | 5 | Interaction | A person who already has a portal account cannot accept a second invite. `client_portal_users.identity_uid` is `UNIQUE`, so the second claim 409s with "a portal account already exists for this identity" and the only workaround is a second account under a different email. | [#309](https://github.com/markgoho/doula-cloud/issues/309) |
+| CB-G4 | 6 | Interaction | There is no Engagement switcher inside the portal. The chooser appears only on the login and accept-invite screens, the authenticated layout offers only sign-out, and the chooser labels an Engagement by `practiceName` alone — so two at one Practice would be indistinguishable. | [#310](https://github.com/markgoho/doula-cloud/issues/310) |
+| CB-G5 | 7 | Both | The Birth Plan link is unconditional. An Engagement with no birth in it still shows it, and the empty state ("No Birth Plan has been created for this Engagement yet") reads as a promise rather than as *not applicable*. | [#311](https://github.com/markgoho/doula-cloud/issues/311) |
+| CB-G6 | 8 | Both | Nothing shows a person's Engagements over time. Messages and Plan Instances are correctly Engagement-scoped, and nothing sits above them — so neither Camille nor her Practice can see that this is the second time. | [#312](https://github.com/markgoho/doula-cloud/issues/312) |
 
 Also hit here, filed on their owning maps: **MO-G4** (her first Engagement cannot
 be closed and her second cannot move), **MO-G3** (name and email only, so nothing
