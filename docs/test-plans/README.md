@@ -14,11 +14,17 @@ built too: [#247](https://github.com/markgoho/doula-cloud/issues/247) moved it
 to Accounts v2 and both Sandbox event destinations are created, so
 `POST .../payments/connect` no longer 401s.
 
-Connect and Invoices stay `blocked`, but **the reason has changed**. It is no
-longer "a Stripe account nobody has opened" or "Stripe refuses Accounts v1" —
-both are cleared. What remains is that nobody has yet sat at a browser and
-filled in Stripe's hosted onboarding form. That is a walk, not a build, and it
-is the only thing between these steps and a `manual` mark.
+**Connect and Invoices are now walked too** (2026-08-22). A Practice onboarded
+through the v2 Account Link to an active account, raised a $1,800 Invoice, and a
+Client paid it with a test card; `invoice.paid` created the `payments` row. No
+plan carries a `blocked` step on the practice side any more.
+
+The walk earned its keep: it found four defects that reading could not. Two were
+config that reported itself healthy while delivering nothing (`events_from` on
+the event destination, and `--forward-thin-connect-to` in `stripe-listen.sh`),
+and two were only visible to the Client (an invoice that said `From DOULA.CLOU`,
+and `payments` rows with no Stripe reference). One of them passed its unit tests
+because the fixture supplied a field production never sends.
 
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan

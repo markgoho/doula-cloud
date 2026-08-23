@@ -81,7 +81,7 @@ whole suite.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 7.1 | Open `/practices/[practiceId]/settings/payments` and start Connect onboarding | `POST .../payments/connect` is owner-gated and passes for Maya, returns a real v2 Account Link, and the hosted flow completes to an active account (#247, walked 2026-08-22) | `manual` |
-| 7.2 | Raise an Invoice against the signed Contract | `connectRequired` with `isOwner: true`; no Invoice is created | `blocked` |
+| 7.2 | Raise an Invoice against the signed Contract | An Invoice is created on the connected account and is payable (#247, walked 2026-08-22) | `manual` |
 | 7.2-a | Compare the **Billing** and **Settings → Payments** screens | Two money screens, neither explaining that one buys credits from Doula Cloud and the other takes money from Clients | `manual` |
 
 ### Stage 8 — Message the Client
@@ -98,7 +98,7 @@ whole suite.
 | --- | --- |
 | `automated` | 9 |
 | `manual` | 19 |
-| `blocked` | 1 (7.2, the Invoice leg — see [#247](https://github.com/markgoho/doula-cloud/issues/247)) |
+| `blocked` | 0 |
 | `missing-feature` | 4 (MO-G1, MO-G2, MO-G3, MO-G4) |
 
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
@@ -161,7 +161,7 @@ amount, and stage 8). The 9 `automated` steps were **not** re-run.
 | 6.2-a | `missing-feature (MO-G1)` | as expected | Confirmed unwalkable. The only input the Visits section carries is `Reassign to Staff id`, a free-text box for a UUID. No date, no time. The `Date` column renders `visit.createdAt` |
 | 6.2-b | `missing-feature (MO-G2)` | as expected | Confirmed unwalkable. No notes field anywhere in the section |
 | 7.1 | `manual` (was `blocked`) | **better than the plan claimed** | Walked end to end on 2026-08-22 (#247). `Payments` reads `Not connected` with `Connect Stripe so Clients can pay their invoices.`; the button opens a real v2 Account Link, and Stripe's hosted flow (business type, personal details, business details, bank, payouts, public details, Radar, review) completes and returns to `?connect=return`. The screen then read `Awaiting Stripe review` — `card_payments: restricted`, `payouts: pending`, **no** requirements outstanding — and **hid** the onboarding button, since there was nothing to supply. Once the capability went active, `capability_status_updated` landed and the screen read `Active` / `Clients can pay their invoices and payouts reach your bank.` **The webhook is what wrote it**: `practices.stripe_connect_status_event_id` holds the delivering event id, not a poll. The old 500 here was the Stripe-401, and is gone |
-| 7.2 | `blocked` | as expected | With an amount (`1800`): `POST .../contract/invoices` -> `200 {"connectRequired":true,"isOwner":true}`, and the section replaces its form with `Connect Stripe to create an Invoice.` and a **Connect Stripe** button. No Invoice is created. **The gate appears only after she tries** — before that the section shows an `Amount (USD)` field and **Create Invoice**, so nothing warns her the leg is closed |
+| 7.2 | `manual` (was `blocked`) | **better than the plan claimed** | Walked 2026-08-22 (#247), on a Practice whose Connect account is active. `Amount (USD)` `1800` -> **Create Invoice** -> the Invoices section shows `$1,800.00 — Open`, and Stripe holds a finalized Invoice on the connected account. Paid on the hosted page with `4242 4242 4242 4242` -> `Invoice paid`, and `invoice.paid` flipped `invoices.status` to `paid` and created exactly one `payments` row for `180000`. **Two bugs fell out of this step**: the Client's invoice read `From DOULA.CLOU` (no `display_name` on the v2 Account, so Stripe fell back to the statement descriptor), and every `payments` row was written with an empty `stripe_payment_reference` (`payment_intent` no longer exists on an Invoice under `2026-07-29.dahlia`). Both fixed. The `connectRequired` gate this row used to record is still correct for a Practice that has *not* connected — it is just no longer what Maya hits |
 | 7.2-a | `manual` | as expected | Side by side: **Billing** is `Credit balance: 0`, a ledger, `Quantity`, **Buy credits**. **Payments** is `Stripe Connect status: Not connected`, **Connect Stripe**. Neither screen carries one word about what it is for, or that the other exists. **MO-G7** stands as written |
 | 8.1 | `manual` | as expected | `201`, and the message renders as `Maya Okonkwo (staff) — 8/22/2026, 2:04:28 PM`. No edit and no delete control on the message, as claimed |
 | 8.2 | `manual` | as expected | The Client replied from the portal (`201`, `senderType: "client"`), and Maya's reloaded thread showed both in order, staff then client, each labelled with its sender type |
