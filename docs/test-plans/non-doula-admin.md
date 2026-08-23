@@ -91,44 +91,23 @@ untouched.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 8.1 | `POST .../contract/invoices` | `connectRequired`, and the endpoint is **not** owner-gated — Stripe is the blocker, not the role. `IsOwner` carries `omitempty` (`api/internal/payments/invoice.go:51`), so for a non-owner the wire body is `{"connectRequired":true}` with the field absent, which the client defaults (`+page.svelte:311`) | `blocked` |
-| 8.2 | Read the message the UI shows | "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume (DW-G2) | `manual` |
+| 8.1 | `POST .../contract/invoices` | **Creates the Invoice.** `201 {"connectRequired":false,"invoice":{…,"status":"open"}}` on a Practice whose Stripe account is connected, for Dee, who is not an Owner — the endpoint never was owner-gated. On a Practice that has *not* connected it answers `200 {"connectRequired":true}` instead; `IsOwner` carries `omitempty` (`api/internal/payments/invoice.go:51`), so for a non-owner the field is absent rather than `false`, and the client defaults it (`+page.svelte:311`) | `manual` |
+| 8.2 | Read the message the UI shows | On an unconnected Practice: "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume (DW-G2). The same sentence is on the **Payments** screen for a non-owner, so DW-G2 is not confined to this stage | `manual` |
 
-**8.1 re-checked three times on 2026-08-22**, and it is still `blocked`. The
-reason has changed each time, and the third one is the durable one.
+**8.1 was `blocked` for most of 2026-08-22, and cleared on Dee's own walk.** The
+reason changed four times in a day, which is worth keeping because each change was
+real work rather than a re-reading.
 
-First pass: the Sandbox existed ([#242](https://github.com/markgoho/doula-cloud/issues/242))
-and Credits cleared, but Stripe refused `POST /v1/accounts` for new integrations
-while every merged Connect path was Accounts v1.
+1. The Sandbox did not exist. [#242](https://github.com/markgoho/doula-cloud/issues/242) created it, and Credits cleared.
+2. Stripe refused `POST /v1/accounts` for new integrations while every merged Connect path was Accounts v1. [#247](https://github.com/markgoho/doula-cloud/issues/247) moved the leg to Accounts v2.
+3. No Practice had been through the hosted onboarding. A first attempt on this walk was made from a Playwright-launched browser and hit a **CAPTCHA** at the email step.
+4. It was then driven through a real Chrome, which Stripe does not challenge the same way, and **it completed**. `card_payments` and `payouts` both went `active`, written by the `capability_status_updated` thin event rather than by a poll.
 
-Second pass: [#247](https://github.com/markgoho/doula-cloud/issues/247) moved the
-Connect leg to Accounts v2 and created both Sandbox event destinations, so that
-refusal is gone. `card_payments` replaced `charges_enabled` as the thing a Practice
-must reach. What was left was that no Practice had completed the hosted onboarding.
-
-Third pass, this walk ([#236](https://github.com/markgoho/doula-cloud/issues/236)):
-that onboarding was attempted for Dee's Practice and **it cannot be completed by
-the walk**. `POST .../payments/connect` succeeded and created the connected account
-(`acct_1U7RdD1rKocBawcv`); the Payments screen went `Not connected` ->
-`Onboarding incomplete` / `Stripe still needs some details before Clients can pay
-you.` / `Stripe needs 15 more details from you.` and offered **Continue Stripe
-onboarding**. That link opens Stripe's hosted form, which serves a **CAPTCHA** at
-the first step. Our own code got as far as it can; what remains is an anti-
-automation control on a third party's system, which a walk must not work around.
-
-So Dee's 8.1 is `blocked` in the strongest sense the
-[README](README.md) defines: the code path is complete, no product decision is
-missing, and it needs a person at a browser.
-
-**It clears inside a live walk session, not before one.** The walking stack's
-Postgres is torn down with its volumes (`app/e2e/stack.ts:171`,
-`compose down -v`), so the Practice and its connected-account row do not survive
-`bun run dev:full` exiting — `acct_1U7RdD1rKocBawcv` still exists in the Sandbox
-but nothing points at it any more. The product's own leg is one click
-(`POST .../payments/connect` recreates the account and re-renders **Continue
-Stripe onboarding**), so a future walk drives everything up to the CAPTCHA and a
-person finishes the hosted form there and then, with the same session's stack
-still running.
+**The CAPTCHA is not the boundary; the browser was.** Stripe challenged an
+automation-launched Chromium and did not challenge a human's own Chrome, so the
+honest statement is that this step needs **an attended session**, not that Stripe
+has closed the door. See [connect-onboarding.md](connect-onboarding.md) for the
+walked-through recipe, so no later walk re-derives it.
 
 ### Stage 9 — Record the Payment (moment of truth)
 
@@ -150,13 +129,14 @@ gap; the missing capability is manual Payment recording.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 0 |
-| `manual` | 20 |
-| `blocked` | 1 (8.1, Connect — [#247](https://github.com/markgoho/doula-cloud/issues/247)) |
+| `manual` | 21 |
+| `blocked` | 0 (8.1 cleared on the walk — Connect completed) |
 | `missing-feature` | 4 (RA-G2, RA-G4, DW-G3, DW-G5) |
 
-Stages 8 and 9 sit either side of the `blocked` / `missing-feature` line and are
-the pair that fixes it: connecting a live Stripe account would clear 8.1 and would
-not touch 9.1, because recording a bank transfer has no code path at all.
+Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and the
+walk proved the line was drawn in the right place: connecting a live Stripe account
+**did** clear 8.1 and did **not** touch 9.1, because recording a bank transfer has
+no code path at all. This plan now has no `blocked` step.
 
 Dee's is the only practice-side plan with **no automated step**. Every spec in the
 suite runs as an Owner who signed up, and the Admin exists only past the invite
@@ -211,13 +191,14 @@ call, recorded here rather than asked.
 | 7.1-a | `manual` | as expected | **Dee, a non-owner, voided a signed Contract**: `200`, `Status: voided`, `Voided — this Contract is no longer active.` Terminal as claimed — a second void `409`s and so does `send`. The prose and all six fields still render |
 | 7.2 | `missing-feature (DW-G5)` | as expected | Confirmed unwalkable. The Clients screen is two columns, `Name` and `Status`, and the Status is the *Engagement's* (`intake`), not the Contract's. No cross-Engagement view of signature state exists |
 | 7.2-a | `manual` | **new** | The void does not close the till. **Create Invoice** and its Amount box keep rendering on the `voided` Contract, and `POST .../contract/invoices` answers `200 {"connectRequired":true}` — the Connect gate, not a refusal. The handler never reads the Contract's status, so with a connected account the next thing it meets is Stripe. New gap **DW-G7** |
-| 8.1 | `blocked` | attempted, still `blocked` — **for a better reason** | Pre-connect: `200 {"connectRequired":true}`. Then the Owner's Connect leg was driven to see whether the mark could be cleared: `POST .../payments/connect` -> `200`, account `acct_1U7RdD1rKocBawcv` created, Payments moved to `Onboarding incomplete` / `Stripe needs 15 more details from you.` with a **Continue Stripe onboarding** link. That link's hosted form serves a **CAPTCHA**. Our code reaches the end of its own leg; what is left is an anti-automation control on Stripe's side, so the walk stopped there rather than working around it |
+| 8.1 | `manual` (was `blocked`) | **re-marked — it clears** | Pre-connect: `200 {"connectRequired":true}`. The Owner then completed Stripe's hosted onboarding (see the addendum below), and the same call as Dee answered `201 {"connectRequired":false,"invoice":{…,"status":"open","amountCents":90000}}`. A non-owner Admin raised a $900 Invoice on a connected account |
 | 8.2 | `manual` | as expected | `Ask a Practice Owner to connect Stripe.` — and the same sentence is on the **Payments** screen for a non-owner. DW-G2 is not confined to the Invoice |
 | 9.1 | `missing-feature (DW-G3)` | as expected | Confirmed unwalkable. No control on the Engagement page matches pay / paid / mark / record, and `api/main.go` has no route that writes a Payment. The only writer is the `invoice.paid` webhook |
 | 10.1 | `manual` | as expected — **and correct** | Dee opened the Engagement and read both filled plans in full: the Care Plan's support people, pain management and backup-doula checkbox, and the Birth Plan's setting, people to notify and atmosphere. Per ADR-0006 an Admin reading both is right, not a leak |
 
-**20 `manual` steps walked; 4 `missing-feature` steps confirmed unwalkable; the 1
-`blocked` step attempted and its real response recorded.** Three expected results
+**21 `manual` steps walked (8.1 among them, after the addendum below); 4
+`missing-feature` steps confirmed unwalkable; no `blocked` step left on this
+plan.** Three expected results
 were falsified — 1.3, 3.1 and 5.2 — and one new step, 7.2-a, was added by the
 walk. Two gaps minted on the journey map (**DW-G6**, **DW-G7**), plus **DW-G8**
 below. No `journey-gap` issue was filed — that is
@@ -248,3 +229,54 @@ down anywhere, and the book stays open.
 The role, meanwhile, is a null. Two runs of the same battery, one with no roles at
 all and one holding `office_manager`, came back identical in every byte. Whatever
 Dee is allowed to do, they are allowed to do it because they are Staff.
+
+### 2026-08-22, later — Connect completed, and 8.1 cleared ([#236](https://github.com/markgoho/doula-cloud/issues/236))
+
+The walk above left 8.1 `blocked` because Stripe's hosted onboarding served a
+CAPTCHA to the Playwright-launched browser. It was then driven again through the
+**user's own Chrome**, which Stripe did not challenge the same way, and it
+completed. Recipe kept at [connect-onboarding.md](connect-onboarding.md).
+
+`acct_1U7Rwv1rKod8tdZe`, an unregistered US business, industry *Other personal
+services*, Stripe test bank, Radar Pro, Climate and Tax declined. On submission
+Stripe redirected to `?connect=return`; `status` went `onboarding_incomplete` ->
+`pending` -> **`active`**, with `cardPaymentsStatus` and `payoutsStatus` both
+`active` and no requirements outstanding. **The webhook wrote it**: the
+`capability_status_updated` thin event landed on `/api/stripe/account-webhook`
+and every delivery answered `200`.
+
+Four things fell out of it.
+
+**8.1 clears, and the practice side has no `blocked` step left.** As Dee — not an
+Owner — `POST .../contract/invoices` answered `201 {"connectRequired":false,…}`
+and created a `$900.00` Invoice at `open`. The endpoint never was owner-gated and
+the walk now proves it end to end rather than at a gate.
+
+**DW-G7 is worse than the pre-connect walk could show.** The Contract was voided
+and the *same* call was made again: `201`, a second Invoice, `$500.00`, `open`.
+Stripe holds a real, finalized, payable invoice with a hosted payment URL against
+an agreement the Practice has already voided. Before Connect this only reached the
+`connectRequired` gate, so the gap read as a missing status check; it is in fact a
+bill a Client can pay for a Contract that no longer exists.
+
+**An Invoice can be raised before the Practice can take payment.** The $900 one
+was created while `cardPaymentsStatus` was still `restricted` and the account was
+`pending`. The product's gate is *has a connected account*, not *can actually
+accept a card payment*, so a Client can be sent a bill during Stripe's review
+window. Recorded here rather than minted: whether that is wrong is a decision
+about what the gate should mean, and [#209](https://github.com/markgoho/doula-cloud/issues/209)
+is where it gets argued.
+
+**The Practice name reaches the Client, and the Payments screen does not reach the
+Owner.** Both Stripe invoices carry `account_name: "Rooted Birth Collective"`, so
+the `display_name` fix from `7261a59` holds on a second, independent Practice —
+the `DOULA.CLOU` regression has not come back. The Payments screen is the opposite
+story: seconds after a successful submission it still read `Onboarding incomplete`
+/ "Stripe still needs some details before Clients can pay you" and offered
+**Continue Stripe onboarding**, a dead end, while the API already said `pending`
+with zero requirements. It fetches once in `onMount` and never again
+(`settings/payments/+page.svelte:21`), so its own banner — "Status updates once
+Stripe confirms your account is active" — describes something the page never does.
+A manual reload showed `Awaiting Stripe review` / "Nothing is needed from you."
+New gap **MO-G11** on [Maya's map](../journeys/solo-birth-doula.md), which owns
+the Connect step.

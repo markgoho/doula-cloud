@@ -140,6 +140,7 @@ explains the difference.
 
 - **7.1** — Open `/practices/[practiceId]/settings/payments` and start Stripe
   Connect onboarding (`POST /api/practices/{id}/payments/connect`, owner-gated).
+  On return from Stripe the screen is **stale** (**MO-G11**).
 - **7.2** — Raise an Invoice against the signed Contract
   (`POST /api/practices/{id}/engagements/{id}/contract/invoices`).
 
@@ -171,3 +172,4 @@ substitute for a phone call in labour.
 | MO-G8 | 7 | Interaction | Stripe Connect is not configured, so getting paid is blocked. Expected — record it, do not chase it. |
 | MO-G9 | 3 | Both | Three signup credits, one consumed per Client. She carries four to six Clients, so she is hard-stopped at her fourth with a `402` — and the only way past it is a Stripe purchase that cannot complete. The wall lands on her moment of truth. |
 | MO-G10 | 5 | Both | A Contract resolves no merge field. `POST .../contract` snapshots the template prose and sets every value empty (`api/internal/contracts/contract.go:124`), so Maya retypes the Practice name and the Client name the product already holds — and **Send** accepts a Contract with all six values blank, which the Client then reads as "This agreement is between  and  for doula services." Found by the [#234](https://github.com/markgoho/doula-cloud/issues/234) walk. |
+| MO-G11 | 7 | Both | **The Payments screen never refreshes itself.** It fetches Connect status once in `onMount` and never again (`settings/payments/+page.svelte:21`), so the one moment an Owner is guaranteed to be looking at it — Stripe's redirect back to `?connect=return` — is the moment it is most likely to be wrong. Its own banner says "Status updates once Stripe confirms your account is active", and nothing ever updates it. Observed on Dee's walk: seconds after a successful submission the screen still read `Onboarding incomplete` / "Stripe still needs some details before Clients can pay you" and offered **Continue Stripe onboarding**, a dead end, while the API already said `pending` with zero requirements. A manual reload showed `Awaiting Stripe review` / "Nothing is needed from you." |

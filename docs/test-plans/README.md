@@ -16,16 +16,23 @@ to Accounts v2 and both Sandbox event destinations are created, so
 
 **Connect and Invoices are now walked too** (2026-08-22). A Practice onboarded
 through the v2 Account Link to an active account, raised a $1,800 Invoice, and a
-Client paid it with a test card; `invoice.paid` created the `payments` row. The
-only `blocked` step left on the practice side is Dee's 8.1, and
-[#236](https://github.com/markgoho/doula-cloud/issues/236) has now attempted it:
-her Practice's connected account was created and the Payments screen moved to
-`Onboarding incomplete`, but Stripe's hosted form serves a **CAPTCHA**, which a
-walk must not work around. So the step stays `blocked`, and what it waits on is
-precise: **a person completing that form by hand, inside a live walk session** —
-the stack's Postgres goes down with its volumes (`app/e2e/stack.ts:171`), so a
-connected account made in one session is orphaned by the next. The product's leg
-is one click, so a walk can drive up to the CAPTCHA and hand over there.
+Client paid it with a test card; `invoice.paid` created the `payments` row.
+
+**The practice side now has no `blocked` step at all.** Dee's 8.1 was the last one,
+and [#236](https://github.com/markgoho/doula-cloud/issues/236) cleared it by
+onboarding a second Practice end to end: `card_payments` and `payouts` both
+`active`, written by the `capability_status_updated` thin event, after which a
+**non-owner Admin** raised a `$900` Invoice. The recipe is kept at
+[connect-onboarding.md](connect-onboarding.md) so no later walk re-derives it.
+
+**On the CAPTCHA.** That walk first hit one at the hosted form's email step and
+recorded the step as closed to automation. That was too strong: the CAPTCHA was
+served to a **Playwright-launched** browser and not to the user's own Chrome,
+which completed the same form unchallenged. The rule that survives is narrower and
+more useful — **an attended browser clears it, an unattended one does not** — so a
+step gated this way is `blocked` for an unattended run and `manual` the moment a
+person is at the keyboard. A walk still never works around an anti-automation
+control; it changes browser, or it hands over.
 
 The walk earned its keep: it found four defects that reading could not. Two were
 config that reported itself healthy while delivering nothing (`events_from` on
@@ -137,11 +144,11 @@ Every step carries exactly one mark.
   it up, and keep `blocked` for the one thing that cannot be (a Stripe account is
   a business relationship, not a container). Dee's walk
   ([#236](https://github.com/markgoho/doula-cloud/issues/236)) drew the second
-  half of that line: Stripe's hosted onboarding serves a **CAPTCHA**, so the step
-  is not merely un-stood-up, it is deliberately closed to automation. **A walk
-  never works around an anti-automation control on a third party's system.** It
-  records where our code stopped and what a person must do, and leaves the mark
-  where it is.
+  half of that line and then erased it: Stripe's hosted onboarding CAPTCHA'd an
+  automated browser and let a person's own Chrome straight through, so what looked
+  like a closed door was **an attendance requirement**. A walk never works around
+  an anti-automation control; it changes browser, or it hands over to the human
+  and carries on.
 
   The expected result is still the real as-built response, so the step is walked
   and observed like a `manual` one — the mark exists so the first run's numbers do
