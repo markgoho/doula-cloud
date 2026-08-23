@@ -25,8 +25,8 @@ except `.env.example`. A Sandbox key is still a key.
 | `STRIPE_API_KEY` | `sk_test_…` in `.env.local` | unset | Secret Manager `doula-cloud-stripe-api-key` |
 | `STRIPE_CREDIT_PRICE_ID` | `price_…` in `.env.local` | unset | plain env var |
 | `STRIPE_WEBHOOK_SECRET` | the `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-webhook-secret` |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | **not set yet** — see below |
-| `STRIPE_ACCOUNT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | **not set yet** — see below |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-connect-webhook-secret` |
+| `STRIPE_ACCOUNT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-account-webhook-secret` |
 | `GCP_PROJECT_ID` | `doula-cloud` | same | ambient |
 | `STORAGE_EMULATOR_HOST` | the compose `gcs` service | same | unset (real GCS) |
 | `GCS_ATTACHMENTS_BUCKET` | `doula-cloud-e2e-attachments` | same | the real bucket |
@@ -172,7 +172,7 @@ and the rule is "no Origin, no rejection" (`api/main.go:125-129`).
 | Endpoint | Events | Payload | `events_from` | State |
 | --- | --- | --- | --- | --- |
 | `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
-| `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@accounts` | `ed_test_61VGma0wEKcK6gNt916VGl100QSQI7KSJpC2tKXrsA8e`, enabled |
+| `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled |
 | `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
 
 The two Connect rows are one feature, split by Stripe's own constraint: an
@@ -184,25 +184,43 @@ delivered object always deserializes into the structs the SDK ships.
 
 Both are created over `/v2/core/event_destinations`, not the v1
 `/v1/webhook_endpoints` surface, and neither carries a `connect=true`
-flag — v2 replaced that with `events_from: ["@accounts"]`.
+flag — v2 replaced that with `events_from`.
 
-**Both Connect destinations are enabled and delivering to a service that
-cannot yet answer them.** Their signing secrets exist only in the create
-responses #247 captured; no Secret Manager version holds either, so
-`STRIPE_CONNECT_WEBHOOK_SECRET` and `STRIPE_ACCOUNT_WEBHOOK_SECRET` are
-unset on Cloud Run and every delivery gets a 400. Stripe eventually
-disables a destination that keeps failing. Two steps close it, in this
-order — deploy first, so the routes exist:
+### `events_from` is not the same for the two Connect destinations
 
-```sh
-gcloud secrets create doula-cloud-stripe-connect-webhook-secret --replication-policy=automatic
-gcloud secrets create doula-cloud-stripe-account-webhook-secret  --replication-policy=automatic
-printf %s "$CONNECT_SECRET" | gcloud secrets versions add doula-cloud-stripe-connect-webhook-secret --data-file=-
-printf %s "$ACCOUNT_SECRET" | gcloud secrets versions add doula-cloud-stripe-account-webhook-secret --data-file=-
+The account destination is **`@self`**, not `@accounts`, and getting this
+wrong is silent — the destination stays `enabled`, `status_details` stays
+`null`, and nothing is delivered. It cost a debugging round on #247 and
+`events_from` cannot be patched, so a wrong one means delete, recreate, and
+roll the signing secret.
 
-gcloud run services update doula-api --region us-central1 \
-  --update-secrets STRIPE_CONNECT_WEBHOOK_SECRET=doula-cloud-stripe-connect-webhook-secret:latest,STRIPE_ACCOUNT_WEBHOOK_SECRET=doula-cloud-stripe-account-webhook-secret:latest
-```
+The rule: a v2 Account is an object the **platform** owns, so events about
+it are emitted on the platform. An Invoice raised with the `Stripe-Account`
+header belongs to the **connected account**, so those are `@accounts`.
+
+Proved rather than reasoned. With the account destination on `@accounts`, a
+freshly created v2 Account emitted `capability_status_updated` and no request
+reached Cloud Run at all. A second destination on `@self`, pointed at the same
+route, delivered on the next account create. Recreated on `@self`, the route
+now answers `200` and logs the handler dropping an account no Practice claims.
+
+The Invoice destination's `@accounts` is **not** verified this way — that needs
+a Practice that has finished onboarding and raised a real Invoice, which is the
+walk #247 still owes. If `invoice.paid` turns out not to arrive, this is the
+first thing to check.
+
+Both Connect secrets are in Secret Manager and wired to the service. Two
+things that were not obvious when setting them up:
+
+- **A new secret needs its own IAM binding.** Cloud Run's runtime service
+  account (`850855848778-compute@developer.gserviceaccount.com`) is granted
+  `roles/secretmanager.secretAccessor` **per secret**, not at the project
+  level, so a freshly created secret is unreadable and the deploy fails with
+  `Permission denied on secret`. Grant it with
+  `gcloud secrets add-iam-policy-binding <name> --member=serviceAccount:… --role=roles/secretmanager.secretAccessor`.
+- **`:latest` re-resolves per revision, not per version.** Adding a new
+  secret version changes nothing on a running service; a new revision has to
+  be created for it to be picked up.
 
 Set out of band on purpose, for the reason the next section gives.
 
