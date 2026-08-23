@@ -1,5 +1,12 @@
 # Read follows the role, and the read endpoint is the boundary
 
+> **Superseded by [ADR-0008](0008-employment-type-gates-the-practice-attachment-gates-the-engagement.md).**
+> The table below is superseded in full — ADR-0008 carries a five-column version
+> with employment type and attachment as real columns, plus a write-side table this
+> ADR never had. The argument in this document stands: why read-follows-write and
+> one-practice-one-view both lost, and why the Staff roster and Templates cells fall
+> where they do. Read this ADR for the reasoning, ADR-0008 for the current table.
+
 Doula Cloud's permission model checks who you are when you try to **change**
 something and almost never when you try to **look** at something. `RequireOwner`
 (`api/internal/staffauth/roles.go:63`) is the only role gate in the codebase, and
@@ -17,6 +24,9 @@ any Staff member reads the Practice's credit balance and purchase ledger
 rule, and this ADR writes it.
 
 ## Read follows the role
+
+**The table in this section is superseded by [ADR-0008](0008-employment-type-gates-the-practice-attachment-gates-the-engagement.md).**
+The argument below it is not.
 
 The Practice boundary is not part of this rule. Postgres row-level security
 already fences Practice from Practice on both tiers, proved by a dedicated
