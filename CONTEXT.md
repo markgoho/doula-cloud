@@ -41,7 +41,7 @@ A role a Staff member holds, covering the business side of a Practice — Client
 _Avoid_: Office manager, Administrator, superuser
 
 **Employment type**:
-What a Staff member is to a Practice — `employee` or `contractor` — held on their Membership, independent of their roles. Every Membership carries one, including the founding Owner's: `employee` means *inside the business*, not literally on a payroll. A role says what a person does; employment type says what they are to the business, so the two are orthogonal and either value may pair with any roles. An Owner may change it, and the change takes effect at once — it grants and withdraws the ambient reach over the whole Practice, and never touches an Engagement the person is attached to. See [ADR-0006](docs/adr/0006-read-follows-the-role.md).
+What a Staff member is to a Practice — `employee` or `contractor` — held on their Membership, independent of their roles. Every Membership carries one, including the founding Owner's: `employee` means *inside the business*, not literally on a payroll. A role says what a person does; employment type says what they are to the business, so the two are orthogonal and either value may pair with any roles. An Owner may change it, and the change takes effect at once — it grants and withdraws the ambient reach over the whole Practice, and never touches an **Attachment**. Flipping an `employee` to `contractor` therefore leaves her holding accrued Attachments to everything she ever worked, and she keeps none of it: an accrued Attachment is a record, not a key, and only a granted one reaches. See [ADR-0006](docs/adr/0006-read-follows-the-role.md).
 _Avoid_: Staff type, worker type (both read as a role)
 
 **Client**:
@@ -54,12 +54,18 @@ _Client says_: my care ("Your care" as a heading). Never "my pregnancy" — too 
 _Avoid_: Pregnancy (too narrow — excludes postpartum-only work), Case, Relationship
 
 **Offer**:
-A Practice proposing an Engagement to a contractor Doula, which she accepts or declines. Her acceptance is what attaches her to the Engagement, and attachment is what she reads by ([ADR-0006](docs/adr/0006-read-follows-the-role.md)). Only contractors are offered work: an employed Doula reads every Engagement at the Practice already, so there is nothing for her to accept. A refusal is durable — a Practice must be able to tell "she said no" from "she has not answered". Not yet in the model (LV-G6); decided on [Lena Vasquez's journey map](docs/journeys/contractor-doula.md).
+A Practice proposing an Engagement to a contractor Doula, which she accepts or declines. Her acceptance is what opens a granted **Attachment**, and that Attachment is what she reads by ([ADR-0006](docs/adr/0006-read-follows-the-role.md)). It is her only door in: with no ambient reach over the Practice, she cannot touch an Engagement she has not been offered, so nothing ever attaches her by accident. Only contractors are offered work: an employed Doula reads every Engagement at the Practice already, so there is nothing for her to accept. A refusal is durable — a Practice must be able to tell "she said no" from "she has not answered". Not yet in the model (LV-G6); decided on [Lena Vasquez's journey map](docs/journeys/contractor-doula.md).
 _Client says_: nothing — the Client never meets the term, and never learns which Doulas refused her Engagement.
 _Avoid_: Assignment (the product's other word for who is doing the work, and it carries no agreement — a Visit's `staff_id` is assigned, not offered), Invitation (already means joining a Practice)
 
+**Attachment**:
+The record that a Doula is on an Engagement — the answer to "who is working this birth", and the only answer a Doula has to "which of these forty Engagements are mine". It has two origins, and the difference is load-bearing. An **accrued** attachment opens by itself the first time she *does* something on the Engagement — logs or is named on a Visit, sends a Message, edits a Plan Instance, acts on a Contract. Merely reading never attaches. A **granted** attachment is someone deciding she is on it: an Admin scheduling her, or a contractor accepting an **Offer**. Only a **granted** attachment grants reach — a contractor reads and writes the Engagements she holds one for, and nothing else. An accrued attachment grants nothing: it belongs to a Doula whose **Employment type** already reaches the whole Practice, so it is a record of work, never a key. Attachment is for Doulas only; an Owner or Admin touching an Engagement is not attached to it.
+An Attachment ends but is never deleted, and ending is not erasure — "she was on this from February to May" is more of the record than "she was on this", not less. It ends when the Practice takes her off, when she drops out, when the Engagement is completed, or when her Membership at the Practice ends. A contractor's reach stops the moment it does; the Visits she worked are untouched, so the Practice keeps its record of who did what.
+_Client says_: my doula — the Client meets the person, never the record.
+_Avoid_: Assignment (the product's other word, and it carries no agreement — a Visit's `staff_id` is assigned, not accepted), Membership (that is joining the Practice, not joining a piece of its work)
+
 **Visit**:
-A scheduled meeting between a Doula and a Client within an Engagement. May be the birth itself.
+A scheduled meeting between a Doula and a Client within an Engagement. May be the birth itself. A Visit's `staff_id` is who is doing *that meeting*; an **Attachment** is who is on the *Engagement*. They are different facts and neither replaces the other — naming a Doula on a Visit is one of the things that attaches her.
 _Client says_: no client-facing surface today — the portal shows no Visit, so no Client word is settled.
 _Avoid_: Appointment (reads clinical/medical-provider)
 
