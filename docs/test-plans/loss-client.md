@@ -147,3 +147,58 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
 That is [#239](https://github.com/markgoho/doula-cloud/issues/239).
+
+### 2026-08-23 — manual and missing-feature steps ([#239](https://github.com/markgoho/doula-cloud/issues/239))
+
+`bun run dev:full` in `app/`, against a fresh solo Practice ("Willow Creek
+Doula Care", Owner+Admin+Doula in one Staff row — Maya's shape, since her
+journey carries this plan's staff-side stages) with one Client (Nadia
+Haddad), one Engagement, four Visits, a filled Birth Plan, a Contract signed
+by the Client and then voided by staff, and a four-message thread. Walked in
+Chrome via playwriter, one browser profile.
+
+**Note on the fixture**: Staff and Client-portal sessions share one
+`__session` cookie per origin (confirmed via `Network.getCookies`), so a
+single profile can hold only one of the two logged in at a time on
+`localhost:5173` — signing in as the other silently 403s the first
+("no matching staff account" on next request). This is exactly what the
+plan's Preconditions warn about ("Two browser sessions or two profiles");
+not a new finding, and not evidence of a production defect, since staff and
+portal are reached via different routes there. Walked by re-authenticating
+whichever side was about to act, immediately before each of its steps.
+
+| Step | Mark | Result |
+| --- | --- | --- |
+| 1.2 | `manual` | as expected | One continuous thread; Maya's and Nadia's messages both appear in order, immutable |
+| 1.2-a | `missing-feature (MO-G3)` | confirmed | Engagement page (both sides) shows only `Status` and `Created` — no due date, no gestation, no other Client detail |
+| 2.1 | `missing-feature (NH-G3)` | confirmed | No control anywhere on the Engagement page records an outcome |
+| 2.1-a | `missing-feature (NH-G1)` | confirmed | No status value is offered anywhere in the UI — there is no status control to read a value from |
+| 2.1-b | `missing-feature (MO-G4)` | confirmed | Same absence — no status control exists to set any value with |
+| 3.1-a | `manual` | as expected | With the tab closed, nothing arrives carrying content — consistent with the map's note that real device delivery is out of scope |
+| 3.2 | `manual` | as expected | No reminder, nudge, or countdown appears anywhere in the product |
+| 4.2 | `manual` | as expected, one correction | `<h1>` reads **"Welcome to Willow Creek Doula Care"** — the actual Practice name, confirming NH-G4's `{practiceName}` template. (The plan's illustrative text names "Rooted Birth Collective", a different Practice used as the shared fixture in other personas' plans; the mechanism, not the literal string, is what NH-G4 claims, and it holds.) |
+| 4.2-b | `manual` | as expected | `Status: intake`, `Created: 8/23/2026` — the only date the portal holds |
+| 4.3 | `manual` | as expected | **Birth Plan** then **Contract**, then the thread — same order every time |
+| 5.1 | `manual` | as expected | **Birth Plan** link renders unconditionally, second from the top |
+| 5.1-a | `missing-feature (NH-G2)` | confirmed | No retire/hide/archive/dismiss control on either side — Staff's Birth Plan section offers only **Save Birth Plan** |
+| 5.2-a | `manual` | as expected | `page.emulateMedia({ media: 'print' })` hides both **Back** and **Print** (`isVisible()` false for both); the print mechanism works |
+| 6.1 | `manual` | as expected | A voided Contract still renders its full signed prose on the Client side |
+| 6.2 | `manual` | as expected | `Status: voided`, then "Voided — this Contract is no longer active." — the ledger's word, no Void button, no human context (NH-G5) |
+| 6.2-a | `missing-feature (HS-G3)`, reasoning corrected, new gap **NH-G8** minted | **falsified in part** | The plan's claim was that the endpoint is merely unlinked. It is worse: `GET /api/portal/engagements/{id}/contract/pdf` itself 404s ("no signed contract found for this engagement") once the Contract is `voided`, confirmed with a direct `fetch()` from the page. `serveSignedPDF` (`api/internal/contracts/signed_pdf.go:66-69`) queries `WHERE ... AND status = $2::contract_status` bound to `statusSigned` — a Contract that has since moved to any other status, voided included, can never resolve a row, even though `signed_pdf_object_path` is still set and the PDF still exists in the store. Fixing HS-G3 (adding a link) would not fix this: the endpoint itself refuses. Distinct root from HS-G3, which is about the missing link on a Contract that is still `signed`; this is about the query excluding every Contract that is not. Same shared function backs the Staff-side signed-PDF route (`main.go:208`), so a Practice loses its own copy of a voided Contract too, once it is voided — noted here since this map owns the void transition, not asserted as a Staff-side finding of this plan. |
+| 6.2-b | `missing-feature (NH-G6)` | confirmed | No Invoice, balance, or payment surface anywhere in the portal — the portal's links are Birth Plan and Contract only |
+| 7.1 | `manual` | as expected | A fourth Visit row: `Maya Okonkwo`, `8/23/2026` — indistinguishable from the first three |
+| 7.1-a | `manual` | as expected | No Visit surface on the Client side at all — the portal home's only links remain Birth Plan and Contract |
+| 7.2 | `manual` | as expected | The thread continues both ways; nothing marks that its subject has changed |
+| 7.2-a | `missing-feature (NH-G7)` | confirmed | No mute, pause, or subject-change control on either side's Messages section |
+| 8.1 | `missing-feature (NH-G1)` | confirmed | Same absence as 2.1-a/2.1-b, observed a second time from the Client's own side |
+
+**22 steps walked: 13 `manual`, 9 `missing-feature`. Every mark holds; one
+reasoning corrected (6.2-a) and one new gap minted (NH-G8, added to
+[docs/journeys/loss-client.md](../journeys/loss-client.md)).** No `blocked`
+step exists on this plan, confirmed. No `journey-gap` issue filed from this
+ticket — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
+
+**Verdict**: this plan cannot pass, as written, and does not. Every
+`missing-feature` step confirmed genuinely unwalkable; the record stays at
+`intake` forever, the Birth Plan cannot be retired, and money has no
+client-facing surface at all.
