@@ -100,14 +100,18 @@ real work rather than a re-reading.
 
 1. The Sandbox did not exist. [#242](https://github.com/markgoho/doula-cloud/issues/242) created it, and Credits cleared.
 2. Stripe refused `POST /v1/accounts` for new integrations while every merged Connect path was Accounts v1. [#247](https://github.com/markgoho/doula-cloud/issues/247) moved the leg to Accounts v2.
-3. No Practice had been through the hosted onboarding. A first attempt on this walk was made from a Playwright-launched browser and hit a **CAPTCHA** at the email step.
-4. It was then driven through a real Chrome, which Stripe does not challenge the same way, and **it completed**. `card_payments` and `payouts` both went `active`, written by the `capability_status_updated` thin event rather than by a poll.
+3. No Practice had been through the hosted onboarding. Two attempts from a Playwright-launched Chromium were **CAPTCHA'd** — headless at the email step, headed at the password step.
+4. Driven through the user's own Chrome with `playwriter`, **no CAPTCHA appeared on any screen** and it completed. `card_payments` and `payouts` both went `active`, written by the `capability_status_updated` thin event rather than by a poll.
 
-**The CAPTCHA is not the boundary; the browser was.** Stripe challenged an
-automation-launched Chromium and did not challenge a human's own Chrome, so the
-honest statement is that this step needs **an attended session**, not that Stripe
-has closed the door. See [connect-onboarding.md](connect-onboarding.md) for the
-walked-through recipe, so no later walk re-derives it.
+**The CAPTCHA is not the boundary; the browser is.** Stripe challenged a
+Playwright-launched Chromium in *both* headless and headed mode — at the email
+step and at the password step respectively — and never challenged the user's own
+Chrome driven through `playwriter`, across all nine screens. So this is not an
+attendance requirement and the step is not closed to automation: it is walkable
+unattended **provided it is driven through a real browser**, which is why 8.1 is
+`manual` rather than `blocked`. See
+[connect-onboarding.md](connect-onboarding.md) for the recipe, so no later walk
+re-derives it.
 
 ### Stage 9 — Record the Payment (moment of truth)
 

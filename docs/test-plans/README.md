@@ -25,14 +25,23 @@ onboarding a second Practice end to end: `card_payments` and `payouts` both
 **non-owner Admin** raised a `$900` Invoice. The recipe is kept at
 [connect-onboarding.md](connect-onboarding.md) so no later walk re-derives it.
 
-**On the CAPTCHA.** That walk first hit one at the hosted form's email step and
-recorded the step as closed to automation. That was too strong: the CAPTCHA was
-served to a **Playwright-launched** browser and not to the user's own Chrome,
-which completed the same form unchallenged. The rule that survives is narrower and
-more useful — **an attended browser clears it, an unattended one does not** — so a
-step gated this way is `blocked` for an unattended run and `manual` the moment a
-person is at the keyboard. A walk still never works around an anti-automation
-control; it changes browser, or it hands over.
+**On the CAPTCHA.** That walk first hit one and recorded the step as closed to
+automation. That was wrong twice over, and the corrected reading is the useful
+one. The variable is **whose browser**, not headless-vs-headed and not whether a
+person is watching:
+
+| Browser | Result |
+| --- | --- |
+| Playwright-launched Chromium, headless | CAPTCHA at the email step |
+| Playwright-launched Chromium, headed | CAPTCHA at the password step |
+| `playwriter` driving the user's own Chrome | **no CAPTCHA on any of the nine screens** |
+
+Stripe is fingerprinting the automation-launched browser, not the absence of a
+human. The run that completed was driven end to end by `playwriter` and was never
+challenged, so **a Connect step is walkable unattended provided it is driven
+through the user's real Chrome** — which makes it `manual`, not `blocked`. A walk
+still never works around an anti-automation control; it uses a browser that does
+not trip one, and hands over to the human if that fails.
 
 The walk earned its keep: it found four defects that reading could not. Two were
 config that reported itself healthy while delivering nothing (`events_from` on
@@ -144,11 +153,11 @@ Every step carries exactly one mark.
   it up, and keep `blocked` for the one thing that cannot be (a Stripe account is
   a business relationship, not a container). Dee's walk
   ([#236](https://github.com/markgoho/doula-cloud/issues/236)) drew the second
-  half of that line and then erased it: Stripe's hosted onboarding CAPTCHA'd an
-  automated browser and let a person's own Chrome straight through, so what looked
-  like a closed door was **an attendance requirement**. A walk never works around
-  an anti-automation control; it changes browser, or it hands over to the human
-  and carries on.
+  half of that line and then erased it: Stripe's hosted onboarding CAPTCHA'd a
+  Playwright-launched browser in both headless and headed mode, and let the user's
+  own Chrome through `playwriter` straight past, unchallenged, on every screen. So
+  what looked like a closed door was **the wrong browser**. A walk never works
+  around an anti-automation control; it uses one that does not trip it.
 
   The expected result is still the real as-built response, so the step is walked
   and observed like a `manual` one — the mark exists so the first run's numbers do

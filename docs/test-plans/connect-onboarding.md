@@ -4,10 +4,18 @@ Written from the walk that first completed it
 ([#236](https://github.com/markgoho/doula-cloud/issues/236)). Every later walk that
 needs a Practice able to raise Invoices follows this rather than re-deriving it.
 
-**The browser matters.** Stripe served a CAPTCHA to a Playwright-launched Chromium
-at the email step and did not challenge the user's own Chrome. Drive this through
-a real browser — `playwriter` against the user's Chrome worked. That is why the
-step is `blocked` for an unattended run and `manual` for an attended one.
+**Drive it with `playwriter`, against the user's own Chrome.** This is the whole
+trick, and getting it wrong costs a CAPTCHA and a restart:
+
+| Browser | Result |
+| --- | --- |
+| Playwright-launched Chromium, headless | CAPTCHA at the email step |
+| Playwright-launched Chromium, headed | CAPTCHA at the password step |
+| `playwriter` -> the user's own Chrome | **no CAPTCHA on any of the nine screens** |
+
+Stripe fingerprints the automation-launched browser, not the absence of a human,
+so a real profiled Chrome walks straight through and **no human is needed for the
+form itself**. Do not `chromium.launch()` for this — headed does not help.
 
 ## Before starting
 
