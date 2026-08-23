@@ -47,6 +47,25 @@ whole suite.
 | 3.4 | Add a second and third Client, then attempt a fourth | The fourth returns `402` with "no credits remaining, ask a Practice Owner to buy more" — to Maya, who *is* the Owner | `manual` |
 | 3.4-a | Follow that instruction and try to buy credits | Stripe Checkout opens for the chosen quantity; paying credits the ledger | `manual` |
 
+**The doula's card statement says `DOULA.CLOU`.** Found on Dee's walk
+([#236](https://github.com/markgoho/doula-cloud/issues/236)) while tracing the
+Client-facing `DOULA.CLOU` that `7261a59` fixed. This is the *other* half of that
+bug and it is **not** fixed: the credits Checkout session sets no descriptor
+(`billing/purchase.go`), so the charge falls back to the platform account's, and
+the platform's `statement_descriptor` is `DOULA.CLOUD` — 11 characters. Stripe caps
+a card prefix at 10 and truncates, giving `DOULA.CLOU`. The Client never sees it,
+because a connected account now carries its own `display_name`; the **doula** sees
+it every time she buys credits.
+
+**No code change fixes this** — it is one Dashboard field, so it is a launch
+checklist item rather than a `journey-gap`. Set the *shortened descriptor* (the
+prefix) on the Doula Cloud account to `DoulaCloud`, which is exactly 10 characters
+and drops the period that makes the truncation read as a cut-off URL. It must be
+set on **both** the sandbox and the live account; Stripe only exposes it in the
+Dashboard (`settings/business-details`), not the API. Verified against the Sandbox
+on 2026-08-22.
+
+
 ### Stage 4 — Fill the Care Plan and the Birth Plan
 
 | Step | Action | Expected result | Mark |
