@@ -11,11 +11,15 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// newStaffListServer mounts ListStaffHandler the way main.go really does
+// -- through GatedRouter with the "owner","admin" declaration -- since
+// the Owner/Admin-vs-Doula boundary lives at that mount, not inside the
+// handler (#315).
 func newStaffListServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/staff",
-		staffauth.Middleware(db.App)(staffauth.ListStaffHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	g.Get("/practices/{practiceId}/staff", []string{ownerRole, adminRole}, staffauth.ListStaffHandler())
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -33,7 +37,7 @@ func getStaffList(t *testing.T, srv *httptest.Server, session, practiceID string
 	return resp
 }
 
-func TestListStaffHandler_NonOwnerForbidden(t *testing.T) {
+func TestListStaffHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-listing-staff"
 	_, practiceID := seedStaffWithMembership(t, db, identityUID) // '{doula}', not owner
@@ -46,6 +50,28 @@ func TestListStaffHandler_NonOwnerForbidden(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+// TestListStaffHandler_AdminSuccess proves ADR-0008's read table widened
+// this route past Owner-only: an Admin membership, which the pre-#315
+// handler's internal RequireOwner check would have 403'd, now reaches it
+// because the mount declares both roles.
+func TestListStaffHandler_AdminSuccess(t *testing.T) {
+	db := testdb.New(t)
+	const adminUID = "admin-lists-staff"
+	practiceID := seedPractice(t, db, "Admin Roster Practice")
+	adminID := seedStaff(t, db, adminUID)
+	seedMembershipWithRoles(t, db, practiceID, adminID, "{admin}")
+
+	srv, session := newStaffListServer(t, db, adminUID)
+	defer srv.Close()
+
+	resp := getStaffList(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
 

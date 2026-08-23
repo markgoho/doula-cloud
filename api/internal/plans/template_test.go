@@ -73,6 +73,35 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 	return practiceID
 }
 
+// seedContractorAtPractice seeds a Practice and a Staff member holding a
+// contractor Doula membership there -- ADR-0008's attachment-narrowed
+// column, distinct from seedMember's employee Doula.
+func seedContractorAtPractice(t *testing.T, db *testdb.DB, identityUID string) (practiceID, staffID string) {
+	t.Helper()
+	practiceID = seedPractice(t, db, "Test Practice")
+	staffID = seedStaff(t, db, identityUID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'contractor')`,
+		practiceID, staffID,
+	); err != nil {
+		t.Fatalf("seed contractor membership: %v", err)
+	}
+	return practiceID, staffID
+}
+
+// seedGrantedAttachment inserts an open, granted-origin
+// engagement_attachments row directly -- no handler in this codebase
+// writes one yet (#317 builds that).
+func seedGrantedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $2)`,
+		engagementID, staffID,
+	); err != nil {
+		t.Fatalf("seed granted attachment: %v", err)
+	}
+}
+
 // seedTemplate seeds a Plan Template row directly (bypassing the handlers
 // under test).
 func seedTemplate(t *testing.T, db *testdb.DB, practiceID, planType, fieldsJSON string) {

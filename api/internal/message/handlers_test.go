@@ -417,6 +417,46 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	}
 }
 
+// TestListHandler_ContractorWithoutAttachmentForbidden proves ADR-0008's
+// attachment rule: a contractor Doula with no engagement_attachments row
+// gets the same "not found" response an out-of-practice Engagement gets.
+func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Contractor Messages Practice")
+	seedContractorAtPractice(t, db, practiceID, "contractor-unattached-messages")
+	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client-cm@example.com")
+
+	srv, session := newServer(t, db, "contractor-unattached-messages")
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestListHandler_ContractorWithGrantedAttachmentSucceeds proves the
+// other half: an open, granted attachment reaches.
+func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Contractor Messages Practice 2")
+	staffID := seedContractorAtPractice(t, db, practiceID, "contractor-attached-messages")
+	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client-cm2@example.com")
+	seedGrantedAttachment(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, "contractor-attached-messages")
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
 // TestListHandler_PaginatesNewestFirst seeds more than one page of
 // Messages and walks the cursor to prove: newest-first ordering, a
 // truncated first page with hasMore/nextCursor set, and a second page
@@ -848,6 +888,24 @@ func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedGet(t, session, srv.URL+"/practices/"+homePracticeID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestAttachmentHandler_ContractorWithoutAttachmentForbidden proves
+// ADR-0008's attachment rule on the attachment-download route too.
+func TestAttachmentHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Contractor Attachment Practice")
+	seedContractorAtPractice(t, db, practiceID, "contractor-unattached-download")
+	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client-ca@example.com")
+
+	srv, session := newServer(t, db, "contractor-unattached-download")
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages/00000000-0000-0000-0000-000000000000/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)

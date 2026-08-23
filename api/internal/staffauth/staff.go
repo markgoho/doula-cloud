@@ -16,13 +16,16 @@ type StaffSummary struct {
 }
 
 // ListStaffHandler lists the Staff members holding a membership at the
-// current Practice, for the Owner-only roster where role assignment and
-// ending a person's sessions everywhere (#154) are reached. Owner-only,
-// not just membership-gated: nobody else has a reason to see the full
-// roster. Must be mounted behind staffauth.Middleware.
+// current Practice, for the roster where role assignment and ending a
+// person's sessions everywhere (#154) are reached. Owner and Admin only
+// (ADR-0008's read table) -- a Doula has no reason to see the full
+// roster; enforced by the "owner","admin" role declaration on this
+// route's GatedRouter mount in main.go, not inside this handler. Must be
+// mounted behind staffauth.Middleware.
 func ListStaffHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
+		tx, practiceID, ok := RequireTx(w, r)
+		// coverage:ignore reason: Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

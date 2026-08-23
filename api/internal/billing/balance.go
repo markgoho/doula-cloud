@@ -77,10 +77,11 @@ func ledgerHistory(ctx context.Context, tx *sql.Tx, practiceID string) ([]Ledger
 	return entries, nil
 }
 
-// GetBalanceHandler lets any Staff member at the current Practice read its
-// billing credit balance and ledger history -- no Owner-only restriction,
-// consistent with the practice-wide visibility default from the role
-// model. Must be mounted behind staffauth.Middleware.
+// GetBalanceHandler reads a Practice's billing credit balance and ledger
+// history. Owner and Admin only (ADR-0008's read table) -- a Doula never
+// reaches it, enforced by the "owner","admin" role declaration on this
+// route's GatedRouter mount in main.go, not inside this handler. Must be
+// mounted behind staffauth.Middleware.
 func GetBalanceHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)

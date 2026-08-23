@@ -215,6 +215,55 @@ func TestGetInstanceHandler_NotFound(t *testing.T) {
 	}
 }
 
+// TestGetInstanceHandler_ContractorWithoutAttachmentForbidden proves
+// ADR-0008's attachment rule for Plan Instances: a contractor Doula with
+// no engagement_attachments row gets the same "not found" response an
+// out-of-practice Engagement gets.
+func TestGetInstanceHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-instance-contractor-unattached"
+	practiceID, _ := seedContractorAtPractice(t, db, uid)
+	engagementID := seedEngagement(t, db, practiceID)
+	seedInstance(t, db, engagementID, birthPlanType,
+		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
+		`{"f1":"Jamie"}`,
+	)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds proves
+// the other half: an open, granted attachment reaches.
+func TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-instance-contractor-attached"
+	practiceID, staffID := seedContractorAtPractice(t, db, uid)
+	engagementID := seedEngagement(t, db, practiceID)
+	seedInstance(t, db, engagementID, birthPlanType,
+		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
+		`{"f1":"Jamie"}`,
+	)
+	seedGrantedAttachment(t, db, engagementID, staffID)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
 func TestGetInstanceHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-success"

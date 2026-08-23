@@ -104,11 +104,32 @@ func PostInstanceHandler() http.Handler {
 }
 
 // GetInstanceHandler views the Plan Instance for :engagementId +
-// :planType. Must be mounted behind staffauth.Middleware.
+// :planType, narrowed by ADR-0008's attachment rule for a contractor
+// Doula, same as engagement.DetailHandler. Must be mounted behind
+// staffauth.Middleware.
 func GetInstanceHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, planType, ok := resolveInstanceRequest(w, r)
 		if !ok {
+			return
+		}
+
+		practiceID, _ := staffauth.PracticeID(r.Context())
+		staffID, _ := staffauth.StaffID(r.Context())
+		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !canAccess {
+			http.Error(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
 			return
 		}
 

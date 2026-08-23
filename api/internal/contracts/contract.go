@@ -131,12 +131,36 @@ func PostContractHandler() http.Handler {
 	})
 }
 
-// GetContractHandler views the Contract for :engagementId. Must be
-// mounted behind staffauth.Middleware.
+// GetContractHandler views the Contract for :engagementId: scope reaches
+// every role that can reach the Engagement at all (narrowed by
+// ADR-0008's attachment rule for a contractor Doula), but money -- and,
+// separately, Invoice history -- is Owner/Admin only. The split is
+// enforced at the type level by ReadContract, not by redacting a value:
+// staffauth.Reader picks which of ContractScope/ContractFull comes back.
+// Must be mounted behind staffauth.Middleware.
 func GetContractHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)
 		if !ok {
+			return
+		}
+
+		practiceID, _ := staffauth.PracticeID(r.Context())
+		staffID, _ := staffauth.StaffID(r.Context())
+		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !canAccess {
+			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
 			return
 		}
 
@@ -151,16 +175,17 @@ func GetContractHandler() http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		out := ContractResponse{
+		full := ContractResponse{
 			EngagementID: engagementID,
 			Status:       status,
 			Prose:        prose,
 			MergeFields:  extractMergeFields(prose),
 			Values:       values.nonEmpty(),
 		}
+
+		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(out); err != nil {
+		if err := json.NewEncoder(w).Encode(ReadContract(reader, full)); err != nil {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})

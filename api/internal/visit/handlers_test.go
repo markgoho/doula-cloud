@@ -169,6 +169,50 @@ func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	}
 }
 
+// TestListHandler_ContractorWithoutAttachmentForbidden proves ADR-0008's
+// attachment rule: a contractor Doula with no engagement_attachments row
+// gets the same "not found" response an out-of-practice Engagement gets.
+func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := seedDoulaWithMembership(t, db, "doula-owner-of-visits")
+	contractorUID := "contractor-unattached-visits"
+	seedContractorAtPractice(t, db, practiceID, contractorUID)
+	engagementID := seedEngagement(t, db, practiceID)
+	seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestListHandler_ContractorWithGrantedAttachmentSucceeds proves the
+// other half: an open, granted attachment reaches.
+func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := seedDoulaWithMembership(t, db, "doula-owner-of-visits-2")
+	contractorUID := "contractor-attached-visits"
+	contractorStaffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	engagementID := seedEngagement(t, db, practiceID)
+	seedVisit(t, db, engagementID, staffID)
+	seedGrantedAttachment(t, db, engagementID, contractorStaffID)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
 func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-list-wrong-practice"

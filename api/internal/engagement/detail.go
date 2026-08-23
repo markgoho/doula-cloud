@@ -21,8 +21,9 @@ type Detail struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-// DetailHandler views one Engagement's basic detail. Must be mounted
-// behind staffauth.Middleware.
+// DetailHandler views one Engagement's basic detail: every Staff role
+// except a contractor Doula without an open, granted attachment on it
+// (ADR-0008). Must be mounted behind staffauth.Middleware.
 func DetailHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
@@ -36,8 +37,26 @@ func DetailHandler() http.Handler {
 			return
 		}
 
+		staffID, _ := staffauth.StaffID(r.Context())
+		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !canAccess {
+			http.Error(w, "engagement not found", http.StatusNotFound)
+			return
+		}
+
 		var d Detail
-		err := tx.QueryRowContext(r.Context(),
+		err = tx.QueryRowContext(r.Context(),
 			`SELECT e.id, c.id, c.name, e.status, e.created_at
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id

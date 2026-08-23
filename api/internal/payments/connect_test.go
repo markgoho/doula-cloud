@@ -78,13 +78,17 @@ func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *str
 	return id
 }
 
+// newConnectServer mounts GetConnectStatusHandler the way main.go really
+// does -- through GatedRouter with the "owner" declaration, mirroring
+// PostConnectHandler's own Owner-only gate (#315; ADR-0008 has no read-
+// table row for Stripe Connect state yet, see #267).
 func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/payments/connect",
 		staffauth.Middleware(db.App)(payments.PostConnectHandler(client)))
-	mux.Handle("GET /practices/{practiceId}/payments/connect",
-		staffauth.Middleware(db.App)(payments.GetConnectStatusHandler(client)))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	g.Get("/practices/{practiceId}/payments/connect", []string{"owner"}, payments.GetConnectStatusHandler(client))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -268,7 +272,7 @@ func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
 func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-not-connected"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -292,14 +296,34 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 	}
 }
 
+// TestGetConnectStatusHandler_DoulaForbidden proves a non-Owner Staff
+// member cannot read the Practice's Stripe Connect status through the
+// real GatedRouter mount, mirroring PostConnectHandler's own Owner-only
+// gate.
+func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "status-doula-forbidden"
+	practiceID := seedMember(t, db, uid)
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := getConnectStatus(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
 // TestGetConnectStatusHandler_OnboardingIncomplete proves a connected
 // account that still owes Stripe information reports
-// onboarding_incomplete, carries the outstanding requirement paths, and
-// that any Staff member (not just an Owner) can read it.
+// onboarding_incomplete and carries the outstanding requirement paths.
 func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-incomplete"
-	practiceID := seedMember(t, db, uid) // doula role, not owner
+	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)

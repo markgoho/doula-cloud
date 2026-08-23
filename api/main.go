@@ -116,6 +116,13 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ownerAndAdmin is the role declaration for every GatedRouter route
+// ADR-0008's read table admits to Owner and Admin only (Staff roster,
+// Credit balance and ledger, Contract's money-bearing Signed PDF and
+// Invoice history) -- named once so golangci-lint's package-wide goconst
+// check doesn't see four independent literals to flag.
+var ownerAndAdmin = []string{"owner", "admin"}
+
 // routes builds the BFF's route table. verifier, db, store, pusher,
 // stripeClient, and paymentsClient are threaded through so tests can
 // substitute a fake Identity Platform verifier, a test Postgres instance,
@@ -127,8 +134,21 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // acceptance) are state-changing too, and both they and the two Stripe
 // webhook routes rely on the same "no Origin header, no rejection" rule
 // -- there is no separate carve-out for either.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, expectedOrigins []string) http.Handler {
+//
+// routes' second return value is GatedRouter's registry of every GET it
+// mounted -- main() never looks at it, but the guardrail tests in
+// main_test.go walk it (and cross-check it against this function's own
+// source for a route that bypassed the gate entirely) without needing a
+// live server.
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
 	mux := http.NewServeMux()
+	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
+	// staffauth.Middleware: Get panics at startup if a route has no role
+	// declaration, so a forgotten one fails the binary rather than
+	// silently opening to every Staff member (#231, #315). AnyStaff
+	// declares an endpoint open to every role on purpose; a bare role
+	// list names exactly who ADR-0008's read table admits.
+	g := staffauth.NewGatedRouter(mux, db)
 	// Under /api like every other route: Firebase Hosting rewrites /api/** to
 	// this service with the path unchanged, so a bare /hello would be
 	// unreachable from the browser. CI's two smoke tests curl this same path
@@ -138,76 +158,89 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("DELETE /api/session", session.EndHandler(db))
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(db))
-	mux.Handle("GET /api/practices/{practiceId}/session",
-		staffauth.Middleware(db)(http.HandlerFunc(practiceSessionHandler)))
+	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, http.HandlerFunc(practiceSessionHandler))
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
 		staffauth.Middleware(db)(staffauth.AssignRolesHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/staff",
-		staffauth.Middleware(db)(staffauth.ListStaffHandler()))
+	// Staff roster: Owner and Admin only (ADR-0008's read table) -- a
+	// Doula has no reason to see the full roster.
+	g.Get("/api/practices/{practiceId}/staff", ownerAndAdmin, staffauth.ListStaffHandler())
 	mux.Handle("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
 		staffauth.Middleware(db)(staffauth.EndSessionsHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/billing",
-		staffauth.Middleware(db)(billing.GetBalanceHandler()))
+	// Credit balance and ledger: Owner and Admin only (ADR-0008).
+	g.Get("/api/practices/{practiceId}/billing", ownerAndAdmin, billing.GetBalanceHandler())
 	mux.Handle("POST /api/practices/{practiceId}/billing/purchases",
 		staffauth.Middleware(db)(billing.PostPurchaseHandler(stripeClient)))
 	mux.Handle("POST /api/stripe/webhook", billing.PostPurchaseWebhookHandler(db, stripeWebhookSecret))
 	mux.Handle("POST /api/practices/{practiceId}/payments/connect",
 		staffauth.Middleware(db)(payments.PostConnectHandler(paymentsClient)))
-	mux.Handle("GET /api/practices/{practiceId}/payments/connect",
-		staffauth.Middleware(db)(payments.GetConnectStatusHandler(paymentsClient)))
+	// ADR-0008's read table has no row for Stripe Connect state; mirroring
+	// the write side's Owner-only gate (PostConnectHandler,
+	// staffauth.RequireOwner) is the narrowest defensible default until a
+	// real rule lands (#267 stays open for that rule).
+	g.Get("/api/practices/{practiceId}/payments/connect", []string{"owner"}, payments.GetConnectStatusHandler(paymentsClient))
 	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret))
 	// A second Connect route, not a second feature: Stripe's v2 account
 	// events are thin and a destination carries one payload type, so they
 	// cannot share connect-webhook's endpoint or its secret (#247).
 	mux.Handle("POST /api/stripe/account-webhook", payments.PostAccountWebhookHandler(db, paymentsClient, paymentsAccountWebhookSecret))
-	mux.Handle("GET /api/practices/{practiceId}/clients",
-		staffauth.Middleware(db)(engagement.ListHandler()))
+	// Engagements, Visits, Messages, Plan Instances, and Contract scope
+	// are open to every Staff role at the mount; the employee/contractor
+	// split ADR-0008's read table draws inside that column is
+	// attachment-narrowing the handler itself enforces via
+	// staffauth.Reader.CanAccessEngagement, not a role declaration.
+	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, engagement.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/clients",
 		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler())))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}",
-		staffauth.Middleware(db)(engagement.DetailHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(db)(visit.ListHandler()))
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, visit.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
 		staffauth.Middleware(db)(visit.CreateHandler()))
 	mux.Handle("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
 		staffauth.Middleware(db)(visit.ReassignHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(db)(message.ListHandler()))
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages", staffauth.AnyStaff, message.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
 		staffauth.Middleware(db)(idempotency.Wrap(message.CreateHandler(store, pusher))))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
-		staffauth.Middleware(db)(message.AttachmentHandler(store)))
-	mux.Handle("GET /api/practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(db)(plans.GetTemplateHandler()))
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment", staffauth.AnyStaff, message.AttachmentHandler(store))
+	// Plan Template and Contract Template: every Staff role (ADR-0008),
+	// no attachment narrowing -- a Template isn't Engagement-scoped.
+	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, plans.GetTemplateHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/plan-templates/{planType}",
 		staffauth.Middleware(db)(plans.PutTemplateHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
 		staffauth.Middleware(db)(plans.PostInstanceHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db)(plans.GetInstanceHandler()))
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}", staffauth.AnyStaff, plans.GetInstanceHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
 		staffauth.Middleware(db)(plans.PutInstanceHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/contract-template",
-		staffauth.Middleware(db)(contracts.GetTemplateHandler()))
+	g.Get("/api/practices/{practiceId}/contract-template", staffauth.AnyStaff, contracts.GetTemplateHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/contract-template",
 		staffauth.Middleware(db)(contracts.PutTemplateHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
 		staffauth.Middleware(db)(contracts.PostContractHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db)(contracts.GetContractHandler()))
+	// Contract read is the sharpest #231 case: scope reaches every role
+	// (narrowed by attachment for a contractor, same as above), but money
+	// -- and Invoice history -- is Owner/Admin only, never a Doula's,
+	// employee or contractor (ADR-0008: "her own agreed fee only ...
+	// never the Practice's price"). GetContractHandler does the
+	// scope-vs-money split itself via staffauth.Reader +
+	// contracts.ContractScope/ContractFull; the mount stays AnyStaff so
+	// scope-only Doulas still reach it.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract", staffauth.AnyStaff, contracts.GetContractHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract",
 		staffauth.Middleware(db)(contracts.PutContractHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
 		staffauth.Middleware(db)(contracts.PostSendContractHandler(pusher)))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
 		staffauth.Middleware(db)(contracts.PostVoidContractHandler()))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract/pdf",
-		staffauth.Middleware(db)(contracts.GetSignedContractPDFHandler(store)))
+	// The Signed PDF is a rendered, unredactable document -- it can't be
+	// split into scope/money views the way the JSON Contract read can, so
+	// it follows the money row: Owner/Admin only.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/pdf", ownerAndAdmin, contracts.GetSignedContractPDFHandler(store))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices",
 		staffauth.Middleware(db)(payments.PostInvoiceHandler(paymentsClient)))
-	mux.Handle("GET /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices",
-		staffauth.Middleware(db)(payments.GetInvoicesHandler()))
+	// Invoice history rides the same money row as Contract money -- see
+	// above. A contractor's own-fee narrowing (rather than an outright
+	// no) is #317's to build once the Offer/Attachment flow exists.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", ownerAndAdmin, payments.GetInvoicesHandler())
 	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",
 		staffauth.Middleware(db)(pushsub.RegisterHandler()))
 	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
@@ -236,7 +269,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 		clientauth.Middleware(db)(pushsub.ClientRegisterHandler()))
 	mux.Handle("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
 		clientauth.Middleware(db)(pushsub.ClientUnregisterHandler()))
-	return csrf.Wrap(expectedOrigins, mux)
+	return csrf.Wrap(expectedOrigins, mux), g.Routes()
 }
 
 func main() {
@@ -274,9 +307,10 @@ func main() {
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
 	paymentsClient := payments.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("APP_BASE_URL"))
 
+	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), resolveExpectedOrigins())
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), resolveExpectedOrigins()),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

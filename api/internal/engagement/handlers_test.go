@@ -96,6 +96,37 @@ func TestListHandler_VisibleToAnyStaffAtSamePractice(t *testing.T) {
 	}
 }
 
+// TestListHandler_ContractorSeesOnlyAttachedEngagements proves ADR-0008's
+// attachment-narrowed column: a contractor Doula's list is scoped to the
+// Engagements she holds an open, granted attachment on, not every Client
+// at the Practice the way an employee's is.
+func TestListHandler_ContractorSeesOnlyAttachedEngagements(t *testing.T) {
+	db := testdb.New(t)
+	const contractorUID = "contractor-listing"
+	practiceID := seedStaffWithMembership(t, db, "staff-owner-of-practice")
+	staffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, attachedEngagementID := seedClientEngagement(t, db, practiceID, "Attached Client", "attached@example.com", "intake")
+	seedClientEngagement(t, db, practiceID, "Unattached Client", "unattached@example.com", "intake")
+	seedGrantedAttachment(t, db, attachedEngagementID, staffID)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var list []engagement.ClientEngagement
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(list) != 1 || list[0].Name != "Attached Client" {
+		t.Fatalf("list = %+v, want only Attached Client", list)
+	}
+}
+
 func TestCreateHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-creating"
@@ -372,6 +403,49 @@ func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestDetailHandler_ContractorWithoutAttachmentForbidden proves the
+// per-Engagement half of ADR-0008's attachment rule: same "not found"
+// response an out-of-practice Engagement gets, so a contractor can't
+// distinguish "doesn't exist" from "not attached" (#230).
+func TestDetailHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const contractorUID = "contractor-unattached-detail"
+	practiceID := seedStaffWithMembership(t, db, "staff-owner-of-practice-2")
+	seedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := seedClientEngagement(t, db, practiceID, "Unattached Detail Client", "unattached-detail@example.com", "intake")
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestDetailHandler_ContractorWithGrantedAttachmentSucceeds proves the
+// other half: an open, granted attachment reaches.
+func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
+	db := testdb.New(t)
+	const contractorUID = "contractor-attached-detail"
+	practiceID := seedStaffWithMembership(t, db, "staff-owner-of-practice-3")
+	staffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := seedClientEngagement(t, db, practiceID, "Attached Detail Client", "attached-detail@example.com", "active")
+	seedGrantedAttachment(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
 

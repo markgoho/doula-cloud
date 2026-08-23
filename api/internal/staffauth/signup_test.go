@@ -28,6 +28,7 @@ const (
 	roundtripOwnerUID = "roundtrip-owner"
 	ownerRole         = "owner"
 	doulaRole         = "doula"
+	adminRole         = "admin"
 )
 
 // errBadToken is what a fake Verifier returns for a token Identity

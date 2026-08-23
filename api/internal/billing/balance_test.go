@@ -34,14 +34,12 @@ func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string, rol
 	}
 }
 
-// seedMember seeds a Practice and a Staff member holding a doula (non-Owner)
-// role there -- GetBalanceHandler must allow this role, unlike Owner-gated
-// handlers elsewhere.
-func seedMember(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
+// seedMember seeds a Practice and a Staff member holding roles there.
+func seedMember(t *testing.T, db *testdb.DB, identityUID string, roles string) (practiceID string) {
 	t.Helper()
 	practiceID = seedPractice(t, db, "Test Practice")
 	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{doula}")
+	seedMembership(t, db, practiceID, staffID, roles)
 	return practiceID
 }
 
@@ -55,11 +53,15 @@ func seedLedgerRow(t *testing.T, db *testdb.DB, practiceID, origin string, quant
 	}
 }
 
+// newBillingServer mounts GetBalanceHandler the way main.go really does --
+// through GatedRouter with the "owner","admin" declaration -- since the
+// Owner/Admin-vs-Doula boundary lives at that mount, not inside the
+// handler (#315).
 func newBillingServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/billing",
-		staffauth.Middleware(db.App)(billing.GetBalanceHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	g.Get("/practices/{practiceId}/billing", []string{"owner", "admin"}, billing.GetBalanceHandler())
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -124,13 +126,14 @@ func TestBalance_ZeroForPracticeWithNoLedgerRows(t *testing.T) {
 	}
 }
 
-// TestGetBalanceHandler_AnyMemberAllowed proves a non-Owner Staff member
-// can read the balance and ledger history -- AC #75 explicitly rules out
-// an Owner-only restriction.
-func TestGetBalanceHandler_AnyMemberAllowed(t *testing.T) {
+// TestGetBalanceHandler_AdminAllowed proves ADR-0008's read table admits
+// Admin, not just Owner (AC #75's "no Owner-only restriction" survives as
+// "no Owner-only restriction among Owner/Admin", the read table's own
+// widening).
+func TestGetBalanceHandler_AdminAllowed(t *testing.T) {
 	db := testdb.New(t)
-	const uid = "get-any-member"
-	practiceID := seedMember(t, db, uid)
+	const uid = "get-admin-member"
+	practiceID := seedMember(t, db, uid, "{admin}")
 	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
 	seedLedgerRow(t, db, practiceID, "purchase", 5)
 
@@ -170,7 +173,7 @@ func TestGetBalanceHandler_AnyMemberAllowed(t *testing.T) {
 func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-empty-ledger"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedMember(t, db, uid, "{owner}")
 
 	srv, session := newBillingServer(t, db, uid)
 	defer srv.Close()
@@ -191,5 +194,26 @@ func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 	}
 	if out.Ledger == nil || len(out.Ledger) != 0 {
 		t.Fatalf("ledger = %+v, want empty non-nil slice", out.Ledger)
+	}
+}
+
+// TestGetBalanceHandler_DoulaForbidden proves ADR-0008's read table cell
+// "Credit balance and ledger: Doula ✗" holds through the real
+// GatedRouter mount, for both employment types -- neither an employee's
+// ambient reach over the Practice nor a contractor's attachment to any
+// Engagement extends to the Practice's own finances.
+func TestGetBalanceHandler_DoulaForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-doula-member"
+	practiceID := seedMember(t, db, uid, "{doula}")
+
+	srv, session := newBillingServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getBalance(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 }

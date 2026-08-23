@@ -145,7 +145,7 @@ func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) 
 func TestPostPurchaseHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-non-owner"
-	practiceID := seedMember(t, db, uid) // doula role, not owner
+	practiceID := seedMember(t, db, uid, "{doula}") // doula role, not owner
 	stripeClient := billing.NewFakeStripeClient()
 
 	srv, session := newPurchaseServer(t, db, uid, stripeClient)

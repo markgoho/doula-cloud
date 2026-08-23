@@ -51,8 +51,9 @@ type ListResponse struct {
 // ListHandler lists a thread's Messages, newest first, cursor-paginated.
 // Newest-first (rather than oldest-first) so the first page a Staff member
 // loads is the most recent activity, not the start of a possibly long-running
-// Engagement; the frontend reverses for display. Must be mounted behind
-// staffauth.Middleware.
+// Engagement; the frontend reverses for display. Narrowed by ADR-0008's
+// attachment rule for a contractor Doula, same as engagement.ListHandler.
+// Must be mounted behind staffauth.Middleware.
 func ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
@@ -72,6 +73,24 @@ func ListHandler() http.Handler {
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		staffID, _ := staffauth.StaffID(r.Context())
+		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !canAccess {
+			http.Error(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 

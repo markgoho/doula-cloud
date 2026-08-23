@@ -13,7 +13,9 @@ import (
 )
 
 // AttachmentHandler streams a Message's stored attachment back to the
-// calling Staff member. Must be mounted behind staffauth.Middleware.
+// calling Staff member, narrowed by ADR-0008's attachment rule for a
+// contractor Doula, same as ListHandler. Must be mounted behind
+// staffauth.Middleware.
 func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
@@ -33,6 +35,24 @@ func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		staffID, _ := staffauth.StaffID(r.Context())
+		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !canAccess {
+			http.Error(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 

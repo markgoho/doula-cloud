@@ -49,6 +49,39 @@ func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID st
 	}
 }
 
+// seedContractorAtPractice mirrors seedStaffAtPractice but for a
+// contractor Doula -- ADR-0008's attachment-narrowed column.
+func seedContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
+		identityUID,
+	).Scan(&staffID); err != nil {
+		t.Fatalf("seed staff: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'contractor')`,
+		practiceID, staffID,
+	); err != nil {
+		t.Fatalf("seed contractor membership: %v", err)
+	}
+	return staffID
+}
+
+// seedGrantedAttachment inserts an open, granted-origin
+// engagement_attachments row directly -- no handler in this codebase
+// writes one yet (#317 builds that).
+func seedGrantedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $2)`,
+		engagementID, staffID,
+	); err != nil {
+		t.Fatalf("seed granted attachment: %v", err)
+	}
+}
+
 // seedSignupBonus grants practiceID the same +3 signup-bonus credit_ledger
 // row staffauth.signup writes for a real Practice, giving CreateHandler
 // tests a balance to spend without going through the signup flow.

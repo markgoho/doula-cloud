@@ -152,14 +152,16 @@ func PostConnectHandler(client Client) http.Handler {
 	})
 }
 
-// GetConnectStatusHandler lets any Staff member at the current Practice
-// read its Stripe Connect status -- no Owner-only restriction, consistent
-// with billing.GetBalanceHandler's practice-wide visibility default. A
-// Practice with no stored account id is reported not_connected without any
-// Stripe call; otherwise status is read live via an on-demand Account
-// retrieve (#79's ticket body: this is deliberately not backed by the
-// webhook-synced columns on practices). Must be mounted behind
-// staffauth.Middleware.
+// GetConnectStatusHandler reads a Practice's Stripe Connect status.
+// ADR-0008's read table has no row for Stripe Connect state (#267 stays
+// open for that rule); until it does, this route mirrors
+// PostConnectHandler's Owner-only gate -- enforced by the "owner" role
+// declaration on this route's GatedRouter mount in main.go, not inside
+// this handler. A Practice with no stored account id is reported
+// not_connected without any Stripe call; otherwise status is read live
+// via an on-demand Account retrieve (#79's ticket body: this is
+// deliberately not backed by the webhook-synced columns on practices).
+// Must be mounted behind staffauth.Middleware.
 func GetConnectStatusHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)

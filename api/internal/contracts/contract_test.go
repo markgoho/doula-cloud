@@ -18,6 +18,11 @@ const (
 	clientNameKey = "client_name"
 	priceKey      = "price"
 	jamieName     = "Jamie"
+
+	// Shared across contracts_test files: goconst flags repeated literals
+	// package-wide, not just within one file.
+	testPriceValue     = "$1,200"
+	testScopeOfService = "12 prenatal visits"
 )
 
 func contractURL(srv *httptest.Server, practiceID, engagementID string) string {
@@ -279,6 +284,57 @@ func TestGetContractHandler_NotFound(t *testing.T) {
 	}
 }
 
+// TestGetContractHandler_ContractorWithoutAttachmentForbidden proves
+// ADR-0008's attachment rule for Contract scope: a contractor Doula with
+// no engagement_attachments row gets the same "not found" response an
+// out-of-practice engagementId gets -- no partly-open state (#230).
+func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-contractor-unattached"
+	practiceID, _ := seedContractorAtPractice(t, db, uid)
+	engagementID := seedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope proves
+// the other half of that rule: a granted, open attachment reaches the
+// Contract's scope -- but never its money, regardless of attachment.
+func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-contractor-attached"
+	practiceID, staffID := seedContractorAtPractice(t, db, uid)
+	engagementID := seedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	seedGrantedAttachment(t, db, engagementID, staffID)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.EngagementID != engagementID {
+		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
+	}
+}
+
 func TestPutContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-invalid-engagement-id"
@@ -442,7 +498,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	putResp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "$1,200"})
+		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 	defer putResp.Body.Close()
 
 	if putResp.StatusCode != http.StatusOK {
@@ -455,7 +511,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
-	if out.Values[clientNameKey] != jamieName || out.Values[priceKey] != "$1,200" {
+	if out.Values[clientNameKey] != jamieName || out.Values[priceKey] != testPriceValue {
 		t.Fatalf("values = %+v, want the just-written values", out.Values)
 	}
 }
