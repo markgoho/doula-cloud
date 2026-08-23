@@ -54,11 +54,12 @@ because the fixture supplied a field production never sends.
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
 carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
 and each plan's **Run log** names its own. **Tasha Bell's, Maya Okonkwo's, Renata
-Alvarez's and Dee Whitlock's plans are walked**
+Alvarez's, Dee Whitlock's and Priya Raman's plans are walked**
 ([#233](https://github.com/markgoho/doula-cloud/issues/233),
 [#234](https://github.com/markgoho/doula-cloud/issues/234),
 [#235](https://github.com/markgoho/doula-cloud/issues/235),
-[#236](https://github.com/markgoho/doula-cloud/issues/236)); the other five are
+[#236](https://github.com/markgoho/doula-cloud/issues/236),
+[#237](https://github.com/markgoho/doula-cloud/issues/237)); the other four are
 not. Filing the `journey-gap` issues stays
 [#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
 nine walks.
@@ -72,7 +73,15 @@ same treatment Maya's 5.2 got.
 A walk may also **add a step**. Dee's 7.2-a came out of voiding a Contract and then
 noticing **Create Invoice** still rendered on it — a check no cell had named. A new
 `-a` id is the same move as a plan appending a check the map's step does not name;
-the map still owns the gap it mints (DW-G7).
+the map still owns the gap it mints (DW-G7). Priya's 5.2-a is the same move from the
+other direction: her 5.2 tested only whether she could *read* a Contract's money, so
+the walk appended the write, and she set a price and sent the Contract (PR-G8).
+
+A walk may **narrow a gap rather than confirm or delete it**. Priya's PR-G3 claimed
+the `doula` role "is never read anywhere in the codebase". A 21-endpoint battery run
+at `roles = '{}'` and again at `['doula']` found it read in exactly one place —
+`visit/roles.go` — gating the one act her journey is named for. The gap survives in
+narrowed form on the map that owns it, the same treatment TB-G7 got.
 
 A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
 to `manual` once the Staff screen turned out to answer it — the rule that a mark

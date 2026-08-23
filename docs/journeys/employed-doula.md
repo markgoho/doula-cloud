@@ -18,6 +18,15 @@ she does could wait; this cannot. If she cannot get to this Client's preferences
 in seconds on the device in her hand, the product has failed at the only moment
 that matters to her.
 
+> **Walked ([#237](https://github.com/markgoho/doula-cloud/issues/237)), and it
+> fails somewhere else than this map expected.** Once she is on the Engagement
+> page the Birth Plan is 0.83 screens down and reads correctly in about 1.7 s on
+> a Pixel 7 — the burial is real but mild. What fails is *arriving*: the app's
+> front door is the SvelteKit scaffold (**PR-G9**) and the Engagement page has no
+> links on it, so from a cold start there is no path to this screen at all, only
+> a URL she has kept. The moment of truth stands where this map put it; the
+> reason it fails has moved from the scroll to the way in.
+
 ## Words
 
 | Domain term | What Priya says | Note |
@@ -89,10 +98,13 @@ None of the read paths are role-checked; owner checks live on write endpoints.
 ### Stage 6 — Read the Birth Plan — moment of truth
 
 **Thinking**: "She did not want an epidural unless she asks twice."
-**Pain points**: the Birth Plan is a section partway down a long page, on a phone,
+**Pain points**: the Birth Plan is a section partway down the page, on a phone,
 in a corridor, under time pressure. There is no deep link to it, no collapse of
 the sections she does not need, and no way to hand it to hospital staff from her
-side — the print stylesheet is on the Client's portal view.
+side — the print stylesheet is on the Client's portal view. The walk of
+[#237](https://github.com/markgoho/doula-cloud/issues/237) confirmed all three
+and added the one that costs her most: there is no way to *reach* the page
+without a remembered URL (**PR-G9**).
 
 - **6.1** — Scroll to the Birth Plan section
   (`GET .../plans/birth`).
@@ -165,12 +177,15 @@ button.
 | ID | Stage | Layer | Gap |
 | --- | --- | --- | --- |
 | PR-G1 | 4 | Interaction | She sees every Client in the Practice. The list handler is Practice-scoped by design ("v1 has no restricted-visibility model"), so her scope requirement fails outright. |
-| PR-G2 | 5 | Both | She can read any Engagement's Contract amount and Invoice history, for any Client. Read paths carry no role checks. [ADR-0006](../adr/0006-read-follows-the-role.md) settles the rule: an **employed** Doula reads a Contract's scope but not its money, so the Contract read must be able to return one without the other. |
-| PR-G3 | 2 | Interaction | The `doula` role is never read anywhere in the codebase. Holding it changes nothing. |
-| PR-G4 | Permission boundary | Interaction | No route has a load-time guard. The Plan Template, Contract Template, and Billing screens gate on write only (`GET` is ungated on all three), so she reaches the page, reads real Practice data, and is refused only at the save button. [ADR-0006](../adr/0006-read-follows-the-role.md) puts the refusal on the read endpoint, not the guard, and rules the Templates readable by any Staff role — so of these three, only Billing is a refusal for her. |
-| PR-G5 | 6 | Experience | The Birth Plan is a section partway down a long single-page Engagement view, with no deep link and no phone-first path, at the exact moment she is standing in a corridor. |
+| PR-G2 | 5 | Both | She can read any Engagement's Contract amount and Invoice history, for any Client. Read paths carry no role checks. [ADR-0006](../adr/0006-read-follows-the-role.md) settles the rule: an **employed** Doula reads a Contract's scope but not its money, so the Contract read must be able to return one without the other. The write side is **PR-G8**. |
+| PR-G3 | 2 | Interaction | **The `doula` role is read in exactly one package, and nowhere else.** Narrowed by the walk of [#237](https://github.com/markgoho/doula-cloud/issues/237), which ran a 21-endpoint battery at `roles = '{}'` and again at `['doula']` and found a single behavioural difference: `POST .../visits` goes `403` -> `201`. `api/internal/visit/roles.go:40` gates the caller and `:57` gates a reassignment target; no other Go package and no front-end file reads the value. So the role is not decorative — it gates the Visit, the one act this journey is named for — but it gates nothing else, which is what **PR-G8** is the sharp edge of. |
+| PR-G4 | Permission boundary | Interaction | No route has a load-time guard. The Plan Template, Contract Template, and Billing screens gate on write only (`GET` is ungated on all three), so she reaches the page and reads real Practice data. [ADR-0006](../adr/0006-read-follows-the-role.md) puts the refusal on the read endpoint, not the guard, and rules the Templates readable by any Staff role — so of these three, only Billing is a refusal for her. The walk of [#237](https://github.com/markgoho/doula-cloud/issues/237) corrected the second half: she is **not** always refused at the save button. Both Templates hand her every editing control and answer `403` on **Save**, but Billing renders **Buy credits** already `disabled` (`billing/+page.svelte:84`, `disabled={isPurchasing \|\| !isOwner}`) and Payments renders no Connect button at all, printing `Ask a Practice Owner to connect Stripe.` instead. So a client-side role gate does exist — on exactly those two controls and on nothing else in the product. |
+| PR-G5 | 6 | Experience | The Birth Plan is a section partway down a single-page Engagement view, with no deep link and no phone-first path, at the exact moment she is standing in a corridor. Measured on a Pixel 7 by the walk of [#237](https://github.com/markgoho/doula-cloud/issues/237): the page is 1755 CSS px tall and the **Birth Plan** heading sits 0.83 screens down, so the burial is milder than this gap first claimed — and everything else holds. The only `id` on the page is `svelte-announcer`, there is no `<details>` anywhere, no stylesheet on that page carries an `@media print` rule, and there is no print, export or share control. The page also renders **zero** `<a>` elements, so there is no way off it and no way back to Clients; she arrives by a remembered URL or not at all (**PR-G9**). |
 | PR-G6 | 7 | Experience | A Visit carries no type, so the three kinds she distinguishes — prenatal, birth, postpartum — are one undifferentiated row. Dateless and note-less Visits are **MO-G1** and **MO-G2**. |
 | PR-G7 | 1 | Experience | Her first impression is a raw URL pasted into a text message, which she cannot verify is genuine. This is the experience half of **RA-G1**; the missing email itself is filed there. |
+
+| PR-G8 | 5 | Interaction | **A Doula can write a Contract's money, not merely read it.** Walked in [#237](https://github.com/markgoho/doula-cloud/issues/237): Priya, holding `doula` and nothing else, set `price` to `$99` on a draft Contract (`PUT .../contract`, `200`) and then **sent it to the Client** (`POST .../contract/send`, `200`); `POST .../contract/invoices` answered `200 {"connectRequired":true}` — the Stripe gate, not a role refusal — so on a connected Practice she raises the Invoice too. Every Contract route in `api/main.go:200-215` is mounted behind `staffauth.Middleware` alone; the only refusals are about Contract **status** (`409 contract is no longer a draft`, `409 contract is not signed`), never about who is asking. [ADR-0006](../adr/0006-read-follows-the-role.md) says an employed Doula may not read a Contract's money; today she can set it and bill it. |
+| PR-G9 | 6 | Both | **The product's front door is the SvelteKit scaffold.** `app/src/routes/+page.svelte` is the unmodified template — `Welcome to SvelteKit` and a link to the framework's documentation. Her moment of truth is the one step in this whole effort that is timed *from a cold start*, and the walk of [#237](https://github.com/markgoho/doula-cloud/issues/237) found that a cold start reaches nothing: `/` is a dead end, `/login` redirects a signed-in user nowhere useful, and the Engagement page has no links, so the only route to this Client's Birth Plan is a Practice URL she has memorised or bookmarked. Measured from the Practice landing instead, the Birth Plan is 2 clicks and ~1.7 s away — the mechanics are fine; there is simply no way in. App-wide, filed here because this is the only journey that starts cold. |
 
 Also hit here, filed on their owning maps: **RA-G1** (no invite email),
 **RA-G2** (no role UI), **RA-G4** (no Doula on an Engagement — which is why she
