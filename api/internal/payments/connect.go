@@ -8,8 +8,11 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// The connection statuses GetConnectStatusHandler can report. #79 defined
-// three -- not connected / onboarding incomplete / active -- against v1's
+// ConnectStatus is the single status GetConnectStatusHandler reports for
+// a Practice's Stripe Connect account, and the Payments settings screen
+// shows.
+//
+// #79 defined three -- not connected / onboarding incomplete / active -- against v1's
 // three booleans. Accounts v2 reports two four-valued capability statuses
 // instead (#247), which the three cannot express, so two are added:
 //
@@ -22,24 +25,36 @@ import (
 //     reaching the Practice's bank. Under v1 this collapsed into
 //     "onboarding incomplete" and read as if invoicing were broken, which
 //     it is not.
+type ConnectStatus string
+
+// The five statuses ConnectStatus takes.
 const (
-	StatusNotConnected         = "not_connected"
-	StatusOnboardingIncomplete = "onboarding_incomplete"
-	StatusPending              = "pending"
-	StatusPayoutsRestricted    = "payouts_restricted"
-	StatusActive               = "active"
+	StatusNotConnected         ConnectStatus = "not_connected"
+	StatusOnboardingIncomplete ConnectStatus = "onboarding_incomplete"
+	StatusPending              ConnectStatus = "pending"
+	StatusPayoutsRestricted    ConnectStatus = "payouts_restricted"
+	StatusActive               ConnectStatus = "active"
 )
 
-// deriveStatus projects a v2 AccountStatus onto the single status the
-// Payments screen shows. card_payments leads, because being payable at all
+// ConnectStatus projects the account onto the single status the
+// Payments settings screen shows. card_payments leads, because being payable at all
 // is the thing the Practice is here for; payouts only refines an otherwise
 // active account.
-func deriveStatus(status AccountStatus) string {
+//
+// Outstanding requirements outrank a pending capability, and the order
+// matters: the two capabilities move independently, so a real account can
+// report card_payments restricted while payouts is pending. Reporting that
+// as StatusPending would hide the onboarding button -- the screen would
+// list what Stripe is waiting on and offer no way to supply it. If the
+// Owner has something to give Stripe, the status has to say so.
+func (status AccountStatus) ConnectStatus() ConnectStatus {
 	switch {
 	case status.CardPayments == CapabilityActive && status.Payouts == CapabilityActive:
 		return StatusActive
 	case status.CardPayments == CapabilityActive:
 		return StatusPayoutsRestricted
+	case len(status.RequirementsDue) > 0:
+		return StatusOnboardingIncomplete
 	case status.CardPayments == CapabilityPending || status.Payouts == CapabilityPending:
 		return StatusPending
 	default:
@@ -57,7 +72,7 @@ type ConnectResponse struct {
 // ConnectStatusResponse is the body of GetConnectStatusHandler's response:
 // a Practice's current Stripe Connect status, read live from Stripe.
 type ConnectStatusResponse struct {
-	Status string `json:"status"`
+	Status ConnectStatus `json:"status"`
 	// The two raw capability statuses behind Status, so the screen can say
 	// which half of the account is held up rather than only that something
 	// is. Both are "unsupported" when the Practice has no Connect account
@@ -172,10 +187,8 @@ func GetConnectStatusHandler(client Client) http.Handler {
 			}
 			out.CardPaymentsStatus = status.CardPayments
 			out.PayoutsStatus = status.Payouts
-			if status.RequirementsDue != nil {
-				out.RequirementsDue = status.RequirementsDue
-			}
-			out.Status = deriveStatus(status)
+			out.RequirementsDue = requirementsOrEmpty(status.RequirementsDue)
+			out.Status = status.ConnectStatus()
 		}
 
 		w.Header().Set("Content-Type", "application/json")

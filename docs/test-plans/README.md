@@ -82,10 +82,14 @@ Every step carries exactly one mark.
   **The rule needs restating, because reality moved.** The old test — *would
   connecting the third-party infrastructure clear it* — assumed the only way a
   complete code path can fail is that the infrastructure is missing. Connecting
-  Stripe did not clear Connect: Stripe now refuses `POST /v1/accounts` for new
-  integrations, and every merged Connect path is Accounts v1
-  ([#247](https://github.com/markgoho/doula-cloud/issues/247)). The
-  infrastructure is present and our code cannot use it.
+  Stripe did not clear Connect: Stripe refused `POST /v1/accounts` for new
+  integrations while every merged Connect path was Accounts v1. The
+  infrastructure was present and our code could not use it.
+
+  [#247](https://github.com/markgoho/doula-cloud/issues/247) has since fixed the
+  code, so that particular gap is closed — but the restated rule below is what
+  caught it, and it holds for the third reason Connect is still `blocked`: the
+  walk itself has not been done.
 
   So `blocked` now means: **the step cannot finish for a reason outside the
   screen it is walked from, and no product decision is missing.** A step whose

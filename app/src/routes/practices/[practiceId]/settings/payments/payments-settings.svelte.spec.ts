@@ -113,7 +113,7 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 			.toBeVisible();
 	});
 
-	it('lists what Stripe is still waiting on', async () => {
+	it('counts what Stripe is still waiting on without leaking its field paths', async () => {
 		mockApi({
 			status: 'onboarding_incomplete',
 			roles: ['owner'],
@@ -121,8 +121,16 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 		});
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Stripe is still waiting on:')).toBeVisible();
-		await expect.element(testPage.getByText('configuration.merchant.mcc')).toBeVisible();
-		await expect.element(testPage.getByText('configuration.merchant.support.phone')).toBeVisible();
+		await expect.element(testPage.getByText('Stripe needs 2 more details from you.')).toBeVisible();
+		await expect.element(testPage.getByText('configuration.merchant.mcc')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
+	});
+
+	it('offers no onboarding button when payouts are held up with nothing to supply', async () => {
+		mockApi({ status: 'payouts_restricted', roles: ['owner'], requirementsDue: [] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).not.toBeInTheDocument();
 	});
 });

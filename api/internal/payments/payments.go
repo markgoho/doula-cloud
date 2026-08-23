@@ -68,6 +68,16 @@ type AccountStatus struct {
 	RequirementsDue []string
 }
 
+// requirementsOrEmpty normalizes a possibly-nil RequirementsDue to an
+// empty slice -- what both the NOT NULL column and the never-null JSON
+// field need, decided in one place rather than at each call site.
+func requirementsOrEmpty(requirements []string) []string {
+	if requirements == nil {
+		return []string{}
+	}
+	return requirements
+}
+
 // Client is the seam over the outbound Stripe API calls the payments
 // package needs across all of #78 -- Connect account linkage (#79),
 // webhook signature verification (#80), and Invoicing (#81/#82) -- so
@@ -112,6 +122,10 @@ type Client interface {
 	// deliberately not backed by the persisted columns), and the account
 	// webhook, which gets only an account id from a thin event and must
 	// fetch the state itself (#247).
+	// Implementations should return a non-nil (possibly empty)
+	// RequirementsDue; callers still pass it through requirementsOrEmpty
+	// rather than trusting that, since
+	// practices.stripe_connect_requirements_due is NOT NULL.
 	RetrieveAccount(ctx context.Context, accountID string) (AccountStatus, error)
 	// CreateInvoice creates a Stripe Invoice (draft, not yet finalized) on
 	// behalf of accountID's connected account, billing

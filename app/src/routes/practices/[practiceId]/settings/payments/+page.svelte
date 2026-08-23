@@ -49,40 +49,64 @@
 		}
 	}
 
-	const statusLabels: Record<ConnectStatus, string> = {
-		not_connected: 'Not connected',
-		onboarding_incomplete: 'Onboarding incomplete',
-		pending: 'Awaiting Stripe review',
-		payouts_restricted: 'Taking payments, payouts on hold',
-		active: 'Active'
+	// One row per status rather than four parallel maps: the label, the
+	// badge, what it means for the Practice in the Owner's words, and
+	// whether reopening Stripe's hosted form could help.
+	//
+	// `onboarding` is not derivable from the status alone. `pending` means
+	// Stripe is reviewing and there is nothing to supply, so offering the
+	// button would be a dead end -- but `payouts_restricted` can mean
+	// either (Stripe reviewing the bank details, or the Owner never
+	// entered any), so that one asks whether anything is outstanding.
+	const statusCopy: Record<
+		ConnectStatus,
+		{
+			label: string;
+			variant: 'neutral' | 'warning' | 'success';
+			explanation: string;
+			onboarding: 'always' | 'never' | 'if-outstanding';
+		}
+	> = {
+		not_connected: {
+			label: 'Not connected',
+			variant: 'neutral',
+			explanation: 'Connect Stripe so Clients can pay their invoices.',
+			onboarding: 'always'
+		},
+		onboarding_incomplete: {
+			label: 'Onboarding incomplete',
+			variant: 'warning',
+			explanation: 'Stripe still needs some details before Clients can pay you.',
+			onboarding: 'always'
+		},
+		pending: {
+			label: 'Awaiting Stripe review',
+			variant: 'warning',
+			explanation: 'Stripe is reviewing the details you submitted. Nothing is needed from you.',
+			onboarding: 'never'
+		},
+		payouts_restricted: {
+			label: 'Taking payments, payouts on hold',
+			variant: 'warning',
+			explanation:
+				'Clients can pay their invoices, but Stripe cannot send the money to your bank yet.',
+			onboarding: 'if-outstanding'
+		},
+		active: {
+			label: 'Active',
+			variant: 'success',
+			explanation: 'Clients can pay their invoices and payouts reach your bank.',
+			onboarding: 'never'
+		}
 	};
 
-	const statusBadgeVariants: Record<ConnectStatus, 'neutral' | 'warning' | 'success'> = {
-		not_connected: 'neutral',
-		onboarding_incomplete: 'warning',
-		pending: 'warning',
-		payouts_restricted: 'warning',
-		active: 'success'
-	};
+	let copy = $derived(status === undefined ? undefined : statusCopy[status.status]);
 
-	// What each status means for the Practice, in the Owner's terms rather
-	// than Stripe's. `pending` is the one v1 could not report at all: the
-	// Owner has finished, so offering them the onboarding button again
-	// would be misleading.
-	const statusExplanations: Record<ConnectStatus, string> = {
-		not_connected: 'Connect Stripe so Clients can pay their invoices.',
-		onboarding_incomplete: 'Stripe still needs some details before Clients can pay you.',
-		pending: 'Stripe is reviewing the details you submitted. Nothing is needed from you.',
-		payouts_restricted:
-			'Clients can pay their invoices, but Stripe cannot send the money to your bank yet.',
-		active: 'Clients can pay their invoices and payouts reach your bank.'
-	};
-
-	// The onboarding button only helps when there is something the Owner
-	// can actually supply. While Stripe is reviewing, there is not.
 	let canStartOnboarding = $derived(
-		status !== undefined && status.status !== 'active' && status.status !== 'pending'
+		copy?.onboarding === 'always' ||
+			(copy?.onboarding === 'if-outstanding' && (status?.requirementsDue.length ?? 0) > 0)
 	);
+
 </script>
 
 <Heading level={1} text="Payments" />
@@ -92,7 +116,7 @@
 {:else if status}
 	<cluster-l>
 		<Text text="Stripe Connect status:" />
-		<Badge label={statusLabels[status.status]} variant={statusBadgeVariants[status.status]} />
+		<Badge label={statusCopy[status.status].label} variant={statusCopy[status.status].variant} />
 	</cluster-l>
 
 	{#if connectParameter === 'return'}
@@ -104,15 +128,19 @@
 		<Notice variant="status" message="Your Stripe onboarding link expired. Start again below." />
 	{/if}
 
-	<Text text={statusExplanations[status.status]} />
+	<Text text={statusCopy[status.status].explanation} />
 
+	<!-- The count, not the list. requirementsDue holds Stripe's own
+	machine-readable field paths ("configuration.merchant.mcc"), which
+	name nothing an Owner recognizes. The place those get asked in words
+	is Stripe's hosted form, which the button below opens; the paths stay
+	in the database for the audit trail. -->
 	{#if status.requirementsDue.length > 0}
-		<Text text="Stripe is still waiting on:" />
-		<ul>
-			{#each status.requirementsDue as requirement (requirement)}
-				<li>{requirement}</li>
-			{/each}
-		</ul>
+		<Text
+			text={status.requirementsDue.length === 1
+				? 'Stripe needs 1 more detail from you.'
+				: `Stripe needs ${status.requirementsDue.length} more details from you.`}
+		/>
 	{/if}
 
 	{#if isOwner && canStartOnboarding}

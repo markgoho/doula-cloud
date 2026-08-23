@@ -66,7 +66,24 @@ account. Two more:
   which it is not.
 
 `card_payments` leads the derivation, because being payable at all is what the
-Practice came for. Payouts only refines an otherwise active account.
+Practice came for. Payouts only refines an otherwise active account. Outstanding
+requirements outrank a `pending` capability: the two capabilities move
+independently, so an account really can report `card_payments` restricted while
+payouts is pending, and calling that `pending` would hide the button while the
+Owner still owed Stripe information.
+
+Two smaller decisions fell out of the same question:
+
+- **The button follows the ask, not the status.** It appears when Stripe has
+  something outstanding the Owner could supply — which is why
+  `payouts_restricted` shows it only when `requirementsDue` is non-empty. Stripe
+  can restrict payouts because it is reviewing bank details, and reopening the
+  form then is a dead end.
+- **The screen shows the count, not the list.** `requirements.entries[].description`
+  is documented by stripe-go as a *machine-readable* string; `configuration.merchant.mcc`
+  names nothing an Owner recognizes. The paths are persisted for the audit trail
+  and summarized on screen as "Stripe needs N more details from you." The place
+  those get asked in words is Stripe's own hosted form.
 
 ## Two webhook routes, because Stripe allows one payload type per destination
 

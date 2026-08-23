@@ -401,11 +401,6 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	requirements := status.RequirementsDue
-	if requirements == nil {
-		requirements = []string{}
-	}
-
 	result, err := tx.ExecContext(r.Context(),
 		`UPDATE practices SET
 			stripe_connect_card_payments_status = $1,
@@ -414,7 +409,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 			stripe_connect_status_event_id = $4,
 			stripe_connect_status_updated_at = now()
 		WHERE stripe_connect_account_id = $5`,
-		string(status.CardPayments), string(status.Payouts), requirements, event.ID, event.AccountID,
+		string(status.CardPayments), string(status.Payouts), requirementsOrEmpty(status.RequirementsDue), event.ID, event.AccountID,
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

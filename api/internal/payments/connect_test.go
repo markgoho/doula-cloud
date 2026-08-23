@@ -367,6 +367,73 @@ func TestGetConnectStatusHandler_Pending(t *testing.T) {
 	}
 }
 
+// TestGetConnectStatusHandler_FreshAccountReportsOnboardingIncomplete
+// covers the state a just-created account is in: Stripe has granted
+// nothing and reported no requirements yet. The Owner has everything
+// still to do, so this must not read as `pending` -- the screen would
+// hide the button and tell them to wait for a review that has not been
+// asked for.
+func TestGetConnectStatusHandler_FreshAccountReportsOnboardingIncomplete(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "status-fresh"
+	practiceID := seedOwner(t, db, uid)
+	client := payments.NewFakeClient()
+
+	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
+	client.Statuses[accountID] = payments.AccountStatus{
+		CardPayments: payments.CapabilityUnsupported,
+		Payouts:      payments.CapabilityUnsupported,
+	}
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := getConnectStatus(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	var out payments.ConnectStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != payments.StatusOnboardingIncomplete {
+		t.Fatalf("status = %q, want %q", out.Status, payments.StatusOnboardingIncomplete)
+	}
+}
+
+// TestGetConnectStatusHandler_MixedStateWithRequirementsIsNotPending
+// pins the order in deriveStatus. The two capabilities move
+// independently, so card_payments can be restricted while payouts is
+// pending. Reading that as `pending` would hide the onboarding button
+// while the screen still listed what Stripe was waiting on -- the Owner
+// would see the ask and have no way to answer it.
+func TestGetConnectStatusHandler_MixedStateWithRequirementsIsNotPending(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "status-mixed"
+	practiceID := seedOwner(t, db, uid)
+	client := payments.NewFakeClient()
+
+	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
+	client.Statuses[accountID] = payments.AccountStatus{
+		CardPayments:    payments.CapabilityRestricted,
+		Payouts:         payments.CapabilityPending,
+		RequirementsDue: []string{requirementMCC},
+	}
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := getConnectStatus(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	var out payments.ConnectStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != payments.StatusOnboardingIncomplete {
+		t.Fatalf("status = %q, want %q -- the Owner still has something to supply", out.Status, payments.StatusOnboardingIncomplete)
+	}
+}
+
 // TestGetConnectStatusHandler_PayoutsRestricted proves the other state a
 // single boolean pair collapsed: Clients can pay, but the money cannot
 // reach the Practice's bank yet. Reporting this as onboarding_incomplete

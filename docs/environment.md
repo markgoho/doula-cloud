@@ -25,8 +25,8 @@ except `.env.example`. A Sandbox key is still a key.
 | `STRIPE_API_KEY` | `sk_test_…` in `.env.local` | unset | Secret Manager `doula-cloud-stripe-api-key` |
 | `STRIPE_CREDIT_PRICE_ID` | `price_…` in `.env.local` | unset | plain env var |
 | `STRIPE_WEBHOOK_SECRET` | the `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-webhook-secret` |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-connect-webhook-secret` |
-| `STRIPE_ACCOUNT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-account-webhook-secret` |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | **not set yet** — see below |
+| `STRIPE_ACCOUNT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | **not set yet** — see below |
 | `GCP_PROJECT_ID` | `doula-cloud` | same | ambient |
 | `STORAGE_EMULATOR_HOST` | the compose `gcs` service | same | unset (real GCS) |
 | `GCS_ATTACHMENTS_BUCKET` | `doula-cloud-e2e-attachments` | same | the real bucket |
@@ -185,6 +185,26 @@ delivered object always deserializes into the structs the SDK ships.
 Both are created over `/v2/core/event_destinations`, not the v1
 `/v1/webhook_endpoints` surface, and neither carries a `connect=true`
 flag — v2 replaced that with `events_from: ["@accounts"]`.
+
+**Both Connect destinations are enabled and delivering to a service that
+cannot yet answer them.** Their signing secrets exist only in the create
+responses #247 captured; no Secret Manager version holds either, so
+`STRIPE_CONNECT_WEBHOOK_SECRET` and `STRIPE_ACCOUNT_WEBHOOK_SECRET` are
+unset on Cloud Run and every delivery gets a 400. Stripe eventually
+disables a destination that keeps failing. Two steps close it, in this
+order — deploy first, so the routes exist:
+
+```sh
+gcloud secrets create doula-cloud-stripe-connect-webhook-secret --replication-policy=automatic
+gcloud secrets create doula-cloud-stripe-account-webhook-secret  --replication-policy=automatic
+printf %s "$CONNECT_SECRET" | gcloud secrets versions add doula-cloud-stripe-connect-webhook-secret --data-file=-
+printf %s "$ACCOUNT_SECRET" | gcloud secrets versions add doula-cloud-stripe-account-webhook-secret --data-file=-
+
+gcloud run services update doula-api --region us-central1 \
+  --update-secrets STRIPE_CONNECT_WEBHOOK_SECRET=doula-cloud-stripe-connect-webhook-secret:latest,STRIPE_ACCOUNT_WEBHOOK_SECRET=doula-cloud-stripe-account-webhook-secret:latest
+```
+
+Set out of band on purpose, for the reason the next section gives.
 
 A signing secret is returned **once**, in the create response — for an
 event destination, only if the request asks for it by name via
