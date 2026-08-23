@@ -173,7 +173,7 @@ func TestSignupHandler_Success(t *testing.T) {
 		t.Fatalf("query membership roles: %v", err)
 	}
 	if roleCount != 3 {
-		t.Fatalf("expected 3 roles (owner, office_manager, doula), got %d", roleCount)
+		t.Fatalf("expected 3 roles (owner, admin, doula), got %d", roleCount)
 	}
 
 	// #145: signup sets the session cookie on its own response, same

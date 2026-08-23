@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	doulaRole         = "doula"
-	officeManagerRole = "office_manager"
+	doulaRole = "doula"
+	adminRole = "admin"
 )
 
 // newServer mounts the same routes main.go wires up for this package,

@@ -12,7 +12,7 @@ import (
 // validRoles is the practice_role enum from 00002_practice_staff_tenancy.sql,
 // mirrored here so role-assignment requests can be validated before they
 // ever reach Postgres.
-var validRoles = map[string]bool{"owner": true, "office_manager": true, "doula": true}
+var validRoles = map[string]bool{"owner": true, "admin": true, "doula": true}
 
 // staffHasRole reports whether staffID's membership at practiceID includes
 // role. Handlers that are Owner-only (invite, role assignment) call this

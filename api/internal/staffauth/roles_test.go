@@ -64,7 +64,7 @@ func TestAssignRolesHandler_UnknownRole(t *testing.T) {
 	srv, session := newRolesServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := patchRoles(t, srv, session, practiceID, ownerID, staffauth.AssignRolesRequest{Roles: []string{"admin"}})
+	resp := patchRoles(t, srv, session, practiceID, ownerID, staffauth.AssignRolesRequest{Roles: []string{"superuser"}})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {

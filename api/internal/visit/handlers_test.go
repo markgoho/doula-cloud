@@ -76,9 +76,9 @@ func TestCreateHandler_Success(t *testing.T) {
 
 func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "office-manager-creating"
+	const identityUID = "admin-creating"
 	practiceID := seedPractice(t, db)
-	seedStaffAtPracticeWithRoles(t, db, practiceID, identityUID, []string{officeManagerRole})
+	seedStaffAtPracticeWithRoles(t, db, practiceID, identityUID, []string{adminRole})
 	engagementID := seedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -154,11 +154,11 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, staffID := seedDoulaWithMembership(t, db, "doula-creator")
-	seedStaffAtPracticeWithRoles(t, db, practiceID, "office-manager-bystander", []string{officeManagerRole})
+	seedStaffAtPracticeWithRoles(t, db, practiceID, "admin-bystander", []string{adminRole})
 	engagementID := seedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
-	srv, session := newServer(t, db, "office-manager-bystander")
+	srv, session := newServer(t, db, "admin-bystander")
 	defer srv.Close()
 
 	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
@@ -259,12 +259,12 @@ func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db)
-	seedStaffAtPracticeWithRoles(t, db, practiceID, "office-manager-reassigning", []string{officeManagerRole})
+	seedStaffAtPracticeWithRoles(t, db, practiceID, "admin-reassigning", []string{adminRole})
 	doulaStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "doula-bystander", []string{doulaRole})
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, doulaStaffID)
 
-	srv, session := newServer(t, db, "office-manager-reassigning")
+	srv, session := newServer(t, db, "admin-reassigning")
 	defer srv.Close()
 
 	body, err := json.Marshal(visit.ReassignRequest{StaffID: doulaStaffID})
@@ -305,7 +305,7 @@ func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-non-doula-target"
 	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	nonDoulaStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "office-manager-target", []string{officeManagerRole})
+	nonDoulaStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "admin-target", []string{adminRole})
 	engagementID := seedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
