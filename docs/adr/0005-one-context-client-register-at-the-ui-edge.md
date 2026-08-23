@@ -1,5 +1,10 @@
 # One bounded context; the Client register translates at the UI edge
 
+> **Extended by [ADR-0009](0009-notification-is-one-term-two-voices-keyed-by-recipient.md).**
+> Binding scope widens from "the client portal" to every Client-facing surface,
+> starting with Practice Notification subject and body wording. The reasoning
+> below stands; only the scope of what the register binds has changed.
+
 Doula Cloud's glossary is the language of the model and of the team. It is not automatically the copy a Client reads, and the persona cast made that seam visible: Renata Alvarez and Dee Whitlock say "Engagement" and "Plan Instance" natively, because they are the domain experts. Hannah Sorensen does not. She says "my doula", "my birth plan", "my due date". Nadia Haddad's vocabulary after a stillbirth is different again, and getting it wrong there is not a copy nit. The question this settles is whether the client portal is a **second bounded context** with its own model and its own language, or **one context** whose UI translates at the last step.
 
 **It is one context.** The discriminating test is whether the portal can hold a fact that legitimately disagrees with the staff-side model, or whether it shows less of the same fact in kinder words. `api/internal/portal/detail.go:21` answers it: `EngagementID`, `PracticeName`, and `Status` are the same Engagement, projected and cut down. There is no second model, no Client-side domain expert to talk to, and no lifecycle the portal owns. `api/internal/portal` is a read-side presentation adapter, not a context. Splitting a 77-line glossary in two, and owing a named context relationship between the halves, to serve a surface whose entire client-facing copy is four strings, would buy nothing and cost every future term two entries. There is therefore no `CONTEXT-MAP.md`.

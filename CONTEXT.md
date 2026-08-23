@@ -104,6 +104,10 @@ _Avoid_: Transaction
 Staff-to-client, bidirectional, in-app communication tied to an Engagement — one continuous thread per Engagement, not split by topic. May carry an image or PDF attachment. Immutable once sent (no edit, no delete) and kept indefinitely as part of the Engagement's permanent record. Delivered via push-triggered fetch: a content-free push notification wakes the client, which then fetches the real content — not a substitute for a phone call in a time-critical situation. See [ADR-0002](docs/adr/0002-message-transport-push-triggered-fetch.md).
 _Avoid_: Chat, DM (implies a general-purpose messenger, not an Engagement-scoped record)
 
+**Notification**:
+A push-delivered alert to a person, on any channel (browser Web Push or email) — content-free, pointing at the product rather than carrying it. Two voices, fixed by who receives it, never by subject matter: a **Platform Notification** is Doula Cloud speaking as itself, to a Staff member or Owner; a **Practice Notification** is Doula Cloud speaking as the Practice, to that Practice's Client. Neither voice's subject or body may carry a Client name or Engagement detail; a Practice Notification's one exception is naming its own Practice, without which it cannot be sent. See [ADR-0009](docs/adr/0009-notification-is-one-term-two-voices-keyed-by-recipient.md).
+_Avoid_: Message (a Notification is never in-app, bidirectional, immutable, or Engagement-scoped — it is a one-way alert on an outside channel)
+
 **Credit**:
 A unit of Doula Cloud's own billing, owned by the **Practice** — never by a Staff member, whatever their roles or Employment type. Only an Owner buys them. What a Credit is spent on is not yet settled (TB-G3).
 _Avoid_: Token, seat, point
