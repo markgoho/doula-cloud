@@ -149,7 +149,7 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{owner,office_manager,doula}')`,
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{owner,office_manager,doula}', 'employee')`,
 		practiceID, staffID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

@@ -100,26 +100,10 @@ func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (p
 		t.Fatalf("seed staff: %v", err)
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{doula}')`,
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'employee')`,
 		practiceID, staffID,
 	); err != nil {
 		t.Fatalf("seed membership: %v", err)
-	}
-	return practiceID
-}
-
-// seedOwnerStaffWithMembership mirrors seedStaffWithMembership but promotes
-// the seeded Staff member to the 'owner' role -- the only role
-// staffauth.InviteHandler accepts as authorization, per
-// staffauth_test's seedOwnerMembership helper of the same intent.
-func seedOwnerStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedStaffWithMembership(t, db, identityUID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practice_memberships SET roles = '{owner}' WHERE practice_id = $1`,
-		practiceID,
-	); err != nil {
-		t.Fatalf("promote to owner: %v", err)
 	}
 	return practiceID
 }

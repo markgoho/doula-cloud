@@ -118,31 +118,3 @@ func TestEndSessionsHandler_Success(t *testing.T) {
 		t.Fatalf("acting owner's own session rows = %d, want 1 (unaffected)", got)
 	}
 }
-
-// TestEndSessionsHandler_PendingInviteeIsNoOp covers a Staff row that has
-// never accepted its invite (identity_uid still NULL, per
-// 00004_staff_invitation.sql): there is no session to end, so the call
-// still succeeds rather than failing on the NULL.
-func TestEndSessionsHandler_PendingInviteeIsNoOp(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-ends-pending"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	var pendingID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (name, email) VALUES ('Pending Person', 'pending@example.com') RETURNING id`,
-	).Scan(&pendingID); err != nil {
-		t.Fatalf("seed pending staff: %v", err)
-	}
-	seedMembership(t, db, practiceID, pendingID)
-
-	srv, session := newEndSessionsServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := deleteSessions(t, srv, session, practiceID, pendingID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
-}

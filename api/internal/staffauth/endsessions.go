@@ -24,7 +24,7 @@ func EndSessionsHandler() http.Handler {
 		}
 		targetStaffID := r.PathValue("staffId")
 
-		var identityUID sql.NullString
+		var identityUID string
 		err := tx.QueryRowContext(r.Context(),
 			`SELECT s.identity_uid FROM staff s
 			 JOIN practice_memberships pm ON pm.staff_id = s.id
@@ -41,16 +41,10 @@ func EndSessionsHandler() http.Handler {
 			return
 		}
 
-		// A pending invitee (identity_uid still NULL, per
-		// 00004_staff_invitation.sql) has never signed in and so holds no
-		// session anywhere -- nothing to end, same idempotent shape as
-		// authn.EndSession on a token that matches nothing.
-		if identityUID.Valid {
-			if err := authn.EndAllSessions(r.Context(), tx, identityUID.String); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
-				return
-			}
+		if err := authn.EndAllSessions(r.Context(), tx, identityUID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)

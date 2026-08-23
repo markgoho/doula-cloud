@@ -138,11 +138,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("DELETE /api/session", session.EndHandler(db))
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(db))
-	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))
 	mux.Handle("GET /api/practices/{practiceId}/session",
 		staffauth.Middleware(db)(http.HandlerFunc(practiceSessionHandler)))
-	mux.Handle("POST /api/practices/{practiceId}/invitations",
-		staffauth.Middleware(db)(idempotency.Wrap(staffauth.InviteHandler())))
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
 		staffauth.Middleware(db)(staffauth.AssignRolesHandler()))
 	mux.Handle("GET /api/practices/{practiceId}/staff",

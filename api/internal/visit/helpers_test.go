@@ -48,7 +48,7 @@ func seedStaffAtPracticeWithRoles(t *testing.T, db *testdb.DB, practiceID, ident
 	}
 	literal := "{" + strings.Join(roles, ",") + "}"
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, $3::practice_role[])`,
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
 		practiceID, staffID, literal,
 	); err != nil {
 		t.Fatalf("seed membership: %v", err)

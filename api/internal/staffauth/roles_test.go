@@ -143,49 +143,6 @@ func TestAssignRolesHandler_Success(t *testing.T) {
 	}
 }
 
-// TestRoleAssignmentUnlocksAccess is the ticket's core behavior end to
-// end: an invitee's membership starts with zero roles and cannot invite
-// (an Owner-only action); once the Owner assigns the 'owner' role, the
-// same membership can invite. This proves role assignment -- not mere
-// membership -- is what unlocks role-gated access.
-func TestRoleAssignmentUnlocksAccess(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "unlock-owner"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	const invitedUID = "unlock-invitee"
-	invitedStaffID := seedStaff(t, db, invitedUID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{}')`,
-		practiceID, invitedStaffID,
-	); err != nil {
-		t.Fatalf("seed zero-role membership: %v", err)
-	}
-
-	inviteSrv, inviteSession := newInviteServer(t, db, invitedUID)
-	defer inviteSrv.Close()
-
-	before := postInvite(t, inviteSrv, inviteSession, practiceID, staffauth.InviteRequest{Email: "someone-else@example.com", Name: "Someone Else"})
-	_ = before.Body.Close()
-	if before.StatusCode != http.StatusForbidden {
-		t.Fatalf("invite before role assignment: status = %d, want %d", before.StatusCode, http.StatusForbidden)
-	}
-
-	rolesSrv, session := newRolesServer(t, db, ownerUID)
-	defer rolesSrv.Close()
-	assign := patchRoles(t, rolesSrv, session, practiceID, invitedStaffID, staffauth.AssignRolesRequest{Roles: []string{ownerRole}})
-	_ = assign.Body.Close()
-	if assign.StatusCode != http.StatusOK {
-		t.Fatalf("assign roles: status = %d, want %d", assign.StatusCode, http.StatusOK)
-	}
-
-	after := postInvite(t, inviteSrv, inviteSession, practiceID, staffauth.InviteRequest{Email: "someone-else@example.com", Name: "Someone Else"})
-	defer after.Body.Close()
-	if after.StatusCode != http.StatusCreated {
-		t.Fatalf("invite after role assignment: status = %d, want %d", after.StatusCode, http.StatusCreated)
-	}
-}
-
 // TestRoles exercises staffauth.Roles directly -- the function main.go's
 // practiceSessionHandler calls so the frontend can gate Owner-only UI
 // (like the invite link) on the caller's actual roles.
@@ -197,7 +154,7 @@ func TestRoles(t *testing.T) {
 
 	zeroRoleID := seedStaff(t, db, "roles-fn-zero")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{}')`,
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{}', 'employee')`,
 		practiceID, zeroRoleID,
 	); err != nil {
 		t.Fatalf("seed zero-role membership: %v", err)

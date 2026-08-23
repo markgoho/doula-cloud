@@ -59,7 +59,7 @@ func TestListStaffHandler_Success(t *testing.T) {
 
 	zeroRoleID := seedStaff(t, db, "zero-role-on-roster")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES ($1, $2, '{}')`,
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{}', 'employee')`,
 		practiceID, zeroRoleID,
 	); err != nil {
 		t.Fatalf("seed zero-role membership: %v", err)

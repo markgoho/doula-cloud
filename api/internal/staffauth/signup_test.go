@@ -3,6 +3,7 @@ package staffauth_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,13 +24,28 @@ const (
 
 	// Shared across staffauth_test files: goconst flags repeated literals
 	// package-wide, not just within one file.
-	someUID            = "some-uid"
-	inviteeIdentityUID = "invitee-identity"
-	roundtripOwnerUID  = "roundtrip-owner"
-	inviteeName        = "Invitee"
-	ownerRole          = "owner"
-	doulaRole          = "doula"
+	someUID           = "some-uid"
+	roundtripOwnerUID = "roundtrip-owner"
+	ownerRole         = "owner"
+	doulaRole         = "doula"
 )
+
+// errBadToken is what a fake Verifier returns for a token Identity
+// Platform would reject. Shared by the bootstrap endpoints' tests -- signup
+// and (in portalinvite) the Client portal's -- which since #151 are the
+// only ones still reading a Bearer ID token.
+var errBadToken = errors.New("invalid token")
+
+// sessionCookie returns the __session cookie from resp, or nil if none
+// was set. Shared across staffauth_test files.
+func sessionCookie(resp *http.Response) *http.Cookie {
+	for _, c := range resp.Cookies() {
+		if c.Name == session.CookieName {
+			return c
+		}
+	}
+	return nil
+}
 
 func newSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()

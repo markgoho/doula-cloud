@@ -52,6 +52,18 @@ func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (s
 	return staffID, practiceID
 }
 
+// seedOwnerMembership mirrors seedStaffWithMembership but promotes the
+// seeded Staff member to the 'owner' role -- the only role
+// AssignRolesHandler-gated actions accept as authorization.
+func seedOwnerMembership(t *testing.T, db *testdb.DB, identityUID string) (staffID, practiceID string) {
+	t.Helper()
+	staffID, practiceID = seedStaffWithMembership(t, db, identityUID)
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practice_memberships SET roles = '{owner}' WHERE staff_id = $1`, staffID); err != nil {
+		t.Fatalf("promote to owner: %v", err)
+	}
+	return staffID, practiceID
+}
+
 // emptyUUID is a well-formed Practice id that matches nothing, for the
 // tests whose request never gets far enough for it to matter.
 const emptyUUID = "00000000-0000-0000-0000-000000000000"
