@@ -21,8 +21,8 @@
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 1.1 | Sign in at `/login` | `POST /api/session` sets `__session`; the browser lands on `/practices/[practiceId]` | `automated (staff-login.e2e.ts)` |
-| 1.2 | Choose Rooted Birth Collective from her memberships | The picker lists every Practice she is a member of | `manual` |
-| 1.3 | Read the tiles | All seven render: the five owner-only ones (Invite, Staff, Plan Templates, Contract Template, Payments) plus Clients and Billing | `manual` |
+| 1.2 | Choose Rooted Birth Collective from her memberships | **There is no choosing.** With one membership `decideLanding` redirects straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`); the `Choose a Practice` picker renders only for two or more, which LV-G2 makes unreachable through the product | `manual` |
+| 1.3 | Read the tiles | All seven render for her — but only **four** are owner-gated (Invite, Staff, Plan Templates, Contract Template). **Payments sits outside the gate** (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`), so every member sees it, roles or none (RA-G9) | `manual` |
 
 The membership picker (1.2) is exercised by no spec — every spec's Staff member
 belongs to exactly one Practice, so the multi-membership path is untested here and
@@ -54,7 +54,7 @@ is Lena's normal case.
 | --- | --- | --- | --- |
 | 4.1 | Open an Engagement from the Clients list | The single-page Engagement view renders | `automated (birth-plan.e2e.ts)` |
 | 4.2 | Look for an assignment control | No field, no endpoint, no screen. An Engagement carries no Doula | `missing-feature (RA-G4)` |
-| 4.3 | Add a Visit naming the new Doula as `staffId` | `POST .../visits` succeeds — assignment exists at Visit level only, on a record with no date | `manual` |
+| 4.3 | Add a Visit naming the new Doula as `staffId` | **The Visit cannot name anyone.** `POST .../visits` takes no body and assigns the *caller* (`api/internal/visit/create.go:32,47`); handing it to a colleague is a second act, the **Reassign to Staff id** free-text box, which wants a UUID no screen prints (RA-G10). Assignment exists at Visit level only, on a record with no date | `manual` |
 
 ### Stage 5 — Reassign when someone is sick
 
@@ -102,7 +102,9 @@ is Lena's normal case.
 | `missing-feature` | 7 (RA-G1, RA-G2, RA-G4, RA-G5, RA-G6, RA-G7, RA-G8) |
 
 RA-G3 is observed at 3.2 rather than given a step: the screen renders, so the step
-is walkable — what fails is the word it prints.
+is walkable — what fails is the word it prints. **RA-G9** and **RA-G10** were minted
+by the walk and are observed the same way, inside 1.3 and 4.3: both steps can be
+performed, and what the product does when they are is the finding.
 
 ## Run log
 
@@ -122,5 +124,65 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 **5 automated steps: all pass.**
 
-The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
-That is [#235](https://github.com/markgoho/doula-cloud/issues/235).
+### 2026-08-22 — manual walk ([#235](https://github.com/markgoho/doula-cloud/issues/235))
+
+`bun run dev:full` in `app/`, walked in a desktop browser at 1280x900 as Renata
+Alvarez, with a second context for the invitee and a 390x844 iPhone context for
+stage 8. Preconditions built as the plan allows: `POST /api/staff/signup` for
+`Rooted Birth Collective`, then two Clients through `POST .../clients` — two of
+the three signup credits, leaving one for 6.1-a. The 5 `automated` steps were
+**not** re-run. No step is `blocked`: this plan has none, and Stripe is never
+reached.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 1.2 | `manual` | **falsified** | There is nothing to choose. One membership, so `decideLanding` returned `{type:'redirect'}` and the browser went straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`); the `Choose a Practice` heading never rendered. The picker needs two memberships, which LV-G2 says a person cannot have — so the step as written is unwalkable *for anyone*, and the path belongs to Lena's walk ([#238](https://github.com/markgoho/doula-cloud/issues/238)) with its `practice_memberships` bypass |
+| 1.3 | `manual` | **falsified** | All seven render for Renata — `Clients Billing Invite a Staff member Staff Plan Templates Contract Template Payments`, plus `Sign out` — but the claim that five are owner-only is wrong. **Four** sit inside `{#if roles.includes('owner')}`; **Payments is outside it** (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`). Seen from the other side at 2.4: Jo Mercer, holding *zero* roles, landed on `Clients Billing Payments`. New gap **RA-G9** on the journey map |
+| 2.1 | `manual` | as expected | `Invite a Staff member`, two fields — `Their name`, `Their email` — and **Send invite**. Nothing else |
+| 2.2 | `manual` | as expected | `201`, and the screen says it plainly: `Invited. There is no email sending yet, so share this link with them directly:` followed by `http://localhost:5173/accept-invite?token=<uuid>` in a `<code>` block |
+| 2.2-a | `missing-feature (RA-G1)` | as expected | Confirmed unwalkable. Nothing in `api/` or `app/src` can send mail — no SMTP client, no mail vendor SDK, no `net/mail` import. There is no inbox to check |
+| 2.3 | `manual` | as expected | The link is the whole message. It names no Practice, no sender, and no person; Renata pastes a bare URL with a UUID in it and the new hire has nothing to check it against |
+| 2.4 | `manual` | as expected | Jo Mercer created an account at `/accept-invite` (`I'm new here`), landed on `Welcome to Rooted Birth Collective`, and the roster showed `no roles yet`; `GET .../staff` returned `"roles":[]`. **What the zero-role state actually gets her** is three links — Clients, Billing, Payments — so before anyone has given her a role she reads the whole Client list, the credit ledger, and the Practice's Stripe state (RA-G9) |
+| 2.4-a | `missing-feature (RA-G8)` | as expected | Confirmed unwalkable. The form's only controls are `INPUT:text` and `INPUT:email`. No roles field, no checkbox, nothing role-shaped anywhere on the page |
+| 3.1 | `manual` | as expected | `Staff`, a Name / Email / Roles / Actions table, two rows. Owner-gated as claimed (`staffauth/staff.go:25`): Jo's own `GET` on the same URL answered `403 only a Practice Owner can do that` |
+| 3.2 | `manual` | as expected, plus one fact the plan does not name | Renata's row reads `owner, office_manager, doula` — raw enums, **RA-G3** — and that is the second finding: `POST /api/staff/signup` grants all three roles at once (`staffauth/signup.go:152`), so the "Owner" every plan walks is also an Admin and a Doula. Jo's empty row printed `no roles yet`, the column's one non-raw word |
+| 3.3 | `missing-feature (RA-G2)` | as expected | Confirmed unwalkable. Zero editable controls inside the table (`table select, table input` → 0). The only row action, on both rows, is **End sessions everywhere** |
+| 3.3-a | `manual` | as expected, and worse than it reads | `PATCH .../staff/{staffId}/roles` with `["doula"]` → `200 {"staffId":…,"roles":["doula"]}`, and the roster then showed `doula`. But **the staff id came from the API**: no screen in the product prints one, so the only way to build a roster starts with a `GET .../staff` in a terminal |
+| 4.2 | `missing-feature (RA-G4)` | as expected | Confirmed unwalkable. Every control on the Engagement page enumerated: `Send portal invite`, `Add a Visit`, `Create Care Plan`, `Create Birth Plan`, `Create Draft Contract`, `Send` (message). The Engagement's own facts are `Status: intake` and `Created: 8/22/2026`. Nothing names a Doula |
+| 4.3 | `manual` | **falsified** | The Visit cannot name anybody. **Add a Visit** sends `POST .../visits` with no body and the handler assigns the *caller* (`api/internal/visit/create.go:32,47`) — the row came back `Renata Alvarez`. Handing it to Jo took a second act, the **Reassign to Staff id** free-text box, into which Renata pastes a UUID no screen prints. New gap **RA-G10** on the journey map. Two smaller facts fell out: the endpoint requires the **Doula** role (`visit/roles.go:40`), which Renata holds only because signup granted all three, so an Owner who is only an Owner cannot add a Visit at all; and the row's `Date` cell is `createdAt` (**MO-G1**) |
+| 5.1 | `manual` | as expected | `PATCH .../visits/{visitId}` with a new `staffId` → `200`, and the table's Staff cell changed `Jo Mercer` → `Renata Alvarez` on reload. Nothing dated moved, because the only date on the row is when it was created |
+| 6.1-a | `manual` | as expected — **this half passes** | Jo, now holding `doula`, created `Priya Raman Client` → `201`. Renata reloaded `/clients` and all three rows were there, hers and Jo's alike, exactly as the handler comment promises |
+| 6.1-b | `manual` | as expected | Two columns, `Name` and `Status`. `intake` on all three rows (**MO-G4**). Nothing about a Contract, an Invoice, or who is covering whom |
+| 6.2 | `manual` | as expected | One Engagement page at a time. Each showed `Contract / Create Draft Contract` and **no Invoice section at all** — Invoices only exist once a Contract does, so the answer to "which invoices are outstanding" is not merely unaggregated, it is absent on most Engagement pages too |
+| 6.2-a | `missing-feature (RA-G6)` | as expected | Confirmed unwalkable. The Clients screen's complete link set is **Add a Client** and the three Client names |
+| 7.2 | `missing-feature (RA-G7)` | as expected | Confirmed unwalkable. **Billing** is `Credit balance: 0`, a Date / Origin / Quantity ledger, `Quantity` and **Buy credits** — Doula Cloud's money, not her Clients'. The only invoice route in the whole API hangs off one Engagement's Contract (`api/main.go:210-213`) |
+| 8.1 | `manual` | as expected | Signed in on a 390x844 iPhone context. The practice screen renders, the seven links stack, and `document.documentElement.scrollWidth === clientWidth === 390` — no horizontal overflow. The phone is not the problem |
+| 8.2 | `missing-feature (RA-G5)` | as expected | Confirmed unwalkable. From the phone the only screens that exist are Clients (Name, Status) and Billing. No availability, no on-call, no coverage — and no route to build one from |
+| 9.2 | `manual` | as expected — **passes** | Filled the Birth Plan (`atmosphere: filled-0`), saved, then added `Hospital transfer wishes` to the Birth Plan template and saved that. Reopening the Engagement showed the original five fields and the kept answer; the new field is in the template response and **absent** from the instance. The snapshot holds |
+
+**16 `manual` steps walked; 7 `missing-feature` steps confirmed unwalkable; no
+`blocked` step on this plan.** Three expected results were falsified — 1.2, 1.3
+and 4.3 — minting **RA-G9** and **RA-G10** on the journey map; the plan's own
+cells are corrected above. No `journey-gap` issue was filed — that is
+[#209](https://github.com/markgoho/doula-cloud/issues/209).
+
+**Verdict against "a pass means": it does not pass, and the one half that passes
+is the half she did not ask about.** A new Doula did accept an invitation and does
+hold the Doula role — but only because a `PATCH` was made from a terminal against
+a staff id no screen prints; nothing in the product does it. She does **not**
+appear as the assigned Doula on an Engagement (RA-G4); the nearest thing the
+product has is a dateless Visit reassigned by pasting a UUID (RA-G10). And no
+screen shows every Engagement with its Contract and Invoice state (RA-G6, RA-G7).
+What does pass is 6.1-a: the Clients list really is Practice-wide, so a Client
+created by anyone shows up for everyone.
+
+Her moment of truth landed where the map put it, and the walk sharpened *why*.
+Stage 8 does not fail on the phone — the screen renders cleanly at 390px with no
+overflow. It fails because there is nothing on it: at 2 a.m. the product can tell
+her the names of three Clients and that each is `intake`. The failure is absence,
+not layout, which is what makes RA-G5 a feature and not a stylesheet.
+
+**For the walks behind this one**: Priya's plan step 3.3 and her journey map's
+stage 3.3 both carry the claim this walk falsified — that Payments is owner-gated
+— and both are corrected. A non-owner will see **Clients, Billing and Payments**,
+not two tiles.

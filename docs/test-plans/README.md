@@ -31,12 +31,20 @@ because the fixture supplied a field production never sends.
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
 carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
-and each plan's **Run log** names its own. **Tasha Bell's and Maya Okonkwo's plans are walked**
+and each plan's **Run log** names its own. **Tasha Bell's, Maya Okonkwo's and
+Renata Alvarez's plans are walked**
 ([#233](https://github.com/markgoho/doula-cloud/issues/233),
-[#234](https://github.com/markgoho/doula-cloud/issues/234)); the other seven are
+[#234](https://github.com/markgoho/doula-cloud/issues/234),
+[#235](https://github.com/markgoho/doula-cloud/issues/235)); the other six are
 not. Filing the `journey-gap` issues stays
 [#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
 nine walks.
+
+A walk may also **falsify an expected result** without moving its mark. Renata's
+1.2, 1.3 and 4.3 each stayed `manual` — the step is performable, and what the
+product did when it was performed is simply not what the plan claimed. The cell is
+corrected in place and the finding goes to the owning map (RA-G9, RA-G10), the
+same treatment Maya's 5.2 got.
 
 A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
 to `manual` once the Staff screen turned out to answer it — the rule that a mark

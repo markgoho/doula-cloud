@@ -55,9 +55,11 @@ in the codebase reads it. The role is decorative.
 - **3.1** — `/login` (`POST /api/session`).
 - **3.2** — Choose Rooted Birth Collective.
 - **3.3** — Land on `/practices/[practiceId]`. The owner-only tiles (Invite,
-  Staff, Plan Templates, Contract Template, Payments) are hidden by
-  `{#if roles.includes('owner')}`. **Clients and Billing remain**, and Billing is
-  the Practice's credit spending (DW-G4).
+  Staff, Plan Templates, Contract Template) are hidden by
+  `{#if roles.includes('owner')}`. **Clients, Billing and Payments remain** —
+  Payments is outside the owner block (RA-G9, corrected by the walk of
+  [#235](https://github.com/markgoho/doula-cloud/issues/235)), and Billing is the
+  Practice's credit spending (DW-G4).
 
 ### Stage 4 — Find her Clients
 

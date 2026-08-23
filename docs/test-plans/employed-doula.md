@@ -43,7 +43,7 @@ than anything Priya would do.
 | --- | --- | --- | --- |
 | 3.1 | Sign in at `/login` | `POST /api/session` succeeds and lands on `/practices/[practiceId]` | `automated (staff-login.e2e.ts)` |
 | 3.2 | Choose Rooted Birth Collective | The picker lists her memberships | `manual` |
-| 3.3 | Read the tiles | Invite, Staff, Plan Templates, Contract Template and Payments are hidden by `{#if roles.includes('owner')}`. **Clients and Billing remain** | `manual` |
+| 3.3 | Read the tiles | Invite, Staff, Plan Templates and Contract Template are hidden by `{#if roles.includes('owner')}`. **Clients, Billing and Payments remain** — Payments is outside the owner block (RA-G9), as #235's walk found by landing a zero-role member on it | `manual` |
 
 ### Stage 4 — Find her Clients
 

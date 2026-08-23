@@ -42,9 +42,14 @@ itself worth recording: the divergences below are the exceptions, not the rule.
 
 - **1.1** — `/login`, sign in (`POST /api/session`).
 - **1.2** — Choose Rooted Birth Collective from her memberships.
+- **1.2** — There is nothing to choose: `decideLanding` redirects a person with
+  one membership straight to their Practice (`app/src/lib/landing.ts:24-26`), and
+  LV-G2 means a second membership cannot be reached through the product.
 - **1.3** — Land on `/practices/[practiceId]`. Because she holds `owner`, the
-  page shows the Invite, Staff, Plan Templates, Contract Template, and Payments
-  tiles, all gated by `{#if roles.includes('owner')}`.
+  page shows the Invite, Staff, Plan Templates and Contract Template tiles, gated
+  by `{#if roles.includes('owner')}`. **Payments is not in that block**
+  (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`): it renders for
+  every member, including one holding no roles at all. See RA-G9.
 
 ### Stage 2 — Invite a new Doula
 
@@ -86,10 +91,14 @@ no screen. The assignment she thinks in terms of does not exist in the model.
 
 - **4.1** — Open an Engagement.
 - **4.2** — Look for an assignment control. There is none.
-- **4.3** — The nearest available act is to add a Visit and pick the Staff member
-  on it (`POST .../visits`, which takes a `staffId`). Assignment exists at Visit
-  level only, and a Visit has no date, so this cannot express "Priya covers this
-  birth".
+- **4.3** — The nearest available act is to add a Visit — but **it cannot name
+  anyone**. `POST .../visits` takes no body and assigns the caller
+  (`api/internal/visit/create.go:32,47`); handing the Visit to a colleague is a
+  second act through the **Reassign to Staff id** free-text box, which wants a
+  staff UUID no screen prints (RA-G10). It also requires the **Doula** role
+  (`api/internal/visit/roles.go:40`), which an Owner holds only because signup
+  grants all three. Assignment exists at Visit level only, and a Visit has no
+  date, so this cannot express "Priya covers this birth".
 
 ### Stage 5 — Reassign when someone is sick
 
@@ -161,6 +170,8 @@ it, because there is no click to record.
 | RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. |
 | RA-G7 | 7 | Interaction | No Practice-wide Invoice or unpaid list. Invoices are reachable only inside a single Engagement's Contract. |
 | RA-G8 | 2 | Interaction | An invitation carries no roles. `InviteHandler` takes a name and an email and inserts a membership with `roles = '{}'` (`api/internal/staffauth/invite.go:67`), so a zero-role membership is the only possible outcome of inviting anyone. Distinct root from RA-G2: a role-assignment UI alone would not fix the endpoint's contract. [ADR-0006](../adr/0006-read-follows-the-role.md) abolishes the zero-role state by putting roles on the invitation. |
+| RA-G9 | 1 | Interaction | The **Payments** tile is not owner-gated, and `GET .../payments/connect` carries no role gate either (`api/internal/payments/connect.go:163-165`, unlike its `POST` sibling at line 96). So every Staff member — including the zero-role member RA-G8 says an invitation must produce — is *offered* the Practice's Stripe account state and reads it: a Doula's `GET` answered `200 {"status":"not_connected",…}`. [ADR-0006](../adr/0006-read-follows-the-role.md)'s table has no row for Stripe Connect state, so this is a read rule the ADR cannot yet be implemented against, not only a mis-placed link. |
+| RA-G10 | 4 | Both | A Visit cannot be created for a colleague, only reassigned to one — and reassignment asks for a staff UUID by hand. `POST .../visits` takes no body and assigns the caller; the only way to put Jo on a Visit is to paste her id into a free-text box, and no screen in the product prints a staff id. Distinct root from RA-G4: even the Visit-level assignment the model *does* have is unreachable for anyone but yourself. |
 
 Also hit here, filed on their owning maps: **MO-G4** (an Engagement's status never
 changes, so her one status column is dead), **MO-G1** (dateless Visits, which is
