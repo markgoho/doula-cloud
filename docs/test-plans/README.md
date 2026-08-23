@@ -16,8 +16,10 @@ to Accounts v2 and both Sandbox event destinations are created, so
 
 **Connect and Invoices are now walked too** (2026-08-22). A Practice onboarded
 through the v2 Account Link to an active account, raised a $1,800 Invoice, and a
-Client paid it with a test card; `invoice.paid` created the `payments` row. No
-plan carries a `blocked` step on the practice side any more.
+Client paid it with a test card; `invoice.paid` created the `payments` row. The
+only `blocked` step left on the practice side is Dee's 8.1, and it now waits on
+her own walk ([#236](https://github.com/markgoho/doula-cloud/issues/236)) rather
+than on Stripe: her Practice has not been through the hosted onboarding.
 
 The walk earned its keep: it found four defects that reading could not. Two were
 config that reported itself healthy while delivering nothing (`events_from` on
@@ -118,8 +120,10 @@ Every step carries exactly one mark.
   The expected result is still the real as-built response, so the step is walked
   and observed like a `manual` one — the mark exists so the first run's numbers do
   not read a bill we have not paid as a hole in the product. **That response is
-  not always graceful**: the Invoice leg answers `connectRequired`, but Buy
-  credits and Connect Stripe both answer a bare `internal error` (HTTP 500).
+  not always graceful**: the Invoice leg answers `connectRequired` on a Practice
+  that has not connected. The bare `internal error` (HTTP 500) that Buy credits
+  and Connect Stripe both used to answer was the missing API key, and is gone —
+  both legs were walked end to end on 2026-08-22.
 - **`missing-feature (<gap id>)`** — the step cannot be performed at all: no
   screen, no endpoint, no column. It cites the gap ID **owned by a journey map**.
   A test plan never mints a gap ID. If a run exposes a gap no map owns, it goes
