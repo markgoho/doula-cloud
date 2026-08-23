@@ -119,5 +119,45 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 **1 automated steps: all pass.**
 
-The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
-That is [#241](https://github.com/markgoho/doula-cloud/issues/241).
+### 2026-08-23 — manual and missing-feature steps ([#241](https://github.com/markgoho/doula-cloud/issues/241))
+
+`bun run dev:full` in `app/`, against a fresh solo Practice ("Rooted Birth
+Collective", Owner+Admin+Doula in one Staff row — Priya's shape, since her
+journey carries this plan's staff-side stages) with two `clients` rows for
+one person (Camille Boyd), her two Engagements, and two portal accounts
+under two email addresses. Walked in Chrome via playwriter, one browser
+profile, re-authenticating whichever side was about to act — staff and
+Client-portal share one `__session` cookie per origin on `localhost:5173`,
+as prior walks found; not a new finding.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 1.1 | `missing-feature (MO-G4)` | confirmed | No status-change control anywhere on the Engagement page — only `Status`/`Created` in a description list, no way to mark it finished |
+| 3.1 | `manual` | as expected | The Clients list row is a plain link back to the same Engagement; nothing on it opens a second one |
+| 3.1-a | `missing-feature (CB-G1)` | confirmed | Add a Client (name + email) is the only entry point; `POST .../clients` inserted a fresh `clients` row both times — no lookup, no search, no add-an-Engagement action anywhere |
+| 3.2 | `manual` | as expected | A second `clients` row for Camille was created without complaint; credit balance went `3 -> 1` across the two creations (**MO-G9**) |
+| 3.2-a | `missing-feature (MO-G3)` | confirmed | The Add a Client form takes name and email only, both times |
+| 4.1 | `missing-feature (CB-G2)` | confirmed | Neither Engagement page shows anything beyond `Status`/`Created` — no kind field, no create-time alternative to `intake` |
+| 4.1-a | `missing-feature (MO-G4)` | confirmed | Same absence — no status control exists on either Engagement to approximate with |
+| 5.1 | `manual` | as expected | `POST .../portal-invite` returned `201`; the link was printed in plain text for hand delivery (**RA-G1**) |
+| 5.2 | `manual` | as expected | `POST /api/portal/accept-invite` returned `409 CONFLICT`; the page showed the exact string "a portal account already exists for this identity" |
+| 5.3 | `manual` | as expected | A second account under a different email address succeeded and landed straight on the postpartum Engagement |
+| 6.2 | `manual` | as expected | Account A resolves only to the 2024 Engagement (still `intake`); account B resolves only to the postpartum one; no route connects them beyond signing out and back in |
+| 6.2-a | `missing-feature (CB-G4)` | confirmed | The authenticated layout's entire chrome is one Sign-out button, on both accounts — no switcher anywhere |
+| 6.2-b | `missing-feature (CB-G4)` | confirmed by inspection, not by walking | CB-G1 and CB-G3 keep any one identity from ever holding two Engagements in this stack, so the two-Engagement chooser this step asks about cannot be produced live; the claim rests on `login/+page.svelte` labeling an Engagement by `practiceName` alone, as the map already argued |
+| 7.1 | `manual` | as expected | **Birth Plan** and **Contract** links both render unconditionally on the postpartum Engagement |
+| 7.2 | `manual` | as expected | "No Birth Plan has been created for this Engagement yet." |
+| 7.2-a | `missing-feature (CB-G5)` | confirmed | Same absence as 4.1 — no way to mark an Engagement as not needing a Birth Plan |
+| 8.1 | `manual` | as expected | The postpartum Engagement's message thread is empty, isolated from the 2024 thread |
+| 8.1-a | `missing-feature (CB-G6)` | confirmed | No view, on either side, shows a person's Engagements over time |
+
+**18 steps walked: 9 `manual`, 9 `missing-feature`. Every mark holds.** No
+`blocked` step exists on this plan, confirmed — nothing on her path touches
+Stripe. No `journey-gap` issue filed from this ticket — that is
+[#209](https://github.com/markgoho/doula-cloud/issues/209), still blocked on
+this ticket alone now that it is the last of the nine.
+
+**Verdict**: this plan cannot pass, as written, and does not, on all three
+clauses. The 2024 Engagement stays `intake` forever; the postpartum one
+cannot declare what it is; and reaching both from one portal account is
+refused at the exact step the map names as her moment of truth.
