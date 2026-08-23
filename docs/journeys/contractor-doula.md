@@ -212,7 +212,10 @@ only record agreements reached elsewhere cannot be the place two businesses agre
 
 1. **An Offer is a new concept in the model** (LV-G6), with its own terminal states:
    accepted, declined, and probably withdrawn. Declined has to be durable, or Renata
-   cannot tell "she said no" from "she has not looked yet".
+   cannot tell "she said no" from "she has not looked yet". Settled in
+   [#229](https://github.com/markgoho/doula-cloud/issues/229) as six states — the two
+   guessed at here plus `withdrawn`, `superseded` (another Doula was faster) and
+   `expired`.
 2. **A fifth read state.** ADR-0006's table describes what each role reads about a
    Practice's Engagements. It now needs a column for a Doula who has been *offered*
    an Engagement and has not accepted: enough to decide on, no more (LV-G7). That
@@ -223,8 +226,14 @@ only record agreements reached elsewhere cannot be the place two businesses agre
    solves how attachment begins; it says nothing about how it ends.
 
 **Not reopened by**: an Owner wanting to skip the handshake for her own employees.
-Employed Doulas read every Engagement at the Practice already ([ADR-0006](../adr/0006-read-follows-the-role.md));
-offering is the contractor's route, not a step added to everyone's.
+Employed Doulas read every Engagement at the Practice already ([ADR-0006](../adr/0006-read-follows-the-role.md)),
+so nothing here becomes a step everyone must take.
+
+**Amended by [#229](https://github.com/markgoho/doula-cloud/issues/229)**: offering is
+no longer the contractor's route *only*. An employee may be offered work too, and the
+sentence above is why it costs her nothing — the Offer grants her no reach she lacks,
+it settles the **claim** that she is on this birth. Offering stays **mandatory** for a
+contractor and **optional** for an employee, who may still simply be assigned.
 
 ## Gaps found
 
