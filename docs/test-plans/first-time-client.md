@@ -59,7 +59,7 @@ Nadia Haddad's, Nadia's plan was written first
 | 4.1-a | Open it while the Contract is still `draft` | "No Contract has been sent for this Engagement yet" — RLS gives her no row, and that is the right message | `manual` |
 | 4.1-b | As Maya, take a signature before sending the portal invite | The Contract can be sent, and no Client can reach it. The ordering is real and nothing on the Staff side states it | `missing-feature (MO-G6)` |
 | 4.2 | Type her full legal name, tick the attestation, submit | `POST .../contract/sign` succeeds and the page re-renders at `signed`. **The strongest screen in the portal** — and no spec covers it | `manual` |
-| 4.3 | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` is routed (`main.go:226`) and nothing in the portal's contract page links it | `missing-feature (HS-G3)` |
+| 4.3 | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` is routed (`main.go:226`) and nothing in the portal's contract page links it | `missing-feature (HS-G3, HS-G6)` |
 
 ### Stage 5 — Reading the Birth Plan
 
@@ -107,7 +107,7 @@ Nadia Haddad's, Nadia's plan was written first
 | --- | --- |
 | `automated` | 6 |
 | `manual` | 18 |
-| `missing-feature` | 8 (HS-G4 ×2, MO-G6, HS-G3, HS-G2, PR-G5, MO-G4, HS-G5) |
+| `missing-feature` | 8 (HS-G4 ×2, MO-G6, HS-G3+HS-G6, HS-G2, PR-G5, MO-G4, HS-G5) |
 
 No step is `blocked`. She never reaches a Stripe surface — the portal has none —
 so the one thing she cannot see about money (**NH-G6**: no Invoice, balance or
@@ -117,12 +117,11 @@ HS-G1, NH-G4, **RA-G1**, **PR-G7**, **MO-G3** and
 [#212](https://github.com/markgoho/doula-cloud/issues/212) are observed inside
 walkable steps (2.2-a, 3.1, 1.2, 3.1-a) rather than given steps of their own.
 
-Two things the run should carry back to
-[her map](../journeys/first-time-client.md). **The Birth Plan has no export but
-Print** — 6.1-a covers Maya handing it over (PR-G5) and nothing owns the absence of
-a PDF or a share link from Hannah's own side, on the journey's moment of truth. And
-**stage 4 is the strongest screen in the portal with no spec on it**: 4.2 signs a
-Contract and the suite never does.
+The Birth Plan's absent export is now [her map](../journeys/first-time-client.md)'s
+**HS-G7**, and 4.3's absent Contract copy sharpened into **HS-G6** — both minted at
+the run ([#240](https://github.com/markgoho/doula-cloud/issues/240)). One fact
+still only handed forward, not a gap: **stage 4 is the strongest screen in the
+portal with no spec on it** — 4.2 signs a Contract and the suite never does.
 
 ## Run log
 
@@ -143,5 +142,65 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 **6 automated steps: all pass.**
 
-The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
-That is [#240](https://github.com/markgoho/doula-cloud/issues/240).
+### 2026-08-23 — manual and missing-feature steps ([#240](https://github.com/markgoho/doula-cloud/issues/240))
+
+`bun run dev:full` in `app/`, against a fresh solo Practice ("Rooted Birth
+Collective", Owner+Admin+Doula in one Staff row) with one Client (Hannah
+Sorensen), a Contract sent with real merge-field values entered, and a filled
+Birth Plan. Walked in Chrome via playwriter, one browser profile, phone
+viewport (390×844) for stages 6 and 7.
+
+**Note on the fixture**: confirms the same shared-`__session`-cookie fact
+[#239](https://github.com/markgoho/doula-cloud/issues/239) already recorded —
+signing in as Staff or as the Client silently invalidates whichever side was
+signed in on the other route. Not re-argued here; walked by re-authenticating
+whichever side was about to act, immediately before each of its steps.
+
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
+| 1.1 | `manual` | as expected | `POST .../portal-invite` returns the token; the page prints the accept-invite URL as a `<code>` block, no email sent |
+| 1.2 | `manual` | as expected | The link was used directly, exactly as printed — no verification mechanism exists |
+| 2.1 | `manual` | as expected | "Missing invite token", no form |
+| 2.2-a | `manual` | as expected | Chosen on Hannah's real, still-unclaimed token: `400`, generic "Accept invite failed"; the token stayed unconsumed and signup succeeded right after |
+| 3.1-a | `manual` | as expected | `Status: intake`, `Created: 8/23/2026` |
+| 3.2 | `manual` | as expected | **Birth Plan** and **Contract** links only, nothing explains either |
+| 3.3 | `manual` | as expected | Nothing on screen asks about notifications |
+| 3.3-a | `missing-feature (HS-G4)` | confirmed | No notification setting anywhere in the portal — the banner holds only **Sign out** |
+| 4.1-a | `manual` | as expected | "No Contract has been sent for this Engagement yet." while the Contract was still `draft` |
+| 4.1-b | `missing-feature (MO-G6)` | confirmed | On a second, never-invited Client, **Send Contract** succeeded (`Status: sent`) with no prior portal invite at all; nothing on the Staff side warns of the ordering |
+| 4.1 | `manual`, **MO-G10 reconfirmed** | as expected, with a correction | `Status: sent` renders, but every merge field is blank — real values (`Rooted Birth Collective`, `Hannah Sorensen`, `$2200`, dates) were typed and **Send Contract** pressed, and neither the staff-side form nor the client-side prose ever showed them on reload. Same defect MO-G10 already names (`contracts/contract.go:124`); not a data-entry mistake, confirmed by re-checking the Staff form after a fresh login |
+| 4.2 | `manual` | as expected | Full legal name typed, attestation checked, **Sign** re-renders the page at `Status: signed` |
+| 4.3 | `missing-feature (HS-G3)`, sharpened, new gap **HS-G6** minted | **falsified in part** | The plan's claim was that the endpoint is merely unlinked. It is worse: `GET /api/portal/engagements/{id}/contract/pdf` itself answers `500 internal error` when called directly (`fetch()` from the page), even though the signed Contract's `status` is `signed`. Querying `fake-gcs-server`'s own API directly (`GET /storage/v1/b/doula-cloud-e2e-attachments/o`) shows the PDF *is* present at `contracts/{engagementId}/signed.pdf` and downloads fine through the emulator's own `mediaLink` — so the object write and the object itself are both fine. The break is in the BFF's read path: `objectstore.GCSStore.Get` (`api/internal/objectstore/gcs.go`) is backed by a `storage.Client` constructed with no options at all (`storage.NewClient(context.Background())`, `main.go:263`), a known incompatibility class between the Go GCS client's newer default read behavior and `fake-gcs-server`. Whether this also breaks against real GCS in Cloud Run is unverified from this walk — a local-only harness defect and a real product defect look identical from here, and that ambiguity belongs to whoever picks up HS-G6, not this ticket |
+| 5.1 | `manual` | as expected | "No Birth Plan has been created for this Engagement yet." |
+| 5.2 | `missing-feature (HS-G2)` | confirmed | Fully read-only rendering (`Hospital`, notify list, atmosphere text, photo preference) — no editable field, no comment box, no acknowledgement control anywhere on the page |
+| 5.2-a | `manual` | as expected | A message referencing the Birth Plan sends and appears in the thread immediately |
+| 6.1 | `manual` | as expected | `page.emulateMedia({ media: 'print' })` removes **Sign out**, **Back** and **Print** from the accessibility tree, leaving only the Plan content — the print stylesheet works |
+| 6.1-a | `missing-feature (PR-G5)` | confirmed | Staff's Birth Plan section offers only the edit form and **Save Birth Plan** — no print-for-client, deep link, or hand-over control of any kind |
+| 6.2 | `manual` | as expected, not literally walkable | Conceptual — the product has nothing left to observe once the paper is handed over |
+| 7.1 | `manual`, new gap **HS-G6** | **as expected on upload, falsified on delivery** | A message with a `pixel.png` attachment posts successfully (`201`) and appears in the thread as a clickable `pixel.png` control — but clicking it, and fetching the attachment URL directly, both answer `500 internal error` and surface a visible **internal error** alert to the Client. Same root as 4.3: the object is written (confirmed present in `fake-gcs-server`) and the BFF's `Get` cannot read it back. "Attachments work both ways" does not hold on this stack — nothing renders inline, on either side of the exchange, once the read path is exercised for real for the first time |
+| 7.3 | `manual`, not exercised | inconclusive | Only one message existed in the thread; no **Load older** control rendered. Not evidence of a defect — the fixture never produced enough history to trigger it |
+| 7.3-a | `missing-feature (HS-G4)` | confirmed | Nothing near the thread says a push is not an alarm |
+| 8.1 | `manual` | as expected | Same heading, same `intake`, same two links, revisited after a reload |
+| 8.1-a | `missing-feature (MO-G4)` | confirmed | No status control exists anywhere on either side |
+| 8.1-b | `manual` | as expected | No Visits section anywhere on the Client side of the product |
+| 9.1 | `missing-feature (HS-G5)` | confirmed | No second-account, guest, or share control anywhere in the portal — the banner holds only **Sign out** |
+
+**26 steps walked: 18 `manual`, 8 `missing-feature`. Every existing mark
+holds; 4.3 was falsified in part (sharpened, not deleted) and two new gaps
+minted — HS-G6 and HS-G7 — added to
+[docs/journeys/first-time-client.md](../journeys/first-time-client.md).** No
+`blocked` step exists on this plan, confirmed. No `journey-gap` issue filed
+from this ticket — that is
+[#209](https://github.com/markgoho/doula-cloud/issues/209).
+
+**Verdict**: this plan cannot pass, as written, and does not. Every
+`missing-feature` step confirmed genuinely unwalkable; the Contract's own
+merge fields never render, and what looked like a merely-unlinked PDF copy
+(HS-G3) turned out to be a PDF copy that cannot be fetched at all — the same
+defect silently breaks message attachments in both directions.
+
+**Facts handed forward, not gaps**: stage 4 remains the strongest screen in
+the portal with no spec on it — 4.2 signs a Contract and the suite never
+does. And the "Birth Plan has no export but Print" callout the plan itself
+flagged for this run is now minted as HS-G7, so it no longer needs carrying
+forward.

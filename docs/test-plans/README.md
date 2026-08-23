@@ -61,8 +61,11 @@ Vasquez's
 [#235](https://github.com/markgoho/doula-cloud/issues/235),
 [#236](https://github.com/markgoho/doula-cloud/issues/236),
 [#237](https://github.com/markgoho/doula-cloud/issues/237),
-[#238](https://github.com/markgoho/doula-cloud/issues/238)); the three client-side
-plans are not. Filing the `journey-gap` issues stays
+[#238](https://github.com/markgoho/doula-cloud/issues/238)). **Two of the three
+client-side plans are walked** — Nadia Haddad's and Hannah Sorensen's
+([#239](https://github.com/markgoho/doula-cloud/issues/239),
+[#240](https://github.com/markgoho/doula-cloud/issues/240)); Camille Boyd's is
+not. Filing the `journey-gap` issues stays
 [#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
 nine walks.
 
