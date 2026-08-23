@@ -17,6 +17,13 @@ Stripe fingerprints the automation-launched browser, not the absence of a human,
 so a real profiled Chrome walks straight through and **no human is needed for the
 form itself**. Do not `chromium.launch()` for this — headed does not help.
 
+**It signs your browser into Stripe as the Persona.** The password step creates a
+real Stripe *user* for the Owner's fake address, and the hosted flow logs the
+browser into it. Afterwards `dashboard.stripe.com` in that Chrome resolves to the
+**connected account**, not the Doula Cloud platform — so a Dashboard settings page
+opened straight after a walk is the Practice's, not yours. Switch accounts
+top-left, or sign out, before touching any platform setting.
+
 ## Before starting
 
 - `bun run dev:full` in `app/`.
