@@ -19,10 +19,19 @@ recorded at all. There is no workaround.
 This is **not** the out-of-scope Stripe gap. A live Stripe account would not fix
 it. The missing capability is manual Payment recording (DW-G3).
 
-The competing candidate was Stage 5, assigning the Doula (RA-G4). It loses
-because Dee has a human workaround there — they tell the doula out of band, the
-same way they do today. A missing capability with a workaround is friction. A book
-they cannot close is a break.
+The competing candidate was Stage 5, assigning the Doula (RA-G4).
+
+**The walk broke the original argument and it is re-stated here.** It read: stage 5
+loses because Dee can create a Visit naming the doula instead. They cannot —
+`POST .../visits` is Doula-gated and refuses them (**DW-G6**). The *product*
+workaround never existed.
+
+The verdict still holds, on the ground that is actually left. Stage 5's workaround
+is out of band and always was: Dee tells the doula, the same way they do today, and
+the work happens. Nothing about the business stops. Stage 9 has no equivalent —
+a payment that arrived cannot be written down anywhere, in or out of the product,
+and the book stays open. Friction that a phone call absorbs is not the same as a
+record that cannot exist.
 
 ## Words
 
@@ -46,7 +55,11 @@ Dee is a domain expert on the business half and a stranger to the care half.
 - **1.1** — Open the invite link at `/accept-invite`.
 - **1.2** — Set email and password; press **Accept invite**
   (`POST /api/staff/accept-invite`). The membership is created with zero roles.
-- **1.3** — Choose the Practice from the membership list.
+- **1.3** — ~~Choose the Practice from the membership list.~~ **There is nothing
+  to choose**: acceptance leaves one membership, so `decideLanding` redirects
+  straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`) and the picker
+  never renders. Same root as Renata's 1.2 — the picker needs two memberships,
+  which **LV-G2** says a person cannot have.
 
 ### Stage 2 — Receive the Admin role
 
@@ -66,8 +79,11 @@ handlers). Neither `office_manager` nor `doula` is read anywhere. **Dee is
 indistinguishable from any other non-owner Staff member.** The Admin role grants
 nothing and withholds nothing.
 
-- **3.1** — Land on `/practices/[practiceId]` and see the non-owner tiles only:
-  Clients and Billing.
+- **3.1** — Land on `/practices/[practiceId]` and see the non-owner tiles:
+  Clients, Billing **and Payments**. Payments sits outside
+  `{#if roles.includes('owner')}` (**RA-G9**, found by
+  [#235](https://github.com/markgoho/doula-cloud/issues/235) and confirmed here on
+  a zero-role membership).
 - **3.2** — Open Billing and read the Practice's credit balance and purchase
   ledger. `billing/balance.go` takes any Staff member, so a non-owner sees what
   the Practice spends. Buying credits is correctly refused
@@ -92,8 +108,11 @@ product was meant to solve.
 **Pain points**: there is no assignment. See RA-G4.
 
 - **5.1** — Open the Engagement and look for an assignment control. There is none.
-- **5.2** — The nearest act is to create a Visit naming a Staff member — a
-  dateless record that does not express coverage.
+- **5.2** — ~~The nearest act is to create a Visit naming a Staff member.~~
+  **There is no nearest act.** `POST .../visits` requires the Doula role
+  (`api/internal/visit/roles.go:41`), which Dee does not hold, so the button is on
+  her screen and answers `403 only a Staff member with the Doula role can do
+  that`. Stage 5 has no in-product act for her at all (**DW-G6**).
 
 ### Stage 6 — Send the Contract
 
@@ -132,9 +151,12 @@ contract list (RA-G6).
 **Thinking**: "Bill the deposit."
 **Pain points**: the endpoint is **not** owner-gated, so the role is not the
 blocker — Stripe Connect is. Without a connected account the handler returns
-`connectRequired`, and because Dee is not an Owner it returns `isOwner: false`,
-which the UI turns into "Ask a Practice Owner to connect Stripe." Dee is stopped
-by an infrastructure gap wearing the costume of a permission error.
+`connectRequired`. `IsOwner` carries `omitempty`
+(`api/internal/payments/invoice.go:51`), so for a non-owner the field is *absent*
+from the body rather than `false` — the wire response is `{"connectRequired":true}`
+and the client defaults it (`+page.svelte:311`, `result.isOwner ?? false`). Either
+way the UI shows "Ask a Practice Owner to connect Stripe." Dee is stopped by an
+infrastructure gap wearing the costume of a permission error.
 
 - **8.1** — `POST /api/practices/{id}/engagements/{id}/contract/invoices`.
 - **8.2** — Read the "ask an Owner" message.
@@ -175,6 +197,9 @@ Record it as an open decision, not as a pass or a failure.
 | DW-G3 | 9 | Interaction | No manual Payment recording. Payments are written only by the Stripe webhook, so a cheque or bank transfer cannot be recorded. |
 | DW-G4 | 3 | Interaction | The Billing balance and ledger are not owner-gated in the UI or the API (`billing/balance.go:86` takes any Staff member), so any non-owner sees the Practice's spending. Buying credits is correctly owner-gated (`billing/purchase.go:33`). |
 | DW-G5 | 7 | Both | No unsigned-contract or outstanding-work list. Chasing signatures means opening every Engagement in turn. |
+| DW-G6 | 5 | Interaction | The Admin cannot record anything about care, not even as a proxy. `owner` and `doula` are the only roles the codebase reads, and Dee holds neither, so the one assignment-shaped act in the product — `POST .../visits` — refuses them (`api/internal/visit/roles.go:41`). **Add a Visit** renders on their screen and 403s. This is the other half of DW-G1: the Admin role grants nothing, *and* the two roles that do grant something both exclude them. |
+| DW-G7 | 7, 8 | Interaction | A voided Contract can still be billed. **Create Invoice** keeps rendering after the void, and `POST .../contract/invoices` does not check the Contract's status — it goes straight to the Stripe Connect gate (`200 {"connectRequired":true}` on a `voided` Contract). With a connected account the next thing it meets is Stripe, not a refusal. `POST .../contract/send` and `POST .../contract/void` both 409 correctly on a voided Contract; the Invoice route is the one that does not. |
+| DW-G8 | every stage | Both | **No screen in the product has a title.** `document.title` is `""` on `/login`, the practice landing, Clients, Billing and the Engagement page, so every tab is blank and SvelteKit's own live region announces `untitled page` to a screen reader on each client-side navigation. Found on Dee's walk because it is on every screen Dee opens; it is app-wide, not theirs. |
 
 Also hit here, filed on their owning maps: **RA-G1** (no invite email),
 **RA-G2** (no role UI), **RA-G3** (`office_manager` on screen), **RA-G4** (no

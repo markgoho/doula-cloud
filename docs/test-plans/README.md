@@ -17,9 +17,13 @@ to Accounts v2 and both Sandbox event destinations are created, so
 **Connect and Invoices are now walked too** (2026-08-22). A Practice onboarded
 through the v2 Account Link to an active account, raised a $1,800 Invoice, and a
 Client paid it with a test card; `invoice.paid` created the `payments` row. The
-only `blocked` step left on the practice side is Dee's 8.1, and it now waits on
-her own walk ([#236](https://github.com/markgoho/doula-cloud/issues/236)) rather
-than on Stripe: her Practice has not been through the hosted onboarding.
+only `blocked` step left on the practice side is Dee's 8.1, and
+[#236](https://github.com/markgoho/doula-cloud/issues/236) has now attempted it:
+her Practice's connected account was created and the Payments screen moved to
+`Onboarding incomplete`, but Stripe's hosted form serves a **CAPTCHA**, which a
+walk must not work around. So the step stays `blocked`, and what it waits on is
+precise: **a person completing that form by hand**, from a link the product
+already renders.
 
 The walk earned its keep: it found four defects that reading could not. Two were
 config that reported itself healthy while delivering nothing (`events_from` on
@@ -31,11 +35,12 @@ because the fixture supplied a field production never sends.
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
 carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
-and each plan's **Run log** names its own. **Tasha Bell's, Maya Okonkwo's and
-Renata Alvarez's plans are walked**
+and each plan's **Run log** names its own. **Tasha Bell's, Maya Okonkwo's, Renata
+Alvarez's and Dee Whitlock's plans are walked**
 ([#233](https://github.com/markgoho/doula-cloud/issues/233),
 [#234](https://github.com/markgoho/doula-cloud/issues/234),
-[#235](https://github.com/markgoho/doula-cloud/issues/235)); the other six are
+[#235](https://github.com/markgoho/doula-cloud/issues/235),
+[#236](https://github.com/markgoho/doula-cloud/issues/236)); the other five are
 not. Filing the `journey-gap` issues stays
 [#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
 nine walks.
@@ -45,6 +50,11 @@ A walk may also **falsify an expected result** without moving its mark. Renata's
 product did when it was performed is simply not what the plan claimed. The cell is
 corrected in place and the finding goes to the owning map (RA-G9, RA-G10), the
 same treatment Maya's 5.2 got.
+
+A walk may also **add a step**. Dee's 7.2-a came out of voiding a Contract and then
+noticing **Create Invoice** still rendered on it — a check no cell had named. A new
+`-a` id is the same move as a plan appending a check the map's step does not name;
+the map still owns the gap it mints (DW-G7).
 
 A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
 to `manual` once the Staff screen turned out to answer it — the rule that a mark
@@ -123,7 +133,13 @@ Every step carries exactly one mark.
   ([#234](https://github.com/markgoho/doula-cloud/issues/234)). **Prefer that fix
   to the mark**: where the missing infrastructure can be stood up locally, stand
   it up, and keep `blocked` for the one thing that cannot be (a Stripe account is
-  a business relationship, not a container).
+  a business relationship, not a container). Dee's walk
+  ([#236](https://github.com/markgoho/doula-cloud/issues/236)) drew the second
+  half of that line: Stripe's hosted onboarding serves a **CAPTCHA**, so the step
+  is not merely un-stood-up, it is deliberately closed to automation. **A walk
+  never works around an anti-automation control on a third party's system.** It
+  records where our code stopped and what a person must do, and leaves the mark
+  where it is.
 
   The expected result is still the real as-built response, so the step is walked
   and observed like a `manual` one — the mark exists so the first run's numbers do
