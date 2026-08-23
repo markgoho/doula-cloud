@@ -5,8 +5,16 @@ import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
 // which GCP project to talk to, the same way it's public in every
 // Firebase web app. The real access boundary is server-side token
 // verification (api/internal/authn), not this key.
+//
+// It does have to be the project's *real* key, though. This was the
+// literal string 'browser-key-not-a-secret', which the auth emulator
+// accepts (it validates nothing) and real Identity Platform rejects with
+// `auth/api-key-not-valid`. Every e2e test runs against the emulator, so
+// nothing caught it, and the deployed app could not log anyone in or sign
+// anyone up. Value is `firebase apps:sdkconfig WEB`'s apiKey for the
+// doula-cloud web app.
 const firebaseConfig = {
-	apiKey: 'browser-key-not-a-secret',
+	apiKey: 'AIzaSyABnAc22teViyKS0EzLmp1Gcxi-uQuU5UE',
 	projectId: 'doula-cloud',
 	authDomain: 'doula-cloud.firebaseapp.com'
 };
