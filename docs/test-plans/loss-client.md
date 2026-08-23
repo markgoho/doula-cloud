@@ -84,7 +84,7 @@ Walked as Maya. Nadia is not in the app.
 | --- | --- | --- | --- |
 | 6.1 | Open the Contract link | The full signed prose renders. A `voided` Contract is not withheld; only the **Sign** form is, and only because it keys on `status === 'sent'` | `manual` |
 | 6.2 | Read the status | `Status: voided`, then "Voided — this Contract is no longer active." The Client portal reuses the Staff `ContractStatus` component and passes no `onVoid`, so she gets the ledger's word with no Void button and no human context (NH-G5) | `manual` |
-| 6.2-a | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` is routed (`main.go:226`) and linked from nowhere | `missing-feature (HS-G3)` |
+| 6.2-a | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` 404s outright once the Contract is `voided` — `serveSignedPDF` (`signed_pdf.go:66-69`) queries `WHERE status = 'signed'`, so linking it (HS-G3) would not be enough | `missing-feature (HS-G3, NH-G8)` |
 | 6.2-b | Find what she still owes, or what was refunded | The portal has no Invoice, balance or payment surface at all. The question she is most likely to have cannot be asked on screen | `missing-feature (NH-G6)` |
 
 ### Stage 7 — Postpartum support continues anyway
@@ -112,7 +112,7 @@ the same absence is hit twice by two different people.
 | --- | --- |
 | `automated` | 5 |
 | `manual` | 13 |
-| `missing-feature` | 9 (MO-G3, NH-G3, NH-G1 ×2, MO-G4, NH-G2, HS-G3, NH-G6, NH-G7) |
+| `missing-feature` | 9 (MO-G3, NH-G3, NH-G1 ×2, MO-G4, NH-G2, HS-G3 + NH-G8, NH-G6, NH-G7) |
 
 No step is `blocked`. Stripe never reaches the Client portal, so nothing here waits
 on an account nobody has opened — **NH-G6** is a hole in the product, not a bill.
@@ -167,15 +167,15 @@ not a new finding, and not evidence of a production defect, since staff and
 portal are reached via different routes there. Walked by re-authenticating
 whichever side was about to act, immediately before each of its steps.
 
-| Step | Mark | Result |
-| --- | --- | --- |
+| Step | Mark | Result | What was seen |
+| --- | --- | --- | --- |
 | 1.2 | `manual` | as expected | One continuous thread; Maya's and Nadia's messages both appear in order, immutable |
 | 1.2-a | `missing-feature (MO-G3)` | confirmed | Engagement page (both sides) shows only `Status` and `Created` — no due date, no gestation, no other Client detail |
 | 2.1 | `missing-feature (NH-G3)` | confirmed | No control anywhere on the Engagement page records an outcome |
 | 2.1-a | `missing-feature (NH-G1)` | confirmed | No status value is offered anywhere in the UI — there is no status control to read a value from |
 | 2.1-b | `missing-feature (MO-G4)` | confirmed | Same absence — no status control exists to set any value with |
-| 3.1-a | `manual` | as expected | With the tab closed, nothing arrives carrying content — consistent with the map's note that real device delivery is out of scope |
-| 3.2 | `manual` | as expected | No reminder, nudge, or countdown appears anywhere in the product |
+| 3.1-a | `manual` | as expected, confirmed by inspection not by walking | Closing the tab was not exercised live; grounded instead in the same fact the journey map already cites (no reminder machinery in `api/`, content-free push by design, ADR-0002) — nothing was found to contradict it |
+| 3.2 | `manual` | as expected, confirmed by inspection not by walking | Not literally waited out; grounded the same way as 3.1-a — no reminder/nudge/countdown code exists anywhere in `api/` |
 | 4.2 | `manual` | as expected, one correction | `<h1>` reads **"Welcome to Willow Creek Doula Care"** — the actual Practice name, confirming NH-G4's `{practiceName}` template. (The plan's illustrative text names "Rooted Birth Collective", a different Practice used as the shared fixture in other personas' plans; the mechanism, not the literal string, is what NH-G4 claims, and it holds.) |
 | 4.2-b | `manual` | as expected | `Status: intake`, `Created: 8/23/2026` — the only date the portal holds |
 | 4.3 | `manual` | as expected | **Birth Plan** then **Contract**, then the thread — same order every time |
@@ -202,3 +202,10 @@ ticket — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 `missing-feature` step confirmed genuinely unwalkable; the record stays at
 `intake` forever, the Birth Plan cannot be retired, and money has no
 client-facing surface at all.
+
+**Unexplained, not chased**: three `404`s in the browser console right after
+**Save Contract** and one after **Void Contract** (staff side), origin not
+identified. Neither action's own result was wrong — the Contract saved and
+voided correctly both times — so this was not chased down to a source. Named
+here rather than dropped, since an unexplained `404` on a write path is
+exactly what turned into real findings on Maya's and Dee's walks.
