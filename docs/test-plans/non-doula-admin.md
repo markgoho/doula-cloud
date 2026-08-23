@@ -118,8 +118,17 @@ automation control on a third party's system, which a walk must not work around.
 
 So Dee's 8.1 is `blocked` in the strongest sense the
 [README](README.md) defines: the code path is complete, no product decision is
-missing, and it needs a person at a browser. It clears when someone completes
-Renata's onboarding by hand — the account and the link both already exist.
+missing, and it needs a person at a browser.
+
+**It clears inside a live walk session, not before one.** The walking stack's
+Postgres is torn down with its volumes (`app/e2e/stack.ts:171`,
+`compose down -v`), so the Practice and its connected-account row do not survive
+`bun run dev:full` exiting — `acct_1U7RdD1rKocBawcv` still exists in the Sandbox
+but nothing points at it any more. The product's own leg is one click
+(`POST .../payments/connect` recreates the account and re-renders **Continue
+Stripe onboarding**), so a future walk drives everything up to the CAPTCHA and a
+person finishes the hosted form there and then, with the same session's stack
+still running.
 
 ### Stage 9 — Record the Payment (moment of truth)
 

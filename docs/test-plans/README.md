@@ -22,8 +22,10 @@ only `blocked` step left on the practice side is Dee's 8.1, and
 her Practice's connected account was created and the Payments screen moved to
 `Onboarding incomplete`, but Stripe's hosted form serves a **CAPTCHA**, which a
 walk must not work around. So the step stays `blocked`, and what it waits on is
-precise: **a person completing that form by hand**, from a link the product
-already renders.
+precise: **a person completing that form by hand, inside a live walk session** —
+the stack's Postgres goes down with its volumes (`app/e2e/stack.ts:171`), so a
+connected account made in one session is orphaned by the next. The product's leg
+is one click, so a walk can drive up to the CAPTCHA and hand over there.
 
 The walk earned its keep: it found four defects that reading could not. Two were
 config that reported itself healthy while delivering nothing (`events_from` on
