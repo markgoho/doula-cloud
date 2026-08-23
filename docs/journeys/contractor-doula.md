@@ -59,7 +59,11 @@ that new row (`accept.go:101`) — but `staff.identity_uid` is `UNIQUE`
 other agency. The person the schema's own comment describes — one who "can work at
 more than one Practice via separate `practice_memberships` rows" (lines 16–18) —
 cannot be created through the only route that reaches her (LV-G2). No email carries
-the link either (RA-G1), so Renata pastes a URL into a text.
+the link either (RA-G1), so Renata pastes a URL into a text. The refusal is clean and
+what it leaves behind is not: the invite writes the pending `staff` row and its
+`roles = '{}'` membership before she ever presses accept (`invite.go:56`, `:66`), in a
+different request from the one that fails, so the roster gains a member who can never
+sign in and whom no route removes (LV-G8, found on the walk).
 
 - **1.1** — Open the invite link at `/accept-invite`.
 - **1.2** — Sign in as herself and submit
@@ -77,14 +81,19 @@ the link either (RA-G1), so Renata pastes a URL into a text.
 **Thinking**: "Which one is this — Renata's or the other one?"
 **Pain points**: she is the only Persona who meets the Practice picker as a real
 decision rather than a formality, and she meets it every time. Nothing on it says
-what she is at each Practice.
+what she is at each Practice. The walk confirmed the picker renders — it is the only
+place in the effort where it ever has, since every other Persona holds one membership.
 
 - **2.1** — `/login` (`POST /api/session`).
 - **2.2** — Choose Rooted Birth Collective from the list.
 - **2.3** — Land on `/practices/[practiceId]`. Owner-only tiles are hidden by
-  `{#if roles.includes('owner')}`; **Clients and Billing remain**, exactly as they do
-  for Priya. Billing is the Practice's own credit spending, which is not her business
-  at all — she is not even the employee it was already wrong for (DW-G4).
+  `{#if roles.includes('owner')}`; **Clients, Billing and Payments remain**, exactly as
+  they do for Priya — Payments sits outside the owner block (RA-G9). Billing is the
+  Practice's own credit spending and Payments its Stripe state, neither of which is her
+  business at all — and she is not even the employee they were already wrong for
+  (DW-G4). What the walk added is that the leak runs the other way too: nothing stops
+  her *adding* a Client and spending one of the agency's credits (LV-G9), or pricing
+  and sending a Contract on a Client who is not hers (PR-G8).
 
 ### Stage 3 — The offer — moment of truth
 
@@ -175,8 +184,11 @@ Credit even buys is unsettled in code (TB-G3).
 her a read of "the Engagements she is attached to" has no modelled way to stop
 granting it, so a contractor who worked one birth in February still reads that Client
 in December — including, once the money split exists, the money. Removing her
-membership entirely is the only available lever, and it is wrong: it erases her from
-the Visits she worked. This is the mirror of RA-G4 rather than a restatement of it —
+membership entirely is the only conceivable lever, it is wrong — it erases her from the
+Visits she worked — and **the product does not have it**: `api/main.go` mounts no route
+that deletes a membership or a `staff` row. What an Owner can actually press is **End
+sessions everywhere**, which ends a sign-in and not a read (confirmed on the walk:
+`204`, and Lena signed straight back in and read the book). This is the mirror of RA-G4 rather than a restatement of it —
 RA-G4 is that attachment cannot be *made*; LV-G4 is that it cannot be *ended*
 (LV-G4).
 
@@ -246,6 +258,8 @@ contractor and **optional** for an employee, who may still simply be assigned.
 | LV-G5 | 4 | Experience | An outside contractor reads the agency's entire client list. Same root as PR-G1 on the interaction layer, but a different finding: for Priya it is a scope failure inside one team; for Lena it is one business reading another's book. It is the reason "restricted visibility" cannot stay a v1 deferral — it is filed here as the experience-layer consequence, and fixing PR-G1 fixes it. |
 | LV-G6 | 3 | Interaction | An Engagement cannot be **offered**. This map decides that a contractor is attached by accepting an offer, and the model holds no such thing: no Offer, no acceptance, and no durable record of a decline — so Renata cannot tell a refusal from silence, and cannot offer the work on. Distinct root from RA-G4, which is that attachment cannot be recorded at all: an Offer is the transition RA-G4's attachment would be the result of, and building one without the other is impossible in either order. |
 | LV-G7 | 3 | Both | There is no read rule for a Doula who has been offered an Engagement and has not accepted. [ADR-0006](../adr/0006-read-follows-the-role.md)'s table has four columns — Owner, Admin, employee Doula, contractor Doula — and this map adds a fifth state to the model that none of them describes. The rule must let her decide (Client, dates, on-call terms, fee) without opening the Practice to someone who has agreed to nothing, and it is what makes the offer screen a decision rather than a notification. Amends ADR-0006; distinct from LV-G6, which is the concept, not the permission. |
+| LV-G8 | 1 | Interaction | A failed acceptance leaves a member behind. `InviteHandler` writes the pending `staff` row and its `roles = '{}'` membership at **invite** time (`invite.go:56`, `:66`), so when acceptance 409s the two rows survive — they were committed by a different request and the rollback cannot reach them. The Practice keeps a member who can never sign in, printed on the Staff screen under the invitee's real name and email and indistinguishable from someone who has accepted and not been given roles yet, since acceptance also leaves `roles = []`. Nothing removes it: `api/main.go` mounts no route that deletes a membership or a `staff` row. Distinct root from LV-G2 — LV-G2 is that the second membership is unreachable, LV-G8 is that the failed attempt is not swept up. Found on the walk ([#238](https://github.com/markgoho/doula-cloud/issues/238)). |
+| LV-G9 | 2, 4 | Interaction | Any Staff member spends the Practice's credits. `POST .../clients` is mounted behind `staffauth.Middleware` with no role check (`api/main.go:169`) and `engagement/create.go:97` consumes a credit in the same transaction, so a Doula who holds no other role — a contractor who does not belong to the business — adds a Client and takes the balance down. Filed here because the contractor is who makes it visible, but it is true of every non-owner: the read half of it is DW-G4 (a non-owner reads the ledger) and this is the write half, where an outsider draws on it. Distinct from PR-G8, which is the Contract write on a Client who is not hers; this one costs the Practice money. Found on the walk ([#238](https://github.com/markgoho/doula-cloud/issues/238)). |
 
 Also hit here, filed on their owning maps: **RA-G1** (no invite email), **RA-G4** (no
 Doula on an Engagement — which is the whole of her read scope), **RA-G8** (an
@@ -253,4 +267,8 @@ invitation carries no roles), **PR-G1** (the Client list is Practice-wide),
 **PR-G2** (the Contract read cannot separate scope from money — Lena is its other
 half), **PR-G5** (no phone-first path to the Birth Plan), **PR-G6**, **MO-G1** and
 **MO-G2** (dateless, type-less, note-less Visits), **DW-G4** (Billing readable by any
-Staff member), **TB-G3** (what a Credit buys is unsettled).
+Staff member), **TB-G3** (what a Credit buys is unsettled). The walk added four more:
+**RA-G9** (Payments is outside the owner gate), **RA-G10** (a Visit cannot name
+anyone), **PR-G8** (a Doula-only member prices and sends a Contract) and **PR-G9** (the
+Engagement page renders no links) — each confirmed from outside the business, which is
+a sharper reading of the same defect but not a second one.

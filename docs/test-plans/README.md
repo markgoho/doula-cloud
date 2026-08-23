@@ -53,14 +53,16 @@ because the fixture supplied a field production never sends.
 **Run status (2026-08-22):** the automated steps of all nine plans are run and
 **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
 carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
-and each plan's **Run log** names its own. **Tasha Bell's, Maya Okonkwo's, Renata
-Alvarez's, Dee Whitlock's and Priya Raman's plans are walked**
+and each plan's **Run log** names its own. **The six practice-side plans are walked** — Tasha
+Bell's, Maya Okonkwo's, Renata Alvarez's, Dee Whitlock's, Priya Raman's and Lena
+Vasquez's
 ([#233](https://github.com/markgoho/doula-cloud/issues/233),
 [#234](https://github.com/markgoho/doula-cloud/issues/234),
 [#235](https://github.com/markgoho/doula-cloud/issues/235),
 [#236](https://github.com/markgoho/doula-cloud/issues/236),
-[#237](https://github.com/markgoho/doula-cloud/issues/237)); the other four are
-not. Filing the `journey-gap` issues stays
+[#237](https://github.com/markgoho/doula-cloud/issues/237),
+[#238](https://github.com/markgoho/doula-cloud/issues/238)); the three client-side
+plans are not. Filing the `journey-gap` issues stays
 [#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
 nine walks.
 
@@ -83,6 +85,15 @@ at `roles = '{}'` and again at `['doula']` found it read in exactly one place �
 `visit/roles.go` — gating the one act her journey is named for. The gap survives in
 narrowed form on the map that owns it, the same treatment TB-G7 got.
 
+**One claim ran through four plans before a walk could settle it.** Renata's 1.2,
+Dee's 1.3 and Priya's 3.2 each expected a Practice picker and each found none, and
+each walk recorded it as unwalkable rather than missing. Lena's walk rendered it:
+signing in with two memberships lists both Practices under `Choose a Practice`, on
+`/login` itself. The picker was never absent — every other Persona holds exactly one
+membership, and LV-G2 makes a second unreachable through the product, so only the
+fixture bypass in Lena's Preconditions can produce the state it needs. A claim no
+single plan could test is worth carrying across plans rather than deleting.
+
 A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
 to `manual` once the Staff screen turned out to answer it — the rule that a mark
 is a claim read out of the code cuts both ways, and the run is what settles it.
@@ -95,8 +106,8 @@ wording is corrected there.
 2. **Preconditions** — the state the run needs before step 1, and how to reach it
    when the product cannot build it.
 3. **Steps** — one small table per stage, mirroring the journey map's stages.
-4. **Permission boundary** — where the map carries one (Priya, Lena). Tester-only
-   steps, never persona steps.
+4. **Permission boundary** — where the plan carries one. Only Priya's does
+   (PR-B1 to PR-B6). Tester-only steps, never persona steps.
 5. **Marks** — the count, and the run log.
 
 ### Step ids
