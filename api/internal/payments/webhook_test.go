@@ -856,6 +856,51 @@ func TestPostConnectWebhookHandler_InvoicePaidCreatesPaymentAndFlipsStatus(t *te
 	}
 }
 
+// TestPostConnectWebhookHandler_InvoicePaidQueuesPaymentReceivedOutboxRow
+// proves #344's trigger point: a validly-signed invoice.paid event queues
+// exactly one payment_received_outbox row, in the same tx, linked via
+// payment_id to the payments row it just created and carrying that
+// Practice's id.
+func TestPostConnectWebhookHandler_InvoicePaidQueuesPaymentReceivedOutboxRow(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Invoice Paid Outbox Practice", "acct_invoice_paid_outbox")
+	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_outbox_test", invoiceStatusOpen, 5000, time.Now())
+	srv := newConnectWebhookServer(db)
+	defer srv.Close()
+
+	paidAt := time.Now().Truncate(time.Second).UTC()
+	payload := invoicePaidPayload(t, "evt_invoice_paid_outbox", "acct_invoice_paid_outbox", "in_paid_outbox_test", paidAt)
+	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	paymentsRows := paymentsForInvoice(t, db, invoiceID)
+	if len(paymentsRows) != 1 {
+		t.Fatalf("payments for invoice = %d, want exactly 1", len(paymentsRows))
+	}
+
+	var count int
+	var gotPracticeID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*), max(pro.practice_id::text)
+		 FROM payment_received_outbox pro
+		 JOIN payments p ON p.id = pro.payment_id
+		 WHERE p.invoice_id = $1`, invoiceID,
+	).Scan(&count, &gotPracticeID); err != nil {
+		t.Fatalf("query payment_received_outbox: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("payment_received_outbox rows = %d, want exactly 1", count)
+	}
+	if gotPracticeID != practiceID {
+		t.Fatalf("outbox row practice_id = %q, want %q", gotPracticeID, practiceID)
+	}
+}
+
 // TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp is the explicit
 // idempotency test AC calls for: replaying the same invoice.paid event id
 // must not create a second payments row.
@@ -885,6 +930,20 @@ func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 	payments := paymentsForInvoice(t, db, invoiceID)
 	if len(payments) != 1 {
 		t.Fatalf("payments for invoice after replay = %d, want exactly 1", len(payments))
+	}
+
+	// A replayed event must not queue a second payment_received_outbox
+	// row either -- this is the guarantee 00035's migration comment
+	// leans on claimEvent's stripe_webhook_events claim for, since the
+	// table itself carries no dedup index (unlike payout_outbox).
+	var outboxCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM payment_received_outbox pro JOIN payments p ON p.id = pro.payment_id WHERE p.invoice_id = $1`, invoiceID,
+	).Scan(&outboxCount); err != nil {
+		t.Fatalf("query payment_received_outbox: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Fatalf("payment_received_outbox rows after replay = %d, want exactly 1", outboxCount)
 	}
 }
 

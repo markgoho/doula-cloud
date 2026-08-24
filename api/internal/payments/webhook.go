@@ -183,28 +183,28 @@ func commitAndAck(w http.ResponseWriter, tx *sql.Tx, committed *bool) {
 // scoped by invoices_practice_visibility and payments_practice_visibility
 // too, not just this read. Returns sql.ErrNoRows if either the account or
 // the Stripe invoice id is unrecognized, so callers can log-and-drop
-// rather than error.
-func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, accountID string) (invoiceID string, err error) {
-	var practiceID string
+// rather than error. Also returns practiceID -- handleInvoicePaid needs
+// it to queue a payment_received_outbox row (#344).
+func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, accountID string) (invoiceID, practiceID string, err error) {
 	if err := tx.QueryRowContext(ctx,
 		`SELECT id FROM practices WHERE stripe_connect_account_id = $1`, accountID,
 	).Scan(&practiceID); err != nil {
 		// coverage:ignore reason: the sql.ErrNoRows branch (unrecognized account) is exercised by unit tests; a non-ErrNoRows DB failure here is not
-		return "", fmt.Errorf("payments: resolve practice for webhook event: %w", err)
+		return "", "", fmt.Errorf("payments: resolve practice for webhook event: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", fmt.Errorf("payments: scope webhook event tx to practice: %w", err)
+		return "", "", fmt.Errorf("payments: scope webhook event tx to practice: %w", err)
 	}
 
 	if err := tx.QueryRowContext(ctx,
 		`SELECT id FROM invoices WHERE stripe_invoice_id = $1`, stripeInvoiceID,
 	).Scan(&invoiceID); err != nil {
 		// coverage:ignore reason: the sql.ErrNoRows branch (unknown invoice) is exercised by unit tests; a non-ErrNoRows DB failure here is not
-		return "", fmt.Errorf("payments: resolve invoice for webhook event: %w", err)
+		return "", "", fmt.Errorf("payments: resolve invoice for webhook event: %w", err)
 	}
-	return invoiceID, nil
+	return invoiceID, practiceID, nil
 }
 
 // handleInvoicePaid applies #82's invoice.paid handling: resolves the
@@ -237,7 +237,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		return
 	}
 
-	invoiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
+	invoiceID, practiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Unrecognized account or unknown Stripe invoice id -- logged
@@ -264,10 +264,11 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		reference = ""
 	}
 
-	if _, err := tx.ExecContext(r.Context(),
-		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, $2, $3, $4)`,
+	var paymentID string
+	if err := tx.QueryRowContext(r.Context(),
+		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, $2, $3, $4) RETURNING id`,
 		invoiceID, reference, inv.AmountPaid, paidAt,
-	); err != nil {
+	).Scan(&paymentID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -275,6 +276,16 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE invoices SET status = 'paid', paid_at = $1 WHERE id = $2`, paidAt, invoiceID,
 	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	// Queue #344's "a Payment arrived" Platform Notification on the same
+	// tx and after the payments row exists to satisfy payment_id's FK --
+	// see 00035_payment_received_outbox.sql for why this needs no
+	// rollback-surviving write the way QueueOutOfCreditsNotification does.
+	if err := QueuePaymentReceivedNotification(r.Context(), tx, paymentID, practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -312,7 +323,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		return
 	}
 
-	invoiceID, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
+	invoiceID, _, err := resolveInvoiceForEvent(r.Context(), tx, inv.ID, event.Account)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("payments: connect webhook: dropping invoice.payment_failed for unresolved invoice %q (account %q, event id %s)", inv.ID, event.Account, event.ID)

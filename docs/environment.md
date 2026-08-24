@@ -91,6 +91,8 @@ checkout.
 
 #343 (the payout-account-incomplete Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a third endpoint, `/api/internal/notifications/process-payout-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`payout_outbox`). Also left unset for the same reason.
 
+#344 (the payment-arrived Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a fourth endpoint, `/api/internal/notifications/process-payment-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`payment_received_outbox`). Also left unset for the same reason.
+
 ## Say Sandbox, not test mode
 
 Stripe renamed it. What #242 and older tickets call test mode, the
