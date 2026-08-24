@@ -21,7 +21,7 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	mux.Handle("GET /practices/{practiceId}/clients",
 		staffauth.Middleware(db.App)(engagement.ListHandler()))
 	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(engagement.CreateHandler()))
+		staffauth.Middleware(db.App)(engagement.CreateHandler(db.App)))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}",
 		staffauth.Middleware(db.App)(engagement.DetailHandler()))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)

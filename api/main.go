@@ -141,7 +141,7 @@ var ownerAndAdmin = []string{"owner", "admin"}
 // main_test.go walk it (and cross-check it against this function's own
 // source for a route that bypassed the gate entirely) without needing a
 // live server.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, lowCreditOutboxWorker billing.Worker, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
 	mux := http.NewServeMux()
 	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
 	// staffauth.Middleware: Get panics at startup if a route has no role
@@ -191,7 +191,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// staffauth.Reader.CanAccessEngagement, not a role declaration.
 	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, engagement.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/clients",
-		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler())))
+		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler(db))))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, visit.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
@@ -254,6 +254,10 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// outside staffauth.Middleware/GatedRouter like the Stripe webhooks
 	// above.
 	mux.Handle("POST /api/internal/notifications/process-outbox", portalinvite.ProcessOutboxHandler(db, outboxWorker, outboxWorkerSecret))
+	// Same X-Internal-Secret guard, same Cloud Scheduler cadence, a
+	// separate endpoint because the two workers process unrelated
+	// outbox tables (ADR-0010, #342).
+	mux.Handle("POST /api/internal/notifications/process-low-credit-outbox", billing.ProcessOutboxHandler(db, lowCreditOutboxWorker, outboxWorkerSecret))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(db)(portal.DetailHandler()))
@@ -324,7 +328,18 @@ func main() {
 		ReplyTo:    "noreply@" + mailgunDomain,
 	}
 
-	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), resolveExpectedOrigins())
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	lowCreditOutboxWorker := billing.Worker{
+		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
+		Now:        time.Now,
+		AppBaseURL: os.Getenv("APP_BASE_URL"),
+		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
+		// Platform voice (ADR-0011): a monitored inbox, not noreply --
+		// unlike the Client portal invite's Practice voice above.
+		ReplyTo: "support@" + mailgunDomain,
+	}
+
+	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), lowCreditOutboxWorker, resolveExpectedOrigins())
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

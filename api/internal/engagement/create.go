@@ -7,6 +7,7 @@
 package engagement
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -39,8 +40,12 @@ type CreateClientResponse struct {
 
 // CreateHandler creates a Client and, in the same request, an Engagement
 // linking them to the current Practice -- there is no way to create a
-// Client without one. Must be mounted behind staffauth.Middleware.
-func CreateHandler() http.Handler {
+// Client without one. Must be mounted behind staffauth.Middleware. db is
+// needed only for the ErrNoCreditsRemaining path: queuing the
+// out-of-Credits Notification (#342) via billing.QueueOutOfCreditsNotification,
+// which must survive the request tx's rollback and so can't run on that
+// tx.
+func CreateHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -96,7 +101,24 @@ func CreateHandler() http.Handler {
 		// against an already-done tx.
 		if err := billing.ConsumeCredit(r.Context(), tx, practiceID, engagementID); err != nil {
 			if errors.Is(err, billing.ErrNoCreditsRemaining) {
+				// Read while the request tx (and its app.current_practice_id)
+				// is still live -- credit_ledger is practice-tier RLS, and
+				// this is the last point in the request that tx is usable
+				// for it.
+				shouldNotify, notifyCheckErr := billing.ShouldQueueOutOfCreditsNotification(r.Context(), tx, practiceID)
 				_ = tx.Rollback()
+				if notifyCheckErr != nil {
+					// coverage:ignore reason: DB query failure, not exercised by unit tests
+					http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+					return
+				}
+				if shouldNotify {
+					if err := billing.QueueOutOfCreditsNotification(r.Context(), db, practiceID); err != nil {
+						// coverage:ignore reason: DB query failure, not exercised by unit tests
+						http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+						return
+					}
+				}
 				http.Error(w, "no credits remaining, ask a Practice Owner to buy more", http.StatusPaymentRequired)
 				return
 			}

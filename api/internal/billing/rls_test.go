@@ -115,3 +115,60 @@ func TestRLS_CreditLedgerCannotInsertForAnotherPractice(t *testing.T) {
 		t.Fatal("expected inserting a ledger row for another Practice to be rejected by RLS, got no error")
 	}
 }
+
+// TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag
+// proves 00033's two new policies stay closed by default: with no
+// session context at all -- the shape ProcessOutboxHandler runs under
+// before it sets app.notification_worker_trusted -- neither table admits
+// a row.
+func TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedOwner(t, db, "worker-untrusted")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	var staffCount, membershipCount int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff`).Scan(&staffCount); err != nil {
+		t.Fatalf("query staff: %v", err)
+	}
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships WHERE practice_id = $1`, practiceID).Scan(&membershipCount); err != nil {
+		t.Fatalf("query practice_memberships: %v", err)
+	}
+	if staffCount != 0 || membershipCount != 0 {
+		t.Fatalf("staffCount/membershipCount = %d/%d, want 0/0 with no session context set", staffCount, membershipCount)
+	}
+}
+
+// TestRLS_NotificationWorkerTrustedFlagOpensStaffAndMemberships proves the
+// door billing.Worker's ownerEmails query relies on actually opens: with
+// app.notification_worker_trusted set, both tables' rows are visible,
+// regardless of Practice.
+func TestRLS_NotificationWorkerTrustedFlagOpensStaffAndMemberships(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedOwner(t, db, "worker-trusted")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	var staffCount, membershipCount int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff`).Scan(&staffCount); err != nil {
+		t.Fatalf("query staff: %v", err)
+	}
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships WHERE practice_id = $1`, practiceID).Scan(&membershipCount); err != nil {
+		t.Fatalf("query practice_memberships: %v", err)
+	}
+	if staffCount != 1 || membershipCount != 1 {
+		t.Fatalf("staffCount/membershipCount = %d/%d, want 1/1", staffCount, membershipCount)
+	}
+}

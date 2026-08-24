@@ -87,6 +87,8 @@ Scheduler job itself -- both left for a deploy session with the real
 `doula-api` service in front of it, rather than done from a local
 checkout.
 
+#342 (the out-of-Credits Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a second endpoint, `/api/internal/notifications/process-low-credit-outbox` -- same secret, same header, but its own Cloud Scheduler job, since it processes a separate outbox table (ADR-0010). That second job is left unset for the same reason the first one is.
+
 ## Say Sandbox, not test mode
 
 Stripe renamed it. What #242 and older tickets call test mode, the

@@ -12,6 +12,10 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// testBrokeClientName is shared across this file's zero-balance tests
+// per golangci-lint's goconst check.
+const testBrokeClientName = "Broke Client"
+
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
@@ -191,8 +195,10 @@ func TestCreateHandler_Success(t *testing.T) {
 }
 
 // TestCreateHandler_NoCreditsReturnsPaymentRequired proves a Practice with
-// a zero balance is rejected with 402 and that the Client/Engagement rows
-// written earlier in the same handler are rolled back, not left orphaned.
+// a zero balance is rejected with 402, that the Client/Engagement rows
+// written earlier in the same handler are rolled back, not left orphaned,
+// and that a pending low_credit_outbox row for the Practice survives that
+// same rollback (#342) -- proving it does not ride the rolled-back tx.
 func TestCreateHandler_NoCreditsReturnsPaymentRequired(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-broke"
@@ -201,7 +207,7 @@ func TestCreateHandler_NoCreditsReturnsPaymentRequired(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	body, err := json.Marshal(engagement.CreateClientRequest{Name: "Broke Client", Email: "broke@example.com"})
+	body, err := json.Marshal(engagement.CreateClientRequest{Name: testBrokeClientName, Email: "broke@example.com"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
@@ -224,6 +230,114 @@ func TestCreateHandler_NoCreditsReturnsPaymentRequired(t *testing.T) {
 	}
 	if clientCount != 0 || engagementCount != 0 || ledgerCount != 0 {
 		t.Fatalf("rows survived rollback: clients=%d engagements=%d credit_ledger=%d, want all 0", clientCount, engagementCount, ledgerCount)
+	}
+
+	var outboxCount int
+	var outboxStatus string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*), max(status) FROM low_credit_outbox WHERE practice_id = $1`, practiceID,
+	).Scan(&outboxCount, &outboxStatus); err != nil {
+		t.Fatalf("count low_credit_outbox: %v", err)
+	}
+	if outboxCount != 1 || outboxStatus != "pending" {
+		t.Fatalf("low_credit_outbox rows = %d (status %q), want 1 pending row", outboxCount, outboxStatus)
+	}
+}
+
+// TestCreateHandler_NoCreditsQueuesNotificationOnlyOncePerEpisode proves
+// the dedupe rule: a second failed create attempt for the same Practice,
+// still out of Credits, does not queue a second low_credit_outbox row.
+func TestCreateHandler_NoCreditsQueuesNotificationOnlyOncePerEpisode(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-broke-twice"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	for i, email := range []string{"first@example.com", "second@example.com"} {
+		body, err := json.Marshal(engagement.CreateClientRequest{Name: testBrokeClientName, Email: email})
+		if err != nil {
+			t.Fatalf("marshal body %d: %v", i, err)
+		}
+		resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", body)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusPaymentRequired {
+			t.Fatalf("attempt %d status = %d, want %d", i, resp.StatusCode, http.StatusPaymentRequired)
+		}
+	}
+
+	var outboxCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM low_credit_outbox WHERE practice_id = $1`, practiceID,
+	).Scan(&outboxCount); err != nil {
+		t.Fatalf("count low_credit_outbox: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Fatalf("low_credit_outbox rows = %d, want exactly 1 across both failed attempts", outboxCount)
+	}
+}
+
+// TestCreateHandler_NoCreditsRequeuesNotificationAfterPurchase proves the
+// other half of the dedupe rule: once the Practice buys more Credits, a
+// later zero-balance episode queues a new row rather than staying
+// suppressed by the first, already-sent notification.
+func TestCreateHandler_NoCreditsRequeuesNotificationAfterPurchase(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-broke-again"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	firstBody, err := json.Marshal(engagement.CreateClientRequest{Name: testBrokeClientName, Email: "first@example.com"})
+	if err != nil {
+		t.Fatalf("marshal first body: %v", err)
+	}
+	firstResp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", firstBody)
+	defer firstResp.Body.Close()
+	if firstResp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("first attempt status = %d, want %d", firstResp.StatusCode, http.StatusPaymentRequired)
+	}
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE low_credit_outbox SET status = 'sent' WHERE practice_id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("mark first outbox row sent: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'purchase', 1)`, practiceID,
+	); err != nil {
+		t.Fatalf("seed purchase: %v", err)
+	}
+	// Spends the purchased credit directly (not through a real create
+	// call) so the Practice is back at a zero balance for the second
+	// attempt below -- this test is only proving the dedupe window
+	// re-arms on a purchase, not exercising consumption itself.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'consumption', -1)`, practiceID,
+	); err != nil {
+		t.Fatalf("seed consumption: %v", err)
+	}
+
+	secondBody, err := json.Marshal(engagement.CreateClientRequest{Name: "Broke Client Two", Email: "second@example.com"})
+	if err != nil {
+		t.Fatalf("marshal second body: %v", err)
+	}
+	secondResp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/clients", secondBody)
+	defer secondResp.Body.Close()
+	if secondResp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("second attempt status = %d, want %d", secondResp.StatusCode, http.StatusPaymentRequired)
+	}
+
+	var outboxCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM low_credit_outbox WHERE practice_id = $1`, practiceID,
+	).Scan(&outboxCount); err != nil {
+		t.Fatalf("count low_credit_outbox: %v", err)
+	}
+	if outboxCount != 2 {
+		t.Fatalf("low_credit_outbox rows = %d, want 2 (one per episode, re-armed by the purchase)", outboxCount)
 	}
 }
 

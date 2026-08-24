@@ -104,7 +104,7 @@ func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(idempotency.Wrap(engagement.CreateHandler())))
+		staffauth.Middleware(db.App)(idempotency.Wrap(engagement.CreateHandler(db.App))))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	session := authntest.SeedSession(t, db.App, identityUID)
