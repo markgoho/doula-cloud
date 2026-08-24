@@ -31,6 +31,8 @@ except `.env.example`. A Sandbox key is still a key.
 | `STORAGE_EMULATOR_HOST` | the compose `gcs` service | same | unset (real GCS) |
 | `GCS_ATTACHMENTS_BUCKET` | `doula-cloud-e2e-attachments` | same | the real bucket |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBSCRIBER` | throwaway keypair in `stack.ts` | same | real keys |
+| `MAILGUN_API_KEY` | one account-level key in `.env.local` | unset | Secret Manager `doula-cloud-mailgun-api-key` |
+| `MAILGUN_DOMAIN` | the account's sandbox domain (`sandbox….mailgun.org`), authorized recipients only | unset | `mg.doula.cloud`, plain env var |
 
 ### `APP_BASE_URL` is not `EXPECTED_ORIGINS`
 
@@ -42,6 +44,41 @@ concatenates redirect targets onto: Checkout returns to
 Account Link returns to `/practices/{id}/settings/payments?connect=return|refresh`.
 A tunnelled local walk needs `APP_BASE_URL` overridden and
 `EXPECTED_ORIGINS` left alone.
+
+## Mailgun
+
+Provisioned for #218 (map #213). One account, one API key, no per-domain
+Sending Key: Mailgun's API key is account-wide, so the same value works
+against both the sandbox domain and the verified one — only `MAILGUN_DOMAIN`
+changes between Local and Deployed.
+
+`mg.doula.cloud` is verified: SPF (TXT) and both DKIM records (CNAME, under
+Mailgun's automatic sender security, which rotates the key every 120 days)
+are live in Squarespace DNS. DMARC is a plain self-published TXT at
+`_dmarc.mg.doula.cloud` (`v=DMARC1; p=none;`) rather than Mailgun's
+suggested record, whose `rua`/`ruf` route reports to Red Sift's
+`inbox.ondmarc.com` — declined to avoid the third-party data share.
+Receiving records (MX) and tracking records (open/click CNAME) were not
+installed: inbound email is out of scope for the whole map, and tracking
+was left undecided rather than defaulted on.
+
+Proved end to end: a real send from `notifications@mg.doula.cloud` landed
+in a real Gmail inbox, not spam, with `dkim=pass`, `spf=pass`,
+`dmarc=pass (p=NONE)`.
+
+The commands that produced the current state, so it can be rebuilt:
+
+```
+gcloud secrets create doula-cloud-mailgun-api-key --replication-policy=automatic --data-file=-
+gcloud secrets add-iam-policy-binding doula-cloud-mailgun-api-key \
+  --member serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --role roles/secretmanager.secretAccessor
+```
+
+Not yet run: `gcloud run services update doula-api --update-secrets
+MAILGUN_API_KEY=… --update-env-vars MAILGUN_DOMAIN=mg.doula.cloud`. No code
+reads either variable yet (#219 lands the sender), so wiring the live
+service is left for that ticket rather than done ahead of it.
 
 ## Say Sandbox, not test mode
 
