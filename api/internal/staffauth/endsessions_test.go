@@ -118,3 +118,35 @@ func TestEndSessionsHandler_Success(t *testing.T) {
 		t.Fatalf("acting owner's own session rows = %d, want 1 (unaffected)", got)
 	}
 }
+
+// TestEndSessionsHandler_QueuesSessionRevokedNotice covers #345: ending a
+// Staff member's sessions everywhere queues a session-revoked notice for
+// that Staff member, not the acting Owner.
+func TestEndSessionsHandler_QueuesSessionRevokedNotice(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-queues-notice"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	const targetUID = "staff-notice-target"
+	targetID := seedStaff(t, db, targetUID)
+	seedMembership(t, db, practiceID, targetID)
+
+	srv, session := newEndSessionsServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := deleteSessions(t, srv, session, practiceID, targetID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
+	var kind string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT kind FROM session_notice_outbox WHERE identity_uid = $1`, targetUID,
+	).Scan(&kind); err != nil {
+		t.Fatalf("query session_notice_outbox: %v", err)
+	}
+	if kind != "session_revoked" {
+		t.Fatalf("kind = %q, want session_revoked", kind)
+	}
+}

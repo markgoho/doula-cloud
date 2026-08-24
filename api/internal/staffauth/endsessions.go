@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/sessionnotice"
 )
 
 // EndSessionsHandler lets a Practice Owner end every session a Staff
@@ -42,6 +43,16 @@ func EndSessionsHandler() http.Handler {
 		}
 
 		if err := authn.EndAllSessions(r.Context(), tx, identityUID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// The target Staff member should hear that this happened (#345),
+		// regardless of who took the action -- there is no self-service
+		// "sign out everywhere" yet, so today that is always this Owner,
+		// not the target.
+		if err := sessionnotice.QueueSessionRevoked(r.Context(), tx, identityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return

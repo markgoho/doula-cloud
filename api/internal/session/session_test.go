@@ -11,6 +11,31 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// seedStaff inserts a Staff row for identityUID -- CreateHandler's
+// new-sign-in notice (#345) is Platform voice, Staff only, so a test
+// proving it fires needs a Staff row behind the signing-in identity.
+func seedStaff(t *testing.T, db *testdb.DB, identityUID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com')`,
+		identityUID,
+	); err != nil {
+		t.Fatalf("seed staff %q: %v", identityUID, err)
+	}
+}
+
+func countNewSignInNotices(t *testing.T, db *testdb.DB, identityUID string) int {
+	t.Helper()
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM session_notice_outbox WHERE identity_uid = $1 AND kind = 'new_signin'`,
+		identityUID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count session_notice_outbox rows: %v", err)
+	}
+	return count
+}
+
 var errBadToken = errors.New("invalid token")
 
 func newServer(t *testing.T, verifier authntest.Verifier) (*httptest.Server, *testdb.DB) {
@@ -150,6 +175,42 @@ func TestCreateHandler_Success(t *testing.T) {
 	// row, and without one the cookie authenticates nobody.
 	if got := authntest.CountFor(t, db.App, "uid-1"); got != 1 {
 		t.Errorf("session rows for uid-1 = %d, want 1", got)
+	}
+}
+
+// TestCreateHandler_QueuesNewSignInNoticeForStaff covers #345: a Staff
+// member signing in queues a new-sign-in notice.
+func TestCreateHandler_QueuesNewSignInNoticeForStaff(t *testing.T) {
+	srv, db := newServer(t, authntest.Verifier{UID: "staff-uid"})
+	defer srv.Close()
+	seedStaff(t, db, "staff-uid")
+
+	resp := postCreate(t, srv, "good-token")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := countNewSignInNotices(t, db, "staff-uid"); got != 1 {
+		t.Errorf("new-sign-in notices for a signing-in Staff member = %d, want 1", got)
+	}
+}
+
+// TestCreateHandler_NoNewSignInNoticeForClient covers #345's scope: a
+// Client Portal sign-in (no Staff row behind the identity) never queues
+// this Platform-voice notice.
+func TestCreateHandler_NoNewSignInNoticeForClient(t *testing.T) {
+	srv, db := newServer(t, authntest.Verifier{UID: "client-uid"})
+	defer srv.Close()
+
+	resp := postCreate(t, srv, "good-token")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := countNewSignInNotices(t, db, "client-uid"); got != 0 {
+		t.Errorf("new-sign-in notices for a Client sign-in = %d, want 0", got)
 	}
 }
 

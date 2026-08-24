@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/sessionnotice"
 )
 
 // CookieName is the session cookie's name -- see authn.SessionCookieName
@@ -59,11 +60,16 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
-		cookie, err := authn.MintSession(r.Context(), db, verified.UID, time.Now())
+		now := time.Now()
+		cookie, err := authn.MintSession(r.Context(), db, verified.UID, now)
 		if err != nil {
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		// Best-effort, same as EndHandler's swallowed EndSession below: a
+		// failed notice queue must never turn a legitimate sign-in into a
+		// 500 (#345).
+		_ = sessionnotice.QueueNewSignInIfDue(r.Context(), db, verified.UID, now)
 		http.SetCookie(w, cookie)
 		writeStatus(w)
 	})

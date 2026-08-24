@@ -93,6 +93,8 @@ checkout.
 
 #344 (the payment-arrived Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a fourth endpoint, `/api/internal/notifications/process-payment-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`payment_received_outbox`). Also left unset for the same reason.
 
+#345 (the new-sign-in/session-revoked Platform Notifications) reuses `NOTIFICATION_WORKER_SECRET` for a fifth endpoint, `/api/internal/notifications/process-session-notice-outbox` -- same secret, same header, its own Cloud Scheduler job, one outbox table (`session_notice_outbox`) shared by both notices since #345 bundled them into a single ticket. Also left unset for the same reason.
+
 ## Say Sandbox, not test mode
 
 Stripe renamed it. What #242 and older tickets call test mode, the
