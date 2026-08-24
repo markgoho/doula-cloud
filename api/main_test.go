@@ -22,16 +22,24 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// testWorkerFrom is every routes() test worker's stand-in From identity.
+const testWorkerFrom = "Doula Cloud <notifications@mg.example.test>"
+
 // testWorker is every routes() test's stand-in outbox worker -- its
 // mail.FakeSender is never asserted on here, per #219's own package
 // covering send/retry/dead-letter behavior; these tests only need routes()
 // to compile and mount the route.
-var testWorker = portalinvite.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: "https://app.example.test", From: "Doula Cloud <notifications@mg.example.test>", ReplyTo: "noreply@mg.example.test"}
+var testWorker = portalinvite.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: "noreply@mg.example.test"}
 
 // testLowCreditWorker is every routes() test's stand-in for the
 // out-of-Credits outbox worker (#342), the billing package's counterpart
 // to testWorker above.
-var testLowCreditWorker = billing.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: "https://app.example.test", From: "Doula Cloud <notifications@mg.example.test>", ReplyTo: "support@mg.example.test"}
+var testLowCreditWorker = billing.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: "support@mg.example.test"}
+
+// testPayoutOutboxWorker is every routes() test's stand-in for the
+// payout-account-incomplete outbox worker (#343), the payments package's
+// counterpart to testLowCreditWorker above.
+var testPayoutOutboxWorker = payments.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: "support@mg.example.test"}
 
 const testWorkerSecret = "worker-secret-test"
 
@@ -39,7 +47,9 @@ const testWorkerSecret = "worker-secret-test"
 // EXPECTED_ORIGINS would resolve to in a real environment (see
 // resolveExpectedOrigins). None of the pre-existing tests below set an
 // Origin header, so its value only matters to the origin-check tests
-// added alongside it.
+// added alongside it. Reused above as the outbox workers' AppBaseURL too
+// -- in a real environment they're the same host, and goconst flags a
+// second literal for the identical value.
 const testExpectedOrigin = "https://app.example.test"
 
 func TestHelloHandler(t *testing.T) {
@@ -61,7 +71,7 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -86,7 +96,7 @@ func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 // path.
 func TestRoutes_CreateAndEndSession(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -170,7 +180,7 @@ func TestResolvePort(t *testing.T) {
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -205,7 +215,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	mux, _ := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -299,7 +309,7 @@ func TestResolveExpectedOrigins(t *testing.T) {
 // reaches the handler -- proven by getting 403 rather than the 401 a
 // missing bearer token would otherwise produce.
 func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -324,7 +334,7 @@ func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
 // not the origin check's 403.
 func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -352,7 +362,7 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 // or snapshot, never both.
 func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

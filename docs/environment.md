@@ -89,6 +89,8 @@ checkout.
 
 #342 (the out-of-Credits Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a second endpoint, `/api/internal/notifications/process-low-credit-outbox` -- same secret, same header, but its own Cloud Scheduler job, since it processes a separate outbox table (ADR-0010). That second job is left unset for the same reason the first one is.
 
+#343 (the payout-account-incomplete Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a third endpoint, `/api/internal/notifications/process-payout-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`payout_outbox`). Also left unset for the same reason.
+
 ## Say Sandbox, not test mode
 
 Stripe renamed it. What #242 and older tickets call test mode, the

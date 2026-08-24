@@ -387,9 +387,11 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string) 
 
 // handleCapabilityStatusUpdated applies one
 // capability_status_updated thin event: fetches the account's current
-// capability statuses and outstanding requirements from Stripe, and
-// writes them onto the matching practices row along with the event id
-// and time that caused the change.
+// capability statuses and outstanding requirements from Stripe, writes
+// them onto the matching practices row along with the event id and time
+// that caused the change, and queues #343's payout-incomplete
+// Notification on the requirements_due empty -> non-empty transition
+// (see 00034_payout_outbox.sql for the trigger/cadence reasoning).
 func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event AccountEvent) {
 	status, err := client.RetrieveAccount(r.Context(), event.AccountID)
 	if err != nil {
@@ -420,34 +422,56 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	result, err := tx.ExecContext(r.Context(),
+	// Locks the practices row for the rest of this transaction and reads
+	// its pre-update requirements_due, so the empty -> non-empty episode
+	// transition below can be judged against what was actually there a
+	// moment ago rather than racing a concurrent delivery for the same
+	// account. cardinality(), not a Scan into []string, for the same
+	// driver reason requirementsStillOutstanding (outbox.go) avoids it.
+	var practiceID string
+	var oldRequirementsCount int
+	err = tx.QueryRowContext(r.Context(),
+		`SELECT id, cardinality(stripe_connect_requirements_due) FROM practices WHERE stripe_connect_account_id = $1 FOR UPDATE`,
+		event.AccountID,
+	).Scan(&practiceID, &oldRequirementsCount)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// No practice has this connected account id -- logged and
+			// dropped, the same rule the Invoice branches follow. The
+			// stripe_webhook_events row inserted above still commits, so a
+			// retried delivery of this same unrecognized event is also a
+			// no-op rather than logging twice.
+			log.Printf("payments: account webhook: dropping capability status update for unrecognized account %q (event id %s)", event.AccountID, event.ID)
+			commitAndAck(w, tx, &committed)
+			return
+		}
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	newRequirementsDue := requirementsOrEmpty(status.RequirementsDue)
+	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE practices SET
 			stripe_connect_card_payments_status = $1,
 			stripe_connect_payouts_status = $2,
 			stripe_connect_requirements_due = $3,
 			stripe_connect_status_event_id = $4,
 			stripe_connect_status_updated_at = now()
-		WHERE stripe_connect_account_id = $5`,
-		string(status.CardPayments), string(status.Payouts), requirementsOrEmpty(status.RequirementsDue), event.ID, event.AccountID,
-	)
-	if err != nil {
+		WHERE id = $5`,
+		string(status.CardPayments), string(status.Payouts), newRequirementsDue, event.ID, practiceID,
+	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-	if rows == 0 {
-		// No practice has this connected account id -- logged and
-		// dropped, the same rule the Invoice branches follow. The
-		// stripe_webhook_events row inserted above still commits, so a
-		// retried delivery of this same unrecognized event is also a
-		// no-op rather than logging twice.
-		log.Printf("payments: account webhook: dropping capability status update for unrecognized account %q (event id %s)", event.AccountID, event.ID)
+
+	if oldRequirementsCount == 0 && len(newRequirementsDue) > 0 {
+		if err := QueuePayoutIncompleteNotification(r.Context(), tx, practiceID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 	}
 
 	commitAndAck(w, tx, &committed)

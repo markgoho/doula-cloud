@@ -387,6 +387,195 @@ func TestPostAccountWebhookHandler_PersistsOutstandingRequirements(t *testing.T)
 	}
 }
 
+// payoutOutboxForPractice returns the status of every payout_outbox row
+// for practiceID, oldest first, so a test can assert both how many
+// episodes queued a row and what became of each.
+func payoutOutboxForPractice(t *testing.T, db *testdb.DB, practiceID string) []string {
+	t.Helper()
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT status FROM payout_outbox WHERE practice_id = $1 ORDER BY created_at`, practiceID,
+	)
+	if err != nil {
+		t.Fatalf("query payout_outbox: %v", err)
+	}
+	defer rows.Close()
+	var statuses []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			t.Fatalf("scan payout_outbox status: %v", err)
+		}
+		statuses = append(statuses, status)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate payout_outbox: %v", err)
+	}
+	return statuses
+}
+
+// TestPostAccountWebhookHandler_QueuesPayoutNotificationOnEmptyToNonEmptyTransition
+// proves #343's trigger: a fresh account (requirements_due starts empty,
+// 00034's column default) that gets its first non-empty requirements_due
+// queues exactly one payout_outbox row.
+func TestPostAccountWebhookHandler_QueuesPayoutNotificationOnEmptyToNonEmptyTransition(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Payout Trigger Practice", "acct_payout_trigger")
+	client := activeAccountClient()
+	client.status = payments.AccountStatus{
+		CardPayments:    payments.CapabilityRestricted,
+		Payouts:         payments.CapabilityRestricted,
+		RequirementsDue: []string{requirementMCC},
+	}
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	resp := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_payout_trigger", "acct_payout_trigger"), stripeAccountWebhookSecret)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	statuses := payoutOutboxForPractice(t, db, practiceID)
+	if len(statuses) != 1 || statuses[0] != testPayoutStatusPending {
+		t.Fatalf("payout_outbox rows = %v, want exactly one pending row", statuses)
+	}
+}
+
+// TestPostAccountWebhookHandler_NoPayoutNotificationWhenRequirementsStayEmpty
+// proves an event that reports nothing outstanding never queues a row.
+func TestPostAccountWebhookHandler_NoPayoutNotificationWhenRequirementsStayEmpty(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Payout No Trigger Practice", "acct_payout_no_trigger")
+	client := activeAccountClient()
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	resp := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_payout_no_trigger", "acct_payout_no_trigger"), stripeAccountWebhookSecret)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	if statuses := payoutOutboxForPractice(t, db, practiceID); len(statuses) != 0 {
+		t.Fatalf("payout_outbox rows = %v, want none for an account with nothing outstanding", statuses)
+	}
+}
+
+// TestPostAccountWebhookHandler_DoesNotRequeuePayoutNotificationWhileRequirementsStayOutstanding
+// proves the episode discipline: a second delivery whose requirements_due
+// is still non-empty (even a different set of fields) does not queue a
+// second row while the first is still pending.
+func TestPostAccountWebhookHandler_DoesNotRequeuePayoutNotificationWhileRequirementsStayOutstanding(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Payout No Requeue Practice", "acct_payout_no_requeue")
+	client := activeAccountClient()
+	client.status = payments.AccountStatus{
+		CardPayments:    payments.CapabilityRestricted,
+		Payouts:         payments.CapabilityRestricted,
+		RequirementsDue: []string{requirementMCC},
+	}
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	first := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_payout_first", "acct_payout_no_requeue"), stripeAccountWebhookSecret)
+	_ = first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("first delivery status = %d, want %d", first.StatusCode, http.StatusOK)
+	}
+
+	client.status.RequirementsDue = []string{requirementMCC, testRequirementDOB}
+	second := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_payout_second", "acct_payout_no_requeue"), stripeAccountWebhookSecret)
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("second delivery status = %d, want %d", second.StatusCode, http.StatusOK)
+	}
+
+	if statuses := payoutOutboxForPractice(t, db, practiceID); len(statuses) != 1 {
+		t.Fatalf("payout_outbox rows = %v, want still exactly one row for the same open episode", statuses)
+	}
+}
+
+// TestPostAccountWebhookHandler_RequeuesPayoutNotificationAfterEpisodeReopens
+// proves re-arming: once the first episode's row has actually been sent
+// (billing.Worker's job, simulated here) and requirements clear and then
+// reappear, a second, independent row queues.
+func TestPostAccountWebhookHandler_RequeuesPayoutNotificationAfterEpisodeReopens(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Payout Reopen Practice", "acct_payout_reopen")
+	client := activeAccountClient()
+	client.status = payments.AccountStatus{
+		CardPayments:    payments.CapabilityRestricted,
+		Payouts:         payments.CapabilityRestricted,
+		RequirementsDue: []string{requirementMCC},
+	}
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	opened := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_payout_reopen_open", "acct_payout_reopen"), stripeAccountWebhookSecret)
+	_ = opened.Body.Close()
+	if opened.StatusCode != http.StatusOK {
+		t.Fatalf("open delivery status = %d, want %d", opened.StatusCode, http.StatusOK)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE payout_outbox SET status = 'sent' WHERE practice_id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("simulate worker send: %v", err)
+	}
+
+	client.status.RequirementsDue = []string{}
+	cleared := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_payout_reopen_clear", "acct_payout_reopen"), stripeAccountWebhookSecret)
+	_ = cleared.Body.Close()
+	if cleared.StatusCode != http.StatusOK {
+		t.Fatalf("clear delivery status = %d, want %d", cleared.StatusCode, http.StatusOK)
+	}
+
+	client.status.RequirementsDue = []string{requirementMCC}
+	reopened := postAccountWebhook(t, srv, capabilityStatusPayload(t, "evt_payout_reopen_again", "acct_payout_reopen"), stripeAccountWebhookSecret)
+	defer reopened.Body.Close()
+	if reopened.StatusCode != http.StatusOK {
+		t.Fatalf("reopen delivery status = %d, want %d", reopened.StatusCode, http.StatusOK)
+	}
+
+	statuses := payoutOutboxForPractice(t, db, practiceID)
+	if len(statuses) != 2 || statuses[0] != testPayoutStatusSent || statuses[1] != testPayoutStatusPending {
+		t.Fatalf("payout_outbox rows = %v, want [sent pending] -- the first episode sent, a second queued after it reopened", statuses)
+	}
+}
+
+// TestPostAccountWebhookHandler_ReplayDoesNotDoubleQueuePayoutNotification
+// proves the general idempotency guarantee (claimEvent's alreadyProcessed
+// short-circuit) covers this new write too: replaying the event that
+// queued a row must not queue a second one.
+func TestPostAccountWebhookHandler_ReplayDoesNotDoubleQueuePayoutNotification(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Payout Replay Practice", "acct_payout_replay")
+	client := activeAccountClient()
+	client.status = payments.AccountStatus{
+		CardPayments:    payments.CapabilityRestricted,
+		Payouts:         payments.CapabilityRestricted,
+		RequirementsDue: []string{requirementMCC},
+	}
+	srv := newAccountWebhookServer(db, client)
+	defer srv.Close()
+
+	payload := capabilityStatusPayload(t, "evt_payout_replay", "acct_payout_replay")
+	first := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
+	_ = first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("first delivery status = %d, want %d", first.StatusCode, http.StatusOK)
+	}
+
+	second := postAccountWebhook(t, srv, payload, stripeAccountWebhookSecret)
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("replay status = %d, want %d", second.StatusCode, http.StatusOK)
+	}
+
+	if statuses := payoutOutboxForPractice(t, db, practiceID); len(statuses) != 1 {
+		t.Fatalf("payout_outbox rows = %v, want exactly one despite the replay", statuses)
+	}
+}
+
 // TestPostAccountWebhookHandler_NilRequirementsPersistAsEmptyArray
 // proves a Client implementation that leaves RequirementsDue nil does
 // not violate the column's NOT NULL.
