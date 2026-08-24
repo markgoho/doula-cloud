@@ -33,6 +33,20 @@ type Enqueuer interface {
 	Enqueue(ctx context.Context, outboxType OutboxType) error
 }
 
+// NoOpEnqueuer is the Enqueuer main() wires up wherever no Cloud Tasks
+// queue is configured (NOTIFICATION_TASKS_QUEUE unset -- local dev, CI's
+// boot smoke test, and the e2e stack, none of which have GCP credentials
+// available for a real *cloudtasks.Client). Every call succeeds without
+// doing anything: the outbox row a write site just queued still gets
+// picked up by Cloud Scheduler's cadence regardless, so there is nothing
+// to log either.
+type NoOpEnqueuer struct{}
+
+// Enqueue does nothing and always succeeds.
+func (NoOpEnqueuer) Enqueue(context.Context, OutboxType) error {
+	return nil
+}
+
 // Fire returns a closure that enqueues a nudge for outboxType via enq,
 // logging and swallowing any error rather than propagating it -- the one
 // piece of behavior every write site in ADR-0013 needs identically. The

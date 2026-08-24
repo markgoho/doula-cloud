@@ -382,17 +382,25 @@ func main() {
 		ReplyTo: "support@" + mailgunDomain,
 	}
 
-	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
-	cloudTasksClient, err := cloudtasks.NewClient(context.Background())
-	if err != nil {
-		// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
-		log.Fatalf("init Cloud Tasks client: %v", err)
-	}
 	// ADR-0013: one shared queue nudging all five outbox process-*
 	// endpoints, reusing NOTIFICATION_WORKER_SECRET rather than a second
-	// credential.
-	// coverage:ignore reason: constructs the real Cloud-Tasks-backed enqueuer, not exercised by unit tests
-	nudgeEnqueuer := tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, os.Getenv("NOTIFICATION_TASKS_QUEUE"), os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"))
+	// credential. NOTIFICATION_TASKS_QUEUE is unset in local dev, CI's
+	// boot smoke test, and the e2e stack (see docs/environment.md) --
+	// none of those have GCP credentials for a real *cloudtasks.Client,
+	// so this only constructs one when a queue is actually configured,
+	// falling back to NoOpEnqueuer otherwise. Every outbox still gets
+	// Cloud Scheduler's cadence regardless of which Enqueuer is wired up.
+	var nudgeEnqueuer tasknudge.Enqueuer = tasknudge.NoOpEnqueuer{}
+	if queue := os.Getenv("NOTIFICATION_TASKS_QUEUE"); queue != "" {
+		// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+		cloudTasksClient, err := cloudtasks.NewClient(context.Background())
+		if err != nil {
+			// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+			log.Fatalf("init Cloud Tasks client: %v", err)
+		}
+		// coverage:ignore reason: constructs the real Cloud-Tasks-backed enqueuer, not exercised by unit tests
+		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"))
+	}
 
 	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, nudgeEnqueuer, resolveExpectedOrigins())
 	server := &http.Server{

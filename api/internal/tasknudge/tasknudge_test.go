@@ -35,6 +35,12 @@ func TestFakeEnqueuer_ReturnsConfiguredError(t *testing.T) {
 	}
 }
 
+func TestNoOpEnqueuer_AlwaysSucceeds(t *testing.T) {
+	if err := (tasknudge.NoOpEnqueuer{}).Enqueue(t.Context(), tasknudge.PortalInvite); err != nil {
+		t.Fatalf("Enqueue: %v, want nil", err)
+	}
+}
+
 func TestFire_EnqueuesOnSuccess(t *testing.T) {
 	f := &tasknudge.FakeEnqueuer{}
 
