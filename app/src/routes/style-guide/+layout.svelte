@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import { atomPages, moleculePages, organismPages } from './components.js';
 
 	const componentPages = [...atomPages, ...moleculePages, ...organismPages];
@@ -27,9 +28,9 @@
 
 		<nav>
 			<cluster-l space="var(--space-4)">
-				<a href={resolve('/style-guide')}>Overview</a>
+				<Link href={resolve('/style-guide')} label="Overview" />
 				{#each componentPages as componentPage (componentPage.slug)}
-					<a href={resolve(`/style-guide/${componentPage.slug}`)}>{componentPage.name}</a>
+					<Link href={resolve(`/style-guide/${componentPage.slug}`)} label={componentPage.name} />
 				{/each}
 			</cluster-l>
 		</nav>

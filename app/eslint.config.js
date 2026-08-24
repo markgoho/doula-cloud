@@ -46,8 +46,28 @@ export default defineConfig(
 		}
 	},
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
-		rules: {}
+		files: ['**/*.svelte'],
+		ignores: [
+			'src/lib/components/atoms/Button.svelte',
+			'src/lib/components/atoms/Link.svelte',
+			'src/lib/components/atoms/Select.svelte'
+		],
+		rules: {
+			'svelte/no-restricted-html-elements': [
+				'error',
+				{
+					elements: ['button'],
+					message: 'Use the Button atom (#lib/components/atoms/Button.svelte) instead of a raw <button> element.'
+				},
+				{
+					elements: ['a'],
+					message: 'Use the Link atom (#lib/components/atoms/Link.svelte) instead of a raw <a> element.'
+				},
+				{
+					elements: ['select'],
+					message: 'Use the Select atom (#lib/components/atoms/Select.svelte) instead of a raw <select> element.'
+				}
+			]
+		}
 	}
 );

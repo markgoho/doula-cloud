@@ -4,6 +4,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadBalance, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 
 	let balance = $state<number | undefined>();
 	let ledger = $state<LedgerEntry[]>([]);
@@ -81,7 +82,7 @@
 			Quantity
 			<input type="number" min="1" bind:value={quantity} required />
 		</label>
-		<button type="submit" disabled={isPurchasing || !isOwner}>Buy credits</button>
+		<Button label="Buy credits" type="submit" disabled={!isOwner} loading={isPurchasing} />
 		{#if purchaseError}
 			<p role="alert">{purchaseError}</p>
 		{/if}

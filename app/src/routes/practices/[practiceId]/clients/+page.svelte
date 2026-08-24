@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 
 	type ClientEngagement = {
 		clientId: string;
@@ -59,9 +60,10 @@
 
 <h1>Clients</h1>
 
-<a href={resolve('/practices/[practiceId]/clients/new', { practiceId: page.params.practiceId! })}
-	>Add a Client</a
->
+<Link
+	href={resolve('/practices/[practiceId]/clients/new', { practiceId: page.params.practiceId! })}
+	label="Add a Client"
+/>
 
 {#if error}
 	<p role="alert">{error}</p>

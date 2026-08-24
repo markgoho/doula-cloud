@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Button from './components/atoms/Button.svelte';
+
 	/**
 	 * Shared status display for a Contract: the current status, a clear
 	 * terminal-state indicator once Voided, and (when the caller is Staff)
@@ -42,7 +44,7 @@
 {/if}
 
 {#if status === 'signed' && onVoid}
-	<button type="button" onclick={handleVoid} disabled={isVoiding}>Void Contract</button>
+	<Button label="Void Contract" onClick={handleVoid} loading={isVoiding} />
 {/if}
 
 {#if error}

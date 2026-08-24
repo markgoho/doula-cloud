@@ -494,13 +494,13 @@
 	{/if}
 
 	{#if portalInviteLink}
-		<Text text="Invited. There is no email sending yet, so share this link with them directly:" />
+		<Text text="Invited. An email has been sent to them. If you need to share the link directly, here it is:" />
 		<div><code>{portalInviteLink}</code></div>
 	{/if}
 
 	<h2>Visits</h2>
 
-	<button type="button" onclick={handleCreateVisit} disabled={isCreatingVisit}>Add a Visit</button>
+	<Button label="Add a Visit" onClick={handleCreateVisit} loading={isCreatingVisit} />
 
 	{#if visitsError}
 		<p role="alert">{visitsError}</p>
@@ -512,7 +512,7 @@
 				Reassign to Staff id
 				<input type="text" bind:value={reassignStaffId[visit.visitId]} required />
 			</label>
-			<button type="submit">Reassign</button>
+			<Button label="Reassign" type="submit" size="sm" variant="secondary" />
 		</form>
 		{#if reassignError[visit.visitId]}
 			<p role="alert">{reassignError[visit.visitId]}</p>
@@ -544,13 +544,17 @@
 					onAnswerChange={(fieldId, value) => handlePlanAnswerChange(section.type, fieldId, value)}
 					onToggleOption={(fieldId, option) => handlePlanToggleOption(section.type, fieldId, option)}
 				/>
-				<button type="button" onclick={() => handleSavePlan(section.type)} disabled={planBusy[section.type]}>
-					Save {section.heading}
-				</button>
+				<Button
+					label="Save {section.heading}"
+					onClick={() => handleSavePlan(section.type)}
+					loading={planBusy[section.type]}
+				/>
 			{:else}
-				<button type="button" onclick={() => handleCreatePlan(section.type)} disabled={planBusy[section.type]}>
-					Create {section.heading}
-				</button>
+				<Button
+					label="Create {section.heading}"
+					onClick={() => handleCreatePlan(section.type)}
+					loading={planBusy[section.type]}
+				/>
 			{/if}
 		{/if}
 	{/each}
@@ -571,11 +575,11 @@
 				onValueChange={handleContractValueChange}
 			/>
 			{#if contract.status === 'draft'}
-				<button type="button" onclick={handleSaveContract} disabled={isContractBusy}>Save Contract</button>
-				<button type="button" onclick={handleSendContract} disabled={isContractBusy}>Send Contract</button>
+				<Button label="Save Contract" onClick={handleSaveContract} loading={isContractBusy} variant="secondary" />
+				<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
 			{/if}
 		{:else}
-			<button type="button" onclick={handleCreateContract} disabled={isContractBusy}>Create Draft Contract</button>
+			<Button label="Create Draft Contract" onClick={handleCreateContract} loading={isContractBusy} />
 		{/if}
 	{/if}
 

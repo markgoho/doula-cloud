@@ -1,6 +1,7 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import Button from '../atoms/Button.svelte';
+	import Link from '../atoms/Link.svelte';
 
 	interface Column<T> {
 		label: string;
@@ -49,7 +50,7 @@
 						{#each columns as column, columnIndex (column.label)}
 							<td>
 								{#if columnIndex === 0 && rowHref}
-									<a href={rowHref(row)}>{column.accessor(row)}</a>
+									<Link href={rowHref(row)} label={column.accessor(row)} />
 								{:else}
 									{column.accessor(row)}
 								{/if}

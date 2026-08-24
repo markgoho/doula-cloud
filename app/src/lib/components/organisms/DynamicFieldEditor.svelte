@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/planTemplate.js';
+	import Button from '../atoms/Button.svelte';
+	import Select from '../atoms/Select.svelte';
 
 	let {
 		fields,
@@ -47,6 +49,7 @@
 			<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for the
 			     bound <select>/<option> pair below aren't reachable from app-level
 			     interaction tests, only from Svelte's own reactivity internals -->
+			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- this row has no wrapping <label>, so aria-label is its only accessible name; the Select atom has no aria-label/passthrough prop, so swapping it in would silently drop the field's name -->
 			<select
 				aria-label="Field type"
 				value={field.type}
@@ -64,27 +67,22 @@
 					oninput={(event_) => handleOptionsInput(field.id, event_.currentTarget.value)}
 				></textarea>
 			{/if}
-			<button type="button" onclick={() => onMoveUp(field.id)} disabled={index === 0}
-				>Move up</button
-			>
-			<button
-				type="button"
-				onclick={() => onMoveDown(field.id)}
-				disabled={index === fields.length - 1}>Move down</button
-			>
-			<button type="button" onclick={() => onRemove(field.id)}>Remove</button>
+			<Button label="Move up" onClick={() => onMoveUp(field.id)} disabled={index === 0} />
+			<Button
+				label="Move down"
+				onClick={() => onMoveDown(field.id)}
+				disabled={index === fields.length - 1}
+			/>
+			<Button label="Remove" onClick={() => onRemove(field.id)} />
 		</li>
 	{/each}
 </ul>
 
 <label>
 	New field type
-	<!-- v8 ignore start: same Svelte-compiled attribute-diffing branches as above -->
-	<select bind:value={newFieldType}>
-		{#each FIELD_TYPES as type (type)}
-			<option value={type}>{type}</option>
-		{/each}
-	</select>
-	<!-- v8 ignore stop -->
+	<Select
+		bind:value={() => newFieldType, (v) => (newFieldType = v as FieldType)}
+		options={[...FIELD_TYPES]}
+	/>
 </label>
-<button type="button" onclick={() => onAdd(newFieldType)}>Add field</button>
+<Button label="Add field" onClick={() => onAdd(newFieldType)} />

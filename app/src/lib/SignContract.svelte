@@ -2,6 +2,7 @@
 	import LabeledField from './components/molecules/LabeledField.svelte';
 	import TextInput from './components/atoms/TextInput.svelte';
 	import Checkbox from './components/atoms/Checkbox.svelte';
+	import Button from './components/atoms/Button.svelte';
 
 	let {
 		onSign
@@ -40,9 +41,10 @@
 			like one.
 		</p>
 		<p>You may withdraw your consent to sign electronically at any time before you sign, with no penalty.</p>
-		<button type="button" onclick={() => (isDisclosureAffirmed = true)}>
-			I agree to sign electronically, continue
-		</button>
+		<Button
+			label="I agree to sign electronically, continue"
+			onClick={() => (isDisclosureAffirmed = true)}
+		/>
 	</section>
 {:else}
 	<form onsubmit={handleSubmit}>
@@ -64,6 +66,6 @@
 		{#if error}
 			<p role="alert">{error}</p>
 		{/if}
-		<button type="submit" disabled={!canSubmit}>Sign</button>
+		<Button label="Sign" type="submit" disabled={!canSubmit} />
 	</form>
 {/if}

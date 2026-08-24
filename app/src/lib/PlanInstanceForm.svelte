@@ -74,6 +74,7 @@
 			{:else if field.type === 'single_select'}
 				<label>
 					{field.label}
+					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- the empty option's value ("") differs from its visible label ("--"), which the Select atom cannot represent (it always uses one string for both); also, unlike Select's disabled placeholder option, this one stays selectable so the answer can be cleared -->
 					<select
 						value={textValue(field)}
 						onchange={(event_) => onAnswerChange(field.id, event_.currentTarget.value)}

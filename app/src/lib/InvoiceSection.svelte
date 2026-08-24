@@ -12,6 +12,7 @@
 	 * callback throws.
 	 */
 	import { formatAmount, type Invoice } from './invoice.js';
+	import Button from './components/atoms/Button.svelte';
 
 	let {
 		invoices,
@@ -94,7 +95,7 @@
 
 {#if connectGate?.isOwner}
 	<p>Connect Stripe to create an Invoice.</p>
-	<button type="button" onclick={handleConnect} disabled={isConnecting}>Connect Stripe</button>
+	<Button label="Connect Stripe" onClick={handleConnect} loading={isConnecting} />
 	{#if connectError}
 		<p role="alert">{connectError}</p>
 	{/if}
@@ -106,7 +107,7 @@
 			Amount (USD)
 			<input type="number" step="0.01" bind:value={amountDollars} required />
 		</label>
-		<button type="submit" disabled={isCreating}>Create Invoice</button>
+		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</form>
 	{#if createError}
 		<p role="alert">{createError}</p>
