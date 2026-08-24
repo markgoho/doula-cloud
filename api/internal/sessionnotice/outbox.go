@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // backoffSchedule mirrors every other outbox in this codebase (ADR-0010):
@@ -79,7 +80,12 @@ func sessionRevokedText() string {
 // session.EndHandler swallows a failed EndSession: a notice is a
 // best-effort side channel, and failing to queue one must never turn a
 // legitimate sign-in into a 500.
-func QueueNewSignInIfDue(ctx context.Context, db *sql.DB, identityUID string, now time.Time) error {
+//
+// enq is ADR-0013's Cloud Tasks nudge; like QueueOutOfCreditsNotification,
+// this function commits its own transaction, so the nudge fires
+// immediately after that commit succeeds rather than through
+// tasknudge.Register/Drain.
+func QueueNewSignInIfDue(ctx context.Context, db *sql.DB, identityUID string, now time.Time, enq tasknudge.Enqueuer) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
@@ -91,6 +97,7 @@ func QueueNewSignInIfDue(ctx context.Context, db *sql.DB, identityUID string, no
 			_ = tx.Rollback()
 		}
 	}()
+	queued := false
 
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -124,6 +131,7 @@ func QueueNewSignInIfDue(ctx context.Context, db *sql.DB, identityUID string, no
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				return fmt.Errorf("sessionnotice: queue new-sign-in notice: %w", err)
 			}
+			queued = true
 		}
 	}
 
@@ -132,6 +140,9 @@ func QueueNewSignInIfDue(ctx context.Context, db *sql.DB, identityUID string, no
 		return fmt.Errorf("sessionnotice: commit queue new-sign-in tx: %w", err)
 	}
 	committed = true
+	if queued {
+		tasknudge.Fire(enq, tasknudge.SessionNotice)(ctx)
+	}
 	return nil
 }
 

@@ -3,6 +3,7 @@ module doula-cloud/api
 go 1.26.5
 
 require (
+	cloud.google.com/go/cloudtasks v1.18.0
 	cloud.google.com/go/storage v1.62.1
 	firebase.google.com/go/v4 v4.21.0
 	github.com/SherClockHolmes/webpush-go v1.4.0

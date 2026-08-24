@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // InviteResponse identifies the pending client_portal_users row created (or
@@ -29,7 +30,12 @@ type InviteResponse struct {
 // gating is practice-tier (any Staff member, not just an Owner, and not
 // scoped to the specific Engagement) -- same tier as clients_insert in
 // 00005_client_engagement.sql. Must be mounted behind staffauth.Middleware.
-func InviteHandler() http.Handler {
+// enq is ADR-0013's Cloud Tasks nudge: on a successful invite, this
+// registers a nudge for the portal-invite outbox rather than firing it
+// directly, since staffauth.Middleware's tx.Commit() -- which decides
+// whether the queued outbox row actually survives -- runs after this
+// handler (and idempotency.Wrap's response cache) has already returned.
+func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -58,6 +64,7 @@ func InviteHandler() http.Handler {
 			writeAPIError(w, status, code, msg)
 			return
 		}
+		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.PortalInvite))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)

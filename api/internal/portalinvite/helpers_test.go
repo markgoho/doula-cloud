@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -24,7 +25,7 @@ func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(db.App)(portalinvite.InviteHandler()))
+		staffauth.Middleware(db.App)(portalinvite.InviteHandler(&tasknudge.FakeEnqueuer{})))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/session"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -42,7 +43,7 @@ func newServer(t *testing.T, verifier authntest.Verifier) (*httptest.Server, *te
 	t.Helper()
 	db := testdb.New(t)
 	mux := http.NewServeMux()
-	mux.Handle("POST /session", session.CreateHandler(verifier, db.App))
+	mux.Handle("POST /session", session.CreateHandler(verifier, db.App, &tasknudge.FakeEnqueuer{}))
 	mux.Handle("DELETE /session", session.EndHandler(db.App))
 	return httptest.NewServer(mux), db
 }

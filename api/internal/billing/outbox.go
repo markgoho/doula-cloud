@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // backoffSchedule mirrors portalinvite's outbox (ADR-0010): attempt N
@@ -72,8 +73,15 @@ func ShouldQueueOutOfCreditsNotification(ctx context.Context, tx *sql.Tx, practi
 // must not survive), so the queued row needs its own, separately
 // committed write to survive that rollback. ON CONFLICT DO NOTHING
 // guards the race between two concurrent requests that both observed a
-// zero balance before either's rollback ran.
-func QueueOutOfCreditsNotification(ctx context.Context, db *sql.DB, practiceID string) error {
+// zero balance before either's rollback ran. enq is ADR-0013's Cloud
+// Tasks nudge; unlike portalinvite.InviteHandler and
+// staffauth.EndSessionsHandler, this write commits on its own (the
+// ExecContext above, autocommitted), so the nudge fires immediately
+// rather than through tasknudge.Register/Drain -- there is no later
+// commit to wait for. Nudging even when ON CONFLICT no-oped (the row was
+// already pending) is harmless: the worker just processes a row that was
+// already due.
+func QueueOutOfCreditsNotification(ctx context.Context, db *sql.DB, practiceID string, enq tasknudge.Enqueuer) error {
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO low_credit_outbox (practice_id) VALUES ($1)
 		 ON CONFLICT (practice_id) WHERE status = 'pending' DO NOTHING`,
@@ -82,6 +90,7 @@ func QueueOutOfCreditsNotification(ctx context.Context, db *sql.DB, practiceID s
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("billing: queue out-of-credits notification: %w", err)
 	}
+	tasknudge.Fire(enq, tasknudge.LowCredit)(ctx)
 	return nil
 }
 

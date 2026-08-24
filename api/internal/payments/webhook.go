@@ -14,6 +14,7 @@ import (
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // maxWebhookBodyBytes bounds how much of a webhook request body
@@ -101,7 +102,7 @@ type invoicePaymentFailedObject struct {
 // outright (verified against the Sandbox, #247) -- so the v2 account
 // events go to PostAccountWebhookHandler on its own route, with its own
 // secret.
-func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string) http.Handler {
+func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
@@ -117,7 +118,7 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string) 
 
 		switch event.Type {
 		case eventTypeInvoicePaid:
-			handleInvoicePaid(w, r, db, client, event)
+			handleInvoicePaid(w, r, db, client, event, enq)
 		case eventTypeInvoicePaymentFailed:
 			handleInvoicePaymentFailed(w, r, db, event)
 		default:
@@ -210,7 +211,7 @@ func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, ac
 // handleInvoicePaid applies #82's invoice.paid handling: resolves the
 // matching invoices row, creates exactly one payments row recording the
 // amount actually paid and when, and flips the Invoice's status to paid.
-func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent) {
+func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, enq tasknudge.Enqueuer) {
 	var inv invoicePaidObject
 	if err := json.Unmarshal(event.Data, &inv); err != nil {
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -292,6 +293,13 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	}
 
 	commitAndAck(w, tx, &committed)
+	// ADR-0013: fired only on this success path, gated on committed --
+	// unlike the alreadyProcessed/dropped branches above (which also call
+	// commitAndAck but queued no row), and unlike a failed commit, which
+	// leaves the just-queued payment_received_outbox row rolled back too.
+	if committed {
+		tasknudge.Fire(enq, tasknudge.PaymentReceived)(r.Context())
+	}
 }
 
 // handleInvoicePaymentFailed applies #82's invoice.payment_failed
@@ -369,7 +377,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 // stripe_webhook_events so a retry is a no-op, and an unrecognized
 // account or unhandled type logged and dropped with a 200 rather than
 // erroring, because Stripe retries indefinitely on anything else.
-func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string) http.Handler {
+func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
@@ -392,7 +400,7 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string) 
 			return
 		}
 
-		handleCapabilityStatusUpdated(w, r, db, client, event)
+		handleCapabilityStatusUpdated(w, r, db, client, event, enq)
 	})
 }
 
@@ -403,7 +411,7 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string) 
 // that caused the change, and queues #343's payout-incomplete
 // Notification on the requirements_due empty -> non-empty transition
 // (see 00034_payout_outbox.sql for the trigger/cadence reasoning).
-func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event AccountEvent) {
+func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event AccountEvent, enq tasknudge.Enqueuer) {
 	status, err := client.RetrieveAccount(r.Context(), event.AccountID)
 	if err != nil {
 		// Unlike an unrecognized account, this is a genuine failure to
@@ -477,7 +485,8 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	if oldRequirementsCount == 0 && len(newRequirementsDue) > 0 {
+	queuedPayoutNotification := oldRequirementsCount == 0 && len(newRequirementsDue) > 0
+	if queuedPayoutNotification {
 		if err := QueuePayoutIncompleteNotification(r.Context(), tx, practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -486,4 +495,11 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 	}
 
 	commitAndAck(w, tx, &committed)
+	// ADR-0013: fired only when this call actually queued a payout_outbox
+	// row and the commit that persisted it succeeded -- not on the
+	// alreadyProcessed/unrecognized-account branches above, which also
+	// call commitAndAck but queued nothing.
+	if committed && queuedPayoutNotification {
+		tasknudge.Fire(enq, tasknudge.Payout)(r.Context())
+	}
 }

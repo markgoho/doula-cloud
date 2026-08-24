@@ -8,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -124,7 +125,7 @@ func TestQueueOutOfCreditsNotification_InsertsPendingRow(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Queue Insert")
 
-	if err := billing.QueueOutOfCreditsNotification(t.Context(), db.App, practiceID); err != nil {
+	if err := billing.QueueOutOfCreditsNotification(t.Context(), db.App, practiceID, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueOutOfCreditsNotification: %v", err)
 	}
 
@@ -145,7 +146,7 @@ func TestQueueOutOfCreditsNotification_ConflictOnExistingPendingRowIsNoop(t *tes
 	practiceID := seedPractice(t, db, "Queue Conflict")
 	seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now())
 
-	if err := billing.QueueOutOfCreditsNotification(t.Context(), db.App, practiceID); err != nil {
+	if err := billing.QueueOutOfCreditsNotification(t.Context(), db.App, practiceID, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueOutOfCreditsNotification: %v", err)
 	}
 

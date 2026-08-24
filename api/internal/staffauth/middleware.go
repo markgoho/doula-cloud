@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 type contextKey string
@@ -129,11 +130,20 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			ctx := context.WithValue(r.Context(), staffIDKey, staffID)
 			ctx = context.WithValue(ctx, practiceIDKey, practiceID)
 			ctx = context.WithValue(ctx, txKey, tx)
+			ctx = tasknudge.Begin(ctx)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 
+			// ADR-0013: a handler behind this Middleware that queued an
+			// outbox row registers a nudge closure on ctx rather than
+			// firing it itself, because the response idempotency.Wrap
+			// (or the handler itself) already wrote is cached below,
+			// before this Commit runs. Draining only on a successful
+			// commit is what keeps a nudge from firing for a write that
+			// never actually landed.
 			if err := tx.Commit(); err == nil {
 				committed = true
+				tasknudge.Drain(ctx)
 			}
 		})
 	}

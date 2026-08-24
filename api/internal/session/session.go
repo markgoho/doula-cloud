@@ -16,6 +16,7 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/sessionnotice"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // CookieName is the session cookie's name -- see authn.SessionCookieName
@@ -46,7 +47,7 @@ type StatusResponse struct {
 // cookie. Since #151 removed the Bearer path from authn.Begin, the only
 // other places an ID token is read are the three bootstrap endpoints,
 // via authn.BeginBootstrap.
-func CreateHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
+func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idToken, ok := authn.BearerToken(r)
 		if !ok {
@@ -69,7 +70,7 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// Best-effort, same as EndHandler's swallowed EndSession below: a
 		// failed notice queue must never turn a legitimate sign-in into a
 		// 500 (#345).
-		_ = sessionnotice.QueueNewSignInIfDue(r.Context(), db, verified.UID, now)
+		_ = sessionnotice.QueueNewSignInIfDue(r.Context(), db, verified.UID, now, enq)
 		http.SetCookie(w, cookie)
 		writeStatus(w)
 	})

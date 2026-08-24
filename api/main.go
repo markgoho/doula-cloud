@@ -14,6 +14,7 @@ import (
 	// Registers the "pgx" driver with database/sql; never referenced by name.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/storage"
 
 	"doula-cloud/api/internal/authn"
@@ -35,6 +36,7 @@ import (
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/visit"
 )
 
@@ -142,7 +144,7 @@ var ownerAndAdmin = []string{"owner", "admin"}
 // main_test.go walk it (and cross-check it against this function's own
 // source for a route that bypassed the gate entirely) without needing a
 // live server.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
 	mux := http.NewServeMux()
 	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
 	// staffauth.Middleware: Get panics at startup if a route has no role
@@ -156,7 +158,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// unreachable from the browser. CI's two smoke tests curl this same path
 	// against the container and against the raw Cloud Run URL.
 	mux.HandleFunc("GET /api/hello", helloHandler)
-	mux.Handle("POST /api/session", session.CreateHandler(verifier, db))
+	mux.Handle("POST /api/session", session.CreateHandler(verifier, db, nudgeEnqueuer))
 	mux.Handle("DELETE /api/session", session.EndHandler(db))
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(db))
@@ -167,7 +169,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// Doula has no reason to see the full roster.
 	g.Get("/api/practices/{practiceId}/staff", ownerAndAdmin, staffauth.ListStaffHandler())
 	mux.Handle("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
-		staffauth.Middleware(db)(staffauth.EndSessionsHandler()))
+		staffauth.Middleware(db)(staffauth.EndSessionsHandler(nudgeEnqueuer)))
 	// Credit balance and ledger: Owner and Admin only (ADR-0008).
 	g.Get("/api/practices/{practiceId}/billing", ownerAndAdmin, billing.GetBalanceHandler())
 	mux.Handle("POST /api/practices/{practiceId}/billing/purchases",
@@ -180,11 +182,11 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// staffauth.RequireOwner) is the narrowest defensible default until a
 	// real rule lands (#267 stays open for that rule).
 	g.Get("/api/practices/{practiceId}/payments/connect", []string{"owner"}, payments.GetConnectStatusHandler(paymentsClient))
-	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret))
+	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret, nudgeEnqueuer))
 	// A second Connect route, not a second feature: Stripe's v2 account
 	// events are thin and a destination carries one payload type, so they
 	// cannot share connect-webhook's endpoint or its secret (#247).
-	mux.Handle("POST /api/stripe/account-webhook", payments.PostAccountWebhookHandler(db, paymentsClient, paymentsAccountWebhookSecret))
+	mux.Handle("POST /api/stripe/account-webhook", payments.PostAccountWebhookHandler(db, paymentsClient, paymentsAccountWebhookSecret, nudgeEnqueuer))
 	// Engagements, Visits, Messages, Plan Instances, and Contract scope
 	// are open to every Staff role at the mount; the employee/contractor
 	// split ADR-0008's read table draws inside that column is
@@ -192,7 +194,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// staffauth.Reader.CanAccessEngagement, not a role declaration.
 	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, engagement.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/clients",
-		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler(db))))
+		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler(db, nudgeEnqueuer))))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, visit.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
@@ -248,7 +250,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
 		staffauth.Middleware(db)(pushsub.UnregisterHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(db)(idempotency.Wrap(portalinvite.InviteHandler())))
+		staffauth.Middleware(db)(idempotency.Wrap(portalinvite.InviteHandler(nudgeEnqueuer))))
 	mux.Handle("POST /api/portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db))
 	// Cloud-Scheduler-triggered, not Staff/Client facing (ADR-0010):
 	// authenticated by outboxWorkerSecret, not a session, so it sits
@@ -380,7 +382,19 @@ func main() {
 		ReplyTo: "support@" + mailgunDomain,
 	}
 
-	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, resolveExpectedOrigins())
+	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+	cloudTasksClient, err := cloudtasks.NewClient(context.Background())
+	if err != nil {
+		// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+		log.Fatalf("init Cloud Tasks client: %v", err)
+	}
+	// ADR-0013: one shared queue nudging all five outbox process-*
+	// endpoints, reusing NOTIFICATION_WORKER_SECRET rather than a second
+	// credential.
+	// coverage:ignore reason: constructs the real Cloud-Tasks-backed enqueuer, not exercised by unit tests
+	nudgeEnqueuer := tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, os.Getenv("NOTIFICATION_TASKS_QUEUE"), os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"))
+
+	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, nudgeEnqueuer, resolveExpectedOrigins())
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

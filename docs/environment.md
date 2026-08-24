@@ -35,6 +35,8 @@ except `.env.example`. A Sandbox key is still a key.
 | `MAILGUN_DOMAIN` | the account's sandbox domain (`sandbox….mailgun.org`), authorized recipients only | unset | `mg.doula.cloud`, plain env var |
 | `NOTIFICATION_WORKER_SECRET` | any value, matched against the `X-Internal-Secret` header on manual calls to `/api/internal/notifications/process-outbox` | unset (no scheduler runs in CI; the fake `mail.Sender` never gets a request either) | Secret Manager `doula-cloud-notification-worker-secret`, also set as the Cloud Scheduler job's header |
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | any value, tests sign their own fixtures with it | unset (nothing calls `/api/mailgun/webhook`) | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, once Mailgun's dashboard is pointed at the deployed endpoint |
+| `NOTIFICATION_TASKS_QUEUE` | unset (no real `tasknudge.CloudTasksEnqueuer` is constructed in `routes()` tests, which inject `tasknudge.FakeEnqueuer` instead) | unset | the Cloud Tasks queue's full resource name, `projects/doula-cloud/locations/us-central1/queues/doula-cloud-notification-nudge`, plain env var |
+| `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
 
 ### `APP_BASE_URL` is not `EXPECTED_ORIGINS`
 
@@ -108,6 +110,21 @@ the deployed app at all. Enabled via `PATCH
 #345 (the new-sign-in/session-revoked Platform Notifications) reuses `NOTIFICATION_WORKER_SECRET` for a fifth endpoint, `/api/internal/notifications/process-session-notice-outbox` -- same secret, same header, its own Cloud Scheduler job, one outbox table (`session_notice_outbox`) shared by both notices since #345 bundled them into a single ticket. Also left unset for the same reason.
 
 #340 (the Mailgun bounce/complaint webhook, ADR-0010) adds a sixth variable, `MAILGUN_WEBHOOK_SIGNING_KEY` -- Mailgun's HTTP webhook signing key, a separate value from `MAILGUN_API_KEY` in Mailgun's dashboard (the exact settings page wasn't confirmed first-party here; find it under the account's security/webhook settings when provisioning), verifying `POST /api/mailgun/webhook`'s HMAC-SHA256 signature rather than a shared-secret header. Left unset for the same reason as the others: nobody has yet pointed Mailgun's dashboard webhook configuration at the deployed `doula-api` URL, so there is no real signing key to provision, and no traffic would reach the endpoint even once one is.
+
+#348 (ADR-0013's Cloud Tasks nudge) adds `NOTIFICATION_TASKS_QUEUE` and `NOTIFICATION_TASKS_TARGET_BASE_URL`, both consumed only by `tasknudge.NewCloudTasksEnqueuer` at startup. No new secret: the enqueued task's `X-Internal-Secret` header is `NOTIFICATION_WORKER_SECRET`, the same value the five `process-*` endpoints already check against a Cloud Scheduler invocation. One queue serves all five outbox types (`main.go` builds one `CloudTasksEnqueuer` and passes it into `routes()` as `nudgeEnqueuer`), provisioned once:
+
+```bash
+gcloud tasks queues create doula-cloud-notification-nudge \
+  --location=us-central1
+gcloud tasks queues add-iam-policy-binding doula-cloud-notification-nudge \
+  --location=us-central1 \
+  --member=serviceAccount:<doula-api's runtime service account> \
+  --role=roles/cloudtasks.enqueuer
+gcloud run services update doula-api --region us-central1 \
+  --update-env-vars NOTIFICATION_TASKS_QUEUE=projects/doula-cloud/locations/us-central1/queues/doula-cloud-notification-nudge,NOTIFICATION_TASKS_TARGET_BASE_URL=https://doula-api-850855848778.us-central1.run.app
+```
+
+`doula-api`'s own runtime service account also needs `roles/cloudtasks.enqueuer` on the queue (the binding above) to call `CreateTask` -- it already reaches Secret Manager and GCS under its existing identity, so no new service account is created for this.
 
 ## Say Sandbox, not test mode
 

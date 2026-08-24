@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -14,7 +15,7 @@ func newEndSessionsServer(t *testing.T, db *testdb.DB, uid string) (srv *httptes
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("DELETE /practices/{practiceId}/staff/{staffId}/sessions",
-		staffauth.Middleware(db.App)(staffauth.EndSessionsHandler()))
+		staffauth.Middleware(db.App)(staffauth.EndSessionsHandler(&tasknudge.FakeEnqueuer{})))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

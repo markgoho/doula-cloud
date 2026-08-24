@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/sessionnotice"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -98,7 +99,7 @@ func TestQueueNewSignInIfDue_SkipsNonStaffIdentity(t *testing.T) {
 	db := testdb.New(t)
 	const clientUID = "client-portal-uid"
 
-	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, clientUID, time.Now()); err != nil {
+	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, clientUID, time.Now(), &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
 	}
 	if got := countOutboxRows(t, db, clientUID, "new_signin"); got != 0 {
@@ -111,7 +112,7 @@ func TestQueueNewSignInIfDue_QueuesFirstSignIn(t *testing.T) {
 	const uid = "staff-first-signin"
 	seedStaff(t, db, uid)
 
-	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, time.Now()); err != nil {
+	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, time.Now(), &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
 	}
 	if got := countOutboxRows(t, db, uid, "new_signin"); got != 1 {
@@ -129,7 +130,7 @@ func TestQueueNewSignInIfDue_SkipsWithinIdleWindow(t *testing.T) {
 	now := time.Now()
 	seedOutboxRow(t, db, uid, "new_signin", 0, now, now.Add(-time.Hour))
 
-	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now); err != nil {
+	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
 	}
 	if got := countOutboxRows(t, db, uid, "new_signin"); got != 1 {
@@ -146,7 +147,7 @@ func TestQueueNewSignInIfDue_QueuesAgainAfterIdleWindow(t *testing.T) {
 	now := time.Now()
 	seedOutboxRow(t, db, uid, "new_signin", 0, now, now.Add(-8*24*time.Hour))
 
-	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now); err != nil {
+	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
 	}
 	if got := countOutboxRows(t, db, uid, "new_signin"); got != 2 {
@@ -165,7 +166,7 @@ func TestQueueNewSignInIfDue_DBFailureRollsBack(t *testing.T) {
 		t.Fatalf("drop staff: %v", err)
 	}
 
-	err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, "some-uid", time.Now())
+	err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, "some-uid", time.Now(), &tasknudge.FakeEnqueuer{})
 	if err == nil {
 		t.Fatal("expected an error with the staff table gone")
 	}

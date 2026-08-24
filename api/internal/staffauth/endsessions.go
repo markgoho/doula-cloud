@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/sessionnotice"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // EndSessionsHandler lets a Practice Owner end every session a Staff
@@ -16,8 +17,10 @@ import (
 // mounted behind staffauth.Middleware, which is what makes the 403s for
 // a non-Owner or an Owner at a different Practice automatic: the caller
 // must already hold a membership at :practiceId to reach RequireOwner at
-// all.
-func EndSessionsHandler() http.Handler {
+// all. enq is ADR-0013's Cloud Tasks nudge for the session-notice outbox
+// row QueueSessionRevoked queues below -- registered rather than fired
+// directly, same reasoning as portalinvite.InviteHandler.
+func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := RequireOwner(w, r)
 		if !ok {
@@ -57,6 +60,7 @@ func EndSessionsHandler() http.Handler {
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.SessionNotice))
 
 		w.WriteHeader(http.StatusNoContent)
 	})

@@ -3,6 +3,7 @@ package idempotency_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -32,7 +34,7 @@ func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(db.App)(idempotency.Wrap(portalinvite.InviteHandler())))
+		staffauth.Middleware(db.App)(idempotency.Wrap(portalinvite.InviteHandler(&tasknudge.FakeEnqueuer{}))))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	session := authntest.SeedSession(t, db.App, identityUID)
@@ -90,6 +92,73 @@ func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
 	}
 }
 
+// TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails is
+// ADR-0013's correctness constraint proven at InviteHandler: a Cloud
+// Tasks enqueue failure must never surface as a 500, because
+// idempotency.Wrap only skips caching a response below status 500 --
+// staffauth.Middleware drains the registered nudge (tasknudge.Register/
+// Drain) only after its own tx.Commit() succeeds, by which point
+// idempotency.Wrap has already cached the 201 this test asserts survives
+// unchanged.
+func TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "e2e-portal-invite-nudge-fail-staff"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	_, engagementID := seedClientEngagement(t, db, practiceID, "E2E Client", "e2e-nudge-fail@example.com")
+
+	failingEnq := &tasknudge.FakeEnqueuer{Err: errors.New("cloud tasks unavailable")}
+	mux := http.NewServeMux()
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
+		staffauth.Middleware(db.App)(idempotency.Wrap(portalinvite.InviteHandler(failingEnq))))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	session := authntest.SeedSession(t, db.App, identityUID)
+
+	postInvite := func(key string) *http.Response {
+		t.Helper()
+		url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, nil)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		authntest.AddSessionCookie(req, session)
+		if key != "" {
+			req.Header.Set("Idempotency-Key", key)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		return resp
+	}
+	decode := func(resp *http.Response) portalinvite.InviteResponse {
+		t.Helper()
+		var out portalinvite.InviteResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return out
+	}
+
+	first := postInvite("portal-invite-nudge-fail-retry-key")
+	defer first.Body.Close()
+	if first.StatusCode != http.StatusCreated {
+		t.Fatalf("first call status = %d, want %d -- an enqueue failure must never surface as a non-2xx", first.StatusCode, http.StatusCreated)
+	}
+	firstOut := decode(first)
+
+	retried := postInvite("portal-invite-nudge-fail-retry-key")
+	defer retried.Body.Close()
+	if retried.StatusCode != http.StatusCreated {
+		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
+	}
+	retriedOut := decode(retried)
+	if retriedOut.InviteToken != firstOut.InviteToken {
+		t.Fatalf("retried inviteToken = %q, want identical cached token %q -- an enqueue failure must not have produced a 500 that skipped caching",
+			retriedOut.InviteToken, firstOut.InviteToken)
+	}
+}
+
 // TestEndToEnd_CreateClientNoDuplicateCreditOnRetry wires
 // engagement.CreateHandler behind staffauth.Middleware(...)(idempotency.Wrap(...))
 // exactly as main.go does, proving a retried create-Client request with the
@@ -104,7 +173,7 @@ func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(idempotency.Wrap(engagement.CreateHandler(db.App))))
+		staffauth.Middleware(db.App)(idempotency.Wrap(engagement.CreateHandler(db.App, &tasknudge.FakeEnqueuer{}))))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	session := authntest.SeedSession(t, db.App, identityUID)

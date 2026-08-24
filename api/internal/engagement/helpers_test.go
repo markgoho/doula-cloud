@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -23,7 +24,7 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	mux.Handle("GET /practices/{practiceId}/clients",
 		staffauth.Middleware(db.App)(engagement.ListHandler()))
 	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(engagement.CreateHandler(db.App)))
+		staffauth.Middleware(db.App)(engagement.CreateHandler(db.App, &tasknudge.FakeEnqueuer{})))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}",
 		staffauth.Middleware(db.App)(engagement.DetailHandler()))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)

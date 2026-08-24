@@ -17,6 +17,7 @@ import (
 
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // intakeStatus is the status every new Engagement starts at -- the
@@ -44,8 +45,9 @@ type CreateClientResponse struct {
 // needed only for the ErrNoCreditsRemaining path: queuing the
 // out-of-Credits Notification (#342) via billing.QueueOutOfCreditsNotification,
 // which must survive the request tx's rollback and so can't run on that
-// tx.
-func CreateHandler(db *sql.DB) http.Handler {
+// tx. enq is ADR-0013's Cloud Tasks nudge, passed through to that same
+// call.
+func CreateHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -113,7 +115,7 @@ func CreateHandler(db *sql.DB) http.Handler {
 					return
 				}
 				if shouldNotify {
-					if err := billing.QueueOutOfCreditsNotification(r.Context(), db, practiceID); err != nil {
+					if err := billing.QueueOutOfCreditsNotification(r.Context(), db, practiceID, enq); err != nil {
 						// coverage:ignore reason: DB query failure, not exercised by unit tests
 						http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 						return

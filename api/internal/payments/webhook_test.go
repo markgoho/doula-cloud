@@ -14,6 +14,7 @@ import (
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -51,8 +52,15 @@ func newConnectWebhookServer(db *testdb.DB) *httptest.Server {
 // those tests need a Client that can answer that call as well as verify
 // the signature.
 func newConnectWebhookServerWith(db *testdb.DB, client payments.Client) *httptest.Server {
+	return newConnectWebhookServerWithEnqueuer(db, client, &tasknudge.FakeEnqueuer{})
+}
+
+// newConnectWebhookServerWithEnqueuer is newConnectWebhookServerWith with
+// the tasknudge.Enqueuer also chosen by the caller -- ADR-0013's tests
+// use this to inject a FakeEnqueuer configured to fail.
+func newConnectWebhookServerWithEnqueuer(db *testdb.DB, client payments.Client, enq tasknudge.Enqueuer) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/connect-webhook", payments.PostConnectWebhookHandler(db.App, client, stripeConnectWebhookSecret))
+	mux.Handle("POST /stripe/connect-webhook", payments.PostConnectWebhookHandler(db.App, client, stripeConnectWebhookSecret, enq))
 	return httptest.NewServer(mux)
 }
 
@@ -292,8 +300,15 @@ func (c *accountFetchClient) RetrieveAccount(_ context.Context, accountID string
 }
 
 func newAccountWebhookServer(db *testdb.DB, client payments.Client) *httptest.Server {
+	return newAccountWebhookServerWithEnqueuer(db, client, &tasknudge.FakeEnqueuer{})
+}
+
+// newAccountWebhookServerWithEnqueuer is newAccountWebhookServer with the
+// tasknudge.Enqueuer also chosen by the caller, mirroring
+// newConnectWebhookServerWithEnqueuer.
+func newAccountWebhookServerWithEnqueuer(db *testdb.DB, client payments.Client, enq tasknudge.Enqueuer) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /stripe/account-webhook", payments.PostAccountWebhookHandler(db.App, client, stripeAccountWebhookSecret))
+	mux.Handle("POST /stripe/account-webhook", payments.PostAccountWebhookHandler(db.App, client, stripeAccountWebhookSecret, enq))
 	return httptest.NewServer(mux)
 }
 
@@ -944,6 +959,36 @@ func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 	}
 	if outboxCount != 1 {
 		t.Fatalf("payment_received_outbox rows after replay = %d, want exactly 1", outboxCount)
+	}
+}
+
+// TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure is
+// ADR-0013's correctness constraint proven at this write site: the
+// handler's own tx already committed the payments row and the
+// payment_received_outbox row by the time commitAndAck runs, so a Cloud
+// Tasks enqueue failure afterward must never turn the acknowledgement
+// into anything but 200 -- a non-2xx here would make Stripe redeliver an
+// event whose payment already recorded.
+func TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Invoice Paid Nudge Fail Practice", "acct_invoice_paid_nudge_fail")
+	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_nudge_fail", invoiceStatusOpen, 5000, time.Now())
+	failingEnq := &tasknudge.FakeEnqueuer{Err: errors.New("cloud tasks unavailable")}
+	srv := newConnectWebhookServerWithEnqueuer(db, payments.NewStripeAPIClient("sk_test_unused", "https://app.test"), failingEnq)
+	defer srv.Close()
+
+	payload := invoicePaidPayload(t, "evt_invoice_paid_nudge_fail", "acct_invoice_paid_nudge_fail", "in_paid_nudge_fail", time.Now())
+	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	paymentsRows := paymentsForInvoice(t, db, invoiceID)
+	if len(paymentsRows) != 1 {
+		t.Fatalf("payments for invoice = %d, want exactly 1 -- the write must have committed despite the enqueue failure", len(paymentsRows))
 	}
 }
 
