@@ -1,9 +1,11 @@
 package engagement_test
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
@@ -127,4 +129,39 @@ func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email, 
 		t.Fatalf("seed engagement: %v", err)
 	}
 	return clientID, engagementID
+}
+
+// seedPortalUser inserts a client_portal_users row for clientID -- #346's
+// join target. When accepted is true, identity_uid is set the way
+// accept.go leaves it; otherwise the row stays pending (identity_uid
+// null), same as right after portalinvite.InviteHandler runs.
+func seedPortalUser(t *testing.T, db *testdb.DB, clientID string, accepted bool) (portalUserID string) {
+	t.Helper()
+
+	var identityUID sql.NullString
+	if accepted {
+		identityUID = sql.NullString{String: "identity-" + clientID, Valid: true}
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2) RETURNING id`,
+		clientID, identityUID,
+	).Scan(&portalUserID); err != nil {
+		t.Fatalf("seed portal user: %v", err)
+	}
+	return portalUserID
+}
+
+// seedOutboxRow inserts a portal_invite_outbox row for portalUserID at an
+// explicit createdAt, rather than relying on now(), so a "latest row
+// wins" test can seed two rows in a known order without depending on
+// clock resolution between two sequential inserts.
+func seedOutboxRow(t *testing.T, db *testdb.DB, portalUserID, status string, createdAt time.Time) {
+	t.Helper()
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO portal_invite_outbox (client_portal_user_id, status, created_at) VALUES ($1, $2, $3)`,
+		portalUserID, status, createdAt,
+	); err != nil {
+		t.Fatalf("seed outbox row: %v", err)
+	}
 }

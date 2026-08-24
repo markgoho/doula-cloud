@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
@@ -15,6 +16,10 @@ import (
 // testBrokeClientName is shared across this file's zero-balance tests
 // per golangci-lint's goconst check.
 const testBrokeClientName = "Broke Client"
+
+// portalOutboxStatusPending mirrors testBrokeClientName's role, for
+// TestListHandler_PortalInviteStatus's repeated "pending" literal.
+const portalOutboxStatusPending = "pending"
 
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
@@ -128,6 +133,86 @@ func TestListHandler_ContractorSeesOnlyAttachedEngagements(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].Name != "Attached Client" {
 		t.Fatalf("list = %+v, want only Attached Client", list)
+	}
+}
+
+// TestListHandler_PortalInviteStatus covers #346: the Staff Clients list
+// surfaces each Client's portal invite state. "accepted" comes from
+// client_portal_users.identity_uid, not the outbox row -- accept.go never
+// touches portal_invite_outbox, so without this precedence an
+// active-for-months Client would still read as whatever their original
+// send landed on.
+func TestListHandler_PortalInviteStatus(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedStaffWithMembership(t, db, "staff-portal-status")
+	now := time.Now()
+
+	seedClientEngagement(t, db, practiceID, "Never Invited", "never@example.com", "intake")
+
+	pendingClientID, _ := seedClientEngagement(t, db, practiceID, "Pending Client", "pending@example.com", "intake")
+	seedOutboxRow(t, db, seedPortalUser(t, db, pendingClientID, false), portalOutboxStatusPending, now)
+
+	sentClientID, _ := seedClientEngagement(t, db, practiceID, "Sent Client", "sent@example.com", "intake")
+	seedOutboxRow(t, db, seedPortalUser(t, db, sentClientID, false), "sent", now)
+
+	bouncedClientID, _ := seedClientEngagement(t, db, practiceID, "Bounced Client", "bounced@example.com", "intake")
+	seedOutboxRow(t, db, seedPortalUser(t, db, bouncedClientID, false), "bounced", now)
+
+	complainedClientID, _ := seedClientEngagement(t, db, practiceID, "Complained Client", "complained@example.com", "intake")
+	seedOutboxRow(t, db, seedPortalUser(t, db, complainedClientID, false), "complained", now)
+
+	deadLetteredClientID, _ := seedClientEngagement(t, db, practiceID, "Dead Lettered Client", "dead@example.com", "intake")
+	seedOutboxRow(t, db, seedPortalUser(t, db, deadLetteredClientID, false), "dead_lettered", now)
+
+	acceptedClientID, _ := seedClientEngagement(t, db, practiceID, "Accepted Client", "accepted@example.com", "intake")
+	seedOutboxRow(t, db, seedPortalUser(t, db, acceptedClientID, true), "sent", now)
+
+	noOutboxClientID, _ := seedClientEngagement(t, db, practiceID, "No Outbox Client", "nooutbox@example.com", "intake")
+	seedPortalUser(t, db, noOutboxClientID, false)
+
+	latestClientID, _ := seedClientEngagement(t, db, practiceID, "Latest Wins Client", "latest@example.com", "intake")
+	latestPU := seedPortalUser(t, db, latestClientID, false)
+	seedOutboxRow(t, db, latestPU, "bounced", now.Add(-time.Hour))
+	seedOutboxRow(t, db, latestPU, portalOutboxStatusPending, now)
+
+	srv, session := newServer(t, db, "staff-portal-status")
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var list []engagement.ClientEngagement
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	statusByName := make(map[string]*string, len(list))
+	for _, ce := range list {
+		statusByName[ce.Name] = ce.PortalInviteStatus
+	}
+
+	for _, name := range []string{"Never Invited", "No Outbox Client"} {
+		if got := statusByName[name]; got != nil {
+			t.Errorf("%s portalInviteStatus = %v, want nil", name, *got)
+		}
+	}
+
+	wantStatus := map[string]string{
+		"Pending Client":       portalOutboxStatusPending,
+		"Sent Client":          "sent",
+		"Bounced Client":       "bounced",
+		"Complained Client":    "complained",
+		"Dead Lettered Client": "dead_lettered",
+		"Accepted Client":      "accepted",
+		"Latest Wins Client":   portalOutboxStatusPending,
+	}
+	for name, want := range wantStatus {
+		got := statusByName[name]
+		if got == nil || *got != want {
+			t.Errorf("%s portalInviteStatus = %v, want %q", name, got, want)
+		}
 	}
 }
 

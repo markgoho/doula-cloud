@@ -18,6 +18,18 @@ type ClientEngagement struct {
 	Email        string `json:"email"`
 	EngagementID string `json:"engagementId"`
 	Status       string `json:"status"`
+
+	// PortalInviteStatus is #346's Staff-visible read of the Client
+	// portal invite: nil when the Client was never invited (no
+	// client_portal_users row, or one with no outbox row -- the same
+	// "nothing to show" case). "accepted" once identity_uid is set,
+	// taking precedence over portal_invite_outbox regardless of what
+	// that row says -- accept.go never touches the outbox row, so a
+	// Client active for months would otherwise still read as whatever
+	// their original send landed on. Otherwise the most recent
+	// portal_invite_outbox row's status: pending, sent, bounced,
+	// complained, or dead_lettered (#337).
+	PortalInviteStatus *string `json:"portalInviteStatus,omitempty"`
 }
 
 // ListHandler lists every Client with an Engagement at the current
@@ -67,9 +79,16 @@ func ListHandler() http.Handler {
 // layer's own filter, so a bug in either one alone can't leak rows.
 func listClientEngagements(ctx context.Context, tx *sql.Tx, practiceID string) ([]ClientEngagement, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT c.id, c.name, c.email, e.id, e.status
+		`SELECT c.id, c.name, c.email, e.id, e.status,
+		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status
 		 FROM engagements e
 		 JOIN clients c ON c.id = e.client_id
+		 LEFT JOIN client_portal_users pu ON pu.client_id = c.id
+		 LEFT JOIN LATERAL (
+		     SELECT o.status FROM portal_invite_outbox o
+		     WHERE o.client_portal_user_id = pu.id
+		     ORDER BY o.created_at DESC LIMIT 1
+		 ) latest ON true
 		 WHERE e.practice_id = $1
 		 ORDER BY c.name`,
 		practiceID,
@@ -90,10 +109,17 @@ func listClientEngagements(ctx context.Context, tx *sql.Tx, practiceID string) (
 // never a key).
 func listAttachedClientEngagements(ctx context.Context, tx *sql.Tx, practiceID, staffID string) ([]ClientEngagement, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT c.id, c.name, c.email, e.id, e.status
+		`SELECT c.id, c.name, c.email, e.id, e.status,
+		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status
 		 FROM engagements e
 		 JOIN clients c ON c.id = e.client_id
 		 JOIN engagement_attachments ea ON ea.engagement_id = e.id
+		 LEFT JOIN client_portal_users pu ON pu.client_id = c.id
+		 LEFT JOIN LATERAL (
+		     SELECT o.status FROM portal_invite_outbox o
+		     WHERE o.client_portal_user_id = pu.id
+		     ORDER BY o.created_at DESC LIMIT 1
+		 ) latest ON true
 		 WHERE e.practice_id = $1 AND ea.staff_id = $2
 		   AND ea.origin = 'granted' AND ea.ended_at IS NULL
 		 ORDER BY c.name`,
@@ -114,10 +140,16 @@ func scanClientEngagements(rows *sql.Rows) ([]ClientEngagement, error) {
 	list := []ClientEngagement{}
 	for rows.Next() {
 		var ce ClientEngagement
-		if err := rows.Scan(&ce.ClientID, &ce.Name, &ce.Email, &ce.EngagementID, &ce.Status); err != nil {
+		var hasPortalUser, accepted bool
+		var outboxStatus sql.NullString
+		if err := rows.Scan(
+			&ce.ClientID, &ce.Name, &ce.Email, &ce.EngagementID, &ce.Status,
+			&hasPortalUser, &accepted, &outboxStatus,
+		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("engagement: scan client engagement row: %w", err)
 		}
+		ce.PortalInviteStatus = portalInviteStatus(hasPortalUser, accepted, outboxStatus)
 		list = append(list, ce)
 	}
 	if err := rows.Err(); err != nil {
@@ -125,4 +157,26 @@ func scanClientEngagements(rows *sql.Rows) ([]ClientEngagement, error) {
 		return nil, fmt.Errorf("engagement: iterate client engagement rows: %w", err)
 	}
 	return list, nil
+}
+
+// portalInviteStatus derives ClientEngagement.PortalInviteStatus:
+// "accepted" (once identity_uid is set) beats whatever
+// portal_invite_outbox last recorded, since accept.go never updates that
+// row. A client_portal_users row with no outbox row at all reads the
+// same as never having one -- invite() always queues an outbox row in
+// the same transaction, so that shape shouldn't occur, but it isn't
+// treated as a distinct state.
+func portalInviteStatus(hasPortalUser, accepted bool, outboxStatus sql.NullString) *string {
+	if !hasPortalUser {
+		return nil
+	}
+	if accepted {
+		status := "accepted"
+		return &status
+	}
+	if outboxStatus.Valid {
+		status := outboxStatus.String
+		return &status
+	}
+	return nil
 }
