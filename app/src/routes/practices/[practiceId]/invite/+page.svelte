@@ -77,7 +77,7 @@
 </form>
 
 {#if acceptLink}
-	<Text text="Invited. There is no email sending yet, so share this link with them directly:" />
+	<Text text="Invited. An email has been sent to them. If you need to share the link directly, here it is:" />
 	<!-- Raw exception (#189): the link is inline literal data, not prose --
 	     Text's string-only API can't carry a <code> child, and one consumer
 	     doesn't justify widening it. -->

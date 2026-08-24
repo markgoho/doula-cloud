@@ -80,13 +80,24 @@ gcloud secrets add-iam-policy-binding doula-cloud-mailgun-api-key \
 #219 lands the code that reads both variables (the outbox worker, the
 Client portal invite's real sender) plus a third,
 `NOTIFICATION_WORKER_SECRET`, guarding the Cloud-Scheduler-triggered
-`/api/internal/notifications/process-outbox` endpoint. Not yet run: the
-`gcloud run services update doula-api --update-secrets
-MAILGUN_API_KEY=…,NOTIFICATION_WORKER_SECRET=… --update-env-vars
-MAILGUN_DOMAIN=mg.doula.cloud` deploy step, and creating the Cloud
-Scheduler job itself -- both left for a deploy session with the real
-`doula-api` service in front of it, rather than done from a local
-checkout.
+`/api/internal/notifications/process-outbox` endpoint. #341 ran the
+deploy step: `MAILGUN_API_KEY` and `NOTIFICATION_WORKER_SECRET` are set
+as Cloud Run secrets on `doula-api`, `MAILGUN_DOMAIN=mg.doula.cloud` is
+a plain env var, and a Cloud Scheduler job
+(`process-portal-invite-outbox`, `us-central1`, every 5 minutes, POSTs
+to `/api/internal/notifications/process-outbox` with the shared secret
+in `X-Internal-Secret`) drives the endpoint on a fixed cadence. Proved
+end to end: a real Client portal invite, added and sent through the
+deployed app, arrived in a real inbox via the deployed pipeline (not a
+local one-off).
+
+While provisioning this, Identity Platform's Email/Password sign-in
+provider turned out to be disabled in the production project (`GET
+.../admin/v2/projects/doula-cloud/config` had no `signIn.email` block)
+-- unrelated to Mailgun, but it meant nobody could sign up or log in to
+the deployed app at all. Enabled via `PATCH
+.../admin/v2/projects/doula-cloud/config?updateMask=signIn.email` with
+`{"signIn":{"email":{"enabled":true,"passwordRequired":true}}}`.
 
 #342 (the out-of-Credits Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a second endpoint, `/api/internal/notifications/process-low-credit-outbox` -- same secret, same header, but its own Cloud Scheduler job, since it processes a separate outbox table (ADR-0010). That second job is left unset for the same reason the first one is.
 

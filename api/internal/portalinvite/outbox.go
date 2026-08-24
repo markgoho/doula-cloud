@@ -25,7 +25,7 @@ var backoffSchedule = []time.Duration{
 // content-free copy (ADR-0009's rule, unconditional per #221: no Client
 // name, no Engagement detail, and -- for v1 -- no Practice name either,
 // anywhere in subject or body). link is the only variable.
-const inviteSubject = "You have something waiting online"
+const inviteSubject = "You've been invited to view your care details online"
 
 func inviteText(link string) string {
 	return "Hello,\n\n" +
