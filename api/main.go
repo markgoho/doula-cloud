@@ -23,6 +23,7 @@ import (
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/payments"
@@ -140,7 +141,7 @@ var ownerAndAdmin = []string{"owner", "admin"}
 // main_test.go walk it (and cross-check it against this function's own
 // source for a route that bypassed the gate entirely) without needing a
 // live server.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
 	mux := http.NewServeMux()
 	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
 	// staffauth.Middleware: Get panics at startup if a route has no role
@@ -248,6 +249,11 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite",
 		staffauth.Middleware(db)(idempotency.Wrap(portalinvite.InviteHandler())))
 	mux.Handle("POST /api/portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db))
+	// Cloud-Scheduler-triggered, not Staff/Client facing (ADR-0010):
+	// authenticated by outboxWorkerSecret, not a session, so it sits
+	// outside staffauth.Middleware/GatedRouter like the Stripe webhooks
+	// above.
+	mux.Handle("POST /api/internal/notifications/process-outbox", portalinvite.ProcessOutboxHandler(db, outboxWorker, outboxWorkerSecret))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(db)(portal.DetailHandler()))
@@ -307,7 +313,18 @@ func main() {
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
 	paymentsClient := payments.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("APP_BASE_URL"))
 
-	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), resolveExpectedOrigins())
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	mailgunDomain := os.Getenv("MAILGUN_DOMAIN")
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	outboxWorker := portalinvite.Worker{
+		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
+		Now:        time.Now,
+		AppBaseURL: os.Getenv("APP_BASE_URL"),
+		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
+		ReplyTo:    "noreply@" + mailgunDomain,
+	}
+
+	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), resolveExpectedOrigins())
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

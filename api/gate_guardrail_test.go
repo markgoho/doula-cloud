@@ -47,7 +47,7 @@ var muxGetPattern = regexp.MustCompile(`mux\.(?:Handle|HandleFunc)\(\s*"(GET [^"
 // catastrophic failure (a panic taking the whole binary down) and an
 // ordinary failing test should both catch the same mistake.
 func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
-	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
+	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, []string{testExpectedOrigin})
 	if len(registry) == 0 {
 		t.Fatal("routes() registered zero GETs through GatedRouter -- did routes() stop wiring g.Get calls?")
 	}
@@ -71,7 +71,7 @@ func TestRoutes_NoGETBypassesTheGate(t *testing.T) {
 		t.Fatalf("read main.go: %v", err)
 	}
 
-	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", []string{testExpectedOrigin})
+	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, []string{testExpectedOrigin})
 	gated := make(map[string]bool, len(registry))
 	for _, route := range registry {
 		gated["GET "+route.Pattern] = true

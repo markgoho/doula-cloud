@@ -325,3 +325,57 @@ func TestRLS_ClientPortalUsersAcceptUpdateRejectsMismatchedIdentity(t *testing.T
 		t.Fatal("expected the update to be rejected -- identity_uid must equal the caller's own app.current_identity_uid")
 	}
 }
+
+// TestRLS_NotificationWorkerCannotReadClientPortalUsersWithoutTrustedFlag
+// proves the outbox worker's own policies (00032) stay closed by default:
+// with no session context at all -- the shape ProcessOutboxHandler runs
+// under before it sets app.notification_worker_trusted -- neither this
+// policy nor any pre-existing one admits a row.
+func TestRLS_NotificationWorkerCannotReadClientPortalUsersWithoutTrustedFlag(t *testing.T) {
+	db := testdb.New(t)
+	seedPendingPortalInvite(t, db)
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	var count int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users`).Scan(&count); err != nil {
+		t.Fatalf("query client_portal_users: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected zero visible rows with no session context set, got %d", count)
+	}
+}
+
+// TestRLS_NotificationWorkerTrustedFlagOpensClientPortalUsersAndClients
+// proves the door ProcessOutboxHandler relies on actually opens: with
+// app.notification_worker_trusted set, every row of both tables is
+// visible, regardless of Practice.
+func TestRLS_NotificationWorkerTrustedFlagOpensClientPortalUsersAndClients(t *testing.T) {
+	db := testdb.New(t)
+	seedPendingPortalInvite(t, db)
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	var portalUserCount, clientCount int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users`).Scan(&portalUserCount); err != nil {
+		t.Fatalf("query client_portal_users: %v", err)
+	}
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM clients`).Scan(&clientCount); err != nil {
+		t.Fatalf("query clients: %v", err)
+	}
+	if portalUserCount != 1 || clientCount != 1 {
+		t.Fatalf("portalUserCount/clientCount = %d/%d, want 1/1", portalUserCount, clientCount)
+	}
+}

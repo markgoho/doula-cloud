@@ -14,10 +14,11 @@ import (
 )
 
 // InviteResponse identifies the pending client_portal_users row created (or
-// re-invited) and hands back the one-time token the Client needs to accept
-// -- there is no email-sending infrastructure yet (see
-// 00004_staff_invitation.sql), so the Staff caller is expected to pass this
-// along outside the app.
+// re-invited) and hands back the one-time token the Client needs to accept.
+// invite() also queues a Practice-voice Notification email carrying the
+// same link (#219, ADR-0010's outbox); InviteToken stays in the response
+// too, so a Staff member can still copy/paste the link by hand as a
+// fallback if the email never arrives.
 type InviteResponse struct {
 	ClientPortalUserID string `json:"clientPortalUserId"`
 	InviteToken        string `json:"inviteToken"`
@@ -109,6 +110,10 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
 		}
+		if err := queueOutboxSend(ctx, tx, newID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		}
 		return InviteResponse{ClientPortalUserID: newID, InviteToken: inviteToken}, http.StatusCreated, "", ""
 
 	case err != nil:
@@ -124,6 +129,10 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 			`UPDATE client_portal_users SET invite_token = $1 WHERE id = $2`,
 			inviteToken, existingID,
 		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		}
+		if err := queueOutboxSend(ctx, tx, existingID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
 		}

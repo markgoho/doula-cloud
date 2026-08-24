@@ -79,6 +79,16 @@ func TestInviteHandler_Success(t *testing.T) {
 	if identityUIDCol.Valid {
 		t.Fatalf("expected pending row to have no identity_uid yet, got %q", identityUIDCol.String)
 	}
+
+	var outboxStatus string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT status FROM portal_invite_outbox WHERE client_portal_user_id = $1`, out.ClientPortalUserID,
+	).Scan(&outboxStatus); err != nil {
+		t.Fatalf("query outbox row: %v", err)
+	}
+	if outboxStatus != testOutboxStatusPending {
+		t.Fatalf("outbox status = %q, want %s", outboxStatus, testOutboxStatusPending)
+	}
 }
 
 func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
@@ -126,6 +136,23 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected exactly one row for the client after re-invite, got %d", count)
+	}
+
+	// The re-invite reuses the same pending outbox row (queueOutboxSend's
+	// ON CONFLICT), rather than forking a second one racing to send the
+	// same portal user's invite.
+	var outboxCount, outboxAttemptCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*), max(attempt_count) FROM portal_invite_outbox WHERE client_portal_user_id = $1`,
+		firstOut.ClientPortalUserID,
+	).Scan(&outboxCount, &outboxAttemptCount); err != nil {
+		t.Fatalf("query outbox rows: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Fatalf("expected exactly one outbox row after re-invite, got %d", outboxCount)
+	}
+	if outboxAttemptCount != 0 {
+		t.Fatalf("expected the re-invite to reset attempt_count to 0, got %d", outboxAttemptCount)
 	}
 }
 

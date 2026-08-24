@@ -33,6 +33,7 @@ except `.env.example`. A Sandbox key is still a key.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBSCRIBER` | throwaway keypair in `stack.ts` | same | real keys |
 | `MAILGUN_API_KEY` | one account-level key in `.env.local` | unset | Secret Manager `doula-cloud-mailgun-api-key` |
 | `MAILGUN_DOMAIN` | the account's sandbox domain (`sandbox….mailgun.org`), authorized recipients only | unset | `mg.doula.cloud`, plain env var |
+| `NOTIFICATION_WORKER_SECRET` | any value, matched against the `X-Internal-Secret` header on manual calls to `/api/internal/notifications/process-outbox` | unset (no scheduler runs in CI; the fake `mail.Sender` never gets a request either) | Secret Manager `doula-cloud-notification-worker-secret`, also set as the Cloud Scheduler job's header |
 
 ### `APP_BASE_URL` is not `EXPECTED_ORIGINS`
 
@@ -75,10 +76,16 @@ gcloud secrets add-iam-policy-binding doula-cloud-mailgun-api-key \
   --role roles/secretmanager.secretAccessor
 ```
 
-Not yet run: `gcloud run services update doula-api --update-secrets
-MAILGUN_API_KEY=… --update-env-vars MAILGUN_DOMAIN=mg.doula.cloud`. No code
-reads either variable yet (#219 lands the sender), so wiring the live
-service is left for that ticket rather than done ahead of it.
+#219 lands the code that reads both variables (the outbox worker, the
+Client portal invite's real sender) plus a third,
+`NOTIFICATION_WORKER_SECRET`, guarding the Cloud-Scheduler-triggered
+`/api/internal/notifications/process-outbox` endpoint. Not yet run: the
+`gcloud run services update doula-api --update-secrets
+MAILGUN_API_KEY=…,NOTIFICATION_WORKER_SECRET=… --update-env-vars
+MAILGUN_DOMAIN=mg.doula.cloud` deploy step, and creating the Cloud
+Scheduler job itself -- both left for a deploy session with the real
+`doula-api` service in front of it, rather than done from a local
+checkout.
 
 ## Say Sandbox, not test mode
 
