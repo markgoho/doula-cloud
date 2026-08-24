@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -90,7 +93,7 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -115,7 +118,7 @@ func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 // path.
 func TestRoutes_CreateAndEndSession(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -199,7 +202,7 @@ func TestResolvePort(t *testing.T) {
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -234,7 +237,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	mux, _ := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -328,7 +331,7 @@ func TestResolveExpectedOrigins(t *testing.T) {
 // reaches the handler -- proven by getting 403 rather than the 401 a
 // missing bearer token would otherwise produce.
 func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -353,7 +356,7 @@ func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
 // not the origin check's 403.
 func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -381,7 +384,7 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 // or snapshot, never both.
 func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -446,5 +449,36 @@ func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	defer accountResp.Body.Close()
 	if accountResp.StatusCode != http.StatusOK {
 		t.Fatalf("POST /api/stripe/account-webhook status = %d, want %d", accountResp.StatusCode, http.StatusOK)
+	}
+
+	// Same shape for the Mailgun webhook (#340): an event type
+	// PostBounceWebhookHandler doesn't act on, signed with the same key
+	// threaded through routes() above, proves the route is mounted and
+	// reachable with no Origin header and no database needed.
+	const mailgunTimestamp, mailgunToken = "1700000000", "guardrail-test-token"
+	mailgunMAC := hmac.New(sha256.New, []byte("mailgun_webhook_test_key"))
+	mailgunMAC.Write([]byte(mailgunTimestamp + mailgunToken))
+	mailgunPayload, err := json.Marshal(map[string]any{
+		"signature": map[string]any{
+			"timestamp": mailgunTimestamp,
+			"token":     mailgunToken,
+			"signature": hex.EncodeToString(mailgunMAC.Sum(nil)),
+		},
+		"event-data": map[string]any{"id": "evt_guardrail", "event": "delivered"},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	mailgunReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/mailgun/webhook", bytes.NewReader(mailgunPayload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	mailgunResp, err := http.DefaultClient.Do(mailgunReq)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer mailgunResp.Body.Close()
+	if mailgunResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/mailgun/webhook status = %d, want %d", mailgunResp.StatusCode, http.StatusOK)
 	}
 }

@@ -34,6 +34,7 @@ except `.env.example`. A Sandbox key is still a key.
 | `MAILGUN_API_KEY` | one account-level key in `.env.local` | unset | Secret Manager `doula-cloud-mailgun-api-key` |
 | `MAILGUN_DOMAIN` | the account's sandbox domain (`sandbox….mailgun.org`), authorized recipients only | unset | `mg.doula.cloud`, plain env var |
 | `NOTIFICATION_WORKER_SECRET` | any value, matched against the `X-Internal-Secret` header on manual calls to `/api/internal/notifications/process-outbox` | unset (no scheduler runs in CI; the fake `mail.Sender` never gets a request either) | Secret Manager `doula-cloud-notification-worker-secret`, also set as the Cloud Scheduler job's header |
+| `MAILGUN_WEBHOOK_SIGNING_KEY` | any value, tests sign their own fixtures with it | unset (nothing calls `/api/mailgun/webhook`) | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, once Mailgun's dashboard is pointed at the deployed endpoint |
 
 ### `APP_BASE_URL` is not `EXPECTED_ORIGINS`
 
@@ -94,6 +95,8 @@ checkout.
 #344 (the payment-arrived Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a fourth endpoint, `/api/internal/notifications/process-payment-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`payment_received_outbox`). Also left unset for the same reason.
 
 #345 (the new-sign-in/session-revoked Platform Notifications) reuses `NOTIFICATION_WORKER_SECRET` for a fifth endpoint, `/api/internal/notifications/process-session-notice-outbox` -- same secret, same header, its own Cloud Scheduler job, one outbox table (`session_notice_outbox`) shared by both notices since #345 bundled them into a single ticket. Also left unset for the same reason.
+
+#340 (the Mailgun bounce/complaint webhook, ADR-0010) adds a sixth variable, `MAILGUN_WEBHOOK_SIGNING_KEY` -- Mailgun's HTTP webhook signing key, a separate value from `MAILGUN_API_KEY` in Mailgun's dashboard (the exact settings page wasn't confirmed first-party here; find it under the account's security/webhook settings when provisioning), verifying `POST /api/mailgun/webhook`'s HMAC-SHA256 signature rather than a shared-secret header. Left unset for the same reason as the others: nobody has yet pointed Mailgun's dashboard webhook configuration at the deployed `doula-api` URL, so there is no real signing key to provision, and no traffic would reach the endpoint even once one is.
 
 ## Say Sandbox, not test mode
 
