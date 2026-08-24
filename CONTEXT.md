@@ -105,7 +105,7 @@ Staff-to-client, bidirectional, in-app communication tied to an Engagement — o
 _Avoid_: Chat, DM (implies a general-purpose messenger, not an Engagement-scoped record)
 
 **Notification**:
-A push-delivered alert to a person, on any channel (browser Web Push or email) — content-free, pointing at the product rather than carrying it. Two voices, fixed by who receives it, never by subject matter: a **Platform Notification** is Doula Cloud speaking as itself, to a Staff member or Owner; a **Practice Notification** is Doula Cloud speaking as the Practice, to that Practice's Client. Neither voice's subject or body may carry a Client name or Engagement detail; a Practice Notification's one exception is naming its own Practice, without which it cannot be sent. See [ADR-0009](docs/adr/0009-notification-is-one-term-two-voices-keyed-by-recipient.md).
+A push-delivered alert to a person, on any channel (browser Web Push or email) — content-free, pointing at the product rather than carrying it. Two voices, fixed by who receives it, never by subject matter: a **Platform Notification** is Doula Cloud speaking as itself, to a Staff member or Owner; a **Practice Notification** is Doula Cloud speaking as the Practice, to that Practice's Client. Neither voice's `From`, subject, or body may carry a Client name, Engagement detail, or the Practice's own name — for v1, no Notification of either voice names a Practice at all. See [ADR-0009](docs/adr/0009-notification-is-one-term-two-voices-keyed-by-recipient.md), [ADR-0011](docs/adr/0011-notification-sending-identity-is-one-shared-domain.md).
 _Avoid_: Message (a Notification is never in-app, bidirectional, immutable, or Engagement-scoped — it is a one-way alert on an outside channel)
 
 **Credit**:
