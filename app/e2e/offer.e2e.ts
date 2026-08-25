@@ -96,4 +96,14 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	await page.getByRole('button', { name: 'Accept' }).click();
 	await expect(page.getByText('Accepted')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0);
+	// #230's terminal rule, through the real stack: the Client's own
+	// fields stop being served the moment the Offer leaves 'offered', so
+	// the row keeps her fee and loses the area and the date.
+	await expect(page.getByText('North side')).toHaveCount(0);
+	await expect(page.getByText('2027-01-04')).toHaveCount(0);
+	await expect(page.getByText('$450.00')).toBeVisible();
+
+	// And the Practice side reads the same answer back.
+	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
+	await expect(page.getByText('Accepted')).toBeVisible();
 });
