@@ -62,6 +62,25 @@ func Queue(ctx context.Context, tx *sql.Tx, invitationID, token string) error {
 	return nil
 }
 
+// Refresh replaces the token on a pending staff_invite_outbox row for
+// invitationID, and does nothing if there is no pending row. It exists
+// for the Offer flow (#317): an Offer to an email address rotates the
+// Invitation's token, which would leave a Staff invitation email still
+// waiting in this outbox holding a token that no longer opens anything.
+// Refresh keeps that row mailable without queueing a second Notification
+// -- the Offer's own email carries the same link, so a fresh Queue here
+// would mail the same person twice for one event.
+func Refresh(ctx context.Context, tx *sql.Tx, invitationID, token string) error {
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE staff_invite_outbox SET invite_token = $2 WHERE invitation_id = $1 AND status = 'pending'`,
+		invitationID, token,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffinvite: refresh outbox token: %w", err)
+	}
+	return nil
+}
+
 // Worker sends due staff_invite_outbox rows -- the Cloud-Scheduler-driven
 // half of ADR-0010's outbox, mirroring portalinvite.Worker's shape.
 type Worker struct {

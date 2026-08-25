@@ -97,6 +97,18 @@ func ReassignHandler() http.Handler {
 			return
 		}
 
+		// The Doula the Visit was handed to is now on this birth, so she
+		// gets a granted attachment even though she is not the actor --
+		// ADR-0008's "an Admin scheduling her onto a Visit ... that is a
+		// granted attachment, written explicitly". attached_by is the
+		// person who did the handing, not the person handed to.
+		actorStaffID, _ := staffauth.StaffID(r.Context())
+		if err := staffauth.Grant(r.Context(), tx, engagementID, req.StaffID, actorStaffID, nil, nil); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(ReassignResponse{VisitID: visitID, StaffID: req.StaffID}); err != nil {

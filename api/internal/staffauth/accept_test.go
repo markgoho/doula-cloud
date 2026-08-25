@@ -395,3 +395,61 @@ func TestAcceptInviteHandler_NoCredential(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 }
+
+// TestAcceptInviteHandler_BackfillsOfferStaffID is ADR-0008's
+// email-target Offer path closing (#317): an Offer mailed to an address
+// names the Invitation, not a person, because no person existed to name.
+// Accepting the Invitation is the moment one does, so every Offer on it
+// gets the staff id it was always going to have -- past Offers included,
+// since they are part of the history she reads.
+func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
+	db := testdb.New(t)
+	ownerID, practiceID := seedOwnerMembership(t, db, "owner-offering-by-email")
+	invitationID, token := seedInvitationWithToken(t, db, practiceID, ownerID, "renata@example.com", "{doula}", contractorType, time.Now().Add(time.Hour))
+
+	var clientID, engagementID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (name, email) VALUES ('Offer Client', 'offer-client@example.com') RETURNING id`,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id) VALUES ($1, $2) RETURNING id`, clientID, practiceID,
+	).Scan(&engagementID); err != nil {
+		t.Fatalf("seed engagement: %v", err)
+	}
+	var offerID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagement_offers
+		     (engagement_id, invitation_id, employment_type, amount_cents, client_first_initial, client_area,
+		      due_date, offered_by, expires_at)
+		 VALUES ($1, $2, 'contractor', 52000, 'R', 'North side', now() + interval '90 days', $3, now() + interval '7 days')
+		 RETURNING id`,
+		engagementID, invitationID, ownerID,
+	).Scan(&offerID); err != nil {
+		t.Fatalf("seed offer: %v", err)
+	}
+
+	srv := newAcceptServer(t, db, "renata-uid", "renata@example.com")
+	defer srv.Close()
+
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "Renata Alvarez"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var accepted staffauth.AcceptInviteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&accepted); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+
+	var offerStaffID *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT staff_id::text FROM engagement_offers WHERE id = $1`, offerID,
+	).Scan(&offerStaffID); err != nil {
+		t.Fatalf("read offer: %v", err)
+	}
+	if offerStaffID == nil || *offerStaffID != accepted.StaffID {
+		t.Fatalf("offer staff_id = %v, want the just-accepted %q", offerStaffID, accepted.StaffID)
+	}
+}

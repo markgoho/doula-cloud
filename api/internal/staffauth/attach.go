@@ -1,0 +1,168 @@
+package staffauth
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"net/http"
+	"slices"
+)
+
+// AttachingWrite is ADR-0008's write-side seam. It wraps an
+// Engagement-scoped write handler and, once that handler has succeeded,
+// attaches the *acting* Doula to the Engagement she just wrote under,
+// origin 'accrued', attached_by her own staff id.
+//
+// It is a mount-time wrapper rather than a call each handler remembers to
+// make, for the reason #231 gave: the per-request facts an attach
+// decision needs are the same ones the read gate already has, so
+// attaching should not become a second hand-maintained list that a new
+// write endpoint can silently fall off.
+//
+// Three rules the seam must never break (ADR-0008):
+//
+//   - Only the actor attaches. A Doula merely named in someone else's
+//     payload -- an Admin scheduling her onto a Visit -- is not the actor
+//     and does not accrue here; that is a granted attachment, written
+//     explicitly by the Visit handlers and Offer accept via Grant below.
+//   - An Owner or Admin acting on an Engagement is never attached by it.
+//   - The seam never mints 'granted'. Accrual is a record of work, never
+//     a key; minting granted by accident is what would silently defeat
+//     #227's no-backfill promise.
+//
+// A write that failed attaches nothing: the wrapped ResponseWriter
+// records the status the handler wrote, and anything at or above 400
+// skips the insert. The insert runs inside the request transaction
+// staffauth.Middleware opened, before that Middleware commits, so an
+// attachment and the write that caused it land together or not at all.
+func AttachingWrite(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		if recorder.status >= http.StatusBadRequest {
+			return
+		}
+
+		tx, has := Tx(r.Context())
+		if !has {
+			// coverage:ignore reason: Middleware always sets a tx before this handler runs
+			return
+		}
+		staffID, _ := StaffID(r.Context())
+		practiceID, _ := PracticeID(r.Context())
+		engagementID := r.PathValue("engagementId")
+
+		if err := attachActor(r.Context(), tx, practiceID, engagementID, staffID); err != nil {
+			// The response is already written, so this cannot become a 500.
+			// Rolling the transaction back instead is what keeps the
+			// database honest: Middleware's Commit then fails and the write
+			// this attachment belonged to is discarded with it, rather than
+			// landing without the attachment ADR-0008 says follows it.
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			log.Printf("staffauth: attach the acting doula to the request's engagement: %v", err)
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			_ = tx.Rollback()
+		}
+	})
+}
+
+// attachActor inserts the accrued attachment, or does nothing at all if
+// the caller is not a plain Doula. ON CONFLICT DO NOTHING is what makes
+// the seam safe to run on every Engagement-scoped write: an attachment
+// already open for this pair -- accrued from an earlier write, or granted
+// by an Offer or a Visit -- is left exactly as it is, so origin can only
+// ever travel accrued -> granted.
+func attachActor(ctx context.Context, tx *sql.Tx, practiceID, engagementID, staffID string) error {
+	if engagementID == "" || staffID == "" {
+		// coverage:ignore reason: every route this wraps carries {engagementId} behind Middleware
+		return nil
+	}
+	roles, err := Roles(ctx, tx, practiceID, staffID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: resolve actor roles: %w", err)
+	}
+	if !slices.Contains(roles, "doula") || slices.Contains(roles, "owner") || slices.Contains(roles, "admin") {
+		return nil
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by)
+		 VALUES ($1, $2, 'accrued', $2)
+		 ON CONFLICT (engagement_id, staff_id) WHERE ended_at IS NULL DO NOTHING`,
+		engagementID, staffID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: accrue attachment: %w", err)
+	}
+	return nil
+}
+
+// Grant opens a granted attachment for staffID on engagementID, or
+// upgrades an open accrued one in place. Granted is the only origin that
+// reaches (see CanAccessEngagement), so it is written explicitly -- by
+// Offer acceptance and by the Visit handlers, which put a named Doula on
+// a birth -- never by AttachingWrite's seam.
+//
+// feeAmountCents and feeTerms are the Offer's own, copied at acceptance
+// so nothing can later rewrite what she agreed to; both are nil
+// everywhere else. The upgrade branch deliberately leaves the fee columns
+// alone: a later Visit-create granting the same pair must not blank the
+// fee an Offer copied on.
+func Grant(ctx context.Context, tx *sql.Tx, engagementID, staffID, attachedBy string, feeAmountCents *int64, feeTerms *string) error {
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO engagement_attachments
+		     (engagement_id, staff_id, origin, attached_by, fee_amount_cents, fee_terms)
+		 VALUES ($1, $2, 'granted', $3, $4, $5)
+		 ON CONFLICT (engagement_id, staff_id) WHERE ended_at IS NULL
+		 DO UPDATE SET origin = 'granted', attached_by = $3
+		 WHERE engagement_attachments.origin = 'accrued'`,
+		engagementID, staffID, attachedBy, feeAmountCents, feeTerms,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: grant attachment: %w", err)
+	}
+	return nil
+}
+
+// EndAttachments closes every open attachment on engagementID, recording
+// who closed them. ADR-0008 names four triggers for ending one; this is
+// the Engagement-completes trigger (#317), and the shape the other three
+// will reuse. Ending is ended_at, never a delete -- "on this from
+// February to May" is more of the record, not less.
+func EndAttachments(ctx context.Context, tx *sql.Tx, engagementID, endedBy string) error {
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE engagement_attachments
+		    SET ended_at = now(), ended_by = $1
+		  WHERE engagement_id = $2 AND ended_at IS NULL`,
+		endedBy, engagementID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: end attachments: %w", err)
+	}
+	return nil
+}
+
+// statusRecorder remembers the status code a handler wrote, so
+// AttachingWrite can tell a write that happened from one that was
+// refused. It records only -- every write goes straight through to the
+// real ResponseWriter, so nothing is buffered and nothing is delayed.
+type statusRecorder struct {
+	http.ResponseWriter
+	status  int
+	written bool
+}
+
+func (s *statusRecorder) WriteHeader(status int) {
+	if !s.written {
+		s.status = status
+		s.written = true
+	}
+	s.ResponseWriter.WriteHeader(status)
+}
+
+func (s *statusRecorder) Write(b []byte) (int, error) {
+	s.written = true
+	return s.ResponseWriter.Write(b) //nolint:wrapcheck // implements http.ResponseWriter; callers expect the raw net/http error, not a wrapped one
+}

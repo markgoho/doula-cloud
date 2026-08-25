@@ -281,3 +281,60 @@ func TestQueue_InsertsPendingRowThenRotationRefreshesToken(t *testing.T) {
 		t.Fatalf("attempt_count after rotation = %d, want reset to 0", rotatedAttempt)
 	}
 }
+
+// TestRefresh_ReplacesAPendingRowsTokenOnly covers the seam the Offer
+// flow (#317) uses when it rotates an Invitation's token out from under
+// a Staff invitation email that has not gone out yet: the pending row
+// stays mailable, and a row that has already been sent is left alone --
+// its token is gone by then, and re-arming it would hand a live
+// credential back to a resolved row.
+func TestRefresh_ReplacesAPendingRowsTokenOnly(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Refresh Practice")
+	pendingInvitation := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
+	sentInvitation := seedPracticeInvitation(t, db, practiceID, "sent@example.com")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, invitationID := range []string{pendingInvitation, sentInvitation} {
+		if err := staffinvite.Queue(t.Context(), tx, invitationID, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"); err != nil {
+			t.Fatalf("Queue: %v", err)
+		}
+	}
+	if _, err := tx.ExecContext(t.Context(),
+		`UPDATE staff_invite_outbox SET status = 'sent', invite_token = NULL WHERE invitation_id = $1`, sentInvitation,
+	); err != nil {
+		t.Fatalf("mark row sent: %v", err)
+	}
+
+	const rotated = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	for _, invitationID := range []string{pendingInvitation, sentInvitation} {
+		if err := staffinvite.Refresh(t.Context(), tx, invitationID, rotated); err != nil {
+			t.Fatalf("Refresh: %v", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	var pendingToken, sentToken sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT invite_token::text FROM staff_invite_outbox WHERE invitation_id = $1`, pendingInvitation,
+	).Scan(&pendingToken); err != nil {
+		t.Fatalf("read pending row: %v", err)
+	}
+	if pendingToken.String != rotated {
+		t.Fatalf("pending token = %q, want the rotated one", pendingToken.String)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT invite_token::text FROM staff_invite_outbox WHERE invitation_id = $1`, sentInvitation,
+	).Scan(&sentToken); err != nil {
+		t.Fatalf("read sent row: %v", err)
+	}
+	if sentToken.Valid {
+		t.Fatalf("sent row token = %q, want it left cleared", sentToken.String)
+	}
+}

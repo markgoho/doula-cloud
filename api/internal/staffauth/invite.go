@@ -110,7 +110,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 // practice_invitations_one_pending (00039) enforces, so two concurrent
 // invites to one address cannot both win.
 func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address string, invited membership) (InviteResponse, int, string) {
-	alreadyMember, err := addressHoldsMembership(ctx, tx, practiceID, address)
+	alreadyMember, err := AddressHoldsMembership(ctx, tx, practiceID, address)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return InviteResponse{}, http.StatusInternalServerError, MsgInternalError
@@ -119,40 +119,7 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 		return InviteResponse{}, http.StatusConflict, "that address already holds a membership at this practice"
 	}
 
-	token := uuid.NewString()
-	digest := TokenDigest(token)
-	expiresAt := time.Now().Add(InvitationLifetime)
-
-	// Read whether a pending Invitation is already here purely to pick
-	// the status code -- 200 for a rotation, 201 for a first send. The
-	// write below is an upsert either way, so a row appearing between
-	// this read and it costs an inaccurate status code, never a second
-	// Invitation. Letting the INSERT fail and retrying as an UPDATE is
-	// not the alternative it looks like: a constraint violation aborts
-	// the whole transaction in Postgres, taking the retry with it.
-	var rotating bool
-	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(
-			SELECT 1 FROM practice_invitations
-			WHERE practice_id = $1 AND lower(address) = $2 AND status = 'pending'
-		)`,
-		practiceID, address,
-	).Scan(&rotating); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, MsgInternalError
-	}
-
-	var invitationID string
-	err = tx.QueryRowContext(ctx,
-		`INSERT INTO practice_invitations
-		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)
-		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7)
-		 ON CONFLICT (practice_id, lower(address)) WHERE status = 'pending'
-		 DO UPDATE SET roles = $3::practice_role[], employment_type = $4::employment_type,
-		               token_digest = $5, invited_by = $6, created_at = now(), expires_at = $7
-		 RETURNING id`,
-		practiceID, address, invited.rolesLiteral, invited.employmentType, digest, actorStaffID, expiresAt,
-	).Scan(&invitationID)
+	invitationID, token, expiresAt, rotating, err := MintInvitation(ctx, tx, practiceID, actorStaffID, address, invited.rolesLiteral, invited.employmentType)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return InviteResponse{}, http.StatusInternalServerError, MsgInternalError
@@ -170,14 +137,64 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 	return InviteResponse{InvitationID: invitationID, ExpiresAt: expiresAt.UTC().Format(time.RFC3339)}, status, ""
 }
 
-// addressHoldsMembership reports whether any staff row carrying address
+// MintInvitation upserts the pending practice_invitations row for address
+// at practiceID and returns its id together with the plaintext token --
+// the only moment that token exists outside a digest, so the caller must
+// hand it straight to whichever outbox is going to mail it. rotated
+// reports whether a pending Invitation was already there and was
+// refreshed rather than created, which is the difference between a 201
+// and a 200 at the invite endpoint.
+//
+// Exported because the Offer flow (#317) mints the same Invitation for
+// its email-target path -- one link that both joins the Practice and
+// opens the Offer, ADR-0008 -- but queues its own Notification rather
+// than the Staff invitation's, so it needs the upsert without
+// staffinvite.Queue attached to it.
+//
+// The read below decides `rotated` only. The write is an upsert either
+// way, so a row appearing between the two costs an inaccurate status
+// code, never a second Invitation. Letting the INSERT fail and retrying
+// as an UPDATE is not the alternative it looks like: a constraint
+// violation aborts the whole transaction in Postgres, taking the retry
+// with it.
+func MintInvitation(ctx context.Context, tx *sql.Tx, practiceID, invitedBy, address, rolesLiteral, employmentType string) (invitationID, token string, expiresAt time.Time, rotated bool, err error) {
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM practice_invitations
+			WHERE practice_id = $1 AND lower(address) = $2 AND status = 'pending'
+		)`,
+		practiceID, address,
+	).Scan(&rotated); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", "", time.Time{}, false, fmt.Errorf("staffauth: check pending invitation: %w", err)
+	}
+
+	token = uuid.NewString()
+	expiresAt = time.Now().Add(InvitationLifetime)
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO practice_invitations
+		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)
+		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7)
+		 ON CONFLICT (practice_id, lower(address)) WHERE status = 'pending'
+		 DO UPDATE SET roles = $3::practice_role[], employment_type = $4::employment_type,
+		               token_digest = $5, invited_by = $6, created_at = now(), expires_at = $7
+		 RETURNING id`,
+		practiceID, address, rolesLiteral, employmentType, TokenDigest(token), invitedBy, expiresAt,
+	).Scan(&invitationID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", "", time.Time{}, false, fmt.Errorf("staffauth: mint invitation: %w", err)
+	}
+	return invitationID, token, expiresAt, rotated, nil
+}
+
+// AddressHoldsMembership reports whether any staff row carrying address
 // already holds a membership at practiceID. It matches on the address
 // rather than on a resolved staff id on purpose: staff.email is not
 // unique, so the same person signing in through a second identity
 // provider would otherwise be invited afresh, accept, and land a second
 // membership row on one address -- the two-rows-on-one-email shape LV-G8
 // (#291) found on the roster.
-func addressHoldsMembership(ctx context.Context, tx *sql.Tx, practiceID, address string) (bool, error) {
+func AddressHoldsMembership(ctx context.Context, tx *sql.Tx, practiceID, address string) (bool, error) {
 	var exists bool
 	err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS(

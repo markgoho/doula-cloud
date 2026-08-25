@@ -15,11 +15,8 @@ import (
 // should call.
 type OutboxType string
 
-// The six outbox types a nudge can target, one per process-* endpoint
-// main.go mounts (ADR-0010, ADR-0013). StaffInvite (#339) has no write
-// site registered yet -- practice_invitations has no handler writing it
-// until #316 -- but the type and its endpointPath entry (cloudtasks.go)
-// are ready for #316 to fire.
+// The seven outbox types a nudge can target, one per process-* endpoint
+// main.go mounts (ADR-0010, ADR-0013).
 const (
 	PortalInvite    OutboxType = "portal-invite"
 	LowCredit       OutboxType = "low-credit"
@@ -27,6 +24,7 @@ const (
 	PaymentReceived OutboxType = "payment-received"
 	SessionNotice   OutboxType = "session-notice"
 	StaffInvite     OutboxType = "staff-invite"
+	EngagementOffer OutboxType = "engagement-offer"
 )
 
 // Enqueuer enqueues a Cloud Task that nudges outboxType's process-*

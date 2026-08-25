@@ -27,6 +27,7 @@ import (
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/portal"
@@ -145,7 +146,7 @@ var ownerAndAdmin = []string{"owner", "admin"}
 // main_test.go walk it (and cross-check it against this function's own
 // source for a route that bypassed the gate entirely) without needing a
 // live server.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, staffInviteOutboxWorker staffinvite.Worker, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, staffInviteOutboxWorker staffinvite.Worker, offerOutboxWorker offer.Worker, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
 	mux := http.NewServeMux()
 	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
 	// staffauth.Middleware: Get panics at startup if a route has no role
@@ -210,14 +211,24 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("POST /api/practices/{practiceId}/clients",
 		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler(db, nudgeEnqueuer))))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
+	// Completing an Engagement runs ADR-0008's cascade -- open Offers
+	// withdrawn, open attachments ended -- so it is one endpoint, not a
+	// generic status PATCH a caller could half-apply.
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/complete",
+		staffauth.Middleware(db)(engagement.CompleteHandler()))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, visit.ListHandler())
+	// staffauth.AttachingWrite is ADR-0008's write-side seam: every
+	// Engagement-scoped write below attaches the acting Doula, accrued,
+	// once it has succeeded. It is applied here rather than inside each
+	// handler so a new Engagement write cannot quietly fall off the list
+	// -- #231's whole argument against a second hand-maintained registry.
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(db)(visit.CreateHandler()))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(visit.CreateHandler())))
 	mux.Handle("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
-		staffauth.Middleware(db)(visit.ReassignHandler()))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(visit.ReassignHandler())))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages", staffauth.AnyStaff, message.ListHandler())
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(db)(idempotency.Wrap(message.CreateHandler(store, pusher))))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(idempotency.Wrap(message.CreateHandler(store, pusher)))))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment", staffauth.AnyStaff, message.AttachmentHandler(store))
 	// Plan Template and Contract Template: every Staff role (ADR-0008),
 	// no attachment narrowing -- a Template isn't Engagement-scoped.
@@ -225,15 +236,15 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("PUT /api/practices/{practiceId}/plan-templates/{planType}",
 		staffauth.Middleware(db)(plans.PutTemplateHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db)(plans.PostInstanceHandler()))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(plans.PostInstanceHandler())))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}", staffauth.AnyStaff, plans.GetInstanceHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db)(plans.PutInstanceHandler()))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(plans.PutInstanceHandler())))
 	g.Get("/api/practices/{practiceId}/contract-template", staffauth.AnyStaff, contracts.GetTemplateHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/contract-template",
 		staffauth.Middleware(db)(contracts.PutTemplateHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db)(contracts.PostContractHandler()))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PostContractHandler())))
 	// Contract read is the sharpest #231 case: scope reaches every role
 	// (narrowed by attachment for a contractor, same as above), but money
 	// -- and Invoice history -- is Owner/Admin only, never a Doula's,
@@ -244,11 +255,11 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// scope-only Doulas still reach it.
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract", staffauth.AnyStaff, contracts.GetContractHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db)(contracts.PutContractHandler()))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PutContractHandler())))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
-		staffauth.Middleware(db)(contracts.PostSendContractHandler(pusher)))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PostSendContractHandler(pusher))))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
-		staffauth.Middleware(db)(contracts.PostVoidContractHandler()))
+		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PostVoidContractHandler())))
 	// The Signed PDF is a rendered, unredactable document -- it can't be
 	// split into scope/money views the way the JSON Contract read can, so
 	// it follows the money row: Owner/Admin only.
@@ -259,6 +270,30 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// above. A contractor's own-fee narrowing (rather than an outright
 	// no) is #317's to build once the Offer/Attachment flow exists.
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", ownerAndAdmin, payments.GetInvoicesHandler())
+	// ADR-0008's Offer flow (#317). The Practice side is Owner/Admin --
+	// making an Offer, taking it back, and reading who has been asked,
+	// which names people and so follows the Staff-roster row of the read
+	// table. The Doula side is her own inbox and her own decisions, so it
+	// is scoped to her staff_id in SQL rather than by a role declaration.
+	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/offers",
+		staffauth.Middleware(db)(idempotency.Wrap(offer.CreateHandler(nudgeEnqueuer))))
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/offers", ownerAndAdmin, offer.EngagementListHandler())
+	g.Get("/api/practices/{practiceId}/offers", staffauth.AnyStaff, offer.InboxHandler())
+	mux.Handle("POST /api/practices/{practiceId}/offers/{offerId}/accept",
+		staffauth.Middleware(db)(offer.AcceptHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/offers/{offerId}/decline",
+		staffauth.Middleware(db)(offer.DeclineHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/offers/{offerId}/withdraw",
+		staffauth.Middleware(db)(offer.WithdrawHandler()))
+	// #230's pre-account Offer read: no session of either population, so
+	// it is mounted on the raw mux and authenticated by the Invitation's
+	// token plus the emailed six-digit code. ADR-0008 requires the
+	// exemption declared by name in GatedRouter's own registry, in the
+	// same change that mounts the route -- g.Exempt is that declaration,
+	// and the guardrail test walks it.
+	g.Exempt("/api/offers/{offerId}", "pre-account Offer read (ADR-0008, #230): no session exists yet -- authenticated by the Invitation token and the emailed access code")
+	mux.Handle("GET /api/offers/{offerId}", offer.ReadHandler(db))
+	mux.Handle("POST /api/offers/{offerId}/decline", offer.DeclineByTokenHandler(db))
 	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",
 		staffauth.Middleware(db)(pushsub.RegisterHandler()))
 	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
@@ -289,6 +324,9 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// Same shape again for #339's Staff invitation outbox (RA-G1), whose
 	// write site is staffauth.InviteHandler above (#316).
 	mux.Handle("POST /api/internal/notifications/process-staff-invite-outbox", staffinvite.ProcessOutboxHandler(db, staffInviteOutboxWorker, outboxWorkerSecret))
+	// Same shape again for #317's Offer outbox, whose write site is
+	// offer.CreateHandler's email-target path above.
+	mux.Handle("POST /api/internal/notifications/process-offer-outbox", offer.ProcessOutboxHandler(db, offerOutboxWorker, outboxWorkerSecret))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(db)(portal.DetailHandler()))
@@ -410,7 +448,18 @@ func main() {
 		ReplyTo: "support@" + mailgunDomain,
 	}
 
-	// ADR-0013: one shared queue nudging all six outbox process-*
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	offerOutboxWorker := offer.Worker{
+		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
+		Now:        time.Now,
+		AppBaseURL: os.Getenv("APP_BASE_URL"),
+		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
+		// Platform voice (ADR-0011): the person offered work isn't a
+		// Practice's Client, same as staffInviteOutboxWorker above.
+		ReplyTo: "support@" + mailgunDomain,
+	}
+
+	// ADR-0013: one shared queue nudging all seven outbox process-*
 	// endpoints, reusing NOTIFICATION_WORKER_SECRET rather than a second
 	// credential. NOTIFICATION_TASKS_QUEUE is unset in local dev, CI's
 	// boot smoke test, and the e2e stack (see docs/environment.md) --
@@ -430,7 +479,7 @@ func main() {
 		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"))
 	}
 
-	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, staffInviteOutboxWorker, nudgeEnqueuer, resolveExpectedOrigins())
+	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, staffInviteOutboxWorker, offerOutboxWorker, nudgeEnqueuer, resolveExpectedOrigins())
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

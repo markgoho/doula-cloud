@@ -201,7 +201,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	// the address rather than on staffID alone because staff.email is not
 	// unique: the same person arriving through a second identity provider
 	// gets a second staff row, and only the address catches that.
-	alreadyMember, err := addressHoldsMembership(ctx, tx, inv.practiceID, address)
+	alreadyMember, err := AddressHoldsMembership(ctx, tx, inv.practiceID, address)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
@@ -235,6 +235,21 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		`UPDATE practice_invitations
 		    SET status = 'accepted', accepted_staff_id = $1, accepted_at = now()
 		  WHERE id = $2`,
+		staffID, inv.id,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
+	// An Offer mailed to this address (#317) named the Invitation, not a
+	// staff row, because no staff row existed to name. Now one does, so
+	// the Offer gets the id it was always going to have -- ADR-0008's
+	// "staff_id stays NULL until the Invitation is accepted and the
+	// accept handler back-fills it". Every Offer on the Invitation is
+	// back-filled, not just an open one: a withdrawn or expired Offer is
+	// part of the history she reads, and it should name her too.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE engagement_offers SET staff_id = $1 WHERE invitation_id = $2 AND staff_id IS NULL`,
 		staffID, inv.id,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

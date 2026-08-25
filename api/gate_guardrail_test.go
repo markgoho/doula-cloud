@@ -21,6 +21,13 @@ import (
 // this list is the explicit, reviewable boundary of that scope. Adding a
 // new entry here should always come with a reason, the same way
 // staffauth.AnyStaff must be named rather than defaulted into.
+//
+// This map is the pre-#317 half of that boundary. ADR-0008 requires the
+// pre-account Offer read declared exempt *in GatedRouter's own registry*
+// rather than in a test-local list, so a route may now be accounted for
+// by either this map or a GatedRouter.Exempt entry -- see
+// TestRoutes_NoGETBypassesTheGate. New exemptions should prefer
+// g.Exempt, which lives beside the mount it describes.
 var exemptGETRoutes = map[string]bool{
 	"GET /api/hello":                                                             true, // no auth at all -- a health probe
 	"GET /api/staff/session":                                                     true, // lists a person's own memberships before any :practiceId is chosen
@@ -47,11 +54,21 @@ var muxGetPattern = regexp.MustCompile(`mux\.(?:Handle|HandleFunc)\(\s*"(GET [^"
 // catastrophic failure (a panic taking the whole binary down) and an
 // ordinary failing test should both catch the same mistake.
 func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
-	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
 	if len(registry) == 0 {
 		t.Fatal("routes() registered zero GETs through GatedRouter -- did routes() stop wiring g.Get calls?")
 	}
 	for _, route := range registry {
+		if route.Exempt {
+			// An exempt route has no roles by definition -- it is outside
+			// staffauth.Middleware, so there is no membership to check
+			// against. What it must carry instead is a reason, which
+			// GatedRouter.Exempt refuses to register without.
+			if route.Reason == "" {
+				t.Errorf("exempt route %q carries no reason", route.Pattern)
+			}
+			continue
+		}
 		if len(route.Roles) == 0 {
 			t.Errorf("route %q has no role declaration", route.Pattern)
 		}
@@ -71,7 +88,12 @@ func TestRoutes_NoGETBypassesTheGate(t *testing.T) {
 		t.Fatalf("read main.go: %v", err)
 	}
 
-	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	// One map for both kinds of registry entry: a GET GatedRouter mounted
+	// with a role declaration, and a GET declared exempt by name because
+	// it is mounted outside staffauth.Middleware entirely (ADR-0008's
+	// pre-account Offer read). Either is a deliberate, reviewable
+	// declaration; an absence from both is the hole this test closes.
 	gated := make(map[string]bool, len(registry))
 	for _, route := range registry {
 		gated["GET "+route.Pattern] = true

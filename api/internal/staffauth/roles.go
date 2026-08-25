@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -77,6 +78,34 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	}
 	if !isOwner {
 		http.Error(w, "only a Practice Owner can do that", http.StatusForbidden)
+		return nil, "", false
+	}
+	return tx, practiceID, true
+}
+
+// RequireOwnerOrAdmin is RequireOwner widened by one role, for the writes
+// ADR-0008 puts in an Admin's hands as well as an Owner's -- making an
+// Offer, withdrawing one, completing an Engagement. Owner-only stays the
+// default for anything that changes who is at the Practice at all
+// (inviting, editing a Membership); this is for running the work.
+func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
+	tx, has := Tx(r.Context())
+	if !has {
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		return nil, "", false
+	}
+	staffID, _ := StaffID(r.Context())
+	practiceID, _ = PracticeID(r.Context())
+
+	roles, err := Roles(r.Context(), tx, practiceID, staffID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		return nil, "", false
+	}
+	if !slices.Contains(roles, "owner") && !slices.Contains(roles, "admin") {
+		http.Error(w, "only a Practice Owner or Admin can do that", http.StatusForbidden)
 		return nil, "", false
 	}
 	return tx, practiceID, true

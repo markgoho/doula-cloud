@@ -12,6 +12,11 @@ import (
 type GatedRoute struct {
 	Pattern string   // the path passed to Get, e.g. "/api/practices/{practiceId}/billing" -- no leading "GET "
 	Roles   []string // roles allowed to reach this endpoint at all; empty means "any Staff member" and must be explicit (AnyStaff), never a bare nil
+	// Exempt marks a GET that is deliberately mounted outside
+	// staffauth.Middleware altogether, so Roles has nothing to say about
+	// it. Reason records why, in one line. See Exempt below.
+	Exempt bool
+	Reason string
 }
 
 // AnyStaff is the explicit opt-out for an endpoint every Staff member may
@@ -57,8 +62,30 @@ func (g *GatedRouter) Get(pattern string, roles []string, h http.Handler) {
 	g.mux.Handle("GET "+pattern, Middleware(g.db)(requireAnyRole(roles, h)))
 }
 
-// Routes returns the registry of every GET mounted through this router --
-// the table a guardrail-shaped test walks.
+// Exempt records a GET that is mounted outside staffauth.Middleware
+// entirely -- a bootstrap route with no session yet, a clientauth-scoped
+// portal route, or ADR-0008's token-authenticated pre-account Offer read
+// (#317), which is authenticated by an Invitation token and an emailed
+// code rather than by a session.
+//
+// GatedRouter cannot mount such a route itself: Get applies Middleware,
+// which is exactly what these routes have no session for. That leaves
+// them unable to be ungated-by-omission the way a forgotten role
+// declaration is caught, which is why ADR-0008 requires them declared
+// exempt *by name, in this registry* -- so the guardrail test walking
+// Routes() sees a deliberate entry with a reason rather than an absence.
+// reason must be non-empty for the same purpose AnyStaff exists: a
+// declaration nobody had to justify is not a declaration.
+func (g *GatedRouter) Exempt(pattern, reason string) {
+	if reason == "" {
+		panic(fmt.Sprintf("staffauth: GatedRouter.Exempt(%q): no reason given -- an ungated GET must say why it is ungated", pattern))
+	}
+	g.routes = append(g.routes, GatedRoute{Pattern: pattern, Exempt: true, Reason: reason})
+}
+
+// Routes returns the registry of every GET this router knows about --
+// those it mounted through Get, and those declared exempt through Exempt
+// -- the table a guardrail-shaped test walks.
 func (g *GatedRouter) Routes() []GatedRoute {
 	return g.routes
 }

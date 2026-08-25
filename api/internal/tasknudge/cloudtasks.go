@@ -9,8 +9,9 @@ import (
 )
 
 // endpointPath maps each OutboxType to the process-* endpoint main.go
-// mounts it at (ADR-0010). Every nudge task hits one of these six paths.
+// mounts it at (ADR-0010). Every nudge task hits one of these seven paths.
 var endpointPath = map[OutboxType]string{
+	EngagementOffer: "/api/internal/notifications/process-offer-outbox",
 	PortalInvite:    "/api/internal/notifications/process-outbox",
 	LowCredit:       "/api/internal/notifications/process-low-credit-outbox",
 	Payout:          "/api/internal/notifications/process-payout-outbox",

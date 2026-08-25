@@ -52,6 +52,17 @@ func CreateHandler() http.Handler {
 			return
 		}
 
+		// Logging a Visit puts a named Doula on this birth, which is a
+		// granted attachment, not the accrual staffauth.AttachingWrite's
+		// seam mints -- ADR-0008 names Visit-create as one of the two
+		// places granted is written explicitly. No fee rides it: a fee is
+		// only ever copied from an Offer.
+		if err := staffauth.Grant(r.Context(), tx, engagementID, staffID, staffID, nil, nil); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests

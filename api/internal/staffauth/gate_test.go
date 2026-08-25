@@ -55,6 +55,38 @@ func TestGatedRouter_RegistryIsWalkable(t *testing.T) {
 	}
 }
 
+// TestGatedRouter_ExemptIsDeclaredInTheSameRegistry is ADR-0008's
+// requirement for the pre-account Offer read (#317): a GET mounted
+// outside staffauth.Middleware cannot be caught by the startup panic --
+// GatedRouter never sees it -- so it has to appear in the same table the
+// guardrail test walks, carrying a reason instead of a role list.
+func TestGatedRouter_ExemptIsDeclaredInTheSameRegistry(t *testing.T) {
+	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
+	g.Get("/api/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler())
+	g.Exempt("/api/offers/{offerId}", "token-authenticated pre-account read")
+
+	routes := g.Routes()
+	if len(routes) != 2 {
+		t.Fatalf("Routes() = %d entries, want the mounted GET and the exemption", len(routes))
+	}
+	exemption := routes[1]
+	if !exemption.Exempt || exemption.Reason == "" || len(exemption.Roles) != 0 {
+		t.Fatalf("exemption = %+v, want Exempt with a reason and no roles", exemption)
+	}
+}
+
+// An exemption nobody had to justify is not a declaration, so Exempt
+// refuses one -- the same argument AnyStaff makes about a role list.
+func TestGatedRouter_ExemptPanicsWithoutAReason(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected Exempt to panic on an empty reason, it did not")
+		}
+	}()
+	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
+	g.Exempt("/api/offers/{offerId}", "")
+}
+
 // TestGatedRouter_BillingBalance_DoulaForbidden runs the real
 // billing.GetBalanceHandler behind the gate and confirms ADR-0008's
 // "Credit balance and ledger: Doula ✗" cell holds.
