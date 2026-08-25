@@ -15,8 +15,8 @@ than anything Priya would do.
 - A Practice with an Owner, **two or more** Clients, at least one of them created
   by a different Staff member — otherwise stage 4 cannot fail the way it should.
 - One Engagement carrying a filled Birth Plan and a Contract with an amount on it.
-- Priya invited, accepted, and given `doula` with
-  `PATCH /api/practices/{id}/staff/{staffId}/roles`; no screen does it (RA-G2).
+- Priya invited as a `doula` and accepted. The role rides the Invitation now
+  (#316), so there is no follow-up call to make.
 - A phone, or a phone-sized viewport, for stage 6. It is the moment of truth and it
   is device-specific.
 
@@ -33,8 +33,7 @@ than anything Priya would do.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | Have the Owner set `doula` from a screen | No screen does this | `missing-feature (RA-G2)` [#261](https://github.com/markgoho/doula-cloud/issues/261) |
-| 2.1-a | Set it with `PATCH .../staff/{staffId}/roles` | Succeeds for an Owner | `manual` |
+| 2.1 | Have the Owner set `doula` from a screen | **Edit membership** on Priya's row of `/practices/[practiceId]/staff` sets roles and employment type together and saves (#316) | `manual` |
 | 2.1-b | Compare every later step with and without the role | **Exactly one observable difference.** A 21-endpoint battery run at `roles = '{}'` and again at `['doula']` differs only at `POST .../visits` (`403` -> `201`), plus `GET .../session` echoing the value. `visit/roles.go:40` gates the caller and `:57` gates a reassignment target; nothing else in Go and nothing in the front end reads it. The role is not decorative, but it gates only the Visit ([PR-G3](https://github.com/markgoho/doula-cloud/issues/278), narrowed) | `manual` |
 
 ### Stage 3 — Sign in and choose the Practice

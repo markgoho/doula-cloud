@@ -42,6 +42,7 @@ const invitations = [
 		roles: ['doula'],
 		employmentType: 'contractor',
 		expiresAt: '2026-09-01T00:00:00Z',
+		expired: false,
 		deliveryFailed: false
 	},
 	{
@@ -50,6 +51,7 @@ const invitations = [
 		roles: ['admin'],
 		employmentType: 'employee',
 		expiresAt: '2026-09-02T00:00:00Z',
+		expired: true,
 		deliveryFailed: true
 	}
 ];
@@ -60,6 +62,7 @@ interface MockOptions {
 	sessionsResponse?: Response;
 	membershipResponse?: Response;
 	revokeResponse?: Response;
+	removeResponse?: Response;
 }
 
 // The API double is stateful: a successful PATCH or revoke changes what
@@ -70,12 +73,21 @@ function mockApi({
 	listOk = true,
 	sessionsResponse,
 	membershipResponse,
-	revokeResponse
+	revokeResponse,
+	removeResponse
 }: MockOptions = {}) {
 	const state = structuredClone(roster);
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
 		if (path.endsWith('/sessions') && init?.method === 'DELETE') {
 			return Promise.resolve(sessionsResponse ?? jsonResponse({}));
+		}
+		if (path.endsWith('/membership') && init?.method === 'DELETE') {
+			if (removeResponse) {
+				return Promise.resolve(removeResponse);
+			}
+			const staffId = path.split('/').at(-2);
+			state.members = state.members.filter((member) => member.staffId !== staffId);
+			return Promise.resolve(jsonResponse({}));
 		}
 		if (path.endsWith('/membership')) {
 			if (membershipResponse) {
@@ -218,6 +230,42 @@ describe('staff screen', () => {
 			.not.toBeInTheDocument();
 		await expect
 			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com' }))
+			.toBeVisible();
+	});
+
+	// #291: a lapsed Invitation still holds its address slot, so it stays
+	// on the screen with something the Owner can do about it.
+	it('flags a lapsed invitation instead of hiding it', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByText('Expired -- invite again or revoke'))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com' }))
+			.toBeVisible();
+	});
+
+	// #291: the route that was missing -- without it a roster row nobody
+	// wants can never be taken off.
+	it('removes a membership from the practice', async () => {
+		await setup();
+
+		await testPage.getByRole('button', { name: 'Remove from practice' }).first().click();
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Ada Lovelace' }))
+			.not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('cell', { name: 'Grace Hopper' })).toBeVisible();
+	});
+
+	it('shows a per-row error notice when removing a membership fails', async () => {
+		await setup({ removeResponse: textResponse('a practice must keep at least one Owner') });
+
+		await testPage.getByRole('button', { name: 'Remove from practice' }).first().click();
+
+		await expect
+			.element(testPage.getByText('a practice must keep at least one Owner'))
 			.toBeVisible();
 	});
 

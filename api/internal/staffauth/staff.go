@@ -1,6 +1,7 @@
 package staffauth
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -32,6 +33,11 @@ type InvitationSummary struct {
 	// EmploymentType is what the Membership will carry on acceptance.
 	EmploymentType string `json:"employmentType"`
 	ExpiresAt      string `json:"expiresAt"`
+	// Expired is true once expires_at has passed. The Invitation is still
+	// listed: nothing sweeps expiries, so it keeps its slot in
+	// practice_invitations_one_pending until it is revoked or re-sent, and
+	// an Owner who cannot see it cannot act on it.
+	Expired bool `json:"expired"`
 	// DeliveryFailed is true once the invitation email has exhausted its
 	// retries and been dead-lettered (#339's passive Staff-visible flag).
 	// It is not an error state of the Invitation itself -- the link still
@@ -62,13 +68,13 @@ func ListStaffHandler() http.Handler {
 			return
 		}
 
-		members, err := listMembers(r, tx, practiceID)
+		members, err := listMembers(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		invitations, err := listPendingInvitations(r, tx, practiceID)
+		invitations, err := listPendingInvitations(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
@@ -83,8 +89,8 @@ func ListStaffHandler() http.Handler {
 	})
 }
 
-func listMembers(r *http.Request, tx *sql.Tx, practiceID string) ([]StaffSummary, error) {
-	rows, err := tx.QueryContext(r.Context(),
+func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSummary, error) {
+	rows, err := tx.QueryContext(ctx,
 		`SELECT s.id, s.name, s.email, array_to_string(pm.roles, ','), pm.employment_type::text
 		 FROM staff s
 		 JOIN practice_memberships pm ON pm.staff_id = s.id
@@ -116,10 +122,13 @@ func listMembers(r *http.Request, tx *sql.Tx, practiceID string) ([]StaffSummary
 	return list, nil
 }
 
-// listPendingInvitations reads the pending group. It checks expires_at
-// rather than trusting the status column, for the reason
-// staffinvite.Worker.ProcessPending gives: nothing sweeps expiries, so
-// 'pending' outlives the window until someone tries to accept.
+// listPendingInvitations reads the pending group -- every row still
+// holding 'pending', lapsed or not. "Pending" means exactly what
+// practice_invitations_one_pending (00039) means by it, because nothing
+// sweeps expiries: a lapsed Invitation still occupies that address's slot
+// until it is revoked or re-sent, so hiding it would leave the Owner
+// unable to act on the thing blocking her. Whether it has lapsed rides
+// along as Expired instead.
 //
 // The dead-letter flag is #339's passive Staff-visible signal, whose only
 // read surface is this screen. It is a scalar subquery rather than a join
@@ -129,17 +138,17 @@ func listMembers(r *http.Request, tx *sql.Tx, practiceID string) ([]StaffSummary
 // would print that Invitation twice. Reading only the newest attempt also
 // gives the flag the meaning it should have -- "the last send gave up",
 // which a re-invite clears -- rather than a permanent mark.
-func listPendingInvitations(r *http.Request, tx *sql.Tx, practiceID string) ([]InvitationSummary, error) {
-	rows, err := tx.QueryContext(r.Context(),
+func listPendingInvitations(ctx context.Context, tx *sql.Tx, practiceID string) ([]InvitationSummary, error) {
+	rows, err := tx.QueryContext(ctx,
 		`SELECT pi.id, pi.address, array_to_string(pi.roles, ','), pi.employment_type::text,
-		        pi.expires_at,
+		        pi.expires_at, pi.expires_at <= now(),
 		        COALESCE((SELECT o.status = 'dead_lettered'
 		                  FROM staff_invite_outbox o
 		                  WHERE o.invitation_id = pi.id
 		                  ORDER BY o.created_at DESC
 		                  LIMIT 1), false)
 		 FROM practice_invitations pi
-		 WHERE pi.practice_id = $1 AND pi.status = 'pending' AND pi.expires_at > now()
+		 WHERE pi.practice_id = $1 AND pi.status = 'pending'
 		 ORDER BY pi.created_at DESC`,
 		practiceID,
 	)
@@ -154,7 +163,7 @@ func listPendingInvitations(r *http.Request, tx *sql.Tx, practiceID string) ([]I
 		var inv InvitationSummary
 		var roles string
 		var expiresAt time.Time
-		if err := rows.Scan(&inv.InvitationID, &inv.Address, &roles, &inv.EmploymentType, &expiresAt, &inv.DeliveryFailed); err != nil {
+		if err := rows.Scan(&inv.InvitationID, &inv.Address, &roles, &inv.EmploymentType, &expiresAt, &inv.Expired, &inv.DeliveryFailed); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("staffauth: scan invitation: %w", err)
 		}

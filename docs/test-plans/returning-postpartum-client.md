@@ -12,8 +12,9 @@ walkable to the end — every refusal she meets is a refusal she can observe.
 
 ## Preconditions
 
-- A Practice with an Owner and Priya holding `doula`, set with
-  `PATCH /api/practices/{id}/staff/{staffId}/roles`; no screen does it (RA-G2).
+- A Practice with an Owner and Priya holding `doula`, set either by the
+  Invitation that brought her in or by **Edit membership** on the Staff screen
+  (#316).
 - **Her first Engagement, created and left alone.** It cannot be closed
   (**MO-G4**), so create it fresh and treat it as the 2024 one. That two years of
   finished work is indistinguishable from an Engagement made this morning is stage

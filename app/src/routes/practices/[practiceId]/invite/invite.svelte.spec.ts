@@ -12,12 +12,18 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 interface SetupOptions {
 	response?: Response;
+	rejectWith?: Error;
 }
 
-async function setup({ response }: SetupOptions = {}) {
-	apiFetchWithSession.mockResolvedValue(
-		response ?? ({ ok: true, json: () => Promise.resolve({ invitationId: 'invitation-1' }) } as Response)
-	);
+async function setup({ response, rejectWith }: SetupOptions = {}) {
+	if (rejectWith) {
+		apiFetchWithSession.mockRejectedValue(rejectWith);
+	} else {
+		apiFetchWithSession.mockResolvedValue(
+			response ??
+				({ ok: true, json: () => Promise.resolve({ invitationId: 'invitation-1' }) } as Response)
+		);
+	}
 	await render(Page, {});
 }
 
@@ -69,7 +75,10 @@ describe('invite a Staff member screen', () => {
 		await fillAndSubmit('lena@example.com');
 
 		await expect.element(testPage.getByText('Choose at least one role.')).toBeVisible();
-		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		// Nothing was sent, so nothing is confirmed as on its way.
+		await expect
+			.element(testPage.getByText('An email with a link to join is on its way to lena@example.com.'))
+			.not.toBeInTheDocument();
 	});
 
 	it('shows the error the server gives back', async () => {
@@ -88,8 +97,7 @@ describe('invite a Staff member screen', () => {
 	});
 
 	it('shows a message when the request itself fails', async () => {
-		apiFetchWithSession.mockRejectedValue(new Error('Network down'));
-		await render(Page, {});
+		await setup({ rejectWith: new Error('Network down') });
 
 		await fillAndSubmit('lena@example.com');
 

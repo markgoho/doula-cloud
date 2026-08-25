@@ -54,7 +54,7 @@
 			const acceptResponse = await fetch(`${apiBaseURL()}/api/staff/accept-invite`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-				body: JSON.stringify({ inviteToken })
+				body: JSON.stringify({ inviteToken, name })
 			});
 			if (!acceptResponse.ok) {
 				error = await acceptResponse.text();

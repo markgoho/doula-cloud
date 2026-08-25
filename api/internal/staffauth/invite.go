@@ -82,22 +82,12 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			http.Error(w, "email is required", http.StatusBadRequest)
 			return
 		}
-		if len(req.Roles) == 0 {
-			http.Error(w, "at least one role is required", http.StatusBadRequest)
-			return
-		}
-		for _, role := range req.Roles {
-			if !validRoles[role] {
-				http.Error(w, "unknown role: "+role, http.StatusBadRequest)
-				return
-			}
-		}
-		if !validEmploymentTypes[req.EmploymentType] {
-			http.Error(w, "employmentType must be employee or contractor", http.StatusBadRequest)
+		invited, ok := parseMembership(w, req.Roles, req.EmploymentType)
+		if !ok {
 			return
 		}
 
-		resp, status, msg := invite(r.Context(), tx, practiceID, actorStaffID, address, req)
+		resp, status, msg := invite(r.Context(), tx, practiceID, actorStaffID, address, invited)
 		if status != http.StatusCreated && status != http.StatusOK {
 			http.Error(w, msg, status)
 			return
@@ -119,7 +109,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 // differ from the first attempt. Rotating rather than inserting is what
 // practice_invitations_one_pending (00039) enforces, so two concurrent
 // invites to one address cannot both win.
-func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address string, req InviteRequest) (InviteResponse, int, string) {
+func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address string, invited membership) (InviteResponse, int, string) {
 	alreadyMember, err := addressHoldsMembership(ctx, tx, practiceID, address)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -132,10 +122,6 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 	token := uuid.NewString()
 	digest := TokenDigest(token)
 	expiresAt := time.Now().Add(InvitationLifetime)
-	// req.Roles is validated against validRoles by the caller, so this
-	// literal can only ever contain known enum members -- the same
-	// reasoning UpdateMembershipHandler's array literal rests on.
-	rolesLiteral := "{" + strings.Join(req.Roles, ",") + "}"
 
 	// Read whether a pending Invitation is already here purely to pick
 	// the status code -- 200 for a rotation, 201 for a first send. The
@@ -165,7 +151,7 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 		 DO UPDATE SET roles = $3::practice_role[], employment_type = $4::employment_type,
 		               token_digest = $5, invited_by = $6, created_at = now(), expires_at = $7
 		 RETURNING id`,
-		practiceID, address, rolesLiteral, req.EmploymentType, digest, actorStaffID, expiresAt,
+		practiceID, address, invited.rolesLiteral, invited.employmentType, digest, actorStaffID, expiresAt,
 	).Scan(&invitationID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

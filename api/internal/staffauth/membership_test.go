@@ -17,7 +17,24 @@ func newMembershipServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest
 	mux := http.NewServeMux()
 	mux.Handle("PATCH /practices/{practiceId}/staff/{staffId}/membership",
 		staffauth.Middleware(db.App)(staffauth.UpdateMembershipHandler()))
+	mux.Handle("DELETE /practices/{practiceId}/staff/{staffId}/membership",
+		staffauth.Middleware(db.App)(staffauth.RemoveMembershipHandler()))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+}
+
+func deleteMembership(t *testing.T, srv *httptest.Server, session, practiceID, staffID string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
+		srv.URL+"/practices/"+practiceID+"/staff/"+staffID+"/membership", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
 }
 
 func patchMembership(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, body any) *http.Response {
@@ -280,4 +297,142 @@ func TestUpdateMembershipHandler_Rejects(t *testing.T) {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 		}
 	})
+}
+
+// TestRemoveMembershipHandler_Success is #291's second criterion: a
+// membership can be taken off a Practice by a route in the product, and
+// who took it off is recorded.
+func TestRemoveMembershipHandler_Success(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-removes-a-membership"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	targetID := seedStaff(t, db, "removable-membership")
+	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := deleteMembership(t, srv, session, practiceID, targetID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
+	var memberships int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
+		practiceID, targetID,
+	).Scan(&memberships); err != nil {
+		t.Fatalf("count memberships: %v", err)
+	}
+	if memberships != 0 {
+		t.Fatalf("memberships = %d, want none", memberships)
+	}
+
+	// The staff row survives: a person is not owned by one Practice.
+	var staffRows int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, targetID).Scan(&staffRows); err != nil {
+		t.Fatalf("count staff: %v", err)
+	}
+	if staffRows != 1 {
+		t.Fatalf("staff rows = %d, want the person to survive her membership", staffRows)
+	}
+
+	events := membershipEvents(t, db, practiceID, targetID)
+	if len(events) != 1 || events[0] != "removed:doula->/employee->" {
+		t.Fatalf("events = %v, want one removed event naming what she held", events)
+	}
+	var actor string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT actor_staff_id FROM practice_membership_events WHERE staff_id = $1`, targetID,
+	).Scan(&actor); err != nil {
+		t.Fatalf("read actor: %v", err)
+	}
+	if actor != ownerID {
+		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
+	}
+}
+
+func TestRemoveMembershipHandler_KeepsTheLastOwner(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "sole-owner-removes-herself"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := deleteMembership(t, srv, session, practiceID, ownerID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+}
+
+func TestRemoveMembershipHandler_Refuses(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-removes-a-stranger"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	t.Run("no such membership", func(t *testing.T) {
+		resp := deleteMembership(t, srv, session, practiceID, emptyUUID)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+		}
+	})
+
+	t.Run("malformed staff id", func(t *testing.T) {
+		resp := deleteMembership(t, srv, session, practiceID, "not-a-uuid")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+	})
+}
+
+func TestRemoveMembershipHandler_NonOwnerForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const doulaUID = "doula-removes-a-membership"
+	staffID, practiceID := seedStaffWithMembership(t, db, doulaUID) // '{doula}'
+
+	srv, session := newMembershipServer(t, db, doulaUID)
+	defer srv.Close()
+
+	resp := deleteMembership(t, srv, session, practiceID, staffID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+// TestUpdateMembershipHandler_ReorderedRolesAreNoChange keeps the history
+// a record of changes: the order roles arrive in is the caller's, not a
+// fact about the Membership.
+func TestUpdateMembershipHandler_ReorderedRolesAreNoChange(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-reorders-roles"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	targetID := seedStaff(t, db, "reordered-membership")
+	seedMembershipWithRoles(t, db, practiceID, targetID, "{admin,doula}")
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := patchMembership(t, srv, session, practiceID, targetID, staffauth.UpdateMembershipRequest{
+		Roles: []string{doulaRole, adminRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if events := membershipEvents(t, db, practiceID, targetID); len(events) != 0 {
+		t.Fatalf("events = %v, want none", events)
+	}
 }

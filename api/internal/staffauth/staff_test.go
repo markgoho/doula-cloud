@@ -150,6 +150,10 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	); err != nil {
 		t.Fatalf("seed dead-lettered outbox row: %v", err)
 	}
+	// A lapsed Invitation is still listed, flagged: it holds this
+	// address's slot in practice_invitations_one_pending until it is
+	// revoked or re-sent, and an Owner who cannot see it cannot act on it.
+	expiredID := seedInvitation(t, db, practiceID, ownerID, "lapsed@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
 	// A revoked Invitation is history, not a pending ask -- it must not
 	// appear in either group.
 	revokedID := seedInvitation(t, db, practiceID, ownerID, "revoked@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
@@ -172,8 +176,8 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	if len(roster.Members) != 1 {
 		t.Fatalf("members = %+v, want only the Owner", roster.Members)
 	}
-	if len(roster.Invitations) != 2 {
-		t.Fatalf("invitations = %+v, want 2 pending", roster.Invitations)
+	if len(roster.Invitations) != 3 {
+		t.Fatalf("invitations = %+v, want 3 pending", roster.Invitations)
 	}
 
 	byID := map[string]staffauth.InvitationSummary{}
@@ -190,6 +194,12 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	}
 	if !byID[deadID].DeliveryFailed {
 		t.Fatalf("dead-lettered invitation = %+v, want deliveryFailed", byID[deadID])
+	}
+	if pending.Expired {
+		t.Fatalf("live invitation = %+v, want not expired", pending)
+	}
+	if !byID[expiredID].Expired {
+		t.Fatalf("lapsed invitation = %+v, want expired", byID[expiredID])
 	}
 }
 

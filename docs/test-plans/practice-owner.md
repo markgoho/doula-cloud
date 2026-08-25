@@ -45,8 +45,8 @@ is Lena's normal case.
 | --- | --- | --- | --- |
 | 3.1 | Open `/practices/[practiceId]/staff` | The roster loads; the `GET` is owner-gated and passes for Renata | `manual` |
 | 3.2 | Read the Roles column | Raw enum strings render — an Admin shows as `office_manager`, the word `CONTEXT.md` rules out | `manual` |
-| 3.3 | Change a member's roles from the screen | No control exists. The only row action is **End sessions everywhere** | `missing-feature (RA-G2)` [#261](https://github.com/markgoho/doula-cloud/issues/261) |
-| 3.3-a | Call `PATCH /api/practices/{id}/staff/{staffId}/roles` directly with `["doula"]` | Succeeds for an Owner. **This is the only way to build a roster**, and every later plan depends on it as fixture setup | `manual` |
+| 3.3 | Change a member's roles from the screen | **Edit membership** opens roles and employment type on one form and saves both (#316). No staff id is needed and no terminal is involved, so a roster can be built in the product | `manual` |
+| 3.4 | Read the Pending invitations group | Addresses asked but not answered, each with its roles, employment type, expiry and a **Revoke** action — a second group, not a row in the members list | `manual` |
 
 ### Stage 4 — Assign the Doula to Engagements
 

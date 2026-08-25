@@ -170,6 +170,10 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// person is at a Practice, so there is one endpoint, not two.
 	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/membership",
 		staffauth.Middleware(db)(staffauth.UpdateMembershipHandler()))
+	// The route #291 found missing: without it a roster row nobody wants
+	// can never be taken off.
+	mux.Handle("DELETE /api/practices/{practiceId}/staff/{staffId}/membership",
+		staffauth.Middleware(db)(staffauth.RemoveMembershipHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/staff/invitations",
 		staffauth.Middleware(db)(idempotency.Wrap(staffauth.InviteHandler(nudgeEnqueuer))))
 	mux.Handle("POST /api/practices/{practiceId}/staff/invitations/{invitationId}/revoke",

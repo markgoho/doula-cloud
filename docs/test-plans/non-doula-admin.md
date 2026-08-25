@@ -10,12 +10,11 @@
 
 - A Practice with an Owner (Renata) and at least one other Staff member holding
   `doula`, so there is somebody for Dee to assign.
-- An invitation issued by the Owner, and its link (printed on the invite screen —
-  no email is sent).
-- Dee's role must be set with `PATCH /api/practices/{id}/staff/{staffId}/roles`;
-  no screen does it (RA-G2). **Run the plan twice** — once with `roles = '{}'` as
-  acceptance leaves it, once with `office_manager` — because the two runs are
-  expected to be identical (DW-G1).
+- An invitation issued by the Owner. The link is emailed to the invited address
+  and is not printed on the invite screen (#316), so read it from the mailbox.
+- Dee's role rides that Invitation, and **Edit membership** on the Staff screen
+  changes it afterwards (#316). The zero-role membership DW-G1's second run
+  needed is no longer reachable, so run the plan once, with `admin`.
 
 ## Steps
 
@@ -31,8 +30,7 @@
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | As the Owner, set `office_manager` on Dee's membership from a screen | No screen does this | `missing-feature (RA-G2)` [#261](https://github.com/markgoho/doula-cloud/issues/261) |
-| 2.1-a | Set it with `PATCH .../staff/{staffId}/roles` instead | Succeeds for an Owner; the Staff screen then prints `office_manager`, not "Admin" ([RA-G3](https://github.com/markgoho/doula-cloud/issues/262)) | `manual` |
+| 2.1 | As the Owner, set `admin` on Dee's membership from a screen | **Edit membership** on Dee's row saves it. The Staff screen then prints the raw enum `admin`, not "Admin" ([RA-G3](https://github.com/markgoho/doula-cloud/issues/262)) | `manual` |
 
 ### Stage 3 — Discover what the Admin role grants
 

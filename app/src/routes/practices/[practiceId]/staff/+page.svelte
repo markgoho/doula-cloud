@@ -24,6 +24,7 @@
 		roles: string[];
 		employmentType: 'employee' | 'contractor';
 		expiresAt: string;
+		expired: boolean;
 		deliveryFailed: boolean;
 	};
 
@@ -48,6 +49,9 @@
 
 	let revokingInvitationId = $state('');
 	let revokeError = $state<Record<string, string>>({});
+
+	let removingStaffId = $state('');
+	let removeError = $state<Record<string, string>>({});
 
 	const memberColumns = [
 		{ label: 'Name', accessor: (member: StaffSummary) => member.name },
@@ -146,6 +150,29 @@
 		}
 	}
 
+	// Ends a Membership: her reach over this Practice stops, her Staff
+	// account and everything she did while she was here stay (#291).
+	async function handleRemoveMembership(staffId: string) {
+		removeError[staffId] = '';
+		removingStaffId = staffId;
+		try {
+			const response = await apiFetchWithSession(
+				`/api/practices/${page.params.practiceId}/staff/${staffId}/membership`,
+				{ method: 'DELETE' }
+			);
+			if (!response.ok) {
+				removeError[staffId] = await response.text();
+				return;
+			}
+			await loadRoster();
+		} catch (error_) {
+			removeError[staffId] =
+				error_ instanceof Error ? error_.message : 'Failed to remove membership';
+		} finally {
+			removingStaffId = '';
+		}
+	}
+
 	async function handleRevoke(invitationId: string) {
 		revokeError[invitationId] = '';
 		revokingInvitationId = invitationId;
@@ -209,9 +236,22 @@
 	{#if endSessionsError[member.staffId]}
 		<Notice variant="error" message={endSessionsError[member.staffId]} />
 	{/if}
+	<Button
+		label="Remove from practice"
+		variant="secondary"
+		size="sm"
+		onClick={() => handleRemoveMembership(member.staffId)}
+		loading={removingStaffId === member.staffId}
+	/>
+	{#if removeError[member.staffId]}
+		<Notice variant="error" message={removeError[member.staffId]} />
+	{/if}
 {/snippet}
 
 {#snippet invitationActions(invitation: InvitationSummary)}
+	{#if invitation.expired}
+		<Badge label="Expired -- invite again or revoke" variant="neutral" />
+	{/if}
 	{#if invitation.deliveryFailed}
 		<Badge label="Email could not be delivered" variant="warning" />
 	{/if}

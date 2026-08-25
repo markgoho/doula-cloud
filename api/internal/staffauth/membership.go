@@ -49,6 +49,53 @@ func RecordMembershipEvent(ctx context.Context, tx *sql.Tx, e MembershipEvent) e
 	return nil
 }
 
+// membership is a Membership's two halves in the form the database wants
+// them: roles as a practice_role[] literal, employment type as the enum's
+// own spelling. parseMembership is the only way to build one, so a
+// caller cannot reach the SQL below with an unvalidated role name.
+type membership struct {
+	roles          []string
+	rolesLiteral   string
+	employmentType string
+}
+
+// parseMembership validates the roles and employment type an invite or a
+// membership edit carries -- the same rules on both, because they set the
+// same two columns. It writes the 400 itself and returns ok=false, the
+// way RequireOwner writes its own 403.
+func parseMembership(w http.ResponseWriter, roles []string, employmentType string) (membership, bool) {
+	if len(roles) == 0 {
+		http.Error(w, "at least one role is required", http.StatusBadRequest)
+		return membership{}, false
+	}
+	for _, role := range roles {
+		if !validRoles[role] {
+			http.Error(w, "unknown role: "+role, http.StatusBadRequest)
+			return membership{}, false
+		}
+	}
+	if !validEmploymentTypes[employmentType] {
+		http.Error(w, "employmentType must be employee or contractor", http.StatusBadRequest)
+		return membership{}, false
+	}
+	// Every role here is a known enum member, so this literal is safe to
+	// build as text and let Postgres parse and cast -- no driver-level
+	// array encoder is needed for a user-defined enum array type.
+	return membership{
+		roles:          roles,
+		rolesLiteral:   "{" + strings.Join(roles, ",") + "}",
+		employmentType: employmentType,
+	}, true
+}
+
+// sameRoles reports whether two role sets hold the same members, ignoring
+// order. The order roles arrive in is the caller's, not a fact about the
+// Membership, so a reordered but otherwise identical edit must not record
+// a change that did not happen.
+func sameRoles(a, b []string) bool {
+	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
+}
+
 // UpdateMembershipRequest replaces a Membership's roles and employment
 // type together (not a diff) -- the caller sends the state it should hold
 // after the call. They arrive on one request because they are edited on
@@ -90,26 +137,10 @@ func UpdateMembershipHandler() http.Handler {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if len(req.Roles) == 0 {
-			http.Error(w, "at least one role is required", http.StatusBadRequest)
+		next, ok := parseMembership(w, req.Roles, req.EmploymentType)
+		if !ok {
 			return
 		}
-		for _, role := range req.Roles {
-			if !validRoles[role] {
-				http.Error(w, "unknown role: "+role, http.StatusBadRequest)
-				return
-			}
-		}
-		if !validEmploymentTypes[req.EmploymentType] {
-			http.Error(w, "employmentType must be employee or contractor", http.StatusBadRequest)
-			return
-		}
-
-		// req.Roles is validated against validRoles above, so this literal
-		// can only ever contain known enum members -- safe to build as
-		// text and let Postgres parse and cast it, rather than needing a
-		// driver-level array encoder for a user-defined enum array type.
-		rolesLiteral := "{" + strings.Join(req.Roles, ",") + "}"
 
 		var previousRoles, previousEmploymentType string
 		err := tx.QueryRowContext(r.Context(),
@@ -133,7 +164,7 @@ func UpdateMembershipHandler() http.Handler {
 		// API can grant the role back, so an Owner demoting the last one
 		// -- herself, most likely -- would leave a Practice nobody can
 		// invite to, edit a Membership at, or buy Credits for.
-		lastOwner, err := removesLastOwner(r, tx, practiceID, targetStaffID, previousRoles, req.Roles)
+		lastOwner, err := removesLastOwner(r.Context(), tx, practiceID, targetStaffID, previousRoles, next.roles)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
@@ -148,7 +179,7 @@ func UpdateMembershipHandler() http.Handler {
 			`UPDATE practice_memberships
 			    SET roles = $1::practice_role[], employment_type = $2::employment_type
 			  WHERE practice_id = $3 AND staff_id = $4`,
-			rolesLiteral, req.EmploymentType, practiceID, targetStaffID,
+			next.rolesLiteral, next.employmentType, practiceID, targetStaffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
@@ -158,10 +189,10 @@ func UpdateMembershipHandler() http.Handler {
 		// One event per axis that actually moved, so the history reads as
 		// what changed rather than as a list of times someone opened the
 		// form. A no-op edit records nothing.
-		if "{"+previousRoles+"}" != rolesLiteral {
+		if !sameRoles(splitRoles(previousRoles), next.roles) {
 			if err := RecordMembershipEvent(r.Context(), tx, MembershipEvent{
 				PracticeID: practiceID, StaffID: targetStaffID, Type: "roles_changed",
-				PreviousRoles: "{" + previousRoles + "}", Roles: rolesLiteral,
+				PreviousRoles: "{" + previousRoles + "}", Roles: next.rolesLiteral,
 				ActorStaffID: actorStaffID,
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -169,10 +200,10 @@ func UpdateMembershipHandler() http.Handler {
 				return
 			}
 		}
-		if previousEmploymentType != req.EmploymentType {
+		if previousEmploymentType != next.employmentType {
 			if err := RecordMembershipEvent(r.Context(), tx, MembershipEvent{
 				PracticeID: practiceID, StaffID: targetStaffID, Type: "employment_type_changed",
-				PreviousEmploymentType: previousEmploymentType, EmploymentType: req.EmploymentType,
+				PreviousEmploymentType: previousEmploymentType, EmploymentType: next.employmentType,
 				ActorStaffID: actorStaffID,
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -181,7 +212,7 @@ func UpdateMembershipHandler() http.Handler {
 			}
 		}
 
-		updated := UpdateMembershipResponse{StaffID: targetStaffID, Roles: req.Roles, EmploymentType: req.EmploymentType}
+		updated := UpdateMembershipResponse{StaffID: targetStaffID, Roles: next.roles, EmploymentType: next.employmentType}
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(updated); err != nil {
@@ -194,12 +225,12 @@ func UpdateMembershipHandler() http.Handler {
 // Membership would leave practiceID with no Owner at all. It is only ever
 // true when the target currently holds 'owner', is losing it, and nobody
 // else at the Practice holds it.
-func removesLastOwner(r *http.Request, tx *sql.Tx, practiceID, targetStaffID, previousRoles string, nextRoles []string) (bool, error) {
-	if !slices.Contains(strings.Split(previousRoles, ","), "owner") || slices.Contains(nextRoles, "owner") {
+func removesLastOwner(ctx context.Context, tx *sql.Tx, practiceID, targetStaffID, previousRoles string, nextRoles []string) (bool, error) {
+	if !slices.Contains(splitRoles(previousRoles), "owner") || slices.Contains(nextRoles, "owner") {
 		return false, nil
 	}
 	var otherOwners bool
-	err := tx.QueryRowContext(r.Context(),
+	err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS(
 			SELECT 1 FROM practice_memberships
 			WHERE practice_id = $1 AND staff_id <> $2 AND 'owner' = ANY(roles)
@@ -211,4 +242,84 @@ func removesLastOwner(r *http.Request, tx *sql.Tx, practiceID, targetStaffID, pr
 		return false, fmt.Errorf("staffauth: count remaining owners: %w", err)
 	}
 	return !otherOwners, nil
+}
+
+// RemoveMembershipHandler ends a Staff member's Membership at the current
+// Practice -- the route LV-G8 (#291) found missing, without which a
+// roster row nobody wants can never be taken off. The staff row survives:
+// a person is not owned by one Practice, and she may hold a Membership
+// elsewhere or be invited back here later. What she did while she was
+// here (her Visits, her Messages) survives too -- removing a Membership
+// ends her reach, it does not unwrite the record.
+//
+// The removal itself is a delete rather than an ended_at column, so the
+// practice_membership_events row this writes first is the only place who
+// removed her and when survives. Must be mounted behind
+// staffauth.Middleware.
+func RemoveMembershipHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, practiceID, ok := RequireOwner(w, r)
+		if !ok {
+			return
+		}
+		actorStaffID, _ := StaffID(r.Context())
+		targetStaffID := r.PathValue("staffId")
+		if !ParseUUID(w, "staff", targetStaffID) {
+			return
+		}
+
+		var roles, employmentType string
+		err := tx.QueryRowContext(r.Context(),
+			`SELECT array_to_string(roles, ','), employment_type::text
+			   FROM practice_memberships
+			  WHERE practice_id = $1 AND staff_id = $2
+			  FOR UPDATE`,
+			practiceID, targetStaffID,
+		).Scan(&roles, &employmentType)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "no membership found for that staff member at this practice", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// Removing a Membership removes every role on it, so the last-Owner
+		// rule applies here for the same reason it applies to an edit.
+		lastOwner, err := removesLastOwner(r.Context(), tx, practiceID, targetStaffID, roles, nil)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if lastOwner {
+			http.Error(w, "a practice must keep at least one Owner", http.StatusConflict)
+			return
+		}
+
+		// The event goes first: it names the roles and employment type the
+		// Membership held, which the next statement destroys.
+		if err := RecordMembershipEvent(r.Context(), tx, MembershipEvent{
+			PracticeID: practiceID, StaffID: targetStaffID, Type: "removed",
+			PreviousRoles: "{" + roles + "}", PreviousEmploymentType: employmentType,
+			ActorStaffID: actorStaffID,
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		if _, err := tx.ExecContext(r.Context(),
+			`DELETE FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
+			practiceID, targetStaffID,
+		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
 }
