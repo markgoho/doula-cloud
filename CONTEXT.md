@@ -45,13 +45,18 @@ What a Staff member is to a Practice — `employee` or `contractor` — held on 
 _Avoid_: Staff type, worker type (both read as a role)
 
 **Client**:
-The pregnant/birthing person a Practice serves. Does not (yet) cover a partner or support person — portal access for a second person is a future extension of Client, not a new entity.
+One Practice's record of the pregnant/birthing person it serves — not the person herself, who lives in the **Portal Account**. Belongs to exactly one Practice, and no Client fact crosses a Practice. Does not (yet) cover a partner or support person — portal access for a second person is a future extension of Client, not a new entity. See [ADR-0015](docs/adr/0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md).
 _Avoid_: Patient, customer, mom
 
+**Portal Account**:
+One person's login to the client portal. Reaches many Clients, at most one per Practice — it is the only thing in the model that knows two Client records are the same woman, and she is the one who told it, by accepting each Practice's invite. Legible only from a portal session, never from a staff one. See [ADR-0015](docs/adr/0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md).
+_Client says_: nothing — she meets a login, never the term.
+_Avoid_: User, account, portal user
+
 **Engagement**:
-The relationship between a Client and a Practice, spanning intake through postpartum, centered on one baby (born or unborn). Deliberately generic so it fits both birth-doula and postpartum-doula work. Carries a status: `intake`, `active`, `postpartum`, or `completed`.
-_Client says_: my care ("Your care" as a heading). Never "my pregnancy" — too narrow for postpartum-only work, and wrong for a Client whose pregnancy ended in loss. Each status has one fixed Client label, the same for every Client: `intake` → Getting started, `active` → Ongoing, `postpartum` → Postpartum, `completed` → Care ended. A status that cannot be labelled kindly for **every** Client means the status set is missing a value; that is a gap in the model, never a conditional label.
-_Avoid_: Pregnancy (too narrow — excludes postpartum-only work), Case, Relationship
+The relationship between a Client and a Practice, from onboarding through the end of care, centered on one baby (born or unborn) and belonging to one Client for life. Deliberately generic so it fits both birth-doula and postpartum-doula work. Declares its **kind** — `birth` or `postpartum`, what the Practice sold — and carries a nullable due date. Carries a status: `intake` — the Client has agreed to work with the Practice and setup is under way, care has not started; `active` — care is booked or happening; `completed` — care has ended, for whatever reason. Two staff-only facts sit beside the status and never merge into it: a **birth outcome** (how the birth went) and an **ending reason** (why care stopped). There is no lead or prospect: an Engagement exists only for a person the Practice has taken on. See [ADR-0015](docs/adr/0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md).
+_Client says_: my care ("Your care" as a heading). Never "my pregnancy" — too narrow for postpartum-only work, and wrong for a Client whose pregnancy ended in loss. Each status has one fixed Client label, the same for every Client: `intake` → Getting started, `active` → Ongoing, `completed` → Care ended. A status that cannot be labelled kindly for **every** Client means the status set is missing a value; that is a gap in the model, never a conditional label. Kind, the birth outcome and the ending reason are staff-only and have no Client word at all.
+_Avoid_: Pregnancy (too narrow — excludes postpartum-only work), Case, Relationship, Lead (nothing in the product holds an enquiry that has not been taken on)
 
 **Offer**:
 A Practice asking a Doula to take an Engagement, which she accepts or declines. Her acceptance opens a granted **Attachment**. The Offer is the same record for any Doula, but it does a different job either side of **Employment type**: for a **contractor** it is her only door in — with no ambient reach over the Practice she cannot touch an Engagement she has not been offered, so nothing ever attaches her by accident — while for an **employee**, who reads and writes every Engagement already, it grants no reach and instead settles the claim: she is on this birth, it is in "my Engagements", and "who is on this birth" has her name. Offering is therefore *mandatory* for a contractor and *optional* for an employee, who may simply be assigned.
