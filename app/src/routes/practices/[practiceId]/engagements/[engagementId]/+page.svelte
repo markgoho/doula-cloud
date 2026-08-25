@@ -25,6 +25,8 @@
 	} from '#lib/contract.js';
 	import InvoiceSection from '#lib/InvoiceSection.svelte';
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
+	import OfferSection from '#lib/OfferSection.svelte';
+	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
 	import { connect as connectStripe } from '#lib/payments.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -99,6 +101,14 @@
 	let invoices = $state<Invoice[]>([]);
 	let invoicesError = $state('');
 	let connectGate = $state<{ isOwner: boolean } | undefined>();
+
+	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
+	// Doula's load simply fails and the section stays hidden -- the read
+	// table keeps who-was-asked away from her, and an error banner about
+	// it would only be noise on her own screen.
+	let offers = $state<Offer[]>([]);
+	let doulas = $state<{ staffId: string; name: string; employmentType: string }[]>([]);
+	let isOffersVisible = $state(false);
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -314,6 +324,38 @@
 		}
 	}
 
+	// The roster read and the Offers read are both Owner/Admin; either
+	// refusing is what tells this page the caller is a Doula, so the
+	// section is left out rather than shown broken.
+	async function loadOffersSection() {
+		try {
+			offers = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+			const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/staff`);
+			if (!response.ok) return;
+			const roster = await response.json();
+			doulas = roster.members
+				.filter((member: { roles: string[] }) => member.roles.includes('doula'))
+				.map((member: { staffId: string; name: string; employmentType: string }) => ({
+					staffId: member.staffId,
+					name: member.name,
+					employmentType: member.employmentType
+				}));
+			isOffersVisible = true;
+		} catch {
+			// Not permitted to read who was offered this work -- see above.
+		}
+	}
+
+	async function handleCreateOffer(offer: NewOffer) {
+		await createOffer(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, offer);
+		offers = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+	}
+
+	async function handleWithdrawOffer(offerId: string) {
+		await withdrawOffer(apiFetchWithSession, page.params.practiceId!, offerId);
+		offers = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+	}
+
 	async function handleConnectInvoicing() {
 		const onboardingUrl = await connectStripe(apiFetchWithSession, page.params.practiceId!);
 		location.assign(onboardingUrl);
@@ -334,6 +376,7 @@
 		await Promise.all(planSections.map((section) => loadPlan(section.type)));
 		await loadContractSection();
 		await loadInvoicesSection();
+		await loadOffersSection();
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -591,6 +634,18 @@
 		{/if}
 
 		<InvoiceSection {invoices} {connectGate} onCreate={handleCreateInvoice} onConnect={handleConnectInvoicing} />
+	{/if}
+
+	{#if isOffersVisible}
+		<h2>Offers</h2>
+
+		<OfferSection
+			{offers}
+			{doulas}
+			clientFirstInitial={detail.clientName}
+			onCreate={handleCreateOffer}
+			onWithdraw={handleWithdrawOffer}
+		/>
 	{/if}
 
 	<h2>Messages</h2>

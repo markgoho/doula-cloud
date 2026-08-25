@@ -22,12 +22,12 @@ type Summary struct {
 	ClientFirstInitial string  `json:"clientFirstInitial"`
 	ClientArea         string  `json:"clientArea"`
 	DueDate            string  `json:"dueDate"`
-	AmountCents        *int64  `json:"amountCents"`
-	Terms              *string `json:"terms"`
+	AmountCents        *int64  `json:"amountCents,omitempty"`
+	Terms              *string `json:"terms,omitempty"`
 	EmploymentType     string  `json:"employmentType"`
 	OfferedAt          string  `json:"offeredAt"`
 	ExpiresAt          string  `json:"expiresAt"`
-	DecidedAt          *string `json:"decidedAt"`
+	DecidedAt          *string `json:"decidedAt,omitempty"`
 	// TargetName and TargetAddress name who the Offer went to. Both are
 	// empty on the inbox read -- she knows who she is -- and filled on
 	// the Practice-side read, which is Owner/Admin only.

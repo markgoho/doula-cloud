@@ -26,8 +26,8 @@ type PreAccountOffer struct {
 	ClientFirstInitial string  `json:"clientFirstInitial"`
 	ClientArea         string  `json:"clientArea"`
 	DueDate            string  `json:"dueDate"`
-	AmountCents        *int64  `json:"amountCents"`
-	Terms              *string `json:"terms"`
+	AmountCents        *int64  `json:"amountCents,omitempty"`
+	Terms              *string `json:"terms,omitempty"`
 	ExpiresAt          string  `json:"expiresAt"`
 }
 

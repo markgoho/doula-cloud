@@ -52,6 +52,13 @@
 		href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
 		label="Billing"
 	/>
+	<!-- Everyone's own Offers, not only a Doula's: an Offer is addressed to
+	     a person, and the inbox is scoped to her staff id, so there is
+	     nothing here a role check would usefully hide. -->
+	<Link
+		href={resolve('/practices/[practiceId]/offers', { practiceId: page.params.practiceId! })}
+		label="Your offers"
+	/>
 	{#if roles.includes('owner')}
 		<Link
 			href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
