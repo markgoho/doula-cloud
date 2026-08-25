@@ -627,7 +627,9 @@ CONSTRAINT engagements_completed_is_explained CHECK (
 ),
 
 CONSTRAINT engagements_outcome_is_dated CHECK (
-    (birth_outcome IS NULL) = (pregnancy_ended_on IS NULL)
+    (birth_outcome IS NULL AND pregnancy_ended_on IS NULL)
+    OR birth_outcome = 'unknown'
+    OR pregnancy_ended_on IS NOT NULL
 )
 ```
 
@@ -635,8 +637,17 @@ CONSTRAINT engagements_outcome_is_dated CHECK (
 the Practice sold, silently applied by whatever forgets to pass it; the intake control is the only
 thing that knows.
 
-The second `CHECK` keeps the outcome and its date as one fact, so the Visit-type derivation is never
-handed an outcome it cannot place in time.
+The second `CHECK` keeps the outcome and its date together where the date exists, so the Visit-type
+derivation is never handed a `live_birth` or a `loss` it cannot place in time. It is deliberately
+**not** biconditional. `unknown` means *the Engagement ended and the Practice never learned* — the
+birth happened, or did not, out of sight — and there is no honest date for that. Requiring one would
+make every abandoned Engagement uncloseable until someone invented a date, which is exactly the lie
+`unknown` exists to avoid. So `unknown` carries a date when the Practice happens to know it and none
+when it does not, while a null outcome still forbids a date outright.
+
+An `unknown` outcome with no date leaves Visits untypeable on that Engagement. That costs nothing:
+the living-baby rule already presumes no baby for `unknown`, so no surface downstream of it is asking
+whether a Visit is postpartum.
 
 ### Immutability is a trigger, because a policy cannot see both rows
 
