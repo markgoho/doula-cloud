@@ -1,0 +1,790 @@
+<title>DoulaCloud Teaser Variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Karla:wght@400;500;600&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=Schibsted+Grotesk:wght@400;500;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<!--
+  THROWAWAY PROTOTYPE - github.com/markgoho/doula-cloud/issues/362
+  Three variants of the pre-launch teaser page, switchable via ?variant=.
+  State (idle / success / error) is simulated in memory. No network, no persistence.
+  Every variant paints its own ground explicitly and does NOT follow the viewer
+  theme: the exact look is the thing being judged, so a theme swap would destroy it.
+-->
+
+<style>
+  /* ---------- shell: deliberately utilitarian, must not read as part of any variant ---------- */
+  :root {
+    /* Declaring color-scheme opts the page out of Chrome's forced dark mode.
+       Without this, Chrome inverts every colour below on a phone set to dark,
+       and the design being judged is not the design that ships. */
+    color-scheme: light;
+    --shell-ink: #0d1412;
+    --shell-ground: #e8ebe9;
+    --shell-line: #b9c2be;
+    --shell-hot: #b8452f;
+    --shell-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--shell-ground);
+    color: var(--shell-ink);
+    font-family: var(--shell-mono);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* :not() keeps this at (0,2,0) so it beats the .vA / .vB layout `display`
+     rules further down the sheet, which are (0,1,0) but come later. */
+  .variant:not([data-active="true"]) { display: none; }
+  .variant { min-height: 100vh; }
+
+  /* only one of the three state blocks shows at a time, per variant */
+  [data-state] .state { display: none; }
+  [data-state="idle"]    .state--idle    { display: block; }
+  [data-state="success"] .state--success { display: block; }
+  [data-state="error"]   .state--error   { display: block; }
+
+  /* the error state reuses the idle form, with the message revealed */
+  [data-state="error"] .state--idle { display: block; }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+
+  /* ---------- switcher ---------- */
+  .switcher {
+    position: fixed; z-index: 90;
+    left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; align-items: stretch; gap: 0;
+    background: var(--shell-ink); color: var(--shell-ground);
+    border-radius: 4px;
+    box-shadow: 0 10px 34px rgba(6, 14, 12, .42);
+    font-family: var(--shell-mono); font-size: 12px;
+    max-width: calc(100vw - 24px); flex-wrap: wrap;
+  }
+
+  .switcher__group {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    border-right: 1px solid rgba(232, 235, 233, .18);
+  }
+  .switcher__group:last-child { border-right: 0; }
+
+  .switcher__legend {
+    font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+    opacity: .5;
+  }
+
+  .switcher button {
+    font: inherit; color: inherit; cursor: pointer;
+    background: transparent; border: 1px solid rgba(232, 235, 233, .28);
+    border-radius: 3px; padding: 4px 9px; line-height: 1.4;
+  }
+  .switcher button:hover { border-color: rgba(232, 235, 233, .7); }
+  .switcher button[aria-pressed="true"] {
+    background: var(--shell-hot); border-color: var(--shell-hot); color: #fff;
+  }
+  .switcher :focus-visible { outline: 2px solid #f0c05a; outline-offset: 2px; }
+
+  .switcher__name {
+    min-width: 108px; width: 108px;
+    font: inherit; color: inherit;
+    background: rgba(232, 235, 233, .1);
+    border: 1px solid rgba(232, 235, 233, .28);
+    border-radius: 3px; padding: 4px 7px;
+  }
+
+  .switcher__label { opacity: .85; }
+
+  @media (max-width: 720px) {
+    .switcher { font-size: 11px; bottom: 8px; }
+    .switcher__group { padding: 6px 9px; }
+  }
+
+  /* ---------- social card overlay ---------- */
+  .cardview {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(8, 14, 12, .72);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .cardview[data-open="true"] { display: flex; }
+
+  .cardview > div { margin: auto; }
+  .cardview__post {
+    width: min(500px, 100%);
+    background: #fff; color: #1c1e21;
+    border-radius: 8px; overflow: hidden;
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+  }
+  .cardview__chrome {
+    display: flex; align-items: center; gap: 9px;
+    padding: 12px 14px; font-size: 13px;
+  }
+  .cardview__avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #c8d2cc; flex: none;
+  }
+  .cardview__who { font-weight: 700; }
+  .cardview__when { color: #65676b; font-size: 11px; }
+  .cardview__body { padding: 0 14px 12px; font-size: 14px; line-height: 1.45; }
+  .cardview__og { border-top: 1px solid #dadde1; border-bottom: 1px solid #dadde1; }
+  .cardview__ogimg {
+    aspect-ratio: 1200 / 630;
+    display: grid; align-content: center; gap: 12px;
+    padding: 0 8%;
+  }
+  .cardview__meta { padding: 10px 14px; background: #f0f2f5; }
+  .cardview__domain {
+    font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #65676b;
+  }
+  .cardview__title { font-size: 15px; font-weight: 700; margin: 3px 0 2px; }
+  .cardview__desc { font-size: 13px; color: #65676b; }
+  .cardview__note {
+    width: min(500px, 100%); margin-top: 12px;
+    color: #dfe7df; font-family: var(--shell-mono); font-size: 11.5px; line-height: 1.6;
+  }
+  .cardview__close {
+    font: inherit; font-family: var(--shell-mono); font-size: 11px;
+    background: #e8ebe9; color: #0d1412; border: 0; border-radius: 3px;
+    padding: 6px 12px; cursor: pointer; margin-top: 10px;
+  }
+
+  /* ================= VARIANT A - "The Notice" ================= */
+  /* One statement, a date, a form. Says the least of the three. */
+  .vA {
+    --ink: #e2e8df; --dim: #93a598; --ground: #0e1a16;
+    --line: #2b3b34; --warm: #dfb676; --bone: #e6e1d4;
+    background: var(--ground); color: var(--ink);
+    font-family: "Karla", system-ui, sans-serif;
+    display: grid; place-items: center;
+    padding: 64px 24px 108px;
+  }
+  .vA__inner { width: min(600px, 100%); }
+  .vA__mark {
+    font-family: var(--shell-mono); font-size: 11px;
+    letter-spacing: .28em; text-transform: uppercase; color: var(--dim);
+    margin: 0 0 44px;
+  }
+  .vA h1 {
+    font-family: "Instrument Serif", Georgia, serif;
+    font-weight: 400; font-size: clamp(2.7rem, 7.4vw, 4.5rem);
+    line-height: 1.03; letter-spacing: -.015em; text-wrap: balance;
+    margin: 0 0 22px;
+  }
+  .vA h1 em { font-style: italic; color: var(--warm); }
+  .vA__sub {
+    font-size: 1.05rem; line-height: 1.55; color: var(--dim);
+    max-width: 40ch; margin: 0 0 46px;
+  }
+  .vA__field { display: grid; gap: 6px; margin-bottom: 22px; }
+  .vA__field label {
+    font-family: var(--shell-mono); font-size: 10.5px;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--dim);
+  }
+  .vA__field input {
+    font: inherit; font-size: 1.05rem; color: var(--ink);
+    background: transparent; border: 0; border-bottom: 1px solid var(--line);
+    padding: 8px 2px; border-radius: 0;
+  }
+  .vA__field input { caret-color: var(--warm); }
+  .vA__field input:focus {
+    outline: none; border-bottom-color: var(--warm);
+  }
+  .vA__field input[aria-invalid="true"] { border-bottom-color: #e0705a; }
+  .vA button[type="submit"] {
+    font: inherit; font-weight: 600; font-size: .98rem;
+    background: var(--bone); color: #14201b; border: 0;
+    padding: 13px 26px; border-radius: 2px; cursor: pointer; margin-top: 8px;
+  }
+  .vA button[type="submit"]:hover { background: #fff; }
+  .vA :focus-visible { outline: 2px solid var(--warm); outline-offset: 3px; }
+  .vA__err {
+    display: none; align-items: center; gap: 8px;
+    color: #f0a091; font-size: .9rem; margin: 0 0 22px;
+  }
+  [data-state="error"] .vA__err { display: flex; }
+  .vA__done h2 {
+    font-family: "Instrument Serif", Georgia, serif; font-weight: 400;
+    font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.1; margin: 0 0 16px;
+  }
+  .vA__done p { color: var(--dim); line-height: 1.6; max-width: 42ch; margin: 0 0 12px; }
+  .vA__done strong { color: var(--ink); font-weight: 600; }
+  .vA__done:focus { outline: none; }
+  .vA__foot {
+    font-family: var(--shell-mono); font-size: 10.5px; color: #61756a;
+    margin: 56px 0 0; letter-spacing: .04em;
+  }
+
+  /* ================= VARIANT B - "The Card" ================= */
+  /* Split layout. Says one line about what it is. Carries a graphic. */
+  .vB {
+    --ink: #191b2a; --dim: #575b76; --ground: #f4f5f9;
+    --card: #ffffff; --line: #d9dbe8;
+    --accent: #474bb5; --wash: #dfe1f5;
+    background: var(--ground); color: var(--ink);
+    font-family: "Newsreader", Georgia, serif;
+    display: grid; align-content: center;
+    padding: 56px 24px 116px;
+  }
+  .vB__grid {
+    width: min(1040px, 100%); margin: 0 auto;
+    display: grid; gap: 52px;
+    grid-template-columns: 1fr;
+    align-items: center;
+  }
+  @media (min-width: 900px) {
+    .vB__grid { grid-template-columns: 1.05fr .95fr; gap: 72px; }
+  }
+  .vB__eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: .15em; text-transform: uppercase;
+    color: var(--accent); background: var(--wash);
+    padding: 6px 11px; border-radius: 999px; margin: 0 0 24px;
+  }
+  .vB h1 {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-weight: 700; font-size: clamp(2.15rem, 5vw, 3.15rem);
+    line-height: 1.06; letter-spacing: -.028em; text-wrap: balance;
+    margin: 0 0 20px;
+  }
+  .vB__sub {
+    font-size: 1.16rem; line-height: 1.6; color: var(--dim);
+    max-width: 44ch; margin: 0;
+  }
+  .vB__art { margin-top: 40px; display: block; width: min(320px, 76%); height: auto; }
+  .vB__card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 32px 30px;
+    box-shadow: 0 1px 2px rgba(25, 27, 42, .05), 0 14px 34px rgba(25, 27, 42, .07);
+  }
+  .vB__cardhead {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-weight: 700; font-size: 1.12rem; letter-spacing: -.015em;
+    margin: 0 0 6px;
+  }
+  .vB__cardnote { font-size: .96rem; color: var(--dim); line-height: 1.5; margin: 0 0 24px; }
+  .vB__field { display: grid; gap: 7px; margin-bottom: 16px; }
+  .vB__field label {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 12.5px; font-weight: 500; color: var(--ink);
+  }
+  .vB__field input {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 1rem; color: var(--ink); background: #fbfbfe;
+    border: 1px solid var(--line); border-radius: 6px; padding: 11px 12px;
+  }
+  .vB__field input:focus { outline: none; border-color: var(--accent); background: #fff; }
+  .vB__field input[aria-invalid="true"] { border-color: #c0392b; background: #fdf4f3; }
+  .vB button[type="submit"] {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 1rem; font-weight: 500; width: 100%;
+    background: var(--accent); color: #fff; border: 0;
+    padding: 13px 20px; border-radius: 6px; cursor: pointer; margin-top: 8px;
+  }
+  .vB button[type="submit"]:hover { background: #383c9f; }
+  .vB :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .vB__err {
+    display: none; font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: .87rem; color: #b13122; margin: -6px 0 16px;
+  }
+  [data-state="error"] .vB__err { display: block; }
+  .vB__done { text-align: left; }
+  .vB__tick {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--wash); color: var(--accent);
+    display: grid; place-items: center; margin: 0 0 18px;
+  }
+  .vB__done h2 {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-weight: 700; font-size: 1.32rem; letter-spacing: -.02em; margin: 0 0 10px;
+  }
+  .vB__done p { font-size: 1rem; line-height: 1.6; color: var(--dim); margin: 0 0 10px; }
+  .vB__done strong { color: var(--ink); font-weight: 600; }
+  .vB__done:focus { outline: none; }
+  .vB__fine {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 11.5px; line-height: 1.5; color: #7c8098; margin: 18px 0 0;
+  }
+
+  /* ================= VARIANT C - "The Letter" ================= */
+  /* A signed note. Says the most. No graphic at all. */
+  .vC {
+    --ink: #14181a; --dim: #4d5558; --ground: #edf0f1;
+    --rule: #9e3b2a; --line: #ccd3d4;
+    background: var(--ground); color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    padding: 72px 24px 120px;
+  }
+  .vC__sheet { width: min(640px, 100%); margin: 0 auto; }
+  .vC__mark {
+    font-family: var(--shell-mono); font-size: 10.5px;
+    letter-spacing: .26em; text-transform: uppercase; color: var(--dim);
+    padding-bottom: 16px; border-bottom: 2px solid var(--rule);
+    margin: 0 0 40px;
+  }
+  .vC h1 {
+    font-weight: 600; font-size: clamp(1.72rem, 3.9vw, 2.35rem);
+    line-height: 1.22; letter-spacing: -.012em; text-wrap: balance;
+    margin: 0 0 26px;
+  }
+  .vC p {
+    font-size: 1.09rem; line-height: 1.68; margin: 0 0 20px;
+    max-width: 62ch;
+  }
+  .vC__sig {
+    font-size: 1.02rem; line-height: 1.5; color: var(--dim);
+    margin: 30px 0 44px;
+  }
+  /* child combinator: the nested [data-product] span must stay inline */
+  .vC__sig > span { display: block; font-size: .92rem; }
+  .vC__form {
+    border-top: 1px solid var(--line); padding-top: 30px;
+    display: grid; gap: 16px;
+    grid-template-columns: 1fr; align-items: end;
+  }
+  @media (min-width: 620px) {
+    .vC__form { grid-template-columns: .8fr 1.2fr auto; gap: 14px; }
+  }
+  .vC__field { display: grid; gap: 6px; }
+  .vC__field label {
+    font-family: var(--shell-mono); font-size: 10px;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--dim);
+  }
+  .vC__field input {
+    font-family: "Source Serif 4", Georgia, serif; font-size: 1.02rem;
+    color: var(--ink); background: #f8fafa;
+    border: 1px solid var(--line); border-radius: 3px; padding: 10px 11px;
+  }
+  .vC__field input:focus { outline: none; border-color: var(--rule); background: #fff; }
+  .vC__field input[aria-invalid="true"] { border-color: var(--rule); background: #fbf1ef; }
+  .vC button[type="submit"] {
+    font-family: var(--shell-mono); font-size: 12px;
+    letter-spacing: .1em; text-transform: uppercase;
+    background: var(--rule); color: #fff; border: 0;
+    padding: 13px 20px; border-radius: 3px; cursor: pointer; white-space: nowrap;
+  }
+  .vC button[type="submit"]:hover { background: #83301f; }
+  .vC :focus-visible { outline: 2px solid var(--rule); outline-offset: 3px; }
+  .vC__err {
+    display: none; font-size: .95rem; color: #8d3123;
+    margin: 14px 0 0; grid-column: 1 / -1;
+  }
+  [data-state="error"] .vC__err { display: block; }
+  .vC__done { border-top: 1px solid var(--line); padding-top: 30px; }
+  .vC__done h2 { font-weight: 600; font-size: 1.35rem; margin: 0 0 12px; }
+  .vC__done p { color: var(--dim); }
+  .vC__done strong { color: var(--ink); font-weight: 600; }
+  .vC__done:focus { outline: none; }
+</style>
+
+<p id="live" role="status" aria-live="polite" class="visually-hidden"></p>
+
+<!-- =============== VARIANT A - The Notice =============== -->
+<section class="variant vA" data-variant="A" data-name="The Notice" data-state="idle">
+  <div class="vA__inner">
+
+    <div class="state state--idle">
+      <p class="vA__mark"><span data-product></span></p>
+      <h1>We open in <em>January 2027</em>.</h1>
+      <p class="vA__sub">Join the waitlist. You will hear from us before we open, and before anyone else.</p>
+
+      <form data-form novalidate>
+        <div class="vA__field">
+          <label for="a-name">First name</label>
+          <input id="a-name" name="metadata__first_name" type="text" autocomplete="given-name" data-name-input>
+        </div>
+        <div class="vA__field">
+          <label for="a-email">Email address</label>
+          <input id="a-email" name="email" type="email" autocomplete="email"
+                 inputmode="email" aria-describedby="a-err" data-email-input>
+        </div>
+        <p class="vA__err" id="a-err" data-err></p>
+        <button type="submit">Join the waitlist</button>
+      </form>
+
+      <p class="vA__foot">For doulas and the agencies they work with.</p>
+    </div>
+
+    <div class="state state--success">
+      <div class="vA__done" tabindex="-1" data-done>
+        <h2>One more step.</h2>
+        <p>We sent a confirmation link to <strong data-echo-email>your inbox</strong>. Click it and you are on the list.</p>
+        <p>Until you click it, you are not on the list. Nothing else arrives until January.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =============== VARIANT B - The Card =============== -->
+<section class="variant vB" data-variant="B" data-name="The Card" data-state="idle">
+  <div class="vB__grid">
+
+    <div>
+      <p class="vB__eyebrow">Coming January 2027</p>
+      <h1>The back office for a doula practice.</h1>
+      <p class="vB__sub">Clients, visits, and invoices in one place — for agencies and the doulas who contract with them. <span data-product></span> opens in January.</p>
+
+      <svg class="vB__art" viewBox="0 0 320 180" role="img" aria-labelledby="b-art-title">
+        <title id="b-art-title">Four nested arcs, each one holding the next</title>
+        <g fill="none" stroke-linecap="round">
+          <path d="M20 160 A140 140 0 0 1 300 160" stroke="#dfe1f5" stroke-width="14"></path>
+          <path d="M52 160 A108 108 0 0 1 268 160" stroke="#c3c7ee" stroke-width="14"></path>
+          <path d="M84 160 A76 76 0 0 1 236 160" stroke="#8e93da" stroke-width="14"></path>
+          <path d="M116 160 A44 44 0 0 1 204 160" stroke="#474bb5" stroke-width="14"></path>
+        </g>
+      </svg>
+    </div>
+
+    <div class="vB__card">
+      <div class="state state--idle">
+        <p class="vB__cardhead">Join the waitlist</p>
+        <p class="vB__cardnote">Two fields. One email from us when we open.</p>
+
+        <form data-form novalidate>
+          <div class="vB__field">
+            <label for="b-name">First name</label>
+            <input id="b-name" name="metadata__first_name" type="text" autocomplete="given-name" data-name-input>
+          </div>
+          <div class="vB__field">
+            <label for="b-email">Email address</label>
+            <input id="b-email" name="email" type="email" autocomplete="email"
+                   inputmode="email" aria-describedby="b-err" data-email-input>
+          </div>
+          <p class="vB__err" id="b-err" data-err></p>
+          <button type="submit">Join the waitlist</button>
+        </form>
+
+        <p class="vB__fine">One confirmation email now, one when we open. Nothing else, and you can leave the list from any of them.</p>
+      </div>
+
+      <div class="state state--success">
+        <div class="vB__done" tabindex="-1" data-done>
+          <div class="vB__tick" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+              <path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.2"
+                    stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <h2>Check your inbox.</h2>
+          <p>We sent a confirmation link to <strong data-echo-email>your inbox</strong>. You are on the list once you click it.</p>
+          <p>If it is not there in a few minutes, look in spam.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =============== VARIANT C - The Letter =============== -->
+<section class="variant vC" data-variant="C" data-name="The Letter" data-state="idle">
+  <div class="vC__sheet">
+
+    <p class="vC__mark"><span data-product></span></p>
+    <h1>I am building the thing you keep rebuilding in a spreadsheet.</h1>
+
+    <p>If you run a doula practice, you already know where the hours go. Matching a client to a doula. Chasing a signature. Working out who is owed what, in a spreadsheet only you understand.</p>
+    <p><span data-product></span> is one place for all of it. It opens in January 2027. It is not ready yet, and I would rather tell you that than show you a demo.</p>
+    <p>Put your name down and I will write to you once, when it opens.</p>
+
+    <p class="vC__sig">Mark<span>Building <span data-product></span></span></p>
+
+    <div class="state state--idle">
+      <form class="vC__form" data-form novalidate>
+        <div class="vC__field">
+          <label for="c-name">First name</label>
+          <input id="c-name" name="metadata__first_name" type="text" autocomplete="given-name" data-name-input>
+        </div>
+        <div class="vC__field">
+          <label for="c-email">Email address</label>
+          <input id="c-email" name="email" type="email" autocomplete="email"
+                 inputmode="email" aria-describedby="c-err" data-email-input>
+        </div>
+        <button type="submit">Add me to the list</button>
+        <p class="vC__err" id="c-err" data-err></p>
+      </form>
+    </div>
+
+    <div class="state state--success">
+      <div class="vC__done" tabindex="-1" data-done>
+        <h2>Check your inbox.</h2>
+        <p>I sent a confirmation link to <strong data-echo-email>your inbox</strong>. Click it and you are on the list. Until you do, you are not — and then nothing from me until January.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =============== social preview overlay =============== -->
+<div class="cardview" data-cardview>
+  <div>
+    <div class="cardview__post">
+      <div class="cardview__chrome">
+        <div class="cardview__avatar"></div>
+        <div>
+          <div class="cardview__who">Doula Support Network (Private group)</div>
+          <div class="cardview__when">Yesterday at 21:14 · Members only</div>
+        </div>
+      </div>
+      <p class="cardview__body">Someone finally building for the admin side of this work. Worth a look.</p>
+      <div class="cardview__og">
+        <div class="cardview__ogimg" data-og-img></div>
+      </div>
+      <div class="cardview__meta">
+        <div class="cardview__domain">doula.cloud</div>
+        <div class="cardview__title" data-og-title></div>
+        <div class="cardview__desc" data-og-desc></div>
+      </div>
+    </div>
+    <p class="cardview__note" data-og-note></p>
+    <button class="cardview__close" data-cardview-close>Close</button>
+  </div>
+</div>
+
+<!-- =============== switcher (prototype chrome, not part of any design) =============== -->
+<div class="switcher" role="group" aria-label="Prototype controls">
+  <div class="switcher__group">
+    <span class="switcher__legend">Variant</span>
+    <button type="button" data-variant-btn="A">A</button>
+    <button type="button" data-variant-btn="B">B</button>
+    <button type="button" data-variant-btn="C">C</button>
+    <span class="switcher__label" data-variant-name></span>
+  </div>
+  <div class="switcher__group">
+    <span class="switcher__legend">State</span>
+    <button type="button" data-state-btn="idle">Idle</button>
+    <button type="button" data-state-btn="error">Error</button>
+    <button type="button" data-state-btn="success">Sent</button>
+  </div>
+  <div class="switcher__group">
+    <label class="switcher__legend" for="rename">Name</label>
+    <input class="switcher__name" id="rename" type="text" value="DoulaCloud" data-rename>
+  </div>
+  <div class="switcher__group">
+    <button type="button" data-cardview-open>Social card</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  // The product name lives here and nowhere else. Change this one
+  // line and every instance on the page follows. In Hugo this is
+  // `title` in hugo.toml, read as {{ .Site.Title }}.
+  // ============================================================
+  var PRODUCT = 'DoulaCloud';
+
+  var VARIANTS = {
+    A: {
+      name: 'The Notice',
+      badEmail: 'Enter an email address like name@example.com.',
+      failed: 'We could not save your address just now. Try again.',
+      og: {
+        bg: '#0e1a16', fg: '#e2e8df', accent: '#dfb676',
+        font: '"Instrument Serif", Georgia, serif',
+        kicker: 'PRODUCT', line: 'We open in <span style="color:#dfb676">January 2027</span>.'
+      },
+      ogTitle: 'PRODUCT — we open in January 2027',
+      ogDesc: 'Join the waitlist. For doulas and the agencies they work with.'
+    },
+    B: {
+      name: 'The Card',
+      badEmail: 'That does not look like an email address. Try name@example.com.',
+      failed: 'We could not save your address just now. Try again.',
+      og: {
+        bg: '#f4f5f9', fg: '#191b2a', accent: '#474bb5',
+        font: '"Schibsted Grotesk", system-ui, sans-serif',
+        kicker: 'COMING JANUARY 2027', line: 'The back office for a doula practice.'
+      },
+      ogTitle: 'PRODUCT — the back office for a doula practice',
+      ogDesc: 'Clients, visits, and invoices in one place. Opens January 2027.'
+    },
+    C: {
+      name: 'The Letter',
+      badEmail: 'I need an email address I can actually write to. Try name@example.com.',
+      failed: 'That did not save. Try once more.',
+      og: {
+        bg: '#edf0f1', fg: '#14181a', accent: '#9e3b2a',
+        font: '"Source Serif 4", Georgia, serif',
+        kicker: 'PRODUCT', line: 'The thing you keep rebuilding in a spreadsheet.'
+      },
+      ogTitle: 'PRODUCT — opens January 2027',
+      ogDesc: 'One place for clients, visits, and invoices. Put your name down.'
+    }
+  };
+
+  var $  = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  var sections = $$('.variant');
+  var live = $('#live');
+  var current = 'A';
+  var state = 'idle';
+
+  // ---------- the one-edit rename ----------
+  function applyName(name) {
+    PRODUCT = name || 'DoulaCloud';
+    $$('[data-product]').forEach(function (el) { el.textContent = PRODUCT; });
+    document.title = PRODUCT + ' — teaser variants';
+    paintCard();
+  }
+
+  // ---------- variant + state ----------
+  function setVariant(key) {
+    if (!VARIANTS[key]) key = 'A';
+    current = key;
+    sections.forEach(function (s) {
+      s.setAttribute('data-active', String(s.dataset.variant === key));
+    });
+    $$('[data-variant-btn]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.variantBtn === key));
+    });
+    $('[data-variant-name]').textContent = VARIANTS[key].name;
+    try {
+      var u = new URL(window.location.href);
+      u.searchParams.set('variant', key);
+      history.replaceState(null, '', u);
+    } catch (e) { /* prototype: URL sync is a nicety */ }
+    paintCard();
+  }
+
+  function setState(next, opts) {
+    state = next;
+    opts = opts || {};
+    sections.forEach(function (s) { s.setAttribute('data-state', next); });
+    $$('[data-state-btn]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.stateBtn === next));
+    });
+
+    var section = $('.variant[data-active="true"]') || sections[0];
+
+    if (next === 'error') {
+      var msg = opts.message || VARIANTS[current].badEmail;
+      $$('[data-err]').forEach(function (p) { p.textContent = msg; });
+      $$('[data-email-input]').forEach(function (i) { i.setAttribute('aria-invalid', 'true'); });
+      if (opts.focus) {
+        var input = $('[data-email-input]', section);
+        if (input) input.focus();
+      }
+    } else {
+      $$('[data-err]').forEach(function (p) { p.textContent = ''; });
+      $$('[data-email-input]').forEach(function (i) { i.removeAttribute('aria-invalid'); });
+    }
+
+    if (next === 'success') {
+      var shown = opts.email || 'your inbox';
+      $$('[data-echo-email]').forEach(function (el) { el.textContent = shown; });
+      if (opts.announce) {
+        var done = $('[data-done]', section);
+        live.textContent = 'Almost there. We sent a confirmation link to ' + shown +
+                           '. Click the link in that email to join the waitlist.';
+        if (done) done.focus();
+      }
+    }
+  }
+
+  // ---------- simulated submit (no network, no persistence) ----------
+  function looksLikeEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); }
+
+  document.addEventListener('submit', function (e) {
+    var form = e.target.closest('[data-form]');
+    if (!form) return;
+    e.preventDefault();
+    var email = ($('[data-email-input]', form) || {}).value || '';
+    email = email.trim();
+
+    if (!looksLikeEmail(email)) {
+      live.textContent = '';
+      setState('error', { message: VARIANTS[current].badEmail, focus: true });
+      return;
+    }
+    // type an address containing "fail" to see the submit-failed error
+    if (email.indexOf('fail') !== -1) {
+      live.textContent = '';
+      setState('error', { message: VARIANTS[current].failed, focus: true });
+      return;
+    }
+    setState('success', { email: email, announce: true });
+  });
+
+  // ---------- social preview card ----------
+  function withName(s) { return String(s).split('PRODUCT').join(PRODUCT); }
+
+  function paintCard() {
+    var v = VARIANTS[current];
+    if (!v) return;
+    var img = $('[data-og-img]');
+    if (!img) return;
+    img.style.background = v.og.bg;
+    img.style.color = v.og.fg;
+    img.style.fontFamily = v.og.font;
+    img.innerHTML =
+      '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;letter-spacing:.22em;' +
+      'text-transform:uppercase;opacity:.65">' + withName(v.og.kicker) + '</div>' +
+      '<div style="font-size:clamp(20px,4.4vw,30px);line-height:1.12;font-weight:500">' +
+      withName(v.og.line) + '</div>';
+    $('[data-og-title]').textContent = withName(v.ogTitle);
+    $('[data-og-desc]').textContent = withName(v.ogDesc);
+    $('[data-og-note]').textContent =
+      'This is the card a doula sees when the link is pasted into a Facebook group. ' +
+      'It needs a real 1200x630 PNG at og:image — Facebook will not render live HTML. ' +
+      'No image tag at all means the group post falls back to a bare grey box.';
+  }
+
+  // ---------- controls ----------
+  $$('[data-variant-btn]').forEach(function (b) {
+    b.addEventListener('click', function () { setVariant(b.dataset.variantBtn); });
+  });
+  $$('[data-state-btn]').forEach(function (b) {
+    b.addEventListener('click', function () { setState(b.dataset.stateBtn, {}); });
+  });
+  $('[data-rename]').addEventListener('input', function (e) { applyName(e.target.value); });
+
+  var cardview = $('[data-cardview]');
+  var lastFocus = null;
+  $('[data-cardview-open]').addEventListener('click', function (e) {
+    lastFocus = e.currentTarget;
+    paintCard();
+    cardview.setAttribute('data-open', 'true');
+    $('[data-cardview-close]').focus();
+  });
+  function closeCard() {
+    cardview.removeAttribute('data-open');
+    if (lastFocus) lastFocus.focus();
+  }
+  $('[data-cardview-close]').addEventListener('click', closeCard);
+  cardview.addEventListener('click', function (e) { if (e.target === cardview) closeCard(); });
+
+  // arrow keys cycle variants, but never while typing
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && cardview.hasAttribute('data-open')) { closeCard(); return; }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    var keys = ['A', 'B', 'C'];
+    var i = keys.indexOf(current);
+    setVariant(keys[(i + (e.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length]);
+  });
+
+  // ---------- init ----------
+  var start = 'A';
+  try {
+    var q = new URL(window.location.href).searchParams.get('variant');
+    if (q && VARIANTS[q.toUpperCase()]) start = q.toUpperCase();
+  } catch (e) { /* prototype */ }
+
+  applyName(PRODUCT);
+  setVariant(start);
+  setState('idle', {});
+})();
+</script>
