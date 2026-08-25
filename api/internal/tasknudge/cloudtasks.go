@@ -9,17 +9,18 @@ import (
 )
 
 // endpointPath maps each OutboxType to the process-* endpoint main.go
-// mounts it at (ADR-0010). Every nudge task hits one of these five paths.
+// mounts it at (ADR-0010). Every nudge task hits one of these six paths.
 var endpointPath = map[OutboxType]string{
 	PortalInvite:    "/api/internal/notifications/process-outbox",
 	LowCredit:       "/api/internal/notifications/process-low-credit-outbox",
 	Payout:          "/api/internal/notifications/process-payout-outbox",
 	PaymentReceived: "/api/internal/notifications/process-payment-outbox",
 	SessionNotice:   "/api/internal/notifications/process-session-notice-outbox",
+	StaffInvite:     "/api/internal/notifications/process-staff-invite-outbox",
 }
 
 // CloudTasksEnqueuer is the production Enqueuer, backed by one Cloud
-// Tasks queue shared by all five outbox types (ADR-0013) -- the same
+// Tasks queue shared by all six outbox types (ADR-0013) -- the same
 // X-Internal-Secret shape the process-* endpoints already accept from
 // Cloud Scheduler, so no endpoint needs to change to accept a nudge too.
 type CloudTasksEnqueuer struct {

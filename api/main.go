@@ -36,6 +36,7 @@ import (
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/visit"
 )
@@ -144,7 +145,7 @@ var ownerAndAdmin = []string{"owner", "admin"}
 // main_test.go walk it (and cross-check it against this function's own
 // source for a route that bypassed the gate entirely) without needing a
 // live server.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, staffInviteOutboxWorker staffinvite.Worker, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
 	mux := http.NewServeMux()
 	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
 	// staffauth.Middleware: Get panics at startup if a route has no role
@@ -272,6 +273,11 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// Same shape again for #345's session-notice outbox (new sign-in,
 	// session revoked).
 	mux.Handle("POST /api/internal/notifications/process-session-notice-outbox", sessionnotice.ProcessOutboxHandler(db, sessionNoticeOutboxWorker, outboxWorkerSecret))
+	// Same shape again for #339's Staff invitation outbox (RA-G1). No
+	// write site queues staff_invite_outbox yet -- #316 builds
+	// InviteHandler -- but the endpoint runs regardless, ready for
+	// Cloud Scheduler once #316 lands and this job is deployed.
+	mux.Handle("POST /api/internal/notifications/process-staff-invite-outbox", staffinvite.ProcessOutboxHandler(db, staffInviteOutboxWorker, outboxWorkerSecret))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(db)(portal.DetailHandler()))
@@ -382,7 +388,18 @@ func main() {
 		ReplyTo: "support@" + mailgunDomain,
 	}
 
-	// ADR-0013: one shared queue nudging all five outbox process-*
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	staffInviteOutboxWorker := staffinvite.Worker{
+		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
+		Now:        time.Now,
+		AppBaseURL: os.Getenv("APP_BASE_URL"),
+		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
+		// Platform voice (ADR-0011): the invited person isn't a Practice's
+		// Client, same as lowCreditOutboxWorker above.
+		ReplyTo: "support@" + mailgunDomain,
+	}
+
+	// ADR-0013: one shared queue nudging all six outbox process-*
 	// endpoints, reusing NOTIFICATION_WORKER_SECRET rather than a second
 	// credential. NOTIFICATION_TASKS_QUEUE is unset in local dev, CI's
 	// boot smoke test, and the e2e stack (see docs/environment.md) --
@@ -402,7 +419,7 @@ func main() {
 		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"))
 	}
 
-	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, nudgeEnqueuer, resolveExpectedOrigins())
+	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, staffInviteOutboxWorker, nudgeEnqueuer, resolveExpectedOrigins())
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,
