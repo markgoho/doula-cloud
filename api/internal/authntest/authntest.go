@@ -20,6 +20,12 @@ type Verifier struct {
 	// UID is the caller identity VerifyIDToken reports on success.
 	UID string
 
+	// Email is the verified address VerifyIDToken reports on success --
+	// the email claim ADR-0008 has Staff invitation acceptance compare
+	// against the invited address. Empty models an identity whose
+	// provider reports no address.
+	Email string
+
 	// Err, when set, is the error VerifyIDToken returns instead of a
 	// verified identity.
 	Err error
@@ -35,7 +41,7 @@ func (v Verifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedTok
 	if v.Err != nil {
 		return nil, v.Err
 	}
-	return &authn.VerifiedToken{UID: v.UID}, nil
+	return &authn.VerifiedToken{UID: v.UID, Email: v.Email}, nil
 }
 
 // SeedSession creates a live session for uid and returns the value its

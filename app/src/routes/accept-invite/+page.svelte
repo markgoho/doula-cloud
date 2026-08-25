@@ -22,6 +22,10 @@
 
 	let email = $state('');
 	let password = $state('');
+	// The Invitation carries an address and a Membership, never a name --
+	// a person names herself here. Ignored server-side if she already has
+	// a Staff account (#316).
+	let name = $state('');
 	let mode = $state<'signup' | 'login'>('signup');
 	let error = $state('');
 	let isSubmitting = $state(false);
@@ -93,6 +97,18 @@
 	<Notice variant="error" message="Missing invite token" />
 {:else}
 	<form onsubmit={handleSubmit}>
+		<LabeledField label="Your name">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					value={name}
+					onInput={(value) => (name = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
 		<LabeledField label="Email">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput

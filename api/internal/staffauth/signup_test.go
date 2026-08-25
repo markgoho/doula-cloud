@@ -29,6 +29,8 @@ const (
 	ownerRole         = "owner"
 	doulaRole         = "doula"
 	adminRole         = "admin"
+	employeeType      = "employee"
+	contractorType    = "contractor"
 )
 
 // errBadToken is what a fake Verifier returns for a token Identity

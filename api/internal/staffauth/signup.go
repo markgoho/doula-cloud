@@ -41,7 +41,7 @@ type SignupResponse struct {
 // to.
 func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.BeginBootstrap(w, r, verifier, db)
+		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
 		if !ok {
 			return
 		}
@@ -65,7 +65,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
-		resp, status, msg := signup(r, tx, uid, req)
+		resp, status, msg := signup(r, tx, verified.UID, req)
 		if status != http.StatusCreated {
 			http.Error(w, msg, status)
 			return
@@ -75,7 +75,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// new rows back instead of leaving them committed behind a
 		// response that reports failure (#145). uid is the identity
 		// authn.Begin already verified.
-		cookie, err := authn.MintSession(r.Context(), tx, uid, time.Now())
+		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
 		if err != nil {
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
@@ -152,6 +152,18 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{owner,admin,doula}', 'employee')`,
 		practiceID, staffID,
 	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
+	// The founding Owner's Membership gets the same 'joined' record every
+	// other Membership does (#316), so "how did this person come to hold
+	// these roles?" has an answer for her too, not only for people
+	// invited later. She is her own actor.
+	if err := RecordMembershipEvent(ctx, tx, MembershipEvent{
+		PracticeID: practiceID, StaffID: staffID, Type: "joined",
+		Roles: "{owner,admin,doula}", EmploymentType: "employee", ActorStaffID: staffID,
+	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}

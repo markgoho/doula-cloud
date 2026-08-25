@@ -301,11 +301,11 @@ func bootstrapRequest(t *testing.T, db *testdb.DB, verifier authn.Verifier, setu
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	setup(req)
 
-	tx, uid, ok := authn.BeginBootstrap(rec, req, verifier, db.App)
+	tx, verified, ok := authn.BeginBootstrap(rec, req, verifier, db.App)
 	if ok {
 		t.Cleanup(func() { _ = tx.Rollback() })
 	}
-	return rec, uid, ok
+	return rec, verified.UID, ok
 }
 
 // TestBeginBootstrap_BearerToken_Success covers the AC that the three

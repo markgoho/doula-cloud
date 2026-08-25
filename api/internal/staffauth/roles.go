@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,10 +14,9 @@ import (
 var validRoles = map[string]bool{"owner": true, "admin": true, "doula": true}
 
 // staffHasRole reports whether staffID's membership at practiceID includes
-// role. Handlers that are Owner-only (invite, role assignment) call this
-// themselves -- staffauth.Middleware only ever checks that a membership
-// exists, not what roles it holds, so a zero-role invitee still lands on
-// the Practice per the Staff-invitation ticket.
+// role. Handlers that are Owner-only (invite, membership editing) call
+// this themselves -- staffauth.Middleware only ever checks that a
+// membership exists, not what roles it holds.
 func staffHasRole(ctx context.Context, tx *sql.Tx, practiceID, staffID, role string) (bool, error) {
 	var has bool
 	err := tx.QueryRowContext(ctx,
@@ -33,7 +31,8 @@ func staffHasRole(ctx context.Context, tx *sql.Tx, practiceID, staffID, role str
 }
 
 // Roles returns the roles staffID's membership holds at practiceID -- an
-// empty slice for a zero-role (e.g. not-yet-assigned invitee) membership.
+// empty slice for a membership holding none, which since #316 is only
+// reachable by an Owner emptying one, not by joining.
 // Exported so callers outside this package (the practice-landing handler
 // in main.go) can gate Owner-only UI affordances, like the invite link,
 // on the caller's actual roles instead of just their membership.
@@ -81,74 +80,4 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 		return nil, "", false
 	}
 	return tx, practiceID, true
-}
-
-// AssignRolesRequest replaces a membership's full role set (not a diff) --
-// the caller sends the roles it should hold after the call.
-type AssignRolesRequest struct {
-	Roles []string `json:"roles"`
-}
-
-// AssignRolesResponse confirms the roles a membership holds after the
-// update.
-type AssignRolesResponse struct {
-	StaffID string   `json:"staffId"`
-	Roles   []string `json:"roles"`
-}
-
-// AssignRolesHandler lets a Practice Owner set the roles held by another
-// Staff member's membership at the same Practice -- including a zero-role
-// invitee's first roles, which is what makes their invite usable. Must be
-// mounted behind staffauth.Middleware.
-func AssignRolesHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
-		if !ok {
-			return
-		}
-		targetStaffID := r.PathValue("staffId")
-
-		var req AssignRolesRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		for _, role := range req.Roles {
-			if !validRoles[role] {
-				http.Error(w, "unknown role: "+role, http.StatusBadRequest)
-				return
-			}
-		}
-
-		// req.Roles is validated against validRoles above, so this literal
-		// can only ever contain known enum members -- safe to build as text
-		// and let Postgres parse+cast it, rather than needing a driver-level
-		// array encoder for a user-defined enum array type.
-		literal := "{" + strings.Join(req.Roles, ",") + "}"
-		result, err := tx.ExecContext(r.Context(),
-			`UPDATE practice_memberships SET roles = $1::practice_role[] WHERE practice_id = $2 AND staff_id = $3`,
-			literal, practiceID, targetStaffID,
-		)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if rows == 0 {
-			http.Error(w, "no membership found for that staff member at this practice", http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(AssignRolesResponse{StaffID: targetStaffID, Roles: req.Roles}); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
-		}
-	})
 }

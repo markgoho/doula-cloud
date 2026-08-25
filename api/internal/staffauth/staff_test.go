@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
@@ -101,16 +102,19 @@ func TestListStaffHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	var list []staffauth.StaffSummary
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+	var roster staffauth.Roster
+	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(list) != 3 {
-		t.Fatalf("staff list = %+v, want 3 entries", list)
+	if len(roster.Members) != 3 {
+		t.Fatalf("members = %+v, want 3 entries", roster.Members)
+	}
+	if len(roster.Invitations) != 0 {
+		t.Fatalf("invitations = %+v, want none", roster.Invitations)
 	}
 
 	byID := map[string]staffauth.StaffSummary{}
-	for _, s := range list {
+	for _, s := range roster.Members {
 		byID[s.StaffID] = s
 	}
 	owner, ok := byID[ownerID]
@@ -125,4 +129,120 @@ func TestListStaffHandler_Success(t *testing.T) {
 	if !ok || len(zeroRole.Roles) != 0 {
 		t.Fatalf("zero-role entry = %+v, want no roles", zeroRole)
 	}
+	if owner.EmploymentType != employeeType {
+		t.Fatalf("owner employmentType = %q, want employee", owner.EmploymentType)
+	}
+}
+
+// TestListStaffHandler_PendingInvitationsAreTheirOwnGroup is #261's
+// actual complaint: a pending Invitation must be tellable apart from a
+// member holding no roles, which a single list could not do. It also
+// covers #339's dead-letter flag, whose only read surface is this group.
+func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-sees-invitations"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	pendingID := seedInvitation(t, db, practiceID, ownerID, "pending@example.com", "{doula}", contractorType, time.Now().Add(time.Hour))
+	deadID := seedInvitation(t, db, practiceID, ownerID, "dead@example.com", "{admin}", employeeType, time.Now().Add(time.Hour))
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO staff_invite_outbox (invitation_id, status) VALUES ($1, 'dead_lettered')`, deadID,
+	); err != nil {
+		t.Fatalf("seed dead-lettered outbox row: %v", err)
+	}
+	// A revoked Invitation is history, not a pending ask -- it must not
+	// appear in either group.
+	revokedID := seedInvitation(t, db, practiceID, ownerID, "revoked@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, revokedID,
+	); err != nil {
+		t.Fatalf("revoke invitation: %v", err)
+	}
+
+	srv, session := newStaffListServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := getStaffList(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	var roster staffauth.Roster
+	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(roster.Members) != 1 {
+		t.Fatalf("members = %+v, want only the Owner", roster.Members)
+	}
+	if len(roster.Invitations) != 2 {
+		t.Fatalf("invitations = %+v, want 2 pending", roster.Invitations)
+	}
+
+	byID := map[string]staffauth.InvitationSummary{}
+	for _, inv := range roster.Invitations {
+		byID[inv.InvitationID] = inv
+	}
+	pending := byID[pendingID]
+	if pending.Address != "pending@example.com" || pending.EmploymentType != contractorType ||
+		len(pending.Roles) != 1 || pending.Roles[0] != doulaRole || pending.ExpiresAt == "" {
+		t.Fatalf("pending invitation = %+v", pending)
+	}
+	if pending.DeliveryFailed {
+		t.Fatalf("pending invitation reports a failed delivery: %+v", pending)
+	}
+	if !byID[deadID].DeliveryFailed {
+		t.Fatalf("dead-lettered invitation = %+v, want deliveryFailed", byID[deadID])
+	}
+}
+
+// TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate pins the shape
+// staffinvite.Queue's partial-index upsert allows: once a send is marked
+// 'sent' it leaves the index, so a re-invite inserts a second outbox row
+// for one Invitation. The pending group must still print that Invitation
+// once, and must read only the newest attempt -- a give-up the Owner has
+// since re-sent past is no longer a warning.
+func TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-reinvites-after-a-send"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	invitationID := seedInvitation(t, db, practiceID, ownerID, "twice-sent@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO staff_invite_outbox (invitation_id, status, created_at)
+		 VALUES ($1, 'dead_lettered', now() - interval '1 hour'), ($1, 'pending', now())`,
+		invitationID,
+	); err != nil {
+		t.Fatalf("seed two outbox rows: %v", err)
+	}
+
+	srv, session := newStaffListServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := getStaffList(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	var roster staffauth.Roster
+	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(roster.Invitations) != 1 {
+		t.Fatalf("invitations = %+v, want exactly 1", roster.Invitations)
+	}
+	if roster.Invitations[0].DeliveryFailed {
+		t.Fatalf("invitation = %+v, want the re-send to clear the flag", roster.Invitations[0])
+	}
+}
+
+// seedInvitation inserts a pending practice_invitations row directly, for
+// the read tests that need one without going through InviteHandler.
+func seedInvitation(t *testing.T, db *testdb.DB, practiceID, invitedBy, address, roles, employmentType string, expiresAt time.Time) string {
+	t.Helper()
+	var id string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO practice_invitations
+		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)
+		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7) RETURNING id`,
+		practiceID, address, roles, employmentType, staffauth.TokenDigest(address+"-token"), invitedBy, expiresAt,
+	).Scan(&id); err != nil {
+		t.Fatalf("seed invitation for %q: %v", address, err)
+	}
+	return id
 }

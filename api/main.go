@@ -164,10 +164,19 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(db))
 	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, http.HandlerFunc(practiceSessionHandler))
-	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/roles",
-		staffauth.Middleware(db)(staffauth.AssignRolesHandler()))
-	// Staff roster: Owner and Admin only (ADR-0008's read table) -- a
-	// Doula has no reason to see the full roster.
+	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))
+	// Roles and employment type are edited together on one surface
+	// (RA-G2, #261) -- ADR-0008 makes them the two halves of what a
+	// person is at a Practice, so there is one endpoint, not two.
+	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/membership",
+		staffauth.Middleware(db)(staffauth.UpdateMembershipHandler()))
+	mux.Handle("POST /api/practices/{practiceId}/staff/invitations",
+		staffauth.Middleware(db)(idempotency.Wrap(staffauth.InviteHandler(nudgeEnqueuer))))
+	mux.Handle("POST /api/practices/{practiceId}/staff/invitations/{invitationId}/revoke",
+		staffauth.Middleware(db)(staffauth.RevokeInvitationHandler()))
+	// Staff roster -- members and pending invitations both: Owner and
+	// Admin only (ADR-0008's read table) -- a Doula has no reason to see
+	// the full roster.
 	g.Get("/api/practices/{practiceId}/staff", ownerAndAdmin, staffauth.ListStaffHandler())
 	mux.Handle("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
 		staffauth.Middleware(db)(staffauth.EndSessionsHandler(nudgeEnqueuer)))
@@ -273,10 +282,8 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// Same shape again for #345's session-notice outbox (new sign-in,
 	// session revoked).
 	mux.Handle("POST /api/internal/notifications/process-session-notice-outbox", sessionnotice.ProcessOutboxHandler(db, sessionNoticeOutboxWorker, outboxWorkerSecret))
-	// Same shape again for #339's Staff invitation outbox (RA-G1). No
-	// write site queues staff_invite_outbox yet -- #316 builds
-	// InviteHandler -- but the endpoint runs regardless, ready for
-	// Cloud Scheduler once #316 lands and this job is deployed.
+	// Same shape again for #339's Staff invitation outbox (RA-G1), whose
+	// write site is staffauth.InviteHandler above (#316).
 	mux.Handle("POST /api/internal/notifications/process-staff-invite-outbox", staffinvite.ProcessOutboxHandler(db, staffInviteOutboxWorker, outboxWorkerSecret))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",

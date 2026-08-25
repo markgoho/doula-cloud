@@ -114,20 +114,20 @@ func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, string,
 // event, and unacceptable everywhere else, which is why Begin no longer
 // offers it. There is no cookie fallback: a caller holding a session has
 // no reason to bootstrap.
-func BeginBootstrap(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, string, bool) {
+func BeginBootstrap(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, VerifiedToken, bool) {
 	tx, ok := beginTx(w, r, db)
 	if !ok {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		return nil, "", false
+		return nil, VerifiedToken{}, false
 	}
 
-	uid, ok := idTokenCredential(w, r, verifier)
+	verified, ok := idTokenCredential(w, r, verifier)
 	if !ok {
 		_ = tx.Rollback()
-		return nil, "", false
+		return nil, VerifiedToken{}, false
 	}
 
-	return tx, uid, true
+	return tx, verified, true
 }
 
 // beginTx opens the request-scoped transaction both entry points run
@@ -175,19 +175,19 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 // idTokenCredential resolves the caller's identity from a Bearer ID
 // token, writing a 401 if the header is absent, malformed, or carries a
 // token Identity Platform rejects.
-func idTokenCredential(w http.ResponseWriter, r *http.Request, verifier Verifier) (string, bool) {
+func idTokenCredential(w http.ResponseWriter, r *http.Request, verifier Verifier) (VerifiedToken, bool) {
 	idToken, ok := BearerToken(r)
 	if !ok {
 		http.Error(w, "missing credential", http.StatusUnauthorized)
-		return "", false
+		return VerifiedToken{}, false
 	}
 
 	verified, err := verifier.VerifyIDToken(r.Context(), idToken)
 	if err != nil {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
-		return "", false
+		return VerifiedToken{}, false
 	}
-	return verified.UID, true
+	return *verified, true
 }
 
 // renewIfStale extends the session's expiry and re-sets the cookie when
@@ -228,11 +228,17 @@ func pastHalfLife(expiresAt, now time.Time) bool {
 
 // VerifiedToken is the identity a Verifier extracts from a valid ID
 // token. Identity Platform provides identity only -- no custom claims --
-// so this is deliberately just a uid; the BFF resolves authorization
-// (which Practice/Client the caller may act as) from the database on
-// every request.
+// so the BFF still resolves authorization (which Practice/Client the
+// caller may act as) from the database on every request. Email is the
+// one reserved claim carried alongside the uid: ADR-0008 has Staff
+// invitation acceptance compare the caller's *verified* address against
+// the address the Owner invited, and only the identity provider can say
+// what that address is. It is empty for an identity signed in through a
+// provider that reports none, which accept treats as "cannot prove you
+// are the invitee".
 type VerifiedToken struct {
-	UID string
+	UID   string
+	Email string
 }
 
 // Verifier checks an Identity Platform ID token. That is the whole of
@@ -287,6 +293,13 @@ func (v *FirebaseVerifier) VerifyIDToken(ctx context.Context, idToken string) (*
 		// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
 		return nil, fmt.Errorf("authn: verify id token: %w", err)
 	}
+	// Identity Platform types every reserved claim except the handful
+	// auth.Token names as fields into Claims, so the email claim is a
+	// map lookup with a comma-ok assertion, not a struct field. A
+	// provider that reports no address leaves this empty rather than
+	// failing the verify -- deciding what an address-less identity may
+	// do belongs to the handler, not here.
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
-	return &VerifiedToken{UID: token.UID}, nil
+	email, _ := token.Claims["email"].(string)
+	return &VerifiedToken{UID: token.UID, Email: email}, nil
 }

@@ -4,9 +4,13 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"net/http"
-
-	"doula-cloud/api/internal/staffauth"
 )
+
+// MsgInternalError is this package's response body for a failure the
+// caller can't act on. Held locally rather than borrowed from staffauth,
+// which imports this package for Queue -- a shared literal is not worth
+// an import cycle.
+const MsgInternalError = "internal error"
 
 // ProcessOutboxHandler is the internal endpoint Cloud Scheduler invokes on
 // a fixed cadence to run Worker.ProcessPending, mirroring
@@ -26,7 +30,7 @@ func ProcessOutboxHandler(db *sql.DB, worker Worker, secret string) http.Handler
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -43,20 +47,20 @@ func ProcessOutboxHandler(db *sql.DB, worker Worker, secret string) http.Handler
 		// policy 00038_staff_invite_outbox.sql added for this worker.
 		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := worker.ProcessPending(r.Context(), tx); err != nil {
 			// coverage:ignore reason: ProcessPending's only failure mode is
 			// a DB failure (outbox.go), not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

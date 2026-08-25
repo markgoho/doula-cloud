@@ -1,0 +1,283 @@
+package staffauth_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/testdb"
+)
+
+func newMembershipServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.Handle("PATCH /practices/{practiceId}/staff/{staffId}/membership",
+		staffauth.Middleware(db.App)(staffauth.UpdateMembershipHandler()))
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+}
+
+func patchMembership(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, body any) *http.Response {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	return patchMembershipRaw(t, srv, session, practiceID, staffID, payload)
+}
+
+func patchMembershipRaw(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, payload []byte) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
+		srv.URL+"/practices/"+practiceID+"/staff/"+staffID+"/membership", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+// membershipEvents reads a Membership's recorded history, newest first.
+func membershipEvents(t *testing.T, db *testdb.DB, practiceID, staffID string) []string {
+	t.Helper()
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT event_type::text || ':' || COALESCE(array_to_string(previous_roles, ','), '') ||
+		        '->' || COALESCE(array_to_string(roles, ','), '') ||
+		        '/' || COALESCE(previous_employment_type::text, '') ||
+		        '->' || COALESCE(employment_type::text, '')
+		 FROM practice_membership_events
+		 WHERE practice_id = $1 AND staff_id = $2
+		 ORDER BY created_at, event_type`,
+		practiceID, staffID,
+	)
+	if err != nil {
+		t.Fatalf("read membership events: %v", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			t.Fatalf("scan membership event: %v", err)
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate membership events: %v", err)
+	}
+	return out
+}
+
+// TestUpdateMembershipHandler_EditsBothHalvesAtOnce is RA-G2 (#261): the
+// roles and the employment type move on one request, because they are
+// edited on one form.
+func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-edits-membership"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	targetID := seedStaff(t, db, "target-membership")
+	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := patchMembership(t, srv, session, practiceID, targetID, staffauth.UpdateMembershipRequest{
+		Roles: []string{adminRole, doulaRole}, EmploymentType: contractorType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var updated staffauth.UpdateMembershipResponse
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if updated.EmploymentType != contractorType || len(updated.Roles) != 2 {
+		t.Fatalf("response = %+v", updated)
+	}
+
+	var roles, employmentType string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT array_to_string(roles, ','), employment_type::text FROM practice_memberships
+		 WHERE practice_id = $1 AND staff_id = $2`, practiceID, targetID,
+	).Scan(&roles, &employmentType); err != nil {
+		t.Fatalf("read membership: %v", err)
+	}
+	// Immediately, with no grandfathering: ADR-0008 gates ambient reach
+	// on employment type, and a gate honouring the old answer is not one.
+	if roles != "admin,doula" || employmentType != contractorType {
+		t.Fatalf("membership = %q/%q", roles, employmentType)
+	}
+
+	events := membershipEvents(t, db, practiceID, targetID)
+	// Both events share one created_at (one transaction), so the tie
+	// breaks on event_type -- ordered by the enum's declaration order in
+	// 00039, not alphabetically.
+	want := []string{"roles_changed:doula->admin,doula/->", "employment_type_changed:->/employee->contractor"}
+	if len(events) != len(want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
+	for i := range want {
+		if events[i] != want[i] {
+			t.Fatalf("events = %v, want %v", events, want)
+		}
+	}
+
+	var actor string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT DISTINCT actor_staff_id FROM practice_membership_events WHERE staff_id = $1`, targetID,
+	).Scan(&actor); err != nil {
+		t.Fatalf("read actor: %v", err)
+	}
+	if actor != ownerID {
+		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
+	}
+}
+
+// TestUpdateMembershipHandler_NoOpRecordsNothing keeps the history a list
+// of changes rather than a list of times someone opened the form.
+func TestUpdateMembershipHandler_NoOpRecordsNothing(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-edits-nothing"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	targetID := seedStaff(t, db, "unchanged-membership")
+	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := patchMembership(t, srv, session, practiceID, targetID, staffauth.UpdateMembershipRequest{
+		Roles: []string{doulaRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if events := membershipEvents(t, db, practiceID, targetID); len(events) != 0 {
+		t.Fatalf("events = %v, want none", events)
+	}
+}
+
+// TestUpdateMembershipHandler_KeepsTheLastOwner covers the one edit an
+// Owner may not make: nothing else in the API grants the role back, so a
+// Practice with no Owner can never be invited to or edited again.
+func TestUpdateMembershipHandler_KeepsTheLastOwner(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "sole-owner-demotes-herself"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := patchMembership(t, srv, session, practiceID, ownerID, staffauth.UpdateMembershipRequest{
+		Roles: []string{doulaRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+
+	// With a second Owner in place, the same demotion is allowed.
+	secondOwner := seedStaff(t, db, "second-owner")
+	seedMembershipWithRoles(t, db, practiceID, secondOwner, "{owner}")
+
+	allowed := patchMembership(t, srv, session, practiceID, ownerID, staffauth.UpdateMembershipRequest{
+		Roles: []string{doulaRole}, EmploymentType: employeeType,
+	})
+	defer allowed.Body.Close()
+	if allowed.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", allowed.StatusCode, http.StatusOK)
+	}
+}
+
+func TestUpdateMembershipHandler_NonOwnerForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const doulaUID = "doula-edits-membership"
+	staffID, practiceID := seedStaffWithMembership(t, db, doulaUID) // '{doula}'
+
+	srv, session := newMembershipServer(t, db, doulaUID)
+	defer srv.Close()
+
+	resp := patchMembership(t, srv, session, practiceID, staffID, staffauth.UpdateMembershipRequest{
+		Roles: []string{ownerRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestUpdateMembershipHandler_NoSuchMembership(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-edits-a-stranger"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := patchMembership(t, srv, session, practiceID, emptyUUID, staffauth.UpdateMembershipRequest{
+		Roles: []string{doulaRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestUpdateMembershipHandler_Rejects(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-membership-validation"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	cases := []struct {
+		name string
+		body staffauth.UpdateMembershipRequest
+	}{
+		{"no roles", staffauth.UpdateMembershipRequest{EmploymentType: employeeType}},
+		{"unknown role", staffauth.UpdateMembershipRequest{Roles: []string{"superuser"}, EmploymentType: employeeType}},
+		{"unknown employment type", staffauth.UpdateMembershipRequest{Roles: []string{doulaRole}, EmploymentType: "volunteer"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := patchMembership(t, srv, session, practiceID, ownerID, tc.body)
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+			}
+		})
+	}
+
+	t.Run("invalid body", func(t *testing.T) {
+		resp := patchMembershipRaw(t, srv, session, practiceID, ownerID, []byte("not json"))
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("malformed staff id", func(t *testing.T) {
+		resp := patchMembership(t, srv, session, practiceID, "not-a-uuid", staffauth.UpdateMembershipRequest{
+			Roles: []string{doulaRole}, EmploymentType: employeeType,
+		})
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+	})
+}

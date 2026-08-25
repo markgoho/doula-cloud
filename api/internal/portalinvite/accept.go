@@ -34,7 +34,7 @@ type AcceptInviteResponse struct {
 // staffauth.AcceptInviteHandler's shape.
 func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.BeginBootstrap(w, r, verifier, db)
+		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
 		if !ok {
 			return
 		}
@@ -56,7 +56,7 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
-		resp, status, code, msg := acceptInvite(r, tx, uid, req.InviteToken)
+		resp, status, code, msg := acceptInvite(r, tx, verified.UID, req.InviteToken)
 		if status != http.StatusOK {
 			writeAPIError(w, status, code, msg)
 			return
@@ -66,7 +66,7 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// new rows back instead of leaving them committed behind a
 		// response that reports failure (#145). uid is the identity
 		// authn.Begin already verified.
-		cookie, err := authn.MintSession(r.Context(), tx, uid, time.Now())
+		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
 			return

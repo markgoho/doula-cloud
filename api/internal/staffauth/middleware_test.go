@@ -54,7 +54,7 @@ func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (s
 
 // seedOwnerMembership mirrors seedStaffWithMembership but promotes the
 // seeded Staff member to the 'owner' role -- the only role
-// AssignRolesHandler-gated actions accept as authorization.
+// RequireOwner-gated actions accept as authorization.
 func seedOwnerMembership(t *testing.T, db *testdb.DB, identityUID string) (staffID, practiceID string) {
 	t.Helper()
 	staffID, practiceID = seedStaffWithMembership(t, db, identityUID)
