@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OG card</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #2a2c38; font-family: "Schibsted Grotesk", system-ui, sans-serif; }
+  .card { width: 1200px; height: 630px; overflow: hidden; position: relative; display: none; }
+  .card[data-on] { display: block; }
+  /* (0,3,0): must beat .card[data-on] above, which is (0,2,0) */
+  .card.split[data-on] { display: flex; }
+
+  /* ---- split: light ground left, photograph right ---- */
+  .split { display: flex; background: #f4f5f9; }
+  .split__type {
+    width: 45%; padding: 72px 56px;
+    display: flex; flex-direction: column; justify-content: center; gap: 26px;
+  }
+  .split__photo { width: 55%; position: relative; }
+  .split__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .wordmark { font-size: 62px; font-weight: 700; letter-spacing: -.03em; color: #191b2a; line-height: 1; }
+  .date {
+    font-family: "IBM Plex Mono", monospace; font-size: 27px;
+    letter-spacing: .13em; text-transform: uppercase; color: #474bb5;
+  }
+  .rule { width: 78px; height: 5px; background: #474bb5; border-radius: 2px; }
+
+  /* ---- scrim: full photograph, type over a gradient ---- */
+  .scrim__photo { position: absolute; inset: 0; }
+  .scrim__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .scrim__wash {
+    position: absolute; inset: 0;
+    background: linear-gradient(100deg, rgba(16,18,32,.94) 0%, rgba(16,18,32,.86) 32%, rgba(16,18,32,.30) 60%, rgba(16,18,32,0) 82%);
+  }
+  .scrim__type {
+    position: absolute; inset: 0; padding: 76px 64px;
+    display: flex; flex-direction: column; justify-content: center; gap: 26px;
+    width: 60%;
+  }
+  .scrim__type .wordmark { color: #ffffff; }
+  .scrim__type .date { color: #b9bdf0; }
+  .scrim__type .rule { background: #8e93da; }
+  .scrim--right .scrim__wash {
+    background: linear-gradient(260deg, rgba(16,18,32,.95) 0%, rgba(16,18,32,.88) 30%, rgba(16,18,32,.34) 58%, rgba(16,18,32,0) 80%);
+  }
+  .scrim--right .scrim__type { left: auto; right: 0; width: 58%; padding-right: 64px; }
+</style>
+
+<div class="card split" data-card="split">
+  <div class="split__type">
+    <svg width="132" viewBox="48 76 202 94" aria-hidden="true">
+      <g fill="none" stroke-linecap="round" stroke-width="12">
+        <path d="M56 160 A76 76 0 0 1 193.97 116 A44 44 0 0 1 238 160" stroke="#c3c7ee"></path>
+        <path d="M78 160 A54 54 0 0 1 182.61 141.18 A22 22 0 0 1 216 160" stroke="#8e93da"></path>
+        <path d="M100 160 A32 32 0 0 1 164 160" stroke="#474bb5"></path>
+      </g>
+    </svg>
+    <div class="wordmark" data-product>DoulaCloud</div>
+    <div class="rule"></div>
+    <div class="date">Coming January 2027</div>
+  </div>
+  <div class="split__photo"><img src="og-source.jpeg" alt=""></div>
+</div>
+
+<div class="card scrim scrim--right" data-card="scrim-right">
+  <div class="scrim__photo"><img src="og-source.jpeg" alt=""></div>
+  <div class="scrim__wash"></div>
+  <div class="scrim__type">
+    <svg width="132" viewBox="48 76 202 94" aria-hidden="true">
+      <g fill="none" stroke-linecap="round" stroke-width="12">
+        <path d="M56 160 A76 76 0 0 1 193.97 116 A44 44 0 0 1 238 160" stroke="#8e93da"></path>
+        <path d="M78 160 A54 54 0 0 1 182.61 141.18 A22 22 0 0 1 216 160" stroke="#b9bdf0"></path>
+        <path d="M100 160 A32 32 0 0 1 164 160" stroke="#ffffff"></path>
+      </g>
+    </svg>
+    <div class="wordmark" data-product>DoulaCloud</div>
+    <div class="rule"></div>
+    <div class="date">Coming January 2027</div>
+  </div>
+</div>
+
+<div class="card scrim" data-card="scrim">
+  <div class="scrim__photo"><img src="og-source.jpeg" alt=""></div>
+  <div class="scrim__wash"></div>
+  <div class="scrim__type">
+    <svg width="132" viewBox="48 76 202 94" aria-hidden="true">
+      <g fill="none" stroke-linecap="round" stroke-width="12">
+        <path d="M56 160 A76 76 0 0 1 193.97 116 A44 44 0 0 1 238 160" stroke="#8e93da"></path>
+        <path d="M78 160 A54 54 0 0 1 182.61 141.18 A22 22 0 0 1 216 160" stroke="#b9bdf0"></path>
+        <path d="M100 160 A32 32 0 0 1 164 160" stroke="#ffffff"></path>
+      </g>
+    </svg>
+    <div class="wordmark" data-product>DoulaCloud</div>
+    <div class="rule"></div>
+    <div class="date">Coming January 2027</div>
+  </div>
+</div>
+
+<script>
+  var which = new URL(location.href).searchParams.get('card') || 'split';
+  document.querySelector('[data-card="' + which + '"]').setAttribute('data-on', '');
+</script>
