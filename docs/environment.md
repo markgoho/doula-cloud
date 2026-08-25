@@ -29,8 +29,9 @@ except `.env.example`. A Sandbox key is still a key.
 | `STRIPE_ACCOUNT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-account-webhook-secret` |
 | `GCP_PROJECT_ID` | `doula-cloud` | same | ambient |
 | `STORAGE_EMULATOR_HOST` | the compose `gcs` service | same | unset (real GCS) |
-| `GCS_ATTACHMENTS_BUCKET` | `doula-cloud-e2e-attachments` | same | the real bucket |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBSCRIBER` | throwaway keypair in `stack.ts` | same | real keys |
+| `GCS_ATTACHMENTS_BUCKET` | `doula-cloud-e2e-attachments` | same | `doula-cloud-attachments`, a real bucket in `us-central1`, uniform access, public access prevention enforced |
+| `VAPID_PUBLIC_KEY` / `VAPID_SUBSCRIBER` | throwaway keypair in `stack.ts` | same | `VAPID_PUBLIC_KEY` plain env var, `VAPID_SUBSCRIBER=mailto:admin@doula.cloud` (not `mg.doula.cloud`: that domain has no inbound MX, see [Mailgun](#mailgun)) |
+| `VAPID_PRIVATE_KEY` | throwaway keypair in `stack.ts` | same | Secret Manager `doula-cloud-vapid-private-key` |
 | `MAILGUN_API_KEY` | one account-level key in `.env.local` | unset | Secret Manager `doula-cloud-mailgun-api-key` |
 | `MAILGUN_DOMAIN` | the account's sandbox domain (`sandbox….mailgun.org`), authorized recipients only | unset | `mg.doula.cloud`, plain env var |
 | `NOTIFICATION_WORKER_SECRET` | any value, matched against the `X-Internal-Secret` header on manual calls to `/api/internal/notifications/process-outbox` | unset (no scheduler runs in CI; the fake `mail.Sender` never gets a request either) | Secret Manager `doula-cloud-notification-worker-secret`, also set as the Cloud Scheduler job's header |
@@ -129,6 +130,59 @@ gcloud run services update doula-api --region us-central1 \
 ```
 
 `doula-api`'s own runtime service account also needs `roles/cloudtasks.enqueuer` on the queue (the binding above) to call `CreateTask` -- it already reaches Secret Manager and GCS under its existing identity, so no new service account is created for this.
+
+## Attachments bucket and VAPID push
+
+#245 provisioned the two variables `ci.yml`'s own comment had wrongly
+claimed were already set out of band: `GCS_ATTACHMENTS_BUCKET` (Contract
+PDFs and Message attachments, `objectstore.NewGCSStore` in `main.go`) and
+the VAPID keypair (`push.NewVAPIDPusher`, Web Push delivery).
+
+Proved end to end, not inferred from the code path: a real Practice, Client,
+Engagement and Contract were created against the deployed service, the
+Contract was sent and signed through the Client portal, and the signed PDF
+read back as `200 application/pdf` from the Owner-only endpoint.
+
+The bucket carries no public access -- every read goes through
+`GetSignedContractPDFHandler` and the equivalent attachment handler,
+never a direct bucket URL. The runtime service account holds
+`roles/storage.objectUser` on the bucket only, not a project-wide role,
+matching the per-secret grants below.
+
+The VAPID keypair is a real production pair, generated once with
+`webpush.GenerateVAPIDKeys()` from a throwaway `main.go` in `api/` that
+piped the private key straight into `gcloud secrets create` and printed
+only the public key -- deleted afterward, so the private key never sat
+in a file, a shell history, or a transcript longer than that one pipe.
+The local/CI throwaway pair in `stack.ts` is deliberately not this one.
+
+The public key also has to reach the browser: `deploy-app`'s "Build app"
+step in `ci.yml` sets `VITE_VAPID_PUBLIC_KEY` at build time, read by
+`app/src/lib/pushRegistration.ts`. It is hardcoded in `ci.yml` rather
+than held as a GitHub secret -- a VAPID public key is meant to travel to
+the browser, so there is nothing to protect. Before #245, this variable
+was never set at all, so every browser push subscription on the live app
+signed against an empty key; `objectstore` and `push` failing closed on
+missing values is what kept that from ever reaching a real push service.
+
+The commands that produced the current state, so it can be rebuilt:
+
+```
+gcloud storage buckets create gs://doula-cloud-attachments \
+  --location=us-central1 \
+  --uniform-bucket-level-access \
+  --public-access-prevention
+gcloud storage buckets add-iam-policy-binding gs://doula-cloud-attachments \
+  --member=serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --role=roles/storage.objectUser
+gcloud secrets create doula-cloud-vapid-private-key --replication-policy=automatic --data-file=-
+gcloud secrets add-iam-policy-binding doula-cloud-vapid-private-key \
+  --member=serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --role=roles/secretmanager.secretAccessor
+gcloud run services update doula-api --region us-central1 \
+  --update-env-vars GCS_ATTACHMENTS_BUCKET=doula-cloud-attachments,VAPID_PUBLIC_KEY=<public key>,VAPID_SUBSCRIBER=mailto:admin@doula.cloud \
+  --update-secrets VAPID_PRIVATE_KEY=doula-cloud-vapid-private-key:latest
+```
 
 ## Say Sandbox, not test mode
 

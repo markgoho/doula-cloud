@@ -522,9 +522,9 @@ jobs:
           # displace them either. An unqualified env_vars would wipe the
           # env-var half on the next push.
           #
-          # Not a claim that every var the BFF reads is set: VAPID_* and
-          # GCS_ATTACHMENTS_BUCKET are still unset on the live service, and
-          # belong to their own tickets, not to this line.
+          # #245 set VAPID_* and GCS_ATTACHMENTS_BUCKET the same way, out
+          # of band -- they are on the live service too, just not named
+          # here (docs/environment.md).
           env_vars: EXPECTED_ORIGINS=${{ steps.app-origin.outputs.origin }}
           env_vars_update_strategy: merge
           flags: --min-instances=1 --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg
@@ -575,7 +575,15 @@ jobs:
 
       - name: Build app
         working-directory: app
+        # VITE_VAPID_PUBLIC_KEY is not a secret -- a VAPID public key is
+        # meant to travel to the browser (pushRegistration.ts embeds it in
+        # every subscribe() call), so it is safe to hardcode here rather
+        # than round-trip through a GitHub secret. Must match doula-api's
+        # own VAPID_PUBLIC_KEY (docs/environment.md) or a subscription
+        # this key signs will fail the push service's verification.
         run: bun run build
+        env:
+          VITE_VAPID_PUBLIC_KEY: BCy44BWTeiwIi5f7-7O5PC7W8NwCssG6pl0_MlLGZYOxcP88qN5qcl4H1bMhRgsOZdssZ8PXc5R1wGhj8sPbaZs
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
