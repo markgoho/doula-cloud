@@ -15,7 +15,7 @@
 	 * callback throws.
 	 */
 	import { untrack } from 'svelte';
-	import { formatFee, isOpen, offerStateLabels, type NewOffer, type Offer } from './offer.js';
+	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type NewOffer, type Offer } from './offer.js';
 	import Badge from './components/atoms/Badge.svelte';
 	import Button from './components/atoms/Button.svelte';
 	import Notice from './components/atoms/Notice.svelte';
@@ -40,7 +40,6 @@
 	let target = $state<'staff' | 'email'>('staff');
 	let staffId = $state('');
 	let email = $state('');
-	let employmentType = $state('contractor');
 	let feeDollars = $state('');
 	let terms = $state('');
 	// Pre-filled from the Client's name once, then hers to change -- hence
@@ -53,22 +52,13 @@
 	let createError = $state('');
 	let withdrawError = $state('');
 
-	// Which employment type the fee rule is being read against: her own
-	// Membership for a Doula already here, the sender's choice for an
-	// email address, where no Membership exists yet.
+	// Which employment type the fee rule is read against: her own
+	// Membership for a Doula already here, and always contractor for an
+	// email address, since that is what the Invitation joins her as.
 	const selectedType = $derived(
-		target === 'email' ? employmentType : (doulas.find((d) => d.staffId === staffId)?.employmentType ?? '')
+		target === 'email' ? 'contractor' : (doulas.find((d) => d.staffId === staffId)?.employmentType ?? '')
 	);
 	const isFeeRequired = $derived(selectedType === 'contractor');
-
-	const badgeVariants = {
-		offered: 'info',
-		accepted: 'success',
-		declined: 'neutral',
-		withdrawn: 'neutral',
-		superseded: 'neutral',
-		expired: 'warning'
-	} as const;
 
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
@@ -82,7 +72,6 @@
 		};
 		if (target === 'email') {
 			offer.email = email;
-			offer.employmentType = employmentType;
 		} else {
 			offer.staffId = staffId;
 		}
@@ -127,7 +116,7 @@
 		{#each offers as offer (offer.offerId)}
 			<li>
 				<span>{offer.targetName || offer.targetAddress}</span>
-				<Badge label={offerStateLabels[offer.state]} variant={badgeVariants[offer.state]} />
+				<Badge label={offerStateLabels[offer.state]} variant={offerStateVariants[offer.state]} />
 				<span>{formatFee(offer.amountCents)}</span>
 				{#if isOpen(offer)}
 					<Button label="Withdraw" variant="secondary" size="sm" onClick={() => handleWithdraw(offer.offerId)} />
@@ -164,15 +153,7 @@
 			Email address
 			<input type="email" bind:value={email} required />
 		</label>
-		<RadioGroup
-			legend="Employment type"
-			options={[
-				{ value: 'contractor', label: 'Contractor' },
-				{ value: 'employee', label: 'Employee' }
-			]}
-			value={employmentType}
-			onChange={(value) => (employmentType = value)}
-		/>
+		<p>She joins the practice as a contractor doula, so this offer carries a fee.</p>
 	{/if}
 
 	{#if isFeeRequired}

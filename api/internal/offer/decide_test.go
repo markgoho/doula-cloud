@@ -165,11 +165,11 @@ func TestAcceptHandler_EmployeeOfferCopiesNoFee(t *testing.T) {
 	var listed offer.ListResponse
 	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", employeeSession, nil),
 		http.StatusOK, &listed)
-	if len(listed.Offers) != 1 || listed.Offers[0].DecidedAt == nil {
-		t.Fatalf("offers = %+v, want one row carrying decidedAt", listed.Offers)
+	if len(listed.Items) != 1 || listed.Items[0].DecidedAt == nil {
+		t.Fatalf("offers = %+v, want one row carrying decidedAt", listed.Items)
 	}
-	if listed.Offers[0].AmountCents != nil || listed.Offers[0].Terms != nil {
-		t.Fatalf("employee offer = %+v, want no fee and no terms", listed.Offers[0])
+	if listed.Items[0].AmountCents != nil || listed.Items[0].Terms != nil {
+		t.Fatalf("employee offer = %+v, want no fee and no terms", listed.Items[0])
 	}
 }
 

@@ -9,6 +9,7 @@ import {
 	loadInbox,
 	loadPreAccountOffer,
 	offerStateLabels,
+	offerStateVariants,
 	withdrawOffer,
 	type Offer
 } from './offer.js';
@@ -37,7 +38,7 @@ const offer: Offer = {
 
 describe('loadEngagementOffers', () => {
 	it('fetches the engagement offers path and returns the decoded list', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ offers: [offer] }));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [offer], hasMore: false }));
 
 		const result = await loadEngagementOffers(fetcher, 'practice-1', 'eng-1');
 
@@ -54,7 +55,7 @@ describe('loadEngagementOffers', () => {
 
 describe('loadInbox', () => {
 	it('fetches the practice offers path and returns her own offers', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ offers: [offer] }));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [offer], hasMore: false }));
 
 		const result = await loadInbox(fetcher, 'practice-1');
 
@@ -195,14 +196,13 @@ describe('isOpen', () => {
 });
 
 describe('offerStateLabels', () => {
+	const states = ['offered', 'accepted', 'declined', 'withdrawn', 'superseded', 'expired'];
+
 	it('names every state the BFF can return', () => {
-		expect(Object.keys(offerStateLabels)).toEqual([
-			'offered',
-			'accepted',
-			'declined',
-			'withdrawn',
-			'superseded',
-			'expired'
-		]);
+		expect(Object.keys(offerStateLabels)).toEqual(states);
+	});
+
+	it('gives every one of them a badge variant, so neither screen keeps its own copy', () => {
+		expect(Object.keys(offerStateVariants)).toEqual(states);
 	});
 });

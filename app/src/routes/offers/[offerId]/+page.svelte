@@ -78,12 +78,17 @@
 	</form>
 {:else}
 	<dl>
-		<dt>Client</dt>
-		<dd>{offer.clientFirstInitial}</dd>
-		<dt>Area</dt>
-		<dd>{offer.clientArea}</dd>
-		<dt>Due date</dt>
-		<dd>{offer.dueDate}</dd>
+		<!-- #230: she opens the link in March and gets a closed offer, not
+		     the Client's due date. The BFF stops serving these once the
+		     Offer is terminal; the page stops asking for their row. -->
+		{#if offer.state === 'offered'}
+			<dt>Client</dt>
+			<dd>{offer.clientFirstInitial}</dd>
+			<dt>Area</dt>
+			<dd>{offer.clientArea}</dd>
+			<dt>Due date</dt>
+			<dd>{offer.dueDate}</dd>
+		{/if}
 		<dt>Fee</dt>
 		<dd>{formatFee(offer.amountCents)}</dd>
 		{#if offer.terms}

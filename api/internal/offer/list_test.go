@@ -1,7 +1,9 @@
 package offer_test
 
 import (
+	"encoding/base64"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"doula-cloud/api/internal/offer"
@@ -17,10 +19,10 @@ func TestInboxHandler_ServesHerOwnOffersAndNobodyElses(t *testing.T) {
 	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
 		http.StatusOK, &listed)
 
-	if len(listed.Offers) != 1 {
-		t.Fatalf("offers = %d, want only her own", len(listed.Offers))
+	if len(listed.Items) != 1 {
+		t.Fatalf("offers = %d, want only her own", len(listed.Items))
 	}
-	got := listed.Offers[0]
+	got := listed.Items[0]
 	if got.OfferID != mine {
 		t.Fatalf("offerId = %q, want %q", got.OfferID, mine)
 	}
@@ -52,8 +54,8 @@ func TestInboxHandler_ExpiresOnTheWayPastAndShowsPastOffers(t *testing.T) {
 	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
 		http.StatusOK, &listed)
 
-	if len(listed.Offers) != 1 || listed.Offers[0].State != stateExpired {
-		t.Fatalf("offers = %+v, want one expired row -- past offers stay readable", listed.Offers)
+	if len(listed.Items) != 1 || listed.Items[0].State != stateExpired {
+		t.Fatalf("offers = %+v, want one expired row -- past offers stay readable", listed.Items)
 	}
 }
 
@@ -61,16 +63,16 @@ func TestEngagementListHandler_NamesWhoWasAsked(t *testing.T) {
 	f := newFixture(t)
 	fee := int64(52000)
 	staffOffer := f.makeOffer(t, offerBody(f.doulaID, 45000))
-	emailOffer := f.makeOffer(t, emailOfferBody(testAddress, contractorType, &fee))
+	emailOffer := f.makeOffer(t, emailOfferBody(testAddress, &fee))
 
 	var listed offer.ListResponse
 	decode(t, do(t, http.MethodGet, f.offersURL(), f.ownerSession, nil), http.StatusOK, &listed)
 
-	if len(listed.Offers) != 2 {
-		t.Fatalf("offers = %d, want both", len(listed.Offers))
+	if len(listed.Items) != 2 {
+		t.Fatalf("offers = %d, want both", len(listed.Items))
 	}
 	byID := map[string]offer.Summary{}
-	for _, o := range listed.Offers {
+	for _, o := range listed.Items {
 		byID[o.OfferID] = o
 	}
 	if got := byID[staffOffer]; got.TargetName == "" || got.TargetAddress == "" {
@@ -136,4 +138,80 @@ func TestCompleteHandler_RefusesUnknownEngagementAndNonPrivilegedCaller(t *testi
 		http.StatusNotFound)
 	expectStatus(t, do(t, http.MethodPost, base+"not-a-uuid/complete", f.ownerSession, nil), http.StatusBadRequest)
 	expectStatus(t, do(t, http.MethodPost, base+f.engagementID+"/complete", f.doulaSession, nil), http.StatusForbidden)
+}
+
+// #230: the copied Client fields stop being served the moment an Offer
+// goes terminal. She keeps the fact of the asking -- who, when, the fee,
+// the terms, and what she answered -- and a stale row in her history is
+// not a stranger's due date sitting in it indefinitely.
+func TestInboxHandler_LapsesTheClientFieldsOnATerminalOffer(t *testing.T) {
+	f := newFixture(t)
+	offerID := f.makeOffer(t, offerBody(f.doulaID, 45000))
+	expectStatus(t, do(t, http.MethodPost, f.offerURL(offerID, "decline"), f.doulaSession, nil), http.StatusOK)
+
+	var listed offer.ListResponse
+	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
+		http.StatusOK, &listed)
+
+	got := listed.Items[0]
+	if got.ClientFirstInitial != "" || got.ClientArea != "" || got.DueDate != "" {
+		t.Fatalf("declined offer still serves the client's fields: %+v", got)
+	}
+	if got.State != stateDeclined || got.DecidedAt == nil {
+		t.Fatalf("offer = %+v, want the fact of the asking kept", got)
+	}
+	if got.AmountCents == nil || *got.AmountCents != 45000 || got.Terms == nil {
+		t.Fatalf("offer = %+v, want her fee and terms kept", got)
+	}
+}
+
+// The list is one page deep with a cursor onto the next, the envelope
+// docs/api-design.md section 4 sets.
+func TestInboxHandler_PaginatesWithACursor(t *testing.T) {
+	f := newFixture(t)
+	// 31 Offers: one page of 30, and one row over.
+	for range 31 {
+		engagementID := seedEngagement(t, f.db, f.practiceID)
+		decode(t, do(t, http.MethodPost,
+			f.srv+"/practices/"+f.practiceID+"/engagements/"+engagementID+"/offers",
+			f.ownerSession, offerBody(f.doulaID, 45000)), http.StatusCreated, nil)
+	}
+
+	inboxURL := f.srv + "/practices/" + f.practiceID + "/offers"
+	var first offer.ListResponse
+	decode(t, do(t, http.MethodGet, inboxURL, f.doulaSession, nil), http.StatusOK, &first)
+	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v", len(first.Items), first.HasMore, first.NextCursor)
+	}
+
+	var second offer.ListResponse
+	decode(t, do(t, http.MethodGet, inboxURL+"?cursor="+url.QueryEscape(*first.NextCursor), f.doulaSession, nil),
+		http.StatusOK, &second)
+	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v", len(second.Items), second.HasMore)
+	}
+	if second.Items[0].OfferID == first.Items[29].OfferID {
+		t.Fatal("the second page repeated the first page's last row")
+	}
+}
+
+// A bad cursor is refused rather than silently serving the wrong page,
+// in each of the three ways it can be bad.
+func TestListHandlers_RefuseAMalformedCursor(t *testing.T) {
+	f := newFixture(t)
+
+	cases := map[string]string{
+		"not base64":         "not-base64!",
+		"no separator":       base64.URLEncoding.EncodeToString([]byte("nothing-to-split-on")),
+		"unparseable moment": base64.URLEncoding.EncodeToString([]byte("not-a-timestamp|" + f.doulaID)),
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			expectStatus(t, do(t, http.MethodGet,
+				f.srv+"/practices/"+f.practiceID+"/offers?cursor="+url.QueryEscape(raw), f.doulaSession, nil),
+				http.StatusBadRequest)
+		})
+	}
+	expectStatus(t, do(t, http.MethodGet, f.offersURL()+"?cursor=not-base64!", f.ownerSession, nil),
+		http.StatusBadRequest)
 }

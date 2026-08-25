@@ -107,7 +107,7 @@ func TestCreateHandler_ToEmailTargetMintsInvitationAndOutbox(t *testing.T) {
 	f := newFixture(t)
 	fee := int64(52000)
 
-	offerID := f.makeOffer(t, emailOfferBody("Renata@Example.com", contractorType, &fee))
+	offerID := f.makeOffer(t, emailOfferBody("Renata@Example.com", &fee))
 
 	var address, status, rolesCSV, employmentType string
 	if err := f.db.Admin.QueryRowContext(t.Context(),
@@ -140,7 +140,7 @@ func TestCreateHandler_EmailTargetResponseCarriesNoCredentials(t *testing.T) {
 	f := newFixture(t)
 	fee := int64(52000)
 
-	resp := do(t, http.MethodPost, f.offersURL(), f.ownerSession, emailOfferBody("renata@example.com", contractorType, &fee))
+	resp := do(t, http.MethodPost, f.offersURL(), f.ownerSession, emailOfferBody("renata@example.com", &fee))
 	var created map[string]any
 	decode(t, resp, http.StatusCreated, &created)
 
@@ -194,7 +194,7 @@ func TestCreateHandler_Validation(t *testing.T) {
 		{"target is not a doula", offerBody(adminOnlyID, 45000), http.StatusBadRequest},
 		{"target is not at this practice", offerBody("11111111-1111-1111-1111-111111111111", 45000), http.StatusBadRequest},
 		{"target is not a uuid", offerBody("not-a-uuid", 45000), http.StatusBadRequest},
-		{"email target with no employment type", emailOfferBody("new@example.test", "", &fee), http.StatusBadRequest},
+		{"email target with no fee", emailOfferBody("new@example.test", nil), http.StatusBadRequest},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -219,7 +219,7 @@ func TestCreateHandler_RefusesEmailTargetWhoAlreadyHoldsMembership(t *testing.T)
 	fee := int64(45000)
 
 	expectStatus(t, do(t, http.MethodPost, f.offersURL(), f.ownerSession,
-		emailOfferBody("uid-doula@example.com", contractorType, &fee)), http.StatusConflict)
+		emailOfferBody("uid-doula@example.com", &fee)), http.StatusConflict)
 }
 
 func TestCreateHandler_RefusesCompletedOrMissingEngagement(t *testing.T) {

@@ -283,7 +283,7 @@ func TestCreate_RefreshesAStaleStaffInviteOutboxToken(t *testing.T) {
 	var created offer.CreateResponse
 	decode(t, do(t, http.MethodPost,
 		f.srv+"/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers", f.ownerSession,
-		emailOfferBody(testAddress, contractorType, &fee)), http.StatusCreated, &created)
+		emailOfferBody(testAddress, &fee)), http.StatusCreated, &created)
 
 	_, freshToken := invitationDigestAndToken(t, f.db, created.OfferID)
 	var staffInviteToken sql.NullString

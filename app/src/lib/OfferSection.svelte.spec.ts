@@ -147,7 +147,7 @@ describe('OfferSection.svelte', () => {
 		});
 	});
 
-	it('offers work to an email address, carrying the employment type the sender chose', async () => {
+	it('offers work to an email address, which always joins her as a contractor and so carries a fee', async () => {
 		const { onCreate } = await setup();
 
 		await page.getByLabelText('Someone new, by email').click();
@@ -158,7 +158,6 @@ describe('OfferSection.svelte', () => {
 
 		expect(onCreate).toHaveBeenCalledWith({
 			email: 'new@example.test',
-			employmentType: 'contractor',
 			amountCents: 52_000,
 			terms: undefined,
 			clientFirstInitial: 'R',
@@ -167,23 +166,15 @@ describe('OfferSection.svelte', () => {
 		});
 	});
 
-	it('drops the fee field when an emailed target is named an employee', async () => {
-		const { onCreate } = await setup();
+	it('says what joining by email makes her, so the fee is not a surprise', async () => {
+		await setup();
 
 		await page.getByLabelText('Someone new, by email').click();
-		await page.getByLabelText('Employee').click();
-		await page.getByLabelText('Email address').fill('new@example.test');
-		await fillFacts();
-		await page.getByRole('button', { name: 'Send Offer' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith({
-			email: 'new@example.test',
-			employmentType: 'employee',
-			terms: undefined,
-			clientFirstInitial: 'R',
-			clientArea: 'North side',
-			dueDate: '2027-01-04'
-		});
+		await expect
+			.element(page.getByText('She joins the practice as a contractor doula, so this offer carries a fee.'))
+			.toBeVisible();
+		await expect.element(page.getByLabelText('Fee (USD)')).toBeVisible();
 	});
 
 	it('refuses a zero fee without calling onCreate', async () => {

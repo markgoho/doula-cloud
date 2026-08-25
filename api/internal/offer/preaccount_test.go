@@ -13,7 +13,7 @@ import (
 func seedEmailOffer(t *testing.T, f fixture) (offerID, token, code string) {
 	t.Helper()
 	fee := int64(52000)
-	offerID = f.makeOffer(t, emailOfferBody(testAddress, contractorType, &fee))
+	offerID = f.makeOffer(t, emailOfferBody(testAddress, &fee))
 	token, code = outboxCredentials(t, f.db, offerID)
 	return offerID, token, code
 }
@@ -157,4 +157,81 @@ func TestDeclineByTokenHandler_RefusesBadInput(t *testing.T) {
 	expectStatus(t, do(t, http.MethodPost, f.offerURL(offerID, "withdraw"), f.ownerSession, nil), http.StatusOK)
 	expectStatus(t, do(t, http.MethodPost, declineURL, "",
 		offer.DeclineByTokenRequest{Token: token, Code: code}), http.StatusConflict)
+}
+
+// #230's terminal rule on the pre-account read: she opens the link in
+// March and gets a closed offer, not the Client's due date.
+func TestReadHandler_LapsesTheClientFieldsOnATerminalOffer(t *testing.T) {
+	f := newFixture(t)
+	offerID, token, code := seedEmailOffer(t, f)
+	expectStatus(t, do(t, http.MethodPost, f.offerURL(offerID, "withdraw"), f.ownerSession, nil), http.StatusOK)
+
+	var got offer.PreAccountOffer
+	decode(t, do(t, http.MethodGet, f.readURL(offerID, token, code), "", nil), http.StatusOK, &got)
+
+	if got.State != stateWithdrawn {
+		t.Fatalf("state = %q, want withdrawn", got.State)
+	}
+	if got.ClientFirstInitial != "" || got.ClientArea != "" || got.DueDate != "" {
+		t.Fatalf("withdrawn offer still serves the client's fields: %+v", got)
+	}
+	// The fee and the terms are hers, not the Client's, and stay.
+	if got.AmountCents == nil || got.Terms == nil {
+		t.Fatalf("offer = %+v, want the fee and terms kept", got)
+	}
+}
+
+// A second Offer to the same address rotates the Invitation's token,
+// which would leave the first Offer's emailed link opening nothing. The
+// first Offer is re-issued instead: a fresh code, and a fresh email
+// carrying the new token.
+func TestCreate_ReissuesAnOpenOfferWhenTheTokenRotates(t *testing.T) {
+	f := newFixture(t)
+	firstOffer, firstToken, firstCode := seedEmailOffer(t, f)
+
+	secondEngagement := seedEngagement(t, f.db, f.practiceID)
+	fee := int64(52000)
+	var created offer.CreateResponse
+	decode(t, do(t, http.MethodPost,
+		f.srv+"/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",
+		f.ownerSession, emailOfferBody(testAddress, &fee)), http.StatusCreated, &created)
+
+	// The credentials the first Offer was mailed with no longer open it.
+	expectStatus(t, do(t, http.MethodGet, f.readURL(firstOffer, firstToken, firstCode), "", nil), http.StatusNotFound)
+
+	// The ones queued for it now do -- a fresh code against the new token.
+	reissuedToken, reissuedCode := outboxCredentials(t, f.db, firstOffer)
+	if reissuedCode == firstCode {
+		t.Fatal("the re-issued offer kept its old code")
+	}
+	var got offer.PreAccountOffer
+	decode(t, do(t, http.MethodGet, f.readURL(firstOffer, reissuedToken, reissuedCode), "", nil), http.StatusOK, &got)
+	if got.OfferID != firstOffer {
+		t.Fatalf("re-issued credentials opened %q, want %q", got.OfferID, firstOffer)
+	}
+
+	// And the second Offer's own credentials work too: one token, two
+	// Offers, a code each.
+	newToken, newCode := outboxCredentials(t, f.db, created.OfferID)
+	expectStatus(t, do(t, http.MethodGet, f.readURL(created.OfferID, newToken, newCode), "", nil), http.StatusOK)
+}
+
+// A re-issue resets the guess counter with the code it replaces: guesses
+// spent against a code nobody can use any more are not held against its
+// successor.
+func TestCreate_ReissueResetsTheGuessCounter(t *testing.T) {
+	f := newFixture(t)
+	firstOffer, firstToken, _ := seedEmailOffer(t, f)
+	for range 10 {
+		expectStatus(t, do(t, http.MethodGet, f.readURL(firstOffer, firstToken, "000000"), "", nil), http.StatusForbidden)
+	}
+
+	secondEngagement := seedEngagement(t, f.db, f.practiceID)
+	fee := int64(52000)
+	decode(t, do(t, http.MethodPost,
+		f.srv+"/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",
+		f.ownerSession, emailOfferBody(testAddress, &fee)), http.StatusCreated, nil)
+
+	reissuedToken, reissuedCode := outboxCredentials(t, f.db, firstOffer)
+	expectStatus(t, do(t, http.MethodGet, f.readURL(firstOffer, reissuedToken, reissuedCode), "", nil), http.StatusOK)
 }

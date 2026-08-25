@@ -21,6 +21,9 @@ export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 export interface Offer {
 	offerId: string;
 	state: OfferState;
+	/** The three fields #230 calls the Client's own. They come back empty
+	 * once the Offer reaches a terminal state: the record of the asking
+	 * survives, the Client's details stop being served. */
 	clientFirstInitial: string;
 	clientArea: string;
 	dueDate: string;
@@ -52,18 +55,29 @@ export interface PreAccountOffer {
 }
 
 /** The body of a make-an-offer request. Exactly one of staffId and email
- * is set; employmentType rides along only on the email path, where no
- * Membership exists to read it from. */
+ * is set. Employment type is never sent: it is read off her Membership
+ * for a staffId target, and an emailed Invitation always joins her as a
+ * contractor, which is why that path always carries a fee. */
 export interface NewOffer {
 	staffId?: string;
 	email?: string;
-	employmentType?: string;
 	amountCents?: number;
 	terms?: string;
 	clientFirstInitial: string;
 	clientArea: string;
 	dueDate: string;
 }
+
+/** Which Badge variant each state wears -- kept beside the labels so the
+ * two never drift, and so neither screen owns a copy of the other's. */
+export const offerStateVariants: Record<OfferState, 'info' | 'success' | 'warning' | 'neutral'> = {
+	offered: 'info',
+	accepted: 'success',
+	declined: 'neutral',
+	withdrawn: 'neutral',
+	superseded: 'neutral',
+	expired: 'warning'
+};
 
 /** Human-readable labels for each state, so a list reads as a story
  * rather than as enum values. */
@@ -93,24 +107,27 @@ async function readOrThrow<T>(response: Response): Promise<T> {
 
 /** Loads every Offer made on one Engagement, newest first -- the
  * make-an-offer screen's own list of who has been asked and what each of
- * them said. Owner and Admin only. */
+ * them said. Owner and Admin only. Only the first page: the BFF paginates
+ * for the reason docs/api-design.md gives, not because a fan-out ever
+ * reaches a second page (see invoice.ts's loadInvoices). */
 export async function loadEngagementOffers(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string
 ): Promise<Offer[]> {
-	const body = await readOrThrow<{ offers: Offer[] }>(
+	const body = await readOrThrow<{ items: Offer[] }>(
 		await fetcher(engagementOffersPath(practiceId, engagementId))
 	);
-	return body.offers;
+	return body.items;
 }
 
 /**
- * Loads the caller's own Offers, open and past -- her inbox.
+ * Loads the caller's own Offers, open and past -- her inbox. First page
+ * only, same as loadEngagementOffers.
  */
 export async function loadInbox(fetcher: Fetcher, practiceId: string): Promise<Offer[]> {
-	const body = await readOrThrow<{ offers: Offer[] }>(await fetcher(`/api/practices/${practiceId}/offers`));
-	return body.offers;
+	const body = await readOrThrow<{ items: Offer[] }>(await fetcher(`/api/practices/${practiceId}/offers`));
+	return body.items;
 }
 
 /** Makes an Offer. Throws with the response body text on refusal -- a

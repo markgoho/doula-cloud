@@ -9,7 +9,7 @@
 	 * onDecide owns the API call and the resulting state change; this
 	 * component reports which Offer and which answer.
 	 */
-	import { formatFee, isOpen, offerStateLabels, type Offer } from './offer.js';
+	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type Offer } from './offer.js';
 	import Badge from './components/atoms/Badge.svelte';
 	import Button from './components/atoms/Button.svelte';
 	import Notice from './components/atoms/Notice.svelte';
@@ -24,15 +24,6 @@
 
 	let decidingId = $state('');
 	let decideError = $state('');
-
-	const badgeVariants = {
-		offered: 'info',
-		accepted: 'success',
-		declined: 'neutral',
-		withdrawn: 'neutral',
-		superseded: 'neutral',
-		expired: 'warning'
-	} as const;
 
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
 		decideError = '';
@@ -53,14 +44,19 @@
 	<ul>
 		{#each offers as offer (offer.offerId)}
 			<li>
-				<Badge label={offerStateLabels[offer.state]} variant={badgeVariants[offer.state]} />
+				<Badge label={offerStateLabels[offer.state]} variant={offerStateVariants[offer.state]} />
 				<dl>
-					<dt>Client</dt>
-					<dd>{offer.clientFirstInitial}</dd>
-					<dt>Area</dt>
-					<dd>{offer.clientArea}</dd>
-					<dt>Due date</dt>
-					<dd>{offer.dueDate}</dd>
+					<!-- The Client's own fields stop being served once an Offer
+					     goes terminal (#230), so a past Offer reads as the fact
+					     of the asking rather than as three blank rows. -->
+					{#if isOpen(offer)}
+						<dt>Client</dt>
+						<dd>{offer.clientFirstInitial}</dd>
+						<dt>Area</dt>
+						<dd>{offer.clientArea}</dd>
+						<dt>Due date</dt>
+						<dd>{offer.dueDate}</dd>
+					{/if}
 					<dt>Fee</dt>
 					<dd>{formatFee(offer.amountCents)}</dd>
 					{#if offer.terms}

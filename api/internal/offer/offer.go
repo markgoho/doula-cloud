@@ -18,10 +18,13 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"doula-cloud/api/internal/staffauth"
@@ -66,7 +69,7 @@ func newAccessCode() (string, error) {
 func expireOpen(ctx context.Context, tx *sql.Tx, column, value string) error {
 	if _, err := tx.ExecContext(ctx,
 		//nolint:gosec // column is one of three package-local constants, never request input
-		`UPDATE engagement_offers SET state = 'expired'
+		`UPDATE engagement_offers SET state = 'expired', decided_at = now()
 		  WHERE `+column+` = $1 AND state = 'offered' AND expires_at <= now()`,
 		value,
 	); err != nil {
@@ -84,13 +87,80 @@ const (
 	byStaffID      = "staff_id"
 )
 
-// The offer_state values (00030) this package compares against by name.
-// The database is the authority on the set; these exist so a typo is a
-// compile error rather than a condition that quietly never matches.
+// The six offer_state values (00030), named so a typo is a compile error
+// rather than a condition that quietly never matches. The database is
+// still the authority on the set; these are how Go refers to it.
 const (
-	stateOffered  = "offered"
-	stateDeclined = "declined"
+	stateOffered    = "offered"
+	stateAccepted   = "accepted"
+	stateDeclined   = "declined"
+	stateWithdrawn  = "withdrawn"
+	stateSuperseded = "superseded"
+	stateExpired    = "expired"
 )
+
+// isTerminal reports whether an Offer has stopped being decidable.
+// #230 hangs a rule on this: the Client's own fields stop being served
+// the moment an Offer reaches any terminal state, so a stale link opens
+// a closed Offer rather than a stranger's due date.
+func isTerminal(state string) bool {
+	return state != stateOffered
+}
+
+// lapseClientFields blanks the three fields #230 calls the Client's own
+// -- first initial, general area, exact due date -- leaving the fact of
+// the asking behind. What survives is her history: who asked, when, the
+// fee, the terms in the Practice's own words, and what she answered.
+//
+// It applies whatever the reader's employment type, though #230 argues
+// the rule for a contractor: an employee reads the Engagement itself, so
+// lapsing her copy costs her nothing and spares the model a second rule
+// about which reader gets which fields.
+func lapseClientFields(state string, clientFirstInitial, clientArea, dueDate *string) {
+	if !isTerminal(state) {
+		return
+	}
+	*clientFirstInitial = ""
+	*clientArea = ""
+	*dueDate = ""
+}
+
+// pageSize is the fixed number of Offers one list page carries --
+// docs/api-design.md section 4, mirroring payments.invoicePageSize's
+// "fixed size is enough for paginated to be true" reasoning.
+const pageSize = 30
+
+// cursor is one list page's position: the Offer it left off at.
+// (offered_at, id) rather than offered_at alone, because two Offers of
+// one Engagement are sent in the same breath and share a timestamp.
+type cursor struct {
+	offeredAt time.Time
+	offerID   string
+}
+
+// encodeCursor renders a cursor for the wire, mirroring
+// payments.encodeInvoiceCursor.
+func encodeCursor(offeredAt time.Time, offerID string) string {
+	return base64.URLEncoding.EncodeToString([]byte(offeredAt.Format(time.RFC3339Nano) + "|" + offerID))
+}
+
+// decodeCursor reverses encodeCursor, rejecting anything malformed
+// rather than letting a bad cursor silently return the wrong page.
+func decodeCursor(s string) (cursor, error) {
+	raw, err := base64.URLEncoding.DecodeString(s)
+	if err != nil {
+		return cursor{}, fmt.Errorf("offer: decode cursor: %w", err)
+	}
+	parts := strings.SplitN(string(raw), "|", 2)
+	if len(parts) != 2 {
+		return cursor{}, errors.New("offer: malformed cursor")
+	}
+	offeredAt, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return cursor{}, fmt.Errorf("offer: parse cursor timestamp: %w", err)
+	}
+	return cursor{offeredAt: offeredAt, offerID: parts[1]}, nil
+}
 
 // writeJSON encodes a 200 response body, the one shape every handler in
 // this package shares.

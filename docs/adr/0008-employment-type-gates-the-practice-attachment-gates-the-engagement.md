@@ -252,6 +252,27 @@ This document makes the following calls, not made in either ticket:
   rather than by a synthetic system account. A build session must not invent a
   system `staff` row to avoid a `NULL` here — that would misrecord a human action
   that did not happen.
+
+  **Amended by the build ([#317](https://github.com/markgoho/doula-cloud/issues/317)):
+  three states, not one.** The rule above survives; "exactly once" does not. Two
+  more terminal states turn out to have no human actor either, and both are
+  recorded the same way rather than given a fabricated one:
+
+  - **A pre-account decline.** [#230](https://github.com/markgoho/doula-cloud/issues/230)'s
+    reader has no `staff` row yet — that is the whole point of the token-plus-code
+    read — so there is nobody to name. Declining must not require joining a
+    Practice in order to say no to it, so the decline is recorded with
+    `decided_at` set and `decided_by NULL`. The audit answer is the row itself:
+    the Invitation it names and the moment it was decided identify the holder of
+    a mailed token and a mailed code.
+  - **Expiry.** This document's own text already granted "an expiry job" the
+    alternative of naming *the process* rather than a person; with no such job
+    built (expiry flips on the way past, at read and decision time, following
+    `acceptInvite`'s precedent), there is no process to name either. `decided_at`
+    records when it was found stale; `decided_by` stays `NULL`.
+
+  What has not changed is the prohibition: no synthetic `staff` row, in any of the
+  three cases.
 - **`access_code_digest` and `access_code_sent_at` are populated only when
   `invitation_id IS NOT NULL`.** They hold the SHA-256 digest of the six-digit code
   [#230](https://github.com/markgoho/doula-cloud/issues/230) requires before the

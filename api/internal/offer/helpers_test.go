@@ -191,11 +191,12 @@ func offerBody(staffID string, amountCents int64) offer.CreateRequest {
 	}
 }
 
-// emailOfferBody is a valid email-target CreateRequest.
-func emailOfferBody(email, employmentType string, amountCents *int64) offer.CreateRequest {
+// emailOfferBody is a valid email-target CreateRequest. An emailed
+// Invitation always joins her as a contractor, so a fee is always
+// required on this path.
+func emailOfferBody(email string, amountCents *int64) offer.CreateRequest {
 	return offer.CreateRequest{
 		Email:              email,
-		EmploymentType:     employmentType,
 		AmountCents:        amountCents,
 		Terms:              "Two prenatal visits.",
 		ClientFirstInitial: "R",

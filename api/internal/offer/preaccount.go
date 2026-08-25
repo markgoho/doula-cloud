@@ -219,12 +219,18 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 		return PreAccountOffer{}, http.StatusInternalServerError, staffauth.MsgInternalError
 	}
 	if o.State == stateOffered && !expiresAt.After(time.Now()) {
-		o.State = "expired"
+		o.State = stateExpired
 	}
 
 	o.DueDate = dueDate.Format(time.DateOnly)
 	o.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
 	o.AmountCents = nullableInt64(amountCents)
 	o.Terms = nullableString(terms)
+	// #230: the read lapses at once on any terminal state -- she opens
+	// the link in March and gets a closed Offer, not the Client's due
+	// date. The link keeps working; what it serves is the fact of the
+	// asking, so a declined Offer does not leave a stranger holding a
+	// Client's details indefinitely.
+	lapseClientFields(o.State, &o.ClientFirstInitial, &o.ClientArea, &o.DueDate)
 	return o, http.StatusOK, ""
 }

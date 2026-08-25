@@ -469,3 +469,160 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }
+
+// CONTEXT.md's Attachment entry: "An Admin may attach an employee
+// directly -- naming her on a Visit is granted, not accrued, because she
+// has done nothing." Handing an employee a Visit puts her on the birth.
+func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-granting"
+	practiceID, creatorStaffID := seedDoulaWithMembership(t, db, identityUID)
+	targetStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "doula-employee-target", []string{doulaRole})
+	engagementID := seedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, creatorStaffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var origin, attachedBy string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT origin::text, attached_by::text FROM engagement_attachments
+		  WHERE engagement_id = $1 AND staff_id = $2`, engagementID, targetStaffID,
+	).Scan(&origin, &attachedBy); err != nil {
+		t.Fatalf("read attachment: %v", err)
+	}
+	if origin != "granted" || attachedBy != creatorStaffID {
+		t.Fatalf("attachment = %s by %s, want granted by the person who handed it over", origin, attachedBy)
+	}
+}
+
+// "A contractor can only be attached by her own acceptance of an Offer:
+// nobody can put an outsider on a Client's birth without her agreement."
+// So handing her a Visit is refused until she has accepted one.
+func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-reassign-to-contractor"
+	practiceID, creatorStaffID := seedDoulaWithMembership(t, db, identityUID)
+	targetStaffID := seedContractorAtPractice(t, db, practiceID, "contractor-target")
+	engagementID := seedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, creatorStaffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
+		engagementID, targetStaffID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count attachments: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("attachments = %d, want none -- nobody may put a contractor on a birth", count)
+	}
+}
+
+// A contractor who has already accepted is on the birth, so handing her
+// a Visit is ordinary.
+func TestReassignHandler_AllowsAnAttachedContractor(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-reassign-to-attached"
+	practiceID, creatorStaffID := seedDoulaWithMembership(t, db, identityUID)
+	targetStaffID := seedContractorAtPractice(t, db, practiceID, "contractor-attached")
+	engagementID := seedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, creatorStaffID)
+	seedGrantedAttachment(t, db, engagementID, targetStaffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// Logging her own Visit puts an employee Doula on the birth, granted.
+func TestCreateHandler_GrantsTheEmployeeWhoLoggedTheVisit(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-logging"
+	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
+	engagementID := seedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+
+	var origin string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT origin::text FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
+		engagementID, staffID,
+	).Scan(&origin); err != nil {
+		t.Fatalf("read attachment: %v", err)
+	}
+	if origin != "granted" {
+		t.Fatalf("origin = %q, want granted", origin)
+	}
+}
+
+// A contractor logging a Visit gets no grant: that would hand her the
+// reach an Offer exists to ask for. She is left with whatever the
+// write-side seam accrues, which is a record and never a key.
+func TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "contractor-logging"
+	practiceID := seedPractice(t, db)
+	staffID := seedContractorAtPractice(t, db, practiceID, identityUID)
+	engagementID := seedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM engagement_attachments
+		  WHERE engagement_id = $1 AND staff_id = $2 AND origin = 'granted'`,
+		engagementID, staffID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count granted attachments: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("granted attachments = %d, want none", count)
+	}
+}

@@ -79,6 +79,19 @@ describe('OfferInbox.svelte', () => {
 		expect(page.getByRole('button', { name: 'Accept' }).elements()).toHaveLength(0);
 	});
 
+	// #230: the Client's own fields stop being served once an Offer goes
+	// terminal, so a past Offer reads as the fact of the asking -- her
+	// fee and what she answered -- rather than as three blank rows.
+	it('leaves out the Client rows on a closed Offer, and keeps the fee', async () => {
+		await setup([
+			{ ...openOffer, state: 'declined', clientFirstInitial: '', clientArea: '', dueDate: '' }
+		]);
+
+		expect(page.getByText('Area').elements()).toHaveLength(0);
+		expect(page.getByText('Due date').elements()).toHaveLength(0);
+		await expect.element(page.getByText('$450.00')).toBeVisible();
+	});
+
 	it('shows the error when onDecide throws', async () => {
 		const onDecide = vi.fn().mockRejectedValue(new Error('that offer is no longer open'));
 		await setup([openOffer], onDecide);

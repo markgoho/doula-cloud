@@ -46,22 +46,70 @@ func requireDoula(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 
 // doulaMembership reports whether staffID holds a practice_memberships row
 // at practiceID, and if so whether that membership includes the Doula
-// role. Unlike staffauth.Roles (built for the caller, whom
-// staffauth.Middleware already guarantees a membership for), this treats
-// "no membership" as a normal, expected outcome rather than an error --
-// staffID here is an arbitrary reassignment target the caller supplied,
-// which may not be a Staff member at this Practice at all.
-func doulaMembership(ctx context.Context, tx *sql.Tx, practiceID, staffID string) (hasMembership, isDoula bool, err error) {
+// role and which employment type it carries. Unlike staffauth.Roles
+// (built for the caller, whom staffauth.Middleware already guarantees a
+// membership for), this treats "no membership" as a normal, expected
+// outcome rather than an error -- staffID here is an arbitrary
+// reassignment target the caller supplied, which may not be a Staff
+// member at this Practice at all.
+func doulaMembership(ctx context.Context, tx *sql.Tx, practiceID, staffID string) (hasMembership, isDoula bool, employmentType string, err error) {
 	err = tx.QueryRowContext(ctx,
-		`SELECT $1 = ANY(roles) FROM practice_memberships WHERE practice_id = $2 AND staff_id = $3`,
+		`SELECT $1 = ANY(roles), employment_type::text
+		   FROM practice_memberships WHERE practice_id = $2 AND staff_id = $3`,
 		doulaRole, practiceID, staffID,
-	).Scan(&isDoula)
+	).Scan(&isDoula, &employmentType)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, false, nil
+		return false, false, "", nil
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return false, false, fmt.Errorf("visit: check doula membership: %w", err)
+		return false, false, "", fmt.Errorf("visit: check doula membership: %w", err)
 	}
-	return true, isDoula, nil
+	return true, isDoula, employmentType, nil
+}
+
+// employeeType is the employment_type a Practice may put on a birth
+// directly. CONTEXT.md's Attachment entry draws the line: "An Admin may
+// attach an employee directly -- naming her on a Visit is granted, not
+// accrued, because she has done nothing... A contractor can only be
+// attached by her own acceptance of an Offer: nobody can put an outsider
+// on a Client's birth without her agreement" -- so a direct grant is for
+// an employee and nobody else.
+const employeeType = "employee"
+
+// hasGrantedAttachment reports whether staffID holds an open, granted
+// attachment to engagementID -- the record that she agreed to be on this
+// birth, which is the only way a contractor gets onto one.
+func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (bool, error) {
+	var attached bool
+	err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM engagement_attachments
+			WHERE engagement_id = $1 AND staff_id = $2
+			  AND origin = 'granted' AND ended_at IS NULL
+		)`,
+		engagementID, staffID,
+	).Scan(&attached)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return false, fmt.Errorf("visit: check granted attachment: %w", err)
+	}
+	return attached, nil
+}
+
+// callerEmploymentType reads the caller's own employment type at
+// practiceID. Unlike doulaMembership this is for the caller, whom
+// staffauth.Middleware already guarantees a membership for, so no rows is
+// an error rather than an expected outcome.
+func callerEmploymentType(ctx context.Context, tx *sql.Tx, practiceID, staffID string) (string, error) {
+	var employmentType string
+	err := tx.QueryRowContext(ctx,
+		`SELECT employment_type::text FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
+		practiceID, staffID,
+	).Scan(&employmentType)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("visit: read caller employment type: %w", err)
+	}
+	return employmentType, nil
 }

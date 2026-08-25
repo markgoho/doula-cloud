@@ -58,7 +58,7 @@ func ReassignHandler() http.Handler {
 			return
 		}
 
-		hasMembership, isDoula, err := doulaMembership(r.Context(), tx, practiceID, req.StaffID)
+		hasMembership, isDoula, employmentType, err := doulaMembership(r.Context(), tx, practiceID, req.StaffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -71,6 +71,22 @@ func ReassignHandler() http.Handler {
 		if !isDoula {
 			http.Error(w, "staff member does not hold the Doula role at this practice", http.StatusBadRequest)
 			return
+		}
+		// A contractor is put on a birth by her own acceptance of an Offer
+		// and by nothing else (CONTEXT.md's Attachment entry), so handing
+		// her a Visit is refused unless she already holds the attachment
+		// that says she agreed.
+		if employmentType != employeeType {
+			attached, err := hasGrantedAttachment(r.Context(), tx, engagementID, req.StaffID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			if !attached {
+				http.Error(w, "that contractor has not accepted an offer on this engagement", http.StatusBadRequest)
+				return
+			}
 		}
 
 		// engagement_id is filtered explicitly, on top of the RLS scoping
@@ -97,16 +113,20 @@ func ReassignHandler() http.Handler {
 			return
 		}
 
-		// The Doula the Visit was handed to is now on this birth, so she
-		// gets a granted attachment even though she is not the actor --
-		// ADR-0008's "an Admin scheduling her onto a Visit ... that is a
-		// granted attachment, written explicitly". attached_by is the
-		// person who did the handing, not the person handed to.
-		actorStaffID, _ := staffauth.StaffID(r.Context())
-		if err := staffauth.Grant(r.Context(), tx, engagementID, req.StaffID, actorStaffID, nil, nil); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-			return
+		// The employee the Visit was handed to is now on this birth, so
+		// she gets a granted attachment even though she is not the actor
+		// -- ADR-0008's "an Admin scheduling her onto a Visit ... that is
+		// a granted attachment, written explicitly". attached_by is the
+		// person who did the handing, not the person handed to. A
+		// contractor needs none: the check above already proved she holds
+		// the one her own acceptance opened.
+		if employmentType == employeeType {
+			actorStaffID, _ := staffauth.StaffID(r.Context())
+			if err := staffauth.Grant(r.Context(), tx, engagementID, req.StaffID, actorStaffID, nil, nil); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

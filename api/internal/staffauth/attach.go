@@ -107,16 +107,19 @@ func attachActor(ctx context.Context, tx *sql.Tx, practiceID, engagementID, staf
 //
 // feeAmountCents and feeTerms are the Offer's own, copied at acceptance
 // so nothing can later rewrite what she agreed to; both are nil
-// everywhere else. The upgrade branch deliberately leaves the fee columns
-// alone: a later Visit-create granting the same pair must not blank the
-// fee an Offer copied on.
+// everywhere else. On an upgrade they are COALESCEd rather than assigned:
+// an acceptance over an existing accrued row still copies its fee on,
+// while a later Visit-create granting the same pair -- which carries no
+// fee -- cannot blank the fee an Offer already copied.
 func Grant(ctx context.Context, tx *sql.Tx, engagementID, staffID, attachedBy string, feeAmountCents *int64, feeTerms *string) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO engagement_attachments
 		     (engagement_id, staff_id, origin, attached_by, fee_amount_cents, fee_terms)
 		 VALUES ($1, $2, 'granted', $3, $4, $5)
 		 ON CONFLICT (engagement_id, staff_id) WHERE ended_at IS NULL
-		 DO UPDATE SET origin = 'granted', attached_by = $3
+		 DO UPDATE SET origin = 'granted', attached_by = $3,
+		               fee_amount_cents = COALESCE($4, engagement_attachments.fee_amount_cents),
+		               fee_terms = COALESCE($5, engagement_attachments.fee_terms)
 		 WHERE engagement_attachments.origin = 'accrued'`,
 		engagementID, staffID, attachedBy, feeAmountCents, feeTerms,
 	); err != nil {

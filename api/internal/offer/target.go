@@ -35,6 +35,10 @@ type offerTarget struct {
 // also do the work would mint an attachment nothing can use.
 const doulaRole = "doula"
 
+// contractorType is the employment_type whose fee the CHECK constraint
+// requires, and the one an emailed Invitation joins someone as.
+const contractorType = "contractor"
+
 // resolveTarget turns the request's staffId-or-email into an offerTarget,
 // minting an Invitation for the email path. Exactly one of the two must
 // be named -- an Offer with both would leave 00030's offer_target_named
@@ -47,7 +51,7 @@ func resolveTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID str
 	case req.StaffID != "":
 		return resolveStaffTarget(ctx, tx, practiceID, req.StaffID)
 	case address != "":
-		return resolveEmailTarget(ctx, tx, practiceID, actorStaffID, address, req.EmploymentType)
+		return resolveEmailTarget(ctx, tx, practiceID, actorStaffID, address)
 	default:
 		return offerTarget{}, http.StatusBadRequest, "an offer needs a staffId or an email address"
 	}
@@ -89,13 +93,15 @@ func resolveStaffTarget(ctx context.Context, tx *sql.Tx, practiceID, staffID str
 // "one link joins her to the Practice and puts the job in front of her at
 // once" -- plus the six-digit code the pre-account read asks for.
 //
-// The Invitation always carries the Doula role: this path exists to put
-// work in front of someone, and the Membership it will create has to be
-// able to hold the attachment acceptance mints.
-func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address, employmentType string) (offerTarget, int, string) {
-	if !validEmploymentTypes[employmentType] {
-		return offerTarget{}, http.StatusBadRequest, "employmentType must be employee or contractor"
-	}
+// The Invitation always carries the Doula role and contractor employment
+// type: CONTEXT.md's Offer entry says this link "joins her to the
+// Practice as a contractor Doula", and it is the only shape that makes
+// sense here -- an employee is inside the business, which is not
+// something an emailed link makes anyone. Someone who should be an
+// employee is invited through the Staff screen and offered work through
+// her Membership afterwards.
+func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address string) (offerTarget, int, string) {
+	const employmentType = contractorType
 
 	// Someone who is already at this Practice is offered work through her
 	// Membership, not through a second front door: a fresh Invitation for
@@ -110,10 +116,21 @@ func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 		return offerTarget{}, http.StatusConflict, "that address already holds a membership at this practice -- offer the work to that staff member instead"
 	}
 
-	invitationID, token, _, _, err := staffauth.MintInvitation(ctx, tx, practiceID, actorStaffID, address, "{"+doulaRole+"}", employmentType)
+	invitationID, token, _, rotated, err := staffauth.MintInvitation(ctx, tx, practiceID, actorStaffID, address, "{"+doulaRole+"}", employmentType)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return offerTarget{}, http.StatusInternalServerError, staffauth.MsgInternalError
+	}
+	// Minting rotates the token, which silently breaks the link in every
+	// email already sent against this Invitation -- including another
+	// Engagement's still-open Offer to the same address. Those Offers are
+	// re-issued rather than left holding a dead link: a fresh code each,
+	// and a fresh email carrying the new token.
+	if rotated {
+		if status, msg := reissueOpenOffers(ctx, tx, invitationID, token); status != http.StatusOK {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return offerTarget{}, status, msg
+		}
 	}
 
 	code, err := newAccessCode()
@@ -131,7 +148,64 @@ func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 	}, http.StatusOK, ""
 }
 
-// validEmploymentTypes mirrors 00030's employment_type enum, so an email
-// path's request can be refused before it reaches Postgres -- the same
-// reason staffauth keeps its own copy.
-var validEmploymentTypes = map[string]bool{"employee": true, "contractor": true}
+// reissueOpenOffers gives every Offer still open on invitationID a fresh
+// access code and queues a fresh email carrying token -- the answer to
+// the token this Invitation just rotated away from under them. One email
+// per open Offer, which is what re-issuing two Offers means; the code
+// has to be new because engagement_offers keeps only its digest, so the
+// old one cannot be re-sent.
+func reissueOpenOffers(ctx context.Context, tx *sql.Tx, invitationID, token string) (int, string) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id FROM engagement_offers
+		  WHERE invitation_id = $1 AND state = 'offered' AND expires_at > now()`,
+		invitationID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return http.StatusInternalServerError, staffauth.MsgInternalError
+	}
+	defer func() { _ = rows.Close() }()
+
+	var offerIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			// coverage:ignore reason: DB scan failure, not exercised by unit tests
+			return http.StatusInternalServerError, staffauth.MsgInternalError
+		}
+		offerIDs = append(offerIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
+		return http.StatusInternalServerError, staffauth.MsgInternalError
+	}
+	if err := rows.Close(); err != nil {
+		// coverage:ignore reason: DB row close failure, not exercised by unit tests
+		return http.StatusInternalServerError, staffauth.MsgInternalError
+	}
+
+	for _, offerID := range offerIDs {
+		code, err := newAccessCode()
+		if err != nil {
+			// coverage:ignore reason: crypto/rand failure, not exercised by unit tests
+			return http.StatusInternalServerError, staffauth.MsgInternalError
+		}
+		// access_code_attempts resets with the code: the guesses spent
+		// against a code nobody can use any more are not held against the
+		// one replacing it.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE engagement_offers
+			    SET access_code_digest = $1, access_code_sent_at = NULL, access_code_attempts = 0
+			  WHERE id = $2`,
+			staffauth.TokenDigest(code), offerID,
+		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return http.StatusInternalServerError, staffauth.MsgInternalError
+		}
+		if err := queue(ctx, tx, offerID, token, code); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return http.StatusInternalServerError, staffauth.MsgInternalError
+		}
+	}
+	return http.StatusOK, ""
+}

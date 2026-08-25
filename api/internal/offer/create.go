@@ -20,10 +20,9 @@ import (
 // not be Staff anywhere yet -- ADR-0008's "one link joins her to the
 // Practice and puts the job in front of her at once".
 //
-// employmentType is read here only on the email path, where no Membership
-// exists to read it from and it rides the Invitation instead. For a
-// staffId target it is taken from her own Membership and any value sent
-// here is ignored: employment type is what a person is to the business,
+// Employment type is never sent: for a staffId target it is read off her
+// own Membership, and the email path always joins her as a contractor
+// (CONTEXT.md's Offer entry). It is what a person is to the business,
 // not something a request body gets to assert on her behalf.
 //
 // clientFirstInitial, clientArea, and dueDate are typed in by the sender,
@@ -32,7 +31,6 @@ import (
 type CreateRequest struct {
 	StaffID            string `json:"staffId"`
 	Email              string `json:"email"`
-	EmploymentType     string `json:"employmentType"`
 	AmountCents        *int64 `json:"amountCents"`
 	Terms              string `json:"terms"`
 	ClientFirstInitial string `json:"clientFirstInitial"`
@@ -147,7 +145,7 @@ func parseFacts(w http.ResponseWriter, req CreateRequest) (facts, bool) {
 // documents the same Postgres behaviour), so the readable error has to
 // be produced here.
 func checkFee(employmentType string, amountCents *int64) (int, string) {
-	if employmentType == "contractor" {
+	if employmentType == contractorType {
 		if amountCents == nil || *amountCents <= 0 {
 			return http.StatusBadRequest, "a fee is required when offering work to a contractor"
 		}

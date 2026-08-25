@@ -57,10 +57,25 @@ func CreateHandler() http.Handler {
 		// seam mints -- ADR-0008 names Visit-create as one of the two
 		// places granted is written explicitly. No fee rides it: a fee is
 		// only ever copied from an Offer.
-		if err := staffauth.Grant(r.Context(), tx, engagementID, staffID, staffID, nil, nil); err != nil {
+		//
+		// Only for an employee, though. CONTEXT.md's Attachment entry
+		// gives a contractor exactly one way onto a birth -- her own
+		// acceptance of an Offer -- so granting here would let her hand
+		// herself the reach an Offer exists to ask for. She gets the
+		// seam's accrued record instead, which is a record of work and
+		// never a key.
+		employmentType, err := callerEmploymentType(r.Context(), tx, practiceID, staffID)
+		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
+		}
+		if employmentType == employeeType {
+			if err := staffauth.Grant(r.Context(), tx, engagementID, staffID, staffID, nil, nil); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
