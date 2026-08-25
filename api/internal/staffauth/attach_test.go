@@ -62,6 +62,15 @@ func newAttachFixture(t *testing.T) attachFixture {
 // the given outcome ("ok" or "refused").
 func (f attachFixture) write(t *testing.T, uid, outcome string) {
 	t.Helper()
+	resp := f.writeStatus(t, uid, outcome)
+	_ = resp.Body.Close()
+}
+
+// writeStatus is write, but returns the response instead of discarding
+// it, for a test that needs to assert the seam's own status code (the
+// pre-handler refusal) rather than just what the stub left behind.
+func (f attachFixture) writeStatus(t *testing.T, uid, outcome string) *http.Response {
+	t.Helper()
 	session := authntest.SeedSession(t, f.db.App, uid)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
 		f.srv.URL+"/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/writes", nil)
@@ -74,7 +83,7 @@ func (f attachFixture) write(t *testing.T, uid, outcome string) {
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	_ = resp.Body.Close()
+	return resp
 }
 
 // attachmentFor reads the open attachment for staffID, if there is one.
@@ -144,6 +153,124 @@ func TestAttachingWrite_AttachesNothingOnARefusedWrite(t *testing.T) {
 
 	if _, _, found := f.attachmentFor(t, doulaID); found {
 		t.Fatal("a refused write still attached the caller")
+	}
+}
+
+// A contractor Doula with no attachment at all is refused before the
+// wrapped handler ever runs, and the refusal reads as the same 404 a
+// contractor's read gets -- #350, the write-side mirror of #231/#315.
+func TestAttachingWrite_RefusesAnUnattachedContractor(t *testing.T) {
+	f := newAttachFixture(t)
+	contractorID := seedStaff(t, f.db, "attach-unattached-contractor")
+	seedContractorMembership(t, f.db, f.practiceID, contractorID)
+
+	resp := f.writeStatus(t, "attach-unattached-contractor", "ok")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d -- an unattached contractor's write must read as 'not found', not 403, so she can't tell 'doesn't exist' from 'not attached'", resp.StatusCode, http.StatusNotFound)
+	}
+	if _, _, found := f.attachmentFor(t, contractorID); found {
+		t.Fatal("a refused write must not attach the caller")
+	}
+}
+
+// An accrued-only attachment is a record of work, never a key (#228): a
+// contractor who has merely written here before still can't write again
+// without a granted attachment.
+func TestAttachingWrite_RefusesAContractorWithOnlyAnAccruedAttachment(t *testing.T) {
+	f := newAttachFixture(t)
+	contractorID := seedStaff(t, f.db, "attach-accrued-only-contractor")
+	seedContractorMembership(t, f.db, f.practiceID, contractorID)
+	seedAttachment(t, f.db, f.engagementID, contractorID, "accrued", false)
+
+	resp := f.writeStatus(t, "attach-accrued-only-contractor", "ok")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// A contractor who holds an open, granted attachment -- an accepted Offer
+// -- writes through the seam like anyone else.
+func TestAttachingWrite_AllowsAContractorWithAGrantedAttachment(t *testing.T) {
+	f := newAttachFixture(t)
+	contractorID := seedStaff(t, f.db, "attach-granted-contractor")
+	seedContractorMembership(t, f.db, f.practiceID, contractorID)
+	seedAttachment(t, f.db, f.engagementID, contractorID, "granted", false)
+
+	resp := f.writeStatus(t, "attach-granted-contractor", "ok")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+}
+
+// A contractor whose granted attachment has since ended is refused again
+// -- attachment gates the Engagement live, not once.
+func TestAttachingWrite_RefusesAContractorWhoseAttachmentHasEnded(t *testing.T) {
+	f := newAttachFixture(t)
+	contractorID := seedStaff(t, f.db, "attach-ended-contractor")
+	seedContractorMembership(t, f.db, f.practiceID, contractorID)
+	seedAttachment(t, f.db, f.engagementID, contractorID, "granted", true)
+
+	resp := f.writeStatus(t, "attach-ended-contractor", "ok")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// An employee Doula keeps the ambient write grant #227 decided -- no
+// attachment needed at all.
+func TestAttachingWrite_AllowsAnEmployeeDoulaWithNoAttachment(t *testing.T) {
+	f := newAttachFixture(t)
+	employeeID := seedStaff(t, f.db, "attach-employee-doula")
+	seedMembershipWithRoles(t, f.db, f.practiceID, employeeID, "{doula}")
+
+	resp := f.writeStatus(t, "attach-employee-doula", "ok")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+}
+
+// A malformed engagementId is left for the wrapped handler's own
+// staffauth.ParseUUID to reject -- the seam must not turn a typo'd path
+// segment into a 500 by handing it straight to a UUID column.
+func TestAttachingWrite_MalformedEngagementIDReachesTheHandler(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Malformed Engagement Practice")
+	doulaID := seedStaff(t, db, "attach-malformed-doula")
+	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/writes",
+		staffauth.Middleware(db.App)(staffauth.AttachingWrite(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "invalid engagement id", http.StatusBadRequest)
+		}))))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	session := authntest.SeedSession(t, db.App, "attach-malformed-doula")
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/writes", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d from the wrapped handler's own validation", resp.StatusCode, http.StatusBadRequest)
 	}
 }
 

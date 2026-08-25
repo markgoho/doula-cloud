@@ -7,20 +7,33 @@ import (
 	"log"
 	"net/http"
 	"slices"
+
+	"github.com/google/uuid"
 )
 
 // AttachingWrite is ADR-0008's write-side seam. It wraps an
-// Engagement-scoped write handler and, once that handler has succeeded,
+// Engagement-scoped write handler, refuses it up front if the caller may
+// not reach the Engagement at all, and, once the handler has succeeded,
 // attaches the *acting* Doula to the Engagement she just wrote under,
 // origin 'accrued', attached_by her own staff id.
 //
 // It is a mount-time wrapper rather than a call each handler remembers to
 // make, for the reason #231 gave: the per-request facts an attach
-// decision needs are the same ones the read gate already has, so
-// attaching should not become a second hand-maintained list that a new
-// write endpoint can silently fall off.
+// decision needs are the same ones the read gate already has, so neither
+// the refusal nor the attach should become a second hand-maintained list
+// that a new write endpoint can silently fall off.
 //
-// Three rules the seam must never break (ADR-0008):
+// The refusal reuses Reader.CanAccessEngagement -- the write table
+// (ADR-0008) draws exactly the same line as the read table: an Owner,
+// Admin, or employee Doula reaches every Engagement at the Practice, a
+// contractor Doula reaches only one she holds an open, granted attachment
+// on. A refused caller gets the same 404 a read gets, rather than a 403,
+// for the reason CanAccessEngagement's own doc comment gives: a 403 would
+// tell a contractor an Engagement exists that she cannot see, which is
+// exactly the "doesn't exist" vs. "not attached" distinction the read gate
+// exists to hide.
+//
+// Three rules the accrual half must never break (ADR-0008):
 //
 //   - Only the actor attaches. A Doula merely named in someone else's
 //     payload -- an Admin scheduling her onto a Visit -- is not the actor
@@ -38,20 +51,44 @@ import (
 // attachment and the write that caused it land together or not at all.
 func AttachingWrite(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(recorder, r)
-		if recorder.status >= http.StatusBadRequest {
-			return
-		}
-
 		tx, has := Tx(r.Context())
 		if !has {
 			// coverage:ignore reason: Middleware always sets a tx before this handler runs
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		staffID, _ := StaffID(r.Context())
 		practiceID, _ := PracticeID(r.Context())
 		engagementID := r.PathValue("engagementId")
+
+		// A malformed engagementId is left for the handler's own
+		// staffauth.ParseUUID to reject with its usual 400 -- querying an
+		// invalid UUID here would surface as a 500 instead, which is the
+		// wrong failure for a caller who simply typo'd a path segment.
+		if _, err := uuid.Parse(engagementID); err == nil {
+			reader, err := ResolveReader(r.Context(), tx, practiceID, staffID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			if !canAccess {
+				http.Error(w, "engagement not found", http.StatusNotFound)
+				return
+			}
+		}
+
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		if recorder.status >= http.StatusBadRequest {
+			return
+		}
 
 		if err := attachActor(r.Context(), tx, practiceID, engagementID, staffID); err != nil {
 			// The response is already written, so this cannot become a 500.
