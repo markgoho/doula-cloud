@@ -314,6 +314,100 @@
     font-size: 11.5px; line-height: 1.5; color: #7c8098; margin: 18px 0 0;
   }
 
+  /* ================= VARIANT D - "The Letter, in B's clothes" =================
+     C's voice (a signed note that names the problem) in B's visual system
+     (light ground, Schibsted display over Newsreader prose, card-held form,
+     the arcs graphic). Built after the first read: the vibe of C, the look of B. */
+  .vD {
+    --ink: #191b2a; --dim: #575b76; --ground: #f4f5f9;
+    --card: #ffffff; --line: #d9dbe8;
+    --accent: #474bb5; --wash: #dfe1f5;
+    background: var(--ground); color: var(--ink);
+    font-family: "Newsreader", Georgia, serif;
+    display: grid; align-content: center;
+    padding: 56px 24px 116px;
+  }
+  .vD__grid {
+    width: min(1080px, 100%); margin: 0 auto;
+    display: grid; gap: 48px; grid-template-columns: 1fr; align-items: start;
+  }
+  @media (min-width: 940px) {
+    .vD__grid { grid-template-columns: 1.15fr .85fr; gap: 68px; }
+    .vD__card { position: sticky; top: 56px; }
+  }
+  .vD__mark { display: block; width: 104px; height: auto; margin: 0 0 26px; }
+  .vD p.vD__eyebrow {
+    display: inline-flex; align-items: center;
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: .15em; text-transform: uppercase;
+    color: var(--accent); background: var(--wash);
+    padding: 6px 11px; border-radius: 999px; margin: 0 0 22px;
+  }
+  .vD h1 {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-weight: 700; font-size: clamp(1.95rem, 3.7vw, 2.7rem);
+    line-height: 1.1; letter-spacing: -.026em; text-wrap: balance;
+    margin: 0 0 24px;
+  }
+  .vD p { font-size: 1.12rem; line-height: 1.62; margin: 0 0 18px; max-width: 56ch; }
+  .vD p.vD__sig {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: .95rem; line-height: 1.45; color: var(--dim); margin: 28px 0 0;
+  }
+  .vD__sig > span { display: block; font-size: .84rem; }
+  .vD__card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 30px 28px;
+    box-shadow: 0 1px 2px rgba(25, 27, 42, .05), 0 14px 34px rgba(25, 27, 42, .07);
+  }
+  .vD p.vD__cardhead {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-weight: 700; font-size: 1.1rem; letter-spacing: -.015em; margin: 0 0 6px;
+  }
+  .vD p.vD__cardnote { font-size: .95rem; color: var(--dim); line-height: 1.5; margin: 0 0 22px; }
+  .vD__field { display: grid; gap: 7px; margin-bottom: 15px; }
+  .vD__field label {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 12.5px; font-weight: 500; color: var(--ink);
+  }
+  .vD__field input {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif; font-size: 1rem;
+    color: var(--ink); background: #fbfbfe;
+    border: 1px solid var(--line); border-radius: 6px; padding: 11px 12px;
+  }
+  .vD__field input:focus { outline: none; border-color: var(--accent); background: #fff; }
+  .vD__field input[aria-invalid="true"] { border-color: #c0392b; background: #fdf4f3; }
+  .vD button[type="submit"] {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 1rem; font-weight: 500; width: 100%;
+    background: var(--accent); color: #fff; border: 0;
+    padding: 13px 20px; border-radius: 6px; cursor: pointer; margin-top: 8px;
+  }
+  .vD button[type="submit"]:hover { background: #383c9f; }
+  .vD :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .vD p.vD__err {
+    display: none; font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: .87rem; color: #b13122; margin: -5px 0 15px;
+  }
+  [data-state="error"] p.vD__err { display: block; }
+  .vD__tick {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--wash); color: var(--accent);
+    display: grid; place-items: center; margin: 0 0 18px;
+  }
+  .vD__done h2 {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-weight: 700; font-size: 1.3rem; letter-spacing: -.02em; margin: 0 0 10px;
+  }
+  .vD__done p { font-size: 1rem; line-height: 1.6; color: var(--dim); margin: 0 0 10px; }
+  .vD__done strong { color: var(--ink); font-weight: 600; }
+  .vD__done:focus { outline: none; }
+  .vD p.vD__fine {
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 11.5px; line-height: 1.5; color: #7c8098; margin: 18px 0 0;
+  }
+
   /* ================= VARIANT C - "The Letter" ================= */
   /* A signed note. Says the most. No graphic at all. */
   .vC {
@@ -523,6 +617,71 @@
   </div>
 </section>
 
+<!-- =============== VARIANT D - The Letter, in B's clothes =============== -->
+<section class="variant vD" data-variant="D" data-name="Letter in B's clothes" data-state="idle">
+  <div class="vD__grid">
+
+    <div>
+      <svg class="vD__mark" viewBox="0 0 320 180" role="img" aria-labelledby="d-art-title">
+        <title id="d-art-title">Four nested arcs, each one holding the next</title>
+        <g fill="none" stroke-linecap="round">
+          <path d="M20 160 A140 140 0 0 1 300 160" stroke="#dfe1f5" stroke-width="14"></path>
+          <path d="M52 160 A108 108 0 0 1 268 160" stroke="#c3c7ee" stroke-width="14"></path>
+          <path d="M84 160 A76 76 0 0 1 236 160" stroke="#8e93da" stroke-width="14"></path>
+          <path d="M116 160 A44 44 0 0 1 204 160" stroke="#474bb5" stroke-width="14"></path>
+        </g>
+      </svg>
+
+      <p class="vD__eyebrow">Coming January 2027</p>
+      <h1>I am building the thing you keep rebuilding in a spreadsheet.</h1>
+
+      <p>If you run a doula practice, you already know where the hours go. Matching a client to a doula. Chasing a signature. Working out who is owed what, in a spreadsheet only you understand.</p>
+      <p><span data-product></span> is one place for all of it. It opens in January 2027. It is not ready yet, and I would rather tell you that than show you a demo.</p>
+      <p>Put your name down and I will write to you once, when it opens.</p>
+
+      <p class="vD__sig">Mark<span>Building <span data-product></span></span></p>
+    </div>
+
+    <div class="vD__card">
+      <div class="state state--idle">
+        <p class="vD__cardhead">Join the waitlist</p>
+        <p class="vD__cardnote">Two fields. One email from me when it opens.</p>
+
+        <form data-form novalidate>
+          <div class="vD__field">
+            <label for="d-name">First name</label>
+            <input id="d-name" name="metadata__first_name" type="text" autocomplete="given-name" data-name-input>
+          </div>
+          <div class="vD__field">
+            <label for="d-email">Email address</label>
+            <input id="d-email" name="email" type="email" autocomplete="email"
+                   inputmode="email" aria-describedby="d-err" data-email-input>
+          </div>
+          <p class="vD__err" id="d-err" data-err></p>
+          <button type="submit">Add me to the list</button>
+        </form>
+
+        <p class="vD__fine">One confirmation email now, one when we open. Nothing else, and you can leave the list from any of them.</p>
+      </div>
+
+      <div class="state state--success">
+        <div class="vD__done" tabindex="-1" data-done>
+          <div class="vD__tick" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+              <path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.2"
+                    stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <h2>Check your inbox.</h2>
+          <p>I sent a confirmation link to <strong data-echo-email>your inbox</strong>. Click it and you are on the list. Until you do, you are not.</p>
+          <p>Then nothing from me until January.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
 <!-- =============== social preview overlay =============== -->
 <div class="cardview" data-cardview>
   <div>
@@ -556,6 +715,7 @@
     <button type="button" data-variant-btn="A">A</button>
     <button type="button" data-variant-btn="B">B</button>
     <button type="button" data-variant-btn="C">C</button>
+    <button type="button" data-variant-btn="D">D</button>
     <span class="switcher__label" data-variant-name></span>
   </div>
   <div class="switcher__group">
@@ -608,6 +768,19 @@
       },
       ogTitle: 'PRODUCT — the back office for a doula practice',
       ogDesc: 'Clients, visits, and invoices in one place. Opens January 2027.'
+    },
+    D: {
+      name: "Letter in B's clothes",
+      badEmail: 'I need an email address I can actually write to. Try name@example.com.',
+      failed: 'That did not save. Try once more.',
+      og: {
+        bg: '#f4f5f9', fg: '#191b2a', accent: '#474bb5',
+        font: '"Schibsted Grotesk", system-ui, sans-serif',
+        kicker: 'COMING JANUARY 2027',
+        line: 'The thing you keep rebuilding in a spreadsheet.'
+      },
+      ogTitle: 'PRODUCT — opens January 2027',
+      ogDesc: 'One place for clients, visits, and invoices. Put your name down.'
     },
     C: {
       name: 'The Letter',
@@ -771,7 +944,7 @@
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     var t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    var keys = ['A', 'B', 'C'];
+    var keys = ['A', 'B', 'C', 'D'];
     var i = keys.indexOf(current);
     setVariant(keys[(i + (e.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length]);
   });
