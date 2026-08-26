@@ -34,3 +34,22 @@ The basis named is **legitimate interest**, deliberately and not by default. Nam
 - **The hidden field is a one-way door, and it is the only one here.** A subscriber who joins before the field exists is untagged forever; there is no way to backfill where somebody came from. Pirsch itself is trivially reversible — remove a script tag — so the field, not the vendor, is what has to be right at go-live.
 - **The teaser now runs JavaScript**, where [#363](https://github.com/markgoho/doula-cloud/issues/363) recorded it as having none. One line of ours, plus Pirsch's tag. Both are outside the form's own path: if either fails or is blocked, the hidden field posts empty and the signup still works.
 - **Attribution degrades quietly rather than loudly.** A blocked script means an untagged subscriber, not a lost one — so the channel counts are a floor, never a total, and should be read that way.
+
+## Amendment, 2026-08-26: four hidden fields, not one
+
+Settled on [#368](https://github.com/markgoho/doula-cloud/issues/368). The vendor, the cookieless posture, the legitimate-interest basis and the no-banner finding are all unchanged. Only the field count moves.
+
+The form carries **four** hidden inputs rather than one, all filled by the same line of first-party JavaScript from the matching UTM parameter:
+
+- `metadata__utm_source` — the venue, at venue granularity: `fb-rochester-birth-workers`, not `facebook`
+- `metadata__utm_medium` — `social`, `email`, `qr`
+- `metadata__utm_campaign` — `teaser`
+- `metadata__utm_content` — which social card was live when the link was posted
+
+`utm_term` is skipped; there is no paid search. Buttondown stores metadata as a JSON dict with arbitrary keys, so four flat keys need nothing special, and its subscriber search works on `key:value` — which four fields serve and one concatenated field would not. Writing four is *less* code than one: a loop over the four names rather than a hand-written read.
+
+The reason to widen it now rather than later is the one-way door this ADR already names. A subscriber who joins before a field exists is untagged forever. One field answers "which venue"; it cannot answer "which card" or "which push", and those questions cost nothing to keep open in August and cannot be reopened in December. `/privacy` gains one word with it — "one hidden field" becomes "a few hidden fields", on [#363](https://github.com/markgoho/doula-cloud/issues/363).
+
+**`utm_content` is a label, never a verdict.** The teaser ships as a single page with one card at a time, swapped over the four months rather than run in parallel — [#368](https://github.com/markgoho/doula-cloud/issues/368) rules out a creative test, because two cards in two different venues confound card with audience, and sequencing them by month confounds card with time instead. The field records which card was live when a link was posted. It does not measure which card is better, and nothing downstream should read it that way.
+
+That accuracy is also unenforced: the tag is only true if whoever posts sets it to the card currently live. A swapped card with an unswapped tag lies silently, which is worse than an absent tag. The constraint belongs to distribution, which is its own map.
