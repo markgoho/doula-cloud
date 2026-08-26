@@ -24,6 +24,8 @@ onBehalfOf := stripe.Params{StripeAccount: stripe.String(accountID)}
 
 That header is what makes a charge a *direct* charge. Stripe's own definition of the three Connect charge types turns on where the object is created and whose balance it settles into (section 4).
 
+**One naming hazard, so nobody misreads it.** The local variable is called `onBehalfOf`, but it sets the **`Stripe-Account` header**, not Stripe's `on_behalf_of` *parameter*. Those are different things: `on_behalf_of` names a settlement merchant on a charge created on the *platform's* account, and it is a destination-charge concept. It is `null` on the walked charge and the walked invoice (section 3.1), and it appears nowhere in the codebase as a parameter. The variable name is unfortunate; the behaviour is not.
+
 ### 2.2 The connected account is created as merchant of record, bearing fees and losses
 
 `CreateAccount` builds an Accounts v2 account with the **`merchant`** configuration, a **full** dashboard, and:
@@ -124,4 +126,6 @@ controller: { fees: { payer: "account" },
 
 ### 3.4 The answer
 
-**No. Client funds never rest under Doula Cloud's control, not even momentarily.** Money moves Client → Stripe → the Practice's Stripe balance → the Practice's bank. Doula Cloud's balance never sees it, and Doula Cloud holds no instruction, no authority and no API call by which it could move it. This is verified, not inferred.
+**No. Client funds never settle anywhere Doula Cloud possesses them, not even momentarily.** Money moves Client → Stripe → the Practice's Stripe balance → the Practice's own linked bank account. Doula Cloud's balance never sees it, and nothing in the integration routes — or could route, without adding a charge type it does not use — settlement to Doula Cloud.
+
+**One distinction the memo must not blur**, because counsel will draw it anyway. Doula Cloud has no *possession* of Client funds, but it does have *administrative API authority* over each connected account: the platform key acts on the Practice's account through the `Stripe-Account` header (that is how the invoice is created there at all), and the v1 view records `controller.is_controller: true, type: application`. Doula Cloud can create and finalize an Invoice on the Practice's account. What it cannot do, on this configuration, is take the proceeds. Whether administrative reach short of possession bears on the statutory test is exactly the sort of question section 7 puts to the attorney rather than answering here.
