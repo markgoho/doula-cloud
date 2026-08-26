@@ -29,7 +29,7 @@ The basis named is **legitimate interest**, deliberately and not by default. Nam
 
 ## Consequences
 
-- **This is the third recurring cost on a product with no revenue**, beside the virtual mailbox (~$99/year, [#363](https://github.com/markgoho/doula-cloud/issues/363)) and the Buttondown tier ([#366](https://github.com/markgoho/doula-cloud/issues/366)). $72/year, and Pirsch has no permanent free tier — only a 30-day trial.
+- ~~**This is the third recurring cost on a product with no revenue**, beside the virtual mailbox (~$99/year, [#363](https://github.com/markgoho/doula-cloud/issues/363)) and the Buttondown tier ([#366](https://github.com/markgoho/doula-cloud/issues/366)). $72/year, and Pirsch has no permanent free tier — only a 30-day trial.~~ **Corrected below: the marginal cost is nil.**
 - **`/privacy` changes, and its date changes with it.** The line "there's no analytics on it", fixed on [#363](https://github.com/markgoho/doula-cloud/issues/363), is now false. The replacement copy is on that ticket.
 - **The hidden field is a one-way door, and it is the only one here.** A subscriber who joins before the field exists is untagged forever; there is no way to backfill where somebody came from. Pirsch itself is trivially reversible — remove a script tag — so the field, not the vendor, is what has to be right at go-live.
 - **The teaser now runs JavaScript**, where [#363](https://github.com/markgoho/doula-cloud/issues/363) recorded it as having none. One line of ours, plus Pirsch's tag. Both are outside the form's own path: if either fails or is blocked, the hidden field posts empty and the signup still works.
@@ -53,3 +53,15 @@ The reason to widen it now rather than later is the one-way door this ADR alread
 **`utm_content` is a label, never a verdict.** The teaser ships as a single page with one card at a time, swapped over the four months rather than run in parallel — [#368](https://github.com/markgoho/doula-cloud/issues/368) rules out a creative test, because two cards in two different venues confound card with audience, and sequencing them by month confounds card with time instead. The field records which card was live when a link was posted. It does not measure which card is better, and nothing downstream should read it that way.
 
 That accuracy is also unenforced: the tag is only true if whoever posts sets it to the card currently live. A swapped card with an unswapped tag lies silently, which is worse than an absent tag. The constraint belongs to distribution, which is its own map.
+
+## Amendment, 2026-08-26: the teaser's Pirsch cost is nil, not $72/year
+
+The consequence above assumed a Pirsch account bought for the teaser. There already is one, and it carries roughly eight sites — the teaser is a marginal tenant on a subscription that would exist whether or not this decision had gone the other way.
+
+So the honest number for **this** map is **$0/year**, and the recurring-cost list shortens to two: the virtual mailbox (~$99/year, [#363](https://github.com/markgoho/doula-cloud/issues/363)) and the Buttondown tier ([#366](https://github.com/markgoho/doula-cloud/issues/366)). The tier movement on that account is driven by the other sites, not by anything the teaser does, and should not be charged here or read as evidence that a teaser draws real traffic.
+
+This strengthens the decision rather than disturbing it. Firebase Hosting request logs were rejected on the quality of the number — raw CDN logs count bots, and bot noise corrupts the one ratio the measurement exists to produce — with price a secondary consideration. That secondary consideration has now gone to zero, so the option that lost on quality also no longer wins on cost.
+
+**One thing it complicates, and it belongs to [the business map](https://github.com/markgoho/doula-cloud/issues/375) rather than here.** A DPA covers an *account*, not a site. This account is personal and serves seven unrelated sites, so signing Pirsch's DPA ([#392](https://github.com/markgoho/doula-cloud/issues/392)) signs it as an individual for all eight — which is correct today, because the LLC does not exist yet ([#377](https://github.com/markgoho/doula-cloud/issues/377) is unfiled). It stops being correct once it does. `doula.cloud` cannot be handed to the entity by moving the account, because seven other sites would go with it; it needs its own account or its own Pirsch organization, owned by the LLC and covered by the LLC's own DPA.
+
+That is not worth doing for the teaser. It is worth doing before January, when the same domain carries the evaluator-facing marketing site and the business should own its own vendor agreements — the same instinct behind the Google Cloud BAA ([#336](https://github.com/markgoho/doula-cloud/issues/336)) and taking Stripe to production under the real entity ([#387](https://github.com/markgoho/doula-cloud/issues/387)).
