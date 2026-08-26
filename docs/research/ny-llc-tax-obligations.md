@@ -232,7 +232,7 @@ Every date below shifts to the next business day when it lands on a Saturday, Su
 | Sat 15 Jan 2028 → **Tue 18 Jan 2028** | Q4-2027 estimated tax | 1040-ES / IT-2105 | | 17 Jan 2028 is a federal holiday |
 | **Wed 15 Mar 2028** | LLC filing fee, tax year 2027 | IT-204-LL | $25 | |
 | Mon 20 Mar 2028 | Sales tax, 1 Dec 2027 – 29 Feb 2028 | ST-100 | | |
-| Sat 15 Apr 2028 → **Mon 17 Apr 2028** | 2027 personal returns; Q1-2028 estimated tax | 1040 + Sch. C/SE; IT-201; 1040-ES / IT-2105 | | |
+| Sat 15 Apr 2028 → **next business day** | 2027 personal returns; Q1-2028 estimated tax | 1040 + Sch. C/SE; IT-201; 1040-ES / IT-2105 | | Check the exact day nearer the time: Emancipation Day (16 April, a District of Columbia holiday) can push the federal deadline past the following Monday |
 | **October 2028** | **First Biennial Statement** | DOS e-Statement | **$9** | Anniversary month of formation, every two years. Email reminder only if an address is on file |
 
 ### The steady-state year, once it is running
