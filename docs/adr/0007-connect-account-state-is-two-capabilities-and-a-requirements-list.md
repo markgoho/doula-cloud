@@ -158,3 +158,13 @@ passed because the fixture supplied a field production never sends.
 The Invoice leg stays on v1 APIs. Stripe accepts a v2 account id on a v1 endpoint
 and applies updates to the corresponding v2 properties, so every `V1Invoices` call
 with `Params.StripeAccount` works unchanged.
+
+## The direct-charge shape is load-bearing, not incidental
+
+Recorded after [#383](https://github.com/markgoho/doula-cloud/issues/383) walked the Sandbox and read the code: every Client-facing charge is created **on the connected account**, with no `application_fee_amount`, no `transfer_data`, no `destination`, and no platform balance entry. A walked $1,800 payment settled wholly into the Practice's balance, with Stripe's fee charged to the Practice.
+
+That is what makes the Practice merchant of record and keeps Doula Cloud out of the flow of funds — which in turn is the whole basis for the ruling on #383 that Doula Cloud is **not a money transmitter**. New York offers no payment-processor exemption and has not adopted the MTMA, so there is no fallback if the shape changes.
+
+**Five constraints follow, and breaking any of them reopens the question:** no application fee on a Client's payment ever (a constraint on [#285](https://github.com/markgoho/doula-cloud/issues/285)'s pricing model, not only on code); no funds resting with the platform; no contractor payouts out of Doula Cloud ([#391](https://github.com/markgoho/doula-cloud/issues/391)); no describing the product as a payment intermediary (Stripe Connect Terms §3.4(b)); hosted onboarding and Radar left on, which Stripe's managed-risk relief is conditioned on.
+
+Full reasoning: [`docs/research/money-transmission-posture.md`](../research/money-transmission-posture.md), and the ruling in [#383](https://github.com/markgoho/doula-cloud/issues/383).
