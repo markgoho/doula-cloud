@@ -69,5 +69,20 @@ export default defineConfig(
 				}
 			]
 		}
+	},
+	{
+		// PROTOTYPE (#372) -- throwaway code on a throwaway branch. It is
+		// deliberately exempt from the production rules; nothing here reaches
+		// trunk. Delete this block with the prototype.
+		files: ['src/lib/prototype/**'],
+		rules: {
+			'svelte/no-restricted-html-elements': 'off',
+			'unicorn/consistent-boolean-name': 'off',
+			'unicorn/no-computed-property-existence-check': 'off',
+			'unicorn/prefer-url-href': 'off',
+			'unicorn/prefer-else-if': 'off',
+			'unicorn/name-replacements': 'off',
+			'@typescript-eslint/no-unused-vars': 'off'
+		}
 	}
 );
