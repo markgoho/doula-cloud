@@ -582,6 +582,17 @@ ALTER TABLE engagements ADD COLUMN due_date date;
 `engagement_kind` is ADR-0015's enum, created here because this is the effort whose intake screen
 writes it. Nothing else from ADR-0015's `engagements` section is built here.
 
+`kind` is `NOT NULL` **with no database default**, exactly as ADR-0015 specifies it: a default would
+be a second opinion about what the Practice sold, silently applied by whatever forgets to pass it,
+and the intake control is the only thing that knows. This **departs from a charting note on
+[#332](https://github.com/markgoho/doula-cloud/issues/332)** which called this map's slice *all
+additive, all nullable* — that note was written before either document said otherwise, and #393 has
+since made the requester state the kind on every path that creates an Engagement, so there is no
+create path left that could produce a null. Existing rows are backfilled in the migration; there is
+no production data, so this is fixtures only.
+
+`due_date` is nullable, because a postpartum-only Engagement has none.
+
 ### `engagement_request_outbox` — the approver's Notification
 
 The same shape as `staff_invite_outbox` (00038) and `engagement_offer_outbox` (00041), row for row:
