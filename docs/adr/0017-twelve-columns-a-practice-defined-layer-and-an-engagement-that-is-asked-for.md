@@ -247,8 +247,10 @@ The general rule this instance belongs to, which the build should apply elsewher
 > and common.**
 
 That is why the same map both blocks a name substitution and *warns, never refuses* on a second
-concurrent Engagement. It is also why a second **pending** Engagement Request for one Client is
-blocked outright by a unique index, while a second live **Engagement** is not.
+concurrent Engagement. It is also why a second **pending** Engagement Request for the same Client
+*and the same kind* is blocked outright by a unique index, while a second live **Engagement** is
+not — and why that index is keyed on the kind rather than on the Client alone, so the woman buying
+both a birth package and a postpartum package is never caught by a rule aimed at a duplicate.
 
 **No delete and no deactivate on a Client.** An Engagement is a permanent record, and the real need
 behind *remove her* is `entered_in_error` on the Engagement, which belongs with the ADR-0015
@@ -557,15 +559,25 @@ CREATE TABLE engagement_requests (
     )
 );
 
--- At most one pending Request per Client, so two Doulas cannot both ask
--- for the same woman and spend two Credits on one piece of work. Same
--- partial-index idiom as engagement_offer_outbox_one_pending (00041).
+-- At most one pending Request per Client *per kind*, so two Doulas
+-- cannot both ask for the same woman's birth package and spend two
+-- Credits on one piece of work -- while a Client buying a birth package
+-- and a postpartum package at intake is still one visit to the screen.
+-- Same partial-index idiom as engagement_offer_outbox_one_pending (00041).
 CREATE UNIQUE INDEX engagement_requests_one_pending
-    ON engagement_requests (client_id)
+    ON engagement_requests (client_id, kind)
     WHERE state = 'pending';
 
 GRANT SELECT, INSERT, UPDATE ON engagement_requests TO app_runtime;   -- no DELETE
 ```
+
+The index is keyed on `(client_id, kind)` rather than on `client_id` alone, and the difference is
+the block-versus-warn rule applied carefully. Two Doulas asking for the same woman's birth package
+is a mistake with a correct alternative — one of them should be looking at the other's pending
+Request — so it is blocked. A Client buying **a birth package and a postpartum package at intake**
+is the same legitimate, common pair that made a second live Engagement *warn, never refuse*, and a
+`client_id`-only index would force her Doula to wait for one approval before asking for the other.
+The narrower key blocks the duplicate and leaves the pair alone.
 
 Practice-tier RLS on its own `practice_id`. `engagement_id` back-references the row approval created,
 which lets the Client detail page say *this Engagement began with a request on 2 March* without a
@@ -598,9 +610,14 @@ no production data, so this is fixtures only.
 The same shape as `staff_invite_outbox` (00038) and `engagement_offer_outbox` (00041), row for row:
 a pending/sent/dead-lettered status, an attempt count, a `next_attempt_at`, a partial unique index
 on one pending row per Request, no RLS, and the notification-worker read door on
-`engagement_requests`. It mails the approver, per ADR-0010 — queued, never sent inside the request.
-A pending Request stops a Doula from doing any work at all, so the wait is a stopped Doula rather
-than a background inconvenience.
+`engagement_requests`. It mails **every Owner and every Admin at the Practice**, per ADR-0010 —
+queued, never sent inside the request. There is no single approver: at a fourteen-doula agency the
+authority is held by several people, and mailing one of them picked by some rule means a Request
+waits on whichever person happens to be away. One outbox row per recipient, so the partial unique
+index is keyed on `(request_id, staff_id)` rather than on the Request alone. A pending Request stops
+a Doula from doing any work at all, so the wait is a stopped Doula rather than a background
+inconvenience — and a collapsed request-and-approval mails nobody, because it was decided the
+instant it was made.
 
 ## Rejected alternatives
 
