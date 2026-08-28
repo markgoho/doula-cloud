@@ -1,4 +1,4 @@
-# `/about` — the page Stripe reviews
+# `/support` — the page Stripe reviews
 
 The copy below is **final and verbatim**. It was settled on [#390](https://github.com/markgoho/doula-cloud/issues/390), on the map [#375](https://github.com/markgoho/doula-cloud/issues/375), and is built by [#358](https://github.com/markgoho/doula-cloud/issues/358) and verified by [#419](https://github.com/markgoho/doula-cloud/issues/419).
 
@@ -6,7 +6,7 @@ Do not reword it without reading #390 first. Every sentence in the refund sectio
 
 ## Where it lives, and how it is served
 
-- URL: `https://doula.cloud/about`
+- URL: `https://doula.cloud/support`
 - **Indexable.** No `noindex`, no canonical tag — the same posture [#368](https://github.com/markgoho/doula-cloud/issues/368) set for the teaser root. Stripe is indifferent either way (verified first-party: unlisted is fine, gated is not), so this is our choice, and the page carries nothing that is being kept quiet — there is no price on it and no feature detail. Reversed on [#390](https://github.com/markgoho/doula-cloud/issues/390) after `noindex` was first recommended: it bought nothing, and a long-`noindex`ed page is slow to get re-crawled once the tag comes off.
 - Reachable with no password, no cookie and no JavaScript.
 - Linked from the teaser footer, beside `/privacy`.
@@ -14,14 +14,14 @@ Do not reword it without reading #390 first. Every sentence in the refund sectio
 
 ## The standing constraint on this URL
 
-**Stripe re-checks the declared URL for as long as the account is live** — it is not a gate passed once at activation. So `doula.cloud/about` is committed to carrying a service description, a customer support contact and a refund position indefinitely.
+**Stripe re-checks the declared URL for as long as the account is live** — it is not a gate passed once at activation. So `doula.cloud/support` is committed to carrying a service description, a customer support contact and a refund position indefinitely.
 
-That matters most in January 2027, when there is a real marketing site and `/about` naturally wants to become a company-story page. Two ways to keep it true, and one of them has to be chosen deliberately rather than discovered:
+It was `/about` until it was pointed out that January's marketing site will want that URL for a company-story page. `/support` was chosen over `/terms-of-service` deliberately: the real terms of service, privacy policy and pilot agreements are **out of scope** on [#375](https://github.com/markgoho/doula-cloud/issues/375) and belong to their own effort, so a page claiming that URL would promise something it does not deliver and would have to move again the moment the real one is drafted. A support page means the same thing in January as it means now, so it squats on nothing. Two ways to keep it true, and one of them has to be chosen deliberately rather than discovered:
 
-- keep the required content on `/about`, however the page is redesigned around it; or
+- keep the required content on `/support`, however the page is redesigned around it; or
 - move the content to its new home **and change `business_profile.url` in the same change**.
 
-Silently redesigning `/about` without doing either takes the live platform account into `invalid_url_website_incomplete` territory, with no deploy-time warning.
+Silently redesigning `/support` without doing either takes the live platform account into `invalid_url_website_incomplete` territory, with no deploy-time warning.
 
 ## Constraints the copy is written under
 
@@ -32,7 +32,9 @@ Silently redesigning `/about` without doing either takes the live platform accou
 
 ---
 
-## About Doula Cloud
+# Support and billing
+
+## What Doula Cloud is
 
 Doula Cloud is practice-management software for doulas and doula agencies. A practice uses it to keep its client records, plan and schedule visits, message its clients, send and sign its contracts, and invoice its own clients for its own services.
 
@@ -40,13 +42,13 @@ Doula Cloud is not a payment service. When a practice invoices a client, the pra
 
 Doula Cloud is in a private pilot with a small number of practices, ahead of a public launch in January 2027.
 
-### What we sell
+## What we sell
 
 Practices buy **Credits**. One Credit covers one client engagement — a single client relationship, from intake through the end of care.
 
 Credits do not expire. There is no subscription and no recurring charge: a practice buys Credits when it wants them, and is charged nothing in between.
 
-### Refunds and cancellation
+## Refunds and cancellation
 
 There is nothing to cancel. Doula Cloud bills no recurring fee, so a practice that stops buying Credits is charged nothing further, and may close its account at any time.
 
@@ -56,11 +58,11 @@ Credits themselves do not expire, and a practice can spend them whenever it like
 
 To ask for a refund, email us. We do not need a reason.
 
-### If you think a charge is wrong
+## If you think a charge is wrong
 
 Email us before disputing the charge with your bank. If we have charged you in error we will refund it. We would rather fix it than argue about it.
 
-### Contact us
+## Contact us
 
 Email **hello@doula.cloud**. That address reaches a person, and it is also where privacy and data requests go.
 
