@@ -10,7 +10,15 @@ export const iconManifest = [
 	'arrow-right',
 	'arrow-square-out',
 	'minus-circle',
-	'paperclip'
+	'paperclip',
+	'users',
+	'receipt',
+	'tag',
+	'user-check',
+	'clipboard-text',
+	'file-text',
+	'credit-card',
+	'caret-down'
 ] as const;
 
 export type IconName = (typeof iconManifest)[number];

@@ -73,4 +73,35 @@ describe('Link.svelte', () => {
 			.element(page.getByRole('link', { name: 'Docs (opens in new tab)' }))
 			.not.toBeInTheDocument();
 	});
+
+	it('renders a leading icon and drops the underline when icon is given', async () => {
+		const { container } = await setup({ icon: 'users' });
+
+		expect(container.querySelector('svg')).toBeVisible();
+		await expect.element(page.getByRole('link')).toHaveClass('has-icon');
+	});
+
+	it('has no icon and keeps the underline class off when icon is omitted', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('link')).not.toHaveClass('has-icon');
+	});
+
+	it('marks the link as the current page when current is true', async () => {
+		await setup({ current: true });
+
+		await expect.element(page.getByRole('link')).toHaveAttribute('aria-current', 'page');
+	});
+
+	it('has no aria-current when current is false', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('link')).not.toHaveAttribute('aria-current');
+	});
+
+	it('reflects the card variant class', async () => {
+		await setup({ variant: 'card', icon: 'users' });
+
+		await expect.element(page.getByRole('link')).toHaveClass('card');
+	});
 });
