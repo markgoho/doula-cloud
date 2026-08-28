@@ -125,7 +125,7 @@ A push-delivered alert to a person, on any channel (browser Web Push or email) �
 _Avoid_: Message (a Notification is never in-app, bidirectional, immutable, or Engagement-scoped — it is a one-way alert on an outside channel)
 
 **Credit**:
-A unit of Doula Cloud's own billing, owned by the **Practice** — never by a Staff member, whatever their roles or Employment type. An Owner or an Admin buys them — an Admin who may approve an Engagement, and who already reads the balance and the ledger, may also top it up. What a Credit is spent on is not yet settled (TB-G3). Decided on [#374](https://github.com/markgoho/doula-cloud/issues/374).
+A unit of Doula Cloud's own billing, owned by the **Practice** — never by a Staff member, whatever their roles or Employment type. An Owner or an Admin buys them — an Admin who may approve an Engagement, and who already reads the balance and the ledger, may also top it up. One Credit covers one **Engagement**: it locks when the Engagement is created, and a locked Credit is spent. Credits do not expire, and a Practice may hold them for as long as it likes. A purchased Credit that is still unspent is refundable for three years from the day it was bought, at the price paid; a Credit granted free of charge is not refundable at all, and a spent one never is. Credits are not fungible for that purpose — which purchase a Credit came from decides what refunding it is worth, and the oldest are spent first. Decided on [#374](https://github.com/markgoho/doula-cloud/issues/374) and [#390](https://github.com/markgoho/doula-cloud/issues/390).
 _Avoid_: Token, seat, point
 
 **Sandbox**:
