@@ -120,7 +120,19 @@ stitch: https://stitch.googleapis.com/mcp (HTTP) - ! Connected · tools fetch fa
 ```
 
 The registration was then removed again (`claude mcp remove stitch -s local`).
-Nothing on this machine still carries the key.
+
+**Corrected 2026-08-28 on [#409](https://github.com/markgoho/doula-cloud/issues/409):
+the claim that followed here — "nothing on this machine still carries the key" —
+was false.** The removal was scoped to this repo. The key is still live on this
+machine in two places: `~/.claude.json` under a **different** project,
+`projects["/Users/mgoho/Github/mbu"].mcpServers.stitch.headers["X-Goog-Api-Key"]`,
+and two lines of `~/.zsh_history`. Both are local files, not published, so the
+exposure is low — but a key that Stitch renders unmasked in its Setup MCP panel
+should not be assumed gone because one registration was removed. **Rotate it in
+Stitch Settings before this repo relies on Stitch again**, and remember that
+`CLAUDE_CONFIG_DIR=/Users/mgoho/.claude-personal` on this machine means
+`~/.claude.json` is *not* the config this repo reads — the same trap
+[#408](https://github.com/markgoho/doula-cloud/issues/408) hit with Pen.
 
 So the config block is **correct** — it authenticates and the session opens —
 but Claude Code loads **zero** Stitch tools from it. Connected is not usable.
