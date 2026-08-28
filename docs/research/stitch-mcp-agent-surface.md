@@ -295,6 +295,12 @@ edits are unreadable, it is that *the agent's own edits* are unreadable.
 - **`list_screens` returned `{}`** for a project that demonstrably had a
   screen. The only way I obtained a screen ID was by keeping the one
   `generate_screen_from_text` returned.
+  **Corrected 2026-08-28 on [#409](https://github.com/markgoho/doula-cloud/issues/409):
+  `list_screens` works.** Called against this same project a few hours later it
+  returned the full `Overview Hub` screen with its `screenshot` and `htmlCode`
+  download URLs. Whatever caused the empty response was transient, not a defect
+  in the tool, so an agent *can* discover a project's screens after the fact.
+  The `get_project` gap below is unaffected and stays NOT VERIFIED.
 - **`get_project` returned no screen instances.** The docs state that
   `apply_design_system` and `create_design_system_from_design_md` take a
   `SelectedScreenInstance.id` *"from `get_project`"*. That field was not in the
@@ -585,6 +591,7 @@ inventions. Worth a follow-up ticket.
 | Update dated **2026-03-19** | The first-party post is dated **2026-03-18**. Minor, but the 19th is a secondary-source date. |
 | Free, no separate tier | **Confirmed** — 400 daily credits, observed, no paywall. |
 | Granular editing weak | **Confirmed, with nuance** — see §6. Prose targeting is good; canvas granularity is zero; persistence is broken. |
+| `list_screens` broken | **Withdrawn** — see §3. It works; the empty response was transient. |
 | "Reads the correction back: no" | **Confirmed, and worse than assumed** — even the agent's own edits are not readable back. |
 
 ## 9. What this means for the tool decision
