@@ -51,6 +51,23 @@
 	let error = $state('');
 	let isSaved = $state(false);
 
+	// A client-side page sequence changes the whole page without a navigation,
+	// so nothing moves focus and a screen reader never hears the new heading.
+	// Focus the heading of each page as it arrives -- and the error summary
+	// instead when the submit was refused.
+	let pageStart = $state<HTMLElement | undefined>();
+	let errorSummary = $state<HTMLElement | undefined>();
+
+	$effect(() => {
+		void step;
+		void matches.length;
+		if (error && errorSummary) {
+			errorSummary.focus();
+			return;
+		}
+		pageStart?.focus();
+	});
+
 	const addressFields: [keyof ClientDraft, string][] = [
 		['address_line1', 'Street address'],
 		['address_line2', 'Apartment, floor'],
@@ -86,7 +103,9 @@
 </script>
 
 {#if matches.length > 0}
-	<Heading level={1} text="Before this is saved" />
+	<div bind:this={pageStart} tabindex="-1">
+		<Heading level={1} text="Before this is saved" />
+	</div>
 	<MatchPrompt
 		{matches}
 		typed={client}
@@ -105,12 +124,16 @@
 		}}
 	/>
 {:else if step === 'name'}
-	<p class="crumb">Adding a Client — 1 of 3</p>
-	<Heading level={1} text="What is the Client’s name?" />
+	<p class="crumb" id="crumb-1of3">Adding a Client — 1 of 3</p>
+	<div bind:this={pageStart} tabindex="-1">
+		<Heading level={1} text="What is the Client’s name?" />
+	</div>
 	<form onsubmit={toName}>
 		<stack-l>
 			{#if error}
-				<Notice variant="error" message={error} />
+				<div bind:this={errorSummary} tabindex="-1" role="alert">
+					<Notice variant="error" message={error} />
+				</div>
 			{/if}
 			<LabeledField label="First name" error={error || undefined}>
 				{#snippet children({ id, describedBy, invalid })}
@@ -151,9 +174,11 @@
 		</stack-l>
 	</form>
 {:else if step === 'reach'}
-	<p class="crumb">Adding a Client — 2 of 3</p>
+	<p class="crumb" id="crumb-2of3">Adding a Client — 2 of 3</p>
 	<Button variant="secondary" size="sm" label="Back to the name" onClick={() => (step = 'name')} />
-	<Heading level={1} text={`How do you contact ${knownAs}?`} />
+	<div bind:this={pageStart} tabindex="-1">
+		<Heading level={1} text={`How do you contact ${knownAs}?`} />
+	</div>
 	<p class="lede">Either one is enough. The other can be added later.</p>
 	<form onsubmit={toReach}>
 		<stack-l>
@@ -185,14 +210,16 @@
 		</stack-l>
 	</form>
 {:else if step === 'dob'}
-	<p class="crumb">Adding a Client — 3 of 3</p>
+	<p class="crumb" id="crumb-3of3">Adding a Client — 3 of 3</p>
 	<Button
 		variant="secondary"
 		size="sm"
 		label="Back to the contact details"
 		onClick={() => (step = 'reach')}
 	/>
-	<Heading level={1} text={`What is ${knownAs}’s date of birth?`} />
+	<div bind:this={pageStart} tabindex="-1">
+		<Heading level={1} text={`What is ${knownAs}’s date of birth?`} />
+	</div>
 	<p class="lede">
 		This is what separates two Clients with the same name, next year and the year after. It is the last
 		thing asked before the record is saved.
@@ -215,7 +242,9 @@
 	</form>
 {:else if step === 'address'}
 	<Button variant="secondary" size="sm" label={`Back to ${knownAs}’s record`} onClick={() => (step = 'hub')} />
-	<Heading level={1} text={`Where does ${knownAs} live?`} />
+	<div bind:this={pageStart} tabindex="-1">
+		<Heading level={1} text={`Where does ${knownAs} live?`} />
+	</div>
 	<p class="lede">Needed before a visit, not before a record.</p>
 	<form
 		onsubmit={(event) => {
@@ -242,7 +271,9 @@
 	</form>
 {:else if step === 'practice'}
 	<Button variant="secondary" size="sm" label={`Back to ${knownAs}’s record`} onClick={() => (step = 'hub')} />
-	<Heading level={1} text="What this Practice also asks" />
+	<div bind:this={pageStart} tabindex="-1">
+		<Heading level={1} text="What this Practice also asks" />
+	</div>
 	<p class="lede">
 		{practiceFields.length} questions this Practice added for itself. None of them are required.
 	</p>
@@ -259,7 +290,9 @@
 	</form>
 {:else if step === 'request'}
 	<Button variant="secondary" size="sm" label={`Back to ${knownAs}’s record`} onClick={() => (step = 'hub')} />
-	<Heading level={1} text={`Ask to start work with ${knownAs}`} />
+	<div bind:this={pageStart} tabindex="-1">
+		<Heading level={1} text={`Ask to start work with ${knownAs}`} />
+	</div>
 	<p class="lede">
 		An Owner or Admin approves this. The Credit is spent when they do, not now. The record stays saved
 		either way.
@@ -277,7 +310,9 @@
 	>
 		<stack-l>
 			{#if error}
-				<Notice variant="error" message={error} />
+				<div bind:this={errorSummary} tabindex="-1" role="alert">
+					<Notice variant="error" message={error} />
+				</div>
 			{/if}
 			<RequestBlock {request} onChange={onRequest} />
 			<Button type="submit" label="Send this to an Owner or Admin to approve" />
@@ -298,6 +333,11 @@
 {/if}
 
 <style>
+	[tabindex='-1']:focus-visible {
+		outline: 2px solid var(--color-text, #111);
+		outline-offset: 4px;
+	}
+
 	.crumb {
 		margin: 0;
 		font-size: 0.8125rem;

@@ -1,7 +1,10 @@
 <script lang="ts">
-	// PROTOTYPE (#372) -- throwaway. The hub D lands on after the save: GOV.UK's
-	// task-list pattern, one short page behind each row. The save already
-	// happened, so "Save record" is not an action here -- it is a fact, stated.
+	// PROTOTYPE (#372) -- throwaway. The hub D lands on after the save. Ruled on
+	// #372 to BE her Client detail page, not an intake confirmation: the same
+	// screen the Clients list opens, forever, gaining her Engagements and her
+	// edit history over time. GOV.UK's task-list pattern, one short page behind
+	// each row. The save already happened, so "Save record" is not an action
+	// here -- it is a fact, stated.
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import { fullName, practiceFields, type ClientDraft } from './fixtures.js';
@@ -15,6 +18,14 @@
 	}
 
 	let { client, custom, isSaved, onOpen, onLeave }: Properties = $props();
+
+	// Same focus rule as the page sequence: arriving here is a page change with
+	// no navigation behind it, so the heading has to be given focus.
+	let pageStart = $state<HTMLElement | undefined>();
+
+	$effect(() => {
+		pageStart?.focus();
+	});
 
 	const knownAs = $derived(client.preferred_name.trim() || client.given_name.trim() || 'this Client');
 
@@ -58,7 +69,9 @@
 	const outstanding = $derived(tasks.filter((task) => !task.done).length);
 </script>
 
-<Heading level={1} text={fullName(client)} />
+<div bind:this={pageStart} tabindex="-1">
+	<Heading level={1} text={fullName(client)} />
+</div>
 
 {#if isSaved}
 	<p class="saved">Saved. This record will come up in the search next time, so the same person cannot be typed in twice.</p>
@@ -94,6 +107,11 @@
 </section>
 
 <style>
+	[tabindex='-1']:focus-visible {
+		outline: 2px solid var(--color-text, #111);
+		outline-offset: 4px;
+	}
+
 	.saved {
 		border-inline-start: 3px solid #15803d;
 		padding-inline-start: 0.625rem;
