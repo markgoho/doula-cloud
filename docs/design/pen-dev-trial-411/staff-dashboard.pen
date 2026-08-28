@@ -717,6 +717,290 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "lVoHM",
+      "x": 1560,
+      "y": 0,
+      "name": "Badge (code import)",
+      "reusable": true,
+      "fill": "$code-info-tint",
+      "cornerRadius": 999,
+      "stroke": "$code-info",
+      "strokeWidth": 1,
+      "strokeAlignment": "inner",
+      "gap": 4,
+      "padding": [
+        4,
+        12
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "icon",
+          "id": "e88Csf",
+          "name": "Icon",
+          "width": 16,
+          "height": 16,
+          "icon": "info",
+          "library": "phosphor",
+          "weight": 400,
+          "fill": "$code-info"
+        },
+        {
+          "type": "text",
+          "id": "AmhDw",
+          "name": "Label",
+          "fill": "$code-info",
+          "content": "Label",
+          "lineHeight": 1.2,
+          "fontFamily": "Inter",
+          "fontSize": 14,
+          "fontWeight": "500"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "VPfEU",
+      "x": 1560,
+      "y": 105,
+      "name": "Badge variants",
+      "clip": true,
+      "fill": "$code-bg",
+      "layout": "vertical",
+      "gap": 28,
+      "padding": 40,
+      "children": [
+        {
+          "type": "frame",
+          "id": "Dq682",
+          "name": "Heading",
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "hxfZc",
+              "name": "Title",
+              "fill": "$code-text",
+              "content": "Badge (code import)",
+              "fontFamily": "Inter",
+              "fontSize": 20,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "l39Ny",
+              "name": "Source",
+              "fill": "$code-neutral",
+              "content": "app/src/lib/components/atoms/Badge.svelte",
+              "fontFamily": "$font-mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "XsuRJ",
+          "name": "Variants",
+          "gap": 28,
+          "children": [
+            {
+              "type": "frame",
+              "id": "E2rsB",
+              "name": "info column",
+              "layout": "vertical",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "n1Trld",
+                  "type": "ref",
+                  "ref": "lVoHM",
+                  "name": "Badge / info",
+                  "fill": "$code-info-tint",
+                  "stroke": "$code-info",
+                  "descendants": {
+                    "e88Csf": {
+                      "icon": "info",
+                      "fill": "$code-info"
+                    },
+                    "AmhDw": {
+                      "content": "Draft",
+                      "fill": "$code-info"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "E03qZ",
+                  "name": "info caption",
+                  "fill": "$code-neutral",
+                  "content": "info",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fh6j7",
+              "name": "success column",
+              "layout": "vertical",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "D0z7X",
+                  "type": "ref",
+                  "ref": "lVoHM",
+                  "name": "Badge / success",
+                  "fill": "$code-success-tint",
+                  "stroke": "$code-success",
+                  "descendants": {
+                    "e88Csf": {
+                      "icon": "check",
+                      "fill": "$code-success"
+                    },
+                    "AmhDw": {
+                      "content": "Paid",
+                      "fill": "$code-success"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "U389Z",
+                  "name": "success caption",
+                  "fill": "$code-neutral",
+                  "content": "success",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "oCVCP",
+              "name": "warning column",
+              "layout": "vertical",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "hfy6W",
+                  "type": "ref",
+                  "ref": "lVoHM",
+                  "name": "Badge / warning",
+                  "fill": "$code-warning-tint",
+                  "stroke": "$code-warning",
+                  "descendants": {
+                    "e88Csf": {
+                      "icon": "warning",
+                      "fill": "$code-warning"
+                    },
+                    "AmhDw": {
+                      "content": "Due soon",
+                      "fill": "$code-warning"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "HJ32Y",
+                  "name": "warning caption",
+                  "fill": "$code-neutral",
+                  "content": "warning",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ybjBj",
+              "name": "error column",
+              "layout": "vertical",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "qa1GD",
+                  "type": "ref",
+                  "ref": "lVoHM",
+                  "name": "Badge / error",
+                  "fill": "$code-error-tint",
+                  "stroke": "$code-error",
+                  "descendants": {
+                    "e88Csf": {
+                      "icon": "x",
+                      "fill": "$code-error"
+                    },
+                    "AmhDw": {
+                      "content": "Failed",
+                      "fill": "$code-error"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "TW6kt",
+                  "name": "error caption",
+                  "fill": "$code-neutral",
+                  "content": "error",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "LHrmm",
+              "name": "neutral column",
+              "layout": "vertical",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "B8dMNB",
+                  "type": "ref",
+                  "ref": "lVoHM",
+                  "name": "Badge / neutral",
+                  "fill": "$code-neutral-tint",
+                  "stroke": "$code-neutral",
+                  "descendants": {
+                    "e88Csf": {
+                      "icon": "minus-circle",
+                      "fill": "$code-neutral"
+                    },
+                    "AmhDw": {
+                      "content": "Archived",
+                      "fill": "$code-neutral"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "YZdHV",
+                  "name": "neutral caption",
+                  "fill": "$code-neutral",
+                  "content": "neutral",
+                  "fontFamily": "$font-mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "variables": {
@@ -763,6 +1047,54 @@
     "radius": {
       "type": "number",
       "value": 8
+    },
+    "code-bg": {
+      "type": "color",
+      "value": "#f6eff8"
+    },
+    "code-text": {
+      "type": "color",
+      "value": "#241c25"
+    },
+    "code-info": {
+      "type": "color",
+      "value": "#0056a4"
+    },
+    "code-info-tint": {
+      "type": "color",
+      "value": "#e4d8ed"
+    },
+    "code-success": {
+      "type": "color",
+      "value": "#006911"
+    },
+    "code-success-tint": {
+      "type": "color",
+      "value": "#e0daf0"
+    },
+    "code-warning": {
+      "type": "color",
+      "value": "#7a4a00"
+    },
+    "code-warning-tint": {
+      "type": "color",
+      "value": "#ecd6e6"
+    },
+    "code-error": {
+      "type": "color",
+      "value": "#a50013"
+    },
+    "code-error-tint": {
+      "type": "color",
+      "value": "#ebd6ea"
+    },
+    "code-neutral": {
+      "type": "color",
+      "value": "#5a525c"
+    },
+    "code-neutral-tint": {
+      "type": "color",
+      "value": "#e2dae4"
     }
   },
   "fileToken": "b667f666-7fab-4ee6-9121-8301303df90b"
