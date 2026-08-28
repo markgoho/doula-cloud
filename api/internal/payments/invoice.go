@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -104,6 +105,10 @@ func PostInvoiceHandler(client Client) http.Handler {
 		}
 
 		clientName, clientEmail, err := fetchClientContact(r.Context(), tx, engagementID)
+		if errors.Is(err, errClientNoEmail) {
+			http.Error(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
+			return
+		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests -- the Contract already resolved above implies the Engagement/Client rows exist
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -313,21 +318,33 @@ func staffIsOwner(ctx context.Context, tx *sql.Tx, practiceID string) (bool, err
 	return slices.Contains(roles, "owner"), nil
 }
 
-// fetchClientContact resolves engagementID's Client name and email --
-// the only Client-identifying fields an Invoice ever carries, per #78's
-// no-PHI-to-Stripe rule (no visit, Care Plan, Birth Plan, or other
-// clinical content).
+// errClientNoEmail is fetchClientContact's refusal when the Engagement's
+// Client has no email on file. ADR-0017 relaxed clients.email to
+// nullable; Stripe invoicing must refuse rather than send to an empty
+// string.
+var errClientNoEmail = errors.New("payments: client has no email on file")
+
+// fetchClientContact resolves engagementID's Client legal name and email
+// -- the only Client-identifying fields an Invoice ever carries, per
+// #78's no-PHI-to-Stripe rule (no visit, Care Plan, Birth Plan, or other
+// clinical content). name uses client.LegalName -- the document name
+// Stripe invoicing reads, per ADR-0017's read table.
 func fetchClientContact(ctx context.Context, tx *sql.Tx, engagementID string) (name, email string, err error) {
+	var givenName string
+	var familyName, clientEmail sql.NullString
 	err = tx.QueryRowContext(ctx,
-		`SELECT c.given_name || COALESCE(' ' || c.family_name, ''), c.email
+		`SELECT c.given_name, c.family_name, c.email
 		 FROM clients c JOIN engagements e ON e.client_id = c.id WHERE e.id = $1`,
 		engagementID,
-	).Scan(&name, &email)
+	).Scan(&givenName, &familyName, &clientEmail)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceEngagement already proved the Engagement (and therefore its Client) exists
 	if err != nil {
 		return "", "", fmt.Errorf("payments: fetch client contact: %w", err)
 	}
-	return name, email, nil
+	if !clientEmail.Valid || clientEmail.String == "" {
+		return "", "", errClientNoEmail
+	}
+	return client.LegalName(givenName, familyName.String), clientEmail.String, nil
 }
 
 // writeJSON encodes body as the response, setting the Content-Type header

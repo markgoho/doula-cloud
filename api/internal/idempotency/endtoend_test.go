@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
@@ -159,28 +159,32 @@ func TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails(t *testing
 	}
 }
 
-// TestEndToEnd_CreateClientNoDuplicateCreditOnRetry wires
-// engagement.CreateHandler behind staffauth.Middleware(...)(idempotency.Wrap(...))
-// exactly as main.go does, proving a retried create-Client request with the
-// same Idempotency-Key returns the identical Client/Engagement pair and
-// consumes exactly one credit -- the concrete financial risk #128 exists
-// to close.
-func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
+// TestEndToEnd_CreateClientNoDuplicateRowOnRetry wires client.CreateHandler
+// behind staffauth.Middleware(...)(idempotency.Wrap(...)) exactly as main.go
+// does, proving a retried create-Client request with the same
+// Idempotency-Key returns the identical Client rather than a second row.
+// #397 split the old combined create-Client-and-Engagement handler (#128) --
+// saving a Client is free now, so there is no credit to double-spend here;
+// that risk moves to the Engagement Request approval endpoint.
+func TestEndToEnd_CreateClientNoDuplicateRowOnRetry(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-create-client-staff"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
-	seedSignupBonus(t, db, practiceID)
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(idempotency.Wrap(engagement.CreateHandler(db.App, &tasknudge.FakeEnqueuer{}))))
+		staffauth.Middleware(db.App)(idempotency.Wrap(client.CreateHandler())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	session := authntest.SeedSession(t, db.App, identityUID)
 
 	postClient := func(key string) *http.Response {
 		t.Helper()
-		body, err := json.Marshal(engagement.CreateClientRequest{Name: "E2E Client", Email: "e2e-create@example.com"})
+		// Override: true -- this test is about idempotency replay, not the
+		// match-refusal path (covered in the client package's own tests), and
+		// without it the no-key retry below would collide with the first
+		// call's identical GivenName and 409 instead of creating its own row.
+		body, err := json.Marshal(client.CreateRequest{Record: client.Record{GivenName: "E2E Client"}, Override: true})
 		if err != nil {
 			t.Fatalf("marshal body: %v", err)
 		}
@@ -198,22 +202,22 @@ func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
 		}
 		return resp
 	}
-	decode := func(resp *http.Response) engagement.CreateClientResponse {
+	decode := func(resp *http.Response) client.Record {
 		t.Helper()
-		var out engagement.CreateClientResponse
+		var out client.Record
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		return out
 	}
-	consumptionCount := func() int {
+	clientCount := func() int {
 		t.Helper()
 		var n int
 		if err := db.Admin.QueryRowContext(t.Context(),
-			`SELECT count(*) FROM credit_ledger WHERE practice_id = $1 AND origin = 'consumption'`,
+			`SELECT count(*) FROM clients WHERE practice_id = $1`,
 			practiceID,
 		).Scan(&n); err != nil {
-			t.Fatalf("count consumption rows: %v", err)
+			t.Fatalf("count client rows: %v", err)
 		}
 		return n
 	}
@@ -224,8 +228,8 @@ func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
 		t.Fatalf("first call status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 	firstOut := decode(first)
-	if consumptionCount() != 1 {
-		t.Fatalf("consumption count after first call = %d, want 1", consumptionCount())
+	if clientCount() != 1 {
+		t.Fatalf("client count after first call = %d, want 1", clientCount())
 	}
 
 	retried := postClient("create-client-retry-key")
@@ -234,11 +238,11 @@ func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
 		t.Fatalf("retried call status = %d, want %d", retried.StatusCode, http.StatusCreated)
 	}
 	retriedOut := decode(retried)
-	if retriedOut.ClientID != firstOut.ClientID || retriedOut.EngagementID != firstOut.EngagementID {
+	if retriedOut.ID != firstOut.ID {
 		t.Fatalf("retried response = %+v, want identical stored response %+v -- business logic must not re-run on replay", retriedOut, firstOut)
 	}
-	if n := consumptionCount(); n != 1 {
-		t.Fatalf("consumption count after retry = %d, want 1 (no second credit spent)", n)
+	if n := clientCount(); n != 1 {
+		t.Fatalf("client count after retry = %d, want 1 (no second row inserted)", n)
 	}
 
 	noKey := postClient("")
@@ -247,11 +251,11 @@ func TestEndToEnd_CreateClientNoDuplicateCreditOnRetry(t *testing.T) {
 		t.Fatalf("no-key call status = %d, want %d", noKey.StatusCode, http.StatusCreated)
 	}
 	noKeyOut := decode(noKey)
-	if noKeyOut.ClientID == firstOut.ClientID {
+	if noKeyOut.ID == firstOut.ID {
 		t.Fatalf("call with no Idempotency-Key returned the same Client as the earlier call -- expected the handler to re-run")
 	}
-	if n := consumptionCount(); n != 2 {
-		t.Fatalf("consumption count after no-key call = %d, want 2 (second call spends its own credit)", n)
+	if n := clientCount(); n != 2 {
+		t.Fatalf("client count after no-key call = %d, want 2 (second call inserts its own row)", n)
 	}
 }
 

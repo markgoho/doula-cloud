@@ -125,6 +125,63 @@ func TestReader_CanAccessEngagement(t *testing.T) {
 	}
 }
 
+// TestReader_CanAccessClient mirrors TestReader_CanAccessEngagement for
+// the Client-scoped ADR-0017 rule: attachment reaches through any of the
+// Client's Engagements, not just one named one.
+func TestReader_CanAccessClient(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Client Access Test Practice")
+	engagementID := seedAccessEngagement(t, db, practiceID)
+	var clientID string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT client_id FROM engagements WHERE id = $1`, engagementID).Scan(&clientID); err != nil {
+		t.Fatalf("read client id: %v", err)
+	}
+
+	ownerID := seedStaff(t, db, "client-access-owner")
+	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
+
+	unattachedContractorID := seedStaff(t, db, "client-access-contractor-unattached")
+	seedContractorMembership(t, db, practiceID, unattachedContractorID)
+
+	attachedContractorID := seedStaff(t, db, "client-access-contractor-attached")
+	seedContractorMembership(t, db, practiceID, attachedContractorID)
+	seedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		t.Fatalf("set practice id: %v", err)
+	}
+
+	cases := []struct {
+		name    string
+		staffID string
+		want    bool
+	}{
+		{ownerRole, ownerID, true},
+		{"contractor, no attachment", unattachedContractorID, false},
+		{"contractor, granted and open", attachedContractorID, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, tc.staffID)
+			if err != nil {
+				t.Fatalf("ResolveReader: %v", err)
+			}
+			got, err := reader.CanAccessClient(t.Context(), tx, clientID)
+			if err != nil {
+				t.Fatalf("CanAccessClient: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("CanAccessClient() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestReader_IsContractor confirms the axis ResolveReader carries
 // besides roles: an employee reader (Owner and Admin included, #227's
 // "employee means inside the business") is not a contractor.

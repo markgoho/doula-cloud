@@ -36,3 +36,32 @@ func (r Reader) CanAccessEngagement(ctx context.Context, tx *sql.Tx, engagementI
 	}
 	return attached, nil
 }
+
+// CanAccessClient reports whether r's caller may read/edit clientID's
+// Client record, per ADR-0017's "edit follows read": an Owner, an Admin,
+// or an employee Doula reaches every Client at the Practice (clients_select
+// RLS already confines that to the current Practice); a contractor Doula
+// reaches only a Client she holds an open, granted attachment to, on any
+// of that Client's Engagements -- the same "attached Clients" carve-out
+// ADR-0008 gives her everywhere else.
+func (r Reader) CanAccessClient(ctx context.Context, tx *sql.Tx, clientID string) (bool, error) {
+	if r.Has("owner") || r.Has("admin") || !r.IsContractor() {
+		return true, nil
+	}
+
+	var attached bool
+	err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM engagement_attachments ea
+			JOIN engagements e ON e.id = ea.engagement_id
+			WHERE e.client_id = $1 AND ea.staff_id = $2
+			  AND ea.origin = 'granted' AND ea.ended_at IS NULL
+		)`,
+		clientID, r.staffID,
+	).Scan(&attached)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return false, fmt.Errorf("staffauth: check client attachment: %w", err)
+	}
+	return attached, nil
+}

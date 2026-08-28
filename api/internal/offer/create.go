@@ -28,6 +28,11 @@ import (
 // clientFirstInitial, clientArea, and dueDate are typed in by the sender,
 // not derived from the Engagement or the Client -- the Offer is a copy
 // (#230). The UI may pre-fill them; the row holds what was actually sent.
+// The one exception is clientArea left blank: CreateHandler prefills it
+// from the Client's address_locality (ADR-0017) before validating, so an
+// Admin isn't forced to retype what's already on the Client's record --
+// the stored value is still a copy, resolved once at send time, never
+// re-derived later.
 type CreateRequest struct {
 	StaffID            string `json:"staffId"`
 	Email              string `json:"email"`
@@ -73,6 +78,13 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		area, err := resolveClientArea(r.Context(), tx, engagementID, strings.TrimSpace(req.ClientArea))
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		req.ClientArea = area
 		facts, ok := parseFacts(w, req)
 		if !ok {
 			return
@@ -99,6 +111,28 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
+}
+
+// resolveClientArea returns provided unchanged when the sender typed
+// something; otherwise it prefills from the Engagement's Client's
+// address_locality (ADR-0017), so an Admin doesn't retype it on every
+// send. Still just a copy, per CreateRequest's doc comment: whichever
+// value comes back is what parseFacts validates and create() stores --
+// the row never re-derives it later.
+func resolveClientArea(ctx context.Context, tx *sql.Tx, engagementID, provided string) (string, error) {
+	if provided != "" {
+		return provided, nil
+	}
+	var locality sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT c.address_locality FROM clients c
+		 JOIN engagements e ON e.client_id = c.id WHERE e.id = $1`,
+		engagementID,
+	).Scan(&locality); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- requireOpenEngagement already proved the Engagement (and therefore its Client) exists
+		return "", fmt.Errorf("offer: resolve client area: %w", err)
+	}
+	return locality.String, nil
 }
 
 // facts is the validated, storable form of an Offer's decidable content.

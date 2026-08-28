@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn } from './auth';
+import { seedEngagement } from './stack';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -57,11 +58,12 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers,
-		data: { name: 'Rosa Martinez', email: `client-${Date.now()}@example.com` }
+		data: { givenName: 'Rosa', familyName: 'Martinez', email: `client-${Date.now()}@example.com` }
 	});
 	const createClientBody = await createClient.text();
 	expect(createClient.ok(), `create client failed: ${createClient.status()} ${createClientBody}`).toBe(true);
-	const { engagementId } = JSON.parse(createClientBody);
+	const { id: clientId } = JSON.parse(createClientBody);
+	const engagementId = seedEngagement(clientId, practiceId);
 
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(email);

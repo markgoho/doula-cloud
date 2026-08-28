@@ -161,8 +161,9 @@ func TestPostContractHandler_NoTemplate(t *testing.T) {
 
 // TestPostContractHandler_Success proves a Contract is created as a
 // Draft, snapshotting the Practice's current template prose, with its
-// merge fields parsed out of that prose and empty Values -- and that any
-// Staff member (not just an Owner) can create one.
+// merge fields parsed out of that prose -- client_name prefilled from the
+// Engagement's Client (ADR-0017), every other merge field left blank --
+// and that any Staff member (not just an Owner) can create one.
 func TestPostContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-success"
@@ -196,8 +197,33 @@ func TestPostContractHandler_Success(t *testing.T) {
 	if len(out.MergeFields) != 2 || out.MergeFields[0] != clientNameKey || out.MergeFields[1] != priceKey {
 		t.Fatalf("mergeFields = %v, want [client_name price]", out.MergeFields)
 	}
+	if len(out.Values) != 1 || out.Values[clientNameKey] != "Test Client" {
+		t.Fatalf("values = %+v, want client_name prefilled from the Engagement's Client", out.Values)
+	}
+}
+
+// TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty proves
+// prefillClientName's other branch: a Template whose prose never asks
+// for client_name gets no prefill at all.
+func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "post-no-client-name-field"
+	practiceID := seedMember(t, db, uid)
+	engagementID := seedEngagement(t, db, practiceID)
+	seedTemplate(t, db, practiceID, "Agreement at {{price}}.")
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 	if len(out.Values) != 0 {
-		t.Fatalf("values = %+v, want empty", out.Values)
+		t.Fatalf("values = %+v, want empty -- no client_name field to prefill", out.Values)
 	}
 }
 

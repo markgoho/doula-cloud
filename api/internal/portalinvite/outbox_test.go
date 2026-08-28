@@ -14,10 +14,11 @@ import (
 // Shared literals across this package's outbox tests (outbox_test.go and
 // outbox_handler_test.go), pulled out per golangci-lint's goconst check.
 const (
-	testOutboxStatusPending = "pending"
-	testOutboxStatusSent    = "sent"
-	testAppBaseURL          = "https://app.example.test"
-	testSenderAddr          = "a@b.test"
+	testOutboxStatusPending      = "pending"
+	testOutboxStatusSent         = "sent"
+	testOutboxStatusDeadLettered = "dead_lettered"
+	testAppBaseURL               = "https://app.example.test"
+	testSenderAddr               = "a@b.test"
 )
 
 // newTestWorker builds a Worker around sender with this file's stand-in
@@ -114,6 +115,35 @@ func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
 	}
 }
 
+// TestWorker_ProcessPending_DeadLettersRowForClientWithNoEmail proves
+// ADR-0017's ride-along: outbox.go must refuse a Client with no email
+// rather than send to an empty string. A row for such a Client is
+// dead-lettered outright, not scheduled for retry, and nothing is sent.
+func TestWorker_ProcessPending_DeadLettersRowForClientWithNoEmail(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedStaffWithMembership(t, db, "no-email-owner")
+	clientID, _ := seedClientEngagement(t, db, practiceID, "No Email Client", "")
+	var portalUserID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+		clientID,
+	).Scan(&portalUserID); err != nil {
+		t.Fatalf("seed portal user: %v", err)
+	}
+	outboxID := seedOutboxRow(t, db, portalUserID, 0, time.Now().Add(-time.Minute))
+
+	sender := &mail.FakeSender{}
+	runWorker(t, db, newTestWorker(sender))
+
+	status, _ := outboxRowState(t, db, outboxID)
+	if status != testOutboxStatusDeadLettered {
+		t.Fatalf("status = %q, want %s", status, testOutboxStatusDeadLettered)
+	}
+	if len(sender.Sent()) != 0 {
+		t.Fatalf("expected no send for a Client with no email, got %d", len(sender.Sent()))
+	}
+}
+
 func TestWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
 	db := testdb.New(t)
 	clientID, _ := seedPendingPortalInvite(t, db)
@@ -159,7 +189,7 @@ func TestWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
 	runWorker(t, db, newTestWorker(sender))
 
 	status, attemptCount := outboxRowState(t, db, outboxID)
-	if status != "dead_lettered" || attemptCount != 5 {
+	if status != testOutboxStatusDeadLettered || attemptCount != 5 {
 		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
 	}
 }

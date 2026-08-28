@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn } from './auth';
-import { seedClientPortalUser } from './stack';
+import { seedClientPortalUser, seedEngagement } from './stack';
 
 // Exercises #65's critical path: Staff fills out a Birth Plan for an
 // Engagement (through the real staff-side UI from #64), then the Client
@@ -42,13 +42,14 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
-		data: { name: 'Pat Client', email: clientEmail }
+		data: { givenName: 'Pat', familyName: 'Client', email: clientEmail }
 	});
 	const createClientBody = await createClient.text();
 	expect(createClient.ok(), `create client failed: ${createClient.status()} ${createClientBody}`).toBe(
 		true
 	);
-	const { clientId, engagementId } = JSON.parse(createClientBody);
+	const { id: clientId } = JSON.parse(createClientBody);
+	const engagementId = seedEngagement(clientId, practiceId);
 
 	// Staff side: log in, create the Birth Plan (signup seeds a default
 	// template per Practice per #63), fill one field, and save.
@@ -58,9 +59,11 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
-	await page.getByRole('link', { name: 'Clients' }).click();
-	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients$`));
-	await page.getByRole('link', { name: 'Pat Client' }).click();
+	// The Clients list no longer links each row to an Engagement (#397 --
+	// the Client detail page each row will link to is #400's separate,
+	// not-yet-built screen), so this test's only route to the Engagement
+	// is a direct navigation rather than the old click-through.
+	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagements/${engagementId}$`));
 
 	await page.getByRole('button', { name: 'Create Birth Plan' }).click();

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
@@ -297,17 +298,25 @@ func insertMessage(ctx context.Context, tx *sql.Tx, messageID, engagementID, sen
 }
 
 // resolveSenderName looks up the display name of the Staff or Client that
-// sent a Message, picking the static query by senderType (senderTypeStaff
-// or senderTypeClient) rather than building the query dynamically.
+// sent a Message. A Client's is her preferred name -- the conversation
+// name every Message thread reads, per ADR-0017's read table -- computed
+// by client.PreferredName rather than a second inline COALESCE.
 func resolveSenderName(ctx context.Context, tx *sql.Tx, senderType, senderID string) (string, error) {
-	query := `SELECT name FROM staff WHERE id = $1`
 	if senderType == senderTypeClient {
-		query = `SELECT COALESCE(preferred_name, given_name) FROM clients WHERE id = $1`
+		var givenName string
+		var preferredName sql.NullString
+		if err := tx.QueryRowContext(ctx,
+			`SELECT given_name, preferred_name FROM clients WHERE id = $1`, senderID,
+		).Scan(&givenName, &preferredName); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return "", fmt.Errorf("message: resolve sender name: %w", err)
+		}
+		return client.PreferredName(givenName, preferredName.String), nil
 	}
 
 	var name string
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err := tx.QueryRowContext(ctx, query, senderID).Scan(&name); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM staff WHERE id = $1`, senderID).Scan(&name); err != nil {
 		return "", fmt.Errorf("message: resolve sender name: %w", err)
 	}
 	return name, nil

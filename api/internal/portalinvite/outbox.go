@@ -87,7 +87,9 @@ func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 		attemptCount int
 		inviteToken  sql.NullString
 		identityUID  sql.NullString
-		email        string
+		// email is nullable since #396/ADR-0017 relaxed clients.email --
+		// a Practice may hold a Client with no address on file yet.
+		email sql.NullString
 	}
 	var pending []pendingRow
 	for rows.Next() {
@@ -119,9 +121,22 @@ func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 			continue
 		}
 
+		if !r.email.Valid || r.email.String == "" {
+			// ADR-0017: clients.email is nullable now, and this row must
+			// refuse rather than mail a live token to an empty string.
+			// Dead-lettered outright, not scheduled for retry -- nothing
+			// about waiting fixes a missing address; a Staff member must
+			// add one and send a fresh invite.
+			if err := w.markDeadLettered(ctx, tx, r.id, "client has no email on file"); err != nil {
+				// coverage:ignore reason: DB update failure, not exercised by unit tests
+				return err
+			}
+			continue
+		}
+
 		link := w.AppBaseURL + "/portal/accept-invite?token=" + r.inviteToken.String
 		sendErr := w.Sender.Send(ctx, mail.Message{
-			To:      r.email,
+			To:      r.email.String,
 			From:    w.From,
 			ReplyTo: w.ReplyTo,
 			Subject: inviteSubject,
@@ -168,6 +183,20 @@ func (w Worker) markSent(ctx context.Context, tx *sql.Tx, id string, now time.Ti
 	); err != nil {
 		// coverage:ignore reason: DB update failure, not exercised by unit tests
 		return fmt.Errorf("portalinvite: mark outbox row sent: %w", err)
+	}
+	return nil
+}
+
+// markDeadLettered dead-letters id outright, with no further retry --
+// used when the row's own data (a missing email) means a retry could
+// never succeed, unlike markFailed's transient-send-error retries.
+func (w Worker) markDeadLettered(ctx context.Context, tx *sql.Tx, id, reason string) error {
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE portal_invite_outbox SET status = 'dead_lettered', last_error = $1 WHERE id = $2`,
+		reason, id,
+	); err != nil {
+		// coverage:ignore reason: DB update failure, not exercised by unit tests
+		return fmt.Errorf("portalinvite: dead-letter outbox row: %w", err)
 	}
 	return nil
 }

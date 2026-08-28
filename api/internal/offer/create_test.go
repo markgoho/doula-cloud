@@ -103,6 +103,48 @@ func TestCreateHandler_ToStaffTarget(t *testing.T) {
 	}
 }
 
+// TestCreateHandler_ClientAreaPrefillsFromAddressLocality proves
+// ADR-0017's ride-along: leaving clientArea blank prefills it from the
+// Engagement's Client's address_locality, so an Admin isn't forced to
+// retype it on every send.
+func TestCreateHandler_ClientAreaPrefillsFromAddressLocality(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET address_locality = 'Brooklyn' WHERE id = (SELECT client_id FROM engagements WHERE id = $1)`,
+		f.engagementID,
+	); err != nil {
+		t.Fatalf("set address_locality: %v", err)
+	}
+
+	body := offerBody(f.doulaID, 45000)
+	body.ClientArea = ""
+	offerID := f.makeOffer(t, body)
+
+	var clientArea string
+	if err := f.db.Admin.QueryRowContext(t.Context(),
+		`SELECT client_area FROM engagement_offers WHERE id = $1`, offerID,
+	).Scan(&clientArea); err != nil {
+		t.Fatalf("read offer: %v", err)
+	}
+	if clientArea != "Brooklyn" {
+		t.Fatalf("client_area = %q, want %q (prefilled from address_locality)", clientArea, "Brooklyn")
+	}
+}
+
+// TestCreateHandler_BlankClientAreaWithNoAddressRefuses proves the
+// prefill has a floor: with nothing typed and nothing to derive, the
+// endpoint still requires clientArea rather than storing an empty string.
+func TestCreateHandler_BlankClientAreaWithNoAddressRefuses(t *testing.T) {
+	f := newFixture(t)
+	body := offerBody(f.doulaID, 45000)
+	body.ClientArea = ""
+
+	resp := do(t, http.MethodPost, f.offersURL(), f.ownerSession, body)
+	if resp.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.status, http.StatusBadRequest)
+	}
+}
+
 func TestCreateHandler_ToEmailTargetMintsInvitationAndOutbox(t *testing.T) {
 	f := newFixture(t)
 	fee := int64(52000)

@@ -19,6 +19,7 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/csrf"
@@ -207,9 +208,21 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// split ADR-0008's read table draws inside that column is
 	// attachment-narrowing the handler itself enforces via
 	// staffauth.Reader.CanAccessEngagement, not a role declaration.
-	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, engagement.ListHandler())
+	// The Client write surface (#397): search, lookup-before-insert
+	// create, the detail read, and edit. Saving or editing a Client is
+	// free and creates no Engagement -- that split off into a separate
+	// Engagement Request, built elsewhere. Role gating beyond "any Staff
+	// member" (the contractor create/search refusal, the attached-Clients
+	// narrowing on edit/detail) is enforced inside each handler via
+	// staffauth.Reader, the same pattern engagement.DetailHandler already
+	// uses for CanAccessEngagement.
+	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, client.ListHandler())
+	g.Get("/api/practices/{practiceId}/clients/search", staffauth.AnyStaff, client.SearchHandler())
 	mux.Handle("POST /api/practices/{practiceId}/clients",
-		staffauth.Middleware(db)(idempotency.Wrap(engagement.CreateHandler(db, nudgeEnqueuer))))
+		staffauth.Middleware(db)(idempotency.Wrap(client.CreateHandler())))
+	g.Get("/api/practices/{practiceId}/clients/{clientId}", staffauth.AnyStaff, client.DetailHandler())
+	mux.Handle("PUT /api/practices/{practiceId}/clients/{clientId}",
+		staffauth.Middleware(db)(client.EditHandler()))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
 	// Completing an Engagement runs ADR-0008's cascade -- open Offers
 	// withdrawn, open attachments ended -- so it is one endpoint, not a

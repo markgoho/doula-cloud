@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -162,6 +163,19 @@ function seedAppE2ERole() {
 // works has to seed it itself.
 export function seedClientPortalUser(identityUID: string, clientID: string) {
 	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(clientID)})`);
+}
+
+// Seeds an Engagement directly: #397 decoupled Client creation from
+// Engagement creation (ADR-0017 -- an Engagement now comes from a
+// separate Engagement Request, not built yet), so POST .../clients no
+// longer returns an engagementId for e2e specs that need one to reach an
+// Engagement-scoped screen or endpoint.
+export function seedEngagement(clientId: string, practiceId: string, status = 'intake', kind = 'birth'): string {
+	const engagementId = randomUUID();
+	execSQL(
+		`INSERT INTO engagements (id, client_id, practice_id, status, kind) VALUES (${sqlLiteral(engagementId)}, ${sqlLiteral(clientId)}, ${sqlLiteral(practiceId)}, ${sqlLiteral(status)}, ${sqlLiteral(kind)})`
+	);
+	return engagementId;
 }
 
 export function stopStack() {

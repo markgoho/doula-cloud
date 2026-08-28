@@ -315,6 +315,36 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	}
 }
 
+// TestPostInvoiceHandler_ClientWithNoEmailRefuses proves ADR-0017's
+// ride-along: invoicing a Client with no email on file refuses rather
+// than sending an empty string to Stripe.
+func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-no-email"
+	practiceID := seedMember(t, db, uid)
+	engagementID := seedEngagement(t, db, practiceID, "No Email Client", "")
+	seedContract(t, db, engagementID)
+	fakeClient := payments.NewFakeClient()
+	accountID, err := fakeClient.CreateAccount(t.Context(), practiceID, "Fixture Practice")
+	if err != nil {
+		t.Fatalf("fixture CreateAccount: %v", err)
+	}
+	seedConnectAccount(t, db, practiceID, accountID)
+
+	srv, session := newInvoiceServer(t, db, uid, fakeClient)
+	defer srv.Close()
+
+	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
+	}
+	if len(fakeClient.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never send an empty string to Stripe", len(fakeClient.CreateInvoiceCalls))
+	}
+}
+
 // TestPostInvoiceHandler_NoContractReturns404 proves an Engagement with no
 // Contract yet 404s rather than creating an Invoice against nothing.
 func TestPostInvoiceHandler_NoContractReturns404(t *testing.T) {

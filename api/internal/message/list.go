@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -133,7 +134,7 @@ func ListHandler() http.Handler {
 // senderTypeClient (context.go) are the single source of truth for those
 // values across this package.
 const listMessagesQuery = `SELECT m.id, m.sender_type, m.sender_id,
-		COALESCE(s.name, c.preferred_name, c.given_name) AS sender_name, COALESCE(m.body, ''),
+		s.name, c.given_name, c.preferred_name, COALESCE(m.body, ''),
 		COALESCE(m.attachment_content_type, ''), COALESCE(m.attachment_filename, ''), m.created_at
 	FROM messages m
 	LEFT JOIN staff s ON s.id = m.sender_id AND m.sender_type = $1
@@ -142,7 +143,7 @@ const listMessagesQuery = `SELECT m.id, m.sender_type, m.sender_id,
 	ORDER BY m.created_at DESC, m.id DESC LIMIT $4`
 
 const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
-		COALESCE(s.name, c.preferred_name, c.given_name) AS sender_name, COALESCE(m.body, ''),
+		s.name, c.given_name, c.preferred_name, COALESCE(m.body, ''),
 		COALESCE(m.attachment_content_type, ''), COALESCE(m.attachment_filename, ''), m.created_at
 	FROM messages m
 	LEFT JOIN staff s ON s.id = m.sender_id AND m.sender_type = $1
@@ -174,10 +175,17 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 	items := []Message{}
 	for rows.Next() {
 		var it Message
-		if err := rows.Scan(&it.MessageID, &it.SenderType, &it.SenderID, &it.SenderName, &it.Body,
+		var staffName, clientGivenName, clientPreferredName sql.NullString
+		if err := rows.Scan(&it.MessageID, &it.SenderType, &it.SenderID,
+			&staffName, &clientGivenName, &clientPreferredName, &it.Body,
 			&it.AttachmentContentType, &it.AttachmentFilename, &it.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("message: scan message row: %w", err)
+		}
+		if staffName.Valid {
+			it.SenderName = staffName.String
+		} else {
+			it.SenderName = client.PreferredName(clientGivenName.String, clientPreferredName.String)
 		}
 		items = append(items, it)
 	}

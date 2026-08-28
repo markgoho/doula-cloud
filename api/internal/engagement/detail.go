@@ -1,3 +1,10 @@
+// Package engagement holds the Staff-side BFF handlers for Engagement
+// detail and completion. All handlers rely on staffauth.Middleware
+// having already resolved the caller's Staff/Practice ids and opened a
+// request-scoped *sql.Tx with app.current_practice_id set, the same way
+// staffauth's own Owner-only handlers (invite, role assignment) do. The
+// Client write surface and the Clients list moved to package client
+// (#397); this package's own surface is now just the Engagement itself.
 package engagement
 
 import (
@@ -7,6 +14,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -56,13 +64,15 @@ func DetailHandler() http.Handler {
 		}
 
 		var d Detail
+		var givenName string
+		var preferredName sql.NullString
 		err = tx.QueryRowContext(r.Context(),
-			`SELECT e.id, c.id, COALESCE(c.preferred_name, c.given_name), e.status, e.created_at
+			`SELECT e.id, c.id, c.given_name, c.preferred_name, e.status, e.created_at
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,
 			engagementID, practiceID,
-		).Scan(&d.EngagementID, &d.ClientID, &d.ClientName, &d.Status, &d.CreatedAt)
+		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "engagement not found", http.StatusNotFound)
 			return
@@ -72,6 +82,7 @@ func DetailHandler() http.Handler {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		d.ClientName = client.PreferredName(givenName, preferredName.String)
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests

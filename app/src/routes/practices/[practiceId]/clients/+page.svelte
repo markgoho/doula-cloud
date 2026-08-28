@@ -6,16 +6,15 @@
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 
-	type ClientEngagement = {
+	type ClientListItem = {
 		clientId: string;
 		name: string;
 		email: string;
-		engagementId: string;
-		status: string;
+		hasWork: boolean;
 		portalInviteStatus?: string;
 	};
 
-	let clients = $state<ClientEngagement[]>([]);
+	let clients = $state<ClientListItem[]>([]);
 	let error = $state('');
 	let isLoaded = $state(false);
 
@@ -33,7 +32,7 @@
 		accepted: 'Accepted'
 	};
 
-	function portalInviteStatusText(client: ClientEngagement): string {
+	function portalInviteStatusText(client: ClientListItem): string {
 		return (
 			(client.portalInviteStatus && portalInviteStatusLabel[client.portalInviteStatus]) ??
 			'Never invited'
@@ -41,8 +40,8 @@
 	}
 
 	const columns = [
-		{ label: 'Name', accessor: (client: ClientEngagement) => client.name },
-		{ label: 'Status', accessor: (client: ClientEngagement) => client.status },
+		{ label: 'Name', accessor: (client: ClientListItem) => client.name },
+		{ label: 'Email', accessor: (client: ClientListItem) => client.email },
 		{ label: 'Portal invite', accessor: portalInviteStatusText }
 	];
 
@@ -68,14 +67,5 @@
 {#if error}
 	<p role="alert">{error}</p>
 {:else if isLoaded}
-	<DataTable
-		{columns}
-		rows={clients}
-		rowHref={(client) =>
-			resolve('/practices/[practiceId]/engagements/[engagementId]', {
-				practiceId: page.params.practiceId!,
-				engagementId: client.engagementId
-			})}
-		emptyMessage="No Clients yet."
-	/>
+	<DataTable {columns} rows={clients} emptyMessage="No Clients yet." />
 {/if}

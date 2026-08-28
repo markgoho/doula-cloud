@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -102,9 +104,23 @@ func PostContractHandler() http.Handler {
 			return
 		}
 
+		mergeFields := extractMergeFields(prose)
+		values, err := prefillClientName(r.Context(), tx, engagementID, mergeFields)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		valuesJSON, err := json.Marshal(values)
+		if err != nil {
+			// coverage:ignore reason: MergeFieldValues always marshals cleanly, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO contracts (engagement_id, prose) VALUES ($1, $2)`,
-			engagementID, prose,
+			`INSERT INTO contracts (engagement_id, prose, merge_field_values) VALUES ($1, $2, $3)`,
+			engagementID, prose, valuesJSON,
 		); err != nil {
 			if isUniqueViolation(err) {
 				http.Error(w, "a contract already exists for this engagement", http.StatusConflict)
@@ -121,8 +137,8 @@ func PostContractHandler() http.Handler {
 			EngagementID: engagementID,
 			Status:       statusDraft,
 			Prose:        prose,
-			MergeFields:  extractMergeFields(prose),
-			Values:       MergeFieldValues{},
+			MergeFields:  mergeFields,
+			Values:       values,
 		}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
@@ -298,6 +314,35 @@ func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, pr
 		return "", "", "", nil, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
 	}
 	return id, prose, status, values, nil
+}
+
+// clientNameMergeKey is the one merge field this package resolves for
+// the caller rather than leaving blank for Staff to type -- per
+// ADR-0017, client_name stays exactly as it is and resolves to the
+// legal name.
+const clientNameMergeKey = "client_name"
+
+// prefillClientName returns Draft Values with client_name already filled
+// in from the Engagement's Client, using client.LegalName -- the
+// document name a Contract reads, per ADR-0017's read table -- when the
+// Template's prose actually asks for it. Every other merge field is left
+// for Staff to fill in via PutContractHandler, exactly as before.
+func prefillClientName(ctx context.Context, tx *sql.Tx, engagementID string, mergeFields []string) (MergeFieldValues, error) {
+	if !slices.Contains(mergeFields, clientNameMergeKey) {
+		return MergeFieldValues{}, nil
+	}
+
+	var givenName string
+	var familyName sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT c.given_name, c.family_name FROM clients c
+		 JOIN engagements e ON e.client_id = c.id WHERE e.id = $1`,
+		engagementID,
+	).Scan(&givenName, &familyName); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement (and therefore its Client) exists
+		return nil, fmt.Errorf("contracts: prefill client name: %w", err)
+	}
+	return MergeFieldValues{clientNameMergeKey: client.LegalName(givenName, familyName.String)}, nil
 }
 
 // validateMergeFieldValues checks each entry in values against

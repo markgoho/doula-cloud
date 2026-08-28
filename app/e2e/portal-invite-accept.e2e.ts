@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn } from './auth';
+import { seedEngagement } from './stack';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -41,13 +42,14 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
-		data: { name: 'Pat Client', email: clientEmail }
+		data: { givenName: 'Pat', familyName: 'Client', email: clientEmail }
 	});
 	const createClientBody = await createClient.text();
 	expect(createClient.ok(), `create client failed: ${createClient.status()} ${createClientBody}`).toBe(
 		true
 	);
-	const { engagementId } = JSON.parse(createClientBody);
+	const { id: clientId } = JSON.parse(createClientBody);
+	const engagementId = seedEngagement(clientId, practiceId);
 
 	const invite = await request.post(
 		`${API_URL}/api/practices/${practiceId}/engagements/${engagementId}/portal-invite`,

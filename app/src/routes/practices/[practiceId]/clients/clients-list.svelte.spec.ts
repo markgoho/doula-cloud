@@ -23,16 +23,14 @@ const clients = [
 		clientId: 'client-1',
 		name: 'Ada Lovelace',
 		email: 'ada@example.com',
-		engagementId: 'engagement-1',
-		status: 'active',
+		hasWork: true,
 		portalInviteStatus: 'sent'
 	},
 	{
 		clientId: 'client-2',
 		name: 'Grace Hopper',
 		email: 'grace@example.com',
-		engagementId: 'engagement-2',
-		status: 'intake'
+		hasWork: false
 	}
 ];
 
@@ -67,8 +65,7 @@ describe('clients list screen', () => {
 					clientId: 'client-1',
 					name: 'Ada Lovelace',
 					email: 'ada@example.com',
-					engagementId: 'engagement-1',
-					status: 'active',
+					hasWork: true,
 					portalInviteStatus
 				}
 			])
@@ -84,16 +81,14 @@ describe('clients list screen', () => {
 					clientId: 'client-1',
 					name: 'Complained Client',
 					email: 'complained@example.com',
-					engagementId: 'engagement-1',
-					status: 'active',
+					hasWork: true,
 					portalInviteStatus: 'complained'
 				},
 				{
 					clientId: 'client-2',
 					name: 'Bounced Client',
 					email: 'bounced@example.com',
-					engagementId: 'engagement-2',
-					status: 'active',
+					hasWork: true,
 					portalInviteStatus: 'bounced'
 				}
 			])

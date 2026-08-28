@@ -22,18 +22,16 @@
 			const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/clients`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ name, email })
+				body: JSON.stringify({ givenName: name, email })
 			});
 			if (!response.ok) {
 				error = await response.text();
 				return;
 			}
 
-			const created: { engagementId: string } = await response.json();
 			await goto(
-				resolve('/practices/[practiceId]/engagements/[engagementId]', {
-					practiceId: page.params.practiceId!,
-					engagementId: created.engagementId
+				resolve('/practices/[practiceId]/clients', {
+					practiceId: page.params.practiceId!
 				})
 			);
 		} catch (error_) {
