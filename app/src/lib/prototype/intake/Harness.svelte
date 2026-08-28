@@ -19,8 +19,8 @@
 <div class="dials">
 	<p class="blurb">{blurb}</p>
 	<p class="pinned">
-		Pinned for now, each its own decision after this one — <strong>what the form demands</strong>
-		(first name only), <strong>field order</strong>, and the
+		Still to decide — <strong>where the save falls</strong> in the three pages, the
+		<strong>voice of the two request actions</strong>, and the
 		<strong>postpartum-only and returning-Client walks</strong>.
 	</p>
 </div>

@@ -4,11 +4,8 @@
 	// not three. fixtures.ts still holds the other cases -- decision 4 walks the
 	// winning shape through them. Mounted by the real "Add a Client" route
 	// behind `?variant=`.
-	import PrototypeSwitcher from '#lib/prototype/PrototypeSwitcher.svelte';
 	import Harness from './Harness.svelte';
-	import VariantA from './VariantA.svelte';
-	import VariantB from './VariantB.svelte';
-	import VariantC from './VariantC.svelte';
+	import VariantD from './VariantD.svelte';
 	import { cases, emptyClient, emptyRequest, type ClientDraft, type RequestDraft } from './fixtures.js';
 
 	interface Properties {
@@ -17,22 +14,11 @@
 
 	let { variant }: Properties = $props();
 
-	const variants = [
-		{ key: 'A', name: 'One page, one submit' },
-		{ key: 'B', name: 'Two steps, saved between' },
-		{ key: 'C', name: 'Minimal, finish on her page' }
-	];
+	const blurb =
+		'D — one thing per page, then a hub. C’s fast front door with B’s ability to keep going: three short pages, a save, and a task list she can work down or walk away from. A, B and C are in this branch’s first commit; this shape replaced them.';
 
-	const blurbs: Record<string, string> = {
-		A: 'A — One page, one submit. Her record and the ask for work sit on one screen and commit together. Detail is behind two disclosures. Order: names → how to reach her → date of birth.',
-		B: 'B — Two steps, with a real save between them. Step 1 commits her record on its own; step 2 is the ask, and you can walk away before it. Date of birth sits WITH the names, as an identity key.',
-		C: 'C — Minimal create, finish on her page. Two fields while you are on the phone, then her record tells you what is missing. The Request is a separate visit, never chained.'
-	};
-
-	// Pinned: the ordinary birth intake, and a form that demands a first name
-	// alone. Both become their own decision once the shape is settled.
+	// Pinned: the ordinary birth intake, seen from an employee Doula's seat.
 	const pinnedCase = cases[0];
-	const demands = 'name-only' as const;
 
 	let client = $state<ClientDraft>({ ...emptyClient(), ...pinnedCase.seed });
 	let request = $state<RequestDraft>({ ...emptyRequest(), kind: pinnedCase.kind });
@@ -53,7 +39,6 @@
 		client,
 		request,
 		custom,
-		demands,
 		onClient: (patch: Partial<ClientDraft>) => {
 			client = { ...client, ...patch };
 		},
@@ -67,16 +52,8 @@
 	});
 </script>
 
-<Harness blurb={blurbs[variant] ?? blurbs.A} {written}>
+<Harness {blurb} {written}>
 	{#key variant}
-		{#if variant === 'B'}
-			<VariantB {...shared} />
-		{:else if variant === 'C'}
-			<VariantC {...shared} />
-		{:else}
-			<VariantA {...shared} />
-		{/if}
+		<VariantD {...shared} />
 	{/key}
 </Harness>
-
-<PrototypeSwitcher {variants} current={variant} />

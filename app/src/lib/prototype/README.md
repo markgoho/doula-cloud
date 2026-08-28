@@ -9,29 +9,37 @@ cd app
 bun run dev
 ```
 
-Then open `/practices/p1/clients/new?variant=A`. Without `?variant=`, the route
+Then open `/practices/p1/clients/new?variant=D`. Without `?variant=`, the route
 is the real "Add a Client" page, untouched.
 
 No API, no database, no login: everything is stubbed in `intake/fixtures.ts`.
 
-## What it is standing in for
+## Where this got to
 
-The search that fronts intake is already settled (#371), so this prototype
-starts one step later: the search came back empty, and this is the form it
-sends you to. Twelve structural columns (ADR-0017), one Practice's own field
-template, and the Engagement Request's own two facts — the kind (#308) and a
-nullable due date (#353).
+The first commit carried three shapes on a variant bar — one page and one
+submit, two steps with a save between, minimal-create-then-finish. They are
+still in that commit, which is what makes them the primary source.
 
-## What to flip
+The shape that replaced them is **D**: the third one's fast front door with the
+second one's ability to keep going, laid out one thing per page (GOV.UK, Adam
+Silver) with a task-list hub after the save.
 
-- **Variant** — the bar at the bottom, or `←` / `→`.
-  - `A` one page, one submit — record and ask commit together.
-  - `B` two steps with a real save between them — step 1 commits her record
-    alone, step 2 is the ask.
-  - `C` minimal create, finish on her page — two fields on the phone, then a
-    completeness strip on her record; the Request never chains.
-- Nothing else. The case, what the form demands, and the field order are pinned and decided after the shape, one at a time.
+- Three short pages: her name, how to reach her, her date of birth.
+- **The save falls after the third page**, not the first. Everything after the
+  save crosses #373's edit path, which blocks and offers only *a different
+  person* — never a merge. A match key deferred past the save makes a duplicate
+  that can no longer be undone, so the save waits for all four keys.
+- Then a hub: what is recorded, what is not, one short page behind each row,
+  and two exits — *Ask to start work with her* and *Leave it here for now*.
+  "Save record" is not an action there; the save already happened, so the hub
+  states it as a fact.
+
+## Still open
+
+Where the save falls in the three pages, the voice of the two request actions
+(#374 makes them two, not one — a Doula asks, an Owner starts directly), and
+the postpartum-only and returning-Client walks.
 
 Each flow ends in a black box: what was written to `clients`, whether an
-`engagement_requests` row was written, and how many Credits moved (always zero
-— the Credit locks at approval, #393).
+`engagement_requests` row was written, and how many Credits moved — always zero
+before approval (#393).
