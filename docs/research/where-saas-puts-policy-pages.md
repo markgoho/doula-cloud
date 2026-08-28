@@ -36,9 +36,9 @@ Two things follow, and the rest of this document tests both against what real si
 
 ## 1. The direct competitors — practice management for solo practitioners
 
-Eight sites: Practice Better, SimplePractice, Jane App, Cliniko, Halaxy, Healthie, Doulado and Enginehire. **Every one of them that states a refund position at all puts their refund position inside a Terms of Service document.** None has a standalone refund page. None has a consolidated processor-facing page.
+Eight sites: Practice Better, SimplePractice, Jane App, Cliniko, Halaxy, Healthie, Doulado and Enginehire. **Every one whose refund position was verified — seven of the eight — states it inside a Terms of Service document.** None has a standalone refund page. None has a consolidated processor-facing page.
 
-**A doula-specific SaaS product does exist**, so this document does not have to record that absence. [**Doulado**](https://doulado.co/) is a live commercial practice-management product sold to doulas, priced Starter $19/month, HIPAA Premium $29/month, Impact custom, with "2 Months Free" on annual — **observed** on the homepage. [**Enginehire**](https://enginehire.io/doula-business-software/) sells a staffing platform with a doula vertical. Neither changes the pattern; both put the money terms in the ToS.
+**A doula-specific SaaS product does exist**, so this document does not have to record that absence. [**Doulado**](https://doulado.co/) is a live commercial practice-management product sold to doulas, priced Starter $19/month, HIPAA Premium $29/month, Impact custom, with "2 Months Free" on annual — **observed** on the homepage. [**Enginehire**](https://enginehire.io/doula-business-software/) sells a staffing platform with a doula vertical. Doulado does not change the pattern: its money terms are in its ToS. Enginehire's terms document was not read, so it is counted as a site visited and not as a verified position.
 
 ### Practice Better
 
