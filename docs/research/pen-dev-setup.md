@@ -30,11 +30,14 @@ CLI**, which is why the CLI showed no session despite the app being signed in si
 
 ## Enabling the MCP server in Claude Code
 
-The Pencil MCP server was **already registered globally** — Pen writes itself into `~/.claude.json` on
-install — but was **explicitly disabled for this repo**:
+**This machine runs with `CLAUDE_CONFIG_DIR=/Users/mgoho/.claude-personal`**, so the live config is
+`~/.claude-personal/.claude.json`. That single fact explains the whole problem, and it is easy to get
+wrong — this ticket got it wrong once before catching it.
+
+Pen writes itself into `~/.claude.json` on install — the *default* config path:
 
 ```jsonc
-// ~/.claude.json
+// ~/.claude.json  <- NOT the config this machine reads
 "mcpServers": {
   "pencil": {
     "command": "/Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64",
@@ -42,14 +45,30 @@ install — but was **explicitly disabled for this repo**:
     "env": {}, "type": "stdio"
   }
 }
-// projects["/Users/mgoho/Github/doula-cloud"]
-"disabledMcpServers": ["pencil"]   // ← this was the blocker
 ```
 
-Note the key: **`disabledMcpServers`**, which gates globally-registered servers per project. It is not
-`enabledMcpjsonServers`, which gates servers declared in a project's `.mcp.json` (this repo's `.mcp.json`
-declares only `svelte`). Fixing this means removing `"pencil"` from that array. A session restart is
-required before the tools appear.
+The live config's global `mcpServers` is **empty**. So pencil was not disabled here, and not
+mis-scoped — it was simply **absent**, because Pen's installer wrote to a config directory this machine
+does not use. Anything reading `~/.claude.json` to reason about MCP state on this machine is reading a
+stale file.
+
+**Do not hand-edit either JSON file.** Use the CLI, which writes to whichever config is live:
+
+```bash
+claude mcp add pencil --scope local -- \
+  /Applications/Pen.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64 \
+  --app desktop --agent claudeCodeCLI
+```
+
+`claude mcp get pencil` then reports **`Status: ✔ Connected`**. `--scope local` keeps it private to this
+project, which is right while pen.dev is doula-cloud work; `--scope user` would widen it to every repo.
+Remove with `claude mcp remove pencil -s local`. A session restart is still needed before the tools
+appear in a running session.
+
+Two diagnostic notes. `claude mcp list` and `claude mcp get` read the **live** config, so they are the
+authority — a server present in a JSON file but absent from `claude mcp get` is not registered.
+And the server binary takes `-app` (*"pen.dev app to connect to"*), `-agent`, `-conversation_id`, and
+`-enable_spawn_agents`, which exposes a `spawn_agents` tool and is off by default.
 
 ## What the MCP server exposes
 
