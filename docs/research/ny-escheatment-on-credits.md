@@ -35,7 +35,7 @@ A purchased Credit is money Doula Cloud has received for a service it has not ye
 
 Read what the subdivision does *not* say, because each omission is load-bearing:
 
-- **No consumer limitation.** The words "consumer", "personal", "family" and "household" do not appear anywhere in § 1315. **[checked absence]** — searched the full text of § 1315 for each of those terms; the only place a consumer limitation appears in this area of New York law is General Business Law § 396-i, which is a different statute doing a different job (see [section 3](#3-business-to-business-versus-a-consumer-gift-card--the-crux)).
+- **No consumer limitation.** The words "consumer", "personal", "family" and "household" do not appear anywhere in § 1315. **[checked absence]** — all six subdivisions of § 1315 (1, 1-a, 1-b, 2, 3, 4) were retrieved verbatim and searched for each of those terms; none occurs. ("Person" occurs, in subdivision 2's "the person or persons entitled thereto", which carries no consumer sense.) The only place a consumer limitation appears in this area of New York law is General Business Law § 396-i, which is a different statute doing a different job (see [section 3](#3-business-to-business-versus-a-consumer-gift-card--the-crux)).
 - **No holder-type limitation.** Subdivisions 1 and 1-a are addressed to "any corporation (other than a public corporation), joint stock company, individual, association of two or more individuals, committee or business trust in this state". **Subdivision 1-b carries no such list at all** — it attaches to the amount, not to the form of the entity holding it. **[statute]** So the question "is a single-member LLC a 'corporation' for § 1315(1)?" — which is a real question, since the Limited Liability Company Law is not the Business Corporation Law — never has to be answered. It does not arise under 1-b. **[inference]** The Comptroller's own reference sheet for this reporting cycle is in any case titled "Unclaimed Property Relating to **All Business Entities**", not "corporations".
 - **No instrument requirement.** Nothing turns on a card, a certificate, a serial number, or a transferable token. An "amount" is enough. **[statute]**
 
@@ -53,11 +53,23 @@ APL § 1315(**1**): **[statute]**
 
 > Any unclaimed amount representing unredeemed gift certificates sold after December thirty-first, nineteen hundred eighty-three, including gift certificates for merchandise only in which case the face value of such certificate shall be deemed the amount deemed abandoned, and owing in this state, or held by any corporation (other than a public corporation), joint stock company, individual, association of two or more individuals, committee or business trust in this state, and which has remained unclaimed by the owner of such amount for five years, shall be deemed abandoned property.
 
-**The Abandoned Property Law does not define "gift certificate".** **[checked absence]** — APL Article 1 contains § 101 (short title), § 102 (declaration of policy) and § 103 (definitions); § 103 carries no definition of "gift certificate", "gift card" or "stored value". Nor does § 1315 define the term. The only content New York gives it in the escheat context is the Comptroller's gloss: **[OSC]**
+**The Abandoned Property Law defines "gift certificate" itself, in APL § 103(g)** — and the definition is *broader* than the consumer gift-card statute's, which is the opposite of what a reader expecting relief would hope. **[statute]** It opens "Gift certificate shall mean a written promise or electronic payment device that: (i) is usable at a single merchant or an affiliated group of merchants that share the same name, mark, or logo, or is usable at multiple, unaffiliated merchants or service providers; and (ii) is issued in a specified amount", and closes with a list of exclusions — deposit-linked payment devices, prepaid telephone calling cards, flexible spending arrangements and accounts, Archer MSAs, dependent care reimbursement accounts, health savings accounts, prepaid discount cards, and payroll cards.
+
+Three things follow, and each is checked: **[checked absence]**
+
+- **The APL definition has no consumer limitation.** It does not contain "personal, family or household" or any restriction to consumer purchases — verified against § 103(g) directly. This is where it diverges from General Business Law § 396-i, whose otherwise near-identical wording *does* carry that limb (see [section 3](#3-business-to-business-versus-a-consumer-gift-card--the-crux)). **The escheat statute deliberately drops the consumer qualifier the consumer statute keeps.**
+- **A single-merchant instrument is expressly included**, in the definition's own words: "usable at a **single** merchant". Closed-loop is not an exit.
+- **None of the nine exclusions reaches a prepaid balance for the seller's own services.** Checked each in turn against these facts; the nearest, "prepaid discount card or program", is a discount mechanism, not a prepayment for the seller's own service, and it carries its own disclosure proviso.
+
+**[checked absence]** — APL Article 1 is short: § 101 (short title), § 102 (declaration of policy) and § 103 (definitions). § 103 defines eleven terms — abandoned property fund; abandoned property heretofore paid to the state; banking organizations; infant; infancy; life insurance corporation; utility services; **gift certificate**; virtual currency; virtual currency business activity; and energy services company. It defines neither **"holder"** nor **"owner"** nor **"stored value"**, so no definitional argument about who holds the balance or what a unit of stored value is has any statutory hook in New York.
+
+The Comptroller adds one gloss on top, closing the "we sell services, not merchandise" reading: **[OSC]**
 
 > The term gift certificate includes gift certificates designated for merchandise and/or services.
 
 — *All Business Entities Reference Sheet*.
+
+**[inference]** Whether Credits fall inside § 103(g) is genuinely arguable — they are denominated in units of service rather than "issued in a specified amount", and there is no instrument to be a "written promise or electronic payment device". That argument is worth having only to decide between a five-year and a three-year clock. **It is not an escape**, because § 1315(1-b) does not use the term at all.
 
 That gloss says a certificate for **services** is still a gift certificate, so "we sell services, not merchandise" is not an exit. **[inference]** But note what the gloss does *not* supply: it does not say a prepaid balance on a customer's own account is a gift certificate, and the Comptroller's property-type table lists the two as **different codes with different dormancy** — MS12 *Unredeemed Gift Certificates* at 5 years, MS04 *Payments For Goods and Services* at 3 years. **[OSC]** ([Property Type Table](https://www.osc.ny.gov/files/unclaimed-funds/reporters/pdf/property-type-tables.pdf), All Business Entities.)
 
@@ -67,9 +79,9 @@ That gloss says a certificate for **services** is still a gift certificate, so "
 
 **No, on both counts, and this is the point where a reader who knows the gift-card rules is most likely to go wrong.**
 
-**"General-purpose" is not a requirement.** § 1315 draws no distinction between a single-merchant (closed-loop) instrument and an open-loop one. **[checked absence]** — searched § 1315 for "closed", "open", "single", "multiple", "network" and "merchant"; none appears. The distinction that *does* exist in New York law lives in General Business Law § 396-i, and § 396-i is a consumer-protection statute, not an escheat statute (see [section 3](#3-business-to-business-versus-a-consumer-gift-card--the-crux)).
+**"General-purpose" is not a requirement.** § 1315 draws no distinction between a single-merchant (closed-loop) instrument and an open-loop one. **[checked absence]** — searched the assembled verbatim text of all six subdivisions of § 1315 (1, 1-a, 1-b, 2, 3, 4) for "closed", "open", "single", "multiple", "network" and "merchant"; none appears. And where New York's escheat law *does* address the point — in the § 103(g) definition — it resolves it the unhelpful way, by including an instrument "usable at a **single** merchant" in terms.
 
-**A consumer purchaser is not required.** § 1315(1-b) has no purchaser qualification at all, and the Comptroller has said in terms that business-to-business does not escape. See [section 3](#3-business-to-business-versus-a-consumer-gift-card--the-crux).
+**A consumer purchaser is not required.** § 1315(1-b) has no purchaser qualification at all; § 103(g) omits the consumer limb that General Business Law § 396-i carries; and the Comptroller has said in terms that business-to-business does not escape. See [section 3](#3-business-to-business-versus-a-consumer-gift-card--the-crux).
 
 ### The provisions that were checked and do not apply
 
@@ -107,7 +119,7 @@ So the clock starts at **purchase**, and **spending any Credit from the balance 
 
 ### Percentage of face value: all of it
 
-**There is no partial escheat in New York.** **[checked absence]** — searched § 1315 for "per cent", "percent", "sixty", "portion" and "fraction": none appears. Searched the Handbook and the All Business Entities reference sheet for a percentage or discount applied to reportable amounts: none. The only two amount fields on the report form are "Initial Amount — Amount due the owner before any allowable deductions are subtracted" and "Remitted Amount — Net amount due the owner after any allowable deductions are subtracted", and the Handbook lists "service charges" among the items that **do not** eliminate the need to report, rather than among deductions a holder may take.
+**There is no partial escheat in New York.** **[checked absence]** — searched the assembled verbatim text of all six subdivisions of § 1315 for "per cent", "percent", "sixty", "portion" and "fraction": none appears. Searched the Handbook and the All Business Entities reference sheet for a percentage or discount applied to reportable amounts: none. The only two amount fields on the report form are "Initial Amount — Amount due the owner before any allowable deductions are subtracted" and "Remitted Amount — Net amount due the owner after any allowable deductions are subtracted", and the Handbook lists "service charges" among the items that **do not** eliminate the need to report, rather than among deductions a holder may take.
 
 The Comptroller states the amount rule directly for the nearest analogue: **[OSC]**
 
@@ -178,7 +190,11 @@ New York's gift-card rules live in **General Business Law § 396-i**, which is c
 
 A Practice buying Credits to run its business is not buying for personal, family or household purposes. **So § 396-i's consumer protections most likely do not attach to Credits.** **[inference]**
 
-**And that is worth nothing for escheat.** § 396-i governs what a seller may do to a card — expiry dates, dormancy fees, disclosure. It is not the abandoned-property statute, § 1315 does not cross-reference it, and the APL nowhere borrows its definitions. **[checked absence]** — searched § 1315 and APL Article 1 § 103 for any reference to the General Business Law: § 1314 references GBL § 715, and § 1315 references the Public Service Law; **neither references GBL § 396-i.** The Comptroller mentions § 396-i in its reference sheet only to warn holders not to confuse the two clocks: **[OSC]**
+**And that is worth nothing for escheat — because the consumer limb is in the wrong place to help.** Look at where each piece sits. § 396-i's **definition** of a gift certificate (subdivision 1) has no consumer limb; the consumer limb sits in subdivision **1-a**, which scopes *what the section regulates*, not *what a gift certificate is*. **[statute]** The Abandoned Property Law then writes out the same definitional wording for itself at § 103(g) — and takes only the definition. **It never imports subdivision 1-a.** So the one sentence that makes § 396-i a consumer statute is precisely the sentence the escheat statute leaves behind. **[inference]**
+
+**[checked absence]** — searched § 1315 (all six subdivisions, verbatim) and APL § 103 for any cross-reference to the General Business Law: § 1315 references only the Public Service Law and the Tax Law, § 103(g) states its own self-contained definition, and the one APL section that *does* point at the GBL is § 1314, which points at **§ 715**, not § 396-i. **No provision of the APL incorporates § 396-i or its consumer scope.**
+
+The practical effect is worth stating plainly: **being too commercial for the consumer gift-card statute does not make Credits too commercial for the escheat statute.** The two are not opposite ends of one spectrum. § 396-i governs what a seller may do to a card — expiry dates, dormancy fees, disclosure. § 1315 governs where the money goes when nobody claims it. The Comptroller mentions § 396-i in its reference sheet only to warn holders not to confuse the two clocks: **[OSC]**
 
 > **Gift Card Expiration Dates — General Business Law Section 396-i.** Gift cards and certificates, other than promotional gift certificates, may not expire earlier than nine years after the date of issue or the date on which funds were last loaded. **Be mindful that the dormancy period under the Abandoned Property Law is five years.** Regardless of expiration dates, these items are reportable as unclaimed funds once they meet the five-year dormancy period.
 
@@ -204,7 +220,7 @@ The Handbook also closes the tempting shortcut: **[OSC]** "a holder cannot write
 
 **Irrelevant to whether escheat happens — but it does remove the only lever that could have shortened the balance's life.**
 
-New York's trigger is the word **"unclaimed"**, not the word "expired". § 1315(1-b) deems the amount abandoned when it "has remained **unclaimed by the owner** of such amount for three years". **[statute]** Expiry appears nowhere in the subdivision. **[checked absence]** — searched the full text of § 1315 for "expire", "expiration" and "term": the words do not occur in any subdivision.
+New York's trigger is the word **"unclaimed"**, not the word "expired". § 1315(1-b) deems the amount abandoned when it "has remained **unclaimed by the owner** of such amount for three years". **[statute]** Expiry appears nowhere in the section. **[checked absence]** — searched the assembled verbatim text of all six subdivisions of § 1315 for "expire", "expiration", "expired" and "expiry": none occurs in any subdivision. The nearest thing to a time-limit concept anywhere in the section is subdivision 4's state tax-refund debit card "which shall not have been activated for one year from the date of issuance", which is a *non-activation* trigger for a State-issued card and has nothing to do with a private seller's expiry terms. The word "expiration" does appear once in the definition at § 103(g), and only inside the exclusion for prepaid discount cards; it is not a trigger anywhere in § 1315.
 
 The Comptroller states the same thing twice, affirmatively: **[OSC]**
 
@@ -271,10 +287,11 @@ So the refund policy is fine, but **the request must be the customer's and it mu
 All retrieved 28 August 2026.
 
 **New York State Legislature — consolidated laws**
-- [Abandoned Property Law § 1315, *Miscellaneous unclaimed property*](https://www.nysenate.gov/legislation/laws/ABP/1315) — subdivision 1 (gift certificates, 5 years), 1-a (outstanding cheques, 3 years), 1-b (services not rendered, 3 years)
+- [Abandoned Property Law § 1315, *Miscellaneous unclaimed property*](https://www.nysenate.gov/legislation/laws/ABP/1315) — all six subdivisions retrieved verbatim: 1 (gift certificates, 5 years), 1-a (outstanding cheques, 3 years), 1-b (services not rendered, 3 years), 2 (escrow, 3 years), 3 (lottery prizes), 4 (State cheques and tax-refund debit cards, 1 year)
+- [Abandoned Property Law § 103, *Definitions*](https://www.nysenate.gov/legislation/laws/ABP/103) — the APL's own definition of "gift certificate" at § 103(g), its nine exclusions, its inclusion of single-merchant instruments, and its omission of any consumer limitation; also the checked absence of any definition of "holder", "owner" or "stored value"
 - [Abandoned Property Law § 1314, *Unclaimed consumer credit balances*](https://www.nysenate.gov/legislation/laws/ABP/1314) — GBL § 715 plumbing; checked and not applicable
 - [Abandoned Property Law, Article 13](https://www.nysenate.gov/legislation/laws/ABP/A13) — full section list, used to establish that no other section reaches these facts
-- [Abandoned Property Law, Article 1](https://www.nysenate.gov/legislation/laws/ABP/A1) — §§ 101–103; checked for a "gift certificate" definition, which is absent
+- [Abandoned Property Law, Article 1](https://www.nysenate.gov/legislation/laws/ABP/A1) — §§ 101–103, used to establish that § 103 is the APL's only definitions section
 - [General Business Law § 396-i](https://www.nysenate.gov/legislation/laws/GBS/396-I) — gift-certificate definition; "personal, family or household purposes" limitation in subdivision 1-a
 
 **New York State Office of the State Comptroller, Office of Unclaimed Funds**
