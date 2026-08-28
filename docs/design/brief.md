@@ -81,6 +81,12 @@ These are the standing expectations `CLAUDE.md` already sets — performance and
 accessibility — restated as an aesthetic commitment, because in this direction
 they *are* the aesthetic.
 
+Smoothness is also where the brief's second governing reference bites hardest.
+Jakob's Law is not adopted alone: the thirty laws at
+[lawsofux.com](https://lawsofux.com/) govern this product's interaction design,
+and each one's concrete obligation here is set out under
+[The Laws of UX](#the-laws-of-ux).
+
 ## Mood, in words
 
 Quiet, professional, unhurried, and legible at the end of a long shift. The
@@ -311,6 +317,103 @@ point at these and say the work is done. The first of them is the largest.
 **This is not a licence to add a fifth.** If a later ticket wants a signature
 move that is not on this list, that is a change to the brief and belongs on the
 map, not in a component.
+
+## The Laws of UX
+
+Jakob's Law decided the direction, and it is not adopted alone. **The thirty laws
+at [lawsofux.com](https://lawsofux.com/) are this product's standing reference
+for interaction design**, on the same footing as the palette and the type scale.
+
+They are listed here once each, grouped by what they actually decide, with **what
+each one demands in Doula Cloud** — not its definition, which the site already
+gives. A law with no concrete obligation here would be decoration, so every row
+names a real screen, a real number, or a real prohibition. Where two laws pull
+against each other, the conflict is named and resolved at the end rather than
+left for somebody to discover mid-ticket.
+
+### The shell, navigation and controls
+
+| Law | What it demands here |
+|---|---|
+| **Jakob's Law** | The governing law of this brief. Top bar, flat nav, tenant name and switcher, account behind an avatar at the end of the chrome — the arrangement every product in the [#406](https://github.com/markgoho/doula-cloud/issues/406) survey converged on. No invented navigation pattern, ever. |
+| **Mental Model** | The app's nouns are the domain's nouns. A Practice, a Client, an Engagement, an Offer, a Staff member and a Plan mean on screen exactly what `CONTEXT.md` says they mean. A screen never renames a domain concept for the sake of a nicer label, and never invents a grouping the domain does not have. |
+| **Fitts's Law** | Primary actions are large and close to where the work happened — a form's submit button sits at the end of the form, not in a distant toolbar. Destructive actions are deliberately *not* adjacent to their benign neighbours. Hit targets never fall below 44px, as already stated under Density. |
+| **Selective Attention** | The plum accent is the attention signal and is spent on primary actions and active state only. Nothing else competes: no coloured card headers, no badges used decoratively, no second accent. A screen where the eye cannot find the one thing to do next has failed this law, not the user. |
+| **Serial Position Effect** | First and last items in a series are remembered, so put the important ones there. In the top bar, the product identity is first and the account menu is last. In an activity ledger the newest event is first. In a long form, the fields a person came to fill in are not buried in the middle. |
+| **Paradox of the Active User** | Nobody reads onboarding. Every screen has to be usable cold, on the first morning, with no tour and no tooltip tour. Help is inline, at the field, at the moment it is needed — never a modal that must be dismissed before work can start. |
+
+### Forms — the hardest surface in this product
+
+[ADR-0017](https://github.com/markgoho/doula-cloud/blob/trunk/docs/adr/0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md)
+grows a Client from two fields to a twelve-column structural core **plus a
+Practice-defined layer of arbitrary added fields**. That makes the intake form
+the screen where these laws bite hardest, and where getting them wrong is most
+expensive.
+
+| Law | What it demands here |
+|---|---|
+| **Hick's Law** | Decision time grows with the number and complexity of choices. A form is presented in sequence, not as a wall: one decision at a time where the domain allows it, and a default chosen for the person wherever a sensible default exists. Applies as hard to Settings as to intake. |
+| **Choice Overload** | A Practice that has defined thirty custom fields must not get thirty inputs on one screen. Practice-defined fields are grouped into Practice-named sections, appended below the structural core — Cliniko's shape, which #406 found is the one that matches ADR-0017. |
+| **Miller's Law** and **Working Memory** | No group of fields, nav items or options exceeds roughly seven before it is broken up. Nothing a person must *remember* from an earlier step to complete a later one: if a later field depends on an earlier answer, the earlier answer is still on screen. |
+| **Chunking** | The structural core is chunked into meaningful groups with headings — identity, contact, care, billing — not presented as twelve equal rows. Chunk by what the information *is*, never by what fits. |
+| **Tesler's Law** | Some complexity is irreducible, and somebody absorbs it. A Practice's intake genuinely has many fields; the design's job is to carry that weight *for the doula*, in the software, rather than hand it to her as a longer form. Where complexity cannot be removed it is moved — to a default, to a template, to a later step — and never simply hidden. |
+| **Postel's Law** | Be liberal in what a field accepts, conservative in what it emits. Phone numbers, dates and names are accepted in whatever shape a person types, then normalised on the way to storage. A field that rejects a valid answer over formatting is a defect, not validation. |
+| **Goal-Gradient Effect** | Effort rises as the end comes into view, so a multi-step form always shows where the end is — a real step count, real progress, and never a fake one. A saved draft resumes at the step it left, not at the beginning. |
+| **Zeigarnik Effect** | An interrupted task is remembered and wants finishing. Nothing in this product loses work: an intake form partially filled at 3am survives the tab closing, and an incomplete Engagement or unsent Invoice is visible somewhere as unfinished rather than silently absent. |
+| **Parkinson's Law** | A task with no visible end inflates to fill the time available. Give every long task a stated shape — how many steps, what remains — so it does not become an open-ended sitting. This is the same instruction as Goal-Gradient, arrived at from the other side. |
+
+### Grouping and visual structure
+
+These five Gestalt laws are why this direction can drop shadows and still read
+as structured. They are the mechanism behind "neutrals carry structure" in the
+palette rules, and they are what a Template layer
+([#410](https://github.com/markgoho/doula-cloud/issues/410)) exists to apply
+consistently.
+
+| Law | What it demands here |
+|---|---|
+| **Law of Proximity** | Spacing does the grouping before any border does. A label sits nearer its own field than the next field; a card's title sits nearer its own links than the card edge. If two things are related, close the gap before drawing a line. |
+| **Law of Common Region** | A shared bounded area groups its contents. This is what a card *is* in this direction — a white surface inside a one-pixel `surface-container-highest` border. Use a region when a group genuinely is a unit; do not wrap things in a card to make a page look busy. |
+| **Law of Uniform Connectedness** | The strongest grouping cue of the five. A run of rows sharing hairline dividers reads as one list, which is exactly how the activity ledger and every table are built. Never split one logical list across two visual containers. |
+| **Law of Similarity** | Things that look the same are assumed to behave the same. One appearance per role, without exception: every link looks like every other link, every primary button like every other primary button. The corollary is stricter — **something that is not a link must never look like one.** |
+| **Law of Prägnanz** | People resolve complexity into the simplest reading available. Prefer a plain rectangle, a plain rule, a plain list. Ornament that has to be decoded is a cost with no return, which is the same conclusion the direction reached on shadows. |
+| **Von Restorff Effect** | The thing that differs is remembered — and this law is why the restrained accent works rather than being merely timid. Plum is memorable *because* it is almost the only colour on the page. Every additional coloured element spends that memorability. Applies once per screen. |
+
+### Pace, feedback and how the product feels
+
+These are the same commitments as
+[the governing principle's smoothness list](#the-governing-principle), stated as
+the laws they come from. [#418](https://github.com/markgoho/doula-cloud/issues/418)
+turns them into checks.
+
+| Law | What it demands here |
+|---|---|
+| **Doherty Threshold** | The interaction budget is **under 400ms**, end to end, for anything a person does routinely — opening a client, saving a field, filtering a list. The brief's stricter "acknowledge within 100ms" is the *feedback* floor and sits inside this budget; 400ms is the completion budget. Over 400ms, the work is done optimistically or with skeletal loading, never with a spinner over the page. |
+| **Cognitive Load** | Every element on a screen costs the reader something. This is the standing argument for cutting: if a thing does not help this person do this task now, it is removed. No metric tiles nobody asked for, no decorative icons, no counts that answer no question. |
+| **Flow** | A doula working through a caseload is in a state worth protecting. Nothing interrupts it: no modal that was not asked for, no notification that steals focus, no navigation that loses scroll position or unsaved work. |
+| **Aesthetic-Usability Effect** | The reason a form-heavy internal tool deserves a real design at all — a considered interface is perceived as more usable and is forgiven more. It carries a warning that this brief accepts: it also **masks usability problems**, so a screen looking good is never evidence that it works. That evidence comes from watching somebody use it. |
+| **Peak-End Rule** | An experience is judged by its peak and its end. The peaks here are the moments that matter to a practice — sending an invoice, a client accepting an offer, completing an intake — and each should end in a clear, calm confirmation of what happened and what comes next. A task that ends by dumping the person back on a blank page has wasted its best moment. |
+
+### What gets built, and what gets cut
+
+| Law | What it demands here |
+|---|---|
+| **Occam's Razor** | Between two designs that serve the task equally, take the one with fewer parts. Applies to components as much as screens: a new atom must justify itself against composing existing ones. |
+| **Pareto Principle** | A small share of the work carries most of the value. Design the paths a 14-doula agency walks every day — the client list, intake, the activity ledger, invoicing — to a higher standard than the paths walked once a quarter, and be explicit about which is which rather than spreading effort evenly. |
+| **Cognitive Bias** | Our own judgement is the unreliable instrument. Two working rules: a design is not validated by the team liking it, and a default is never neutral — whatever is pre-selected is what most people will accept, so choose defaults as deliberately as any other decision. |
+
+### Where the laws conflict
+
+Three real tensions. Each is resolved here so no ticket has to relitigate it.
+
+- **Hick's Law and Choice Overload against Tesler's Law.** Fewer choices are better, and a Practice's intake genuinely needs many fields. **Tesler wins on what exists; Hick wins on what is shown at once.** No field is deleted to make a form shorter. Fields are sequenced, grouped, defaulted and deferred so that few decisions are present at any moment — and the irreducible complexity is absorbed by templates and defaults rather than passed to the doula.
+- **Von Restorff and Selective Attention against the Aesthetic-Usability Effect.** Restraint makes the one accent memorable; a richer surface is perceived as more usable. **Restraint wins, and the aesthetic budget is spent on typography, rhythm and smoothness instead of on colour** — which is exactly what [Where the character comes from](#where-the-character-comes-from) already says.
+- **Goal-Gradient and Zeigarnik against "nothing moves that the user did not cause".** Progress indicators and unfinished-work cues are motion and attention the user did not ask for. **The Motion rule holds:** progress is *shown*, never animated at somebody; an unfinished Engagement appears in a list, never as a badge that pulses or a banner that follows a person around.
+
+**Standing instruction.** These laws are a checklist for review, not a vocabulary to
+sprinkle through tickets. Cite one when it decides something. If a design has to
+break one, say which and why in the ticket — that is a legitimate outcome, and an
+undocumented one is not.
 
 ## Adopting this in `hugo/`
 
