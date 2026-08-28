@@ -12,6 +12,11 @@ holds single words and short phrases, never sentences. Where the model cannot ho
 fact at all, the register stays silent and the fact becomes a `journey-gap` issue. See
 [ADR-0005](docs/adr/0005-one-context-client-register-at-the-ui-edge.md).
 
+A bare **Template** is not a domain term. The domain's templates are always written
+qualified — **Plan Template**, **Client Field Template** — and an unqualified "Template"
+means the Atomic Design layer in `app/src/lib/components/templates/`, per
+[ADR-0018](docs/adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md).
+
 **Practice**:
 A tenant business. May be a solo doula or a multi-doula business with non-doula Staff.
 _Avoid_: Business, tenant, org
