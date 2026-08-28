@@ -157,6 +157,42 @@ func TestRLS_ClientsInsertRejectedForContractorMembership(t *testing.T) {
 	}
 }
 
+// TestRLS_ClientsInsertAllowedForOwnerWithContractorEmploymentType proves
+// clients_insert's refusal is role-gated, not bare employment_type: an
+// Owner who also does the work under a contractor employment type
+// (ADR-0017's "solo Practice") stays in the Owner column and may still
+// create a Client, unlike a pure contractor Doula.
+func TestRLS_ClientsInsertAllowedForOwnerWithContractorEmploymentType(t *testing.T) {
+	db := testdb.New(t)
+	var practiceID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO practices (name) VALUES ('Owner Contractor Practice') RETURNING id`,
+	).Scan(&practiceID); err != nil {
+		t.Fatalf("seed practice: %v", err)
+	}
+	ownerContractorID := seedOwnerContractorAtPractice(t, db, practiceID, "owner-contractor-inserting")
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, ownerContractorID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	if _, err := tx.ExecContext(t.Context(),
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Owner Contractor Client', 'owner-contractor-client@example.com')`,
+		practiceID,
+	); err != nil {
+		t.Fatalf("expected INSERT to be allowed for an Owner with a contractor employment type, got error: %v", err)
+	}
+}
+
 // TestRLS_EngagementsVisibilityIsScopedToCurrentPractice proves the
 // engagements policy narrows to rows for app.current_practice_id, not
 // every Engagement globally.

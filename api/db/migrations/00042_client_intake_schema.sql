@@ -53,6 +53,14 @@ CREATE POLICY clients_select ON clients
 -- verifies the practice_id being written matches the caller's Practice
 -- context AND that the caller's own Membership there is not a contractor
 -- Doula's (ADR-0017's write table: a contractor originates no Client).
+-- The refusal is role-gated, not bare employment_type: ADR-0017's write
+-- table names four columns -- Owner, Admin, Doula (employee), Doula
+-- (contractor) -- the same shape ADR-0008's read table already uses, and
+-- an Owner or Admin who also does the work under a contractor employment
+-- type (ADR-0017's "solo Practice") stays in the Owner/Admin column, not
+-- the Doula (contractor) one. So the check reads: contractor employment
+-- type refuses only a Membership holding neither the owner nor the admin
+-- role.
 DROP POLICY clients_insert ON clients;
 -- +goose StatementBegin
 CREATE POLICY clients_insert ON clients
@@ -63,7 +71,10 @@ CREATE POLICY clients_insert ON clients
             SELECT 1 FROM practice_memberships pm
             WHERE pm.staff_id = NULLIF(current_setting('app.current_staff_id', true), '')::uuid
               AND pm.practice_id = NULLIF(current_setting('app.current_practice_id', true), '')::uuid
-              AND pm.employment_type <> 'contractor'
+              AND (
+                  pm.employment_type <> 'contractor'
+                  OR pm.roles && ARRAY['owner', 'admin']::practice_role[]
+              )
         )
     );
 -- +goose StatementEnd

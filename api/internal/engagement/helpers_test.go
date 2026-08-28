@@ -72,6 +72,29 @@ func seedContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityU
 	return staffID
 }
 
+// seedOwnerContractorAtPractice seeds a Membership holding both the
+// owner role and a contractor employment type -- ADR-0017's "solo
+// Practice": someone who runs the Practice and also does the work,
+// billed as a contractor. clients_insert's WITH CHECK must stay in the
+// Owner column for her, not the Doula (contractor) one.
+func seedOwnerContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
+		identityUID,
+	).Scan(&staffID); err != nil {
+		t.Fatalf("seed staff: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{owner,doula}', 'contractor')`,
+		practiceID, staffID,
+	); err != nil {
+		t.Fatalf("seed owner-contractor membership: %v", err)
+	}
+	return staffID
+}
+
 // seedGrantedAttachment inserts an open, granted-origin
 // engagement_attachments row directly -- no handler in this codebase
 // writes one yet (#317 builds that).
