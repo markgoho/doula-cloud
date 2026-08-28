@@ -19,13 +19,13 @@ import (
 func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email string) (clientID, engagementID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (name, email) VALUES ($1, $2) RETURNING id`,
-		name, email,
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $3) RETURNING id`,
+		practiceID, name, email,
 	).Scan(&clientID); err != nil {
 		t.Fatalf("seed client: %v", err)
 	}
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id) VALUES ($1, $2) RETURNING id`,
+		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
 		clientID, practiceID,
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)

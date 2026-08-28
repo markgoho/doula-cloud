@@ -302,7 +302,7 @@ func insertMessage(ctx context.Context, tx *sql.Tx, messageID, engagementID, sen
 func resolveSenderName(ctx context.Context, tx *sql.Tx, senderType, senderID string) (string, error) {
 	query := `SELECT name FROM staff WHERE id = $1`
 	if senderType == senderTypeClient {
-		query = `SELECT name FROM clients WHERE id = $1`
+		query = `SELECT COALESCE(preferred_name, given_name) FROM clients WHERE id = $1`
 	}
 
 	var name string

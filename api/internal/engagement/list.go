@@ -79,7 +79,7 @@ func ListHandler() http.Handler {
 // layer's own filter, so a bug in either one alone can't leak rows.
 func listClientEngagements(ctx context.Context, tx *sql.Tx, practiceID string) ([]ClientEngagement, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT c.id, c.name, c.email, e.id, e.status,
+		`SELECT c.id, COALESCE(c.preferred_name, c.given_name), c.email, e.id, e.status,
 		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status
 		 FROM engagements e
 		 JOIN clients c ON c.id = e.client_id
@@ -90,7 +90,7 @@ func listClientEngagements(ctx context.Context, tx *sql.Tx, practiceID string) (
 		     ORDER BY o.created_at DESC LIMIT 1
 		 ) latest ON true
 		 WHERE e.practice_id = $1
-		 ORDER BY c.name`,
+		 ORDER BY COALESCE(c.preferred_name, c.given_name)`,
 		practiceID,
 	)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -109,7 +109,7 @@ func listClientEngagements(ctx context.Context, tx *sql.Tx, practiceID string) (
 // never a key).
 func listAttachedClientEngagements(ctx context.Context, tx *sql.Tx, practiceID, staffID string) ([]ClientEngagement, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT c.id, c.name, c.email, e.id, e.status,
+		`SELECT c.id, COALESCE(c.preferred_name, c.given_name), c.email, e.id, e.status,
 		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status
 		 FROM engagements e
 		 JOIN clients c ON c.id = e.client_id
@@ -122,7 +122,7 @@ func listAttachedClientEngagements(ctx context.Context, tx *sql.Tx, practiceID, 
 		 ) latest ON true
 		 WHERE e.practice_id = $1 AND ea.staff_id = $2
 		   AND ea.origin = 'granted' AND ea.ended_at IS NULL
-		 ORDER BY c.name`,
+		 ORDER BY COALESCE(c.preferred_name, c.given_name)`,
 		practiceID, staffID,
 	)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests

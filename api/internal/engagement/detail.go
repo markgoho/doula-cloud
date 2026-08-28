@@ -57,7 +57,7 @@ func DetailHandler() http.Handler {
 
 		var d Detail
 		err = tx.QueryRowContext(r.Context(),
-			`SELECT e.id, c.id, c.name, e.status, e.created_at
+			`SELECT e.id, c.id, COALESCE(c.preferred_name, c.given_name), e.status, e.created_at
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,

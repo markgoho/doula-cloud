@@ -34,10 +34,9 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 // practice_memberships row linking them to an existing practiceID, using
 // the superuser Admin connection (which bypasses RLS) so fixture setup
 // isn't gated by the policies under test.
-func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) {
+func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
 
-	var staffID string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
 		identityUID,
@@ -50,6 +49,7 @@ func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID st
 	); err != nil {
 		t.Fatalf("seed membership: %v", err)
 	}
+	return staffID
 }
 
 // seedContractorAtPractice mirrors seedStaffAtPractice but for a
@@ -103,28 +103,40 @@ func seedSignupBonus(t *testing.T, db *testdb.DB, practiceID string) {
 func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
 	t.Helper()
 
+	practiceID, _ = seedStaffWithMembershipID(t, db, identityUID)
+	return practiceID
+}
+
+// seedStaffWithMembershipID is seedStaffWithMembership widened to also
+// return the seeded Staff row's id, for tests that need to set
+// app.current_staff_id themselves (clients_insert's contractor check).
+func seedStaffWithMembershipID(t *testing.T, db *testdb.DB, identityUID string) (practiceID, staffID string) {
+	t.Helper()
+
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`,
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)
 	}
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	return practiceID
+	staffID = seedStaffAtPractice(t, db, practiceID, identityUID)
+	return practiceID, staffID
 }
 
 // seedClientEngagement inserts a Client and an Engagement linking them to
-// practiceID, using the superuser Admin connection.
+// practiceID, using the superuser Admin connection. name is used whole as
+// given_name -- #396 split the single name column into three, but no
+// caller here asserts on family_name/preferred_name specifically.
 func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email, status string) (clientID, engagementID string) {
 	t.Helper()
 
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (name, email) VALUES ($1, $2) RETURNING id`,
-		name, email,
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $3) RETURNING id`,
+		practiceID, name, email,
 	).Scan(&clientID); err != nil {
 		t.Fatalf("seed client: %v", err)
 	}
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status) VALUES ($1, $2, $3) RETURNING id`,
+		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, $3, 'birth') RETURNING id`,
 		clientID, practiceID, status,
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)

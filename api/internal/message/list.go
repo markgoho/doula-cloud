@@ -133,7 +133,7 @@ func ListHandler() http.Handler {
 // senderTypeClient (context.go) are the single source of truth for those
 // values across this package.
 const listMessagesQuery = `SELECT m.id, m.sender_type, m.sender_id,
-		COALESCE(s.name, c.name) AS sender_name, COALESCE(m.body, ''),
+		COALESCE(s.name, c.preferred_name, c.given_name) AS sender_name, COALESCE(m.body, ''),
 		COALESCE(m.attachment_content_type, ''), COALESCE(m.attachment_filename, ''), m.created_at
 	FROM messages m
 	LEFT JOIN staff s ON s.id = m.sender_id AND m.sender_type = $1
@@ -142,7 +142,7 @@ const listMessagesQuery = `SELECT m.id, m.sender_type, m.sender_id,
 	ORDER BY m.created_at DESC, m.id DESC LIMIT $4`
 
 const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
-		COALESCE(s.name, c.name) AS sender_name, COALESCE(m.body, ''),
+		COALESCE(s.name, c.preferred_name, c.given_name) AS sender_name, COALESCE(m.body, ''),
 		COALESCE(m.attachment_content_type, ''), COALESCE(m.attachment_filename, ''), m.created_at
 	FROM messages m
 	LEFT JOIN staff s ON s.id = m.sender_id AND m.sender_type = $1

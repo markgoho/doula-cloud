@@ -319,7 +319,8 @@ func staffIsOwner(ctx context.Context, tx *sql.Tx, practiceID string) (bool, err
 // clinical content).
 func fetchClientContact(ctx context.Context, tx *sql.Tx, engagementID string) (name, email string, err error) {
 	err = tx.QueryRowContext(ctx,
-		`SELECT c.name, c.email FROM clients c JOIN engagements e ON e.client_id = c.id WHERE e.id = $1`,
+		`SELECT c.given_name || COALESCE(' ' || c.family_name, ''), c.email
+		 FROM clients c JOIN engagements e ON e.client_id = c.id WHERE e.id = $1`,
 		engagementID,
 	).Scan(&name, &email)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceEngagement already proved the Engagement (and therefore its Client) exists

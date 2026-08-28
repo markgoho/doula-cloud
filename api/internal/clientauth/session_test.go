@@ -114,7 +114,7 @@ func TestSessionHandler_MultipleEngagements(t *testing.T) {
 	practiceB := seedPractice(t, db, "Practice B")
 	clientID, engagementA := seedClientEngagement(t, db, practiceA, "Shared Client", "shared@example.com", "intake")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status) VALUES ($1, $2, 'intake')`,
+		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'intake', 'birth')`,
 		clientID, practiceB,
 	); err != nil {
 		t.Fatalf("seed second engagement: %v", err)

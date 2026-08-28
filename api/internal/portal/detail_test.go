@@ -37,14 +37,15 @@ func seedClientWithEngagement(t *testing.T, db *testdb.DB, identityUID, practice
 
 	var clientID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (name, email) VALUES ('Test Client', 'client@example.com') RETURNING id`,
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'client@example.com') RETURNING id`,
+		practiceID,
 	).Scan(&clientID); err != nil {
 		t.Fatalf("seed client: %v", err)
 	}
 
 	status = "intake"
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status) VALUES ($1, $2, $3) RETURNING id`,
+		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, $3, 'birth') RETURNING id`,
 		clientID, practiceID, status,
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)

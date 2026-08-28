@@ -33,7 +33,7 @@ func TestRLS_ClientsSelfVisibilityScopedToOwnRow(t *testing.T) {
 	}
 
 	var name string
-	if err := tx.QueryRowContext(t.Context(), `SELECT name FROM clients WHERE id = $1`, clientA).Scan(&name); err != nil {
+	if err := tx.QueryRowContext(t.Context(), `SELECT given_name FROM clients WHERE id = $1`, clientA).Scan(&name); err != nil {
 		t.Fatalf("expected Client A to see their own clients row, got error: %v", err)
 	}
 	if name != "Client A" {

@@ -409,12 +409,13 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 
 	var clientID, engagementID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (name, email) VALUES ('Offer Client', 'offer-client@example.com') RETURNING id`,
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Offer Client', 'offer-client@example.com') RETURNING id`,
+		practiceID,
 	).Scan(&clientID); err != nil {
 		t.Fatalf("seed client: %v", err)
 	}
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id) VALUES ($1, $2) RETURNING id`, clientID, practiceID,
+		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`, clientID, practiceID,
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)
 	}

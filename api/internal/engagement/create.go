@@ -25,6 +25,17 @@ import (
 // CONTEXT.md. There is no create-time way to set a different status.
 const intakeStatus = "intake"
 
+// legacyKind pins every Engagement this handler creates to 'birth'.
+// #396 makes engagements.kind NOT NULL with no database default -- the
+// intake screen is meant to supply it, but this handler is the pre-#332
+// combined create-and-spend flow ADR-0017 replaces with a free Client
+// save plus a separate Engagement Request (#397/#398), and neither this
+// handler nor the frontend screen that posts to it asks for a kind. Once
+// #397/#398 land, this handler and CreateClientRequest.Name (a single
+// field mapped onto given_name below, one Client name split into three by
+// #396) are both deleted rather than extended.
+const legacyKind = "birth"
+
 // CreateClientRequest is the body of a create-Client-and-Engagement
 // request.
 type CreateClientRequest struct {
@@ -67,17 +78,13 @@ func CreateHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		// Generated in Go, not via `RETURNING id`: at the moment the client
-		// row is inserted no engagement referencing it exists yet, so it
-		// doesn't match the clients_select SELECT policy, and Postgres
-		// applies SELECT policies to RETURNING rows too (see
-		// 00005_client_engagement.sql).
+		// Generated in Go, not via `RETURNING id`.
 		clientID := uuid.NewString()
 		engagementID := uuid.NewString()
 
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO clients (id, name, email) VALUES ($1, $2, $3)`,
-			clientID, req.Name, req.Email,
+			`INSERT INTO clients (id, practice_id, given_name, email) VALUES ($1, $2, $3, $4)`,
+			clientID, practiceID, req.Name, req.Email,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -85,8 +92,8 @@ func CreateHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO engagements (id, client_id, practice_id, status) VALUES ($1, $2, $3, $4)`,
-			engagementID, clientID, practiceID, intakeStatus,
+			`INSERT INTO engagements (id, client_id, practice_id, status, kind) VALUES ($1, $2, $3, $4, $5)`,
+			engagementID, clientID, practiceID, intakeStatus, legacyKind,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
