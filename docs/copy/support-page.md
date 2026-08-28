@@ -28,7 +28,7 @@ Silently redesigning `/support` without doing either takes the live platform acc
 - **Connect Terms §3.4(b)** forbids holding ourselves out as a payment facilitator, intermediary or aggregator. A Practice *invoices its clients from* Doula Cloud; money never moves *through* it. See [#383](https://github.com/markgoho/doula-cloud/issues/383).
 - **No price.** [#285](https://github.com/markgoho/doula-cloud/issues/285) owns the published price and is January work. Stripe does not require one.
 - **No feature detail** beyond what Stripe's requirement list forces.
-- **Refunds**: purchased Credits only, at the price paid, to the original payment method, on the Practice's own request, within three years.
+- **Refunds**: purchased Credits only, at the price paid, to the original payment method, on the Practice's own request, within 90 days.
 
 ---
 
@@ -52,9 +52,9 @@ Credits do not expire. There is no subscription and no recurring charge: a pract
 
 There is nothing to cancel. Doula Cloud bills no recurring fee, so a practice that stops buying Credits is charged nothing further, and may close its account at any time.
 
-Unspent Credits that a practice has purchased can be refunded within three years of the date they were bought, at the price paid for them and together with any sales tax charged on them, to the original payment method. Credits given free of charge are not refundable. A Credit already used to start an engagement has been spent, and is not refundable.
+Unspent Credits that a practice has purchased can be refunded within 90 days of the date they were bought, at the price paid for them and together with any sales tax charged on them, to the original payment method. Credits given free of charge are not refundable. A Credit already used to start an engagement has been spent, and is not refundable.
 
-Credits themselves do not expire, and a practice can spend them whenever it likes. It is the right to a cash refund that runs out after three years, because that is how long New York State gives us to reclaim sales tax we have already paid on a practice's behalf.
+Credits themselves do not expire, and a practice can spend them whenever it likes. It is only the right to a cash refund that runs out.
 
 To ask for a refund, email us. We do not need a reason.
 
@@ -79,6 +79,6 @@ Email **hello@doula.cloud**. That address reaches a person, and it is also where
 | *"…at the price paid for them…"* | Credits rise in price over time. Refunding at today's price would let a Practice profit on an unused balance. |
 | *"…to the original payment method."* | A refund cheque that sits uncashed becomes escheatable property in its own right under [APL §1315(1-a)](https://www.nysenate.gov/legislation/laws/ABP/1315). |
 | *"To ask for a refund, email us."* | A refund the platform initiates inherits the original balance's dormancy date; one issued on the Practice's recorded request restarts the clock. |
-| *"…within three years…"* and the paragraph explaining it | [Tax Law §1139](https://www.nysenate.gov/legislation/laws/TAX/1139) gives three years to reclaim remitted sales tax, and §1139(a) bars recovery until the tax has been repaid to the customer. Past three years we would owe the tax back with no way to reclaim it. Three years is also the record-retention period and the escheat dormancy period. |
+| *"…within 90 days…"* | Any refund at all is already off-market — eight of nine prepaid-credit businesses surveyed refuse refunds on unspent balance outright, including Cliniko and Halaxy. 90 days keeps most refunds inside the same or the next filing quarter, where [§1132(e)](https://www.nysenate.gov/legislation/laws/TAX/1132) lets the receipt be excluded from the ST-100 outright — no AU-11, no Schedule CW, and no three-year [§1139](https://www.nysenate.gov/legislation/laws/TAX/1139) clawback window to track. |
 | *"Email us before disputing the charge with your bank."* | Stripe asks for a dispute policy. A business that invites contact first is a business with a low chargeback rate, which is what the reviewer is assessing. |
 | *"Email **hello@doula.cloud**."* | Stripe's required customer service contact. Email is explicitly accepted; no phone number exists, and inventing one would be worse. |
