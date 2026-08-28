@@ -30,12 +30,7 @@ nullable due date (#353).
     alone, step 2 is the ask.
   - `C` minimal create, finish on her page — two fields on the phone, then a
     completeness strip on her record; the Request never chains.
-- **Case being typed** — the five walks the ticket names, including the
-  postpartum-only intake with no due date to give, the bereavement intake, and
-  the two the save-time match (#371) has to catch.
-- **Form demands** — first name only / first name + one way to reach her /
-  first name + reach + date of birth. AC 3 says this must be decided rather
-  than defaulted, so it is a dial, not a default.
+- Nothing else. The case, what the form demands, and the field order are pinned and decided after the shape, one at a time.
 
 Each flow ends in a black box: what was written to `clients`, whether an
 `engagement_requests` row was written, and how many Credits moved (always zero

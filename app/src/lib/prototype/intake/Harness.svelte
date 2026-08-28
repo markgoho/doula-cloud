@@ -1,53 +1,28 @@
 <script lang="ts">
-	// PROTOTYPE (#372) -- throwaway. The dials above every variant, and the
-	// state box below it. Everything the variants disagree about is a switch
-	// here, so nothing is decided by defaulting.
+	// PROTOTYPE (#372) -- throwaway. Decision 1 of 4: the shape. One dial only.
+	// Everything else the ticket asks is pinned here and decided later, in its
+	// own turn, so the shapes are judged rather than the permutations.
 	import type { Snippet } from 'svelte';
-	import {
-		cases,
-		demandLabels,
-		type Case,
-		type Demands,
-		type ClientDraft,
-		type RequestDraft
-	} from './fixtures.js';
+	import type { ClientDraft, RequestDraft } from './fixtures.js';
 
 	interface Properties {
 		blurb: string;
-		activeCase: Case;
-		demands: Demands;
-		onCase: (value: Case) => void;
-		onDemands: (value: Demands) => void;
-		written: { client?: ClientDraft; request?: RequestDraft; reused?: string; note: string } | undefined;
+		written:
+			| { client?: ClientDraft; request?: RequestDraft; reused?: string; note: string }
+			| undefined;
 		children: Snippet;
 	}
 
-	let { blurb, activeCase, demands, onCase, onDemands, written, children }: Properties = $props();
-
-	const demandKeys = Object.keys(demandLabels) as Demands[];
+	let { blurb, written, children }: Properties = $props();
 </script>
 
 <div class="dials">
 	<p class="blurb">{blurb}</p>
-	<div class="row">
-		<span class="key">Case</span>
-		{#each cases as item (item.key)}
-			<button
-				type="button"
-				class:on={item.key === activeCase.key}
-				onclick={() => onCase(item)}>{item.name}</button
-			>
-		{/each}
-	</div>
-	<div class="row">
-		<span class="key">Form demands</span>
-		{#each demandKeys as item (item)}
-			<button type="button" class:on={item === demands} onclick={() => onDemands(item)}
-				>{demandLabels[item]}</button
-			>
-		{/each}
-	</div>
-	<p class="case">{activeCase.blurb}</p>
+	<p class="pinned">
+		Pinned for now, each its own decision after this one — <strong>what the form demands</strong>
+		(first name only), <strong>field order</strong>, and the
+		<strong>postpartum-only and returning-Client walks</strong>.
+	</p>
 </div>
 
 <div class="stage">
@@ -80,6 +55,7 @@
 		padding: 0.75rem;
 		margin-block-end: 1.5rem;
 		font-size: 0.8125rem;
+		max-width: 62ch;
 	}
 
 	.blurb {
@@ -87,40 +63,9 @@
 		font-weight: 600;
 	}
 
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.375rem;
-		margin-block-end: 0.375rem;
-	}
-
-	.key {
-		font: 600 0.6875rem/1 ui-monospace, monospace;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		min-width: 8rem;
-	}
-
-	.row button {
-		border: 1px solid #999;
-		background: transparent;
-		border-radius: 999px;
-		padding: 0.1875rem 0.625rem;
-		font-size: 0.75rem;
-		cursor: pointer;
-	}
-
-	.row button.on {
-		background: #111;
-		color: #fff;
-		border-color: #111;
-	}
-
-	.case {
-		margin: 0.5rem 0 0;
-		font-style: italic;
-		max-width: 68ch;
+	.pinned {
+		margin: 0;
+		color: #555;
 	}
 
 	.stage {

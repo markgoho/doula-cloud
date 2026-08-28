@@ -1,21 +1,15 @@
 <script lang="ts">
-	// PROTOTYPE (#372) -- throwaway. Holds the draft state the variants share, so
-	// switching variant or case resets cleanly. Mounted by the real
-	// "Add a Client" route behind `?variant=`.
+	// PROTOTYPE (#372) -- throwaway. Decision 1 of 4: the shape, and nothing
+	// else. The case and what the form demands are pinned so there is one dial,
+	// not three. fixtures.ts still holds the other cases -- decision 4 walks the
+	// winning shape through them. Mounted by the real "Add a Client" route
+	// behind `?variant=`.
 	import PrototypeSwitcher from '#lib/prototype/PrototypeSwitcher.svelte';
 	import Harness from './Harness.svelte';
 	import VariantA from './VariantA.svelte';
 	import VariantB from './VariantB.svelte';
 	import VariantC from './VariantC.svelte';
-	import {
-		cases,
-		emptyClient,
-		emptyRequest,
-		type Case,
-		type ClientDraft,
-		type Demands,
-		type RequestDraft
-	} from './fixtures.js';
+	import { cases, emptyClient, emptyRequest, type ClientDraft, type RequestDraft } from './fixtures.js';
 
 	interface Properties {
 		variant: string;
@@ -35,25 +29,17 @@
 		C: 'C — Minimal create, finish on her page. Two fields while you are on the phone, then her record tells you what is missing. The Request is a separate visit, never chained.'
 	};
 
-	let activeCase = $state<Case>(cases[0]);
-	let demands = $state<Demands>('name-only');
-	let client = $state<ClientDraft>({ ...emptyClient(), ...cases[0].seed });
-	let request = $state<RequestDraft>({ ...emptyRequest(), kind: cases[0].kind });
+	// Pinned: the ordinary birth intake, and a form that demands a first name
+	// alone. Both become their own decision once the shape is settled.
+	const pinnedCase = cases[0];
+	const demands = 'name-only' as const;
+
+	let client = $state<ClientDraft>({ ...emptyClient(), ...pinnedCase.seed });
+	let request = $state<RequestDraft>({ ...emptyRequest(), kind: pinnedCase.kind });
 	let custom = $state<Record<string, string | boolean>>({});
 	let written = $state<
 		{ client?: ClientDraft; request?: RequestDraft; reused?: string; note: string } | undefined
 	>();
-	let generation = $state(0);
-
-	function reset(next: Case = activeCase) {
-		activeCase = next;
-		client = { ...emptyClient(), ...next.seed };
-		request = { ...emptyRequest(), kind: next.kind };
-		custom = {};
-		written = undefined;
-		generation += 1;
-	}
-
 	function finish(result: { reused?: string; note: string; withRequest: boolean }) {
 		written = {
 			client: result.reused ? undefined : { ...client },
@@ -81,18 +67,8 @@
 	});
 </script>
 
-<Harness
-	blurb={blurbs[variant] ?? blurbs.A}
-	{activeCase}
-	{demands}
-	onCase={(next) => reset(next)}
-	onDemands={(next) => {
-		demands = next;
-		reset();
-	}}
-	{written}
->
-	{#key `${variant}-${generation}`}
+<Harness blurb={blurbs[variant] ?? blurbs.A} {written}>
+	{#key variant}
 		{#if variant === 'B'}
 			<VariantB {...shared} />
 		{:else if variant === 'C'}
