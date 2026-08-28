@@ -39,11 +39,11 @@
 
 	type Step = 'name' | 'reach' | 'dob' | 'hub' | 'address' | 'practice' | 'request';
 
-	// Copy names the Client first and never assumes. Page 1 is the only screen
-	// with no name to use, so it names the Client instead; every screen after it
-	// uses the name just typed. Pronouns are asked here, beside the name, because
-	// they are part of how a person is addressed -- and they became a structural
-	// column on #372 so the product may actually read them.
+	// Page 1 is the only screen with no name to use, so it is the only one that
+	// could need a pronoun -- and it names the Client instead. Every screen after
+	// it addresses her by the name just typed. The product cannot do better than
+	// this: pronouns are a Practice-defined field (ADR-0017), which means the
+	// product stores them and never reads them.
 	const knownAs = $derived(client.preferred_name.trim() || client.given_name.trim() || 'this Client');
 
 	let step = $state<Step>('name');
@@ -132,18 +132,6 @@
 						{invalid}
 						value={client.family_name}
 						onInput={(value) => onClient({ family_name: value })}
-					/>
-				{/snippet}
-			</LabeledField>
-			<LabeledField label="Pronouns (optional)">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						placeholder="she/her, they/them, he/him"
-						value={client.pronouns}
-						onInput={(value) => onClient({ pronouns: value })}
 					/>
 				{/snippet}
 			</LabeledField>

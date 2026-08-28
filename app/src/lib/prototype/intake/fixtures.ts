@@ -5,16 +5,12 @@
 export type Kind = 'birth' | 'postpartum';
 
 /**
- * ADR-0017's thirteen structural columns, minus practice_id (implicit here).
- * `pronouns` moved out of the Practice-defined layer on #372: copy names the
- * Client first and uses pronouns only where recorded, so the product must read
- * them -- and a Practice-defined field is defined as one it never interprets.
+ * ADR-0017's twelve structural columns, minus practice_id (implicit here).
  */
 export interface ClientDraft {
 	given_name: string;
 	family_name: string;
 	preferred_name: string;
-	pronouns: string;
 	date_of_birth: string;
 	email: string;
 	phone: string;
@@ -29,7 +25,6 @@ export const emptyClient = (): ClientDraft => ({
 	given_name: '',
 	family_name: '',
 	preferred_name: '',
-	pronouns: '',
 	date_of_birth: '',
 	email: '',
 	phone: '',
@@ -67,7 +62,7 @@ export interface PracticeField {
  * Empty by default at a new Practice; this one has been set up (ADR-0017).
  */
 export const practiceFields: PracticeField[] = [
-	{ id: 'f_birth_plan_note', label: 'Where she plans to give birth', type: 'short_text' },
+	{ id: 'f_pronouns', label: 'Pronouns', type: 'short_text' },
 	{
 		id: 'f_referral',
 		label: 'How she found us',
@@ -90,7 +85,6 @@ export interface ExistingClient {
 	given_name: string;
 	family_name: string;
 	preferred_name: string;
-	pronouns: string;
 	date_of_birth: string;
 	email: string;
 	phone: string;
@@ -107,7 +101,6 @@ export const existingClients: ExistingClient[] = [
 		given_name: 'Priya',
 		family_name: 'Raman',
 		preferred_name: 'Priya',
-		pronouns: 'she/her',
 		date_of_birth: '1991-03-14',
 		email: 'priya.raman@oldmail.example',
 		phone: '(917) 555-0163',
@@ -119,7 +112,6 @@ export const existingClients: ExistingClient[] = [
 		given_name: 'Dana',
 		family_name: 'Whitfield',
 		preferred_name: 'Dana',
-		pronouns: 'she/her',
 		date_of_birth: '1998-11-02',
 		email: 'whitfieldhouse@example.com',
 		phone: '(718) 555-0110',
@@ -131,7 +123,6 @@ export const existingClients: ExistingClient[] = [
 		given_name: 'Marion',
 		family_name: 'Whitfield',
 		preferred_name: 'Mar',
-		pronouns: '',
 		date_of_birth: '1968-06-20',
 		email: 'whitfieldhouse@example.com',
 		phone: '(718) 555-0110',
@@ -143,7 +134,6 @@ export const existingClients: ExistingClient[] = [
 		given_name: 'Camille',
 		family_name: 'Osei',
 		preferred_name: 'Cam',
-		pronouns: 'she/they',
 		date_of_birth: '1994-08-09',
 		email: 'camille.osei@example.com',
 		phone: '(347) 555-0128',
