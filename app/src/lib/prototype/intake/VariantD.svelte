@@ -140,11 +140,12 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Continue" />
+			<Button type="submit" label="Add her contact details" />
 		</stack-l>
 	</form>
 {:else if step === 'reach'}
 	<p class="crumb">Adding a Client — 2 of 3</p>
+	<Button variant="secondary" size="sm" label="Back to her name" onClick={() => (step = 'name')} />
 	<Heading level={1} text="How do you reach her?" />
 	<p class="lede">Either one is enough. Both can be added later.</p>
 	<form onsubmit={toReach}>
@@ -173,12 +174,17 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Continue" />
-			<Button variant="secondary" label="Back" onClick={() => (step = 'name')} />
+			<Button type="submit" label="Add her date of birth" />
 		</stack-l>
 	</form>
 {:else if step === 'dob'}
 	<p class="crumb">Adding a Client — 3 of 3</p>
+	<Button
+		variant="secondary"
+		size="sm"
+		label="Back to her contact details"
+		onClick={() => (step = 'reach')}
+	/>
 	<Heading level={1} text="What is her date of birth?" />
 	<p class="lede">
 		This is what tells her apart from someone with the same name, next year and the year after. It is
@@ -197,11 +203,11 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label={`Save ${fullName(client)}`} />
-			<Button variant="secondary" label="Back" onClick={() => (step = 'reach')} />
+			<Button type="submit" label={`Save ${fullName(client)}'s record`} />
 		</stack-l>
 	</form>
 {:else if step === 'address'}
+	<Button variant="secondary" size="sm" label="Back to her record" onClick={() => (step = 'hub')} />
 	<Heading level={1} text="Where does she live?" />
 	<p class="lede">Needed before a visit, not before a record.</p>
 	<form
@@ -224,10 +230,11 @@
 					{/snippet}
 				</LabeledField>
 			{/each}
-			<Button type="submit" label="Save and go back" />
+			<Button type="submit" label="Save her address" />
 		</stack-l>
 	</form>
 {:else if step === 'practice'}
+	<Button variant="secondary" size="sm" label="Back to her record" onClick={() => (step = 'hub')} />
 	<Heading level={1} text="What this Practice also asks" />
 	<p class="lede">
 		{practiceFields.length} questions this Practice added for itself. None of them are required.
@@ -240,10 +247,11 @@
 	>
 		<stack-l>
 			<PracticeFieldsBlock values={custom} onChange={onCustom} />
-			<Button type="submit" label="Save and go back" />
+			<Button type="submit" label="Save these answers" />
 		</stack-l>
 	</form>
 {:else if step === 'request'}
+	<Button variant="secondary" size="sm" label="Back to her record" onClick={() => (step = 'hub')} />
 	<Heading level={1} text={`Ask to start work with ${client.preferred_name || client.given_name}`} />
 	<p class="lede">
 		An Owner or Admin approves this. The Credit is spent when they do, not now. Her record stays
@@ -265,8 +273,7 @@
 				<Notice variant="error" message={error} />
 			{/if}
 			<RequestBlock {request} onChange={onRequest} />
-			<Button type="submit" label="Send the request" />
-			<Button variant="secondary" label="Back" onClick={() => (step = 'hub')} />
+			<Button type="submit" label="Send this to an Owner or Admin to approve" />
 		</stack-l>
 	</form>
 {:else}
