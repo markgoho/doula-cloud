@@ -6,22 +6,43 @@
 -- birth outcome, ending reason, the immutability trigger, portal_accounts,
 -- the accept-time 409 -- stays with that document.
 --
--- No production data (pre-launch, CLAUDE.md) and no earlier migration
--- inserts a row into clients or engagements, so every column added below
--- as NOT NULL lands on an empty table -- no backfill UPDATE belongs in
--- this file, the same reasoning 00029 already applied to
--- practices.stripe_connect_*. The "backfill" ADR-0017 and this ticket's
--- thread call for is in the Go test fixtures across the repo (helpers_test.go
--- files), not here.
+-- No production launch yet (pre-launch, CLAUDE.md), but the deployed
+-- Cloud SQL instance is not itself empty -- a handful of rows exist from
+-- manual testing against the running app (e.g. #345's ADR-0013 check),
+-- which any ALTER TABLE ... NOT NULL below would fail against with no
+-- default. practice_id and given_name are therefore backfilled from data
+-- already on the row (an existing Client's own Engagement, and the
+-- column it replaces) rather than assumed onto an empty table; nothing
+-- else added here is NOT NULL. engagements.kind has no fact to backfill
+-- from, so it takes a literal default of 'birth', matching the fixtures
+-- backfill the issue thread already called for -- there is no
+-- pilot-meaningful data to get wrong here, only leftover manual test
+-- rows.
 
 -- =====================================================================
 -- clients: a Practice, twelve structural columns, and a values blob
 -- =====================================================================
 
-ALTER TABLE clients ADD COLUMN practice_id uuid NOT NULL REFERENCES practices (id);
+-- practice_id: backfilled from each Client's own Engagement (DISTINCT ON
+-- the earliest one, in the unlikely case a stray row has more than one)
+-- rather than assumed NOT NULL onto an empty table.
+ALTER TABLE clients ADD COLUMN practice_id uuid REFERENCES practices (id);
+UPDATE clients SET practice_id = earliest.practice_id
+    FROM (
+        SELECT DISTINCT ON (client_id) client_id, practice_id
+        FROM engagements
+        ORDER BY client_id, created_at
+    ) earliest
+    WHERE clients.id = earliest.client_id;
+ALTER TABLE clients ALTER COLUMN practice_id SET NOT NULL;
 
+-- given_name: backfilled from the column it replaces, before that column
+-- is dropped.
+ALTER TABLE clients ADD COLUMN given_name text;
+UPDATE clients SET given_name = name;
 ALTER TABLE clients DROP COLUMN name;
-ALTER TABLE clients ADD COLUMN given_name          text NOT NULL;
+ALTER TABLE clients ALTER COLUMN given_name SET NOT NULL;
+
 ALTER TABLE clients ADD COLUMN family_name         text;
 ALTER TABLE clients ADD COLUMN preferred_name      text;
 ALTER TABLE clients ALTER COLUMN email DROP NOT NULL;
@@ -307,11 +328,17 @@ CREATE POLICY engagement_requests_notification_worker ON engagement_requests
 -- engagements: kind and due_date
 -- =====================================================================
 
--- kind is NOT NULL with no database default, exactly as ADR-0015
+-- kind carries no *database* default going forward, exactly as ADR-0015
 -- specifies it -- a default would be a second opinion about what the
--- Practice sold. Nothing else from ADR-0015's engagements section is
--- built here.
-ALTER TABLE engagements ADD COLUMN kind     engagement_kind NOT NULL;
+-- Practice sold. A handful of pre-existing Engagement rows from manual
+-- testing have no kind to backfill from, so this migration's one-time
+-- backfill (not an ongoing default) fills them as 'birth' -- the fixture
+-- backfill the issue thread already called for, applied here too since
+-- the deployed database is not actually empty. Nothing else from
+-- ADR-0015's engagements section is built here.
+ALTER TABLE engagements ADD COLUMN kind engagement_kind;
+UPDATE engagements SET kind = 'birth' WHERE kind IS NULL;
+ALTER TABLE engagements ALTER COLUMN kind SET NOT NULL;
 ALTER TABLE engagements ADD COLUMN due_date date;
 
 -- +goose Down
