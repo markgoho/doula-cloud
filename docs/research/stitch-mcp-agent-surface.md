@@ -24,7 +24,8 @@ over. No claim below rests on a blog post or review article.
 | Question | Answer |
 |---|---|
 | Is there an MCP server? | Yes. Remote, streamable HTTP, first-party. **Observed working.** |
-| Can an agent generate a design headlessly? | **Yes. Observed** — 91 s, no browser. |
+| Does it work **in Claude Code**? | **No, not today.** It connects, then fails to load a single tool. See §1.4. |
+| Can an agent generate a design headlessly? | **Yes. Observed** — 91 s, no browser, over raw JSON-RPC. |
 | Can an agent iterate on it? | Calls succeed, **but see the read-back defect below.** |
 | Can an agent read the result back? | Partly. First generation, yes. **After an edit, no — observed broken.** |
 | Cost to us? | Free. 400 daily credits, no tier, no paywall. **Observed in Settings.** |
@@ -83,20 +84,10 @@ Either form resolves to the same three facts: **URL**
 **auth** a single `X-Goog-Api-Key` request header. There is no stdio command,
 no local binary, no `env` block.
 
-### Verified working, without writing it into Claude Code's config
+### 1.3 The transport is verified — the server answers
 
-I did **not** run `claude mcp add`. This repo lists MCP servers in
-`~/.claude.json` and gates them per-repo through `enabledMcpjsonServers`, which
-is currently `[]` for `/Users/mgoho/Github/doula-cloud`. Registering Stitch
-with `-s user` would write the user's API key into `~/.claude.json` in
-plaintext and enable it for every repo. That is a larger change than #407
-needs, and a secret on disk that nobody asked for.
-
-Instead I exercised the identical transport and header directly. That is what
-`claude mcp add --transport http --header` produces, so a green result here is a
-green result for the config block.
-
-**Observed — handshake:**
+**Observed — handshake, over raw JSON-RPC with exactly the URL and header the
+config block specifies:**
 
 ```
 POST https://stitch.googleapis.com/mcp
@@ -110,10 +101,57 @@ POST https://stitch.googleapis.com/mcp
 `StatelessServer` matters: there is no session affinity, so an agent must carry
 project and screen IDs itself between calls.
 
-### What would need to change to enable it here
+### 1.4 But in Claude Code it connects and then exposes nothing
 
-Nothing has been changed. To adopt it later, two edits are needed, and they are
-separate decisions:
+I ran the config block for real, at `local` scope so no global config or
+committed file was touched:
+
+```
+claude mcp add --transport http stitch https://stitch.googleapis.com/mcp \
+  --header "X-Goog-Api-Key: <KEY>" -s local
+claude mcp list
+```
+
+**Observed result:**
+
+```
+stitch: https://stitch.googleapis.com/mcp (HTTP) - ! Connected · tools fetch failed
+        — can't resolve reference #/$defs/ScreenInstance from id #
+```
+
+The registration was then removed again (`claude mcp remove stitch -s local`).
+Nothing on this machine still carries the key.
+
+So the config block is **correct** — it authenticates and the session opens —
+but Claude Code loads **zero** Stitch tools from it. Connected is not usable.
+
+**Root cause, confirmed against the raw `tools/list` payload.** The server ships
+a malformed JSON Schema. Seven tools reference `#/$defs/ScreenInstance`, and
+`upload_design_md` carries that reference in its `outputSchema` while its
+`outputSchema.$defs` is **empty**:
+
+| Tool | `outputSchema` `$defs` present | References `#/$defs/ScreenInstance` |
+|---|---|---|
+| `create_project` | `ScreenInstance` and 6 others | yes — resolves |
+| `get_project` | `ScreenInstance` and 6 others | yes — resolves |
+| `list_projects` | `ScreenInstance` and 7 others | yes — resolves |
+| `upload_design_md` | **`[]` — none** | yes — **dangling** |
+
+Claude Code validates every schema before registering any tool, so one dangling
+`$ref` in one tool takes down the whole server's tool list. My raw JSON-RPC
+calls succeeded only because I never validated the schemas.
+
+This is a bug on Google's side, not a configuration mistake, and it is not
+something this repo can work around. Until Google populates
+`upload_design_md`'s `$defs`, **Stitch is not drivable from Claude Code at
+all** — every finding in §3 below was obtained by speaking HTTP to the endpoint
+directly. Re-run `claude mcp list` before relying on Stitch; the fix is a
+server-side change that needs no action here.
+
+### 1.5 What would need to change to enable it here
+
+Nothing has been left changed. To adopt it later — **once §1.4's schema bug is
+fixed upstream** — two edits are needed, and they are separate decisions:
 
 1. `~/.claude.json` → `mcpServers.stitch` gains the HTTP entry above, carrying
    the API key. Consider whether a plaintext key in a global config is
@@ -538,7 +576,7 @@ inventions. Worth a follow-up ticket.
 
 | Claim on #405 / #407 | Verdict |
 |---|---|
-| MCP server added | **Confirmed**, and working. |
+| MCP server added | **Confirmed** — and working over raw HTTP. **But broken in Claude Code** (§1.4). |
 | AI-native infinite canvas | **Confirmed** — observed; pan/zoom/select tools, screens laid out spatially. |
 | Multi-screen generation | **Confirmed** — documented and observed via next-screen suggestions. |
 | Figma **export** | **Confirmed** — an Export panel option, and a `figmaExport` field on `Screen`. It was `ABSENT` in my response, so the field is conditional. |
@@ -557,6 +595,12 @@ Stitch is a strong **generator** and a poor **surface**.
   free. One 91-second call produced a named direction, a full token set, a
   typography scale, a prose rationale, and a rendered screen. That is exactly
   the job #405 assigns it.
+- **But not from Claude Code, today.** The schema bug in §1.4 means an agent in
+  this harness cannot call a single Stitch tool. Until Google fixes it, Stitch
+  is a **web-UI tool driven by a human**, or a tool reached by a script speaking
+  HTTP to `stitch.googleapis.com/mcp` directly. Neither is the "agent generates,
+  human edits, agent reads back" workflow #405 is shopping for — and §3 shows
+  the read-back half would fail even if the tools loaded.
 - As a working surface it fails the round trip, and now for a documented,
   reproducible reason rather than an assumption. Do not plan any workflow that
   reads an edit back out of Stitch.
@@ -577,7 +621,11 @@ Stitch is a strong **generator** and a poor **surface**.
    drive Stitch rather than the reverse.
 3. **Decide the MCP registration scope** if Stitch is adopted — global
    `~/.claude.json` with a plaintext key, versus a gitignored project
-   `.mcp.json`.
+   `.mcp.json`. Moot until (4) lands.
+4. **Re-check the Claude Code tool-load bug** (§1.4) before any ticket plans on
+   agent-driven Stitch. One `claude mcp list` answers it. Consider reporting
+   `upload_design_md`'s empty `outputSchema.$defs` to Google — it is a
+   one-field fix that currently blocks every MCP client that validates schemas.
 
 ## Artefacts from this run
 
@@ -590,6 +638,10 @@ Stitch is a strong **generator** and a poor **surface**.
 - Credits consumed: one generation and one edit, against a 400/day allowance.
 
 ## Sources
+
+**Observed in Claude Code** — `claude mcp add --transport http` at `local`
+scope, then `claude mcp list`, then `claude mcp remove`. Result quoted verbatim
+in §1.4.
 
 **Observed in-product / against the live API** — Stitch Settings
 (`https://stitch.withgoogle.com/settings`), the Setup MCP panel, the project
