@@ -8,6 +8,7 @@
     "dev": "bun run --cwd app dev:full"
   },
   "devDependencies": {
+    "@pen.dev/cli": "^0.3.5",
     "@types/bun": "latest",
     "firebase-tools": "^15.28.1"
   },
