@@ -19,9 +19,11 @@
 <div class="dials">
 	<p class="blurb">{blurb}</p>
 	<p class="pinned">
-		Still to decide — <strong>where the save falls</strong> in the three pages, the
-		<strong>voice of the two request actions</strong>, and the
-		<strong>postpartum-only and returning-Client walks</strong>.
+		Decided — the save falls <strong>after the third page</strong>, so the duplicate check runs on
+		all four keys; the actions read <strong>Ask to start work</strong> for a Doula and
+		<strong>Start work</strong> for an Owner or Admin; the due date is
+		<strong>always shown and always optional</strong>; and this hub <strong>is</strong> her Client
+		detail page, not an intake confirmation.
 	</p>
 </div>
 

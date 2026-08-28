@@ -21,7 +21,7 @@
 		legend="What kind of work is this?"
 		options={[
 			{ value: 'birth' as Kind, label: 'Birth — the pregnancy is ongoing' },
-			{ value: 'postpartum' as Kind, label: 'Postpartum — support after a birth' }
+			{ value: 'postpartum' as Kind, label: 'Postpartum — support after the pregnancy has ended' }
 		]}
 		value={request.kind as Kind}
 		onChange={(value) => onChange({ kind: value })}
@@ -38,7 +38,7 @@
 			<input
 				{id}
 				type="date"
-				aria-describedby="{describedBy ?? ''} {id}-hint"
+				aria-describedby={[describedBy, `${id}-hint`].filter(Boolean).join(' ')}
 				value={request.due_date}
 				oninput={(event) => onChange({ due_date: event.currentTarget.value })}
 			/>
