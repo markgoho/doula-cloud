@@ -7,10 +7,21 @@ Do not reword it without reading #390 first. Every sentence in the refund sectio
 ## Where it lives, and how it is served
 
 - URL: `https://doula.cloud/about`
-- `noindex`, via `<meta name="robots">` or an `X-Robots-Tag` header. Stripe does not require indexing — verified first-party; unlisted is fine, gated is not — and the pre-launch detail is deliberately kept out of search results.
+- **Indexable.** No `noindex`, no canonical tag — the same posture [#368](https://github.com/markgoho/doula-cloud/issues/368) set for the teaser root. Stripe is indifferent either way (verified first-party: unlisted is fine, gated is not), so this is our choice, and the page carries nothing that is being kept quiet — there is no price on it and no feature detail. Reversed on [#390](https://github.com/markgoho/doula-cloud/issues/390) after `noindex` was first recommended: it bought nothing, and a long-`noindex`ed page is slow to get re-crawled once the tag comes off.
 - Reachable with no password, no cookie and no JavaScript.
 - Linked from the teaser footer, beside `/privacy`.
 - `business_profile.url` on the live Stripe platform account points at **this page**, not at the site root. The teaser root is the exact shape of Stripe's named rejection code `invalid_url_website_incomplete_under_construction`.
+
+## The standing constraint on this URL
+
+**Stripe re-checks the declared URL for as long as the account is live** — it is not a gate passed once at activation. So `doula.cloud/about` is committed to carrying a service description, a customer support contact and a refund position indefinitely.
+
+That matters most in January 2027, when there is a real marketing site and `/about` naturally wants to become a company-story page. Two ways to keep it true, and one of them has to be chosen deliberately rather than discovered:
+
+- keep the required content on `/about`, however the page is redesigned around it; or
+- move the content to its new home **and change `business_profile.url` in the same change**.
+
+Silently redesigning `/about` without doing either takes the live platform account into `invalid_url_website_incomplete` territory, with no deploy-time warning.
 
 ## Constraints the copy is written under
 
