@@ -23,12 +23,20 @@ Three reasons were recorded, in the words given:
    most of their time in other software; Doula Cloud should work the way that
    software already works.
 
-The third reason governs the other two, and it settles the direction's only
-stated weakness. Of the four candidates this was the safest and the least
-memorable. **That is the point, not a flaw to fix.** A doula opening this
-product on her first morning should already know where the nav is, what a
-primary button looks like, and what happens when she clicks the avatar.
-Novelty in those places is a cost paid by every user, every day.
+The third reason governs the other two. A doula opening this product on her
+first morning should already know where the nav is, what a primary button looks
+like, and what happens when she clicks the avatar. Novelty in those places is a
+cost paid by every user, every day.
+
+A fourth thing was stipulated alongside the choice, and it is not a caveat:
+
+4. **Doula Cloud should still have something of its own** — not so radical that
+   a person cannot work out how to use it, but genuinely there. **Smooth UX is
+   a primary goal**, and it is the thing the product should be recognised for.
+
+So the direction's stated weakness — that it was the safest and least memorable
+of the four — is *not* accepted as it stands. Familiarity is the floor, not the
+ceiling. What follows is how both are satisfied at once.
 
 ## The governing principle
 
@@ -42,9 +50,36 @@ typography, rhythm and one signature component, described under
 [Where the character comes from](#where-the-character-comes-from).
 
 This is not a licence to be generic. A brief that only said "look like other
-SaaS" would produce something anonymous, and anonymous is what this direction
-was criticised for. The instruction is narrower: **be unsurprising in what the
-interface does, and deliberate in how it looks while doing it.**
+SaaS" would produce something anonymous, and anonymous is exactly what has been
+ruled out. The instruction is narrower: **be unsurprising in what the interface
+does, and unmistakable in how well it does it.**
+
+**Smoothness is where the character lives.** The thing this product should be
+recognised for is not a shape nobody has seen before — it is that everything
+answers immediately, nothing jumps, focus always lands where a person expects,
+a form remembers what was typed, and a long list never stutters. That is
+difficult, it is felt by every user on every visit, and almost nothing in this
+category does it well. It is a far better place to be distinctive than a novel
+nav pattern, and it costs the user nothing to learn.
+
+Concretely, smoothness is a requirement and gets checked, not hoped for:
+
+- **Nothing shifts after it paints.** No layout jump when data arrives, no
+  reflow when an image or a font loads. Space is reserved before content
+  arrives; a font is loaded with a metric-compatible fallback.
+- **Every action acknowledges itself within 100ms**, even when the work behind
+  it takes longer. A button that has been pressed looks pressed.
+- **Loading is skeletal, not spinning**, and only where content will actually
+  appear. A spinner covering a whole page is a failure.
+- **Focus is always visible and always predictable.** Closing a dialog returns
+  focus to what opened it; submitting a form moves focus to the result.
+- **Keyboard is a first-class path through the whole app**, not a fallback.
+- **A dense list stays at 60fps while scrolling** under a real Practice's data,
+  not a fixture's.
+
+These are the standing expectations `CLAUDE.md` already sets — performance and
+accessibility — restated as an aesthetic commitment, because in this direction
+they *are* the aesthetic.
 
 ## Mood, in words
 
@@ -248,18 +283,23 @@ generator and is not adopted.
 ## Where the character comes from
 
 The direction is deliberately conventional in its patterns, so the whole
-distinctiveness budget is spent in three places. A later ticket should be able
-to point at these and say the work is done.
+distinctiveness budget is spent in four places. A later ticket should be able to
+point at these and say the work is done. The first of them is the largest.
 
-1. **Typography, executed strictly.** One family with a real scale, tracking
+1. **Smoothness, as specified under
+   [The governing principle](#the-governing-principle).** It is listed first
+   because it is the one a person actually notices, and the one that separates
+   this product from the category. It is also the only item here that is not a
+   visual decision — it is built, and it is measured.
+2. **Typography, executed strictly.** One family with a real scale, tracking
    that changes with size, tabular figures where numbers line up, and a measure
    on prose. Most products in this category get this wrong; getting it right is
    visible even to somebody who could not say why.
-2. **Rhythm.** One spacing scale, one card padding, one row height, one gutter,
+3. **Rhythm.** One spacing scale, one card padding, one row height, one gutter,
    applied without exception. The character of a quiet interface is consistency,
    and consistency is what a Template layer exists to enforce — see
    [#410](https://github.com/markgoho/doula-cloud/issues/410).
-3. **One signature component: the activity ledger.** Every feature in this repo
+4. **One signature component: the activity ledger.** Every feature in this repo
    records who did a thing and when; that is a standing expectation, not a
    feature. The Recent-activity feed on the hub is the visible face of it, and
    it appears again on every record. Give it a considered treatment — a fixed
@@ -268,7 +308,7 @@ to point at these and say the work is done.
    audit trail is shown. It is the one component that is recognisably this
    product rather than any practice-management tool.
 
-**This is not a licence to add a fourth.** If a later ticket wants a signature
+**This is not a licence to add a fifth.** If a later ticket wants a signature
 move that is not on this list, that is a change to the brief and belongs on the
 map, not in a component.
 
