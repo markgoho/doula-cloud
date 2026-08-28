@@ -39,6 +39,13 @@
 
 	type Step = 'name' | 'reach' | 'dob' | 'hub' | 'address' | 'practice' | 'request';
 
+	// Page 1 is the only screen with no name to use, so it is the only one that
+	// could need a pronoun -- and it names the Client instead. Every screen after
+	// it addresses her by the name just typed. The product cannot do better than
+	// this: pronouns are a Practice-defined field (ADR-0017), which means the
+	// product stores them and never reads them.
+	const knownAs = $derived(client.preferred_name.trim() || client.given_name.trim() || 'this Client');
+
 	let step = $state<Step>('name');
 	let matches = $state<ExistingClient[]>([]);
 	let error = $state('');
@@ -54,7 +61,7 @@
 
 	function toName(event: SubmitEvent) {
 		event.preventDefault();
-		error = client.given_name.trim() ? '' : 'Enter her first name.';
+		error = client.given_name.trim() ? '' : 'Enter a first name.';
 		if (!error) step = 'reach';
 	}
 
@@ -87,7 +94,7 @@
 			matches = [];
 			onDone({
 				reused: `${existing.given_name} ${existing.family_name}`,
-				note: 'Caught at the save. Her record was kept and what you typed applied as an edit.',
+				note: 'Caught at the save. The existing record was kept and what you typed applied as an edit.',
 				withRequest: false
 			});
 		}}
@@ -99,7 +106,7 @@
 	/>
 {:else if step === 'name'}
 	<p class="crumb">Adding a Client — 1 of 3</p>
-	<Heading level={1} text="What is her name?" />
+	<Heading level={1} text="What is the Client’s name?" />
 	<form onsubmit={toName}>
 		<stack-l>
 			{#if error}
@@ -128,26 +135,26 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<LabeledField label="What she goes by (optional)">
+			<LabeledField label="Goes by (optional)">
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
 						{describedBy}
 						{invalid}
-						placeholder={client.given_name || 'Same as her first name'}
+						placeholder={client.given_name || 'Same as the first name'}
 						value={client.preferred_name}
 						onInput={(value) => onClient({ preferred_name: value })}
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Add her contact details" />
+			<Button type="submit" label="Add contact details" />
 		</stack-l>
 	</form>
 {:else if step === 'reach'}
 	<p class="crumb">Adding a Client — 2 of 3</p>
-	<Button variant="secondary" size="sm" label="Back to her name" onClick={() => (step = 'name')} />
-	<Heading level={1} text="How do you reach her?" />
-	<p class="lede">Either one is enough. Both can be added later.</p>
+	<Button variant="secondary" size="sm" label="Back to the name" onClick={() => (step = 'name')} />
+	<Heading level={1} text={`How do you contact ${knownAs}?`} />
+	<p class="lede">Either one is enough. The other can be added later.</p>
 	<form onsubmit={toReach}>
 		<stack-l>
 			<LabeledField label="Phone (optional)">
@@ -174,7 +181,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Add her date of birth" />
+			<Button type="submit" label={`Add ${knownAs}’s date of birth`} />
 		</stack-l>
 	</form>
 {:else if step === 'dob'}
@@ -182,13 +189,13 @@
 	<Button
 		variant="secondary"
 		size="sm"
-		label="Back to her contact details"
+		label="Back to the contact details"
 		onClick={() => (step = 'reach')}
 	/>
-	<Heading level={1} text="What is her date of birth?" />
+	<Heading level={1} text={`What is ${knownAs}’s date of birth?`} />
 	<p class="lede">
-		This is what tells her apart from someone with the same name, next year and the year after. It is
-		the last thing asked before her record is saved.
+		This is what separates two Clients with the same name, next year and the year after. It is the last
+		thing asked before the record is saved.
 	</p>
 	<form onsubmit={save}>
 		<stack-l>
@@ -203,12 +210,12 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label={`Save ${fullName(client)}'s record`} />
+			<Button type="submit" label={`Save ${fullName(client)}’s record`} />
 		</stack-l>
 	</form>
 {:else if step === 'address'}
-	<Button variant="secondary" size="sm" label="Back to her record" onClick={() => (step = 'hub')} />
-	<Heading level={1} text="Where does she live?" />
+	<Button variant="secondary" size="sm" label={`Back to ${knownAs}’s record`} onClick={() => (step = 'hub')} />
+	<Heading level={1} text={`Where does ${knownAs} live?`} />
 	<p class="lede">Needed before a visit, not before a record.</p>
 	<form
 		onsubmit={(event) => {
@@ -230,11 +237,11 @@
 					{/snippet}
 				</LabeledField>
 			{/each}
-			<Button type="submit" label="Save her address" />
+			<Button type="submit" label="Save this address" />
 		</stack-l>
 	</form>
 {:else if step === 'practice'}
-	<Button variant="secondary" size="sm" label="Back to her record" onClick={() => (step = 'hub')} />
+	<Button variant="secondary" size="sm" label={`Back to ${knownAs}’s record`} onClick={() => (step = 'hub')} />
 	<Heading level={1} text="What this Practice also asks" />
 	<p class="lede">
 		{practiceFields.length} questions this Practice added for itself. None of them are required.
@@ -251,11 +258,11 @@
 		</stack-l>
 	</form>
 {:else if step === 'request'}
-	<Button variant="secondary" size="sm" label="Back to her record" onClick={() => (step = 'hub')} />
-	<Heading level={1} text={`Ask to start work with ${client.preferred_name || client.given_name}`} />
+	<Button variant="secondary" size="sm" label={`Back to ${knownAs}’s record`} onClick={() => (step = 'hub')} />
+	<Heading level={1} text={`Ask to start work with ${knownAs}`} />
 	<p class="lede">
-		An Owner or Admin approves this. The Credit is spent when they do, not now. Her record stays
-		saved either way.
+		An Owner or Admin approves this. The Credit is spent when they do, not now. The record stays saved
+		either way.
 	</p>
 	<form
 		onsubmit={(event) => {
@@ -263,7 +270,7 @@
 			error = request.kind ? '' : 'Choose what kind of work this is.';
 			if (error) return;
 			onDone({
-				note: 'Her record was saved after page 3, on its own. The Request came from the hub, later and separately.',
+				note: 'The record was saved after page 3, on its own. The Request came from the hub, later and separately.',
 				withRequest: true
 			});
 		}}
@@ -284,7 +291,7 @@
 		onOpen={(next) => (step = next)}
 		onLeave={() =>
 			onDone({
-				note: 'Saved and left. She is findable in the intake search forever, which is the point. No Request, so she sits outside the "Clients with work" filter.',
+				note: 'Saved and left. The record is findable in the intake search forever, which is the point. No Request, so it sits outside the "Clients with work" filter.',
 				withRequest: false
 			})}
 	/>

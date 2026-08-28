@@ -20,7 +20,7 @@
 	<RadioGroup
 		legend="What kind of work is this?"
 		options={[
-			{ value: 'birth' as Kind, label: 'Birth — she is pregnant now' },
+			{ value: 'birth' as Kind, label: 'Birth — the pregnancy is ongoing' },
 			{ value: 'postpartum' as Kind, label: 'Postpartum — support after a birth' }
 		]}
 		value={request.kind as Kind}

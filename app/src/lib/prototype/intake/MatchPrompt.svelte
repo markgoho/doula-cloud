@@ -58,18 +58,18 @@
 					{/each}
 				</ul>
 			{:else}
-				<p class="quiet">No work with her yet.</p>
+				<p class="quiet">No work with this Client yet.</p>
 			{/if}
 
 			{#if live}
 				<p class="warn">
-					She has a live {live.kind} Engagement, {live.span}. Start a second one only if this is
+					This Client has a live {live.kind} Engagement, {live.span}. Start a second one only if this is
 					separate work.
 				</p>
 			{/if}
 
 			{#if changes.length > 0}
-				<p class="quiet">Choosing her record applies these as a recorded edit:</p>
+				<p class="quiet">Choosing this record applies these as a recorded edit:</p>
 				<ul>
 					{#each changes as change (change)}
 						<li>{change}</li>
@@ -78,14 +78,14 @@
 			{/if}
 
 			<Button
-				label="This is her — use her record"
+				label="Same person — use this record"
 				onClick={() => onReuse(existing)}
 			/>
 		</article>
 	{/each}
 
 	<p class="quiet">
-		If none of these is the woman you are entering, say so. This is the only way to create a second
+		If none of these is the person you are entering, say so. This is the only way to create a second
 		record for the same name.
 	</p>
 	<Button label="No — a different person" variant="secondary" onClick={onDifferentPerson} />

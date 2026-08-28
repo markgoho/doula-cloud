@@ -16,6 +16,8 @@
 
 	let { client, custom, isSaved, onOpen, onLeave }: Properties = $props();
 
+	const knownAs = $derived(client.preferred_name.trim() || client.given_name.trim() || 'this Client');
+
 	const addressKeys: (keyof ClientDraft)[] = [
 		'address_line1',
 		'address_locality',
@@ -26,7 +28,7 @@
 	const tasks = $derived([
 		{
 			key: 'reach' as const,
-			label: 'How to reach her',
+			label: 'Contact details',
 			done: Boolean(client.phone.trim() || client.email.trim()),
 			hint: [client.phone, client.email].filter(Boolean).join(' · ')
 		},
@@ -38,7 +40,7 @@
 		},
 		{
 			key: 'address' as const,
-			label: 'Where she lives',
+			label: 'Address',
 			done: addressKeys.some((key) => client[key].trim()),
 			hint: [client.address_locality, client.address_region].filter(Boolean).join(', ')
 		},
@@ -59,13 +61,13 @@
 <Heading level={1} text={fullName(client)} />
 
 {#if isSaved}
-	<p class="saved">Saved. She will come up in the search next time, so she cannot be typed in twice.</p>
+	<p class="saved">Saved. This record will come up in the search next time, so the same person cannot be typed in twice.</p>
 {/if}
 
 <p class="lede">
 	{outstanding === 0
 		? 'Everything this Practice asks for is recorded.'
-		: `${outstanding} of ${tasks.length} things not recorded yet. None of them are needed to keep her record.`}
+		: `${outstanding} of ${tasks.length} things not recorded yet. None of them are needed to keep this record.`}
 </p>
 
 <ul class="tasks">
@@ -83,10 +85,10 @@
 </ul>
 
 <section>
-	<h2>Work with her</h2>
+	<h2>Work with {knownAs}</h2>
 	<p class="quiet">Nothing yet. No Credit has moved.</p>
 	<stack-l>
-		<Button label="Ask to start work with her" onClick={() => onOpen('request')} />
+		<Button label={`Ask to start work with ${knownAs}`} onClick={() => onOpen('request')} />
 		<Button variant="secondary" label="Leave it here for now" onClick={onLeave} />
 	</stack-l>
 </section>
