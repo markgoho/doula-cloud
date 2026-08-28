@@ -1,0 +1,769 @@
+{
+  "version": "2.17",
+  "children": [
+    {
+      "type": "frame",
+      "id": "Njlb8",
+      "x": 0,
+      "y": 0,
+      "name": "QuickCard",
+      "reusable": true,
+      "width": 180,
+      "fill": "$surface",
+      "cornerRadius": "$radius",
+      "stroke": "$hairline",
+      "strokeWidth": 1,
+      "strokeAlignment": "inner",
+      "layout": "vertical",
+      "gap": 14,
+      "padding": 20,
+      "children": [
+        {
+          "type": "icon",
+          "id": "NrgVf",
+          "name": "Icon",
+          "width": 22,
+          "height": 22,
+          "icon": "users",
+          "library": "lucide",
+          "fill": "$muted"
+        },
+        {
+          "type": "text",
+          "id": "O5Uqi",
+          "name": "Label",
+          "fill": "$text",
+          "content": "Clients",
+          "fontFamily": "$font-sans",
+          "fontSize": 16,
+          "fontWeight": "500"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "nHB3f",
+      "x": 260,
+      "y": 0,
+      "name": "ActivityRow",
+      "reusable": true,
+      "width": 1000,
+      "height": 52,
+      "stroke": "$hairline",
+      "strokeWidth": {
+        "bottom": 1
+      },
+      "strokeAlignment": "inner",
+      "gap": 20,
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "tkrlZ",
+          "name": "Timestamp",
+          "fill": "$muted",
+          "textGrowth": "fixed-width",
+          "width": 136,
+          "content": "2026-08-28 09:14",
+          "fontFamily": "$font-mono",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "rectangle",
+          "id": "rFrjZ",
+          "name": "Column Rule",
+          "fill": "$hairline",
+          "width": 1,
+          "height": "fill_container"
+        },
+        {
+          "type": "text",
+          "id": "ic0lj",
+          "name": "Description",
+          "fill": "$text",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "Event description",
+          "fontFamily": "$font-sans",
+          "fontSize": 15,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "P3YAlV",
+          "name": "Actor",
+          "fill": "$muted",
+          "content": "Actor Name",
+          "fontFamily": "$font-sans",
+          "fontSize": 14,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "sKVjj",
+      "x": 0,
+      "y": 217,
+      "name": "Staff Dashboard",
+      "clip": true,
+      "width": 1440,
+      "fill": "$page-bg",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Ft8x5",
+          "name": "Top Bar",
+          "width": "fill_container",
+          "height": 60,
+          "fill": "$surface",
+          "stroke": "$hairline",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "strokeAlignment": "inner",
+          "padding": [
+            0,
+            "$gutter"
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "erB37",
+              "name": "Brand and Nav",
+              "height": "fill_container",
+              "gap": 44,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "S8qrIO",
+                  "name": "Wordmark",
+                  "fill": "$text",
+                  "content": "Doula Cloud",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 17,
+                  "fontWeight": "600",
+                  "letterSpacing": -0.2
+                },
+                {
+                  "type": "frame",
+                  "id": "C1JthA",
+                  "name": "Nav",
+                  "height": "fill_container",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "hELNt",
+                      "name": "Nav Overview",
+                      "height": "fill_container",
+                      "stroke": "$accent",
+                      "strokeWidth": {
+                        "bottom": 2
+                      },
+                      "strokeAlignment": "inner",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "MOmUe",
+                          "name": "Label",
+                          "fill": "$accent",
+                          "content": "Overview",
+                          "fontFamily": "$font-sans",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "VRWwM",
+                      "name": "Nav Clients",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "BTBRZ",
+                          "name": "Label",
+                          "fill": "$muted",
+                          "content": "Clients",
+                          "fontFamily": "$font-sans",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ZysFz",
+                      "name": "Nav Billing",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "xoLol",
+                          "name": "Label",
+                          "fill": "$muted",
+                          "content": "Billing",
+                          "fontFamily": "$font-sans",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Mfre3",
+                      "name": "Nav Staff",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "r3cVMJ",
+                          "name": "Label",
+                          "fill": "$muted",
+                          "content": "Staff",
+                          "fontFamily": "$font-sans",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jyoL1",
+                      "name": "Nav Offers",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "y6lqBn",
+                          "name": "Label",
+                          "fill": "$muted",
+                          "content": "Offers",
+                          "fontFamily": "$font-sans",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "J1FKfr",
+              "name": "Account",
+              "gap": 18,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Ns2EC",
+                  "name": "Practice Switcher",
+                  "gap": 7,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "YReTp",
+                      "name": "Practice Name",
+                      "fill": "$text",
+                      "content": "Riverside Doula Collective",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "bsshh",
+                      "name": "Caret",
+                      "width": 15,
+                      "height": 15,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "j11Xw",
+                  "name": "Avatar",
+                  "width": 34,
+                  "height": 34,
+                  "fill": "$panel",
+                  "cornerRadius": 17,
+                  "stroke": "$hairline",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "U6nZA",
+                      "name": "Initials",
+                      "fill": "$text",
+                      "content": "MG",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 13,
+                      "fontWeight": "600",
+                      "letterSpacing": 0.3
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "D1zxr",
+          "name": "Page Content",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 34,
+          "padding": [
+            38,
+            "$gutter",
+            48,
+            "$gutter"
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "m9QMAG",
+              "name": "Page Title",
+              "fill": "$text",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Welcome to Riverside Doula Collective",
+              "lineHeight": 1.2,
+              "fontFamily": "$font-sans",
+              "fontSize": 32,
+              "fontWeight": "700",
+              "letterSpacing": -0.7
+            },
+            {
+              "type": "frame",
+              "id": "S9ZtiS",
+              "name": "Quick Links",
+              "width": "fill_container",
+              "gap": 20,
+              "children": [
+                {
+                  "id": "uBgIm",
+                  "type": "ref",
+                  "ref": "Njlb8",
+                  "name": "Clients",
+                  "width": "fill_container",
+                  "descendants": {
+                    "NrgVf": {
+                      "icon": "users"
+                    },
+                    "O5Uqi": {
+                      "content": "Clients"
+                    }
+                  }
+                },
+                {
+                  "id": "JXSb6",
+                  "type": "ref",
+                  "ref": "Njlb8",
+                  "name": "Billing",
+                  "width": "fill_container",
+                  "descendants": {
+                    "NrgVf": {
+                      "icon": "receipt"
+                    },
+                    "O5Uqi": {
+                      "content": "Billing"
+                    }
+                  }
+                },
+                {
+                  "id": "czZ6N",
+                  "type": "ref",
+                  "ref": "Njlb8",
+                  "name": "Your offers",
+                  "width": "fill_container",
+                  "descendants": {
+                    "NrgVf": {
+                      "icon": "tag"
+                    },
+                    "O5Uqi": {
+                      "content": "Your offers"
+                    }
+                  }
+                },
+                {
+                  "id": "YY0aD",
+                  "type": "ref",
+                  "ref": "Njlb8",
+                  "name": "Staff",
+                  "width": "fill_container",
+                  "descendants": {
+                    "NrgVf": {
+                      "icon": "user-check"
+                    },
+                    "O5Uqi": {
+                      "content": "Staff"
+                    }
+                  }
+                },
+                {
+                  "id": "nEjmr",
+                  "type": "ref",
+                  "ref": "Njlb8",
+                  "name": "Plan Templates",
+                  "width": "fill_container",
+                  "descendants": {
+                    "NrgVf": {
+                      "icon": "layout-template"
+                    },
+                    "O5Uqi": {
+                      "content": "Plan Templates"
+                    }
+                  }
+                },
+                {
+                  "id": "V6dl7E",
+                  "type": "ref",
+                  "ref": "Njlb8",
+                  "name": "Contract Template",
+                  "width": "fill_container",
+                  "descendants": {
+                    "NrgVf": {
+                      "icon": "file-text"
+                    },
+                    "O5Uqi": {
+                      "content": "Contract Template"
+                    }
+                  }
+                },
+                {
+                  "id": "KNDkp",
+                  "type": "ref",
+                  "ref": "Njlb8",
+                  "name": "Payments",
+                  "width": "fill_container",
+                  "descendants": {
+                    "NrgVf": {
+                      "icon": "credit-card"
+                    },
+                    "O5Uqi": {
+                      "content": "Payments"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "h2Jivr",
+              "name": "Recent Activity",
+              "clip": true,
+              "width": "fill_container",
+              "fill": "$panel",
+              "cornerRadius": "$radius",
+              "stroke": "$hairline",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "rWJDl",
+                  "name": "Panel Header",
+                  "width": "fill_container",
+                  "stroke": "$hairline",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "padding": [
+                    17,
+                    24
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "x7xpL2",
+                      "name": "Panel Title",
+                      "fill": "$text",
+                      "content": "Recent activity",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 17,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "plyzo",
+                      "name": "Panel Meta",
+                      "fill": "$muted",
+                      "content": "Last 4 days · newest first",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "H2gCTq",
+                  "name": "Activity List",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "padding": [
+                    2,
+                    24,
+                    8,
+                    24
+                  ],
+                  "children": [
+                    {
+                      "id": "lBMkC",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 1",
+                      "width": "fill_container",
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-28 09:41"
+                        },
+                        "ic0lj": {
+                          "content": "Invoice INV-2041 sent to Amara Okafor for $1,850.00"
+                        },
+                        "P3YAlV": {
+                          "content": "Mark Goho"
+                        }
+                      }
+                    },
+                    {
+                      "id": "M5XZaS",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 2",
+                      "width": "fill_container",
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-28 08:57"
+                        },
+                        "ic0lj": {
+                          "content": "Danielle Ruiz accepted the invitation to join the practice"
+                        },
+                        "P3YAlV": {
+                          "content": "System"
+                        }
+                      }
+                    },
+                    {
+                      "id": "Xblub",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 3",
+                      "width": "fill_container",
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-27 17:22"
+                        },
+                        "ic0lj": {
+                          "content": "Employment type changed for Priya Raman: contractor to employee"
+                        },
+                        "P3YAlV": {
+                          "content": "Mark Goho"
+                        }
+                      }
+                    },
+                    {
+                      "id": "kewXc",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 4",
+                      "width": "fill_container",
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-27 15:05"
+                        },
+                        "ic0lj": {
+                          "content": "Plan “Full Spectrum Birth + 4 Postpartum Visits” assigned to Jordan Wells"
+                        },
+                        "P3YAlV": {
+                          "content": "Tasha Lin"
+                        }
+                      }
+                    },
+                    {
+                      "id": "m0fJq",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 5",
+                      "width": "fill_container",
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-27 11:38"
+                        },
+                        "ic0lj": {
+                          "content": "Payment of $600.00 received against invoice INV-2038"
+                        },
+                        "P3YAlV": {
+                          "content": "Stripe"
+                        }
+                      }
+                    },
+                    {
+                      "id": "cHeKD",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 6",
+                      "width": "fill_container",
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-26 16:12"
+                        },
+                        "ic0lj": {
+                          "content": "Contract template “Standard Birth Doula Agreement” updated to v4"
+                        },
+                        "P3YAlV": {
+                          "content": "Mark Goho"
+                        }
+                      }
+                    },
+                    {
+                      "id": "H9H3N",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 7",
+                      "width": "fill_container",
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-26 10:04"
+                        },
+                        "ic0lj": {
+                          "content": "Client record created for Simone Adeyemi, due 2026-11-14"
+                        },
+                        "P3YAlV": {
+                          "content": "Tasha Lin"
+                        }
+                      }
+                    },
+                    {
+                      "id": "YWmTF",
+                      "type": "ref",
+                      "ref": "nHB3f",
+                      "name": "Row 8",
+                      "width": "fill_container",
+                      "strokeWidth": 0,
+                      "descendants": {
+                        "tkrlZ": {
+                          "content": "2026-08-25 14:47"
+                        },
+                        "ic0lj": {
+                          "content": "Offer “Postpartum Support Package” archived"
+                        },
+                        "P3YAlV": {
+                          "content": "Danielle Ruiz"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "page-bg": {
+      "type": "color",
+      "value": "#fff8f9"
+    },
+    "panel": {
+      "type": "color",
+      "value": "#fbf1f4"
+    },
+    "surface": {
+      "type": "color",
+      "value": "#ffffff"
+    },
+    "hairline": {
+      "type": "color",
+      "value": "#e9e0e3"
+    },
+    "text": {
+      "type": "color",
+      "value": "#1f1a1c"
+    },
+    "muted": {
+      "type": "color",
+      "value": "#51434b"
+    },
+    "accent": {
+      "type": "color",
+      "value": "#722c60"
+    },
+    "font-sans": {
+      "type": "string",
+      "value": "Hanken Grotesk"
+    },
+    "font-mono": {
+      "type": "string",
+      "value": "IBM Plex Mono"
+    },
+    "gutter": {
+      "type": "number",
+      "value": 40
+    },
+    "radius": {
+      "type": "number",
+      "value": 8
+    }
+  },
+  "fileToken": "b667f666-7fab-4ee6-9121-8301303df90b"
+}
