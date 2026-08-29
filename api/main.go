@@ -64,16 +64,6 @@ func resolveExpectedOrigins() []string {
 	return origins
 }
 
-// practiceSessionResponse confirms to the frontend which Practice the
-// caller landed on -- and, as a side effect of running through
-// staffauth.Middleware, records it as the Staff member's last-used
-// Practice for their next login.
-type practiceSessionResponse struct {
-	PracticeID   string   `json:"practiceId"`
-	PracticeName string   `json:"practiceName"`
-	Roles        []string `json:"roles"`
-}
-
 func main() {
 	port := resolvePort()
 

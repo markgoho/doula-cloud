@@ -23,7 +23,22 @@ import (
 	"doula-cloud/api/internal/website"
 )
 
+// ownerAndAdmin is the role declaration for every GatedRouter route
+// ADR-0008's read table admits to Owner and Admin only (Staff roster,
+// Credit balance and ledger, Contract's money-bearing Signed PDF and
+// Invoice history) -- named once so golangci-lint's package-wide goconst
+// check doesn't see four independent literals to flag.
 var ownerAndAdmin = []string{"owner", "admin"}
+
+// practiceSessionResponse confirms to the frontend which Practice the
+// caller landed on -- and, as a side effect of running through
+// staffauth.Middleware, records it as the Staff member's last-used
+// Practice for their next login.
+type practiceSessionResponse struct {
+	PracticeID   string   `json:"practiceId"`
+	PracticeName string   `json:"practiceName"`
+	Roles        []string `json:"roles"`
+}
 
 func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 	tx, _ := staffauth.Tx(r.Context())
@@ -60,11 +75,6 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // share ADR-0008's role vocabulary -- ownerAndAdmin below, AnyStaff, and
 // the attachment narrowing each handler does for itself -- and splitting
 // them further would scatter that without separating anything.
-// ownerAndAdmin is the role declaration for every GatedRouter route
-// ADR-0008's read table admits to Owner and Admin only (Staff roster,
-// Credit balance and ledger, Contract's money-bearing Signed PDF and
-// Invoice history) -- named once so golangci-lint's package-wide goconst
-// check doesn't see four independent literals to flag.
 func registerPracticeRoutes(mux *http.ServeMux, g *staffauth.GatedRouter, d Deps) {
 	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, http.HandlerFunc(practiceSessionHandler))
 	// Roles and employment type are edited together on one surface
