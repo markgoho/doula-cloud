@@ -42,8 +42,8 @@
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
-		{ value: 'signup', label: "I'm new here -- create an account" },
-		{ value: 'login', label: 'I already have an account -- log in' }
+		{ value: 'signup', label: "I'm new here — create an account" },
+		{ value: 'login', label: 'I already have an account — log in' }
 	];
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';

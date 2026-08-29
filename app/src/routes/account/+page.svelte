@@ -144,7 +144,7 @@
 		forward. Saying so here is cheaper than answering it in support.
 	-->
 	<Text
-		text="Where you work sets how much sales tax your practice pays on the credits it buys. Changing it here changes that from today forward -- purchases you have already made are not re-priced, and no receipt you have already been sent changes."
+		text="Where you work sets how much sales tax your practice pays on the credits it buys. Changing it here changes that from today forward &mdash; purchases you have already made are not re-priced, and no receipt you have already been sent changes."
 		tone="variant"
 	/>
 {/snippet}
