@@ -7,7 +7,7 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// These tests exercise 00048's client_field_templates_select/_insert/
+// These tests exercise 00050's client_field_templates_select/_insert/
 // _update policies directly via db.App and set_config, bypassing the Go
 // handlers -- proving AC1's "at both seams" holds at the database seam,
 // not only PutHandler's own RequireOwnerOrAdmin check.

@@ -283,7 +283,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// list an Owner or Admin defines for a Client's Practice-defined
 	// layer. Sibling of Plan Templates above -- read by any Staff member
 	// (the definitions carry nothing secret), written by an Owner or
-	// Admin alone (client_field_templates_insert/_update, 00048, enforce
+	// Admin alone (client_field_templates_insert/_update, 00050, enforce
 	// the same rule in RLS).
 	g.Get("/api/practices/{practiceId}/client-field-template", staffauth.AnyStaff, clientfieldtemplate.GetHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/client-field-template",
