@@ -15,16 +15,17 @@ import (
 // should call.
 type OutboxType string
 
-// The seven outbox types a nudge can target, one per process-* endpoint
+// The eight outbox types a nudge can target, one per process-* endpoint
 // main.go mounts (ADR-0010, ADR-0013).
 const (
-	PortalInvite    OutboxType = "portal-invite"
-	LowCredit       OutboxType = "low-credit"
-	Payout          OutboxType = "payout"
-	PaymentReceived OutboxType = "payment-received"
-	SessionNotice   OutboxType = "session-notice"
-	StaffInvite     OutboxType = "staff-invite"
-	EngagementOffer OutboxType = "engagement-offer"
+	PortalInvite      OutboxType = "portal-invite"
+	LowCredit         OutboxType = "low-credit"
+	Payout            OutboxType = "payout"
+	PaymentReceived   OutboxType = "payment-received"
+	SessionNotice     OutboxType = "session-notice"
+	StaffInvite       OutboxType = "staff-invite"
+	EngagementOffer   OutboxType = "engagement-offer"
+	EngagementRequest OutboxType = "engagement-request"
 )
 
 // Enqueuer enqueues a Cloud Task that nudges outboxType's process-*

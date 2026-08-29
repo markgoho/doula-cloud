@@ -110,6 +110,32 @@ func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T
 	}
 }
 
+// TestPostPurchaseHandler_AdminCanPurchase proves ADR-0017's correction:
+// an Admin, not only an Owner, may buy Credits.
+func TestPostPurchaseHandler_AdminCanPurchase(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-admin"
+	practiceID := seedMember(t, db, uid, "{admin}")
+	stripeClient := billing.NewFakeStripeClient()
+
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 3}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out billing.PurchaseResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.CheckoutURL == "" {
+		t.Fatal("checkoutUrl is empty")
+	}
+}
+
 // TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer proves a
 // Practice's second purchase does not create a second Stripe Customer.
 func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) {

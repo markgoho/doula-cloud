@@ -22,15 +22,18 @@ type PurchaseResponse struct {
 	CheckoutURL string `json:"checkoutUrl"`
 }
 
-// PostPurchaseHandler lets a Practice Owner start a credit purchase: it
-// lazily creates the Practice's Stripe Customer on its first purchase and
+// PostPurchaseHandler lets a Practice Owner or Admin start a credit
+// purchase -- ADR-0017's correction: an Admin who may approve an
+// Engagement Request, and who already reads the balance and the ledger,
+// must be able to top up the balance she approves against. It lazily
+// creates the Practice's Stripe Customer on its first purchase and
 // returns a Checkout Session URL for quantity credits. The ledger itself
 // is never credited here -- only PostPurchaseWebhookHandler does that,
 // once Stripe confirms the payment actually succeeded. Must be mounted
 // behind staffauth.Middleware.
 func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
+		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
 		if !ok {
 			return
 		}
