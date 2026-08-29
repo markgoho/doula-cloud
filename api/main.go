@@ -211,7 +211,15 @@ func main() {
 	siteBuildWorker := sitebuild.Worker{
 		Dispatcher: sitebuild.GitHubDispatcher{
 			Client: siteHTTP,
-			Token:  os.Getenv("GITHUB_DISPATCH_TOKEN"),
+			// Trimmed, because this arrives from Secret Manager and a
+			// secret written with a here-string or an editor carries a
+			// trailing newline nobody can see. Go refuses a header value
+			// containing one outright -- so the deploy would stop firing
+			// on a credential that is otherwise perfectly good, and the
+			// only symptom would be Practice pages that never leave
+			// pending. Cost of trimming: nothing. A token has no
+			// meaningful leading or trailing whitespace.
+			Token: strings.TrimSpace(os.Getenv("GITHUB_DISPATCH_TOKEN")),
 		},
 		Now: time.Now,
 	}
