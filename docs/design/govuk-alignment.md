@@ -136,9 +136,11 @@ Atomic Design set. Where a row says a name of ours, the **behavior** is theirs a
 | [Error message](https://design-system.service.gov.uk/components/error-message/) | `LabeledField`'s `error` prop, which no route passes | Open -- [#467](https://github.com/markgoho/doula-cloud/issues/467) |
 | [Error summary](https://design-system.service.gov.uk/components/error-summary/) | Does not exist | Open -- [#467](https://github.com/markgoho/doula-cloud/issues/467) |
 | [Exit this page](https://design-system.service.gov.uk/components/exit-this-page/) | Undecided | Open decision -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
+| [Feedback](https://design-system.service.gov.uk/components/feedback/) | Their footer prompt for feedback on a government service. `/support` is the contact route here | N/A |
 | [Fieldset](https://design-system.service.gov.uk/components/fieldset/) | `FormPage` and `QuestionPage` own the fieldset and legend | Aligned |
 | [File upload](https://design-system.service.gov.uk/components/file-upload/) | Nothing in the app uploads a file; PDFs are generated, not received | N/A for now |
 | [Footer](https://design-system.service.gov.uk/components/footer/) / [Header](https://design-system.service.gov.uk/components/header/) | Ours, from [the brief](brief.md) | Departed -- look, not behavior |
+| [Generic header](https://design-system.service.gov.uk/components/generic-header/) | Their unbranded header for services that are not GOV.UK. Nearest in spirit to our top bar, and still replaced by it | Departed -- look, not behavior |
 | [Inset text](https://design-system.service.gov.uk/components/inset-text/) | `Notice` covers the announcement job | N/A for now |
 | [Language navigation](https://design-system.service.gov.uk/components/language-navigation/) | English only | N/A |
 | [Notification banner](https://design-system.service.gov.uk/components/notification-banner/) | `atoms/Notice.svelte`, with the same `role="alert"` / `role="status"` split | Aligned |
@@ -157,7 +159,7 @@ Atomic Design set. Where a row says a name of ours, the **behavior** is theirs a
 | [Task list](https://design-system.service.gov.uk/components/task-list/) | Not adopted; see the note on multiple tasks below | Considered |
 | [Text input](https://design-system.service.gov.uk/components/text-input/) | `atoms/TextInput.svelte` | Aligned |
 | [Textarea](https://design-system.service.gov.uk/components/textarea/) | Five raw `<textarea>` elements and no atom | Open -- [#468](https://github.com/markgoho/doula-cloud/issues/468) |
-| [Warning text](https://design-system.service.gov.uk/components/warning-text/) | `Notice`'s warning variant | Aligned |
+| [Warning text](https://design-system.service.gov.uk/components/warning-text/) | Nothing. `Notice.svelte:7` is `error \| status \| info` and must not grow a fourth variant -- it announces what happened, not what is about to | Open -- [#473](https://github.com/markgoho/doula-cloud/issues/473) |
 
 
 ## Where we depart on purpose
