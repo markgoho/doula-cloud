@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
-	import PlanInstanceForm from '#lib/PlanInstanceForm.svelte';
+	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
 	import {
 		loadInstance,
 		createInstance,
@@ -12,8 +12,8 @@
 		toggleMultiSelectOption,
 		type Instance
 	} from '#lib/planInstance.js';
-	import ContractForm from '#lib/ContractForm.svelte';
-	import ContractStatus from '#lib/ContractStatus.svelte';
+	import ContractForm from '#lib/components/molecules/ContractForm.svelte';
+	import ContractStatus from '#lib/components/molecules/ContractStatus.svelte';
 	import {
 		loadContract,
 		createContract,
@@ -23,19 +23,19 @@
 		setMergeFieldValue,
 		type Contract
 	} from '#lib/contract.js';
-	import InvoiceSection from '#lib/InvoiceSection.svelte';
+	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
-	import OfferSection from '#lib/OfferSection.svelte';
+	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
 	import { connect as connectStripe } from '#lib/payments.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -520,48 +520,56 @@
 	}
 </script>
 
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if detail}
-	<Heading level={1} text={detail.clientName} />
-	<DescriptionList
-		items={[
-			{ label: 'Status', value: detail.status },
-			{ label: 'Created', value: new Date(detail.createdAt).toLocaleDateString() }
-		]}
-	/>
+{#snippet summary()}
+	<stack-l space="var(--space-4)">
+		<DescriptionList
+			items={[
+				{ label: 'Status', value: detail!.status },
+				{ label: 'Created', value: new Date(detail!.createdAt).toLocaleDateString() }
+			]}
+		/>
 
+		<!--
+			The outcome of the header's own action, and the only block-level
+			room in the header block: `actions` is a cluster beside the h1,
+			where an error banner and a full invite URL cannot go. Absorbed
+			into the Template's existing regions rather than taken through one
+			of ADR-0018's exits.
+		-->
+		{#if portalInviteError}
+			<Notice variant="error" message={portalInviteError} />
+		{/if}
+
+		{#if portalInviteLink}
+			<Text text="Invited. An email has been sent to them. If you need to share the link directly, here it is:" />
+			<div><code>{portalInviteLink}</code></div>
+		{/if}
+	</stack-l>
+{/snippet}
+
+{#snippet actions()}
 	<Button label="Send portal invite" onClick={handleSendPortalInvite} loading={isSendingPortalInvite} />
+{/snippet}
 
-	{#if portalInviteError}
-		<Notice variant="error" message={portalInviteError} />
+{#snippet reassignAction(visit: Visit)}
+	<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
+		<label>
+			Reassign to Staff id
+			<input type="text" bind:value={reassignStaffId[visit.visitId]} required />
+		</label>
+		<Button label="Reassign" type="submit" size="sm" variant="secondary" />
+	</form>
+	{#if reassignError[visit.visitId]}
+		<p role="alert">{reassignError[visit.visitId]}</p>
 	{/if}
+{/snippet}
 
-	{#if portalInviteLink}
-		<Text text="Invited. An email has been sent to them. If you need to share the link directly, here it is:" />
-		<div><code>{portalInviteLink}</code></div>
-	{/if}
-
-	<h2>Visits</h2>
-
+{#snippet visitsSection()}
 	<Button label="Add a Visit" onClick={handleCreateVisit} loading={isCreatingVisit} />
 
 	{#if visitsError}
 		<p role="alert">{visitsError}</p>
 	{/if}
-
-	{#snippet reassignAction(visit: Visit)}
-		<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-			<label>
-				Reassign to Staff id
-				<input type="text" bind:value={reassignStaffId[visit.visitId]} required />
-			</label>
-			<Button label="Reassign" type="submit" size="sm" variant="secondary" />
-		</form>
-		{#if reassignError[visit.visitId]}
-			<p role="alert">{reassignError[visit.visitId]}</p>
-		{/if}
-	{/snippet}
 
 	<DataTable
 		columns={[
@@ -572,39 +580,43 @@
 		rowActions={{ label: 'Reassign', content: reassignAction }}
 		emptyMessage="No Visits yet."
 	/>
+{/snippet}
 
-	{#each planSections as section (section.type)}
-		<h2>{section.heading}</h2>
+<!--
+	One body for both Plan sections, parameterised the way the `planSections`
+	loop was: they are the same generic Plan Instance API with a different
+	plan type (see planInstance.ts). A Template section's `content` takes no
+	arguments, so each type gets a thin wrapper below rather than the loop.
+-->
+{#snippet planSectionBody(planType: PlanType, heading: string)}
+	{#if planError[planType]}
+		<p role="alert">{planError[planType]}</p>
+	{/if}
 
-		{#if planError[section.type]}
-			<p role="alert">{planError[section.type]}</p>
+	{#if planLoaded[planType]}
+		{#if planInstances[planType]}
+			<PlanInstanceForm
+				fields={planInstances[planType]!.fields}
+				answers={planInstances[planType]!.answers}
+				onAnswerChange={(fieldId, value) => handlePlanAnswerChange(planType, fieldId, value)}
+				onToggleOption={(fieldId, option) => handlePlanToggleOption(planType, fieldId, option)}
+			/>
+			<Button label="Save {heading}" onClick={() => handleSavePlan(planType)} loading={planBusy[planType]} />
+		{:else}
+			<Button label="Create {heading}" onClick={() => handleCreatePlan(planType)} loading={planBusy[planType]} />
 		{/if}
+	{/if}
+{/snippet}
 
-		{#if planLoaded[section.type]}
-			{#if planInstances[section.type]}
-				<PlanInstanceForm
-					fields={planInstances[section.type]!.fields}
-					answers={planInstances[section.type]!.answers}
-					onAnswerChange={(fieldId, value) => handlePlanAnswerChange(section.type, fieldId, value)}
-					onToggleOption={(fieldId, option) => handlePlanToggleOption(section.type, fieldId, option)}
-				/>
-				<Button
-					label="Save {section.heading}"
-					onClick={() => handleSavePlan(section.type)}
-					loading={planBusy[section.type]}
-				/>
-			{:else}
-				<Button
-					label="Create {section.heading}"
-					onClick={() => handleCreatePlan(section.type)}
-					loading={planBusy[section.type]}
-				/>
-			{/if}
-		{/if}
-	{/each}
+{#snippet carePlanSection()}
+	{@render planSectionBody('care_plan', 'Care Plan')}
+{/snippet}
 
-	<h2>Contract</h2>
+{#snippet birthPlanSection()}
+	{@render planSectionBody('birth_plan', 'Birth Plan')}
+{/snippet}
 
+{#snippet contractSection()}
 	{#if contractError}
 		<p role="alert">{contractError}</p>
 	{/if}
@@ -626,31 +638,27 @@
 			<Button label="Create Draft Contract" onClick={handleCreateContract} loading={isContractBusy} />
 		{/if}
 	{/if}
+{/snippet}
 
-	{#if contract}
-		<h2>Invoices</h2>
-
-		{#if invoicesError}
-			<p role="alert">{invoicesError}</p>
-		{/if}
-
-		<InvoiceSection {invoices} {connectGate} onCreate={handleCreateInvoice} onConnect={handleConnectInvoicing} />
+{#snippet invoicesSection()}
+	{#if invoicesError}
+		<p role="alert">{invoicesError}</p>
 	{/if}
 
-	{#if isOffersVisible}
-		<h2>Offers</h2>
+	<InvoiceSection {invoices} {connectGate} onCreate={handleCreateInvoice} onConnect={handleConnectInvoicing} />
+{/snippet}
 
-		<OfferSection
-			{offers}
-			{doulas}
-			clientFirstInitial={detail.clientName}
-			onCreate={handleCreateOffer}
-			onWithdraw={handleWithdrawOffer}
-		/>
-	{/if}
+{#snippet offersSection()}
+	<OfferSection
+		{offers}
+		{doulas}
+		clientFirstInitial={detail!.clientName}
+		onCreate={handleCreateOffer}
+		onWithdraw={handleWithdrawOffer}
+	/>
+{/snippet}
 
-	<h2>Messages</h2>
-
+{#snippet messagesSection()}
 	<MessageThread
 		{messages}
 		error={messagesError}
@@ -661,6 +669,32 @@
 		onSend={didSendMessage}
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
+	/>
+{/snippet}
+
+{#if error}
+	<Notice variant="error" message={error} />
+{:else if detail}
+	<!--
+		Archetype D, ADR-0018. The Invoices and Offers sections are still
+		conditional exactly as before -- Invoices needs a Contract to exist
+		and Offers is Owner/Admin-only -- which is why `sections` is a typed
+		array and not a run of named regions.
+	-->
+	<RecordDetail
+		title={detail.clientName}
+		{summary}
+		{actions}
+		isContentsShown
+		sections={[
+			{ heading: 'Visits', content: visitsSection },
+			{ heading: 'Care Plan', content: carePlanSection },
+			{ heading: 'Birth Plan', content: birthPlanSection },
+			{ heading: 'Contract', content: contractSection },
+			...(contract ? [{ heading: 'Invoices', content: invoicesSection }] : []),
+			...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
+			{ heading: 'Messages', content: messagesSection }
+		]}
 	/>
 {:else}
 	<Skeleton variant="text" lines={6} label="Loading the Engagement" />

@@ -11,8 +11,8 @@
 	 * amount the Staff member entered and displays whatever error either
 	 * callback throws.
 	 */
-	import { formatAmount, type Invoice } from './invoice.js';
-	import Button from './components/atoms/Button.svelte';
+	import { formatAmount, type Invoice } from '#lib/invoice.js';
+	import Button from '#lib/components/atoms/Button.svelte';
 
 	let {
 		invoices,

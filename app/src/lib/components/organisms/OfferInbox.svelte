@@ -9,10 +9,10 @@
 	 * onDecide owns the API call and the resulting state change; this
 	 * component reports which Offer and which answer.
 	 */
-	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type Offer } from './offer.js';
-	import Badge from './components/atoms/Badge.svelte';
-	import Button from './components/atoms/Button.svelte';
-	import Notice from './components/atoms/Notice.svelte';
+	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type Offer } from '#lib/offer.js';
+	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 
 	let {
 		offers,

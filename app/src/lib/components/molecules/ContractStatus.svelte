@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Button from './components/atoms/Button.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 
 	/**
 	 * Shared status display for a Contract: the current status, a clear

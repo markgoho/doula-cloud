@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OfferSection from './OfferSection.svelte';
-import type { NewOffer, Offer } from './offer.js';
+import type { NewOffer, Offer } from '#lib/offer.js';
 
 const contractor = { staffId: 'staff-1', name: 'Renata Alvarez', employmentType: 'contractor' };
 const employee = { staffId: 'staff-2', name: 'Dana Okafor', employmentType: 'employee' };

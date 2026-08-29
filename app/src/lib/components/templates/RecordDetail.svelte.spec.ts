@@ -83,4 +83,50 @@ describe('RecordDetail.svelte', () => {
 		expect(container.querySelector('nav')).toBeNull();
 		expect(container.querySelector('header')).toBeNull();
 	});
+
+	it('gives every section an anchor id derived from its heading', async () => {
+		const { container } = await setup({
+			sections: [{ heading: 'Birth Plan', content: textSnippet('Signed') }]
+		});
+
+		expect(container.querySelector('section')).toHaveAttribute('id', 'birth-plan');
+	});
+
+	it('renders no contents region unless it is asked for', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelector('.contents-rail')).toBeNull();
+		expect(container.querySelector('.contents-strip')).toBeNull();
+	});
+
+	it('lists every section in the contents region, and links only to itself', async () => {
+		const { container } = await setup({ isContentsShown: true });
+
+		const rail = container.querySelector('.contents-rail')!;
+		const hrefs = [...rail.querySelectorAll('a')].map((anchor) => anchor.getAttribute('href'));
+		expect(hrefs).toEqual(['#visits', '#invoices']);
+
+		// It is not a nav: the region derives from `sections`, so there is no
+		// way for a route to put a route in it. ADR-0018.
+		expect(container.querySelector('nav')).toBeNull();
+	});
+
+	it('offers the same contents as a jump-to strip for a narrow viewport', async () => {
+		const { container } = await setup({ isContentsShown: true });
+
+		const strip = container.querySelector('.contents-strip')!;
+		const hrefs = [...strip.querySelectorAll('a')].map((anchor) => anchor.getAttribute('href'));
+		expect(hrefs).toEqual(['#visits', '#invoices']);
+	});
+
+	it('renders the contents between the title and the first section in source order', async () => {
+		const { container } = await setup({ isContentsShown: true });
+
+		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
+		const strip = container.querySelector('.contents-strip')!;
+		const firstSection = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
+
+		expect(title.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(strip.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
 });

@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import OfferInbox from '#lib/OfferInbox.svelte';
+	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import { decideOffer, loadInbox, type Offer } from '#lib/offer.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';

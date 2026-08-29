@@ -167,3 +167,20 @@ hiding the Birth Plan behind a tab is PR-G5 with extra steps rather than a fix f
 The arrangement is not new — it is the 260px rail plus 1052px column the Intake question pages already
 established, so archetype D reads as the same product as archetype E rather than inventing a second page
 geometry.
+
+### Built on [#424](https://github.com/markgoho/doula-cloud/issues/424): the region is a boolean
+
+`contents` is the one region that is **not** a Snippet. It is `isContentsShown`, a boolean, and the list
+is derived from `sections`. That is what keeps the "it is not a nav" promise enforceable rather than
+merely stated: a Snippet region would let a route hand the rail a route, and nothing in the Template
+could stop it.
+
+The drawing put a 260px rail beside a 1052px column, which is 1360px of content and wider than
+`--page-max`'s 76rem. The token wins: the rail stays at its drawn 16.25rem and the column takes whatever
+`--page-max` leaves. A second page width for one archetype would be a worse answer than a column 144px
+narrower than a 1440px artboard suggested.
+
+The same list is rendered twice — a rail and a jump-to strip — with exactly one of them `display: none`
+at any width, which takes the other out of the accessibility tree entirely. One list restyled by a
+container query is not available: the two looks are `Link` variants (`rail` and `chip`), and an atom does
+not get to know how wide its page frame is.

@@ -38,7 +38,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
-	import WorkStateField from '#lib/WorkStateField.svelte';
+	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [

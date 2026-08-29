@@ -1,8 +1,8 @@
 <script lang="ts">
-	import LabeledField from './components/molecules/LabeledField.svelte';
-	import TextInput from './components/atoms/TextInput.svelte';
-	import Checkbox from './components/atoms/Checkbox.svelte';
-	import Button from './components/atoms/Button.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 
 	let {
 		onSign

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fillProse } from './contract.js';
+	import { fillProse } from '#lib/contract.js';
 
 	let { prose, values }: { prose: string; values: Record<string, string> } = $props();
 </script>

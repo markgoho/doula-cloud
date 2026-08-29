@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import InvoiceSection from './InvoiceSection.svelte';
-import type { Invoice } from './invoice.js';
+import type { Invoice } from '#lib/invoice.js';
 
 interface SetupOptions {
 	invoices?: Invoice[];

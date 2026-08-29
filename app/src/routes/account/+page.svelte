@@ -35,7 +35,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import WorkStateField from '#lib/WorkStateField.svelte';
+	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 
 	let name = $state('');
 	let memberships = $state<Membership[]>([]);

@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import PlanInstanceForm from './PlanInstanceForm.svelte';
-import type { Answers, Field } from './planInstance.js';
+import type { Answers, Field } from '#lib/planInstance.js';
 
 const defaultFields: Field[] = [
 	{ id: 'heading', type: 'section_header', label: 'Support', order: 0 },

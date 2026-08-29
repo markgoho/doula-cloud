@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MERGE_FIELDS } from './contractTemplate.js';
+	import { MERGE_FIELDS } from '#lib/contractTemplate.js';
 
 	let {
 		prose,

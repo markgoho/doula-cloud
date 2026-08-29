@@ -8,7 +8,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import WorkStateField from '#lib/WorkStateField.svelte';
+	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import { workStateCode } from '#lib/workStates.js';
 
 	let practiceName = $state('');

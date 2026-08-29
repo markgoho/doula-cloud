@@ -69,10 +69,16 @@
 	<Text text="One invoice outstanding — $450, due 15 March." step="body-sm" tone="variant" />
 {/snippet}
 
+<!--
+	`isContentsShown` is on here because the contents region is the part
+	worth looking at; with it off this is the same page without the rail.
+	A second instance would put a second <h1> on one demo page.
+-->
 <RecordDetail
 	title="Ada Lovelace"
 	{summary}
 	{actions}
+	isContentsShown
 	sections={[
 		{ heading: 'Visits', content: visitsSection },
 		{ heading: 'Birth plan', content: birthPlanSection },

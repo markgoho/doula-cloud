@@ -4,9 +4,9 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClientContract, signContract, type Contract } from '#lib/contract.js';
-	import ContractView from '#lib/ContractView.svelte';
-	import ContractStatus from '#lib/ContractStatus.svelte';
-	import SignContract from '#lib/SignContract.svelte';
+	import ContractView from '#lib/components/molecules/ContractView.svelte';
+	import ContractStatus from '#lib/components/molecules/ContractStatus.svelte';
+	import SignContract from '#lib/components/organisms/SignContract.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';

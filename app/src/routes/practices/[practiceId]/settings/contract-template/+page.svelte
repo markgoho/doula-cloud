@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import ContractTemplateEditor from '#lib/ContractTemplateEditor.svelte';
+	import ContractTemplateEditor from '#lib/components/organisms/ContractTemplateEditor.svelte';
 	import { loadContractTemplate, saveContractTemplate, validateProse } from '#lib/contractTemplate.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';

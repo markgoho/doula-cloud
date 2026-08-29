@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClientBirthPlan, type Instance } from '#lib/planInstance.js';
-	import BirthPlanView from '#lib/BirthPlanView.svelte';
+	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';

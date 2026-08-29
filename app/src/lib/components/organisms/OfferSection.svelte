@@ -15,11 +15,11 @@
 	 * callback throws.
 	 */
 	import { untrack } from 'svelte';
-	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type NewOffer, type Offer } from './offer.js';
-	import Badge from './components/atoms/Badge.svelte';
-	import Button from './components/atoms/Button.svelte';
-	import Notice from './components/atoms/Notice.svelte';
-	import RadioGroup from './components/molecules/RadioGroup.svelte';
+	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type NewOffer, type Offer } from '#lib/offer.js';
+	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 
 	let {
 		offers,

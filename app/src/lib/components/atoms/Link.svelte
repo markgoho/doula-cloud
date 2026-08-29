@@ -5,7 +5,7 @@
 	interface Properties {
 		href: string;
 		label: string;
-		variant?: 'primary' | 'secondary' | 'card';
+		variant?: 'primary' | 'secondary' | 'card' | 'rail' | 'chip';
 		icon?: IconName;
 		current?: boolean;
 	}
@@ -80,19 +80,16 @@
 			color: var(--color-primary);
 		}
 
-		/* A block-level tile: icon over label, its own chrome. tokens.css has
-		   no --color-surface-bright / --space-5 yet -- both are asked for by name
-		   with a light fallback so this picks them up unchanged once they
-		   land (see docs/design/brief.md). */
+		/* A block-level tile: icon over label, its own chrome. */
 		a.card {
 			flex-direction: column;
 			align-items: flex-start;
 			gap: 14px;
 			inline-size: 100%;
-			padding: var(--space-5, 1.25rem);
+			padding: var(--space-5);
 			border: var(--border-thin) solid var(--color-outline-variant);
 			border-radius: var(--radius);
-			background-color: var(--color-surface-bright, oklch(99% 0.004 320));
+			background-color: var(--color-surface-bright);
 			color: var(--color-on-surface);
 			font-size: var(--text-body-size);
 			font-weight: var(--font-weight-medium);
@@ -108,6 +105,50 @@
 		}
 
 		a.card:hover :global(svg) {
+			color: var(--color-primary);
+		}
+
+		/* An entry in a page's own contents list (RecordDetail's `contents`
+		   region, ADR-0018). It is an in-page anchor rather than a route, so
+		   it deliberately does not read as a prose link: eight underlined
+		   plum links beside a column is the same accent overspend #431 found
+		   in the intake step rail and rejected. The left hairline is what
+		   collects the entries into a list, so the list frame carries no gap
+		   and the rules meet. */
+		a.rail {
+			display: flex;
+			inline-size: 100%;
+			padding-block: var(--space-2);
+			padding-inline-start: var(--space-3);
+			border-inline-start: var(--border-thin) solid var(--color-outline-variant);
+			color: var(--color-on-surface-variant);
+			font-size: var(--text-body-sm-size);
+			font-weight: var(--font-weight-normal);
+			text-decoration: none;
+		}
+
+		a.rail:hover {
+			border-inline-start-color: var(--color-primary);
+			color: var(--color-primary);
+		}
+
+		/* The same contents list where there is no room beside the column:
+		   a wrapping row of targets under the title. A pill rather than a
+		   rail entry because it has to survive being read at arm's length in
+		   a hospital corridor -- PR-G5, the moment that earned the region. */
+		a.chip {
+			padding: var(--space-2) var(--space-3);
+			border: var(--border-thin) solid var(--color-outline);
+			border-radius: var(--radius);
+			background-color: var(--color-surface-bright);
+			color: var(--color-on-surface);
+			font-size: var(--text-label-size);
+			font-weight: var(--font-weight-medium);
+			text-decoration: none;
+		}
+
+		a.chip:hover {
+			border-color: var(--color-primary);
 			color: var(--color-primary);
 		}
 

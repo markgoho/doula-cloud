@@ -24,7 +24,7 @@
 		loadPracticeLanding,
 		type PracticeLanding
 	} from '#lib/practiceLanding.js';
-	import OfferInbox from '#lib/OfferInbox.svelte';
+	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';

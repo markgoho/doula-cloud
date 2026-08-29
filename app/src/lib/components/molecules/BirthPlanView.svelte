@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from './planInstance.js';
+	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from '#lib/planInstance.js';
 
 	let { fields, answers }: { fields: Field[]; answers: Answers } = $props();
 

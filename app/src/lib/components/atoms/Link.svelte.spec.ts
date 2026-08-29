@@ -104,4 +104,16 @@ describe('Link.svelte', () => {
 
 		await expect.element(page.getByRole('link')).toHaveClass('card');
 	});
+
+	it('reflects the rail variant class, for a contents entry', async () => {
+		await setup({ variant: 'rail' });
+
+		await expect.element(page.getByRole('link')).toHaveClass('rail');
+	});
+
+	it('reflects the chip variant class, for a jump-to target', async () => {
+		await setup({ variant: 'chip' });
+
+		await expect.element(page.getByRole('link')).toHaveClass('chip');
+	});
 });

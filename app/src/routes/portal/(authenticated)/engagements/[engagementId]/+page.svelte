@@ -9,11 +9,11 @@
 	} from '#lib/pushRegistration.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -180,17 +180,16 @@
 	}
 </script>
 
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if detail}
-	<Heading level={1} text={`Welcome to ${detail.practiceName}`} />
+{#snippet summary()}
 	<DescriptionList
 		items={[
-			{ label: 'Status', value: detail.status },
-			{ label: 'Created', value: new Date(detail.createdAt).toLocaleDateString() }
+			{ label: 'Status', value: detail!.status },
+			{ label: 'Created', value: new Date(detail!.createdAt).toLocaleDateString() }
 		]}
 	/>
+{/snippet}
 
+{#snippet actions()}
 	<Link
 		href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', { engagementId: page.params.engagementId! })}
 		label="Birth Plan"
@@ -199,9 +198,9 @@
 		href={resolve('/portal/(authenticated)/engagements/[engagementId]/contract', { engagementId: page.params.engagementId! })}
 		label="Contract"
 	/>
+{/snippet}
 
-	<h2>Messages</h2>
-
+{#snippet messagesSection()}
 	<MessageThread
 		{messages}
 		error={messagesError}
@@ -212,6 +211,23 @@
 		onSend={didSendMessage}
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
+	/>
+{/snippet}
+
+{#if error}
+	<Notice variant="error" message={error} />
+{:else if detail}
+	<!--
+		Archetype D, ADR-0018 -- the same Template the staff Engagement page
+		uses, which is the point of putting both on it. No contents region:
+		one section is not a page you scroll to search, and a contents list
+		above three sections is furniture.
+	-->
+	<RecordDetail
+		title={`Welcome to ${detail.practiceName}`}
+		{summary}
+		{actions}
+		sections={[{ heading: 'Messages', content: messagesSection }]}
 	/>
 {:else}
 	<Skeleton variant="text" lines={5} label="Loading your Engagement" />

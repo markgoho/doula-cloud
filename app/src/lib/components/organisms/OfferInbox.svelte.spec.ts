@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OfferInbox from './OfferInbox.svelte';
-import type { Offer } from './offer.js';
+import type { Offer } from '#lib/offer.js';
 
 const openOffer: Offer = {
 	offerId: 'offer-1',

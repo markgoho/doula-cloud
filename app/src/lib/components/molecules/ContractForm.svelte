@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { mergeFieldLabel } from './contract.js';
+	import { mergeFieldLabel } from '#lib/contract.js';
 
 	let {
 		mergeFields,

@@ -13,6 +13,15 @@
 
 	const componentPages = [...atomPages, ...moleculePages, ...organismPages, ...templatePages];
 
+	/*
+	 * `resolve()` is overloaded per route, so handing it a union of every
+	 * component slug stops resolving once the union is large enough -- and
+	 * this list is now over thirty. So resolve the one static parent, which
+	 * is what carries any configured base path, and append the slug.
+	 */
+	const styleGuideRoot = resolve('/style-guide');
+	const componentHref = (slug: string) => `${styleGuideRoot}/${slug}`;
+
 	let { children } = $props();
 
 	/*
@@ -47,7 +56,7 @@
 			<cluster-l space="var(--space-4)">
 				<Link href={resolve('/style-guide')} label="Overview" />
 				{#each componentPages as componentPage (componentPage.slug)}
-					<Link href={resolve(`/style-guide/${componentPage.slug}`)} label={componentPage.name} />
+					<Link href={componentHref(componentPage.slug)} label={componentPage.name} />
 				{/each}
 			</cluster-l>
 		</nav>
