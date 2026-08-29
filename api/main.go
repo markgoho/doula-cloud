@@ -195,7 +195,7 @@ func main() {
 		Now:    time.Now,
 	}
 
-	handler, _ := routes(Deps{
+	handler, _, _ := routes(Deps{
 		Verifier: verifier,
 		DB:       db,
 		Store:    store,

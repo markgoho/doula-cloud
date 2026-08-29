@@ -49,7 +49,7 @@ var muxGetPattern = regexp.MustCompile(`mux\.(?:Handle|HandleFunc)\(\s*"(GET [^"
 // catastrophic failure (a panic taking the whole binary down) and an
 // ordinary failing test should both catch the same mistake.
 func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
-	_, registry := routes(testDeps())
+	_, registry, _ := routes(testDeps())
 	if len(registry) == 0 {
 		t.Fatal("routes() registered zero GETs through GatedRouter -- did routes() stop wiring g.Get calls?")
 	}
@@ -80,7 +80,7 @@ func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
 func TestRoutes_NoGETBypassesTheGate(t *testing.T) {
 	src := packageSource(t)
 
-	_, registry := routes(testDeps())
+	_, registry, _ := routes(testDeps())
 	// One map for both kinds of registry entry: a GET GatedRouter mounted
 	// with a role declaration, and a GET declared exempt by name because
 	// it is mounted outside staffauth.Middleware entirely (ADR-0008's

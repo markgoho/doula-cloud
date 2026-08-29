@@ -157,7 +157,7 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux, _ := routes(testDeps())
+	mux, _, _ := routes(testDeps())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -185,7 +185,7 @@ func TestRoutes_CreateAndEndSession(t *testing.T) {
 	deps := testDeps()
 	deps.Verifier = authntest.Verifier{UID: "uid-1"}
 	deps.DB = db.App
-	mux, _ := routes(deps)
+	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -271,7 +271,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 	db := testdb.New(t)
 	deps := testDeps()
 	deps.DB = db.App
-	mux, _ := routes(deps)
+	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -309,7 +309,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	deps := testDeps()
 	deps.Verifier = authntest.Verifier{UID: identityUID}
 	deps.DB = db.App
-	mux, _ := routes(deps)
+	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -404,7 +404,7 @@ func TestResolveExpectedOrigins(t *testing.T) {
 // reaches the handler -- proven by getting 403 rather than the 401 a
 // missing bearer token would otherwise produce.
 func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
-	mux, _ := routes(testDeps())
+	mux, _, _ := routes(testDeps())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -431,7 +431,7 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 	db := testdb.New(t)
 	deps := testDeps()
 	deps.DB = db.App
-	mux, _ := routes(deps)
+	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -461,7 +461,7 @@ func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
 	deps := testDeps()
 	deps.StripeWebhookSecret = stripeWebhookSecret
-	mux, _ := routes(deps)
+	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
