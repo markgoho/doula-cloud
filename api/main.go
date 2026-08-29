@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -19,45 +18,19 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
-	"doula-cloud/api/internal/client"
-	"doula-cloud/api/internal/clientauth"
-	"doula-cloud/api/internal/clientfieldtemplate"
-	"doula-cloud/api/internal/contracts"
-	"doula-cloud/api/internal/csrf"
-	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/engagementrequest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mail"
-	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/payments"
-	"doula-cloud/api/internal/plans"
-	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
-	"doula-cloud/api/internal/pushsub"
-	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/sitebuild"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
-	"doula-cloud/api/internal/visit"
 	"doula-cloud/api/internal/website"
 )
-
-type helloResponse struct {
-	Message string `json:"message"`
-}
-
-func helloHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(helloResponse{Message: "hello world"}); err != nil {
-		log.Printf("helloHandler: encode response: %v", err)
-	}
-}
 
 func resolvePort() string {
 	if port := os.Getenv("PORT"); port != "" {
@@ -99,321 +72,6 @@ type practiceSessionResponse struct {
 	PracticeID   string   `json:"practiceId"`
 	PracticeName string   `json:"practiceName"`
 	Roles        []string `json:"roles"`
-}
-
-func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
-	tx, _ := staffauth.Tx(r.Context())
-	staffID, _ := staffauth.StaffID(r.Context())
-	practiceID, _ := staffauth.PracticeID(r.Context())
-
-	var name string
-	if err := tx.QueryRowContext(r.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&name); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-
-	roles, err := staffauth.Roles(r.Context(), tx, practiceID, staffID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(practiceSessionResponse{PracticeID: practiceID, PracticeName: name, Roles: roles}); err != nil {
-		log.Printf("practiceSessionHandler: encode response: %v", err)
-	}
-}
-
-// ownerAndAdmin is the role declaration for every GatedRouter route
-// ADR-0008's read table admits to Owner and Admin only (Staff roster,
-// Credit balance and ledger, Contract's money-bearing Signed PDF and
-// Invoice history) -- named once so golangci-lint's package-wide goconst
-// check doesn't see four independent literals to flag.
-var ownerAndAdmin = []string{"owner", "admin"}
-
-// routes builds the BFF's route table. verifier, db, store, pusher,
-// stripeClient, and paymentsClient are threaded through so tests can
-// substitute a fake Identity Platform verifier, a test Postgres instance,
-// an in-memory ObjectStore, an in-memory Pusher, and in-memory billing.StripeClient
-// / payments.Client doubles instead of the real ones main() wires up.
-//
-// The whole mux is wrapped in csrf.Wrap, rather than only the
-// authenticated routes: the bootstrap endpoints (signup, invitation
-// acceptance) are state-changing too, and both they and the two Stripe
-// webhook routes rely on the same "no Origin header, no rejection" rule
-// -- there is no separate carve-out for either.
-//
-// routes' second return value is GatedRouter's registry of every GET it
-// mounted -- main() never looks at it, but the guardrail tests in
-// main_test.go walk it (and cross-check it against this function's own
-// source for a route that bypassed the gate entirely) without needing a
-// live server.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, staffInviteOutboxWorker staffinvite.Worker, offerOutboxWorker offer.Worker, engagementRequestOutboxWorker engagementrequest.Worker, siteBuildWorker sitebuild.Worker, pageVerifier sitebuild.Verifier, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
-	mux := http.NewServeMux()
-	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
-	// staffauth.Middleware: Get panics at startup if a route has no role
-	// declaration, so a forgotten one fails the binary rather than
-	// silently opening to every Staff member (#231, #315). AnyStaff
-	// declares an endpoint open to every role on purpose; a bare role
-	// list names exactly who ADR-0008's read table admits.
-	g := staffauth.NewGatedRouter(mux, db)
-	// Under /api like every other route: Firebase Hosting rewrites /api/** to
-	// this service with the path unchanged, so a bare /hello would be
-	// unreachable from the browser. CI's two smoke tests curl this same path
-	// against the container and against the raw Cloud Run URL.
-	mux.HandleFunc("GET /api/hello", helloHandler)
-	mux.Handle("POST /api/session", session.CreateHandler(verifier, db, nudgeEnqueuer))
-	mux.Handle("DELETE /api/session", session.EndHandler(db))
-	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
-	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(db))
-	// Where she works is a fact about the person, not about a Membership
-	// (00043), so its write sits beside the session probe rather than
-	// under a Practice -- no {practiceId} in the path, and no staff id
-	// either, which is what makes it self-edit-only by shape (#437).
-	mux.Handle("PUT /api/staff/work-state", staffauth.UpdateWorkStateHandler(db))
-	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, http.HandlerFunc(practiceSessionHandler))
-	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))
-	// Roles and employment type are edited together on one surface
-	// (RA-G2, #261) -- ADR-0008 makes them the two halves of what a
-	// person is at a Practice, so there is one endpoint, not two.
-	mux.Handle("PATCH /api/practices/{practiceId}/staff/{staffId}/membership",
-		staffauth.Middleware(db)(staffauth.UpdateMembershipHandler()))
-	// The route #291 found missing: without it a roster row nobody wants
-	// can never be taken off.
-	mux.Handle("DELETE /api/practices/{practiceId}/staff/{staffId}/membership",
-		staffauth.Middleware(db)(staffauth.RemoveMembershipHandler()))
-	mux.Handle("POST /api/practices/{practiceId}/staff/invitations",
-		staffauth.Middleware(db)(idempotency.Wrap(staffauth.InviteHandler(nudgeEnqueuer))))
-	mux.Handle("POST /api/practices/{practiceId}/staff/invitations/{invitationId}/revoke",
-		staffauth.Middleware(db)(staffauth.RevokeInvitationHandler()))
-	// Staff roster -- members and pending invitations both: Owner and
-	// Admin only (ADR-0008's read table) -- a Doula has no reason to see
-	// the full roster.
-	g.Get("/api/practices/{practiceId}/staff", ownerAndAdmin, staffauth.ListStaffHandler())
-	mux.Handle("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
-		staffauth.Middleware(db)(staffauth.EndSessionsHandler(nudgeEnqueuer)))
-	// Credit balance and ledger: Owner and Admin only (ADR-0008).
-	g.Get("/api/practices/{practiceId}/billing", ownerAndAdmin, billing.GetBalanceHandler())
-	mux.Handle("POST /api/practices/{practiceId}/billing/purchases",
-		staffauth.Middleware(db)(billing.PostPurchaseHandler(stripeClient)))
-	mux.Handle("POST /api/stripe/webhook", billing.PostPurchaseWebhookHandler(db, stripeWebhookSecret))
-	mux.Handle("POST /api/practices/{practiceId}/payments/connect",
-		staffauth.Middleware(db)(payments.PostConnectHandler(paymentsClient)))
-	// ADR-0008's read table has no row for Stripe Connect state; mirroring
-	// the write side's Owner-only gate (PostConnectHandler,
-	// staffauth.RequireOwner) is the narrowest defensible default until a
-	// real rule lands (#267 stays open for that rule).
-	g.Get("/api/practices/{practiceId}/payments/connect", []string{"owner"}, payments.GetConnectStatusHandler(paymentsClient))
-	// The website a Practice declares to Stripe (#440). Read by every
-	// Staff member, because the payments screen has to tell a Doula who
-	// opens it what is outstanding rather than show her an empty panel,
-	// and nothing here is secret -- the whole point of the answer is that
-	// it is published. Written by an Owner alone (website.PutHandler).
-	g.Get("/api/practices/{practiceId}/website", staffauth.AnyStaff, website.GetHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/website",
-		staffauth.Middleware(db)(website.PutHandler(nudgeEnqueuer)))
-	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret, nudgeEnqueuer))
-	// A second Connect route, not a second feature: Stripe's v2 account
-	// events are thin and a destination carries one payload type, so they
-	// cannot share connect-webhook's endpoint or its secret (#247).
-	mux.Handle("POST /api/stripe/account-webhook", payments.PostAccountWebhookHandler(db, paymentsClient, paymentsAccountWebhookSecret, nudgeEnqueuer))
-	// Engagements, Visits, Messages, Plan Instances, and Contract scope
-	// are open to every Staff role at the mount; the employee/contractor
-	// split ADR-0008's read table draws inside that column is
-	// attachment-narrowing the handler itself enforces via
-	// staffauth.Reader.CanAccessEngagement, not a role declaration.
-	// The Client write surface (#397): search, lookup-before-insert
-	// create, the detail read, and edit. Saving or editing a Client is
-	// free and creates no Engagement -- that split off into a separate
-	// Engagement Request, built elsewhere. Role gating beyond "any Staff
-	// member" (the contractor create/search refusal, the attached-Clients
-	// narrowing on edit/detail) is enforced inside each handler via
-	// staffauth.Reader, the same pattern engagement.DetailHandler already
-	// uses for CanAccessEngagement.
-	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, client.ListHandler())
-	g.Get("/api/practices/{practiceId}/clients/search", staffauth.AnyStaff, client.SearchHandler())
-	mux.Handle("POST /api/practices/{practiceId}/clients",
-		staffauth.Middleware(db)(idempotency.Wrap(client.CreateHandler())))
-	g.Get("/api/practices/{practiceId}/clients/{clientId}", staffauth.AnyStaff, client.DetailHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/clients/{clientId}",
-		staffauth.Middleware(db)(client.EditHandler()))
-	// ADR-0017's Engagement Request (#398): the ask for paid work with a
-	// Client, and the act that creates an Engagement. Request is any
-	// Staff member but a contractor Doula (enforced here and,
-	// independently, by engagement_requests_insert's RLS policy);
-	// approve/refuse are Owner/Admin; withdraw is the requester alone,
-	// so it carries no role declaration.
-	mux.Handle("POST /api/practices/{practiceId}/clients/{clientId}/engagement-requests",
-		staffauth.Middleware(db)(idempotency.Wrap(engagementrequest.RequestHandler(db, nudgeEnqueuer))))
-	mux.Handle("POST /api/practices/{practiceId}/engagement-requests/{requestId}/approve",
-		staffauth.Middleware(db)(engagementrequest.ApproveHandler(db, nudgeEnqueuer)))
-	mux.Handle("POST /api/practices/{practiceId}/engagement-requests/{requestId}/refuse",
-		staffauth.Middleware(db)(engagementrequest.RefuseHandler()))
-	mux.Handle("POST /api/practices/{practiceId}/engagement-requests/{requestId}/withdraw",
-		staffauth.Middleware(db)(engagementrequest.WithdrawHandler()))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
-	// Completing an Engagement runs ADR-0008's cascade -- open Offers
-	// withdrawn, open attachments ended -- so it is one endpoint, not a
-	// generic status PATCH a caller could half-apply.
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/complete",
-		staffauth.Middleware(db)(engagement.CompleteHandler()))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, visit.ListHandler())
-	// staffauth.AttachingWrite is ADR-0008's write-side seam: every
-	// Engagement-scoped write below attaches the acting Doula, accrued,
-	// once it has succeeded. It is applied here rather than inside each
-	// handler so a new Engagement write cannot quietly fall off the list
-	// -- #231's whole argument against a second hand-maintained registry.
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(visit.CreateHandler())))
-	mux.Handle("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(visit.ReassignHandler())))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages", staffauth.AnyStaff, message.ListHandler())
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(idempotency.Wrap(message.CreateHandler(store, pusher)))))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment", staffauth.AnyStaff, message.AttachmentHandler(store))
-	// Plan Template and Contract Template: every Staff role (ADR-0008),
-	// no attachment narrowing -- a Template isn't Engagement-scoped.
-	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, plans.GetTemplateHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(db)(plans.PutTemplateHandler()))
-	// ADR-0017's Client Field Template settings screen (#399): the field
-	// list an Owner or Admin defines for a Client's Practice-defined
-	// layer. Sibling of Plan Templates above -- read by any Staff member
-	// (the definitions carry nothing secret), written by an Owner or
-	// Admin alone (client_field_templates_insert/_update, 00050, enforce
-	// the same rule in RLS).
-	g.Get("/api/practices/{practiceId}/client-field-template", staffauth.AnyStaff, clientfieldtemplate.GetHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/client-field-template",
-		staffauth.Middleware(db)(clientfieldtemplate.PutHandler()))
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(plans.PostInstanceHandler())))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}", staffauth.AnyStaff, plans.GetInstanceHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(plans.PutInstanceHandler())))
-	g.Get("/api/practices/{practiceId}/contract-template", staffauth.AnyStaff, contracts.GetTemplateHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/contract-template",
-		staffauth.Middleware(db)(contracts.PutTemplateHandler()))
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PostContractHandler())))
-	// Contract read is the sharpest #231 case: scope reaches every role
-	// (narrowed by attachment for a contractor, same as above), but money
-	// -- and Invoice history -- is Owner/Admin only, never a Doula's,
-	// employee or contractor (ADR-0008: "her own agreed fee only ...
-	// never the Practice's price"). GetContractHandler does the
-	// scope-vs-money split itself via staffauth.Reader +
-	// contracts.ContractScope/ContractFull; the mount stays AnyStaff so
-	// scope-only Doulas still reach it.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract", staffauth.AnyStaff, contracts.GetContractHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PutContractHandler())))
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PostSendContractHandler(pusher))))
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
-		staffauth.Middleware(db)(staffauth.AttachingWrite(contracts.PostVoidContractHandler())))
-	// The Signed PDF is a rendered, unredactable document -- it can't be
-	// split into scope/money views the way the JSON Contract read can, so
-	// it follows the money row: Owner/Admin only.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/pdf", ownerAndAdmin, contracts.GetSignedContractPDFHandler(store))
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices",
-		staffauth.Middleware(db)(payments.PostInvoiceHandler(paymentsClient)))
-	// Invoice history rides the same money row as Contract money -- see
-	// above. A contractor's own-fee narrowing (rather than an outright
-	// no) is #317's to build once the Offer/Attachment flow exists.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", ownerAndAdmin, payments.GetInvoicesHandler())
-	// ADR-0008's Offer flow (#317). The Practice side is Owner/Admin --
-	// making an Offer, taking it back, and reading who has been asked,
-	// which names people and so follows the Staff-roster row of the read
-	// table. The Doula side is her own inbox and her own decisions, so it
-	// is scoped to her staff_id in SQL rather than by a role declaration.
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/offers",
-		staffauth.Middleware(db)(idempotency.Wrap(offer.CreateHandler(nudgeEnqueuer))))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/offers", ownerAndAdmin, offer.EngagementListHandler())
-	g.Get("/api/practices/{practiceId}/offers", staffauth.AnyStaff, offer.InboxHandler())
-	mux.Handle("POST /api/practices/{practiceId}/offers/{offerId}/accept",
-		staffauth.Middleware(db)(offer.AcceptHandler()))
-	mux.Handle("POST /api/practices/{practiceId}/offers/{offerId}/decline",
-		staffauth.Middleware(db)(offer.DeclineHandler()))
-	mux.Handle("POST /api/practices/{practiceId}/offers/{offerId}/withdraw",
-		staffauth.Middleware(db)(offer.WithdrawHandler()))
-	// #230's pre-account Offer read: no session of either population, so
-	// it is mounted on the raw mux and authenticated by the Invitation's
-	// token plus the emailed six-digit code. ADR-0008 requires the
-	// exemption declared by name in GatedRouter's own registry, in the
-	// same change that mounts the route -- g.Exempt is that declaration,
-	// and the guardrail test walks it.
-	g.Exempt("/api/offers/{offerId}", "pre-account Offer read (ADR-0008, #230): no session exists yet -- authenticated by the Invitation token and the emailed access code")
-	mux.Handle("GET /api/offers/{offerId}", offer.ReadHandler(db))
-	mux.Handle("POST /api/offers/{offerId}/decline", offer.DeclineByTokenHandler(db))
-	mux.Handle("POST /api/practices/{practiceId}/push-subscriptions",
-		staffauth.Middleware(db)(pushsub.RegisterHandler()))
-	mux.Handle("DELETE /api/practices/{practiceId}/push-subscriptions",
-		staffauth.Middleware(db)(pushsub.UnregisterHandler()))
-	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(db)(idempotency.Wrap(portalinvite.InviteHandler(nudgeEnqueuer))))
-	mux.Handle("POST /api/portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db))
-	// Cloud-Scheduler-triggered, not Staff/Client facing (ADR-0010):
-	// authenticated by outboxWorkerSecret, not a session, so it sits
-	// outside staffauth.Middleware/GatedRouter like the Stripe webhooks
-	// above.
-	mux.Handle("POST /api/internal/notifications/process-outbox", portalinvite.ProcessOutboxHandler(db, outboxWorker, outboxWorkerSecret))
-	// #340/ADR-0010: Mailgun's bounce/complaint delivery-event webhook,
-	// same no-staffauth shape as the Stripe webhooks above -- signature
-	// verified instead of a session.
-	mux.Handle("POST /api/mailgun/webhook", portalinvite.PostBounceWebhookHandler(db, mailgunWebhookSigningKey))
-	// Same X-Internal-Secret guard, same Cloud Scheduler cadence, a
-	// separate endpoint because the two workers process unrelated
-	// outbox tables (ADR-0010, #342).
-	mux.Handle("POST /api/internal/notifications/process-low-credit-outbox", billing.ProcessOutboxHandler(db, lowCreditOutboxWorker, outboxWorkerSecret))
-	// Same shape again for #343's payout-incomplete outbox.
-	mux.Handle("POST /api/internal/notifications/process-payout-outbox", payments.ProcessOutboxHandler(db, payoutOutboxWorker, outboxWorkerSecret))
-	// Same shape again for #344's payment-received outbox.
-	mux.Handle("POST /api/internal/notifications/process-payment-outbox", payments.ProcessPaymentOutboxHandler(db, paymentOutboxWorker, outboxWorkerSecret))
-	// Same shape again for #345's session-notice outbox (new sign-in,
-	// session revoked).
-	mux.Handle("POST /api/internal/notifications/process-session-notice-outbox", sessionnotice.ProcessOutboxHandler(db, sessionNoticeOutboxWorker, outboxWorkerSecret))
-	// Same shape again for #339's Staff invitation outbox (RA-G1), whose
-	// write site is staffauth.InviteHandler above (#316).
-	mux.Handle("POST /api/internal/notifications/process-staff-invite-outbox", staffinvite.ProcessOutboxHandler(db, staffInviteOutboxWorker, outboxWorkerSecret))
-	// Same shape again for #317's Offer outbox, whose write site is
-	// offer.CreateHandler's email-target path above.
-	mux.Handle("POST /api/internal/notifications/process-offer-outbox", offer.ProcessOutboxHandler(db, offerOutboxWorker, outboxWorkerSecret))
-	// Same shape again for #398's Engagement Request outbox, whose write
-	// site is engagementrequest.RequestHandler above.
-	mux.Handle("POST /api/internal/notifications/process-engagement-request-outbox", engagementrequest.ProcessOutboxHandler(db, engagementRequestOutboxWorker, outboxWorkerSecret))
-	// #443's two site endpoints, on the same X-Internal-Secret shape and
-	// under /api/internal/site rather than /notifications, because
-	// neither of them notifies anybody. process-build-outbox turns
-	// queued rebuilds into one repository_dispatch; verify-pages probes
-	// every published page and records whether it resolved. Both are
-	// called by Cloud Scheduler on a cadence, and verify-pages is also
-	// the last step of the deploy workflow itself.
-	mux.Handle("POST /api/internal/site/process-build-outbox", sitebuild.ProcessOutboxHandler(db, siteBuildWorker, outboxWorkerSecret))
-	mux.Handle("POST /api/internal/site/verify-pages", sitebuild.VerifyHandler(db, pageVerifier, outboxWorkerSecret))
-	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
-	mux.Handle("GET /api/portal/engagements/{engagementId}",
-		clientauth.Middleware(db)(portal.DetailHandler()))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/birth-plan",
-		clientauth.Middleware(db)(plans.ClientGetBirthPlanHandler()))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/contract",
-		clientauth.Middleware(db)(contracts.ClientGetContractHandler()))
-	mux.Handle("POST /api/portal/engagements/{engagementId}/contract/sign",
-		clientauth.Middleware(db)(contracts.ClientPostSignContractHandler(store)))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/contract/pdf",
-		clientauth.Middleware(db)(contracts.ClientGetSignedContractPDFHandler(store)))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(db)(message.ClientListHandler()))
-	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(db)(message.ClientCreateHandler(store, pusher)))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/messages/{messageId}/attachment",
-		clientauth.Middleware(db)(message.ClientAttachmentHandler(store)))
-	mux.Handle("POST /api/portal/engagements/{engagementId}/push-subscriptions",
-		clientauth.Middleware(db)(pushsub.ClientRegisterHandler()))
-	mux.Handle("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
-		clientauth.Middleware(db)(pushsub.ClientUnregisterHandler()))
-	return csrf.Wrap(expectedOrigins, mux), g.Routes()
 }
 
 func main() {
@@ -574,7 +232,36 @@ func main() {
 		Now:    time.Now,
 	}
 
-	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, staffInviteOutboxWorker, offerOutboxWorker, engagementRequestOutboxWorker, siteBuildWorker, pageVerifier, nudgeEnqueuer, resolveExpectedOrigins())
+	handler, _ := routes(Deps{
+		Verifier: verifier,
+		DB:       db,
+		Store:    store,
+		Pusher:   pusher,
+
+		StripeClient:        stripeClient,
+		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
+
+		PaymentsClient:               paymentsClient,
+		PaymentsWebhookSecret:        os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"),
+		PaymentsAccountWebhookSecret: os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"),
+
+		MailgunWebhookSigningKey: os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"),
+		WorkerSecret:             os.Getenv("NOTIFICATION_WORKER_SECRET"),
+
+		PortalInviteWorker:      outboxWorker,
+		LowCreditWorker:         lowCreditOutboxWorker,
+		PayoutWorker:            payoutOutboxWorker,
+		PaymentReceivedWorker:   paymentOutboxWorker,
+		SessionNoticeWorker:     sessionNoticeOutboxWorker,
+		StaffInviteWorker:       staffInviteOutboxWorker,
+		OfferWorker:             offerOutboxWorker,
+		EngagementRequestWorker: engagementRequestOutboxWorker,
+		SiteBuildWorker:         siteBuildWorker,
+		PageVerifier:            pageVerifier,
+
+		NudgeEnqueuer:   nudgeEnqueuer,
+		ExpectedOrigins: resolveExpectedOrigins(),
+	})
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

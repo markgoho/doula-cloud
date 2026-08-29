@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -31,9 +30,9 @@ var exemptEngagementWriteRoutes = map[string]string{
 }
 
 // muxHandleEngagementWrite finds the start of every mux.Handle
-// registration in main.go's own source for a mutating verb whose route
-// pattern carries {engagementId} -- routes() function's own text, not a
-// running server, mirroring muxGetPattern's approach above.
+// registration in this package's own source for a mutating verb whose
+// route pattern carries {engagementId} -- the route files' own text, not
+// a running server, mirroring muxGetPattern's approach above.
 var muxHandleEngagementWrite = regexp.MustCompile(`mux\.Handle\(\s*"(POST|PUT|PATCH|DELETE) ([^"]*\{engagementId\}[^"]*)"`)
 
 // balancedParenStatement returns the text of the parenthesized call
@@ -68,15 +67,11 @@ func balancedParenStatement(text string, openFrom int) string {
 // closes the hole a future Engagement-scoped write could otherwise fall
 // into by never being wrapped at all.
 func TestRoutes_NoEngagementWriteBypassesTheAttachingWriteGate(t *testing.T) {
-	src, err := os.ReadFile("main.go")
-	if err != nil {
-		t.Fatalf("read main.go: %v", err)
-	}
-	text := string(src)
+	text := packageSource(t)
 
 	matches := muxHandleEngagementWrite.FindAllStringSubmatchIndex(text, -1)
 	if len(matches) == 0 {
-		t.Fatal("found zero mutating {engagementId} mux registrations in main.go -- did the regex stop matching the source?")
+		t.Fatal("found zero mutating {engagementId} mux registrations in this package -- did the regex stop matching the source?")
 	}
 	for _, m := range matches {
 		pattern := text[m[2]:m[3]] + " " + text[m[4]:m[5]]

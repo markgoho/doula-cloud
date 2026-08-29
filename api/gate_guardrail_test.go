@@ -3,14 +3,8 @@ package main
 import (
 	"os"
 	"regexp"
+	"strings"
 	"testing"
-
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/billing"
-	"doula-cloud/api/internal/objectstore"
-	"doula-cloud/api/internal/payments"
-	"doula-cloud/api/internal/push"
-	"doula-cloud/api/internal/sitebuild"
 )
 
 // exemptGETRoutes are the GET routes routes() registers directly on the
@@ -42,9 +36,9 @@ var exemptGETRoutes = map[string]bool{
 }
 
 // muxGetPattern finds every GET route registered directly on the raw mux
-// (mux.Handle or mux.HandleFunc) in main.go's source -- the routes()
-// function's own text, not a running server, since Go's http.ServeMux
-// has no public API to enumerate its registered patterns.
+// (mux.Handle or mux.HandleFunc) in this package's own source, not on a
+// running server: Go's http.ServeMux has no public API to enumerate its
+// registered patterns.
 var muxGetPattern = regexp.MustCompile(`mux\.(?:Handle|HandleFunc)\(\s*"(GET [^"]+)"`)
 
 // TestRoutes_EveryDeclaredGETHasRoleDeclaration is the rlsguardrail-shaped
@@ -55,7 +49,7 @@ var muxGetPattern = regexp.MustCompile(`mux\.(?:Handle|HandleFunc)\(\s*"(GET [^"
 // catastrophic failure (a panic taking the whole binary down) and an
 // ordinary failing test should both catch the same mistake.
 func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
-	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
+	_, registry := routes(testDeps())
 	if len(registry) == 0 {
 		t.Fatal("routes() registered zero GETs through GatedRouter -- did routes() stop wiring g.Get calls?")
 	}
@@ -80,16 +74,13 @@ func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
 // GatedRouter's startup panic only fires for a route someone actually
 // declares through it. Nothing stops a future change from registering a
 // GET straight on mux, skipping the gate (and the panic) entirely. This
-// test closes that hole by scanning main.go's own source for every direct
-// mux GET registration and failing if one isn't accounted for by either
-// the GatedRouter registry or exemptGETRoutes above.
+// test closes that hole by scanning this package's own source for every
+// direct mux GET registration and failing if one isn't accounted for by
+// either the GatedRouter registry or exemptGETRoutes above.
 func TestRoutes_NoGETBypassesTheGate(t *testing.T) {
-	src, err := os.ReadFile("main.go")
-	if err != nil {
-		t.Fatalf("read main.go: %v", err)
-	}
+	src := packageSource(t)
 
-	_, registry := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
+	_, registry := routes(testDeps())
 	// One map for both kinds of registry entry: a GET GatedRouter mounted
 	// with a role declaration, and a GET declared exempt by name because
 	// it is mounted outside staffauth.Middleware entirely (ADR-0008's
@@ -100,9 +91,9 @@ func TestRoutes_NoGETBypassesTheGate(t *testing.T) {
 		gated["GET "+route.Pattern] = true
 	}
 
-	matches := muxGetPattern.FindAllStringSubmatch(string(src), -1)
+	matches := muxGetPattern.FindAllStringSubmatch(src, -1)
 	if len(matches) == 0 {
-		t.Fatal("found zero direct mux GET registrations in main.go -- did the regex stop matching the source?")
+		t.Fatal("found zero direct mux GET registrations in this package -- did the regex stop matching the source?")
 	}
 	for _, match := range matches {
 		pattern := match[1]
@@ -111,4 +102,37 @@ func TestRoutes_NoGETBypassesTheGate(t *testing.T) {
 		}
 		t.Errorf("route %q is registered directly on mux, bypassing GatedRouter and undeclared in exemptGETRoutes -- mount it through g.Get with a role declaration, or add it to exemptGETRoutes with a reason", pattern)
 	}
+}
+
+// packageSource is every non-test .go file in this package, concatenated.
+//
+// Read by directory rather than from a list of filenames, and that is the
+// point of it: #482 split the route table into one file per area, and a
+// hardcoded list would mean the next area added is a set of routes this
+// guardrail quietly stops looking at. A file that appears beside these is
+// scanned because it is there.
+func packageSource(t *testing.T) string {
+	t.Helper()
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		// coverage:ignore reason: the package's own directory is always readable while its tests run
+		t.Fatalf("read package directory: %v", err)
+	}
+	var all strings.Builder
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		// #nosec G304 -- name comes from ReadDir on this package's own
+		// directory, not from anything a caller supplies
+		src, err := os.ReadFile(name)
+		if err != nil {
+			// coverage:ignore reason: a file ReadDir listed a moment ago
+			t.Fatalf("read %s: %v", name, err)
+		}
+		all.Write(src)
+		all.WriteString("\n")
+	}
+	return all.String()
 }
