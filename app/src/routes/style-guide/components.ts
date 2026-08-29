@@ -26,6 +26,7 @@ export const moleculePages = [
 ] as const;
 
 export const organismPages = [
+	{ name: 'Client field template editor', slug: 'client-field-template-editor' },
 	{ name: 'Contract template editor', slug: 'contract-template-editor' },
 	{ name: 'Data table', slug: 'data-table' },
 	{ name: 'Dynamic field editor', slug: 'dynamic-field-editor' },
