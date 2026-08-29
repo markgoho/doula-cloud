@@ -123,6 +123,21 @@
 				label="Payments"
 				variant="secondary"
 			/>
+			<!--
+				Outside the Owner gate above, like Payments and for the same
+				reason: the answer is readable by every Staff member (#440), and
+				a Doula who wonders why Clients cannot pay yet should be able to
+				see whether a website has been declared rather than being told
+				to ask. Only an Owner can change it, which the screen says and
+				the endpoint enforces.
+			-->
+			<Link
+				href={resolve('/practices/[practiceId]/settings/website', {
+					practiceId: page.params.practiceId
+				})}
+				label="Website"
+				variant="secondary"
+			/>
 		</nav>
 	{/if}
 	<div class="account">

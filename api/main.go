@@ -41,6 +41,7 @@ import (
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/visit"
+	"doula-cloud/api/internal/website"
 )
 
 type helloResponse struct {
@@ -203,6 +204,14 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// staffauth.RequireOwner) is the narrowest defensible default until a
 	// real rule lands (#267 stays open for that rule).
 	g.Get("/api/practices/{practiceId}/payments/connect", []string{"owner"}, payments.GetConnectStatusHandler(paymentsClient))
+	// The website a Practice declares to Stripe (#440). Read by every
+	// Staff member, because the payments screen has to tell a Doula who
+	// opens it what is outstanding rather than show her an empty panel,
+	// and nothing here is secret -- the whole point of the answer is that
+	// it is published. Written by an Owner alone (website.PutHandler).
+	g.Get("/api/practices/{practiceId}/website", staffauth.AnyStaff, website.GetHandler())
+	mux.Handle("PUT /api/practices/{practiceId}/website",
+		staffauth.Middleware(db)(website.PutHandler()))
 	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret, nudgeEnqueuer))
 	// A second Connect route, not a second feature: Stripe's v2 account
 	// events are thin and a destination carries one payload type, so they

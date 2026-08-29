@@ -12,7 +12,8 @@
 		disabled = false,
 		invalid = false,
 		describedBy,
-		minlength
+		minlength,
+		inputmode
 	}: {
 		id?: string;
 		value: string;
@@ -25,6 +26,15 @@
 		invalid?: boolean;
 		describedBy?: string;
 		minlength?: number;
+		/*
+		 * The on-screen keyboard a phone offers. Separate from `type`
+		 * because the two do different jobs: `type` decides what the browser
+		 * will refuse to submit, and a field that deliberately accepts what
+		 * type="url" refuses -- "facebook.com/your-practice", which the
+		 * server normalizes rather than rejects (#440) -- still wants the URL
+		 * keyboard.
+		 */
+		inputmode?: 'text' | 'url' | 'email' | 'tel' | 'numeric' | 'decimal' | 'search';
 	} = $props();
 </script>
 
@@ -37,6 +47,7 @@
 	{required}
 	{disabled}
 	{minlength}
+	{inputmode}
 	class:invalid
 	aria-invalid={invalid}
 	aria-describedby={describedBy}

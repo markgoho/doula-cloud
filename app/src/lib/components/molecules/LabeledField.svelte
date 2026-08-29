@@ -12,6 +12,14 @@
 	interface Properties {
 		id?: string;
 		label: string;
+		/*
+		 * What the field is for, in the reader's words -- GOV.UK's hint
+		 * text. It sits between the label and the control and is joined to
+		 * the control by aria-describedby, so a screen reader announces the
+		 * question and then the help rather than leaving the help
+		 * unreachable beside it.
+		 */
+		hint?: string;
 		error?: string;
 		orientation?: 'stacked' | 'inline';
 		children: Snippet<[ControlProperties]>;
@@ -19,11 +27,20 @@
 
 	const generatedId = $props.id();
 
-	let { id = generatedId, label, error, orientation = 'stacked', children }: Properties = $props();
+	let { id = generatedId, label, hint, error, orientation = 'stacked', children }: Properties = $props();
 
 	const errorId = $derived(`${id}-error`);
+	const hintId = $derived(`${id}-hint`);
 	const isInvalid = $derived(Boolean(error));
-	const describedBy = $derived(error ? errorId : undefined);
+	/*
+	 * The hint first, then the error: both are announced, and the order is
+	 * the order they are read on screen. A space-separated list is what
+	 * aria-describedby takes, and undefined rather than an empty string
+	 * when there is neither, so the attribute is absent instead of blank.
+	 */
+	const describedBy = $derived(
+		[hint ? hintId : undefined, error ? errorId : undefined].filter(Boolean).join(' ') || undefined
+	);
 </script>
 
 {#snippet control()}
@@ -34,6 +51,12 @@
 	<label for={id}>{label}</label>
 {/snippet}
 
+{#snippet fieldHint()}
+	{#if hint}
+		<p id={hintId} class="hint">{hint}</p>
+	{/if}
+{/snippet}
+
 <stack-l space="var(--space-1)">
 	{#if orientation === 'inline'}
 		<cluster-l>
@@ -42,6 +65,7 @@
 		</cluster-l>
 	{:else}
 		{@render fieldLabel()}
+		{@render fieldHint()}
 		{@render control()}
 	{/if}
 	{#if error}
@@ -63,6 +87,16 @@
 			display: block;
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
+		}
+
+		/*
+		 * Quieter than the label it follows and than the control it
+		 * describes -- it is help, not the question.
+		 */
+		.hint {
+			margin: 0;
+			color: var(--color-on-surface-muted);
+			font-size: var(--text-body-sm-size);
 		}
 
 		p[role='alert'] {
