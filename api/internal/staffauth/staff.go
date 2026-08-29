@@ -18,6 +18,15 @@ type StaffSummary struct {
 	Email          string   `json:"email"`
 	Roles          []string `json:"roles"`
 	EmploymentType string   `json:"employmentType"`
+	// WorkState is the US state this person works from (#415), and
+	// WorkStateReportedAt is when she last asserted it. Both are on the
+	// roster because only she may write the value, so an Owner reading
+	// "New York -- self-reported 28 Aug 2026" has the whole answer to
+	// "how did this get set?" -- including for a contractor who recorded
+	// it at another Practice before this one existed. The date is also
+	// the only staleness signal there is: nothing prompts a re-assertion.
+	WorkState           string    `json:"workState"`
+	WorkStateReportedAt time.Time `json:"workStateReportedAt"`
 }
 
 // InvitationSummary is one pending Invitation: an address that has been
@@ -91,7 +100,8 @@ func ListStaffHandler() http.Handler {
 
 func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSummary, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT s.id, s.name, s.email, array_to_string(pm.roles, ','), pm.employment_type::text
+		`SELECT s.id, s.name, s.email, array_to_string(pm.roles, ','), pm.employment_type::text,
+		        s.work_state, s.work_state_reported_at
 		 FROM staff s
 		 JOIN practice_memberships pm ON pm.staff_id = s.id
 		 WHERE pm.practice_id = $1
@@ -108,7 +118,7 @@ func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSum
 	for rows.Next() {
 		var s StaffSummary
 		var roles string
-		if err := rows.Scan(&s.StaffID, &s.Name, &s.Email, &roles, &s.EmploymentType); err != nil {
+		if err := rows.Scan(&s.StaffID, &s.Name, &s.Email, &roles, &s.EmploymentType, &s.WorkState, &s.WorkStateReportedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("staffauth: scan member: %w", err)
 		}

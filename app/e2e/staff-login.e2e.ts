@@ -28,7 +28,7 @@ test('Staff login lands on their practice-scoped URL', async ({ page, request })
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', staffEmail: email }
+		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', staffEmail: email , workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);

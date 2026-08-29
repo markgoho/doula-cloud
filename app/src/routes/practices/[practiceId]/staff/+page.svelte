@@ -9,6 +9,7 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
+	import { WORK_STATES } from '#lib/workStates.js';
 
 	type StaffSummary = {
 		staffId: string;
@@ -16,6 +17,8 @@
 		email: string;
 		roles: string[];
 		employmentType: 'employee' | 'contractor';
+		workState: string;
+		workStateReportedAt: string;
 	};
 
 	type InvitationSummary = {
@@ -53,6 +56,18 @@
 	let removingStaffId = $state('');
 	let removeError = $state<Record<string, string>>({});
 
+	function workStateName(code: string): string {
+		return WORK_STATES.find((s) => s.code === code)?.name ?? code;
+	}
+
+	function reportedOn(timestamp: string): string {
+		return new Date(timestamp).toLocaleDateString(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+
 	const memberColumns = [
 		{ label: 'Name', accessor: (member: StaffSummary) => member.name },
 		{ label: 'Email', accessor: (member: StaffSummary) => member.email },
@@ -60,7 +75,17 @@
 			label: 'Roles',
 			accessor: (member: StaffSummary) => member.roles.join(', ') || 'no roles yet'
 		},
-		{ label: 'Employment type', accessor: (member: StaffSummary) => member.employmentType }
+		{ label: 'Employment type', accessor: (member: StaffSummary) => member.employmentType },
+		// Only the person herself may set this, so "self-reported" is
+		// always the true provenance -- and the date is the only staleness
+		// signal there is, since nothing prompts a re-assertion (#415). A
+		// contractor who recorded it at another Practice shows up here with
+		// a date older than her membership, which is the point.
+		{
+			label: 'Works from',
+			accessor: (member: StaffSummary) =>
+				`${workStateName(member.workState)} -- self-reported ${reportedOn(member.workStateReportedAt)}`
+		}
 	];
 
 	const invitationColumns = [
@@ -277,6 +302,9 @@
 	     single-list shape unable to tell that apart from a member holding
 	     no roles. -->
 	<Heading level={2} text="Members" />
+	<Text
+		text="Work states are self-reported by each person and are not verified. They set how much sales tax your practice pays on credits."
+	/>
 	{#if members.length === 0}
 		<Text text="No Staff yet." />
 	{:else}

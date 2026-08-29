@@ -82,7 +82,7 @@ func TestSignupHandler_MissingToken(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "", staffauth.SignupRequest{PracticeName: "P", StaffName: "S", StaffEmail: testStaffEmail})
+	resp := postSignup(t, srv, "", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", StaffName: "S", StaffEmail: testStaffEmail})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -98,7 +98,7 @@ func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "bad-token", staffauth.SignupRequest{PracticeName: "P", StaffName: "S", StaffEmail: testStaffEmail})
+	resp := postSignup(t, srv, "bad-token", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", StaffName: "S", StaffEmail: testStaffEmail})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -136,7 +136,7 @@ func TestSignupHandler_MissingFields(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "", StaffName: "S", StaffEmail: testStaffEmail})
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "", StaffName: "S", StaffEmail: testStaffEmail})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -149,7 +149,7 @@ func TestSignupHandler_Success(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Solo Doula Co",
 		StaffName:    jamieOwnerName,
 		StaffEmail:   jamieEmail,
@@ -212,7 +212,7 @@ func TestSignupHandler_SessionStoreFailure(t *testing.T) {
 		t.Fatalf("drop sessions: %v", err)
 	}
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: practiceName,
 		StaffName:    jamieOwnerName,
 		StaffEmail:   jamieEmail,
@@ -242,14 +242,14 @@ func TestSignupHandler_DuplicateSignup(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "repeat-owner"}, db)
 	defer srv.Close()
 
-	body := staffauth.SignupRequest{PracticeName: "First Practice", StaffName: jamieName, StaffEmail: jamieEmail}
+	body := staffauth.SignupRequest{WorkState: "NY", PracticeName: "First Practice", StaffName: jamieName, StaffEmail: jamieEmail}
 	first := postSignup(t, srv, "tok", body)
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first signup status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 
-	second := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "Second Practice", StaffName: jamieName, StaffEmail: jamieEmail})
+	second := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "Second Practice", StaffName: jamieName, StaffEmail: jamieEmail})
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second signup status = %d, want %d", second.StatusCode, http.StatusConflict)
@@ -264,7 +264,7 @@ func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "bonus-owner"}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Bonus Practice",
 		StaffName:    jamieOwnerName,
 		StaffEmail:   jamieEmail,
@@ -300,7 +300,7 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "seed-owner"}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Seeded Practice",
 		StaffName:    jamieOwnerName,
 		StaffEmail:   jamieEmail,
@@ -357,7 +357,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	// session exists); everything behind the middleware takes the cookie.
 	session := authntest.SeedSession(t, db.App, roundtripOwnerUID)
 
-	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Roundtrip Practice", StaffName: jamieName, StaffEmail: jamieEmail,
 	})
 	defer signupResp.Body.Close()
@@ -419,7 +419,7 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "seed-contract-owner"}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Seeded Contract Practice",
 		StaffName:    jamieOwnerName,
 		StaffEmail:   jamieEmail,
@@ -465,7 +465,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	// session exists); everything behind the middleware takes the cookie.
 	session := authntest.SeedSession(t, db.App, ownerUID)
 
-	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Roundtrip Contract Practice", StaffName: jamieName, StaffEmail: jamieEmail,
 	})
 	defer signupResp.Body.Close()

@@ -12,6 +12,8 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import WorkStateField from '#lib/WorkStateField.svelte';
+	import { workStateCode } from '#lib/workStates.js';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
 		{ value: 'signup', label: "I'm new here -- create an account" },
@@ -26,6 +28,12 @@
 	// a person names herself here. Ignored server-side if she already has
 	// a Staff account (#316).
 	let name = $state('');
+	// Asked on the same terms as the name above, and ignored server-side
+	// on the same branch: a work state is a fact about the person, so
+	// someone already Staff elsewhere keeps the one she already asserted
+	// (#415). Shown rather than hidden because this page cannot know
+	// which she is until she has signed in.
+	let workStateName = $state('');
 	let mode = $state<'signup' | 'login'>('signup');
 	let error = $state('');
 	let isSubmitting = $state(false);
@@ -54,7 +62,7 @@
 			const acceptResponse = await fetch(`${apiBaseURL()}/api/staff/accept-invite`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-				body: JSON.stringify({ inviteToken, name })
+				body: JSON.stringify({ inviteToken, name, workState: workStateCode(workStateName) })
 			});
 			if (!acceptResponse.ok) {
 				error = await acceptResponse.text();
@@ -109,6 +117,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
+		<WorkStateField bind:value={workStateName} />
 		<LabeledField label="Email">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput

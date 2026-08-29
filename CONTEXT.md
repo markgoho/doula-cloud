@@ -25,6 +25,10 @@ _Avoid_: Business, tenant, org
 A person who works at a Practice. One person is one Staff record, however many Practices they work at; what they are at each Practice is a separate Membership. Holds one or more roles (e.g. Doula, Admin, Owner) via that Membership; the same person's roles may differ across Practices.
 _Avoid_: User, employee, member
 
+**Work State**:
+The US state a Staff member works from. A fact about the person, not about any one Membership, and not a mailing address — where they differ, it is where she works, not where she lives. Self-reported, never verified, and the only thing that makes a Practice's sales tax computable: the taxable share of a Credit purchase is the Practice's New York-located Staff over all its Staff.
+_Avoid_: Location, address, region, state (a bare "state" in this codebase is a lifecycle state)
+
 **Membership**:
 What one Staff person is to one Practice — the roles they hold there and their Employment type. A person holds a separate Membership per Practice, and working at more than one Practice is normal, not an oddity: a contractor Doula is the ordinary case. A Membership always carries at least one role, and it is the only thing that makes a person Staff at that Practice. It is created at Practice signup for the founding Owner, or by accepting an Invitation.
 _Avoid_: Seat, account, affiliation

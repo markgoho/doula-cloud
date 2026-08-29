@@ -55,7 +55,7 @@ export async function seedPortalClient(
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${staffIdToken}` },
-		data: { practiceName, staffName: 'Alex Owner', staffEmail }
+		data: { practiceName, staffName: 'Alex Owner', staffEmail , workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);

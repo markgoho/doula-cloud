@@ -24,7 +24,7 @@ func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID st
 	t.Helper()
 
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
 		identityUID,
 	).Scan(&staffID); err != nil {
 		t.Fatalf("seed staff: %v", err)
@@ -47,7 +47,7 @@ func seedStaffAtPracticeNamed(t *testing.T, db *testdb.DB, practiceID, identityU
 	t.Helper()
 
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, $2, 'staff@example.com') RETURNING id`,
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, 'staff@example.com', 'NY') RETURNING id`,
 		identityUID, name,
 	).Scan(&staffID); err != nil {
 		t.Fatalf("seed staff: %v", err)
@@ -67,7 +67,7 @@ func seedContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityU
 	t.Helper()
 
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
 		identityUID,
 	).Scan(&staffID); err != nil {
 		t.Fatalf("seed staff: %v", err)

@@ -261,6 +261,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	defer srv.Close()
 
 	signupBody, _ := json.Marshal(staffauth.SignupRequest{
+		WorkState:    "NY",
 		PracticeName: "Riverside Doulas",
 		StaffName:    "Jamie Owner",
 		StaffEmail:   "jamie@example.com",

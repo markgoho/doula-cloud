@@ -31,7 +31,7 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${staffIdToken}` },
-		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', staffEmail }
+		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', staffEmail , workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);

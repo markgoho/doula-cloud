@@ -145,7 +145,7 @@ func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
 func seedMember(t *testing.T, db *testdb.DB, practiceID, identityUID string, roles []string, employmentType string) (staffID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, $2, $3) RETURNING id`,
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
 		identityUID, "Staff "+identityUID, identityUID+"@example.com",
 	).Scan(&staffID); err != nil {
 		t.Fatalf("seed staff: %v", err)

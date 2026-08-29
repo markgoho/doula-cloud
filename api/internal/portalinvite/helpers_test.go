@@ -92,7 +92,7 @@ func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (p
 	practiceID = seedPractice(t, db, "Portal Invite Test Practice")
 	var staffID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com') RETURNING id`,
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
 		identityUID,
 	).Scan(&staffID); err != nil {
 		t.Fatalf("seed staff: %v", err)

@@ -8,9 +8,12 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import WorkStateField from '#lib/WorkStateField.svelte';
+	import { workStateCode } from '#lib/workStates.js';
 
 	let practiceName = $state('');
 	let staffName = $state('');
+	let workStateName = $state('');
 	let email = $state('');
 	let password = $state('');
 	let error = $state('');
@@ -30,7 +33,12 @@
 			const response = await fetch(`${apiBaseURL()}/api/staff/signup`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-				body: JSON.stringify({ practiceName, staffName, staffEmail: email })
+				body: JSON.stringify({
+					practiceName,
+					staffName,
+					staffEmail: email,
+					workState: workStateCode(workStateName)
+				})
 			});
 			if (!response.ok) {
 				error = await response.text();
@@ -81,6 +89,7 @@
 			/>
 		{/snippet}
 	</LabeledField>
+	<WorkStateField bind:value={workStateName} />
 	<LabeledField label="Email">
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput

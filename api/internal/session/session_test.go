@@ -18,7 +18,7 @@ import (
 func seedStaff(t *testing.T, db *testdb.DB, identityUID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, 'Test Staff', 'staff@example.com')`,
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY')`,
 		identityUID,
 	); err != nil {
 		t.Fatalf("seed staff %q: %v", identityUID, err)

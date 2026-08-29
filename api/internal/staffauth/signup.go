@@ -25,6 +25,12 @@ type SignupRequest struct {
 	PracticeName string `json:"practiceName"`
 	StaffName    string `json:"staffName"`
 	StaffEmail   string `json:"staffEmail"`
+	// WorkState is the US state this person works from, as a USPS
+	// two-letter abbreviation (#415). Required, because New York's sales
+	// tax on a Credit purchase is apportioned over where a Practice's
+	// people work and a Practice with an unknown member cannot be
+	// apportioned at all.
+	WorkState string `json:"workState"`
 }
 
 // SignupResponse identifies the Practice and Staff row signup created.
@@ -64,6 +70,12 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			http.Error(w, "practiceName, staffName, and staffEmail are required", http.StatusBadRequest)
 			return
 		}
+		workState, ok := NormalizeWorkState(req.WorkState)
+		if !ok {
+			http.Error(w, MsgWorkStateRequired, http.StatusBadRequest)
+			return
+		}
+		req.WorkState = workState
 
 		resp, status, msg := signup(r, tx, verified.UID, req)
 		if status != http.StatusCreated {
@@ -121,8 +133,8 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 	// it.
 	var staffID string
 	err := tx.QueryRowContext(ctx,
-		`INSERT INTO staff (identity_uid, name, email) VALUES ($1, $2, $3) RETURNING id`,
-		identityUID, req.StaffName, req.StaffEmail,
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, $4) RETURNING id`,
+		identityUID, req.StaffName, req.StaffEmail, req.WorkState,
 	).Scan(&staffID)
 	if isUniqueViolation(err) {
 		return SignupResponse{}, http.StatusConflict, "a staff account already exists for this identity"
@@ -164,6 +176,16 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		PracticeID: practiceID, StaffID: staffID, Type: "joined",
 		Roles: "{owner,admin,doula}", EmploymentType: "employee", ActorStaffID: staffID,
 	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
+	// The first thing ever known about where this person works (#415).
+	// Written after the Membership rather than beside the staff INSERT
+	// because staff_work_state_events_practice_visibility (00043) admits
+	// a row only for someone holding a Membership at the current
+	// Practice -- which is true from the statement above and not before.
+	if err := RecordFirstWorkStateAssertion(ctx, tx, staffID, req.WorkState, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}

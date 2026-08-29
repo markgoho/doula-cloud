@@ -74,7 +74,7 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	srv := newAcceptServer(t, db, "lena-uid", "Lena@Example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "Lena Vasquez"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Lena Vasquez"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -161,7 +161,7 @@ func TestAcceptInviteHandler_ResolvesAnExistingStaffRow(t *testing.T) {
 	srv := newAcceptServer(t, db, "known-uid", "known@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -199,7 +199,7 @@ func TestAcceptInviteHandler_AlreadyAMemberIs409(t *testing.T) {
 	srv := newAcceptServer(t, db, "member-uid", "member@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {
@@ -223,7 +223,7 @@ func TestAcceptInviteHandler_SecondIdentityOnOneAddressIs409(t *testing.T) {
 	srv := newAcceptServer(t, db, "twice-uid-b", "twice@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "Twice Over"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Twice Over"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {
@@ -250,7 +250,7 @@ func TestAcceptInviteHandler_WrongAddressForbidden(t *testing.T) {
 	srv := newAcceptServer(t, db, "someone-else-uid", "someone.else@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "Someone Else"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Someone Else"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -266,7 +266,7 @@ func TestAcceptInviteHandler_NoVerifiedAddressForbidden(t *testing.T) {
 	srv := newAcceptServer(t, db, "address-less-uid", "")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "No Address"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "No Address"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -282,7 +282,7 @@ func TestAcceptInviteHandler_ExpiredIsGoneAndMarked(t *testing.T) {
 	srv := newAcceptServer(t, db, "late-uid", "late@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "Too Late"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Too Late"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusGone {
@@ -308,7 +308,7 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	srv := newAcceptServer(t, db, "nobody-uid", "nobody@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: "not-a-real-token", Name: "Nobody"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "not-a-real-token", Name: "Nobody"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -329,7 +329,7 @@ func TestAcceptInviteHandler_RevokedTokenIsNotFound(t *testing.T) {
 	srv := newAcceptServer(t, db, "gone-uid", "gone@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "Too Late"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Too Late"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -354,7 +354,7 @@ func TestAcceptInviteHandler_BadRequests(t *testing.T) {
 	})
 
 	t.Run("missing token", func(t *testing.T) {
-		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{Name: "Nameless"})
+		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", Name: "Nameless"})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -364,7 +364,7 @@ func TestAcceptInviteHandler_BadRequests(t *testing.T) {
 	// A new person must name herself: practice_invitations carries no
 	// name column, so there is nothing to fall back to.
 	t.Run("missing name for a new person", func(t *testing.T) {
-		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token})
+		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -377,7 +377,7 @@ func TestAcceptInviteHandler_NoCredential(t *testing.T) {
 	srv := newAcceptServer(t, db, "unused-uid", "unused@example.com")
 	defer srv.Close()
 
-	payload, err := json.Marshal(staffauth.AcceptInviteRequest{InviteToken: "whatever"})
+	payload, err := json.Marshal(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "whatever"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 	srv := newAcceptServer(t, db, "renata-uid", "renata@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{InviteToken: token, Name: "Renata Alvarez"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Renata Alvarez"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
