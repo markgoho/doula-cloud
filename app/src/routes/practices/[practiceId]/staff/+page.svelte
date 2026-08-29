@@ -84,7 +84,7 @@
 		{
 			label: 'Works from',
 			accessor: (member: StaffSummary) =>
-				`${workStateName(member.workState)} -- self-reported ${reportedOn(member.workStateReportedAt)}`
+				`${workStateName(member.workState)} — self-reported ${reportedOn(member.workStateReportedAt)}`
 		}
 	];
 
