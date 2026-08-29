@@ -9,7 +9,7 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
-	import { WORK_STATES } from '#lib/workStates.js';
+	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	type StaffSummary = {
 		staffId: string;
@@ -56,18 +56,6 @@
 	let removingStaffId = $state('');
 	let removeError = $state<Record<string, string>>({});
 
-	function workStateName(code: string): string {
-		return WORK_STATES.find((s) => s.code === code)?.name ?? code;
-	}
-
-	function reportedOn(timestamp: string): string {
-		return new Date(timestamp).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
-
 	const memberColumns = [
 		{ label: 'Name', accessor: (member: StaffSummary) => member.name },
 		{ label: 'Email', accessor: (member: StaffSummary) => member.email },
@@ -84,7 +72,7 @@
 		{
 			label: 'Works from',
 			accessor: (member: StaffSummary) =>
-				`${workStateName(member.workState)} — self-reported ${reportedOn(member.workStateReportedAt)}`
+				`${workStateName(member.workState)} — self-reported ${workStateReportedOn(member.workStateReportedAt)}`
 		}
 	];
 

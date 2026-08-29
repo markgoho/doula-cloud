@@ -76,3 +76,41 @@ export const WORK_STATE_NAMES: readonly string[] = WORK_STATES.map((s) => s.name
 export function workStateCode(name: string): string {
 	return WORK_STATES.find((s) => s.name === name)?.code ?? '';
 }
+
+/**
+ * The full state name for a USPS code, or the code itself if it is not
+ * one of ours. The fallback is deliberate: the API is the authority on
+ * what is stored, so a code this list has not heard of is shown as it
+ * came rather than swallowed into a blank -- a wrong-looking value on
+ * the screen is how anyone finds out the two lists have drifted apart.
+ *
+ * The inverse of workStateCode(). Both directions are needed because the
+ * dropdown speaks names and the API speaks codes (#437 added this one,
+ * for the screens that read a recorded state back out).
+ */
+export function workStateName(code: string): string {
+	return WORK_STATES.find((s) => s.code === code)?.name ?? code;
+}
+
+/**
+ * The day a work state was last asserted, in the one format every screen
+ * that shows it uses -- the roster's "self-reported <date>" column, the
+ * account screen's "last confirmed" line, and the read-only value shown
+ * to someone accepting a second Invitation.
+ *
+ * The date carries real weight rather than being decoration: nothing
+ * prompts a re-assertion, so how old it is is the only staleness signal
+ * the design has (#415). Three screens showing the same fact in three
+ * shapes would make it harder to compare, so the format lives here once.
+ *
+ * The locale is left to the browser (`undefined`), the way every other
+ * date in this app is formatted -- we do not know better than the
+ * reader's own machine which order she reads a date in.
+ */
+export function workStateReportedOn(timestamp: string): string {
+	return new Date(timestamp).toLocaleDateString(undefined, {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric'
+	});
+}

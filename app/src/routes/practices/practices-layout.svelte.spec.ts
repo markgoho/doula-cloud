@@ -138,3 +138,32 @@ describe('the temporary nav the shell will replace (#452)', () => {
 		expect(page.getByRole('navigation', { name: 'Practice' }).elements()).toHaveLength(0);
 	});
 });
+
+// The only way in to the screen where a Staff member corrects her own
+// work state (#437). It is on the layout rather than the roster because
+// a Doula, who has no roster access at all, is exactly the person who
+// needs it.
+describe('the Account link', () => {
+	it('sits beside sign-out and points at the account screen', async () => {
+		await setup();
+
+		const accountLink = page.getByRole('link', { name: 'Account', exact: true });
+		await expect.element(accountLink).toBeVisible();
+		await expect.element(accountLink).toHaveAttribute('href', '/account');
+	});
+
+	it('is there for a Doula, who cannot reach the Staff roster at all', async () => {
+		await setup({ roles: ['doula'] });
+
+		await expect.element(page.getByRole('link', { name: 'Account', exact: true })).toBeVisible();
+	});
+
+	// Outside the Practice nav's practiceId gate on purpose: the work
+	// state is a fact about the person, so the way to it cannot depend on
+	// a Practice being in the route.
+	it('survives on a Staff screen with no Practice in its route', async () => {
+		await setup({ routeParameters: {} });
+
+		await expect.element(page.getByRole('link', { name: 'Account', exact: true })).toBeVisible();
+	});
+});

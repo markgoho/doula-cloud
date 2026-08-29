@@ -165,6 +165,11 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	mux.Handle("DELETE /api/session", session.EndHandler(db))
 	mux.Handle("POST /api/staff/signup", staffauth.SignupHandler(verifier, db))
 	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(db))
+	// Where she works is a fact about the person, not about a Membership
+	// (00043), so its write sits beside the session probe rather than
+	// under a Practice -- no {practiceId} in the path, and no staff id
+	// either, which is what makes it self-edit-only by shape (#437).
+	mux.Handle("PUT /api/staff/work-state", staffauth.UpdateWorkStateHandler(db))
 	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, http.HandlerFunc(practiceSessionHandler))
 	mux.Handle("POST /api/staff/accept-invite", staffauth.AcceptInviteHandler(verifier, db))
 	// Roles and employment type are edited together on one surface

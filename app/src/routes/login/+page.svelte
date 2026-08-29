@@ -32,8 +32,15 @@
 			// land first (#149). A plain, one-off fetch: this token makes one
 			// trip and is never carried around the way apiFetchWithSession's
 			// cookie is (#150 deleted the shared ID-token helper).
+			// credentials: 'include' because apiBaseURL() may point at another
+			// origin, and a cross-origin Set-Cookie is dropped without it --
+			// which would leave the exchange reporting success and the cookie
+			// never arriving. It is a no-op on the same origin, which is what
+			// production serves (the /api/** rewrite), so this costs nothing
+			// and matches both apiFetch and the accept-invite exchange.
 			const exchangeResponse = await fetch(`${apiBaseURL()}/api/session`, {
 				method: 'POST',
+				credentials: 'include',
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {

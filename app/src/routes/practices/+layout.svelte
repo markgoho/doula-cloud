@@ -125,7 +125,22 @@
 			/>
 		</nav>
 	{/if}
-	<SignOutButton signOut={handleSignOut} />
+	<div class="account">
+		<!--
+			Not inside the Practice nav above, and deliberately outside its
+			practiceId gate: a Staff member's work state is a fact about her,
+			not about any one Practice she works at (#437), so the way to it
+			has to be present on every authenticated Staff screen rather than
+			only the ones that happen to carry a Practice in the route.
+
+			It also cannot hang off the Staff roster, which is the only other
+			place a work state is shown. A Doula has no roster access at all
+			and she is exactly the person who has to be able to correct her
+			own -- an entry point she cannot reach is not an entry point.
+		-->
+		<Link href={resolve('/account')} label="Account" variant="secondary" />
+		<SignOutButton signOut={handleSignOut} />
+	</div>
 </header>
 
 {@render children()}
@@ -143,6 +158,16 @@
 		nav {
 			display: flex;
 			flex-wrap: wrap;
+			gap: var(--space-3);
+		}
+
+		/* The person's own controls, kept together at the far end of the
+		   header and apart from the Practice's links -- what they act on is
+		   her, not whatever Practice she is looking at. */
+		.account {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
 			gap: var(--space-3);
 		}
 	}

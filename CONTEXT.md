@@ -26,7 +26,7 @@ A person who works at a Practice. One person is one Staff record, however many P
 _Avoid_: User, employee, member
 
 **Work State**:
-The US state a Staff member works from. A fact about the person, not about any one Membership, and not a mailing address — where they differ, it is where she works, not where she lives. Self-reported, never verified, and the only thing that makes a Practice's sales tax computable: the taxable share of a Credit purchase is the Practice's New York-located Staff over all its Staff.
+The US state a Staff member works from. A fact about the person, not about any one Membership, and not a mailing address — where they differ, it is where she works, not where she lives. Self-reported, never verified, and the only thing that makes a Practice's sales tax computable: the taxable share of a Credit purchase is the Practice's New York-located Staff over all its Staff. **Hers alone to assert and hers alone to change** — an Owner and an Admin read it on the roster and cannot write it, so it is stated once at onboarding and corrected on her own account screen, never by the Practice. Every assertion is kept, including one that repeats the value unchanged: saying "still New York, as of today" is a real act, because the date it carries is the only signal that the answer might be stale. A correction applies **from that day forward** and re-prices nothing — a Credit purchase records the tax it actually charged, so an earlier receipt stands. Decided on [#415](https://github.com/markgoho/doula-cloud/issues/415) and [#437](https://github.com/markgoho/doula-cloud/issues/437).
 _Avoid_: Location, address, region, state (a bare "state" in this codebase is a lifecycle state)
 
 **Membership**:

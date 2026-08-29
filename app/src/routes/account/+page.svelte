@@ -1,0 +1,248 @@
+<script lang="ts">
+	/*
+	 * Your account -- one screen, per person, not per Practice (#437).
+	 *
+	 * The decision this route exists to settle: a Staff member's work
+	 * state is one fact about one person, however many Practices she
+	 * works at. A contractor doula on three rosters does not work from
+	 * New York at one of them and New Jersey at the other two. So a
+	 * screen at /practices/[practiceId]/profile would be showing a global
+	 * value inside a per-Practice frame, and a person who corrected it
+	 * there would have every reason to believe she had corrected it only
+	 * for that Practice. That is a small lie the layout would be telling
+	 * on its own, before any copy got a chance to correct it. The route
+	 * sits at the top level instead, where the value's reach and the
+	 * screen's reach are the same shape.
+	 *
+	 * It follows from that that the way in cannot be the Staff roster:
+	 * a Doula has no roster access at all, and she is exactly the person
+	 * this screen is for. The link lives on the Staff layout header,
+	 * beside sign-out, which every authenticated Staff screen carries.
+	 *
+	 * Data is read in onMount rather than a +page.ts load, matching every
+	 * other authenticated Staff route in this app -- the whole app is a
+	 * client-side SPA behind auth (`ssr = false` in src/routes/+layout.ts)
+	 * and a load function would buy nothing but a second place to look.
+	 */
+	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
+	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import type { Membership, SessionInfo } from '#lib/landing.js';
+	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
+	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
+	import WorkStateField from '#lib/WorkStateField.svelte';
+
+	let name = $state('');
+	let memberships = $state<Membership[]>([]);
+	let reportedAt = $state('');
+	// The full state name the <select> speaks; workStateCode() converts it
+	// back to the USPS code the API stores on the way out.
+	let selectedState = $state('');
+	let isLoaded = $state(false);
+	let loadError = $state('');
+	let saveError = $state('');
+	let savedState = $state('');
+	let isSaving = $state(false);
+
+	async function loadAccount() {
+		const response = await apiFetchWithSession('/api/staff/session');
+		if (!response.ok) {
+			// 404 means the verified identity has no staff row behind it --
+			// signed in, but nobody here yet. Say so and render nothing to
+			// edit, rather than offering a form whose save cannot land.
+			loadError = await apiErrorMessage(response);
+			return;
+		}
+
+		const session: SessionInfo = await response.json();
+		name = session.name;
+		memberships = session.memberships;
+		reportedAt = session.workStateReportedAt;
+		selectedState = workStateName(session.workState);
+		isLoaded = true;
+	}
+
+	onMount(loadAccount);
+
+	/*
+	 * One deliberate act: choose a state, press Save. No confirmation
+	 * step, and that is a decision rather than an omission (#437).
+	 *
+	 * A confirmation dialog buys its friction with a promise that the act
+	 * is hard to undo. This one is not: picking the previous state again
+	 * puts it back, and both events are recorded either way, so the audit
+	 * trail is richer for the round trip rather than damaged by it. And
+	 * the failure this screen exists to fix is not a doula who changes
+	 * her state carelessly -- it is a doula who moves and never says so,
+	 * leaving her Practice's sales tax quietly wrong for years. Friction
+	 * here pushes towards that failure, not away from it.
+	 *
+	 * If a confirmation is ever warranted, it is warranted on the
+	 * consequence, which is why the consequence is stated above the field
+	 * and before the choice instead.
+	 */
+	async function handleSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		saveError = '';
+		savedState = '';
+		isSaving = true;
+		try {
+			/*
+			 * Sent every time, including when the state has not changed.
+			 * Saying "yes, still New York, as of today" is a real thing to
+			 * say: the reported date is the only staleness signal the design
+			 * has, so a re-assertion moves it and is worth having. That is
+			 * why the button is never disabled on an unchanged value and the
+			 * request is never skipped -- an "optimization" here would
+			 * silently delete the one thing this screen can tell an Owner
+			 * reading the roster.
+			 *
+			 * There is no staffId in the path or the body. The endpoint
+			 * only ever writes the caller's own row, which is how self-edit
+			 * only is enforced where it can actually be enforced -- an Owner
+			 * reads a work state on the roster and cannot write it (#415).
+			 */
+			const response = await apiFetchWithSession('/api/staff/work-state', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ workState: workStateCode(selectedState) })
+			});
+			if (!response.ok) {
+				saveError = await apiErrorMessage(response);
+				return;
+			}
+
+			const saved: { workState: string; workStateReportedAt: string } = await response.json();
+			reportedAt = saved.workStateReportedAt;
+			selectedState = workStateName(saved.workState);
+			savedState = selectedState;
+		} catch (error_) {
+			saveError = error_ instanceof Error ? error_.message : 'Could not save your work state';
+		} finally {
+			isSaving = false;
+		}
+	}
+</script>
+
+{#snippet intro()}
+	<!--
+		The consequence, stated before the choice and not after it. A work
+		state moves money: sales tax on a Practice's credits is apportioned
+		over where its people work (TB-ST-128), so this field is the input
+		to a bill somebody else pays. Someone changing it deserves to know
+		that before she changes it, not in a confirmation dialog after.
+
+		The second sentence closes off the question the first one opens.
+		"Does correcting this claw back what I was charged last year?" No:
+		#420 records the tax actually charged on each purchase row, so past
+		receipts stand exactly as issued. A correction applies from today
+		forward. Saying so here is cheaper than answering it in support.
+	-->
+	<Text
+		text="Where you work sets how much sales tax your practice pays on the credits it buys. Changing it here changes that from today forward -- purchases you have already made are not re-priced, and no receipt you have already been sent changes."
+		tone="variant"
+	/>
+{/snippet}
+
+{#snippet workState()}
+	{#if reportedAt}
+		<Text text={`Last confirmed ${workStateReportedOn(reportedAt)}.`} step="meta" tone="muted" />
+	{/if}
+	<WorkStateField bind:value={selectedState} />
+	<!--
+		Saving the same state again is a re-assertion, not a no-op -- see
+		the comment on handleSubmit. Hence no `disabled` on an unchanged
+		value.
+	-->
+{/snippet}
+
+{#snippet saveNotice()}
+	<Notice variant="error" message={saveError} />
+{/snippet}
+
+{#snippet actions()}
+	<Button type="submit" label="Save work state" loading={isSaving} />
+{/snippet}
+
+{#if loadError}
+	<!--
+		Same frame as the form, without the form. A 404 here means the
+		verified identity has no staff row behind it -- signed in, but
+		nobody here yet -- so there is nothing to edit and offering a
+		control whose save could never land would be worse than saying so.
+	-->
+	<container-l>
+		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
+			<stack-l space="var(--space-7)">
+				<Heading level={1} variant="page" text="Your account" />
+				<Notice variant="error" message={loadError} />
+			</stack-l>
+		</center-l>
+	</container-l>
+{:else if isLoaded}
+	<form onsubmit={handleSubmit}>
+		<FormPage
+			title="Your account"
+			{intro}
+			fieldsets={[{ legend: `Your details, ${name}`, content: workState }]}
+			error={saveError ? saveNotice : undefined}
+			{actions}
+		/>
+	</form>
+
+	<!--
+		Confirmation sits where she just was -- immediately under the Save
+		button she pressed, not in a banner at the top of a page she would
+		have to scroll back up to read. Notice's status variant carries
+		role="status", so a screen reader announces it politely wherever it
+		is; a sighted reader is looking at the button. The "Last confirmed"
+		line above the field moves to the new date at the same moment,
+		which is the durable half of the same answer.
+	-->
+	{#if savedState}
+		<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
+	{/if}
+
+	<!--
+		A way back. The session response already carries every Practice she
+		belongs to, so this screen can return her to the one she came from
+		without a second read -- and a top-level route outside the Practice
+		layout would otherwise be a place with no exit but the back button.
+		One Practice, one link; several, several.
+	-->
+	<nav aria-label="Your practices">
+		<Heading level={2} variant="section" text="Back to your practices" />
+		<ul>
+			{#each memberships as membership (membership.practiceId)}
+				<li>
+					<Link
+						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
+						label={membership.practiceName}
+					/>
+				</li>
+			{/each}
+		</ul>
+	</nav>
+{/if}
+
+<style>
+	@layer components {
+		ul {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--space-3);
+		}
+
+		nav {
+			padding: var(--space-6) var(--page-gutter);
+		}
+	}
+</style>

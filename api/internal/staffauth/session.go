@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"doula-cloud/api/internal/authn"
 )
@@ -24,10 +25,26 @@ type Membership struct {
 // Staff member after login: their memberships (to auto-redirect when
 // there's exactly one, or offer a picker when there's more than one) and
 // their last-used Practice (to skip the picker on a returning visit).
+// It is also the whole read behind /account (#437), the per-person
+// screen where a Staff member corrects her work state. That screen is
+// not scoped to a Practice -- a work state is a fact about the person
+// (00043) -- so this endpoint, which already answers "who am I" before
+// any Practice is chosen, is where the fact belongs rather than a second
+// route saying the same thing. Name rides along for the same reason:
+// the accept-invite screen shows a returning contractor what her
+// existing account already holds instead of asking for it and throwing
+// the answer away.
 type SessionResponse struct {
-	StaffID        string       `json:"staffId"`
-	LastPracticeID *string      `json:"lastPracticeId,omitempty"`
-	Memberships    []Membership `json:"memberships"`
+	StaffID string `json:"staffId"`
+	Name    string `json:"name"`
+	// WorkState is the US state she works from, and WorkStateReportedAt
+	// is when she last asserted it -- the pair the roster prints as "New
+	// York -- self-reported 28 Aug 2026", shown to her here so she can
+	// see the value she is being taxed on and how old it is.
+	WorkState           string       `json:"workState"`
+	WorkStateReportedAt time.Time    `json:"workStateReportedAt"`
+	LastPracticeID      *string      `json:"lastPracticeId,omitempty"`
+	Memberships         []Membership `json:"memberships"`
 }
 
 // SessionHandler resolves the verified caller to a Staff row and reports
@@ -64,11 +81,13 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionRes
 		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
-	var staffID string
+	var staffID, name, workState string
+	var workStateReportedAt time.Time
 	var lastPracticeID sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`SELECT id, last_practice_id FROM staff WHERE identity_uid = $1`, identityUID,
-	).Scan(&staffID, &lastPracticeID)
+		`SELECT id, name, work_state, work_state_reported_at, last_practice_id
+		   FROM staff WHERE identity_uid = $1`, identityUID,
+	).Scan(&staffID, &name, &workState, &workStateReportedAt, &lastPracticeID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SessionResponse{}, http.StatusNotFound, "no matching staff account"
 	}
@@ -83,7 +102,13 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionRes
 		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
-	resp := SessionResponse{StaffID: staffID, Memberships: memberships}
+	resp := SessionResponse{
+		StaffID:             staffID,
+		Name:                name,
+		WorkState:           workState,
+		WorkStateReportedAt: workStateReportedAt,
+		Memberships:         memberships,
+	}
 	if lastPracticeID.Valid {
 		resp.LastPracticeID = &lastPracticeID.String
 	}
