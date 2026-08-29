@@ -158,34 +158,22 @@ Two more endpoints on the same `X-Internal-Secret` shape, under `/api/internal/s
 
 `GITHUB_DISPATCH_TOKEN` is the one new credential. **Contents: write** is the narrowest permission GitHub's dispatch endpoint accepts, and it is the same level a GitHub App would need, which is why #443 chose the simpler thing. Give it a real expiry rather than "no expiration": a lapsed token is not silent here -- the dispatch fails, the page never leaves `pending`, and the Practice's website settings screen says her page is not confirmed.
 
-```bash
-# The token itself is created by hand at
-# https://github.com/settings/personal-access-tokens -- resource owner
-# markgoho, repository access "Only select repositories" -> doula-cloud,
-# Repository permissions -> Contents: Read and write, expiry 366 days.
-printf %s "<the token>" | gcloud secrets create doula-cloud-github-dispatch-token \
-  --data-file=- --replication-policy=automatic
-gcloud secrets add-iam-policy-binding doula-cloud-github-dispatch-token \
-  --member=serviceAccount:<doula-api's runtime service account> \
-  --role=roles/secretmanager.secretAccessor
-gcloud run services update doula-api --region us-central1 \
-  --update-secrets GITHUB_DISPATCH_TOKEN=doula-cloud-github-dispatch-token:latest
+**Provisioned.** Both Cloud Scheduler jobs exist and have each run green: `process-site-build-outbox` every five minutes, `verify-practice-pages` every fifteen, both in `us-central1`, both carrying `X-Internal-Secret` the way `process-portal-invite-outbox` does. The deploy workflow's service account (`github-action-733741680@doula-cloud.iam.gserviceaccount.com`) has been granted `roles/secretmanager.secretAccessor` on `doula-cloud-notification-worker-secret`, which it needs to read the secret its last step posts.
 
-# The two Cloud Scheduler jobs, on the shape the seven notification jobs
-# already use.
-gcloud scheduler jobs create http doula-cloud-site-build-outbox \
-  --location=us-central1 --schedule="*/5 * * * *" \
-  --uri=https://doula-api-850855848778.us-central1.run.app/api/internal/site/process-build-outbox \
-  --http-method=POST \
-  --update-headers="X-Internal-Secret=<NOTIFICATION_WORKER_SECRET>"
-gcloud scheduler jobs create http doula-cloud-verify-practice-pages \
-  --location=us-central1 --schedule="*/15 * * * *" \
-  --uri=https://doula-api-850855848778.us-central1.run.app/api/internal/site/verify-pages \
-  --http-method=POST \
-  --update-headers="X-Internal-Secret=<NOTIFICATION_WORKER_SECRET>"
+**Still outstanding: the token itself.** It is created by hand at <https://github.com/settings/personal-access-tokens> -- resource owner `markgoho`, repository access *"Only select repositories"* → `doula-cloud`, Repository permissions → **Contents: Read and write**, expiry 366 days. Until it is in Secret Manager and on the service, `process-site-build-outbox` runs green with nothing to do and a real publish would sit at `pending` with the outbox retrying.
+
+```bash
+printf %s "<the token>" | gcloud secrets create doula-cloud-github-dispatch-token \
+  --project=doula-cloud --data-file=- --replication-policy=automatic
+gcloud secrets add-iam-policy-binding doula-cloud-github-dispatch-token \
+  --project=doula-cloud \
+  --member=serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --role=roles/secretmanager.secretAccessor
+gcloud run services update doula-api --region us-central1 --project=doula-cloud \
+  --update-secrets GITHUB_DISPATCH_TOKEN=doula-cloud-github-dispatch-token:latest
 ```
 
-The deploy workflow also needs `roles/secretmanager.secretAccessor` on `doula-cloud-notification-worker-secret` for its GitHub Actions service account (`github-action-733741680@doula-cloud.iam.gserviceaccount.com`), which already holds it on `doula-cloud-pg-site-builder-dsn`.
+**A gap this ticket found rather than made.** Only `process-portal-invite-outbox` was ever provisioned as a Cloud Scheduler job; the seven other `process-*` endpoints this document describes have no job behind them, so their outboxes have only ADR-0013's nudge and no backstop. Recorded as [#481](https://github.com/markgoho/doula-cloud/issues/481).
 
 ## Attachments bucket and VAPID push
 
