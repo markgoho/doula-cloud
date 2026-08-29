@@ -64,7 +64,7 @@ named Snippet props and the repeatable part is a typed array, `DataTable.rowActi
 | Archetype | Component | Regions |
 |---|---|---|
 | **B** Overview hub | `templates/OverviewHub.svelte` | `title`, `primary`, `secondary?`, and **`isEmpty` + `empty`, both required** |
-| **D** Record detail | `templates/RecordDetail.svelte` | `title`, `summary?`, `actions?`, `sections: { heading, content }[]` |
+| **D** Record detail | `templates/RecordDetail.svelte` | `title`, `summary?`, `actions?`, `sections: { heading, content }[]`, **`contents?`** — see the amendment below |
 | **E** Long form | `templates/FormPage.svelte` | `title`, `intro?`, `fieldsets: { legend, content }[]`, `error?`, `actions` |
 
 `FormPage.fieldsets` is ADR-0017's shape: the twelve-column structural core is one fieldset and each
@@ -139,3 +139,31 @@ it — an Offer inbox, roster health, credit and Connect state, and the empty st
 blocks they ask for cannot be served: there is no practice-wide contracts-awaiting-signature endpoint, no
 unpaid-invoice roll-up, and coverage is blocked at the schema, since `00007_visit.sql` gives a Visit no
 date at all. Those are product and backend work beyond this map's destination.
+
+
+## Amendment, 2026-08-29 — `RecordDetail` gains a `contents` region
+
+Added on [#433](https://github.com/markgoho/doula-cloud/issues/433), drawing the two Engagement detail
+pages. The staff one is the page this Template was shaped against, and drawing it produced **eight**
+sections: Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Messages, Activity.
+
+Eight `<h2>`s in one column is a page you scroll to search. Two journey gaps say so independently:
+**PR-G5** ([#280](https://github.com/markgoho/doula-cloud/issues/280)) is that the Birth Plan is *"a
+section partway down a long page with no deep link"*, found at Priya Raman's moment of truth — reading it
+on a phone, in a hospital corridor, under time pressure — and **PR-G9**
+([#283](https://github.com/markgoho/doula-cloud/issues/283)) is that the page renders **no `<a>` elements
+at all**, so there is no way off it or around it.
+
+So `RecordDetail` takes an optional **`contents`** region: a list of the page's own sections, rendered
+beside the column at desktop width and as a jump-to strip under the title at narrow width. It is
+optional because archetype D covers short records too, and a contents list above three sections is
+furniture.
+
+Two things this deliberately is not. It is **not a nav** — a Template still renders no navigation, and
+these are in-page anchors, not routes, so the rule in *What a Template owns* stands unbroken. And it is
+**not a tab set or an accordion**: `docs/design/govuk-alignment.md` marks both *"nothing needs one"*, and
+hiding the Birth Plan behind a tab is PR-G5 with extra steps rather than a fix for it.
+
+The arrangement is not new — it is the 260px rail plus 1052px column the Intake question pages already
+established, so archetype D reads as the same product as archetype E rather than inventing a second page
+geometry.

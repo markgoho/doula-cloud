@@ -344,9 +344,40 @@ point at these and say the work is done. The first of them is the largest.
    feature. The Recent-activity feed on the hub is the visible face of it, and
    it appears again on every record. Give it a considered treatment — a fixed
    date column in `meta` at tabular figures, the event in `body`, the actor in
-   `outline`, hairline-separated rows — and reuse that treatment everywhere an
-   audit trail is shown. It is the one component that is recognisably this
-   product rather than any practice-management tool.
+   `on-surface-muted`, hairline-separated rows — and reuse that treatment
+   everywhere an audit trail is shown. It is the one component that is
+   recognisably this product rather than any practice-management tool.
+
+   > **Amended 2026-08-29 on [#433](https://github.com/markgoho/doula-cloud/issues/433),
+   > in three places.**
+   >
+   > **The actor's colour.** This entry originally read *"the actor in
+   > `outline`"*. `outline` is the form-control-border role, chosen for SC
+   > 1.4.11's 3:1 boundary floor; as text on `surface-bright` it sits under
+   > this brief's own non-negotiable 4.5:1. `on-surface-muted` exists because,
+   > in this brief's own words, "one value cannot serve two floors at once".
+   >
+   > **No vertical column rule.** A fixed-width date column already aligns the
+   > dates, so a rule between the columns is decoration, and decoration is
+   > ruled out two sections above. Hairlines separate rows and nothing else.
+   >
+   > **It is built, and it is not what people come for.** Eight journey maps
+   > were searched for a moment where anyone — staff or Client — needs to
+   > reconstruct who did what and when. Staff: none. The four near misses are
+   > all something else (a Visit's *content*, an *agreed fee* recalled, a
+   > *current* Contract status, an Offer). Clients: fragments, never a feed —
+   > *did I sign that*, *what have I paid*, *when did Maya come*. So the ledger
+   > keeps its place on this list, because `CLAUDE.md` requires the record and
+   > because the treatment is genuinely this product's own — but the claim that
+   > it is *"the one a person actually notices"* is withdrawn. It sits low on
+   > every page it appears on, and behind a closed disclosure in the Client
+   > portal. What people come for is *who is on this birth*, *has she signed*,
+   > and *what do I owe*.
+   >
+   > Its time format is set by
+   > [ADR-0022](../adr/0022-one-activity-log-with-a-subject-and-three-kinds-of-actor.md):
+   > relative under seven days, absolute beyond, on a 12-hour clock with a
+   > lowercase `am`/`pm`, and the exact instant always carried underneath.
 
 **This is not a licence to add a fifth.** If a later ticket wants a signature
 move that is not on this list, that is a change to the brief and belongs on the
