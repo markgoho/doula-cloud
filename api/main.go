@@ -21,7 +21,6 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
-	"doula-cloud/api/internal/clientfieldtemplate"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagement"
@@ -279,15 +278,6 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, plans.GetTemplateHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/plan-templates/{planType}",
 		staffauth.Middleware(db)(plans.PutTemplateHandler()))
-	// ADR-0017's Client Field Template settings screen (#399): the field
-	// list an Owner or Admin defines for a Client's Practice-defined
-	// layer. Sibling of Plan Templates above -- read by any Staff member
-	// (the definitions carry nothing secret), written by an Owner or
-	// Admin alone (client_field_templates_insert/_update, 00048, enforce
-	// the same rule in RLS).
-	g.Get("/api/practices/{practiceId}/client-field-template", staffauth.AnyStaff, clientfieldtemplate.GetHandler())
-	mux.Handle("PUT /api/practices/{practiceId}/client-field-template",
-		staffauth.Middleware(db)(clientfieldtemplate.PutHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
 		staffauth.Middleware(db)(staffauth.AttachingWrite(plans.PostInstanceHandler())))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}", staffauth.AnyStaff, plans.GetInstanceHandler())
