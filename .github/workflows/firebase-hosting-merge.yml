@@ -79,17 +79,20 @@ jobs:
         env:
           SITE_BUILDER_DSN: ${{ steps.secrets.outputs.dsn }}
         run: |
-          cloud-sql-proxy --port 5432 doula-cloud:us-central1:doula-cloud-pg &
+          # --health-check publishes /readiness on --http-port, which is
+          # the proxy's own answer to "are you listening yet". Asked with
+          # curl rather than a bash /dev/tcp redirect: this step runs
+          # under `sh -e` (the container image sets no default shell), and
+          # sh has no /dev/tcp at all -- so the redirect could never
+          # succeed and the wait was decided by the timeout every run.
+          cloud-sql-proxy --port 5432 --health-check --http-address 127.0.0.1 --http-port 9090 \
+            doula-cloud:us-central1:doula-cloud-pg &
           proxy_pid=$!
           trap 'kill "${proxy_pid}"' EXIT
-          # Measured at ~10s on the first run of this job, which is the
-          # whole of a ten-attempt budget -- so the wait is 30, and a
-          # proxy that never comes up fails here rather than leaving the
-          # sync to report a confusing connection error.
           for attempt in $(seq 1 30); do
-            if (echo > /dev/tcp/127.0.0.1/5432) 2>/dev/null; then break; fi
+            if curl -fs http://127.0.0.1:9090/readiness > /dev/null; then break; fi
             if [ "${attempt}" -eq 30 ]; then
-              echo "cloud-sql-proxy never started listening on 127.0.0.1:5432"
+              echo "cloud-sql-proxy never reported ready"
               exit 1
             fi
             sleep 1
