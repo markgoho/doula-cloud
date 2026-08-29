@@ -82,9 +82,16 @@ jobs:
           cloud-sql-proxy --port 5432 doula-cloud:us-central1:doula-cloud-pg &
           proxy_pid=$!
           trap 'kill "${proxy_pid}"' EXIT
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          # Measured at ~10s on the first run of this job, which is the
+          # whole of a ten-attempt budget -- so the wait is 30, and a
+          # proxy that never comes up fails here rather than leaving the
+          # sync to report a confusing connection error.
+          for attempt in $(seq 1 30); do
             if (echo > /dev/tcp/127.0.0.1/5432) 2>/dev/null; then break; fi
-            echo "waiting for cloud-sql-proxy (${attempt})..."
+            if [ "${attempt}" -eq 30 ]; then
+              echo "cloud-sql-proxy never started listening on 127.0.0.1:5432"
+              exit 1
+            fi
             sleep 1
           done
           # The secret is postgres://user:pass@_/dbname, the same shape
