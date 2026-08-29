@@ -5218,32 +5218,85 @@
                   "fill": "$color-on-surface-variant",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Optional. Type it any way at all - 14/3/1991, March 14 1991, 1991-03-14. A date of birth is how this practice recognises a returning Client years later.",
+                  "content": "Optional. For example, 3 14 1991. A date of birth is how this practice recognises a returning Client years later.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
                   "fontSize": "$text-body-size"
                 },
                 {
-                  "id": "I7MzKD",
-                  "type": "ref",
-                  "ref": "Am2D2",
+                  "type": "frame",
+                  "id": "NQzqq",
                   "name": "Date of birth",
-                  "width": 260,
-                  "descendants": {
-                    "uoKkL": {
-                      "enabled": false
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "id": "l7Gps3",
+                      "type": "ref",
+                      "ref": "Am2D2",
+                      "name": "Month",
+                      "width": 88,
+                      "descendants": {
+                        "uoKkL": {
+                          "content": "Month"
+                        },
+                        "FewDq": {
+                          "enabled": false
+                        },
+                        "BzSn0": {
+                          "content": "3",
+                          "fill": "$color-on-surface"
+                        },
+                        "b3UyVM": {
+                          "enabled": false
+                        }
+                      }
                     },
-                    "FewDq": {
-                      "enabled": false
+                    {
+                      "id": "G0yDec",
+                      "type": "ref",
+                      "ref": "Am2D2",
+                      "name": "Day",
+                      "width": 88,
+                      "descendants": {
+                        "uoKkL": {
+                          "content": "Day"
+                        },
+                        "FewDq": {
+                          "enabled": false
+                        },
+                        "BzSn0": {
+                          "content": "14",
+                          "fill": "$color-on-surface"
+                        },
+                        "b3UyVM": {
+                          "enabled": false
+                        }
+                      }
                     },
-                    "BzSn0": {
-                      "content": "March 14, 1991",
-                      "fill": "$color-on-surface"
-                    },
-                    "b3UyVM": {
-                      "enabled": false
+                    {
+                      "id": "w7ovjT",
+                      "type": "ref",
+                      "ref": "Am2D2",
+                      "name": "Year",
+                      "width": 120,
+                      "descendants": {
+                        "uoKkL": {
+                          "content": "Year"
+                        },
+                        "FewDq": {
+                          "enabled": false
+                        },
+                        "BzSn0": {
+                          "content": "1991",
+                          "fill": "$color-on-surface"
+                        },
+                        "b3UyVM": {
+                          "enabled": false
+                        }
+                      }
                     }
-                  }
+                  ]
                 },
                 {
                   "type": "frame",
