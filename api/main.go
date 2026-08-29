@@ -394,11 +394,7 @@ func main() {
 	pusher := push.NewVAPIDPusher(os.Getenv("VAPID_PUBLIC_KEY"), os.Getenv("VAPID_PRIVATE_KEY"), os.Getenv("VAPID_SUBSCRIBER"))
 
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
-	stripeClient, err := billing.NewStripeAPIClient(context.Background(), os.Getenv("STRIPE_API_KEY"), os.Getenv("STRIPE_CREDIT_PRICE_ID"), os.Getenv("APP_BASE_URL"))
-	if err != nil {
-		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-		log.Fatalf("init stripe client: %v", err)
-	}
+	stripeClient := billing.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("STRIPE_CREDIT_PRICE_ID"), os.Getenv("APP_BASE_URL"))
 
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
 	paymentsClient := payments.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("APP_BASE_URL"))

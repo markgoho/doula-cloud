@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/stripe/stripe-go/v86"
 )
@@ -12,44 +13,62 @@ import (
 // Stripe API via stripe-go -- the same bucket/pusher-vs-client shape as
 // objectstore.GCSStore and push.VAPIDPusher.
 type StripeAPIClient struct {
-	client     *stripe.Client
-	pricing    creditPricing
-	appBaseURL string
+	client        *stripe.Client
+	creditPriceID string
+	appBaseURL    string
+
+	mu            sync.Mutex
+	cachedPricing *creditPricing
 }
 
 // NewStripeAPIClient builds a StripeAPIClient from a Stripe secret API
 // key, the Stripe Price id representing one credit's flat fee, and the
 // app's own base URL (used to build the Checkout Session's success/cancel
 // redirect targets).
+func NewStripeAPIClient(apiKey, creditPriceID, appBaseURL string) *StripeAPIClient {
+	// coverage:ignore reason: only called from main() to build the real client; not exercised by unit tests, which inject billing.FakeStripeClient instead
+	return &StripeAPIClient{client: stripe.NewClient(apiKey), creditPriceID: creditPriceID, appBaseURL: appBaseURL}
+}
+
+// pricing reads the configured credit Price back from Stripe, once, and
+// remembers it.
 //
-// It reads the Price back from Stripe once, here, rather than taking the
-// amount as a second environment variable: an apportioned purchase has to
-// state cent amounts itself, and a copy of the price outside Stripe is a
-// copy that can disagree with the Price the ordinary path charges.
-func NewStripeAPIClient(ctx context.Context, apiKey, creditPriceID, appBaseURL string) (*StripeAPIClient, error) {
+// The amount is fetched rather than configured as a second environment
+// variable because an apportioned Session has to state cent amounts
+// itself, and a copy of the price outside Stripe is a copy that can
+// disagree with the Price the ordinary path charges. It is fetched here
+// rather than at construction because the BFF has to boot without Stripe
+// credentials -- end-to-end tests and the image's boot smoke test both
+// start it with none -- so a missing or wrong price id fails the purchase
+// that needs it, not the process.
+func (c *StripeAPIClient) pricing(ctx context.Context) (creditPricing, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	client := stripe.NewClient(apiKey)
+	c.mu.Lock()
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	price, err := client.V1Prices.Retrieve(ctx, creditPriceID, nil)
+	defer c.mu.Unlock()
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if c.cachedPricing != nil {
+		return *c.cachedPricing, nil
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	price, err := c.client.V1Prices.Retrieve(ctx, c.creditPriceID, nil)
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return nil, fmt.Errorf("billing: retrieve credit price %q: %w", creditPriceID, err)
+		return creditPricing{}, fmt.Errorf("billing: retrieve credit price %q: %w", c.creditPriceID, err)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if price.Product == nil {
-		return nil, fmt.Errorf("billing: credit price %q has no product", creditPriceID)
+		return creditPricing{}, fmt.Errorf("billing: credit price %q has no product", c.creditPriceID)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return &StripeAPIClient{
-		client: client,
-		pricing: creditPricing{
-			priceID:         price.ID,
-			productID:       price.Product.ID,
-			currency:        string(price.Currency),
-			unitAmountCents: price.UnitAmount,
-		},
-		appBaseURL: appBaseURL,
-	}, nil
+	c.cachedPricing = &creditPricing{
+		priceID:         price.ID,
+		productID:       price.Product.ID,
+		currency:        string(price.Currency),
+		unitAmountCents: price.UnitAmount,
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return *c.cachedPricing, nil
 }
 
 // CreateCustomer creates a Stripe Customer tagged with practiceID.
@@ -83,10 +102,16 @@ func (c *StripeAPIClient) CreateCustomer(ctx context.Context, practiceID string)
 // which state's tax was charged.
 func (c *StripeAPIClient) CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	pricing, err := c.pricing(ctx)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", err
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	sess, err := c.client.V1CheckoutSessions.Create(ctx, &stripe.CheckoutSessionCreateParams{
 		Customer:     stripe.String(req.CustomerID),
 		Mode:         stripe.String(string(stripe.CheckoutSessionModePayment)),
-		LineItems:    creditLineItems(c.pricing, req),
+		LineItems:    creditLineItems(pricing, req),
 		AutomaticTax: &stripe.CheckoutSessionCreateAutomaticTaxParams{Enabled: new(true)},
 		CustomerUpdate: &stripe.CheckoutSessionCreateCustomerUpdateParams{
 			Address: stripe.String("auto"),
