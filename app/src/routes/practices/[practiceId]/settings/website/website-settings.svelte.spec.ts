@@ -194,6 +194,23 @@ describe('website settings screen', () => {
 		});
 	});
 
+	it('lets a half-written page be abandoned for her own site without a dead button', async () => {
+		const { puts } = await setup();
+
+		await testPage.getByRole('radio', { name: 'Publish a page for me' }).click();
+		await testPage.getByLabelText('What your Practice offers').fill('a'.repeat(501));
+		await testPage.getByRole('radio', { name: 'I have my own website or social profile' }).click();
+		await testPage
+			.getByLabelText('The web address of your website or social profile')
+			.fill('rochesterdoulas.com');
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect
+			.element(testPage.getByText('Last changed by Maya Chen on August 29, 2026'))
+			.toBeVisible();
+		expect(puts.at(-1)).toEqual({ mode: 'own', ownUrl: 'rochesterdoulas.com' });
+	});
+
 	it('lets her go back from the check screen to change an answer', async () => {
 		await setup();
 

@@ -148,12 +148,22 @@
 		submitError = '';
 		isSubmitting = true;
 		try {
-			current = await saveWebsite(apiFetchWithSession, page.params.practiceId!, {
-				mode: choice === 'hosted' ? 'hosted' : 'own',
-				ownUrl,
-				serviceDescription,
-				cancellationPolicy
-			});
+			/*
+			 * Only the fields the chosen mode is about. The server keeps what
+			 * the other mode wrote (00045's upsert COALESCEs), so sending them
+			 * back buys nothing -- and it costs: a half-written page left over
+			 * from a change of mind would be validated against the budget it
+			 * has not met, and the 400 would name a box this screen is no
+			 * longer showing. A button that silently does nothing is the one
+			 * outcome worth designing out.
+			 */
+			current = await saveWebsite(
+				apiFetchWithSession,
+				page.params.practiceId!,
+				choice === 'hosted'
+					? { mode: 'hosted', serviceDescription, cancellationPolicy }
+					: { mode: 'own', ownUrl }
+			);
 			fieldErrors = {};
 			step = 'saved';
 		} catch (error_) {
