@@ -133,15 +133,36 @@
 			border: 0;
 		}
 
+		/* The brief keeps this spinner rather than replacing it: a small
+		   indicator inside the button a person just pressed is the most
+		   conventional loading affordance there is, and Jakob's Law is the
+		   brief's governing law. What the brief does not allow is movement a
+		   person cannot switch off, so the rotation is gated below and
+		   `reduce` gets the ring standing still. The feedback survives that:
+		   the ring is still drawn, and `button:disabled` still dims the whole
+		   control, so a pressed button still looks pressed. See #418. */
 		.spinner {
 			inline-size: 1em;
 			block-size: 1em;
 			border: 2px solid currentColor;
 			border-inline-end-color: transparent;
 			border-radius: 50%;
-			animation: spin 700ms linear infinite;
 		}
 
+		@media (prefers-reduced-motion: no-preference) {
+			/* motion:ignore -- a continuous indeterminate rotation is not a
+			   state change, an entrance, or a navigation, so none of the three
+			   motion tokens describes it; and `--ease-out` on an infinite loop
+			   would make it lurch once per turn. This is the only place in the
+			   app that legitimately needs a raw duration and `linear`. */
+			.spinner {
+				animation: spin 700ms linear infinite;
+			}
+		}
+
+		/* motion:ignore -- the app's only keyframe animation. It is the
+		   in-button loading indicator above, already gated on
+		   prefers-reduced-motion, and it moves nothing else on the page. */
 		@keyframes spin {
 			to {
 				transform: rotate(360deg);

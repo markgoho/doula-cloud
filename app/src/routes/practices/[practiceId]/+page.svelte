@@ -10,6 +10,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	let practiceName = $state('');
 	let roles = $state<string[]>([]);
@@ -87,4 +88,6 @@
 		})}
 		label="Payments"
 	/>
+{:else}
+	<Skeleton variant="text" lines={6} label="Loading your Practice" />
 {/if}

@@ -84,10 +84,17 @@
 						{#if message.attachmentFilename}
 							{@const filename = message.attachmentFilename}
 							{#if attachmentPreviewURLs[message.messageId]}
+								<!-- width/height are the reserved layout box, not the file's
+								     own dimensions, which are unknowable before the blob
+								     loads. `object-fit: contain` fits the real image inside
+								     that box, so the thread never reflows when an attachment
+								     arrives and nothing is cropped out of a preview. -->
 								<img
 									class="attachment-preview"
 									src={attachmentPreviewURLs[message.messageId]}
 									alt={filename}
+									width="240"
+									height="180"
 								/>
 							{/if}
 							<Button
@@ -143,8 +150,11 @@
 
 		.attachment-preview {
 			display: block;
-			max-inline-size: 240px;
-			max-block-size: 240px;
+			inline-size: 240px;
+			block-size: 180px;
+			max-inline-size: 100%;
+			object-fit: contain;
+			background-color: var(--color-surface-container);
 			border-radius: var(--radius);
 		}
 

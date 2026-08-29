@@ -97,11 +97,11 @@
 
 		@media (prefers-reduced-motion: no-preference) {
 			input.toggle {
-				transition: background-color 150ms ease;
+				transition: background-color var(--motion-state) var(--ease-out);
 			}
 
 			input.toggle::before {
-				transition: translate 150ms ease;
+				transition: translate var(--motion-state) var(--ease-out);
 			}
 		}
 	}

@@ -5,6 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	type ClientListItem = {
 		clientId: string;
@@ -68,4 +69,6 @@
 	<p role="alert">{error}</p>
 {:else if isLoaded}
 	<DataTable {columns} rows={clients} emptyMessage="No Clients yet." />
+{:else}
+	<Skeleton variant="row" lines={8} label="Loading Clients" />
 {/if}

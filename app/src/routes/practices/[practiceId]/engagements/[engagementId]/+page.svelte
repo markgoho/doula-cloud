@@ -33,6 +33,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 
@@ -661,4 +662,6 @@
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
 	/>
+{:else}
+	<Skeleton variant="text" lines={6} label="Loading the Engagement" />
 {/if}

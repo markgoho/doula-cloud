@@ -11,8 +11,47 @@ git config core.hooksPath scripts/hooks
 `scripts/hooks/pre-commit` runs:
 1. **`api/` (Go)**: blocks any commit that stages an unformatted `.go` file, prompting to run `gofmt -w <file>` on it.
 2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
+3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Roughly 6s on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the BFF and the Auth emulator.
 
 This is opt-in (`core.hooksPath` is local git config, not something a clone picks up automatically) — the CI jobs are the actual enforcement backstop regardless of whether it's enabled locally.
+
+## Smoothness: gated on causes, not on frame rate
+
+[ADR-0020](adr/0020-smoothness-is-gated-on-causes-because-the-outcome-is-not-measurable-where-the-gate-lives.md)
+records why, with the measurements behind it. The short version: headless
+Chromium reports a fixed ~8.3ms frame no matter what it renders, and CI's
+`app` job runs Postgres, the Auth emulator, the Go BFF and Chromium on one
+shared runner with `retries: 2`. Neither frame rate nor interaction latency
+can be read honestly in either place. Facts about *space* can, so those are
+what is asserted.
+
+Four specs carry it, all in the unit suite, all blocking:
+
+- `app/src/lib/styles/motion.spec.ts` — parses every `.svelte` and `.css`
+  file under `app/src` for raw durations and easing keywords, ungated
+  transforms, unjustified `@keyframes`, motion tokens with no consumer, and
+  `<img>` without intrinsic dimensions. Break a rule deliberately by putting
+  `motion:ignore` plus the reason in a comment attached to the declaration
+  or to the rule that encloses it — the same shape as `coverage:ignore` in
+  `api/`.
+- `app/src/lib/components/organisms/DataTable.usage.spec.ts` — no route may
+  hand `DataTable` an unbounded list. Four routes are on a justified waiting
+  list until [#446](https://github.com/markgoho/doula-cloud/issues/446)
+  gives their endpoints a cursor; the spec fails if one is left on that list
+  after it starts paginating.
+- `app/src/lib/components/organisms/DataTable.performance.svelte.spec.ts` —
+  a row costs at most six elements, and mount cost stays linear in the row
+  count. A ratio, never a millisecond budget.
+- `app/src/lib/components/atoms/Skeleton.layoutShift.svelte.spec.ts` — a
+  skeleton reserves the space the content it stands in for will occupy.
+
+**What is not checked** is listed in ADR-0020 rather than left to be
+discovered: frame rate, the 100ms and 400ms latency budgets, route-level
+Cumulative Layout Shift, and the blank first frame an SPA paints before its
+JavaScript boots. Scroll feel is a human check on a real display when a
+ticket touches a list. Focus visibility and keyboard reachability belong to
+accessibility ([#447](https://github.com/markgoho/doula-cloud/issues/447)),
+not to this gate, so nothing is asserted twice under two names.
 
 ## `api/`: lint with golangci-lint, matching CI exactly
 

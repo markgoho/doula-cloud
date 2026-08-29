@@ -7,6 +7,7 @@ export const atomPages = [
 	{ name: 'Link', slug: 'link' },
 	{ name: 'Notice', slug: 'notice' },
 	{ name: 'Select', slug: 'select' },
+	{ name: 'Skeleton', slug: 'skeleton' },
 	{ name: 'Text', slug: 'text' },
 	{ name: 'Text input', slug: 'text-input' }
 ] as const;

@@ -78,9 +78,16 @@
 			border-collapse: collapse;
 		}
 
+		/* "Compact rows, airy forms": the brief's Density section fixes a
+		   table row at 40px and body-sm, so a person scanning fifty Clients
+		   sees as many as will fit. The height is set here rather than left
+		   to padding because a Skeleton has to reserve exactly this much
+		   space before the rows arrive -- see Skeleton.layoutShift.svelte.spec.ts. */
 		th,
 		td {
-			padding: var(--space-2) var(--space-3);
+			block-size: 2.5rem;
+			padding: 0 var(--space-3);
+			font-size: var(--text-body-sm-size);
 			text-align: start;
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
