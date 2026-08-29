@@ -71,10 +71,38 @@ The elements one extra row adds, isolated from the table's fixed header cost.
 async function costPerRow(smaller: number, larger: number) {
 	const small = await setup({ rows: smaller });
 	const large = await setup({ rows: larger });
-	return {
-		elements: (large.elements - small.elements) / (larger - smaller),
-		slowdown: large.milliseconds / small.milliseconds
-	};
+	return { elements: (large.elements - small.elements) / (larger - smaller) };
+}
+
+/**
+ * The best mount time observed for a row count, in milliseconds.
+ *
+ * The fastest of several attempts, not one attempt and not their mean,
+ * because timing noise on a shared runner is one-sided: another process
+ * on the machine can only ever make a render take longer, never shorter.
+ * So the minimum is the closest this can get to what the render actually
+ * costs, and a mean would fold in whatever else the runner happened to be
+ * doing.
+ *
+ * Added after a single-sample version failed CI at 6.66 against a
+ * threshold of 6, on a commit that touched no front-end code at all. The
+ * threshold is deliberately unchanged: the point is to measure the same
+ * thing more reliably, not to accept more.
+ */
+async function fastestMount(rows: number, attempts = 3): Promise<number> {
+	// One render thrown away first. A cold mount pays for work that has
+	// nothing to do with the row count -- compiling the component, the
+	// first style recalculation -- and charging that to whichever size
+	// happens to run first is how a linear renderer measures as
+	// super-linear.
+	await setup({ rows });
+
+	let best = Infinity;
+	for (let attempt = 0; attempt < attempts; attempt++) {
+		const { milliseconds } = await setup({ rows });
+		best = Math.min(best, milliseconds);
+	}
+	return best;
 }
 
 describe('a row costs a fixed, small amount of page', () => {
@@ -95,13 +123,16 @@ describe('a row costs a fixed, small amount of page', () => {
 
 describe('mount cost stays linear in the number of rows', () => {
 	it('takes under six times as long for four times the rows', async () => {
-		const { slowdown } = await costPerRow(200, 800);
+		const slowdown = (await fastestMount(800)) / (await fastestMount(200));
 		// Deliberately not a millisecond budget: a constant-factor slowdown
 		// is the element budget's job, and an absolute threshold measures
 		// whatever else is on the runner. What this catches is per-row work
 		// that reads the rest of the list -- a sort, a lookup, an indexOf --
 		// which turns 4x the rows into 16x the time and is what actually
 		// makes a long list stutter.
+		//
+		// Which is also why six survives the noise this measurement still
+		// has: the failure it exists to catch is 16x, not 6.7x.
 		expect(slowdown).toBeLessThan(6);
 	});
 });
