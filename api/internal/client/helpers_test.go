@@ -138,6 +138,21 @@ func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, givenName, em
 	return clientID, engagementID
 }
 
+// seedFieldTemplate inserts a client_field_templates row for practiceID
+// directly, bypassing clientfieldtemplate.PutHandler -- for tests
+// exercising resolveFields' live-read against the template in isolation
+// from that package's own write path.
+func seedFieldTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)
+		 ON CONFLICT (practice_id) DO UPDATE SET fields = EXCLUDED.fields`,
+		practiceID, fieldsJSON,
+	); err != nil {
+		t.Fatalf("seed field template: %v", err)
+	}
+}
+
 // seedGrantedAttachment inserts an open, granted-origin
 // engagement_attachments row directly.
 func seedGrantedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID string) {

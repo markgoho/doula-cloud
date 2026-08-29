@@ -51,11 +51,14 @@ type HistoryEntry struct {
 }
 
 // DetailResponse is a Client's full detail read: her record (both
-// layers), her Engagements past and present, and her merged history.
+// layers), her Practice-defined values resolved against the current
+// Client Field Template, her Engagements past and present, and her
+// merged history.
 type DetailResponse struct {
 	Record
-	Engagements []EngagementSummary `json:"engagements"`
-	History     []HistoryEntry      `json:"history"`
+	ResolvedFields []ResolvedField     `json:"resolvedFields"`
+	Engagements    []EngagementSummary `json:"engagements"`
+	History        []HistoryEntry      `json:"history"`
 }
 
 // DetailHandler views one Client's full record. Access follows
@@ -118,9 +121,17 @@ func DetailHandler() http.Handler {
 			return
 		}
 
+		resolvedFields, err := resolveFields(r.Context(), tx, practiceID, rec.FieldValues)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		out := DetailResponse{Record: rec, ResolvedFields: resolvedFields, Engagements: engagements, History: history}
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(DetailResponse{Record: rec, Engagements: engagements, History: history}); err != nil {
+		if err := json.NewEncoder(w).Encode(out); err != nil {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})

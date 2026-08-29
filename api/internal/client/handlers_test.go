@@ -457,6 +457,100 @@ func TestDetailHandler_ReturnsRecordEngagementsAndHistory(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_ResolvedFieldsCoverActiveBlankArchivedHeldAndDropped
+// proves #399's AC3 and AC5: an active field always appears (even
+// blank), an archived field appears only when the Client holds a stored
+// value under it and is marked "No longer collected", and an archived
+// field with no stored value does not appear at all.
+func TestDetailHandler_ResolvedFieldsCoverActiveBlankArchivedHeldAndDropped(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-resolved-fields"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	clientID := seedClient(t, db, practiceID, "Resolved Fields Client", "resolved@example.com")
+
+	seedFieldTemplate(t, db, practiceID, `[
+		{"id":"active_blank","type":"short_text","label":"Pronouns","order":0,"archived":false},
+		{"id":"active_held","type":"short_text","label":"Intake note","order":1,"archived":false},
+		{"id":"archived_held","type":"short_text","label":"Old note","order":2,"archived":true},
+		{"id":"archived_blank","type":"short_text","label":"Never filled in","order":3,"archived":true}
+	]`)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET field_values = $1 WHERE id = $2`,
+		`{"active_held":"She/her","archived_held":"Kept for the record"}`, clientID,
+	); err != nil {
+		t.Fatalf("seed field values: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	defer resp.Body.Close()
+	var out client.DetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	byID := map[string]client.ResolvedField{}
+	for _, f := range out.ResolvedFields {
+		byID[f.FieldID] = f
+	}
+	if _, dropped := byID["archived_blank"]; dropped {
+		t.Fatalf("resolved fields = %+v, want archived_blank dropped", out.ResolvedFields)
+	}
+	if len(byID) != 3 {
+		t.Fatalf("resolved fields = %+v, want exactly 3", out.ResolvedFields)
+	}
+
+	active := byID["active_blank"]
+	if active.Note != "" || string(active.Value) != "null" {
+		t.Fatalf("active_blank = %+v, want no note and a null value", active)
+	}
+	held := byID["active_held"]
+	if held.Note != "" || string(held.Value) != `"She/her"` {
+		t.Fatalf("active_held = %+v, want no note and its stored value", held)
+	}
+	archived := byID["archived_held"]
+	if archived.Note != "No longer collected" || string(archived.Value) != `"Kept for the record"` {
+		t.Fatalf("archived_held = %+v, want the \"No longer collected\" note and its stored value", archived)
+	}
+}
+
+// TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted proves ADR-0017's
+// departure from ADR-0001: editing the Practice's Client Field Template
+// after a Client already exists changes what her detail read shows, on
+// the very next read -- nothing is snapshotted at intake.
+func TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-live-template"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	clientID := seedClient(t, db, practiceID, "Live Template Client", "live@example.com")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	before := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	var beforeOut client.DetailResponse
+	if err := json.NewDecoder(before.Body).Decode(&beforeOut); err != nil {
+		t.Fatalf("decode before response: %v", err)
+	}
+	_ = before.Body.Close()
+	if len(beforeOut.ResolvedFields) != 0 {
+		t.Fatalf("resolved fields before template exists = %+v, want none", beforeOut.ResolvedFields)
+	}
+
+	seedFieldTemplate(t, db, practiceID, `[{"id":"new_field","type":"short_text","label":"Added later","order":0,"archived":false}]`)
+
+	after := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	defer after.Body.Close()
+	var afterOut client.DetailResponse
+	if err := json.NewDecoder(after.Body).Decode(&afterOut); err != nil {
+		t.Fatalf("decode after response: %v", err)
+	}
+	if len(afterOut.ResolvedFields) != 1 || afterOut.ResolvedFields[0].FieldID != "new_field" {
+		t.Fatalf("resolved fields after adding a field to the template = %+v, want one field new_field", afterOut.ResolvedFields)
+	}
+}
+
 // TestListHandler_ClientShapedDefaultFiltersToWork proves the Clients
 // list returns one row per Client (not one per Client+Engagement pair)
 // and defaults to Clients with work.
