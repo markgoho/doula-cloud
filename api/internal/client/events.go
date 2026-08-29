@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	"doula-cloud/api/internal/activity"
 )
 
 type eventType string
@@ -59,25 +61,26 @@ func createdDiff(rec Record) map[string]change {
 	return diffRecords(Record{FieldValues: []byte("{}")}, rec)
 }
 
-// recordEvent inserts one client_events row: eventType, the diff, and the
-// acting Staff member. client_events is append-only (SELECT, INSERT only
-// -- no UPDATE, no DELETE grant), so this is the only way this package
-// ever touches it. Every create and every edit writes exactly one row,
-// even a no-op edit whose diff is empty -- "one row per act" (ADR-0017),
-// not one row per changed fact.
+// recordEvent writes one activity row (subject_kind 'client', ADR-0022):
+// eventType, the diff, and the acting Staff member. Every create and
+// every edit writes exactly one row, even a no-op edit whose diff is
+// empty -- "one row per act" (ADR-0017), not one row per changed fact.
 func recordEvent(ctx context.Context, tx *sql.Tx, practiceID, clientID string, et eventType, diff map[string]change, actorStaffID string) error {
 	diffJSON, err := json.Marshal(diff)
 	if err != nil {
 		// coverage:ignore reason: a map of strings/RawMessage always marshals cleanly, not exercised by unit tests
 		return fmt.Errorf("client: marshal event diff: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO client_events (practice_id, client_id, event_type, diff, actor_kind, actor_staff_id)
-		 VALUES ($1, $2, $3, $4, 'staff', $5)`,
-		practiceID, clientID, string(et), diffJSON, actorStaffID,
-	); err != nil {
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: "client",
+		SubjectID:   clientID,
+		Action:      string(et),
+		Diff:        diffJSON,
+		Actor:       activity.StaffActor(actorStaffID),
+	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("client: insert client event: %w", err)
+		return fmt.Errorf("client: record client event: %w", err)
 	}
 	return nil
 }

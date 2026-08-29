@@ -66,13 +66,13 @@ func patchMembershipRaw(t *testing.T, srv *httptest.Server, session, practiceID,
 func membershipEvents(t *testing.T, db *testdb.DB, practiceID, staffID string) []string {
 	t.Helper()
 	rows, err := db.Admin.QueryContext(t.Context(),
-		`SELECT event_type::text || ':' || COALESCE(array_to_string(previous_roles, ','), '') ||
-		        '->' || COALESCE(array_to_string(roles, ','), '') ||
-		        '/' || COALESCE(previous_employment_type::text, '') ||
-		        '->' || COALESCE(employment_type::text, '')
-		 FROM practice_membership_events
-		 WHERE practice_id = $1 AND staff_id = $2
-		 ORDER BY created_at, event_type`,
+		`SELECT action || ':' || COALESCE(diff->'roles'->>'from', '') ||
+		        '->' || COALESCE(diff->'roles'->>'to', '') ||
+		        '/' || COALESCE(diff->'employmentType'->>'from', '') ||
+		        '->' || COALESCE(diff->'employmentType'->>'to', '')
+		 FROM activity
+		 WHERE practice_id = $1 AND subject_kind = 'membership' AND subject_id = $2
+		 ORDER BY created_at, action`,
 		practiceID, staffID,
 	)
 	if err != nil {
@@ -137,9 +137,8 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 
 	events := membershipEvents(t, db, practiceID, targetID)
 	// Both events share one created_at (one transaction), so the tie
-	// breaks on event_type -- ordered by the enum's declaration order in
-	// 00039, not alphabetically.
-	want := []string{"roles_changed:doula->admin,doula/->", "employment_type_changed:->/employee->contractor"}
+	// breaks on action, alphabetically.
+	want := []string{"employment_type_changed:->/employee->contractor", "roles_changed:doula->admin,doula/->"}
 	if len(events) != len(want) {
 		t.Fatalf("events = %v, want %v", events, want)
 	}
@@ -151,7 +150,7 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 
 	var actor string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT DISTINCT actor_staff_id FROM practice_membership_events WHERE staff_id = $1`, targetID,
+		`SELECT DISTINCT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID,
 	).Scan(&actor); err != nil {
 		t.Fatalf("read actor: %v", err)
 	}
@@ -345,7 +344,7 @@ func TestRemoveMembershipHandler_Success(t *testing.T) {
 	}
 	var actor string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM practice_membership_events WHERE staff_id = $1`, targetID,
+		`SELECT actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1`, targetID,
 	).Scan(&actor); err != nil {
 		t.Fatalf("read actor: %v", err)
 	}

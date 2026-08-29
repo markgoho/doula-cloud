@@ -9,21 +9,44 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"doula-cloud/api/internal/activity"
 )
 
-// MembershipEvent is one recorded change to a Membership --
-// practice_membership_events (00039). Roles and EmploymentType are the
-// state after the change; Previous* are the state before, empty on a
-// 'joined' event, which has no before.
+// MembershipEvent is one recorded change to a Membership, subject_kind
+// 'membership' in the activity log (ADR-0022). Roles and EmploymentType
+// are the state after the change; Previous* are the state before, empty
+// on a 'joined' event, which has no before.
 type MembershipEvent struct {
 	PracticeID             string
 	StaffID                string
-	Type                   string // 'joined' | 'roles_changed' | 'employment_type_changed'
+	Type                   string // 'joined' | 'roles_changed' | 'employment_type_changed' | 'removed'
 	PreviousRoles          string // Postgres array literal, e.g. "{owner,doula}"
 	Roles                  string
 	PreviousEmploymentType string
 	EmploymentType         string
 	ActorStaffID           string
+}
+
+// fromTo is one changed fact's before/after, the same shape client's
+// diffRecords builds -- a membership event has exactly two facts that
+// can change (roles, employment type), never more, so it is written by
+// hand here rather than sharing that package's diffing machinery.
+type fromTo struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// rolesLiteralToCSV strips a Postgres array literal's braces, e.g.
+// "{owner,doula}" -> "owner,doula", leaving the diff's JSON free of
+// Postgres-specific syntax. A MembershipEvent whose roles did not
+// change carries "" (no braces at all, see RecordMembershipEvent's
+// callers), which passes through unchanged.
+func rolesLiteralToCSV(literal string) string {
+	if literal == "" {
+		return ""
+	}
+	return strings.Trim(literal, "{}")
 }
 
 // RecordMembershipEvent writes one row of a Membership's history. Every
@@ -32,18 +55,27 @@ type MembershipEvent struct {
 // does -- CLAUDE.md's audit-trail expectation, answered where the change
 // happens rather than by a listener that can miss one.
 func RecordMembershipEvent(ctx context.Context, tx *sql.Tx, e MembershipEvent) error {
-	_, err := tx.ExecContext(ctx,
-		`INSERT INTO practice_membership_events
-		     (practice_id, staff_id, event_type, previous_roles, roles,
-		      previous_employment_type, employment_type, actor_staff_id)
-		 VALUES ($1, $2, $3::membership_event_type,
-		         NULLIF($4, '')::practice_role[], NULLIF($5, '')::practice_role[],
-		         NULLIF($6, '')::employment_type, NULLIF($7, '')::employment_type, $8)`,
-		e.PracticeID, e.StaffID, e.Type, e.PreviousRoles, e.Roles,
-		e.PreviousEmploymentType, e.EmploymentType, e.ActorStaffID,
-	)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	diff, err := json.Marshal(struct {
+		Roles          fromTo `json:"roles"`
+		EmploymentType fromTo `json:"employmentType"`
+	}{
+		Roles:          fromTo{From: rolesLiteralToCSV(e.PreviousRoles), To: rolesLiteralToCSV(e.Roles)},
+		EmploymentType: fromTo{From: e.PreviousEmploymentType, To: e.EmploymentType},
+	})
 	if err != nil {
+		// coverage:ignore reason: a struct of plain strings always marshals cleanly, not exercised by unit tests
+		return fmt.Errorf("staffauth: marshal membership event diff: %w", err)
+	}
+
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  e.PracticeID,
+		SubjectKind: "membership",
+		SubjectID:   e.StaffID,
+		Action:      e.Type,
+		Diff:        diff,
+		Actor:       activity.StaffActor(e.ActorStaffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("staffauth: record membership event: %w", err)
 	}
 	return nil

@@ -136,8 +136,8 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 
 	var eventType, actor string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT event_type::text, actor_staff_id FROM practice_membership_events
-		 WHERE practice_id = $1 AND staff_id = $2`, practiceID, accepted.StaffID,
+		`SELECT action, actor_staff_id FROM activity
+		 WHERE practice_id = $1 AND subject_kind = 'membership' AND subject_id = $2`, practiceID, accepted.StaffID,
 	).Scan(&eventType, &actor); err != nil {
 		t.Fatalf("read membership event: %v", err)
 	}

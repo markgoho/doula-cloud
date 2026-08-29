@@ -189,8 +189,8 @@ func TestRLS_PracticeMembershipsVisibilityIsScopedToCurrentPractice(t *testing.T
 	}
 }
 
-// TestRLS_MembershipEventsAreScopedToCurrentPractice proves
-// practice_membership_events (00039) is fenced the same way every other
+// TestRLS_MembershipEventsAreScopedToCurrentPractice proves the activity
+// table (00051, ADR-0022) is fenced the same way every other
 // practice_id-carrying table is: an audit record of who changed whose
 // Membership is exactly the kind of row a second Practice must not read.
 func TestRLS_MembershipEventsAreScopedToCurrentPractice(t *testing.T) {
@@ -200,8 +200,8 @@ func TestRLS_MembershipEventsAreScopedToCurrentPractice(t *testing.T) {
 	staffID := seedStaff(t, db, "membership-events-rls")
 	seedMembership(t, db, mine, staffID)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_membership_events (practice_id, staff_id, event_type, roles, employment_type, actor_staff_id)
-		 VALUES ($1, $2, 'joined', '{doula}', 'employee', $2)`,
+		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)
+		 VALUES ($1, 'membership', $2, 'joined', '{}'::jsonb, 'staff', $2)`,
 		mine, staffID,
 	); err != nil {
 		t.Fatalf("seed membership event: %v", err)
@@ -225,7 +225,7 @@ func TestRLS_MembershipEventsAreScopedToCurrentPractice(t *testing.T) {
 				t.Fatalf("set_config: %v", err)
 			}
 			var count int
-			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_membership_events`).Scan(&count); err != nil {
+			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM activity`).Scan(&count); err != nil {
 				t.Fatalf("count membership events: %v", err)
 			}
 			if count != tc.want {

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -76,9 +77,9 @@ func GetHandler() http.Handler {
 // PutHandler lets an Owner or Admin replace the full field list of the
 // current Practice's Client Field Template -- add, reorder, archive and
 // unarchive, never a bare delete (normalizeFields refuses one). Every
-// change that actually alters the list writes one
-// client_field_template_events row naming the actor, in the same
-// transaction as the update. Must be mounted behind staffauth.Middleware.
+// change that actually alters the list writes one activity row naming
+// the actor, in the same transaction as the update. Must be mounted
+// behind staffauth.Middleware.
 func PutHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
@@ -149,9 +150,10 @@ func FetchFields(ctx context.Context, tx *sql.Tx, practiceID string) ([]Field, e
 }
 
 // saveFields upserts practiceID's field list and, when fields actually
-// differs from previous, writes one client_field_template_events row
-// holding both sides -- skipped on a no-op PUT (e.g. re-saving an
-// unchanged list) so the audit trail stays one row per real act.
+// differs from previous, writes one activity row (subject_kind
+// 'client_field_template', ADR-0022) holding both sides -- skipped on a
+// no-op PUT (e.g. re-saving an unchanged list) so the audit trail stays
+// one row per real act.
 func saveFields(ctx context.Context, tx *sql.Tx, practiceID, staffID string, previous, fields []Field) error {
 	fieldsJSON, err := json.Marshal(fields)
 	if err != nil {
@@ -159,11 +161,13 @@ func saveFields(ctx context.Context, tx *sql.Tx, practiceID, staffID string, pre
 		return fmt.Errorf("clientfieldtemplate: marshal fields: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx,
+	var templateID string
+	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)
-		 ON CONFLICT (practice_id) DO UPDATE SET fields = EXCLUDED.fields, updated_at = now()`,
+		 ON CONFLICT (practice_id) DO UPDATE SET fields = EXCLUDED.fields, updated_at = now()
+		 RETURNING id`,
 		practiceID, fieldsJSON,
-	); err != nil {
+	).Scan(&templateID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("clientfieldtemplate: save fields: %w", err)
 	}
@@ -182,12 +186,16 @@ func saveFields(ctx context.Context, tx *sql.Tx, practiceID, staffID string, pre
 		// coverage:ignore reason: both sides always marshal cleanly, not exercised by unit tests
 		return fmt.Errorf("clientfieldtemplate: marshal diff: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO client_field_template_events (practice_id, diff, actor_staff_id) VALUES ($1, $2, $3)`,
-		practiceID, diff, staffID,
-	); err != nil {
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: "client_field_template",
+		SubjectID:   templateID,
+		Action:      "updated",
+		Diff:        diff,
+		Actor:       activity.StaffActor(staffID),
+	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("clientfieldtemplate: insert audit event: %w", err)
+		return fmt.Errorf("clientfieldtemplate: record audit event: %w", err)
 	}
 	return nil
 }

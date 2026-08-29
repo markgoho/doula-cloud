@@ -160,41 +160,50 @@ func TestRLS_DoulaUpdateAffectsZeroRows(t *testing.T) {
 	}
 }
 
-// TestRLS_AuditEventInsertRequiresOwnerOrAdminAndOwnActorID proves
-// client_field_template_events_insert refuses a Doula's INSERT, and
-// refuses an Owner naming someone else as the actor.
-func TestRLS_AuditEventInsertRequiresOwnerOrAdminAndOwnActorID(t *testing.T) {
+// TestRLS_ActivityIsScopedToCurrentPractice proves the activity table
+// (00051, ADR-0022) fences a Client Field Template's audit rows by
+// Practice the same way every practice_id-carrying table is fenced.
+//
+// 00050's own client_field_template_events_insert additionally refused
+// a Doula's INSERT and an Owner naming someone else as the actor -- a
+// per-table INSERT-time role check that activity's single, shared
+// practice-tier policy does not carry forward (ADR-0022 is one policy
+// for every subject_kind, not a carve-out per predecessor table; see
+// 00051_activity_log.sql's comment). That role check still runs where
+// it can actually be enforced: PutHandler behind
+// staffauth.RequireOwnerOrAdmin (TestPutHandler_DoulaForbidden), the
+// same seam every other Staff-write endpoint in this repo relies on.
+func TestRLS_ActivityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "rls-audit-owner")
-	ownerID := seedStaffID(t, db, "rls-audit-owner")
+	mine := seedOwner(t, db, "rls-activity-mine")
+	mineID := seedStaffID(t, db, "rls-activity-mine")
+	theirs := seedOwner(t, db, "rls-activity-theirs")
 
-	doulaPracticeID := seedDoula(t, db, "rls-audit-doula")
-	doulaID := seedStaffID(t, db, "rls-audit-doula")
-
-	txDoula := beginAs(t, db, doulaPracticeID, doulaID)
-	if _, err := txDoula.ExecContext(t.Context(),
-		`INSERT INTO client_field_template_events (practice_id, diff, actor_staff_id) VALUES ($1, '{}'::jsonb, $2)`,
-		doulaPracticeID, doulaID,
-	); err == nil {
-		t.Fatal("expected a Doula's audit-event INSERT to be refused, got no error")
-	}
-
-	// A separate tx per assertion: Postgres aborts the whole transaction
-	// on a failed INSERT, so the "names herself" success case below can't
-	// share a tx with the "names someone else" failure above.
-	txOwnerRefused := beginAs(t, db, practiceID, ownerID)
-	if _, err := txOwnerRefused.ExecContext(t.Context(),
-		`INSERT INTO client_field_template_events (practice_id, diff, actor_staff_id) VALUES ($1, '{}'::jsonb, $2)`,
-		practiceID, doulaID,
-	); err == nil {
-		t.Fatal("expected an Owner naming a different staff member as actor to be refused, got no error")
-	}
-
-	txOwnerAdmitted := beginAs(t, db, practiceID, ownerID)
-	if _, err := txOwnerAdmitted.ExecContext(t.Context(),
-		`INSERT INTO client_field_template_events (practice_id, diff, actor_staff_id) VALUES ($1, '{}'::jsonb, $2)`,
-		practiceID, ownerID,
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)
+		 VALUES ($1, 'client_field_template', $1, 'updated', '{}'::jsonb, 'staff', $2)`,
+		mine, mineID,
 	); err != nil {
-		t.Fatalf("expected an Owner naming herself as actor to be admitted, got: %v", err)
+		t.Fatalf("seed activity row: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name       string
+		practiceID string
+		want       int
+	}{
+		{"own practice", mine, 1},
+		{"another practice", theirs, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tx := beginAs(t, db, tc.practiceID, mineID)
+			var count int
+			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM activity`).Scan(&count); err != nil {
+				t.Fatalf("count activity: %v", err)
+			}
+			if count != tc.want {
+				t.Fatalf("visible activity rows = %d, want %d", count, tc.want)
+			}
+		})
 	}
 }

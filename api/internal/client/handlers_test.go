@@ -82,12 +82,12 @@ func TestCreateHandler_MinimalSavesFreely(t *testing.T) {
 	var eventCount int
 	var eventType string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*), max(event_type::text) FROM client_events WHERE client_id = $1`, rec.ID,
+		`SELECT count(*), max(action) FROM activity WHERE subject_kind = 'client' AND subject_id = $1`, rec.ID,
 	).Scan(&eventCount, &eventType); err != nil {
-		t.Fatalf("count client_events: %v", err)
+		t.Fatalf("count activity: %v", err)
 	}
 	if eventCount != 1 || eventType != "created" {
-		t.Fatalf("client_events count = %d type = %q, want 1 and \"created\"", eventCount, eventType)
+		t.Fatalf("activity count = %d type = %q, want 1 and \"created\"", eventCount, eventType)
 	}
 }
 
@@ -336,7 +336,7 @@ func TestEditHandler_ChangingEmailRevokesPendingInvite(t *testing.T) {
 	}
 }
 
-// TestEditHandler_EveryEditWritesOneClientEvent proves the client_events
+// TestEditHandler_EveryEditWritesOneClientEvent proves the activity
 // AC: an edit that actually changes a fact writes exactly one row, with
 // a diff and a named actor.
 func TestEditHandler_EveryEditWritesOneClientEvent(t *testing.T) {
@@ -358,10 +358,10 @@ func TestEditHandler_EveryEditWritesOneClientEvent(t *testing.T) {
 	var eventType, actorKind string
 	var actorStaffID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*), max(event_type::text), max(actor_kind::text), max(actor_staff_id::text)
-		 FROM client_events WHERE client_id = $1 AND event_type = 'updated'`, clientID,
+		`SELECT count(*), max(action), max(actor_kind::text), max(actor_staff_id::text)
+		 FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'updated'`, clientID,
 	).Scan(&eventCount, &eventType, &actorKind, &actorStaffID); err != nil {
-		t.Fatalf("query client_events: %v", err)
+		t.Fatalf("query activity: %v", err)
 	}
 	if eventCount != 1 || eventType != "updated" || actorKind != "staff" || actorStaffID == "" {
 		t.Fatalf("eventCount=%d eventType=%q actorKind=%q actorStaffID=%q, want 1 updated staff <id>", eventCount, eventType, actorKind, actorStaffID)
@@ -370,7 +370,7 @@ func TestEditHandler_EveryEditWritesOneClientEvent(t *testing.T) {
 
 // TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent proves ADR-0017's
 // "one row per act": even a no-op edit (identical values resubmitted)
-// writes exactly one client_events row, with an empty diff.
+// writes exactly one activity row, with an empty diff.
 func TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-noop-edit"
@@ -389,12 +389,12 @@ func TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent(t *testing.T) {
 	var count int
 	var diffJSON string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*), max(diff::text) FROM client_events WHERE client_id = $1`, clientID,
+		`SELECT count(*), max(diff::text) FROM activity WHERE subject_kind = 'client' AND subject_id = $1`, clientID,
 	).Scan(&count, &diffJSON); err != nil {
-		t.Fatalf("count client_events: %v", err)
+		t.Fatalf("count activity: %v", err)
 	}
 	if count != 1 || diffJSON != "{}" {
-		t.Fatalf("client_events count = %d diff = %q, want 1 row with an empty diff", count, diffJSON)
+		t.Fatalf("activity count = %d diff = %q, want 1 row with an empty diff", count, diffJSON)
 	}
 }
 
@@ -418,7 +418,7 @@ func TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob(t *testing.T) {
 
 	var diffJSON []byte
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT diff FROM client_events WHERE client_id = $1 AND event_type = 'updated'`, clientID,
+		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'updated'`, clientID,
 	).Scan(&diffJSON); err != nil {
 		t.Fatalf("read diff: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob(t *testing.T) {
 }
 
 // TestDetailHandler_ReturnsRecordEngagementsAndHistory proves the detail
-// read: her record, her Engagements, and client_events merged with
+// read: her record, her Engagements, and activity merged with
 // engagement_requests.
 func TestDetailHandler_ReturnsRecordEngagementsAndHistory(t *testing.T) {
 	db := testdb.New(t)
@@ -800,7 +800,7 @@ func TestDetailHandler_InvalidAndMissing(t *testing.T) {
 }
 
 // TestDetailHandler_MergesEventsAndRequestsIntoHistory proves the merged
-// history: client_events rows (written by an actual create then edit)
+// history: activity rows (written by an actual create then edit)
 // interleaved with engagement_requests rows, newest first.
 func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 	db := testdb.New(t)

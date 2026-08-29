@@ -13,8 +13,9 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// Event is one client_events row: what changed, when, and who did
-// it -- append-only, so this is always the row exactly as written.
+// Event is one activity row for this Client (subject_kind 'client',
+// ADR-0022): what changed, when, and who did it -- append-only, so this
+// is always the row exactly as written.
 type Event struct {
 	EventType    string          `json:"eventType"`
 	Diff         json.RawMessage `json:"diff"`
@@ -166,8 +167,8 @@ func mergedHistory(ctx context.Context, tx *sql.Tx, clientID string) ([]HistoryE
 
 func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT event_type::text, diff, actor_kind::text, actor_staff_id, created_at
-		 FROM client_events WHERE client_id = $1 ORDER BY created_at`,
+		`SELECT action, diff, actor_kind::text, actor_staff_id, created_at
+		 FROM activity WHERE subject_kind = 'client' AND subject_id = $1 ORDER BY created_at`,
 		clientID,
 	)
 	if err != nil {

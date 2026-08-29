@@ -91,26 +91,27 @@ func seedTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON string) {
 	}
 }
 
-// auditEventCount counts client_field_template_events rows for
-// practiceID.
+// auditEventCount counts activity rows (subject_kind
+// 'client_field_template', ADR-0022) for practiceID.
 func auditEventCount(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
 	var count int
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM client_field_template_events WHERE practice_id = $1`, practiceID,
+		`SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'client_field_template'`, practiceID,
 	).Scan(&count); err != nil {
 		t.Fatalf("count audit events: %v", err)
 	}
 	return count
 }
 
-// lastAuditActor reads the actor_staff_id of the most recent
-// client_field_template_events row for practiceID.
+// lastAuditActor reads the actor_staff_id of the most recent activity
+// row (subject_kind 'client_field_template') for practiceID.
 func lastAuditActor(t *testing.T, db *testdb.DB, practiceID string) string {
 	t.Helper()
 	var actorID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM client_field_template_events WHERE practice_id = $1 ORDER BY created_at DESC LIMIT 1`,
+		`SELECT actor_staff_id FROM activity
+		 WHERE practice_id = $1 AND subject_kind = 'client_field_template' ORDER BY created_at DESC LIMIT 1`,
 		practiceID,
 	).Scan(&actorID); err != nil {
 		t.Fatalf("read last audit actor: %v", err)

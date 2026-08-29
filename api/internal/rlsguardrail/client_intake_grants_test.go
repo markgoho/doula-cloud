@@ -11,34 +11,34 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// TestGrant_ClientEventsIsAppendOnly proves client_events
-// (00042_client_intake_schema.sql) holds SELECT and INSERT but no UPDATE
-// or DELETE grant for app_runtime -- an audit trail that can't be
-// rewritten or removed after the fact.
-func TestGrant_ClientEventsIsAppendOnly(t *testing.T) {
+// TestGrant_ActivityIsAppendOnly proves activity (00051_activity_log.sql,
+// ADR-0022) holds SELECT and INSERT but no UPDATE or DELETE grant for
+// app_runtime -- an audit trail that can't be rewritten or removed after
+// the fact.
+func TestGrant_ActivityIsAppendOnly(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, clientID, _ := seedEngagementAt(t, db, "Grant Client Events Practice")
 	staffID := seedGrantStaffAt(t, db, practiceID, "grant-client-events-staff")
 
 	var eventID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_events (practice_id, client_id, event_type, diff, actor_kind, actor_staff_id)
-		 VALUES ($1, $2, 'created', '{}'::jsonb, 'staff', $3) RETURNING id`,
+		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)
+		 VALUES ($1, 'client', $2, 'created', '{}'::jsonb, 'staff', $3) RETURNING id`,
 		practiceID, clientID, staffID,
 	).Scan(&eventID); err != nil {
 		t.Fatalf("seed client event: %v", err)
 	}
 
 	if _, err := db.App.ExecContext(t.Context(),
-		`UPDATE client_events SET diff = '{"x":1}'::jsonb WHERE id = $1`, eventID,
+		`UPDATE activity SET diff = '{"x":1}'::jsonb WHERE id = $1`, eventID,
 	); err == nil {
-		t.Fatal("expected UPDATE on client_events to be rejected, got no error")
+		t.Fatal("expected UPDATE on activity to be rejected, got no error")
 	} else if !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected a permission-denied error, got: %v", err)
 	}
 
-	if _, err := db.App.ExecContext(t.Context(), `DELETE FROM client_events WHERE id = $1`, eventID); err == nil {
-		t.Fatal("expected DELETE on client_events to be rejected, got no error")
+	if _, err := db.App.ExecContext(t.Context(), `DELETE FROM activity WHERE id = $1`, eventID); err == nil {
+		t.Fatal("expected DELETE on activity to be rejected, got no error")
 	} else if !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected a permission-denied error, got: %v", err)
 	}
