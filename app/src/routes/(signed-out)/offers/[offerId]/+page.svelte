@@ -101,7 +101,7 @@
 
 	{#if offer.state === 'offered'}
 		<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." tone="variant" />
-		<Link href={`${resolve('/accept-invite')}?token=${encodeURIComponent(token)}`} label="Join and accept" />
+		<Link href={`${resolve('/(signed-out)/accept-invite')}?token=${encodeURIComponent(token)}`} label="Join and accept" />
 		<Button label="Decline" variant="secondary" onClick={handleDecline} loading={isDeclining} />
 	{/if}
 {/if}

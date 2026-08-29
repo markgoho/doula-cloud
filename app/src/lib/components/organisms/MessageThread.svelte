@@ -150,8 +150,8 @@
 
 		.attachment-preview {
 			display: block;
-			inline-size: 240px;
-			block-size: 180px;
+			inline-size: var(--thumb-max-inline);
+			block-size: var(--thumb-max-block);
 			max-inline-size: 100%;
 			object-fit: contain;
 			background-color: var(--color-surface-container);
@@ -178,8 +178,8 @@
 		}
 
 		textarea:focus-visible {
-			outline: 2px solid var(--color-primary);
-			outline-offset: 2px;
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
 		}
 
 		input[type='file'] {

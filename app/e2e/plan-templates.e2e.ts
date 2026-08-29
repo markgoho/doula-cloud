@@ -33,6 +33,10 @@ test('Practice Owner can view seeded plan templates and add/save a field', async
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
+	// Through Settings, which is where these screens live now that the
+	// shell's six-item nav replaced the temporary header of links (#452).
+	await page.getByRole('link', { name: 'Settings' }).first().click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings$`));
 	await page.getByRole('link', { name: 'Plan Templates' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings/plan-templates$`));
 

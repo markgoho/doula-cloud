@@ -13,7 +13,6 @@
 // One variable file covers every weight the scale uses (400/500/600), so there
 // are no per-weight downloads. Italic is deliberately not fetched -- no step in
 // the brief's type scale uses it (#417).
-import { mkdir, writeFile } from 'node:fs/promises';
 
 const targetDirectory = new URL('../src/lib/styles/fonts/', import.meta.url);
 const subsets = ['latin', 'latin-ext'];
@@ -100,8 +99,8 @@ for (const [, subset, body] of css.matchAll(/\/\*\s*([\w-]+)\s*\*\/\s*@font-face
 
 	const fileName = `hanken-grotesk-${subset}.woff2`;
 	const bytes = new Uint8Array(await fetchBytes(remoteUrl));
-	await mkdir(targetDirectory, { recursive: true });
-	await writeFile(new URL(fileName, targetDirectory), bytes);
+	// No mkdir: Bun.write creates the parent directories it needs.
+	await Bun.write(new URL(fileName, targetDirectory), bytes);
 
 	faces.push(`@font-face {
 	font-family: 'Hanken Grotesk';
@@ -159,7 +158,7 @@ ${faces.join('\n\n')}
 ${fallback}
 `;
 
-await writeFile(new URL('../fonts.css', targetDirectory), generated);
+await Bun.write(new URL('../fonts.css', targetDirectory), generated);
 
 console.log(
 	`Wrote ${faces.length} face(s) and a fallback at size-adjust ${percent(sizeAdjust)}.`

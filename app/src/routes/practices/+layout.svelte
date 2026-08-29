@@ -9,38 +9,79 @@
 		unregisterPushSubscription
 	} from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
-	import SignOutButton from '#lib/components/molecules/SignOutButton.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import type { PracticeOption } from '#lib/components/molecules/PracticeSwitcher.svelte';
+	import StaffTopBar, { type NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
 
 	let { children } = $props();
 
-	/*
-	 * Temporary chrome. Until #452 builds the real Staff shell, these are
-	 * the links the Practice landing page used to carry itself -- moved up
-	 * here because navigation is chrome, and ADR-0018 puts all chrome on
-	 * the layout. #423 needed them off the page: a menu of administration
-	 * is precisely what made that page the abandon point in
-	 * `docs/journeys/evaluator-doula.md`.
-	 *
-	 * Same links and the same Owner gate as before, so nothing a person is
-	 * mid-journey through moves. The shell replaces this whole header.
-	 */
+	type Membership = { practiceId: string; practiceName: string; roles: string[] };
+	type StaffSession = { name: string; email: string; memberships: Membership[] };
+
+	let session = $state<StaffSession | undefined>();
 	let roles = $state<string[]>([]);
-	let isOwner = $derived(roles.includes('owner'));
+
+	const practiceId = $derived(page.params.practiceId);
 
 	onMount(async () => {
-		const practiceId = page.params.practiceId;
+		// Who am I: the name and email the avatar menu shows, and the
+		// Memberships the Practice switcher is built from. Free -- this is
+		// the same endpoint login already calls to decide where to land.
+		const sessionResponse = await apiFetchWithSession('/api/staff/session');
+		if (sessionResponse.ok) session = await sessionResponse.json();
+
 		if (practiceId === undefined) return;
 
-		const response = await apiFetchWithSession(`/api/practices/${practiceId}/session`);
-		if (!response.ok) return;
-
-		const body: { roles: string[] } = await response.json();
+		// What I am *here*. Separate from the above because a role is held at
+		// a Practice, not by a person: the same account is an Owner at one
+		// agency and a contractor Doula at the next.
+		const rolesResponse = await apiFetchWithSession(`/api/practices/${practiceId}/session`);
+		if (!rolesResponse.ok) return;
+		const body: { roles: string[] } = await rolesResponse.json();
 		roles = body.roles;
 	});
 
+	/*
+	 * The drawing (#431) shows an Owner's bar, with all six sections. A
+	 * Doula's is four: `GET .../billing` and `GET .../staff` are both
+	 * `ownerAndAdmin` on the BFF, so offering her those two would be a
+	 * promise the endpoint refuses. Same rule #423 applied to the landing
+	 * page's rail -- ask only for what the caller's role can be served.
+	 */
+	const isAdmin = $derived(roles.includes('owner') || roles.includes('admin'));
+
+	const navItems = $derived.by((): NavItem[] => {
+		if (practiceId === undefined) return [];
+		const path = page.url.pathname;
+		const overview = resolve('/practices/[practiceId]', { practiceId });
+		const items = [
+			{ label: 'Overview', href: overview, current: path === overview },
+			{ label: 'Clients', href: resolve('/practices/[practiceId]/clients', { practiceId }) },
+			...(isAdmin
+				? [
+						{ label: 'Billing', href: resolve('/practices/[practiceId]/billing', { practiceId }) },
+						{ label: 'Staff', href: resolve('/practices/[practiceId]/staff', { practiceId }) }
+					]
+				: []),
+			{ label: 'Offers', href: resolve('/practices/[practiceId]/offers', { practiceId }) },
+			{ label: 'Settings', href: resolve('/practices/[practiceId]/settings', { practiceId }) }
+		];
+		// Overview is an exact match and every other section is a prefix, so
+		// a Client's own screen still marks Clients as the current section.
+		return items.map((item) => ({
+			...item,
+			current: item.current ?? path.startsWith(item.href)
+		}));
+	});
+
+	const practices = $derived.by((): PracticeOption[] =>
+		(session?.memberships ?? []).map((membership) => ({
+			...membership,
+			href: resolve('/practices/[practiceId]', { practiceId: membership.practiceId })
+		}))
+	);
+
 	function pushUnsubscribeURL(): string | undefined {
-		const practiceId = page.params.practiceId;
 		return practiceId === undefined ? undefined : practicePushSubscriptionsPath(practiceId);
 	}
 
@@ -58,132 +99,28 @@
 			fetcher: apiFetch,
 			unregisterPush: unregisterPushSubscription
 		});
-		if (outcome.ok) await goto(resolve('/login'));
+		if (outcome.ok) await goto(resolve('/(signed-out)/login'));
 		return outcome;
 	}
 </script>
 
-<header>
-	{#if page.params.practiceId}
-		<nav aria-label="Practice">
-			<Link
-				href={resolve('/practices/[practiceId]', { practiceId: page.params.practiceId })}
-				label="Overview"
-				variant="secondary"
-			/>
-			<Link
-				href={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId })}
-				label="Clients"
-				variant="secondary"
-			/>
-			<Link
-				href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId })}
-				label="Billing"
-				variant="secondary"
-			/>
-			<!-- Everyone's own Offers, not only a Doula's: an Offer is
-			     addressed to a person, and the inbox is scoped to her staff
-			     id, so there is nothing here a role check would usefully
-			     hide. -->
-			<Link
-				href={resolve('/practices/[practiceId]/offers', { practiceId: page.params.practiceId })}
-				label="Your offers"
-				variant="secondary"
-			/>
-			{#if isOwner}
-				<Link
-					href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId })}
-					label="Invite a Staff member"
-					variant="secondary"
-				/>
-				<Link
-					href={resolve('/practices/[practiceId]/staff', { practiceId: page.params.practiceId })}
-					label="Staff"
-					variant="secondary"
-				/>
-				<Link
-					href={resolve('/practices/[practiceId]/settings/plan-templates', {
-						practiceId: page.params.practiceId
-					})}
-					label="Plan Templates"
-					variant="secondary"
-				/>
-				<Link
-					href={resolve('/practices/[practiceId]/settings/contract-template', {
-						practiceId: page.params.practiceId
-					})}
-					label="Contract Template"
-					variant="secondary"
-				/>
-			{/if}
-			<Link
-				href={resolve('/practices/[practiceId]/settings/payments', {
-					practiceId: page.params.practiceId
-				})}
-				label="Payments"
-				variant="secondary"
-			/>
-			<!--
-				Outside the Owner gate above, like Payments and for the same
-				reason: the answer is readable by every Staff member (#440), and
-				a Doula who wonders why Clients cannot pay yet should be able to
-				see whether a website has been declared rather than being told
-				to ask. Only an Owner can change it, which the screen says and
-				the endpoint enforces.
-			-->
-			<Link
-				href={resolve('/practices/[practiceId]/settings/website', {
-					practiceId: page.params.practiceId
-				})}
-				label="Website"
-				variant="secondary"
-			/>
-		</nav>
-	{/if}
-	<div class="account">
-		<!--
-			Not inside the Practice nav above, and deliberately outside its
-			practiceId gate: a Staff member's work state is a fact about her,
-			not about any one Practice she works at (#437), so the way to it
-			has to be present on every authenticated Staff screen rather than
-			only the ones that happen to carry a Practice in the route.
-
-			It also cannot hang off the Staff roster, which is the only other
-			place a work state is shown. A Doula has no roster access at all
-			and she is exactly the person who has to be able to correct her
-			own -- an entry point she cannot reach is not an entry point.
-		-->
-		<Link href={resolve('/account')} label="Account" variant="secondary" />
-		<SignOutButton signOut={handleSignOut} />
-	</div>
-</header>
-
-{@render children()}
-
-<style>
-	@layer components {
-		header {
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			gap: var(--space-4);
-			padding: var(--space-2) var(--space-4);
-		}
-
-		nav {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--space-3);
-		}
-
-		/* The person's own controls, kept together at the far end of the
-		   header and apart from the Practice's links -- what they act on is
-		   her, not whatever Practice she is looking at. */
-		.account {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-3);
-		}
-	}
-</style>
+<Link href="#main" label="Skip to main content" variant="skip" />
+<!--
+	Rendered before the session lands, not after: the bar is a fixed 60px
+	whatever it holds, so painting it immediately means the page below never
+	moves. The parts that need an answer from the BFF -- the person's
+	avatar, the Practice switcher, and the two admin-only nav items --
+	arrive into a bar that is already there.
+-->
+<StaffTopBar
+	{navItems}
+	{practices}
+	currentPracticeId={practiceId ?? ''}
+	name={session?.name ?? ''}
+	email={session?.email}
+	accountHref={resolve('/account')}
+	signOut={handleSignOut}
+/>
+<main id="main" tabindex="-1">
+	{@render children()}
+</main>

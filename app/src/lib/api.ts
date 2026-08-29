@@ -46,8 +46,14 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
 
 async function handleExpiredSession(): Promise<void> {
 	await signOut(getFirebaseAuth());
-	const loginPath = resolve(location.pathname.startsWith('/portal') ? '/portal/login' : '/login');
-	await goto(`${loginPath}?sessionEnded=true`);
+	// Resolved separately per branch rather than from a union: `resolve` is
+	// overloaded per route, and a union argument stops matching any single
+	// overload.
+	await goto(
+		location.pathname.startsWith('/portal')
+			? `${resolve('/portal/(signed-out)/login')}?sessionEnded=true`
+			: `${resolve('/(signed-out)/login')}?sessionEnded=true`
+	);
 }
 
 /**

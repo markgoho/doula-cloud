@@ -42,7 +42,11 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 
 	// The control is in the Staff authenticated layout, so it is on this
 	// screen and on every other one under practices/[practiceId].
-	await page.getByRole('button', { name: 'Sign out' }).click();
+	// Sign out moved behind the avatar menu when the shell landed (#452):
+	// the menu is the person's, and Sign out is the one thing in it that
+	// every screen under practices/[practiceId] still carries.
+	await page.getByRole('button', { name: /Your account/ }).first().click();
+	await page.getByRole('button', { name: 'Sign out' }).first().click();
 
 	// A deliberate sign-out lands on the plain login screen -- no
 	// sessionEnded flag, which is api.ts's "your session expired under you"
@@ -97,12 +101,17 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 	// __session cookie -- and holds it after the first tab signs out.
 	const staleTab = await page.context().newPage();
 	await staleTab.goto(`/practices/${practiceId}`);
-	await expect(staleTab.getByRole('button', { name: 'Sign out' })).toBeVisible();
+	await staleTab.getByRole('button', { name: /Your account/ }).first().click();
+	await expect(staleTab.getByRole('button', { name: 'Sign out' }).first()).toBeVisible();
 
-	await page.getByRole('button', { name: 'Sign out' }).click();
+	// Sign out moved behind the avatar menu when the shell landed (#452):
+	// the menu is the person's, and Sign out is the one thing in it that
+	// every screen under practices/[practiceId] still carries.
+	await page.getByRole('button', { name: /Your account/ }).first().click();
+	await page.getByRole('button', { name: 'Sign out' }).first().click();
 	await expect(page).toHaveURL(/\/login$/);
 
-	await staleTab.getByRole('button', { name: 'Sign out' }).click();
+	await staleTab.getByRole('button', { name: 'Sign out' }).first().click();
 
 	await expect(staleTab).toHaveURL(/\/login$/);
 	await expect(staleTab.getByRole('alert')).toHaveCount(0);
@@ -143,7 +152,11 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	await secondTab.goto(`/practices/${practiceId}`);
 	await expect(secondTab.locator('h1')).toHaveText('Welcome to Elm Street Doulas');
 
-	await page.getByRole('button', { name: 'Sign out' }).click();
+	// Sign out moved behind the avatar menu when the shell landed (#452):
+	// the menu is the person's, and Sign out is the one thing in it that
+	// every screen under practices/[practiceId] still carries.
+	await page.getByRole('button', { name: /Your account/ }).first().click();
+	await page.getByRole('button', { name: 'Sign out' }).first().click();
 	await expect(page).toHaveURL(/\/login$/);
 
 	// No click, no reload of the tab's own doing -- a fresh navigation is

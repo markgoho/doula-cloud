@@ -12,7 +12,6 @@
 // consumable icons. The upstream README documents `assets/` as the actual
 // per-weight, ready-to-use export path, which is what this script uses;
 // see the correction posted on #96.
-import { mkdir, writeFile } from 'node:fs/promises';
 import { iconManifest } from '../src/lib/components/atoms/Icon/manifest.ts';
 
 const weights = ['duotone', 'light'] as const;
@@ -43,7 +42,7 @@ async function fetchLayerMarkup(name: string, weight: (typeof weights)[number]):
 	return tagLayerClasses(await response.text());
 }
 
-await mkdir(targetDirectory, { recursive: true });
+// No mkdir: Bun.write creates the parent directories it needs.
 
 for (const name of iconManifest) {
 	const [duotone, light] = await Promise.all(weights.map((weight) => fetchLayerMarkup(name, weight)));
@@ -52,6 +51,6 @@ for (const name of iconManifest) {
 export const duotone = ${JSON.stringify(duotone)};
 export const light = ${JSON.stringify(light)};
 `;
-	await writeFile(new URL(`${name}.ts`, targetDirectory), generatedModule);
+	await Bun.write(new URL(`${name}.ts`, targetDirectory), generatedModule);
 	console.log(`synced ${name}.ts`);
 }

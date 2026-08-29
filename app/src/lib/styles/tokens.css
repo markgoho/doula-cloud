@@ -141,11 +141,23 @@
 	--top-bar-height: 3.75rem;
 	--hit-target-min: 2.75rem;
 
-	/* Shape. One radius only -- the brief forbids a second, larger one, so
-	   there is deliberately no --radius-md to reach for. */
+	/* Shape. One corner radius only -- the brief forbids a second, larger
+	   one, so there is deliberately no --radius-md to reach for.
+	   --radius-pill is not that second step: it is "round this end
+	   completely", which is a shape a Badge and a toggle track have and a
+	   card does not. */
 	--radius: 8px;
+	--radius-pill: 999px;
 	--border-thin: 1px;
 	--border-active: 2px;
+
+	/* The focus ring. Its own pair rather than --border-active, because a
+	   focus ring is not a border: it is drawn outside the box, it is the
+	   same on every control whatever that control's border does, and WCAG
+	   2.4.11 is about this and nothing else. Seventeen raw `2px`s across
+	   six atoms were the evidence that it wanted naming (#452). */
+	--focus-ring-width: 2px;
+	--focus-ring-offset: 2px;
 
 	/* Motion. Enforcement (including prefers-reduced-motion) is #418. */
 	--motion-state: 120ms;
@@ -167,6 +179,31 @@
 	--page-gutter: clamp(var(--space-4), 5vw, 2.5rem);
 	--page-max: 76rem;
 	--form-max: 44rem;
+
+	/* The application shell (#452), for the same reason as the page frame
+	   above: the brief fixes the 60px bar and --hit-target-min, and leaves
+	   the rest of the shell's geometry undecided. These are chosen here so
+	   the Staff bar, the portal bar and the narrow sheet read from one
+	   source rather than each carrying its own copy of a number lifted off
+	   the canvas.
+
+	   The avatar is smaller than its own hit target on purpose: 34px of
+	   circle inside 44px of target, so the chrome stays quiet without
+	   failing WCAG 2.5.5. */
+	--avatar-size: 2.125rem;
+	/* A full-width nav row -- the narrow sheet's items, the portal's second
+	   row, and a Practice in the switcher. Taller than --row-height, which
+	   is a table's, because these are targets rather than reading. */
+	--nav-row-height: 3.25rem;
+	/* A menu panel is bounded at both ends: wide enough for a Practice's
+	   name on one line, narrow enough not to become a page. */
+	--menu-panel-min: 15rem;
+	--menu-panel-max: 20rem;
+	/* An inline attachment preview in a message thread. Capped in both axes
+	   so a portrait photo and a landscape one occupy the same block of the
+	   conversation and the thread does not jump as images decode. */
+	--thumb-max-inline: 15rem;
+	--thumb-max-block: 11.25rem;
 }
 
 /*

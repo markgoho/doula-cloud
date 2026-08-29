@@ -1,0 +1,226 @@
+<script module lang="ts">
+	export interface NavItem {
+		label: string;
+		href: string;
+		current: boolean;
+	}
+</script>
+
+<script lang="ts">
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import AvatarMenu from '#lib/components/molecules/AvatarMenu.svelte';
+	import BrandLockup from '#lib/components/molecules/BrandLockup.svelte';
+	import PracticeSwitcher, {
+		type PracticeOption
+	} from '#lib/components/molecules/PracticeSwitcher.svelte';
+	import type { SignOutOutcome } from '#lib/signOut.js';
+
+	/*
+	 * The Staff shell's bar (#431, #452). A 60px band that does not grow:
+	 * the lockup, a six-item flat nav, then the Practice switcher and the
+	 * avatar at the far end.
+	 *
+	 * Narrow, the nav and the switcher move into a full-screen sheet behind
+	 * a hamburger. A bottom tab bar was drawn and rejected -- five slots
+	 * cannot carry six sections without a `More`, and `More` is not a noun
+	 * this domain has.
+	 */
+	interface Properties {
+		navItems: NavItem[];
+		practices: PracticeOption[];
+		currentPracticeId: string;
+		name: string;
+		email?: string;
+		accountHref?: string;
+		signOut: () => Promise<SignOutOutcome>;
+	}
+
+	let {
+		navItems,
+		practices,
+		currentPracticeId,
+		name,
+		email,
+		accountHref,
+		signOut
+	}: Properties = $props();
+
+	/*
+	 * `<dialog>` rather than a popover, because the sheet is the one place
+	 * in the shell that has to trap focus: it covers the page, so Tab
+	 * reaching the page underneath would walk a person through content they
+	 * cannot see. showModal() traps, Escape closes, and the browser returns
+	 * focus to the hamburger -- none of which a popover promises.
+	 */
+	let sheet = $state<HTMLDialogElement>();
+
+	function openSheet() {
+		sheet?.showModal();
+	}
+
+	function closeSheet() {
+		sheet?.close();
+	}
+</script>
+
+<header>
+	<div class="wide">
+		<div class="brand-and-nav">
+			<BrandLockup />
+			<nav aria-label="Practice">
+				{#each navItems as item (item.href)}
+					<Link href={item.href} label={item.label} variant="nav" current={item.current} />
+				{/each}
+			</nav>
+		</div>
+		<div class="account">
+			<PracticeSwitcher {practices} {currentPracticeId} />
+			<AvatarMenu {name} {email} {accountHref} {signOut} />
+		</div>
+	</div>
+
+	<div class="narrow">
+		<Button label="Menu" icon="list" iconOnly variant="bare" onClick={openSheet} />
+		<PracticeSwitcher {practices} {currentPracticeId} />
+		<AvatarMenu {name} {email} {accountHref} {signOut} />
+	</div>
+</header>
+
+<dialog bind:this={sheet} class="sheet" aria-label="Practice menu">
+	<div class="sheet-bar">
+		<Button label="Close menu" icon="x" iconOnly variant="bare" onClick={closeSheet} />
+		<BrandLockup />
+		<AvatarMenu {name} {email} {accountHref} {signOut} />
+	</div>
+	<nav aria-label="Practice">
+		{#each navItems as item (item.href)}
+			<Link href={item.href} label={item.label} variant="sheet" current={item.current} />
+		{/each}
+	</nav>
+	<div class="sheet-switcher">
+		<p class="sheet-switcher-label">Practice</p>
+		<PracticeSwitcher {practices} {currentPracticeId} />
+	</div>
+</dialog>
+
+<style>
+	@layer components {
+		header {
+			display: flex;
+			align-items: center;
+			block-size: var(--top-bar-height);
+			padding-inline: var(--page-gutter);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+			background-color: var(--color-surface-bright);
+		}
+
+		.wide,
+		.narrow {
+			align-items: center;
+			inline-size: 100%;
+			block-size: 100%;
+		}
+
+		.wide {
+			display: none;
+			justify-content: space-between;
+		}
+
+		.narrow {
+			display: flex;
+			gap: var(--space-1);
+			/* The Practice name takes the room the nav does not need here, so
+			   the hamburger and the avatar stay pinned to the two edges. */
+			justify-content: space-between;
+		}
+
+		/* One breakpoint, and it is where six nav items plus a Practice name
+		   stop fitting rather than a device width. Below it the same items
+		   are in the sheet, which is why both trees are in the document and
+		   one is display:none -- a hidden subtree is out of the accessibility
+		   tree too, so nothing is announced twice. */
+		@media (min-width: 60rem) {
+			.wide {
+				display: flex;
+			}
+
+			.narrow {
+				display: none;
+			}
+		}
+
+		.brand-and-nav {
+			display: flex;
+			align-items: center;
+			gap: var(--space-10);
+			block-size: 100%;
+		}
+
+		/* No gap: each item carries its own padding, and only one of them is
+		   ever current, so two accent rules never meet. The canvas's 2px was
+		   drawing the space between two boxes, which CSS gets from the
+		   padding instead. */
+		nav {
+			display: flex;
+			block-size: 100%;
+		}
+
+		.account {
+			display: flex;
+			align-items: center;
+			gap: var(--space-4);
+		}
+
+		/* The sheet is the whole screen, so the UA's default caps on a modal
+		   dialog (max-inline-size: calc(100% - 6px - 2em)) have to go, and so
+		   does the auto margin that centres it. */
+		.sheet {
+			inset: 0;
+			inline-size: 100%;
+			max-inline-size: 100%;
+			block-size: 100%;
+			max-block-size: 100%;
+			margin: 0;
+			padding: 0;
+			border: 0;
+			background-color: var(--color-surface-bright);
+			color: var(--color-on-surface);
+		}
+
+		.sheet-bar {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: var(--space-1);
+			block-size: var(--top-bar-height);
+			padding-inline: var(--space-2);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+		}
+
+		.sheet nav {
+			display: flex;
+			flex-direction: column;
+			gap: 0;
+			block-size: auto;
+			padding-block: var(--space-2);
+		}
+
+		.sheet-switcher {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-2);
+			padding: var(--space-3) var(--space-5) 0;
+			border-block-start: var(--border-thin) solid var(--color-outline-variant);
+		}
+
+		.sheet-switcher-label {
+			margin: 0;
+			color: var(--color-on-surface-muted);
+			font-family: var(--font-family-base);
+			font-size: var(--text-meta-size);
+			letter-spacing: var(--text-meta-tracking);
+			text-transform: uppercase;
+		}
+	}
+</style>

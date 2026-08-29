@@ -52,8 +52,8 @@
 		}
 
 		input.invalid {
-			outline: 2px solid var(--color-error);
-			outline-offset: 2px;
+			outline: var(--focus-ring-width) solid var(--color-error);
+			outline-offset: var(--focus-ring-offset);
 		}
 
 		input:disabled {
@@ -62,8 +62,8 @@
 		}
 
 		input:focus-visible {
-			outline: 2px solid var(--color-primary);
-			outline-offset: 2px;
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
 		}
 
 		input.toggle {
@@ -72,15 +72,15 @@
 			inline-size: 2.5rem;
 			block-size: 1.5rem;
 			border: var(--border-thin) solid var(--color-outline);
-			border-radius: 999px;
+			border-radius: var(--radius-pill);
 			background-color: var(--color-outline-variant);
 		}
 
 		input.toggle::before {
 			content: '';
 			position: absolute;
-			inset-block-start: 1px;
-			inset-inline-start: 1px;
+			inset-block-start: var(--border-thin);
+			inset-inline-start: var(--border-thin);
 			inline-size: 1.2rem;
 			block-size: 1.2rem;
 			border-radius: 50%;

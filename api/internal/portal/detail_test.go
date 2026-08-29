@@ -91,6 +91,11 @@ func TestDetailHandler_Success(t *testing.T) {
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
 	}
+	// The portal bar's avatar needs a name of the Client's own (#452), and
+	// after ADR-0017 that is a display name rather than a column.
+	if out.ClientName != "Test Client" {
+		t.Fatalf("clientName = %q, want %q", out.ClientName, "Test Client")
+	}
 	if out.PracticeName != "Riverside Doulas" {
 		t.Fatalf("practiceName = %q, want %q", out.PracticeName, "Riverside Doulas")
 	}

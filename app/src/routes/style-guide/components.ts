@@ -1,7 +1,9 @@
 export const atomPages = [
+	{ name: 'Avatar', slug: 'avatar' },
 	{ name: 'Badge', slug: 'badge' },
 	{ name: 'Button', slug: 'button' },
 	{ name: 'Checkbox', slug: 'checkbox' },
+	{ name: 'Cloud mark', slug: 'cloud-mark' },
 	{ name: 'Heading', slug: 'heading' },
 	{ name: 'Icon', slug: 'icon' },
 	{ name: 'Link', slug: 'link' },
@@ -13,13 +15,17 @@ export const atomPages = [
 ] as const;
 
 export const moleculePages = [
+	{ name: 'Avatar menu', slug: 'avatar-menu' },
 	{ name: 'Birth plan view', slug: 'birth-plan-view' },
+	{ name: 'Brand lockup', slug: 'brand-lockup' },
 	{ name: 'Contract form', slug: 'contract-form' },
 	{ name: 'Contract status', slug: 'contract-status' },
 	{ name: 'Contract view', slug: 'contract-view' },
 	{ name: 'Description list', slug: 'description-list' },
 	{ name: 'Labeled field', slug: 'labeled-field' },
 	{ name: 'MembershipFields', slug: 'membership-fields' },
+	{ name: 'Menu button', slug: 'menu-button' },
+	{ name: 'Practice switcher', slug: 'practice-switcher' },
 	{ name: 'Radio group', slug: 'radio-group' },
 	{ name: 'Sign out button', slug: 'sign-out-button' },
 	{ name: 'Work state field', slug: 'work-state-field' }
@@ -35,7 +41,10 @@ export const organismPages = [
 	{ name: 'Offer inbox', slug: 'offer-inbox' },
 	{ name: 'Offer section', slug: 'offer-section' },
 	{ name: 'Plan instance form', slug: 'plan-instance-form' },
-	{ name: 'Sign contract', slug: 'sign-contract' }
+	{ name: 'Portal top bar', slug: 'portal-top-bar' },
+	{ name: 'Sign contract', slug: 'sign-contract' },
+	{ name: 'Signed-out top bar', slug: 'signed-out-top-bar' },
+	{ name: 'Staff top bar', slug: 'staff-top-bar' }
 ] as const;
 
 /*

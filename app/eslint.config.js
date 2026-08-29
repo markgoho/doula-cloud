@@ -46,6 +46,35 @@ export default defineConfig(
 		}
 	},
 	{
+		/*
+		 * `app/scripts/**` is the only source in this package that Bun itself
+		 * runs (`bun scripts/sync-icons.ts`, `bun run dev:full`), so it is the
+		 * only source that must reach for Bun's APIs rather than Node's.
+		 *
+		 * Everything else is deliberately outside this rule, and the reason is
+		 * the runtime rather than a preference. Vitest spawns its workers on
+		 * Node even when the run is started with `bunx` -- a probe inside a
+		 * spec reports `Bun=undefined versions.bun=none` -- so a spec that
+		 * imported `Bun.file` would fail at run time. The e2e suite runs under
+		 * Playwright, and vite.config.ts under Vite; both are Node too.
+		 */
+		files: ['scripts/**/*.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							group: ['node:*'],
+							message:
+								'This file is run by Bun. Use a Bun API instead of a node: import -- Bun.write (which creates parent directories, so no mkdir), Bun.file, Bun.spawn, Bun.$. Specs, e2e and config files run on Node and are outside this rule.'
+						}
+					]
+				}
+			]
+		}
+	},
+	{
 		files: ['**/*.svelte'],
 		ignores: [
 			'src/lib/components/atoms/Button.svelte',

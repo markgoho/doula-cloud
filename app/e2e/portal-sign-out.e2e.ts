@@ -14,7 +14,9 @@ test('a Client signs out and can no longer reach their Engagement', async ({ pag
 
 	// The control is in the portal authenticated layout, so it is on this
 	// screen and on every other one under portal/engagements/[engagementId].
-	await page.getByRole('button', { name: 'Sign out' }).click();
+	// Sign out moved behind the avatar menu when the shell landed (#452).
+	await page.getByRole('button', { name: /Your account/ }).first().click();
+	await page.getByRole('button', { name: 'Sign out' }).first().click();
 
 	// The *portal* login screen, not the Staff one at /login -- and the
 	// plain one, with no sessionEnded flag: that is api.ts's "your session
@@ -62,12 +64,15 @@ test('a Client second tab signing out after the first shows no error', async ({ 
 	// __session cookie -- and holds it after the first tab signs out.
 	const staleTab = await page.context().newPage();
 	await staleTab.goto(`/portal/engagements/${engagementId}`);
-	await expect(staleTab.getByRole('button', { name: 'Sign out' })).toBeVisible();
+	await staleTab.getByRole('button', { name: /Your account/ }).first().click();
+	await expect(staleTab.getByRole('button', { name: 'Sign out' }).first()).toBeVisible();
 
-	await page.getByRole('button', { name: 'Sign out' }).click();
+	// Sign out moved behind the avatar menu when the shell landed (#452).
+	await page.getByRole('button', { name: /Your account/ }).first().click();
+	await page.getByRole('button', { name: 'Sign out' }).first().click();
 	await expect(page).toHaveURL(/\/portal\/login$/);
 
-	await staleTab.getByRole('button', { name: 'Sign out' }).click();
+	await staleTab.getByRole('button', { name: 'Sign out' }).first().click();
 
 	await expect(staleTab).toHaveURL(/\/portal\/login$/);
 	await expect(staleTab.getByRole('alert')).toHaveCount(0);

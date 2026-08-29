@@ -94,7 +94,9 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
-	await page.getByRole('link', { name: 'Birth Plan' }).click();
+	// Scoped to the page: since the shell landed (#452) the portal nav
+	// carries a Birth plan link too, and both are correct.
+	await page.getByRole('main').getByRole('link', { name: 'Birth plan' }).click();
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}/birth-plan$`));
 	await expect(page.getByText('Soft lighting, calm music')).toBeVisible();
 });

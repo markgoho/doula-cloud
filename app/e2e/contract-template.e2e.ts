@@ -33,6 +33,10 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
+	// Through Settings, which is where these screens live now that the
+	// shell's six-item nav replaced the temporary header of links (#452).
+	await page.getByRole('link', { name: 'Settings' }).first().click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings$`));
 	await page.getByRole('link', { name: 'Contract Template' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings/contract-template$`));
 
@@ -51,8 +55,11 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByText('Saved.')).toBeVisible();
 
+	// Back is the Settings hub now, not the Practice overview: the way in
+	// runs through it since the shell's six-item nav replaced the temporary
+	// header of links (#452).
 	await page.goBack();
-	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/settings$`));
 	await page.getByRole('link', { name: 'Contract Template' }).click();
 	await expect(page.getByLabel('Contract template prose')).toHaveValue(
 		'Updated agreement with {{client_name}}'

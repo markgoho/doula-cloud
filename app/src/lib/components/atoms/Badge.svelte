@@ -31,7 +31,7 @@
 			gap: var(--space-1);
 			padding: var(--space-1) var(--space-3);
 			border: var(--border-thin) solid;
-			border-radius: 999px;
+			border-radius: var(--radius-pill);
 			font-family: var(--font-family-base);
 			font-size: var(--text-body-sm-size);
 			font-weight: var(--font-weight-medium);

@@ -37,6 +37,12 @@ type Membership struct {
 type SessionResponse struct {
 	StaffID string `json:"staffId"`
 	Name    string `json:"name"`
+	// Email is here for the shell's avatar menu (#452), which shows the
+	// person the account they are signed in as. A Staff member can hold
+	// Memberships at several Practices under one account, so "which
+	// account is this" is a real question at the top right of every
+	// screen, and the answer is her email rather than her name.
+	Email string `json:"email"`
 	// WorkState is the US state she works from, and WorkStateReportedAt
 	// is when she last asserted it -- the pair the roster prints as "New
 	// York -- self-reported 28 Aug 2026", shown to her here so she can
@@ -81,13 +87,13 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionRes
 		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
-	var staffID, name, workState string
+	var staffID, name, email, workState string
 	var workStateReportedAt time.Time
 	var lastPracticeID sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`SELECT id, name, work_state, work_state_reported_at, last_practice_id
+		`SELECT id, name, email, work_state, work_state_reported_at, last_practice_id
 		   FROM staff WHERE identity_uid = $1`, identityUID,
-	).Scan(&staffID, &name, &workState, &workStateReportedAt, &lastPracticeID)
+	).Scan(&staffID, &name, &email, &workState, &workStateReportedAt, &lastPracticeID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SessionResponse{}, http.StatusNotFound, "no matching staff account"
 	}
@@ -105,6 +111,7 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionRes
 	resp := SessionResponse{
 		StaffID:             staffID,
 		Name:                name,
+		Email:               email,
 		WorkState:           workState,
 		WorkStateReportedAt: workStateReportedAt,
 		Memberships:         memberships,

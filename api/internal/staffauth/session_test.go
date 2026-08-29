@@ -99,6 +99,12 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 	if out.StaffID != staffID {
 		t.Fatalf("staffId = %q, want %q", out.StaffID, staffID)
 	}
+	// The shell's avatar menu shows which account a person is signed in as
+	// (#452), which matters because one account holds Memberships at
+	// several Practices.
+	if wantEmail := identityUID + "@example.com"; out.Email != wantEmail {
+		t.Fatalf("email = %q, want %q", out.Email, wantEmail)
+	}
 	if len(out.Memberships) != 1 || out.Memberships[0].PracticeID != practiceID {
 		t.Fatalf("memberships = %+v, want single membership at %q", out.Memberships, practiceID)
 	}

@@ -66,8 +66,8 @@
 		}
 
 		input:focus-visible {
-			outline: 2px solid var(--color-primary);
-			outline-offset: 2px;
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
 		}
 	}
 </style>

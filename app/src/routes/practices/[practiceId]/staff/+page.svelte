@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -8,6 +9,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 
@@ -281,6 +283,17 @@
 {/snippet}
 
 <Heading level={1} text="Staff" />
+
+<!--
+	Inviting somebody is an action on this roster, so it belongs on the
+	roster. It used to hang off the temporary header of links the shell
+	replaced (#452), which is the only reason it was ever anywhere else --
+	and with that header gone, nothing else in the app reaches /invite.
+-->
+<Link
+	href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
+	label="Invite a Staff member"
+/>
 
 {#if error}
 	<Notice variant="error" message={error} />

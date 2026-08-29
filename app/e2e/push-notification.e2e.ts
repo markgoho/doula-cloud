@@ -78,6 +78,12 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
+
+	// The thread moved off the hub onto its own route when the portal nav
+	// gained a Messages destination (#452), so that is the tab a push has to
+	// wake.
+	await page.getByRole('link', { name: 'Messages' }).first().click();
+	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}/messages$`));
 	await expect(page.getByText('No messages yet.')).toBeVisible();
 
 	// Wait for the service worker to install and start controlling this
