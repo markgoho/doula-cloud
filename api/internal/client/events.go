@@ -16,7 +16,7 @@ const (
 	eventUpdated eventType = "updated"
 )
 
-// change is one changed fact's client_events diff entry: both sides, so
+// change is one changed fact's activity diff entry: both sides, so
 // an event row stays legible without joining back to the row it
 // describes.
 type change struct {
@@ -55,7 +55,7 @@ func diffRecords(old, next Record) map[string]change {
 }
 
 // createdDiff is diffRecords against a wholly-empty Record, so a
-// `created` client_events row states every field intake actually set --
+// `created` activity row states every field intake actually set --
 // "from" is always empty, "to" is what was saved.
 func createdDiff(rec Record) map[string]change {
 	return diffRecords(Record{FieldValues: []byte("{}")}, rec)

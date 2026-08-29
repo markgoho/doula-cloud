@@ -285,7 +285,7 @@ func removesLastOwner(ctx context.Context, tx *sql.Tx, practiceID, targetStaffID
 // ends her reach, it does not unwrite the record.
 //
 // The removal itself is a delete rather than an ended_at column, so the
-// practice_membership_events row this writes first is the only place who
+// activity row this writes first is the only place who
 // removed her and when survives. Must be mounted behind
 // staffauth.Middleware.
 func RemoveMembershipHandler() http.Handler {

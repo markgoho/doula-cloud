@@ -26,7 +26,7 @@ type Event struct {
 
 // RequestSummary is one engagement_requests row -- the audit record for
 // "this Engagement began because she asked and he agreed" (ADR-0017),
-// merged into the same history as her client_events rows rather than
+// merged into the same history as her activity rows rather than
 // mirrored into one.
 type RequestSummary struct {
 	RequestID    string     `json:"requestId"`
@@ -41,7 +41,7 @@ type RequestSummary struct {
 }
 
 // HistoryEntry is one row of a Client's merged history -- her
-// client_events rows and her engagement_requests rows, interleaved by
+// activity rows and her engagement_requests rows, interleaved by
 // time, newest first. Exactly one of ClientEvent/EngagementRequest is
 // set, named by Type.
 type HistoryEntry struct {
@@ -138,7 +138,7 @@ func DetailHandler() http.Handler {
 	})
 }
 
-// mergedHistory reads clientID's client_events and engagement_requests
+// mergedHistory reads clientID's activity and engagement_requests
 // rows and interleaves them newest-first by time -- a read concern, not
 // a storage one (ADR-0017 deliberately keeps no mirrored row on either
 // side).
