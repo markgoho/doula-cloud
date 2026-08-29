@@ -39,6 +39,7 @@ except `.env.example`. A Sandbox key is still a key.
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | any value, tests sign their own fixtures with it | unset (nothing calls `/api/mailgun/webhook`) | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, once Mailgun's dashboard is pointed at the deployed endpoint |
 | `NOTIFICATION_TASKS_QUEUE` | unset (no real `tasknudge.CloudTasksEnqueuer` is constructed in `routes()` tests, which inject `tasknudge.FakeEnqueuer` instead) | unset | the Cloud Tasks queue's full resource name, `projects/doula-cloud/locations/us-central1/queues/doula-cloud-notification-nudge`, plain env var |
 | `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
+| `GITHUB_DISPATCH_TOKEN` | unset (nothing local fires a real deploy) | unset | Secret Manager `doula-cloud-github-dispatch-token`, a fine-grained personal access token scoped to `markgoho/doula-cloud` with **Contents: write** |
 
 ## The Hugo site's build
 
@@ -146,6 +147,45 @@ gcloud run services update doula-api --region us-central1 \
 ```
 
 `doula-api`'s own runtime service account also needs `roles/cloudtasks.enqueuer` on the queue (the binding above) to call `CreateTask` -- it already reaches Secret Manager and GCS under its existing identity, so no new service account is created for this.
+
+### #443's site rebuild and page probe
+
+Two more endpoints on the same `X-Internal-Secret` shape, under `/api/internal/site` rather than `/notifications` because neither of them notifies anybody. `NOTIFICATION_WORKER_SECRET` again, not a second credential.
+
+`POST /api/internal/site/process-build-outbox` turns queued rebuilds into one `repository_dispatch`, and is the ninth type on ADR-0013's shared Cloud Tasks queue. It is the one type whose nudge is **delayed** -- 90 seconds, `tasknudge.Delay` -- because the worker collapses every pending row into a single deploy and can only collapse rows that have had a moment to gather. Its Cloud Scheduler job is the durability backstop: a dispatch that fails leaves the rows pending, and the next tick retries.
+
+`POST /api/internal/site/verify-pages` fetches every published page from `doula.cloud` and records whether it resolved. Two callers, and deliberately identical behavior for both: the last step of `firebase-hosting-merge.yml`, which reads the same secret out of Secret Manager over Workload Identity Federation and posts to the raw Cloud Run URL; and a Cloud Scheduler job every fifteen minutes. The sweep is what covers the case the workflow cannot -- a build that fails produces no deploy and no callback at all, so only something that runs anyway can notice a page that never went live.
+
+`GITHUB_DISPATCH_TOKEN` is the one new credential. **Contents: write** is the narrowest permission GitHub's dispatch endpoint accepts, and it is the same level a GitHub App would need, which is why #443 chose the simpler thing. Give it a real expiry rather than "no expiration": a lapsed token is not silent here -- the dispatch fails, the page never leaves `pending`, and the Practice's website settings screen says her page is not confirmed.
+
+```bash
+# The token itself is created by hand at
+# https://github.com/settings/personal-access-tokens -- resource owner
+# markgoho, repository access "Only select repositories" -> doula-cloud,
+# Repository permissions -> Contents: Read and write, expiry 366 days.
+printf %s "<the token>" | gcloud secrets create doula-cloud-github-dispatch-token \
+  --data-file=- --replication-policy=automatic
+gcloud secrets add-iam-policy-binding doula-cloud-github-dispatch-token \
+  --member=serviceAccount:<doula-api's runtime service account> \
+  --role=roles/secretmanager.secretAccessor
+gcloud run services update doula-api --region us-central1 \
+  --update-secrets GITHUB_DISPATCH_TOKEN=doula-cloud-github-dispatch-token:latest
+
+# The two Cloud Scheduler jobs, on the shape the seven notification jobs
+# already use.
+gcloud scheduler jobs create http doula-cloud-site-build-outbox \
+  --location=us-central1 --schedule="*/5 * * * *" \
+  --uri=https://doula-api-850855848778.us-central1.run.app/api/internal/site/process-build-outbox \
+  --http-method=POST \
+  --update-headers="X-Internal-Secret=<NOTIFICATION_WORKER_SECRET>"
+gcloud scheduler jobs create http doula-cloud-verify-practice-pages \
+  --location=us-central1 --schedule="*/15 * * * *" \
+  --uri=https://doula-api-850855848778.us-central1.run.app/api/internal/site/verify-pages \
+  --http-method=POST \
+  --update-headers="X-Internal-Secret=<NOTIFICATION_WORKER_SECRET>"
+```
+
+The deploy workflow also needs `roles/secretmanager.secretAccessor` on `doula-cloud-notification-worker-secret` for its GitHub Actions service account (`github-action-733741680@doula-cloud.iam.gserviceaccount.com`), which already holds it on `doula-cloud-pg-site-builder-dsn`.
 
 ## Attachments bucket and VAPID push
 

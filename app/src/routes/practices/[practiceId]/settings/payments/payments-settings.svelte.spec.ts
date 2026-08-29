@@ -39,6 +39,10 @@ interface MockOptions {
 	   precondition every other assertion on this screen depends on --
 	   without a declared website there is no button to assert about. */
 	websiteMode?: 'undeclared' | 'own' | 'hosted';
+	/* Whether the page we publish for her has been confirmed to load
+	   (#443). `pending` is the default because it is where every hosted
+	   page starts and where the happy path passes through. */
+	pageState?: '' | 'pending' | 'live' | 'failed';
 }
 
 function mockApi({
@@ -46,7 +50,8 @@ function mockApi({
 	roles = [],
 	sessionOk = true,
 	requirementsDue = [],
-	websiteMode = 'own'
+	websiteMode = 'own',
+	pageState = 'pending'
 }: MockOptions = {}) {
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.endsWith('/session')) {
@@ -60,7 +65,11 @@ function mockApi({
 					serviceDescription: '',
 					cancellationPolicy: '',
 					updatedBy: '',
-					updatedAt: ''
+					updatedAt: '',
+					pageState: websiteMode === 'hosted' ? pageState : '',
+					pageCheckedAt: '',
+					pageCheckDetail: '',
+					pageUrl: websiteMode === 'hosted' ? 'https://doula.cloud/p/rochester-doulas' : ''
 				})
 			);
 		}
@@ -189,6 +198,41 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 
 	it('opens the flow once a page is published here, not only when she has her own site', async () => {
 		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'hosted' });
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
+	});
+
+	/* #443. The URL Stripe would be handed 404s, and #382 established the
+	   review of that URL is ongoing with no published SLA -- so the
+	   rejection arrives weeks later with no visible cause. Blocked on the
+	   same rule as the missing answer above, and PostConnectHandler
+	   refuses the request too. */
+	it('refuses the button when the page published for her does not load', async () => {
+		mockApi({
+			status: 'not_connected',
+			roles: ['owner'],
+			websiteMode: 'hosted',
+			pageState: 'failed'
+		});
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('The page we publish for you is not loading', { exact: false }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Go to website settings' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+	});
+
+	/* A page still waiting for its deploy must not block her: every
+	   Practice passes through `pending` on the way to `live`. */
+	it('opens the flow while her page is still waiting for its deploy', async () => {
+		mockApi({
+			status: 'not_connected',
+			roles: ['owner'],
+			websiteMode: 'hosted',
+			pageState: 'pending'
+		});
 		await render(Page, {});
 
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();

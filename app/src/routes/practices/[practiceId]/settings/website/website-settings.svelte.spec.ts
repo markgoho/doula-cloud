@@ -32,7 +32,11 @@ const undeclared = {
 	serviceDescription: '',
 	cancellationPolicy: '',
 	updatedBy: '',
-	updatedAt: ''
+	updatedAt: '',
+	pageState: '',
+	pageCheckedAt: '',
+	pageCheckDetail: '',
+	pageUrl: ''
 };
 
 interface SetupOptions {
@@ -240,6 +244,61 @@ describe('website settings screen', () => {
 
 		await testPage.getByRole('button', { name: 'Change' }).click();
 		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
+	});
+
+	/* #443. Three states, and the middle one is the point: a page nothing
+	   has confirmed reads as not-yet, never as a success, because the
+	   build can fail and report nothing at all. */
+	it('says her page is not confirmed while it waits for its deploy', async () => {
+		await setup({
+			website: {
+				...undeclared,
+				mode: 'hosted',
+				serviceDescription: 'Birth support in Monroe County.',
+				cancellationPolicy: 'Two weeks notice.',
+				pageState: 'pending',
+				pageUrl: 'https://doula.cloud/p/rochester-doulas'
+			}
+		});
+
+		await expect
+			.element(testPage.getByText('Your page is being published', { exact: false }))
+			.toBeVisible();
+	});
+
+	it('shows her the address once we have loaded the page ourselves', async () => {
+		await setup({
+			website: {
+				...undeclared,
+				mode: 'hosted',
+				serviceDescription: 'Birth support in Monroe County.',
+				cancellationPolicy: 'Two weeks notice.',
+				pageState: 'live',
+				pageUrl: 'https://doula.cloud/p/rochester-doulas'
+			}
+		});
+
+		await expect
+			.element(testPage.getByText('Your page is live at https://doula.cloud/p/rochester-doulas'))
+			.toBeVisible();
+	});
+
+	it('tells her why her page failed, in words she can act on', async () => {
+		await setup({
+			website: {
+				...undeclared,
+				mode: 'hosted',
+				serviceDescription: 'Birth support in Monroe County.',
+				cancellationPolicy: 'Two weeks notice.',
+				pageState: 'failed',
+				pageCheckDetail: 'the site answered 404 for this page',
+				pageUrl: 'https://doula.cloud/p/rochester-doulas'
+			}
+		});
+
+		await expect
+			.element(testPage.getByText('the site answered 404 for this page', { exact: false }))
+			.toBeVisible();
 	});
 
 	it('lets a Practice with her own site abandon a change and keep what she had', async () => {

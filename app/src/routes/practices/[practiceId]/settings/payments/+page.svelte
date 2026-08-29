@@ -136,12 +136,22 @@
 			(copy?.onboarding === 'if-outstanding' && (status?.requirementsDue.length ?? 0) > 0)
 	);
 
-	/* The gate. `undeclared` is the shape the website endpoint reports for
-	   a Practice with no row, so this is "has she answered?" and not "is
-	   the page live?" -- whether a published page has actually been built
-	   and resolves is #443's, and Stripe's review of the URL is ongoing
-	   either way (#382). */
+	/* The first gate. `undeclared` is the shape the website endpoint
+	   reports for a Practice with no row, so this is "has she answered?"
+	   and nothing more. */
 	let hasDeclaredWebsite = $derived(website !== undefined && website.mode !== 'undeclared');
+
+	/* The second gate (#443). She answered, and a probe of the page we
+	   publish for her found nothing there -- so the URL Stripe would be
+	   given is one that 404s, and #382 established the review of that URL
+	   is ongoing with no published SLA. Blocking, not warning, on the
+	   same rule as the first gate: an answer that does not resolve is
+	   worth no more to Stripe than no answer at all.
+
+	   `pending` deliberately does not block. It is the ordinary couple of
+	   minutes between publishing and the deploy finishing, and every
+	   Practice passes through it on the way to `live`. */
+	let isPageFailed = $derived(website?.pageState === 'failed');
 
 	let websiteHref = $derived(
 		resolve('/practices/[practiceId]/settings/website', { practiceId: page.params.practiceId! })
@@ -240,6 +250,18 @@
 			message="Stripe will not let you take Client payments until it can see where you are online. Tell us your website or let us publish a page for you, then come back here."
 		/>
 		<Link href={websiteHref} label="Answer the website question" />
+	{:else if canStartOnboarding && isPageFailed}
+		<!--
+			Block again, and name it as our problem rather than hers: she
+			wrote the words and we failed to put them anywhere. Same shape
+			as the gate above, and PostConnectHandler refuses the request
+			too, which is what actually holds the line.
+		-->
+		<Notice
+			variant="error"
+			message="The page we publish for you is not loading, so Stripe would find nothing at your web address. Open your website settings and publish it again."
+		/>
+		<Link href={websiteHref} label="Go to website settings" />
 	{:else if canStartOnboarding}
 		<!-- A heading and a list, with no <section> around them: the
 		     heading already puts this in the screen-reader outline, and a

@@ -24,6 +24,7 @@ import (
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/sessionnotice"
+	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
@@ -118,7 +119,7 @@ func TestHelloHandler(t *testing.T) {
 // has to be registered on the same /api prefix the browser uses. Body shape is
 // TestHelloHandler's job; this one only pins where the route hangs.
 func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -143,7 +144,7 @@ func TestRoutes_HelloUnderAPIPrefix(t *testing.T) {
 // path.
 func TestRoutes_CreateAndEndSession(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{UID: "uid-1"}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -227,7 +228,7 @@ func TestResolvePort(t *testing.T) {
 
 func TestRoutes_MissingTokenPaths(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -262,7 +263,7 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
-	mux, _ := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{UID: identityUID}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -357,7 +358,7 @@ func TestResolveExpectedOrigins(t *testing.T) {
 // reaches the handler -- proven by getting 403 rather than the 401 a
 // missing bearer token would otherwise produce.
 func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -382,7 +383,7 @@ func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
 // not the origin check's 403.
 func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 	db := testdb.New(t)
-	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, db.App, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), "whsec_test", payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -410,7 +411,7 @@ func TestRoutes_MatchingOriginAllowed(t *testing.T) {
 // or snapshot, never both.
 func TestRoutes_StripeWebhooksSucceedWithNoOrigin(t *testing.T) {
 	const stripeWebhookSecret = "whsec_test"
-	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, testNudgeEnqueuer, []string{testExpectedOrigin})
+	mux, _ := routes(authntest.Verifier{}, nil, objectstore.NewMemoryStore(), push.NewFakePusher(), billing.NewFakeStripeClient(), stripeWebhookSecret, payments.NewFakeClient(), "whsec_connect_test", "whsec_account_test", testWorker, testWorkerSecret, "mailgun_webhook_test_key", testLowCreditWorker, testPayoutOutboxWorker, testPaymentOutboxWorker, testSessionNoticeOutboxWorker, testStaffInviteOutboxWorker, testOfferOutboxWorker, testEngagementRequestOutboxWorker, sitebuild.Worker{}, sitebuild.Verifier{}, testNudgeEnqueuer, []string{testExpectedOrigin})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

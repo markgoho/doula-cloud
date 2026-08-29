@@ -11,7 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // GetHandler reports the website a Practice has declared. Readable by
@@ -56,7 +58,7 @@ func GetHandler() http.Handler {
 //
 // PUT, not POST: one answer per Practice, replaced whole, so re-sending
 // the same body is safe and needs no Idempotency-Key.
-func PutHandler() http.Handler {
+func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireOwner(w, r)
 		if !ok {
@@ -76,11 +78,26 @@ func PutHandler() http.Handler {
 			return
 		}
 
-		resp, err := write(r.Context(), tx, practiceID, staffID, valid)
+		resp, siteIsStale, err := write(r.Context(), tx, practiceID, staffID, valid)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError, nil)
 			return
+		}
+
+		// #443: the deploy workflow fires on a push touching hugo/**,
+		// and this produces no commit, so without a queued rebuild her
+		// page never appears. Queued inside the request transaction, so
+		// a declaration that rolls back queues no deploy; the nudge is
+		// registered rather than fired, so staffauth.Middleware sends it
+		// only once its own commit has succeeded.
+		if siteIsStale {
+			if err := sitebuild.Queue(r.Context(), tx, practiceID); err != nil {
+				// coverage:ignore reason: DB insert failure, not exercised by unit tests
+				writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError, nil)
+				return
+			}
+			tasknudge.Register(r.Context(), tasknudge.Fire(nudge, tasknudge.SiteBuild))
 		}
 
 		writeJSON(w, resp)
@@ -98,11 +115,16 @@ func read(ctx context.Context, tx *sql.Tx, practiceID string) (Response, error) 
 		ownURL      sql.NullString
 		description sql.NullString
 		policy      sql.NullString
+		pageState   sql.NullString
+		checkedAt   sql.NullTime
+		checkDetail sql.NullString
+		slug        sql.NullString
 	)
 	err := tx.QueryRowContext(ctx,
-		`SELECT mode, own_url, service_description, cancellation_policy
+		`SELECT mode, own_url, service_description, cancellation_policy,
+		        page_state, page_checked_at, page_check_detail, slug
 		   FROM practice_websites WHERE practice_id = $1`, practiceID,
-	).Scan(&resp.Mode, &ownURL, &description, &policy)
+	).Scan(&resp.Mode, &ownURL, &description, &policy, &pageState, &checkedAt, &checkDetail, &slug)
 	if errors.Is(err, sql.ErrNoRows) {
 		return resp, nil
 	}
@@ -113,6 +135,16 @@ func read(ctx context.Context, tx *sql.Tx, practiceID string) (Response, error) 
 	resp.OwnURL = ownURL.String
 	resp.ServiceDescription = description.String
 	resp.CancellationPolicy = policy.String
+	resp.PageState = pageState.String
+	resp.PageCheckDetail = checkDetail.String
+	resp.PageCheckedAt = FormatUpdatedAt(checkedAt.Time, checkedAt.Valid)
+	// Only while the page is the answer. A Practice who switched to her
+	// own website keeps her slug (00046, so switching back republishes
+	// the same address) but has nothing published at it, and showing her
+	// a link to a page that is no longer built would be a broken promise.
+	if resp.Mode == ModeHosted {
+		resp.PageURL = HostedPageURL(slug.String)
+	}
 
 	var (
 		actorName sql.NullString
@@ -154,7 +186,13 @@ func read(ctx context.Context, tx *sql.Tx, practiceID string) (Response, error) 
 // a re-assertion, and the date it happened is what the payments screen
 // prints back to her; a silent no-op would leave her looking at an old
 // date after an act she just performed.
-func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, v Validated) (Response, error) {
+// The bool it returns is whether the published site no longer matches
+// what is stored, and so needs rebuilding (#443). True when she now has
+// a hosted page, and true when she has just switched away from one --
+// that page has to be pruned, which is as much a rebuild as publishing
+// was. False only for a Practice moving between her own websites, who
+// has never had a page here to build.
+func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, v Validated) (Response, bool, error) {
 	var (
 		previousMode sql.NullString
 		existingSlug sql.NullString
@@ -164,8 +202,9 @@ func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, v V
 	).Scan(&previousMode, &existingSlug)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return Response{}, fmt.Errorf("website: read previous mode: %w", err)
+		return Response{}, false, fmt.Errorf("website: read previous mode: %w", err)
 	}
+	siteIsStale := v.Mode == ModeHosted || previousMode.String == ModeHosted
 
 	// A slug is minted exactly once, the first time a Practice publishes
 	// a hosted page, and is never revisited -- not when she renames the
@@ -180,13 +219,13 @@ func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, v V
 			`SELECT name FROM practices WHERE id = $1`, practiceID,
 		).Scan(&name); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return Response{}, fmt.Errorf("website: read practice name: %w", err)
+			return Response{}, false, fmt.Errorf("website: read practice name: %w", err)
 		}
 	}
 
 	if err := upsert(ctx, tx, practiceID, name, existingSlug.String, needSlug, v); err != nil {
 		// coverage:ignore reason: every failure inside upsert is a DB error or an exhausted retry, none reachable from a unit test
-		return Response{}, err
+		return Response{}, false, err
 	}
 
 	// The event snapshots what was written, not what the row now holds:
@@ -202,14 +241,15 @@ func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, v V
 		practiceID, previousMode, v.Mode, v.OwnURL, v.ServiceDescription, v.CancellationPolicy, actorStaffID,
 	).Scan(&createdAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return Response{}, fmt.Errorf("website: record event: %w", err)
+		return Response{}, false, fmt.Errorf("website: record event: %w", err)
 	}
 
 	// Read back rather than echo the request: the upsert carries the
 	// other mode's facts forward, so what is now stored is not what was
 	// sent, and the screen has to be told the truth about what it may
 	// offer her next time.
-	return read(ctx, tx, practiceID)
+	resp, err := read(ctx, tx, practiceID)
+	return resp, siteIsStale, err
 }
 
 func writeJSON(w http.ResponseWriter, resp Response) {
@@ -253,15 +293,25 @@ func upsert(ctx context.Context, tx *sql.Tx, practiceID, name, currentSlug strin
 	// practice_websites_hosted_slug_present without the DO UPDATE ever
 	// being reached -- the COALESCE never gets a chance to keep the slug
 	// that is already there.
+	//
+	// page_state is set from the mode on both arms, and any earlier
+	// probe result is cleared with it (#443). She has just changed what
+	// the page says, so whatever a probe found before this is about a
+	// page that no longer exists: only an affirmative probe of what is
+	// now deployed may say "live" again.
 	const stmt = `INSERT INTO practice_websites
-	     (practice_id, mode, own_url, service_description, cancellation_policy, slug)
-	 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''))
+	     (practice_id, mode, own_url, service_description, cancellation_policy, slug, page_state)
+	 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''),
+	         CASE WHEN $2 = 'hosted' THEN 'pending'::practice_page_state END)
 	 ON CONFLICT (practice_id) DO UPDATE SET
 	     mode = EXCLUDED.mode,
 	     own_url = COALESCE(EXCLUDED.own_url, practice_websites.own_url),
 	     service_description = COALESCE(EXCLUDED.service_description, practice_websites.service_description),
 	     cancellation_policy = COALESCE(EXCLUDED.cancellation_policy, practice_websites.cancellation_policy),
 	     slug = COALESCE(practice_websites.slug, EXCLUDED.slug),
+	     page_state = EXCLUDED.page_state,
+	     page_checked_at = NULL,
+	     page_check_detail = NULL,
 	     updated_at = now()`
 
 	for attempt := 0; ; attempt++ {

@@ -104,7 +104,13 @@
   </style>
 </head>
 <body>
-  <main>
+  {{/* data-practice-page is what #443's probe looks for after a deploy.
+       A status code alone would not do: a host that serves its own
+       not-found page with a 200 would pass, and Stripe would go on
+       holding a URL that shows a Client nothing. The same string is
+       sitebuild.PageMarker in api/internal/sitebuild/http.go; it appears
+       on this page type and nowhere else on the site. */}}
+  <main data-practice-page>
     <h1>{{ .Title }}</h1>
 
     <h2>What we offer</h2>

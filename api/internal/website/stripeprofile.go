@@ -42,10 +42,20 @@ func HostedPageURL(slug string) string {
 // inventing one for the others would be putting words in her mouth on a
 // form Stripe underwrites her against. She types it in Stripe's own flow
 // instead.
+//
+// PageFailed is #443's second gate, and it is a narrower thing than
+// Declared: she has answered, and a probe of the page we publish for
+// her found nothing there. Sending her into onboarding then would hand
+// Stripe a URL that 404s, and #382 established the review of that URL
+// is ongoing with no published SLA -- so the rejection would arrive
+// weeks later with no visible cause. False for a Practice on her own
+// website: what is at the far end of an address she gave us is hers to
+// keep working, and probing it would be checking up on her.
 type StripeProfile struct {
 	Declared           bool
 	URL                string
 	ProductDescription string
+	PageFailed         bool
 }
 
 // ReadStripeProfile resolves practiceID's declaration into what Stripe
@@ -58,11 +68,12 @@ func ReadStripeProfile(ctx context.Context, tx *sql.Tx, practiceID string) (Stri
 		ownURL      sql.NullString
 		description sql.NullString
 		slug        sql.NullString
+		pageState   sql.NullString
 	)
 	err := tx.QueryRowContext(ctx,
-		`SELECT mode, own_url, service_description, slug
+		`SELECT mode, own_url, service_description, slug, page_state
 		   FROM practice_websites WHERE practice_id = $1`, practiceID,
-	).Scan(&mode, &ownURL, &description, &slug)
+	).Scan(&mode, &ownURL, &description, &slug, &pageState)
 	if errors.Is(err, sql.ErrNoRows) {
 		return StripeProfile{}, nil
 	}
@@ -76,6 +87,7 @@ func ReadStripeProfile(ctx context.Context, tx *sql.Tx, practiceID string) (Stri
 			Declared:           true,
 			URL:                HostedPageURL(slug.String),
 			ProductDescription: strings.TrimSpace(description.String),
+			PageFailed:         pageState.String == PageStateFailed,
 		}, nil
 	}
 	return StripeProfile{Declared: true, URL: ownURL.String}, nil

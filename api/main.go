@@ -21,6 +21,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/clientfieldtemplate"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagement"
@@ -38,6 +39,7 @@ import (
 	"doula-cloud/api/internal/pushsub"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/sessionnotice"
+	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
@@ -149,7 +151,7 @@ var ownerAndAdmin = []string{"owner", "admin"}
 // main_test.go walk it (and cross-check it against this function's own
 // source for a route that bypassed the gate entirely) without needing a
 // live server.
-func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, staffInviteOutboxWorker staffinvite.Worker, offerOutboxWorker offer.Worker, engagementRequestOutboxWorker engagementrequest.Worker, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
+func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher, stripeClient billing.StripeClient, stripeWebhookSecret string, paymentsClient payments.Client, paymentsWebhookSecret, paymentsAccountWebhookSecret string, outboxWorker portalinvite.Worker, outboxWorkerSecret string, mailgunWebhookSigningKey string, lowCreditOutboxWorker billing.Worker, payoutOutboxWorker payments.Worker, paymentOutboxWorker payments.PaymentReceivedWorker, sessionNoticeOutboxWorker sessionnotice.Worker, staffInviteOutboxWorker staffinvite.Worker, offerOutboxWorker offer.Worker, engagementRequestOutboxWorker engagementrequest.Worker, siteBuildWorker sitebuild.Worker, pageVerifier sitebuild.Verifier, nudgeEnqueuer tasknudge.Enqueuer, expectedOrigins []string) (http.Handler, []staffauth.GatedRoute) {
 	mux := http.NewServeMux()
 	// GatedRouter (staffauth/gate.go) is the only door for a GET behind
 	// staffauth.Middleware: Get panics at startup if a route has no role
@@ -212,7 +214,7 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// it is published. Written by an Owner alone (website.PutHandler).
 	g.Get("/api/practices/{practiceId}/website", staffauth.AnyStaff, website.GetHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/website",
-		staffauth.Middleware(db)(website.PutHandler()))
+		staffauth.Middleware(db)(website.PutHandler(nudgeEnqueuer)))
 	mux.Handle("POST /api/stripe/connect-webhook", payments.PostConnectWebhookHandler(db, paymentsClient, paymentsWebhookSecret, nudgeEnqueuer))
 	// A second Connect route, not a second feature: Stripe's v2 account
 	// events are thin and a destination carries one payload type, so they
@@ -277,6 +279,15 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, plans.GetTemplateHandler())
 	mux.Handle("PUT /api/practices/{practiceId}/plan-templates/{planType}",
 		staffauth.Middleware(db)(plans.PutTemplateHandler()))
+	// ADR-0017's Client Field Template settings screen (#399): the field
+	// list an Owner or Admin defines for a Client's Practice-defined
+	// layer. Sibling of Plan Templates above -- read by any Staff member
+	// (the definitions carry nothing secret), written by an Owner or
+	// Admin alone (client_field_templates_insert/_update, 00048, enforce
+	// the same rule in RLS).
+	g.Get("/api/practices/{practiceId}/client-field-template", staffauth.AnyStaff, clientfieldtemplate.GetHandler())
+	mux.Handle("PUT /api/practices/{practiceId}/client-field-template",
+		staffauth.Middleware(db)(clientfieldtemplate.PutHandler()))
 	mux.Handle("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
 		staffauth.Middleware(db)(staffauth.AttachingWrite(plans.PostInstanceHandler())))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}", staffauth.AnyStaff, plans.GetInstanceHandler())
@@ -372,6 +383,15 @@ func routes(verifier authn.Verifier, db *sql.DB, store objectstore.ObjectStore, 
 	// Same shape again for #398's Engagement Request outbox, whose write
 	// site is engagementrequest.RequestHandler above.
 	mux.Handle("POST /api/internal/notifications/process-engagement-request-outbox", engagementrequest.ProcessOutboxHandler(db, engagementRequestOutboxWorker, outboxWorkerSecret))
+	// #443's two site endpoints, on the same X-Internal-Secret shape and
+	// under /api/internal/site rather than /notifications, because
+	// neither of them notifies anybody. process-build-outbox turns
+	// queued rebuilds into one repository_dispatch; verify-pages probes
+	// every published page and records whether it resolved. Both are
+	// called by Cloud Scheduler on a cadence, and verify-pages is also
+	// the last step of the deploy workflow itself.
+	mux.Handle("POST /api/internal/site/process-build-outbox", sitebuild.ProcessOutboxHandler(db, siteBuildWorker, outboxWorkerSecret))
+	mux.Handle("POST /api/internal/site/verify-pages", sitebuild.VerifyHandler(db, pageVerifier, outboxWorkerSecret))
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(db))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(db)(portal.DetailHandler()))
@@ -535,7 +555,26 @@ func main() {
 		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"))
 	}
 
-	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, staffInviteOutboxWorker, offerOutboxWorker, engagementRequestOutboxWorker, nudgeEnqueuer, resolveExpectedOrigins())
+	// #443. The HTTP client is shared by both and is deliberately
+	// short-timeout: a probe is a CDN fetch of a static file, and a
+	// dispatch is one small POST -- neither has any business waiting
+	// long enough to hold the sweep open.
+	siteHTTP := &http.Client{Timeout: 10 * time.Second}
+	siteBuildWorker := sitebuild.Worker{
+		Dispatcher: sitebuild.GitHubDispatcher{
+			Client: siteHTTP,
+			Token:  os.Getenv("GITHUB_DISPATCH_TOKEN"),
+		},
+		Now: time.Now,
+	}
+	pageVerifier := sitebuild.Verifier{
+		// The same constant #442 hands Stripe, so the address probed is
+		// by construction the address Stripe was told about.
+		Prober: sitebuild.HTTPProber{Client: siteHTTP, BaseURL: website.SiteBaseURL},
+		Now:    time.Now,
+	}
+
+	handler, _ := routes(verifier, db, store, pusher, stripeClient, os.Getenv("STRIPE_WEBHOOK_SECRET"), paymentsClient, os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"), os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"), outboxWorker, os.Getenv("NOTIFICATION_WORKER_SECRET"), os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"), lowCreditOutboxWorker, payoutOutboxWorker, paymentOutboxWorker, sessionNoticeOutboxWorker, staffInviteOutboxWorker, offerOutboxWorker, engagementRequestOutboxWorker, siteBuildWorker, pageVerifier, nudgeEnqueuer, resolveExpectedOrigins())
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

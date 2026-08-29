@@ -15,8 +15,9 @@ import (
 func seedWebsite(t *testing.T, db *testdb.DB, practiceID, mode, ownURL string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_websites (practice_id, mode, own_url, service_description, cancellation_policy, slug)
-		 VALUES ($1, $2, NULLIF($3, ''), 'Birth support.', 'Two weeks notice.', $4)`,
+		`INSERT INTO practice_websites (practice_id, mode, own_url, service_description, cancellation_policy, slug, page_state)
+		 VALUES ($1, $2, NULLIF($3, ''), 'Birth support.', 'Two weeks notice.', $4,
+		         CASE WHEN $2 = 'hosted' THEN 'pending'::practice_page_state END)`,
 		practiceID, mode, ownURL, practiceID,
 	); err != nil {
 		t.Fatalf("seed practice_websites: %v", err)

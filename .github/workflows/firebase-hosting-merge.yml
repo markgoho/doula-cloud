@@ -13,6 +13,12 @@ on:
       - "scripts/sync-practice-pages.ts"
       - "package.json"
       - ".github/workflows/firebase-hosting-merge.yml"
+  # A Practice publishing her page (#441) produces no commit, so no push
+  # trigger can ever see it. The BFF fires this event instead, from a
+  # queued rebuild (#443) -- one named type, so the workflow answers to
+  # this and to nothing else anyone might send.
+  repository_dispatch:
+    types: [practice-page-published]
 
 permissions:
   contents: read
@@ -25,6 +31,10 @@ permissions:
 # same choice, after confirming experimentally that a job's own
 # concurrency group doesn't protect it from a cancel-in-progress: true
 # set anywhere in the same run.)
+#
+# The same holds for a dispatched rebuild: #443's worker already
+# collapses queued rebuilds into one dispatch, so a second run arriving
+# here is a real second change and not a duplicate to discard.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
@@ -140,3 +150,31 @@ jobs:
 
       - name: Deploy to Firebase
         run: bunx firebase-tools deploy --only hosting:hugo --non-interactive
+
+      # #443: prove each published page resolves, and mark the Practice
+      # when it does not.
+      #
+      # One POST rather than a curl loop over the pages, because the BFF
+      # already knows every slug and has to write the result somewhere
+      # this workflow cannot reach -- the site builder role reads five
+      # tables and writes nothing, deliberately (00046). The probe is one
+      # Go function, shared with the Cloud Scheduler sweep that covers
+      # what this step cannot: a build that fails never gets here at all.
+      - name: Fetch the site worker secret
+        id: worker
+        uses: google-github-actions/get-secretmanager-secrets@v3
+        with:
+          secrets: |-
+            secret:doula-cloud/doula-cloud-notification-worker-secret
+
+      # The raw Cloud Run URL, the same one Cloud Tasks targets, rather
+      # than going in through Firebase Hosting's /api/** rewrite: this
+      # endpoint is not the app's, and the rewrite strips headers this
+      # request is authenticated by (#138).
+      - name: Confirm every published page resolves
+        env:
+          WORKER_SECRET: ${{ steps.worker.outputs.secret }}
+        run: |
+          curl -fsS --retry 3 --retry-delay 5 --max-time 120 \
+            -X POST "https://doula-api-850855848778.us-central1.run.app/api/internal/site/verify-pages" \
+            -H "X-Internal-Secret: ${WORKER_SECRET}"

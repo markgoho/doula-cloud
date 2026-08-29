@@ -37,7 +37,42 @@ export interface PracticeWebsite {
 	RFC 3339, or empty if nobody has answered.
 	*/
 	updatedAt: string;
+	/**
+	Whether the page we publish for her has been confirmed to load
+	(#443). Empty for a Practice on her own website, who has no page
+	here.
+	*/
+	pageState: PageState;
+	/**
+	When a probe last looked, RFC 3339, or empty if none has.
+	*/
+	pageCheckedAt: string;
+	/**
+	Why the last probe failed, in a few words for her to read. Empty
+	when it did not fail.
+	*/
+	pageCheckDetail: string;
+	/**
+	The public address of the page published for her, or empty when she
+	is on her own website. The same URL Stripe is handed, so showing it
+	to her shows her what Stripe will look at.
+	*/
+	pageUrl: string;
 }
+
+/**
+ * Whether her published page is actually there (#443).
+ *
+ * `pending` is the ordinary couple of minutes between publishing and the
+ * deploy finishing, and it is also where a page stays when the build
+ * failed and nothing ever reported back -- so it reads as "not confirmed
+ * yet" rather than as a problem, and never as a success. Only a probe
+ * that fetched the page says `live`.
+ *
+ * Empty string is a Practice on her own website: there is no page of
+ * ours to be in any state at all.
+ */
+export type PageState = '' | 'pending' | 'live' | 'failed';
 
 /**
 What the app may send: the two real answers, never `undeclared`.

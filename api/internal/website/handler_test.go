@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/website"
 )
@@ -72,7 +73,7 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("PUT /practices/{practiceId}/website",
-		staffauth.Middleware(db.App)(website.PutHandler()))
+		staffauth.Middleware(db.App)(website.PutHandler(&tasknudge.FakeEnqueuer{})))
 	g := staffauth.NewGatedRouter(mux, db.App)
 	g.Get("/practices/{practiceId}/website", staffauth.AnyStaff, website.GetHandler())
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
@@ -605,5 +606,140 @@ func TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses(t *testing.T)
 	}
 	if events != 1 {
 		t.Fatalf("got %d events for the second Practice, want 1", events)
+	}
+}
+
+// #443: publishing a page queues a rebuild, because the deploy workflow
+// fires on a push touching hugo/** and this produces no commit at all.
+func TestPutHandler_PublishingQueuesARebuild(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "website-queues-rebuild"
+	practiceID, _ := seedOwner(t, db, uid)
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	resp := putWebsite(t, srv, session, practiceID,
+		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"`+policyText+`"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("got %d, want 200", resp.StatusCode)
+	}
+
+	if got := queuedRebuilds(t, db, practiceID); got != 1 {
+		t.Fatalf("queued %d rebuilds, want 1", got)
+	}
+	// And the page reads as unproven until something has actually
+	// fetched it: absence of a report is never a pass.
+	body := decodeWebsite(t, resp)
+	if body.PageState != website.PageStatePending {
+		t.Fatalf("pageState = %q, want %q", body.PageState, website.PageStatePending)
+	}
+	if body.PageURL != website.HostedPageURL(firstSlug) {
+		t.Fatalf("pageUrl = %q, want the published address", body.PageURL)
+	}
+}
+
+// An edit is as much a reason to rebuild as a first publish, and it
+// puts the page back to unproven -- whatever a probe found before is
+// about words she has just changed.
+func TestPutHandler_EditingQueuesAnotherRebuildAndResetsTheState(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "website-edit-rebuild"
+	practiceID, _ := seedOwner(t, db, uid)
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	first := putWebsite(t, srv, session, practiceID,
+		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"`+policyText+`"}`)
+	_ = first.Body.Close()
+	markPageLive(t, db, practiceID)
+
+	second := putWebsite(t, srv, session, practiceID,
+		`{"mode":"hosted","serviceDescription":"Birth and postpartum support.","cancellationPolicy":"`+policyText+`"}`)
+	defer func() { _ = second.Body.Close() }()
+
+	if got := queuedRebuilds(t, db, practiceID); got != 2 {
+		t.Fatalf("queued %d rebuilds, want one per write", got)
+	}
+	body := decodeWebsite(t, second)
+	if body.PageState != website.PageStatePending {
+		t.Fatalf("pageState = %q, want the earlier probe result cleared", body.PageState)
+	}
+	if body.PageCheckedAt != "" {
+		t.Fatalf("pageCheckedAt = %q, want it cleared with the state", body.PageCheckedAt)
+	}
+}
+
+// Switching away has to prune her page, which is as much a rebuild as
+// publishing was.
+func TestPutHandler_SwitchingAwayQueuesARebuildAndDropsTheState(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "website-switch-away"
+	practiceID, _ := seedOwner(t, db, uid)
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	first := putWebsite(t, srv, session, practiceID,
+		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"`+policyText+`"}`)
+	_ = first.Body.Close()
+
+	second := putWebsite(t, srv, session, practiceID, `{"mode":"own","ownUrl":"`+ownSiteURL+`"}`)
+	defer func() { _ = second.Body.Close() }()
+
+	if got := queuedRebuilds(t, db, practiceID); got != 2 {
+		t.Fatalf("queued %d rebuilds, want the prune queued too", got)
+	}
+	body := decodeWebsite(t, second)
+	if body.PageState != "" {
+		t.Fatalf("pageState = %q, want no state for a Practice with no page here", body.PageState)
+	}
+	if body.PageURL != "" {
+		t.Fatalf("pageUrl = %q, want no link to a page that is no longer built", body.PageURL)
+	}
+}
+
+// A Practice moving between her own websites has never had a page here,
+// so there is nothing to build and nothing to prune.
+func TestPutHandler_OwnSiteOnlyQueuesNothing(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "website-own-only"
+	practiceID, _ := seedOwner(t, db, uid)
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	resp := putWebsite(t, srv, session, practiceID, `{"mode":"own","ownUrl":"`+ownSiteURL+`"}`)
+	defer func() { _ = resp.Body.Close() }()
+
+	if got := queuedRebuilds(t, db, practiceID); got != 0 {
+		t.Fatalf("queued %d rebuilds, want none", got)
+	}
+}
+
+// queuedRebuilds counts what #443's outbox holds for one Practice.
+func queuedRebuilds(t *testing.T, db *testdb.DB, practiceID string) int {
+	t.Helper()
+	var n int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM site_build_outbox WHERE practice_id = $1`, practiceID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count queued rebuilds: %v", err)
+	}
+	return n
+}
+
+// markPageLive stands in for a probe having run, so a test can prove the
+// next write clears it.
+func markPageLive(t *testing.T, db *testdb.DB, practiceID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practice_websites
+		    SET page_state = 'live', page_checked_at = now()
+		  WHERE practice_id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("mark page live: %v", err)
 	}
 }

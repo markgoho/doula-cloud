@@ -9,13 +9,14 @@ package tasknudge
 import (
 	"context"
 	"log"
+	"time"
 )
 
 // OutboxType names which of ADR-0010's process-* endpoints a nudge task
 // should call.
 type OutboxType string
 
-// The eight outbox types a nudge can target, one per process-* endpoint
+// The nine outbox types a nudge can target, one per process-* endpoint
 // main.go mounts (ADR-0010, ADR-0013).
 const (
 	PortalInvite      OutboxType = "portal-invite"
@@ -26,7 +27,29 @@ const (
 	StaffInvite       OutboxType = "staff-invite"
 	EngagementOffer   OutboxType = "engagement-offer"
 	EngagementRequest OutboxType = "engagement-request"
+	SiteBuild         OutboxType = "site-build"
 )
+
+// delay is how long a nudge waits before it fires, per outbox type.
+//
+// Zero for every notification outbox, and rightly: two invitations are
+// two emails, so there is nothing to gain by making the second one wait.
+// #443's site rebuild is the one type where the opposite holds -- two
+// Practices publishing a minute apart need one deploy between them, and
+// the worker can only collapse rows that have had a moment to
+// accumulate. See sitebuild.CoalesceWindow for the number and the
+// reasoning behind it; it is repeated here rather than imported because
+// tasknudge is imported by every write site and must not pull a worker
+// package in behind it.
+var delay = map[OutboxType]time.Duration{
+	SiteBuild: 90 * time.Second,
+}
+
+// Delay reports how long a nudge for outboxType waits before firing.
+// Zero means immediately, which is every type but one.
+func Delay(outboxType OutboxType) time.Duration {
+	return delay[outboxType]
+}
 
 // Enqueuer enqueues a Cloud Task that nudges outboxType's process-*
 // endpoint to run immediately. An error means the caller should log and

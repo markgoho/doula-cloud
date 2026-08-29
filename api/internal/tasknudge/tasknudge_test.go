@@ -91,3 +91,27 @@ func TestDrain_NoOpWithoutBegin(t *testing.T) {
 	// Must not panic when ctx never went through Begin.
 	tasknudge.Drain(t.Context())
 }
+
+// TestDelay proves the one type that waits, and that every other one
+// still fires immediately. #443's worker collapses queued rebuilds into
+// one dispatch, which only works if rows have had a moment to gather --
+// an immediate nudge per publish would deploy once per publish.
+func TestDelay(t *testing.T) {
+	if got := tasknudge.Delay(tasknudge.SiteBuild); got <= 0 {
+		t.Fatalf("Delay(SiteBuild) = %v, want a real wait", got)
+	}
+	for _, outboxType := range []tasknudge.OutboxType{
+		tasknudge.PortalInvite,
+		tasknudge.LowCredit,
+		tasknudge.Payout,
+		tasknudge.PaymentReceived,
+		tasknudge.SessionNotice,
+		tasknudge.StaffInvite,
+		tasknudge.EngagementOffer,
+		tasknudge.EngagementRequest,
+	} {
+		if got := tasknudge.Delay(outboxType); got != 0 {
+			t.Fatalf("Delay(%s) = %v, want no wait", outboxType, got)
+		}
+	}
+}

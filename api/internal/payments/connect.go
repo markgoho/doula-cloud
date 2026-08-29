@@ -15,6 +15,12 @@ import (
 // where to do it.
 const MsgWebsiteRequired = "Tell us where Clients can find you online before you connect Stripe. Answer the website question in your settings, then come back."
 
+// MsgPageNotLive is the refusal for a Practice whose published page
+// does not answer. Named as a problem with the page rather than with
+// her, because it is ours: she wrote the words and we failed to put
+// them anywhere (#443).
+const MsgPageNotLive = "The page we publish for you is not loading, so Stripe would see nothing at your web address. Open your website settings and publish it again; if it keeps failing, tell us."
+
 // The machine-readable codes this handler returns, in
 // docs/api-design.md section 7's shape. codeFailedPrecondition is the
 // one #442 adds: the request is well-formed and the caller is allowed to
@@ -172,6 +178,15 @@ func PostConnectHandler(client Client) http.Handler {
 		}
 		if !profile.Declared {
 			writeAPIError(w, http.StatusConflict, codeFailedPrecondition, MsgWebsiteRequired)
+			return
+		}
+		// #443's second refusal, on the same rule and for the same
+		// reason: an answer that does not resolve is worth no more to
+		// Stripe than no answer at all. Only a page we publish can fail
+		// this -- a Practice's own address is hers, and we do not check
+		// up on it.
+		if profile.PageFailed {
+			writeAPIError(w, http.StatusConflict, codeFailedPrecondition, MsgPageNotLive)
 			return
 		}
 

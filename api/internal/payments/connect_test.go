@@ -76,13 +76,19 @@ func seedDeclaredWebsite(t *testing.T, db *testdb.DB, practiceID, ownURL string)
 }
 
 // seedHostedPage records the other answer: a page published here, at the
-// slug 00046 mints once.
+// slug 00046 mints once. pageState is 00049's liveness (#443), which a
+// real publish always sets to "pending".
 func seedHostedPage(t *testing.T, db *testdb.DB, practiceID, slug, description string) {
 	t.Helper()
+	seedHostedPageInState(t, db, practiceID, slug, description, "pending")
+}
+
+func seedHostedPageInState(t *testing.T, db *testdb.DB, practiceID, slug, description, pageState string) {
+	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_websites (practice_id, mode, service_description, cancellation_policy, slug)
-		 VALUES ($1, 'hosted', $2, 'Cancel any time up to two weeks before the due date.', $3)`,
-		practiceID, description, slug,
+		`INSERT INTO practice_websites (practice_id, mode, service_description, cancellation_policy, slug, page_state)
+		 VALUES ($1, 'hosted', $2, 'Cancel any time up to two weeks before the due date.', $3, $4::practice_page_state)`,
+		practiceID, description, slug, pageState,
 	); err != nil {
 		t.Fatalf("seed hosted page: %v", err)
 	}
@@ -783,5 +789,63 @@ func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
 	}
 	if got.ProductDescription != "Birth and postpartum doula support across Monroe County." {
 		t.Fatalf("ProductDescription = %q, want what she wrote on her page", got.ProductDescription)
+	}
+}
+
+// TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad is
+// #443's half of the same block-over-warn rule. She answered, and the
+// page we publish for her is not there -- so the URL Stripe would be
+// handed 404s, and #382 established the review of that URL is ongoing
+// with no published SLA, which makes the rejection arrive weeks later
+// with no visible cause.
+func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-page-failed"
+	practiceID := seedOwner(t, db, uid)
+	seedHostedPageInState(t, db, practiceID, "test-practice", "Birth support.", "failed")
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	var out struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Message != payments.MsgPageNotLive {
+		t.Fatalf("message = %q, want %q", out.Message, payments.MsgPageNotLive)
+	}
+	if got := client.AccountCallCount(); got != 0 {
+		t.Fatalf("CreateAccount calls = %d, want 0", got)
+	}
+}
+
+// A page still waiting for its deploy must not block her. Every
+// Practice passes through "pending" on the way to "live", and blocking
+// there would block the happy path.
+func TestPostConnectHandler_AllowsAPageStillWaitingForItsDeploy(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-page-pending"
+	practiceID := seedOwner(t, db, uid)
+	seedHostedPageInState(t, db, practiceID, "test-practice", "Birth support.", "pending")
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }

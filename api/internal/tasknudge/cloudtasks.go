@@ -3,14 +3,17 @@ package tasknudge
 import (
 	"context"
 	"fmt"
+	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // endpointPath maps each OutboxType to the process-* endpoint main.go
-// mounts it at (ADR-0010). Every nudge task hits one of these eight paths.
+// mounts it at (ADR-0010). Every nudge task hits one of these nine paths.
 var endpointPath = map[OutboxType]string{
+	SiteBuild:         "/api/internal/site/process-build-outbox",
 	EngagementOffer:   "/api/internal/notifications/process-offer-outbox",
 	EngagementRequest: "/api/internal/notifications/process-engagement-request-outbox",
 	PortalInvite:      "/api/internal/notifications/process-outbox",
@@ -58,18 +61,27 @@ func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, outboxType OutboxType)
 		return fmt.Errorf("tasknudge: unknown outbox type %q", outboxType)
 	}
 	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
-	_, err := e.client.CreateTask(ctx, &cloudtaskspb.CreateTaskRequest{
-		Parent: e.queue,
-		Task: &cloudtaskspb.Task{
-			MessageType: &cloudtaskspb.Task_HttpRequest{
-				HttpRequest: &cloudtaskspb.HttpRequest{
-					Url:        e.targetBaseURL + path,
-					HttpMethod: cloudtaskspb.HttpMethod_POST,
-					Headers:    map[string]string{"X-Internal-Secret": e.secret},
-				},
+	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
+	task := &cloudtaskspb.Task{
+		MessageType: &cloudtaskspb.Task_HttpRequest{
+			HttpRequest: &cloudtaskspb.HttpRequest{
+				Url:        e.targetBaseURL + path,
+				HttpMethod: cloudtaskspb.HttpMethod_POST,
+				Headers:    map[string]string{"X-Internal-Secret": e.secret},
 			},
 		},
-	})
+	}
+	// Zero for every type but #443's site rebuild, whose worker can only
+	// collapse queued rows that have had a moment to accumulate. Left
+	// unset when the delay is zero, which is what "as soon as you can"
+	// has always meant here.
+	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
+	if d := Delay(outboxType); d > 0 {
+		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
+		task.ScheduleTime = timestamppb.New(time.Now().Add(d))
+	}
+	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
+	_, err := e.client.CreateTask(ctx, &cloudtaskspb.CreateTaskRequest{Parent: e.queue, Task: task})
 	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 	if err != nil {
 		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests

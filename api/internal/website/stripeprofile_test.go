@@ -75,8 +75,8 @@ func TestReadStripeProfile_HerHostedPage(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Rochester Doulas")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_websites (practice_id, mode, service_description, cancellation_policy, slug)
-		 VALUES ($1, 'hosted', $2, $3, $4)`,
+		`INSERT INTO practice_websites (practice_id, mode, service_description, cancellation_policy, slug, page_state)
+		 VALUES ($1, 'hosted', $2, $3, $4, 'pending')`,
 		practiceID, "Birth and postpartum support across Monroe County.", policyText, firstSlug,
 	); err != nil {
 		t.Fatalf("seed hosted page: %v", err)

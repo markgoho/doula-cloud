@@ -400,9 +400,23 @@
 								{ label: 'Cancellation policy', value: current.cancellationPolicy }
 							]}
 						/>
-						<Text
-							text="Your page goes live the next time the site is built. Until then Stripe will see the address but not the page."
-						/>
+						<!-- Whether the page is actually there (#443). Three states,
+						     and the middle one is the point: a page nothing has
+						     confirmed reads as "not confirmed yet", never as a
+						     success, because the build can fail and report nothing
+						     at all. -->
+						{#if current.pageState === 'live'}
+							<Text text={`Your page is live at ${current.pageUrl}`} />
+						{:else if current.pageState === 'failed'}
+							<Notice
+								variant="error"
+								message={`We could not load your page: ${current.pageCheckDetail}. Choose Change below and save again. If it keeps failing, tell us — Stripe will not let you take payments while your address shows nothing.`}
+							/>
+						{:else}
+							<Text
+								text="Your page is being published. This usually takes a few minutes. Until we have loaded it ourselves we will not say it is live."
+							/>
+						{/if}
 					{/if}
 
 					<!-- How this came to say what it says: who last wrote it, and

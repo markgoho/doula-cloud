@@ -130,7 +130,36 @@ type Response struct {
 	UpdatedBy string `json:"updatedBy"`
 	// RFC 3339, or empty when nobody has answered.
 	UpdatedAt string `json:"updatedAt"`
+	// PageState is whether the hosted page has been confirmed to
+	// resolve on the live site (#443): "pending", "live" or "failed".
+	// Empty for a Practice using her own website, who has no page here.
+	//
+	// "pending" is not a failure and never blocks her -- it is the
+	// ordinary couple of minutes between publishing and the deploy
+	// finishing. It is also what a page stays at when the build failed
+	// and nothing ever reported, which is why the screen says "not
+	// confirmed yet" rather than nothing at all: absence of a report is
+	// never a pass.
+	PageState string `json:"pageState"`
+	// PageCheckedAt is when a probe last ran, RFC 3339, or empty when
+	// none has.
+	PageCheckedAt string `json:"pageCheckedAt"`
+	// PageCheckDetail is why the last probe failed, in a few words for
+	// her to read. Empty when it did not fail.
+	PageCheckDetail string `json:"pageCheckDetail"`
+	// PageURL is the public address of the page published for her.
+	// Empty for a Practice on her own website. It is the same URL
+	// Stripe is handed (ReadStripeProfile), so a screen that shows it to
+	// her is showing her what Stripe will look at.
+	PageURL string `json:"pageUrl"`
 }
+
+// The values PageState takes, matching 00049's practice_page_state.
+const (
+	PageStatePending = "pending"
+	PageStateLive    = "live"
+	PageStateFailed  = "failed"
+)
 
 // Validated is a Request that has been through Validate: trimmed,
 // normalized, and known to satisfy the mode it declares.
