@@ -18,6 +18,17 @@ import (
 // handler's Stripe-failure path.
 var errStripeFake = errors.New("stripe: fake failure")
 
+// The fixture Practice and the website she declared, named once because
+// several tests seed the same pair and because a test reading "the same
+// answer as last time" should be looking at the same literal.
+const (
+	fixturePracticeName = "Fixture Practice"
+	fixtureOwnSiteURL   = "https://rochesterdoulas.com"
+	// The Practice seedOwner creates, and so the descriptor its name
+	// makes.
+	seededPracticeName = "Test Practice"
+)
+
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 	t.Helper()
 	var id string
@@ -46,6 +57,34 @@ func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string, rol
 		practiceID, staffID, roles,
 	); err != nil {
 		t.Fatalf("seed membership: %v", err)
+	}
+}
+
+// seedDeclaredWebsite records the website answer #440 collects, which
+// #442 makes a precondition of starting Connect onboarding. Written
+// straight to the table rather than through website.PutHandler: this
+// package's tests are about the payments handler, and the declaration is
+// a fixture for them, not the thing under test.
+func seedDeclaredWebsite(t *testing.T, db *testdb.DB, practiceID, ownURL string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_websites (practice_id, mode, own_url) VALUES ($1, 'own', $2)`,
+		practiceID, ownURL,
+	); err != nil {
+		t.Fatalf("seed declared website: %v", err)
+	}
+}
+
+// seedHostedPage records the other answer: a page published here, at the
+// slug 00046 mints once.
+func seedHostedPage(t *testing.T, db *testdb.DB, practiceID, slug, description string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_websites (practice_id, mode, service_description, cancellation_policy, slug)
+		 VALUES ($1, 'hosted', $2, 'Cancel any time up to two weeks before the due date.', $3)`,
+		practiceID, description, slug,
+	); err != nil {
+		t.Fatalf("seed hosted page: %v", err)
 	}
 }
 
@@ -128,6 +167,7 @@ func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-owner"
 	practiceID := seedOwner(t, db, uid)
+	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -171,6 +211,7 @@ func TestPostConnectHandler_SecondAttemptReusesExistingAccount(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-owner-repeat"
 	practiceID := seedOwner(t, db, uid)
+	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -229,6 +270,7 @@ func TestPostConnectHandler_CreateAccountFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-account-fail"
 	practiceID := seedOwner(t, db, uid)
+	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 	client.CreateAccountErr = errStripeFake
 
@@ -252,6 +294,7 @@ func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-link-fail"
 	practiceID := seedOwner(t, db, uid)
+	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 	client.CreateAccountLinkErr = errStripeFake
 
@@ -547,7 +590,11 @@ func TestGetConnectStatusHandler_RetrieveFailureReturns500(t *testing.T) {
 // FakeClient.Statuses reports for it.
 func postConnectAsOwnerForStatusFixture(t *testing.T, db *testdb.DB, client *payments.FakeClient, practiceID string) string {
 	t.Helper()
-	accountID, err := client.CreateAccount(t.Context(), practiceID, "Fixture Practice")
+	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
+		PracticeID:   practiceID,
+		PracticeName: fixturePracticeName,
+		BusinessURL:  fixtureOwnSiteURL,
+	})
 	if err != nil {
 		t.Fatalf("CreateAccount fixture: %v", err)
 	}
@@ -568,6 +615,7 @@ func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-display-name"
 	practiceID := seedOwner(t, db, uid)
+	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -579,14 +627,161 @@ func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	if len(client.AccountNames) != 1 {
-		t.Fatalf("AccountNames = %v, want exactly one CreateAccount call", client.AccountNames)
+	if len(client.AccountProfiles) != 1 {
+		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", client.AccountProfiles)
 	}
 	var want string
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&want); err != nil {
 		t.Fatalf("read practice name: %v", err)
 	}
-	if client.AccountNames[0] != want {
-		t.Fatalf("display name sent to Stripe = %q, want the Practice's own name %q", client.AccountNames[0], want)
+	if client.AccountProfiles[0].PracticeName != want {
+		t.Fatalf("display name sent to Stripe = %q, want the Practice's own name %q", client.AccountProfiles[0].PracticeName, want)
+	}
+}
+
+// TestPostConnectHandler_RefusesWithoutDeclaredWebsite is the boundary
+// half of #442's block-over-warn rule. The screen hides the button, but
+// the screen is not what enforces this: #421 walked what Stripe's hosted
+// form does with an empty website field -- it accepts it, lets her finish
+// every remaining step, and returns her "done" with card_payments
+// restricted and nothing saying why. So no account is created and no
+// Account Link is minted for a Practice who has not answered.
+func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-no-website"
+	practiceID := seedOwner(t, db, uid)
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	var out struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Code != "FAILED_PRECONDITION" {
+		t.Fatalf("code = %q, want %q", out.Code, "FAILED_PRECONDITION")
+	}
+	if out.Message != payments.MsgWebsiteRequired {
+		t.Fatalf("message = %q, want %q", out.Message, payments.MsgWebsiteRequired)
+	}
+	// The refusal has to land before the account is created, not merely
+	// before the link is minted: a Stripe account made without a website
+	// is one whose Owner is asked for it by hand, which is the failure
+	// this ticket exists to remove.
+	if got := client.AccountCallCount(); got != 0 {
+		t.Fatalf("CreateAccount calls = %d, want 0", got)
+	}
+	if got := client.AccountLinkCallCount(); got != 0 {
+		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
+	}
+	if got := stripeConnectAccountID(t, db, practiceID); got != nil {
+		t.Fatalf("stripe_connect_account_id = %v, want nil", got)
+	}
+}
+
+// TestPostConnectHandler_RefusesAnAlreadyConnectedPracticeWithoutAWebsite
+// proves the gate is on minting a link and not only on creating an
+// account. A Practice connected before #440 existed has an account id and
+// no declaration, and re-opening the hosted flow for her would walk her
+// into the same empty-website trap.
+func TestPostConnectHandler_RefusesAnAlreadyConnectedPracticeWithoutAWebsite(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-legacy-account"
+	practiceID := seedOwner(t, db, uid)
+	client := payments.NewFakeClient()
+	postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	if got := client.AccountLinkCallCount(); got != 0 {
+		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
+	}
+}
+
+// TestPostConnectHandler_SendsHerOwnWebsiteToStripe proves the URL she
+// declared is what the account is created with, so Stripe's hosted form
+// never asks her for it -- the four requirements #442's Sandbox walk
+// showed disappear when the account carries them at create.
+func TestPostConnectHandler_SendsHerOwnWebsiteToStripe(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-own-website"
+	practiceID := seedOwner(t, db, uid)
+	seedDeclaredWebsite(t, db, practiceID, "https://facebook.com/rochester-doulas")
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	if len(client.AccountProfiles) != 1 {
+		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", client.AccountProfiles)
+	}
+	got := client.AccountProfiles[0]
+	if got.BusinessURL != "https://facebook.com/rochester-doulas" {
+		t.Fatalf("BusinessURL = %q, want the URL she declared", got.BusinessURL)
+	}
+	// #440 asks a Practice declaring her own site for nothing but the
+	// address, so there is no product description to send and inventing
+	// one would be putting words in her mouth on a form Stripe
+	// underwrites her against.
+	if got.ProductDescription != "" {
+		t.Fatalf("ProductDescription = %q, want empty", got.ProductDescription)
+	}
+	// The descriptor comes from the Practice's name and not from the URL.
+	// Deriving it from the URL is exactly what Stripe does when it is not
+	// told one, and #421 watched that put FACEBOOK.COM/ROCHESTER onto a
+	// walked account's Clients' card statements.
+	if got.StatementDescriptor != seededPracticeName {
+		t.Fatalf("StatementDescriptor = %q, want the Practice's name", got.StatementDescriptor)
+	}
+}
+
+// TestPostConnectHandler_SendsHerHostedPageToStripe proves the other
+// answer resolves to the address the page is actually published at, and
+// carries the words she wrote as Stripe's product description.
+func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-hosted-page"
+	practiceID := seedOwner(t, db, uid)
+	seedHostedPage(t, db, practiceID, "rochester-doulas", "Birth and postpartum doula support across Monroe County.")
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	got := client.AccountProfiles[0]
+	if got.BusinessURL != "https://doula.cloud/p/rochester-doulas" {
+		t.Fatalf("BusinessURL = %q, want her published page's address", got.BusinessURL)
+	}
+	if got.ProductDescription != "Birth and postpartum doula support across Monroe County." {
+		t.Fatalf("ProductDescription = %q, want what she wrote on her page", got.ProductDescription)
 	}
 }

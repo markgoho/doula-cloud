@@ -36,10 +36,12 @@ type FakeClient struct {
 	nextID int
 
 	AccountCalls []string
-	// AccountNames records the display name passed alongside each
+	// AccountProfiles records the whole profile passed to each
 	// CreateAccount call, so a test can prove the Practice's own name is
-	// what reaches Stripe (#247).
-	AccountNames       []string
+	// what reaches Stripe as the display name (#247), and that her
+	// declared website, industry and card-statement text reach it too
+	// (#442).
+	AccountProfiles    []AccountProfile
 	AccountLinkCalls   []FakeAccountLinkCall
 	RetrieveCalls      []string
 	CreateInvoiceCalls []FakeCreateInvoiceCall
@@ -69,11 +71,11 @@ func NewFakeClient() *FakeClient {
 
 // CreateAccount returns a deterministic fake Stripe Connect account id, or
 // CreateAccountErr if a test set one.
-func (f *FakeClient) CreateAccount(_ context.Context, practiceID, practiceName string) (string, error) {
+func (f *FakeClient) CreateAccount(_ context.Context, profile AccountProfile) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.AccountCalls = append(f.AccountCalls, practiceID)
-	f.AccountNames = append(f.AccountNames, practiceName)
+	f.AccountCalls = append(f.AccountCalls, profile.PracticeID)
+	f.AccountProfiles = append(f.AccountProfiles, profile)
 	if f.CreateAccountErr != nil {
 		return "", f.CreateAccountErr
 	}

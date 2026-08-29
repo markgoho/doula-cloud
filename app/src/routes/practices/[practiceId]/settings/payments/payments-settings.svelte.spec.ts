@@ -3,15 +3,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
 
-vi.mock('$app/state', () => ({
-	page: {
-		params: { practiceId: 'practice-1' },
-		url: new URL('https://test.local/practices/practice-1/settings/payments')
-	}
+/* The screen reads the `connect` query parameter Stripe redirects back
+   with, so the mocked URL has to be settable per test rather than fixed
+   at module scope. */
+const mockPage = vi.hoisted(() => ({
+	params: { practiceId: 'practice-1' },
+	url: new URL('https://test.local/practices/practice-1/settings/payments')
 }));
+vi.mock('$app/state', () => ({ page: mockPage }));
+
+function returnedFromStripe(parameter: 'return' | 'refresh') {
+	mockPage.url = new URL(`https://test.local/practices/practice-1/settings/payments?connect=${parameter}`);
+}
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+vi.mock('#lib/api.js', () => ({
+	apiFetchWithSession,
+	// website.ts reads a failure through this; the screen only ever hits
+	// the happy path here, but the mock has to carry every export the
+	// module tree imports.
+	apiErrorMessage: (response: Response) => response.text()
+}));
 
 // eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
 function jsonResponse(body: unknown, ok = true): Response {
@@ -23,12 +35,34 @@ interface MockOptions {
 	roles?: string[];
 	sessionOk?: boolean;
 	requirementsDue?: string[];
+	/* What #440's endpoint reports. `own` is the default because it is the
+	   precondition every other assertion on this screen depends on --
+	   without a declared website there is no button to assert about. */
+	websiteMode?: 'undeclared' | 'own' | 'hosted';
 }
 
-function mockApi({ status = 'not_connected', roles = [], sessionOk = true, requirementsDue = [] }: MockOptions = {}) {
+function mockApi({
+	status = 'not_connected',
+	roles = [],
+	sessionOk = true,
+	requirementsDue = [],
+	websiteMode = 'own'
+}: MockOptions = {}) {
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.endsWith('/session')) {
 			return Promise.resolve(jsonResponse({ roles }, sessionOk));
+		}
+		if (path.endsWith('/website')) {
+			return Promise.resolve(
+				jsonResponse({
+					mode: websiteMode,
+					ownUrl: websiteMode === 'own' ? 'https://rochesterdoulas.com' : '',
+					serviceDescription: '',
+					cancellationPolicy: '',
+					updatedBy: '',
+					updatedAt: ''
+				})
+			);
 		}
 		return Promise.resolve(
 			jsonResponse({
@@ -43,6 +77,7 @@ function mockApi({ status = 'not_connected', roles = [], sessionOk = true, requi
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	mockPage.url = new URL('https://test.local/practices/practice-1/settings/payments');
 });
 
 describe('payments settings screen', () => {
@@ -132,5 +167,91 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).not.toBeInTheDocument();
+	});
+});
+
+describe('payments settings screen: what #442 refuses and what it warns about', () => {
+	it('refuses the button, and says where to fix it, when no website has been declared', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'undeclared' });
+		await render(Page, {});
+
+		await expect
+			.element(
+				testPage.getByText(
+					'Stripe will not let you take Client payments until it can see where you are online.',
+					{ exact: false }
+				)
+			)
+			.toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Answer the website question' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+	});
+
+	it('opens the flow once a page is published here, not only when she has her own site', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'hosted' });
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
+	});
+
+	it('says what Stripe will ask for before the button, not after it', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('heading', { name: 'What Stripe will ask you for' })).toBeVisible();
+		await expect.element(testPage.getByText('two-step authentication', { exact: false })).toBeVisible();
+		await expect
+			.element(testPage.getByText('last four digits of your Social Security number', { exact: false }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('bank routing and account numbers', { exact: false })).toBeVisible();
+	});
+
+	it('tells her where the text on her Clients card statements comes from', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'] });
+		await render(Page, {});
+
+		await expect
+			.element(
+				testPage.getByText("Stripe puts a short version of your Practice's name on your Clients' card statements", {
+					exact: false
+				})
+			)
+			.toBeVisible();
+	});
+
+	it('does not congratulate a Practice who came back from Stripe still restricted', async () => {
+		returnedFromStripe('return');
+		mockApi({
+			status: 'onboarding_incomplete',
+			roles: ['owner'],
+			requirementsDue: ['defaults.profile.business_url']
+		});
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('Stripe still needs something from you before Clients can pay.', { exact: false }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: false })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
+	});
+});
+
+describe('payments settings screen: the one question the two website answers do not share', () => {
+	it("warns a Practice on her own site that Stripe wants a description she has not written", async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'own' });
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('A short description of what your Practice offers', { exact: false }))
+			.toBeVisible();
+	});
+
+	it('does not warn a Practice whose published page already carries one', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'hosted' });
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('A short description of what your Practice offers', { exact: false }))
+			.not.toBeInTheDocument();
 	});
 });

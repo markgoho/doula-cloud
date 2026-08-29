@@ -6,7 +6,40 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/website"
 )
+
+// MsgWebsiteRequired is what PostConnectHandler refuses a Practice with,
+// and what the payments screen renders when it does. Written for the
+// Owner rather than for a log: it names the thing she has not done and
+// where to do it.
+const MsgWebsiteRequired = "Tell us where Clients can find you online before you connect Stripe. Answer the website question in your settings, then come back."
+
+// The machine-readable codes this handler returns, in
+// docs/api-design.md section 7's shape. codeFailedPrecondition is the
+// one #442 adds: the request is well-formed and the caller is allowed to
+// make it, but the Practice is in a state where it cannot be granted.
+const (
+	codeFailedPrecondition = "FAILED_PRECONDITION"
+)
+
+// apiError is docs/api-design.md section 7's structured error shape.
+// The rest of this package still writes plain text via http.Error, which
+// is what #462 exists to finish; a new refusal follows the documented
+// rule rather than the surrounding habit, the same way the website
+// package's endpoints do.
+type apiError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// writeAPIError writes status with a {code, message} JSON body.
+func writeAPIError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	// coverage:ignore reason: response encoding failure, not exercised by unit tests
+	_ = json.NewEncoder(w).Encode(apiError{Code: code, Message: message})
+}
 
 // ConnectStatus is the single status GetConnectStatusHandler reports for
 // a Practice's Stripe Connect account, and the Payments settings screen
@@ -119,11 +152,40 @@ func PostConnectHandler(client Client) http.Handler {
 			return
 		}
 
+		// The gate, and it sits before the account is created rather than
+		// before the link is minted. Stripe's hosted form fills its
+		// business-details step from what the account already carries, so
+		// an account made without a website is one whose Owner will be
+		// asked for it by hand -- and #421 walked what she does then: she
+		// leaves it empty, Continue accepts it, she finishes every
+		// remaining step, submits, and comes back "done" with
+		// card_payments restricted and nothing on screen saying why.
+		//
+		// Refusing here means no Stripe account exists for a Practice who
+		// has not answered, so there is no half-made account to reconcile
+		// and the create-time profile below is always complete.
+		profile, err := website.ReadStripeProfile(r.Context(), tx, practiceID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !profile.Declared {
+			writeAPIError(w, http.StatusConflict, codeFailedPrecondition, MsgWebsiteRequired)
+			return
+		}
+
 		if !accountID.Valid {
 			// practiceName travels with the id so the Client's invoice
 			// reads "From <the Practice>" rather than a statement
 			// descriptor (#247).
-			id, err := client.CreateAccount(r.Context(), practiceID, practiceName)
+			id, err := client.CreateAccount(r.Context(), AccountProfile{
+				PracticeID:          practiceID,
+				PracticeName:        practiceName,
+				BusinessURL:         profile.URL,
+				ProductDescription:  profile.ProductDescription,
+				StatementDescriptor: StatementDescriptor(practiceName),
+			})
 			if err != nil {
 				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return

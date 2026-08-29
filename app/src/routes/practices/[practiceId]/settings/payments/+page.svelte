@@ -1,15 +1,40 @@
 <script lang="ts">
+	/*
+	 * Where a Practice Owner meets Stripe's hosted onboarding (#442).
+	 *
+	 * Two things this screen owes her, both found by walking that flow in
+	 * the Sandbox rather than guessed at.
+	 *
+	 * She is told what is coming. The flow asks for a Stripe login with
+	 * mandatory two-step authentication, her legal name, date of birth,
+	 * home address and the last four digits of her Social Security number,
+	 * her bank routing and account numbers, and a support phone and
+	 * address. Fifteen minutes, a phone in her hand, and her bank details
+	 * are not things to discover halfway through.
+	 *
+	 * And she is not sent in without a website. Stripe's website field
+	 * accepts empty: she clicks Continue with no error, completes every
+	 * remaining step, submits, and returns here "done" with card_payments
+	 * restricted and nothing on screen saying why (#421). That is the worst
+	 * outcome the flow can produce. The button is unavailable until she has
+	 * answered #440's question, and PostConnectHandler refuses to mint an
+	 * Account Link in that state whatever this screen does.
+	 */
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
+	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 
 	let status = $state<ConnectStatusResult | undefined>();
+	let website = $state<PracticeWebsite | undefined>();
 	let error = $state('');
 	let roles = $state<string[]>([]);
 	let isOwner = $derived(roles.includes('owner'));
@@ -21,6 +46,10 @@
 	onMount(async () => {
 		try {
 			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
+			// Every Staff member may read this (#440), so it loads for
+			// everyone: a Doula who opens this screen should see why Clients
+			// cannot pay yet rather than an unexplained missing button.
+			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
 			return;
@@ -107,6 +136,57 @@
 			(copy?.onboarding === 'if-outstanding' && (status?.requirementsDue.length ?? 0) > 0)
 	);
 
+	/* The gate. `undeclared` is the shape the website endpoint reports for
+	   a Practice with no row, so this is "has she answered?" and not "is
+	   the page live?" -- whether a published page has actually been built
+	   and resolves is #443's, and Stripe's review of the URL is ongoing
+	   either way (#382). */
+	let hasDeclaredWebsite = $derived(website !== undefined && website.mode !== 'undeclared');
+
+	let websiteHref = $derived(
+		resolve('/practices/[practiceId]/settings/website', { practiceId: page.params.practiceId! })
+	);
+
+	/* What Stripe's hosted flow actually asks for, in the order it asks.
+	   Walked end to end in the Sandbox on #421 and again on #442 -- not
+	   read off a doc page, and not a guess at what a merchant onboarding
+	   might want.
+
+	   Two of the things #421 met are missing on purpose, because #442
+	   removed them: the industry dropdown (Stripe's list has no doula or
+	   birth-work category, so the account is created under one already)
+	   and the website field. Neither appears in the walked flow any more,
+	   so neither belongs in a list of what she will be asked. */
+	const stripeAsksFor = [
+		'A Stripe login: an email address, a password, and two-step authentication on your phone. Stripe gives you a backup code — keep it.',
+		'Whether your Practice is registered with the government, and whether it has an EIN.',
+		'Your legal name, date of birth, home address, phone number, and the last four digits of your Social Security number.',
+		'Your bank routing and account numbers, so Stripe can send you the money.',
+		'A phone number and postal address Clients can use to reach you about a payment.'
+	];
+
+	/* One question the two answers to #440 do not share. A Practice who
+	   published a page here wrote a description of what she offers, and it
+	   travels to Stripe with the account, so Stripe never asks; a Practice
+	   who gave her own address wrote nothing, and Stripe asks her for it
+	   in its own words. Confirmed against the Sandbox on two accounts
+	   created with the same parameters but that one field (#442) --
+	   defaults.profile.product_description stays outstanding on the second
+	   and disappears on the first.
+
+	   She is not asked for it here instead. #440 asks a Practice for
+	   exactly the facts nobody else can supply and stops, and a box on
+	   this screen would be a third place to keep the same sentence. */
+	let willAskForProductDescription = $derived(website?.mode === 'own');
+
+	/* Coming back from Stripe is not the same as being finished. Stripe's
+	   website field accepts empty, and #421 watched an account come back
+	   "done" and restricted; the account is also restricted while Stripe
+	   is still reviewing. So the return notice reads the status rather
+	   than assuming the trip worked. */
+	let isBackFromStripeRestricted = $derived(
+		connectParameter === 'return' && status !== undefined && status.status === 'onboarding_incomplete'
+	);
 </script>
 
 <Heading level={1} text="Payments" />
@@ -119,7 +199,12 @@
 		<Badge label={statusCopy[status.status].label} variant={statusCopy[status.status].variant} />
 	</cluster-l>
 
-	{#if connectParameter === 'return'}
+	{#if isBackFromStripeRestricted}
+		<Notice
+			variant="error"
+			message="Stripe still needs something from you before Clients can pay. Open the form again below and finish what it asks for."
+		/>
+	{:else if connectParameter === 'return'}
 		<Notice
 			variant="status"
 			message="Stripe onboarding finished. Status updates once Stripe confirms your account is active."
@@ -143,16 +228,76 @@
 		/>
 	{/if}
 
-	{#if isOwner && canStartOnboarding}
-		<Button
-			label={status.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
-			onClick={handleConnect}
-			loading={isConnecting}
+	{#if canStartOnboarding && !hasDeclaredWebsite}
+		<!--
+			Block, do not warn. A disabled button with a tooltip would leave
+			her guessing what unlocks it; this names the missing thing and
+			links to where she supplies it. PostConnectHandler refuses the
+			request as well, which is what actually holds the line.
+		-->
+		<Notice
+			variant="info"
+			message="Stripe will not let you take Client payments until it can see where you are online. Tell us your website or let us publish a page for you, then come back here."
 		/>
-		{#if connectError}
-			<Notice variant="error" message={connectError} />
+		<Link href={websiteHref} label="Answer the website question" />
+	{:else if canStartOnboarding}
+		<!-- A heading and a list, with no <section> around them: the
+		     heading already puts this in the screen-reader outline, and a
+		     landmark that only repeats the heading is one more thing to
+		     skip past. -->
+		<stack-l space="var(--space-4)">
+			<Heading level={2} text="What Stripe will ask you for" />
+			<Text
+				text="This takes about fifteen minutes. Have your phone and your bank details with you before you start — Stripe does not save a half-finished form for long."
+			/>
+			<ul>
+				{#each stripeAsksFor as item (item)}
+					<li>{item}</li>
+				{/each}
+				{#if willAskForProductDescription}
+					<li>A short description of what your Practice offers, for Stripe's own records.</li>
+				{/if}
+			</ul>
+			<!--
+				#421 watched Stripe put FACEBOOK.COM/ROCHESTER onto a walked
+				account's Clients' card statements, because it derives the
+				descriptor from the website URL when it is not told one. It is
+				told one now -- the Practice's own name, set when the account is
+				created (#442) -- so what she needs to know is not a warning but
+				where to change it.
+			-->
+			<Text
+				text="Stripe puts a short version of your Practice's name on your Clients' card statements. It shows you that text near the end, and you can change it there."
+			/>
+		</stack-l>
+
+		{#if isOwner}
+			<Button
+				label={status.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
+				onClick={handleConnect}
+				loading={isConnecting}
+			/>
+			{#if connectError}
+				<Notice variant="error" message={connectError} />
+			{/if}
+		{:else}
+			<Text text="Ask a Practice Owner to connect Stripe." />
 		{/if}
-	{:else if !isOwner && canStartOnboarding}
-		<Text text="Ask a Practice Owner to connect Stripe." />
 	{/if}
 {/if}
+
+<style>
+	@layer components {
+		ul {
+			margin: 0;
+			padding-inline-start: var(--space-6);
+			color: var(--color-on-surface);
+			font-family: var(--font-family-base);
+			font-size: var(--text-body-size);
+		}
+
+		li + li {
+			margin-block-start: var(--space-2);
+		}
+	}
+</style>

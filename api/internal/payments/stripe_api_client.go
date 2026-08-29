@@ -52,41 +52,63 @@ const connectMerchantConfiguration = "merchant"
 // That is what v1's type=standard did implicitly, and it is what keeps
 // Doula Cloud off the money-transmitter path -- there is no
 // ApplicationFeeAmount anywhere in this package (docs/environment.md).
-func (c *StripeAPIClient) CreateAccount(ctx context.Context, practiceID, practiceName string) (string, error) {
+func (c *StripeAPIClient) CreateAccount(ctx context.Context, profile AccountProfile) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	merchant := &stripe.V2CoreAccountCreateConfigurationMerchantParams{
+		Capabilities: &stripe.V2CoreAccountCreateConfigurationMerchantCapabilitiesParams{
+			// card_payments is the only capability requested by
+			// name. stripe_balance.payouts is not requestable on
+			// create -- stripe-go carries no param for it -- and
+			// Stripe grants it alongside a merchant configuration
+			// anyway: a freshly created account already reports a
+			// stripe_balance.payouts status (verified in the
+			// Sandbox, #247).
+			CardPayments: &stripe.V2CoreAccountCreateConfigurationMerchantCapabilitiesCardPaymentsParams{
+				Requested: new(true),
+			},
+		},
+		MCC: stripe.String(DoulaMCC),
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if profile.StatementDescriptor != "" {
+		// Omitted rather than sent empty when the Practice's name cannot
+		// make a legal one: Stripe refuses a descriptor under five
+		// characters outright, and a refused create is worse than the
+		// extra field she would otherwise have filled in anyway (#442).
+		merchant.StatementDescriptor = &stripe.V2CoreAccountCreateConfigurationMerchantStatementDescriptorParams{
+			Descriptor: stripe.String(profile.StatementDescriptor),
+		}
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	stripeProfile := &stripe.V2CoreAccountCreateDefaultsProfileParams{
+		BusinessURL: stripe.String(profile.BusinessURL),
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if profile.ProductDescription != "" {
+		stripeProfile.ProductDescription = stripe.String(profile.ProductDescription)
+	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	acct, err := c.client.V2CoreAccounts.Create(ctx, &stripe.V2CoreAccountCreateParams{
 		// The Practice's own name, so the Client's hosted invoice reads
 		// "From <the Practice they hired>". Stripe falls back to the
 		// statement descriptor when this is unset, which showed a walked
 		// invoice as being from "DOULA.CLOU" (#247).
-		DisplayName: stripe.String(practiceName),
+		DisplayName: stripe.String(profile.PracticeName),
 		Identity: &stripe.V2CoreAccountCreateIdentityParams{
 			Country: stripe.String(connectAccountCountry),
 		},
 		Configuration: &stripe.V2CoreAccountCreateConfigurationParams{
-			Merchant: &stripe.V2CoreAccountCreateConfigurationMerchantParams{
-				Capabilities: &stripe.V2CoreAccountCreateConfigurationMerchantCapabilitiesParams{
-					// card_payments is the only capability requested by
-					// name. stripe_balance.payouts is not requestable on
-					// create -- stripe-go carries no param for it -- and
-					// Stripe grants it alongside a merchant configuration
-					// anyway: a freshly created account already reports a
-					// stripe_balance.payouts status (verified in the
-					// Sandbox, #247).
-					CardPayments: &stripe.V2CoreAccountCreateConfigurationMerchantCapabilitiesCardPaymentsParams{
-						Requested: new(true),
-					},
-				},
-			},
+			Merchant: merchant,
 		},
 		Defaults: &stripe.V2CoreAccountCreateDefaultsParams{
 			Responsibilities: &stripe.V2CoreAccountCreateDefaultsResponsibilitiesParams{
 				FeesCollector:   stripe.String(string(stripe.V2CoreAccountDefaultsResponsibilitiesFeesCollectorStripe)),
 				LossesCollector: stripe.String(string(stripe.V2CoreAccountDefaultsResponsibilitiesLossesCollectorStripe)),
 			},
+			Profile: stripeProfile,
 		},
 		Dashboard: stripe.String(string(stripe.V2CoreAccountDashboardFull)),
-		Metadata:  map[string]string{"practice_id": practiceID},
+		Metadata:  map[string]string{"practice_id": profile.PracticeID},
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {

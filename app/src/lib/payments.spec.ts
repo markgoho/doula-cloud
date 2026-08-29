@@ -48,4 +48,20 @@ describe('connect', () => {
 
 		await expect(connect(fetcher, 'practice-1')).rejects.toThrow('forbidden: owner only');
 	});
+
+	it("reads #442's structured refusal as its sentence, not as its JSON", async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			jsonResponse(
+				{
+					code: 'FAILED_PRECONDITION',
+					message: 'Tell us where Clients can find you online before you connect Stripe.'
+				},
+				false
+			)
+		);
+
+		await expect(connect(fetcher, 'practice-1')).rejects.toThrow(
+			'Tell us where Clients can find you online before you connect Stripe.'
+		);
+	});
 });

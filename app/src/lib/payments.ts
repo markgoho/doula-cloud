@@ -5,6 +5,8 @@
  * api/internal/payments/connect.go's doc comments.
  */
 
+import { apiErrorMessage } from './api.js';
+
 export type ConnectStatus =
 	| 'not_connected'
 	| 'onboarding_incomplete'
@@ -54,13 +56,17 @@ export async function loadConnectStatus(fetcher: Fetcher, practiceId: string): P
 
 /** Starts (or resumes) Stripe Connect onboarding and returns the
  * Stripe-hosted Account Link URL the caller's browser must navigate to.
- * Throws with the response body text on a non-2xx response -- e.g. a
- * non-Owner attempting the request, which the backend's `RequireOwner`
- * rejects. */
+ *
+ * Throws with whatever sentence the server sent on a non-2xx response --
+ * a non-Owner attempting the request, which `RequireOwner` rejects, or a
+ * Practice who has not declared a website, which #442 refuses with
+ * docs/api-design.md section 7's structured body. Read through
+ * `apiErrorMessage` rather than as raw text, so the second of those
+ * reaches the screen as a sentence and not as JSON. */
 export async function connect(fetcher: Fetcher, practiceId: string): Promise<string> {
 	const response = await fetcher(connectPath(practiceId), { method: 'POST' });
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	const body: { onboardingUrl: string } = await response.json();
 	return body.onboardingUrl;

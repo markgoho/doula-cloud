@@ -110,12 +110,17 @@ type Client interface {
 	// practices.stripe_connect_account_id and reuses it on every later
 	// onboarding attempt.
 	//
-	// practiceName becomes the Account's display_name, which is what a
-	// Client sees as the "From" on their hosted invoice. Without it Stripe
-	// falls back to the statement descriptor, and the Client is billed by
-	// something like "DOULA.CLOU" rather than the Practice they hired
-	// (found in #247's walk).
-	CreateAccount(ctx context.Context, practiceID, practiceName string) (accountID string, err error)
+	// profile.PracticeName becomes the Account's display_name, which is
+	// what a Client sees as the "From" on their hosted invoice. Without it
+	// Stripe falls back to the statement descriptor, and the Client is
+	// billed by something like "DOULA.CLOU" rather than the Practice they
+	// hired (found in #247's walk).
+	//
+	// The rest of the profile is what #442 stops Stripe's hosted form
+	// having to ask her -- the website, the industry, the product
+	// description and the card-statement text. See AccountProfile for what
+	// the Sandbox walk showed each one removes.
+	CreateAccount(ctx context.Context, profile AccountProfile) (accountID string, err error)
 	// CreateAccountLink creates a single-use Stripe v2 Account Link for
 	// accountID's hosted merchant onboarding flow, tagged so its
 	// return/refresh redirects land back on practiceID's payments settings
