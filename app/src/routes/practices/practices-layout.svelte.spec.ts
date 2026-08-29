@@ -17,19 +17,35 @@ vi.mock('$app/navigation', () => ({ goto }));
 const signOutOfSession = vi.hoisted(() => vi.fn<() => Promise<SignOutOutcome>>());
 vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
 
+// The layout reads its own roles so the temporary nav can hide the
+// Owner-only links -- see the comment on the nav in +layout.svelte.
+const apiFetchWithSession = vi.hoisted(() => vi.fn());
+const apiFetch = vi.hoisted(() => vi.fn());
+vi.mock('#lib/api.js', () => ({ apiFetch, apiFetchWithSession }));
+
 interface SetupOptions {
 	outcome?: SignOutOutcome;
 	routeParameters?: { practiceId?: string };
+	roles?: string[];
+	sessionRefuses?: boolean;
 }
 
 async function setup({
 	outcome = { ok: true },
-	routeParameters = { practiceId: 'practice-1' }
+	routeParameters = { practiceId: 'practice-1' },
+	roles = ['owner'],
+	sessionRefuses = false
 }: SetupOptions = {}) {
 	pageState.params = routeParameters;
 	goto.mockReset();
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
+	apiFetchWithSession.mockReset();
+	apiFetchWithSession.mockResolvedValue({
+		ok: !sessionRefuses,
+		text: () => Promise.resolve('nope'),
+		json: () => Promise.resolve({ roles })
+	} as Response);
 	await render(Layout, {
 		children: createRawSnippet(() => ({ render: () => '<p>staff child content</p>' }))
 	});
@@ -82,5 +98,43 @@ describe('Staff authenticated layout', () => {
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Sign-out failed.');
 		expect(goto).not.toHaveBeenCalled();
+	});
+});
+
+describe('the temporary nav the shell will replace (#452)', () => {
+	it('carries the links the Practice landing page used to hold itself', async () => {
+		await setup({ roles: ['doula'] });
+
+		const nav = page.getByRole('navigation', { name: 'Practice' });
+		await expect.element(nav).toBeVisible();
+		for (const label of ['Overview', 'Clients', 'Billing', 'Your offers', 'Payments']) {
+			await expect.element(nav.getByRole('link', { name: label })).toBeVisible();
+		}
+	});
+
+	const ownerOnly = [['Staff'], ['Invite a Staff member'], ['Plan Templates'], ['Contract Template']];
+
+	it.each(ownerOnly)('shows %s to an Owner', async (label) => {
+		await setup({ roles: ['owner'] });
+
+		await expect.element(page.getByRole('link', { name: label, exact: true })).toBeVisible();
+	});
+
+	it.each(ownerOnly)('hides %s from a Doula', async (label) => {
+		await setup({ roles: ['doula'] });
+
+		expect(page.getByRole('link', { name: label, exact: true }).elements()).toHaveLength(0);
+	});
+
+	it('keeps the Owner links hidden when the session read refuses', async () => {
+		await setup({ sessionRefuses: true });
+
+		expect(page.getByRole('link', { name: 'Staff', exact: true }).elements()).toHaveLength(0);
+	});
+
+	it('renders no nav on a Staff screen with no Practice in its route', async () => {
+		await setup({ routeParameters: {} });
+
+		expect(page.getByRole('navigation', { name: 'Practice' }).elements()).toHaveLength(0);
 	});
 });

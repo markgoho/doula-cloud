@@ -1,4 +1,15 @@
 <script lang="ts">
+	/*
+	 * The Practice landing page -- archetype B, on `OverviewHub` (#423,
+	 * ADR-0018).
+	 *
+	 * It used to be an `<h1>` and eight bare links, which is the abandon
+	 * point `docs/journeys/evaluator-doula.md` names: "Six of the seven are
+	 * administration. The words 'birth plan' and 'visit' do not appear."
+	 * Those links are chrome, and chrome now lives in
+	 * `practices/+layout.svelte` until #452 builds the real shell, so this
+	 * page is free to answer "what needs me today" instead.
+	 */
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
@@ -7,25 +18,35 @@
 		practicePushSubscriptionsPath,
 		registerPushSubscription
 	} from '#lib/pushRegistration.js';
+	import { decideOffer } from '#lib/offer.js';
+	import {
+		hasSecondary,
+		loadPracticeLanding,
+		type PracticeLanding
+	} from '#lib/practiceLanding.js';
+	import OfferInbox from '#lib/OfferInbox.svelte';
+	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
+	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 
-	let practiceName = $state('');
-	let roles = $state<string[]>([]);
+	let landing = $state<PracticeLanding | undefined>();
 	let error = $state('');
 
-	onMount(async () => {
-		const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
-		if (!response.ok) {
-			error = await response.text();
-			return;
+	async function load() {
+		try {
+			landing = await loadPracticeLanding(apiFetchWithSession, page.params.practiceId!);
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to load your Practice';
 		}
+	}
 
-		const body: { practiceName: string; roles: string[] } = await response.json();
-		practiceName = body.practiceName;
-		roles = body.roles;
+	onMount(async () => {
+		await load();
 
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
@@ -39,54 +60,152 @@
 			apiFetch
 		);
 	});
+
+	// The whole hub is reloaded rather than the one Offer patched out:
+	// accepting an Offer supersedes every other open Offer on the same
+	// Engagement, and it can spend a credit, so the rail is stale too.
+	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
+		await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
+		await load();
+	}
+
+	const connectLabels: Record<string, { label: string; variant: 'neutral' | 'warning' | 'success' }> = {
+		not_connected: { label: 'Not connected', variant: 'neutral' },
+		onboarding_incomplete: { label: 'Onboarding incomplete', variant: 'warning' },
+		pending: { label: 'Awaiting Stripe review', variant: 'warning' },
+		payouts_restricted: { label: 'Payouts on hold', variant: 'warning' },
+		active: { label: 'Taking payments', variant: 'success' }
+	};
 </script>
+
+{#snippet primary()}
+	<Heading level={2} variant="section" text="Offers awaiting your answer" />
+	<Text
+		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."
+		tone="variant"
+	/>
+	<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
+{/snippet}
+
+{#snippet rosterBlock()}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="card" text="Your people" />
+			{#if landing!.roster === 'unavailable'}
+				<Text text="Could not load the roster just now." tone="muted" />
+			{:else if landing!.roster}
+				<DescriptionList
+					items={[
+						{ label: 'Members', value: String(landing!.roster.members) },
+						{ label: 'Invitations pending', value: String(landing!.roster.pendingInvitations) }
+					]}
+				/>
+				<!-- A cluster, not two stack children: `stack-l` spaces with
+				     `margin-block-start`, which an inline Badge and an inline
+				     Link ignore, so they would share a line with a single space
+				     between them. -->
+				<cluster-l space="var(--space-3)" align="center">
+					{#if landing!.roster.expiredInvitations > 0}
+						<Badge
+							label={`${landing!.roster.expiredInvitations} invitation${landing!.roster.expiredInvitations === 1 ? '' : 's'} expired`}
+							variant="warning"
+						/>
+					{/if}
+					<Link
+						href={resolve('/practices/[practiceId]/staff', { practiceId: page.params.practiceId! })}
+						label="Manage staff"
+						variant="secondary"
+					/>
+				</cluster-l>
+			{/if}
+		</stack-l>
+	</section>
+{/snippet}
+
+{#snippet creditBlock()}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="card" text="Credits" />
+			{#if landing!.credit === 'unavailable'}
+				<Text text="Could not load your credit balance just now." tone="muted" />
+			{:else if landing!.credit}
+				<DescriptionList items={[{ label: 'Balance', value: String(landing!.credit.balance) }]} />
+				<Link
+					href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
+					label="Buy credits"
+					variant="secondary"
+				/>
+			{/if}
+		</stack-l>
+	</section>
+{/snippet}
+
+{#snippet connectBlock()}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="card" text="Getting paid" />
+			{#if landing!.connect === 'unavailable'}
+				<Text text="Could not load your Stripe status just now." tone="muted" />
+			{:else if landing!.connect}
+				{#if landing!.connect.requirementsDue.length > 0}
+					<Text
+						text={`Stripe is waiting on ${landing!.connect.requirementsDue.length} more detail${landing!.connect.requirementsDue.length === 1 ? '' : 's'}.`}
+						tone="variant"
+					/>
+				{/if}
+				<cluster-l space="var(--space-3)" align="center">
+					<Badge
+						label={connectLabels[landing!.connect.status].label}
+						variant={connectLabels[landing!.connect.status].variant}
+					/>
+					<Link
+						href={resolve('/practices/[practiceId]/settings/payments', {
+							practiceId: page.params.practiceId!
+						})}
+						label="Payment settings"
+						variant="secondary"
+					/>
+				</cluster-l>
+			{/if}
+		</stack-l>
+	</section>
+{/snippet}
+
+{#snippet secondary()}
+	{#if landing!.roster !== undefined}{@render rosterBlock()}{/if}
+	{#if landing!.credit !== undefined}{@render creditBlock()}{/if}
+	{#if landing!.connect !== undefined}{@render connectBlock()}{/if}
+{/snippet}
+
+{#snippet empty()}
+	<!--
+		The zero-Client state is the reason ADR-0018 makes `empty` a required
+		prop. It names the work rather than the filing cabinet, and it offers
+		one action, not a menu -- a menu is what made this page the abandon
+		point in the first place.
+	-->
+	<stack-l space="var(--space-4)">
+		<Text
+			text="Nothing is here yet, because no Client is. Add one and this becomes her birth plan, the visits you make to her, and the contract and invoices between you."
+		/>
+		<Link
+			href={resolve('/practices/[practiceId]/clients/new', {
+				practiceId: page.params.practiceId!
+			})}
+			label="Add your first Client"
+		/>
+	</stack-l>
+{/snippet}
 
 {#if error}
 	<Notice variant="error" message={error} />
-{:else if practiceName}
-	<Heading level={1} text={`Welcome to ${practiceName}`} />
-	<Link
-		href={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })}
-		label="Clients"
-	/>
-	<Link
-		href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
-		label="Billing"
-	/>
-	<!-- Everyone's own Offers, not only a Doula's: an Offer is addressed to
-	     a person, and the inbox is scoped to her staff id, so there is
-	     nothing here a role check would usefully hide. -->
-	<Link
-		href={resolve('/practices/[practiceId]/offers', { practiceId: page.params.practiceId! })}
-		label="Your offers"
-	/>
-	{#if roles.includes('owner')}
-		<Link
-			href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
-			label="Invite a Staff member"
-		/>
-		<Link
-			href={resolve('/practices/[practiceId]/staff', { practiceId: page.params.practiceId! })}
-			label="Staff"
-		/>
-		<Link
-			href={resolve('/practices/[practiceId]/settings/plan-templates', {
-				practiceId: page.params.practiceId!
-			})}
-			label="Plan Templates"
-		/>
-		<Link
-			href={resolve('/practices/[practiceId]/settings/contract-template', {
-				practiceId: page.params.practiceId!
-			})}
-			label="Contract Template"
-		/>
-	{/if}
-	<Link
-		href={resolve('/practices/[practiceId]/settings/payments', {
-			practiceId: page.params.practiceId!
-		})}
-		label="Payments"
+{:else if landing}
+	<OverviewHub
+		title={`Welcome to ${landing.practiceName}`}
+		isEmpty={!landing.hasClients}
+		{primary}
+		secondary={hasSecondary(landing) ? secondary : undefined}
+		{empty}
 	/>
 {:else}
 	<Skeleton variant="text" lines={6} label="Loading your Practice" />
