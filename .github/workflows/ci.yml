@@ -22,6 +22,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The Hugo site's pre-build step (#441): the generator that turns
+  # published Practice pages into hugo/content/p. Its own job because it
+  # lives at the repo root rather than in app/ or api/, and because it
+  # needs neither a browser nor a database -- the rendering half is pure,
+  # which is what makes the page a Stripe reviewer will read testable at
+  # all.
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Test
+        run: bun test scripts/
+
   actionlint:
     runs-on: ubuntu-latest
     timeout-minutes: 5

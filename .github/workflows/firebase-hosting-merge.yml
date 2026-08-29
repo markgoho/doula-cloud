@@ -6,6 +6,13 @@ on:
     paths:
       - "hugo/**"
       - "firebase.json"
+      # The site is no longer only the files under hugo/: #441's
+      # pre-build step generates a page per published Practice, so the
+      # generator and the script that runs it are site sources too.
+      - "scripts/practice-page.ts"
+      - "scripts/sync-practice-pages.ts"
+      - "package.json"
+      - ".github/workflows/firebase-hosting-merge.yml"
 
 permissions:
   contents: read
@@ -34,8 +41,62 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+
+      # Same download and retry as ci.yml's migrate job -- Google's
+      # storage bucket rather than a GitHub release asset, because the
+      # shared-runner download path is flaky.
+      - name: Install cloud-sql-proxy
+        run: |
+          for attempt in 1 2 3; do
+            if curl -o /usr/local/bin/cloud-sql-proxy -fsSL https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.25.2/cloud-sql-proxy.linux.amd64; then
+              chmod +x /usr/local/bin/cloud-sql-proxy
+              exit 0
+            fi
+            echo "cloud-sql-proxy install attempt ${attempt} failed; retrying in 10s..."
+            sleep 10
+          done
+          exit 1
+
+      - name: Fetch the site builder DSN
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@v3
+        with:
+          secrets: |-
+            dsn:doula-cloud/doula-cloud-pg-site-builder-dsn
+
+      # SYNC_PRACTICE_PAGES=required is what makes an unreachable
+      # database fail this job instead of quietly building a site with no
+      # Practice pages in it. A failed build uploads no artifact, the
+      # deploy job never runs, and the live pages -- whose URLs Stripe
+      # holds under an ongoing review (#382) -- stay exactly as they were.
       - name: Build Hugo site
-        run: bun run build
+        env:
+          SITE_BUILDER_DSN: ${{ steps.secrets.outputs.dsn }}
+        run: |
+          cloud-sql-proxy --port 5432 doula-cloud:us-central1:doula-cloud-pg &
+          proxy_pid=$!
+          trap 'kill "${proxy_pid}"' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if (echo > /dev/tcp/127.0.0.1/5432) 2>/dev/null; then break; fi
+            echo "waiting for cloud-sql-proxy (${attempt})..."
+            sleep 1
+          done
+          # The secret is postgres://user:pass@_/dbname, the same shape
+          # ci.yml's migrate DSN has: the host in it is a placeholder,
+          # because the only reachable address is the proxy on localhost.
+          without_scheme="${SITE_BUILDER_DSN#postgres://}"
+          userpass="${without_scheme%%@*}"
+          rest="${without_scheme#*@}"
+          db_name="${rest##*/}"
+          export SYNC_PRACTICE_PAGES=required
+          export DATABASE_URL="postgres://${userpass}@127.0.0.1:5432/${db_name%%\?*}?sslmode=disable"
+          bun run build
 
       - name: Upload Hugo build artifacts
         uses: actions/upload-artifact@v7

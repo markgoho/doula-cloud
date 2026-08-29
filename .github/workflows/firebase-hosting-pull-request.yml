@@ -9,6 +9,13 @@ on:
     paths:
       - "hugo/**"
       - "firebase.json"
+      # As on the merge workflow. The preview build has no database
+      # credential and SYNC_PRACTICE_PAGES is unset here on purpose, so
+      # a preview shows the site without Practice pages rather than a
+      # stale copy of them.
+      - "scripts/practice-page.ts"
+      - "scripts/sync-practice-pages.ts"
+      - "package.json"
       - ".github/workflows/firebase-hosting-pull-request.yml"
 
 permissions:

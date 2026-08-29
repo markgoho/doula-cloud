@@ -4,8 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "cd hugo && hugo --minify",
-    "dev": "bun run --cwd app dev:full"
+    "build": "bun scripts/sync-practice-pages.ts && cd hugo && hugo --minify",
+    "dev": "bun run --cwd app dev:full",
+    "test": "bun test scripts/"
   },
   "devDependencies": {
     "@pen.dev/cli": "^0.3.5",

@@ -1,7 +1,8 @@
 # Environment variables
 
 Every variable `api/main.go` reads, what it is for, and what it holds in
-each of the three places the BFF runs. `app/.env.example` is the local
+each of the three places the BFF runs. The Hugo site's own build reads two
+of its own — see [The Hugo site's build](#the-hugo-sites-build). `app/.env.example` is the local
 template; `scripts/stripe-setup.sh` fills the Stripe half of it in.
 
 ## Where a value lives
@@ -38,6 +39,19 @@ except `.env.example`. A Sandbox key is still a key.
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | any value, tests sign their own fixtures with it | unset (nothing calls `/api/mailgun/webhook`) | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, once Mailgun's dashboard is pointed at the deployed endpoint |
 | `NOTIFICATION_TASKS_QUEUE` | unset (no real `tasknudge.CloudTasksEnqueuer` is constructed in `routes()` tests, which inject `tasknudge.FakeEnqueuer` instead) | unset | the Cloud Tasks queue's full resource name, `projects/doula-cloud/locations/us-central1/queues/doula-cloud-notification-nudge`, plain env var |
 | `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
+
+## The Hugo site's build
+
+`bun run build` runs `scripts/sync-practice-pages.ts` before `hugo`, which writes a page into `hugo/content/p/<slug>/` for every Practice that published one (#441). It reads two variables, and neither belongs to the BFF.
+
+| Variable | Local | PR preview | Merge deploy |
+| --- | --- | --- | --- |
+| `SYNC_PRACTICE_PAGES` | unset | unset | `required`, set in `firebase-hosting-merge.yml` |
+| `DATABASE_URL` | unset | unset | built from Secret Manager `doula-cloud-pg-site-builder-dsn`, dialled through the Cloud SQL Auth Proxy on `127.0.0.1:5432` |
+
+**Unset means "touch nothing", not "connect if you can".** The script prunes `hugo/content/p` before it writes, because that is the only way a Practice who switches back to her own website loses her page. So an unreachable database and an empty result set would produce the same output — every live page deleted, against a Stripe review #382 established is ongoing. `SYNC_PRACTICE_PAGES=required` makes an unreachable database fail the build instead, and the workflow's build/deploy split means a failed build uploads no artifact and the live site stays exactly as it was.
+
+The DSN belongs to `site_builder_login`, a Cloud SQL user created for this and granted `site_builder` — 00046's role, which holds `SELECT` on five tables and no write grant at all. The build job's credential can read what is about to be published and change nothing. The name mirrors `app_runtime_login`, which is granted `app_runtime` the same way.
 
 ### `APP_BASE_URL` is not `EXPECTED_ORIGINS`
 

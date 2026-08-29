@@ -15,8 +15,9 @@ import (
 func seedWebsite(t *testing.T, db *testdb.DB, practiceID, mode, ownURL string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_websites (practice_id, mode, own_url) VALUES ($1, $2, NULLIF($3, ''))`,
-		practiceID, mode, ownURL,
+		`INSERT INTO practice_websites (practice_id, mode, own_url, service_description, cancellation_policy, slug)
+		 VALUES ($1, $2, NULLIF($3, ''), 'Birth support.', 'Two weeks notice.', $4)`,
+		practiceID, mode, ownURL, practiceID,
 	); err != nil {
 		t.Fatalf("seed practice_websites: %v", err)
 	}
@@ -173,5 +174,52 @@ func TestSchema_RefusesAModeWithoutItsFacts(t *testing.T) {
 		 VALUES ($1, 'hosted', repeat('a', 501), 'Two weeks.')`, practiceID,
 	); err == nil {
 		t.Fatal("inserted a service description past the budget, want it refused")
+	}
+}
+
+// TestRLS_SiteBuilderReadsEveryPublishedPageAndWritesNothing proves
+// 00046's role does the one job it exists for.
+//
+// Every other policy in this schema scopes a read to one Practice, which
+// is right for the BFF and useless for a build that has to render every
+// published page in one pass. The permissive policies added for
+// site_builder sit beside the per-Practice ones rather than replacing
+// them, and the grant is SELECT and nothing else -- so the credential
+// that lives in a public website's build job can read what is about to
+// be published and change nothing at all.
+func TestRLS_SiteBuilderReadsEveryPublishedPageAndWritesNothing(t *testing.T) {
+	db := testdb.New(t)
+	first := seedPractice(t, db, "Rochester Doulas")
+	second := seedPractice(t, db, "Genesee Birth Collective")
+	seedWebsite(t, db, first, "hosted", "")
+	seedWebsite(t, db, second, "hosted", "")
+
+	// A connection of its own, so SET ROLE cannot leak into another
+	// test's use of the pool.
+	conn, err := db.Admin.Conn(t.Context())
+	if err != nil {
+		t.Fatalf("open connection: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(t.Context(), `SET ROLE site_builder`); err != nil {
+		t.Fatalf("set role site_builder: %v", err)
+	}
+
+	var count int
+	if err := conn.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_websites WHERE mode = 'hosted'`,
+	).Scan(&count); err != nil {
+		t.Fatalf("read published pages as site_builder: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("site_builder sees %d published pages, want 2 -- a build that "+
+			"sees fewer than exist deletes the pages it cannot see", count)
+	}
+
+	if _, err := conn.ExecContext(t.Context(),
+		`UPDATE practice_websites SET mode = 'own' WHERE practice_id = $1`, first,
+	); err == nil {
+		t.Fatal("site_builder wrote to practice_websites; the grant is SELECT only")
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -153,32 +155,38 @@ func read(ctx context.Context, tx *sql.Tx, practiceID string) (Response, error) 
 // prints back to her; a silent no-op would leave her looking at an old
 // date after an act she just performed.
 func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, v Validated) (Response, error) {
-	var previousMode sql.NullString
+	var (
+		previousMode sql.NullString
+		existingSlug sql.NullString
+	)
 	err := tx.QueryRowContext(ctx,
-		`SELECT mode FROM practice_websites WHERE practice_id = $1 FOR UPDATE`, practiceID,
-	).Scan(&previousMode)
+		`SELECT mode, slug FROM practice_websites WHERE practice_id = $1 FOR UPDATE`, practiceID,
+	).Scan(&previousMode, &existingSlug)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return Response{}, fmt.Errorf("website: read previous mode: %w", err)
 	}
 
-	// A URL and the two facts are stored as NULL when absent rather than
-	// as an empty string, so 00045's CHECK constraints mean what they
-	// say: "mode 'own' has a URL" must not be satisfied by "".
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO practice_websites
-		     (practice_id, mode, own_url, service_description, cancellation_policy)
-		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''))
-		 ON CONFLICT (practice_id) DO UPDATE SET
-		     mode = EXCLUDED.mode,
-		     own_url = COALESCE(EXCLUDED.own_url, practice_websites.own_url),
-		     service_description = COALESCE(EXCLUDED.service_description, practice_websites.service_description),
-		     cancellation_policy = COALESCE(EXCLUDED.cancellation_policy, practice_websites.cancellation_policy),
-		     updated_at = now()`,
-		practiceID, v.Mode, v.OwnURL, v.ServiceDescription, v.CancellationPolicy,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return Response{}, fmt.Errorf("website: upsert declaration: %w", err)
+	// A slug is minted exactly once, the first time a Practice publishes
+	// a hosted page, and is never revisited -- not when she renames the
+	// Practice, and not when she switches to her own site and back.
+	// Stripe holds the declared URL for the life of the connected
+	// account and #382 established its review of that URL is ongoing, so
+	// a slug that moves points a live review at a 404.
+	needSlug := v.Mode == ModeHosted && !existingSlug.Valid
+	var name string
+	if needSlug {
+		if err := tx.QueryRowContext(ctx,
+			`SELECT name FROM practices WHERE id = $1`, practiceID,
+		).Scan(&name); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return Response{}, fmt.Errorf("website: read practice name: %w", err)
+		}
+	}
+
+	if err := upsert(ctx, tx, practiceID, name, existingSlug.String, needSlug, v); err != nil {
+		// coverage:ignore reason: every failure inside upsert is a DB error or an exhausted retry, none reachable from a unit test
+		return Response{}, err
 	}
 
 	// The event snapshots what was written, not what the row now holds:
@@ -210,4 +218,92 @@ func writeJSON(w http.ResponseWriter, resp Response) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError, nil)
 	}
+}
+
+// maxSlugAttempts bounds the collision retry. Ten Practices sharing one
+// name is already beyond anything plausible; the eleventh gets a 500
+// rather than a loop nobody is watching.
+const maxSlugAttempts = 10
+
+// upsert writes the declaration, minting a slug when one is needed, and
+// retries the whole statement on a slug collision.
+//
+// The retry is the shape it is because of RLS. practice_websites is
+// visible one Practice at a time (00045), so this transaction cannot
+// look up which slugs are already taken -- and a role that could would
+// be a role that can read every Practice's row to answer a question
+// about a URL. The unique index is the only thing in the system that
+// knows, so the write asks it: attempt, catch 23505, take the next
+// candidate. The savepoint is what makes that survivable, since a
+// constraint violation otherwise aborts the caller's transaction along
+// with the audit row it has not written yet.
+func upsert(ctx context.Context, tx *sql.Tx, practiceID, name, currentSlug string, needSlug bool, v Validated) error {
+	// A URL and the two facts are stored as NULL when absent rather than
+	// as an empty string, so 00045's CHECK constraints mean what they
+	// say: "mode 'own' has a URL" must not be satisfied by "".
+	//
+	// The slug uses COALESCE the other way round from the rest: the
+	// stored value wins, so a republish can never overwrite the address
+	// Stripe already holds.
+	//
+	// It is also sent on every hosted write, not only the one that mints
+	// it. Postgres checks a CHECK constraint against the tuple proposed
+	// for insertion before it arbitrates the conflict, so a republish
+	// that left $6 NULL would be refused by
+	// practice_websites_hosted_slug_present without the DO UPDATE ever
+	// being reached -- the COALESCE never gets a chance to keep the slug
+	// that is already there.
+	const stmt = `INSERT INTO practice_websites
+	     (practice_id, mode, own_url, service_description, cancellation_policy, slug)
+	 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''))
+	 ON CONFLICT (practice_id) DO UPDATE SET
+	     mode = EXCLUDED.mode,
+	     own_url = COALESCE(EXCLUDED.own_url, practice_websites.own_url),
+	     service_description = COALESCE(EXCLUDED.service_description, practice_websites.service_description),
+	     cancellation_policy = COALESCE(EXCLUDED.cancellation_policy, practice_websites.cancellation_policy),
+	     slug = COALESCE(practice_websites.slug, EXCLUDED.slug),
+	     updated_at = now()`
+
+	for attempt := 0; ; attempt++ {
+		slug := currentSlug
+		if needSlug {
+			slug = SlugCandidate(name, practiceID, attempt)
+		}
+
+		if _, err := tx.ExecContext(ctx, `SAVEPOINT website_upsert`); err != nil {
+			// coverage:ignore reason: savepoint failure, not exercised by unit tests
+			return fmt.Errorf("website: savepoint: %w", err)
+		}
+
+		_, err := tx.ExecContext(ctx, stmt,
+			practiceID, v.Mode, v.OwnURL, v.ServiceDescription, v.CancellationPolicy, slug)
+		if err == nil {
+			if _, err := tx.ExecContext(ctx, `RELEASE SAVEPOINT website_upsert`); err != nil {
+				// coverage:ignore reason: savepoint failure, not exercised by unit tests
+				return fmt.Errorf("website: release savepoint: %w", err)
+			}
+			return nil
+		}
+
+		if !needSlug || !isSlugCollision(err) || attempt >= maxSlugAttempts-1 {
+			// coverage:ignore reason: DB write failure, not exercised by unit tests
+			return fmt.Errorf("website: upsert declaration: %w", err)
+		}
+
+		if _, err := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT website_upsert`); err != nil {
+			// coverage:ignore reason: savepoint failure, not exercised by unit tests
+			return fmt.Errorf("website: rollback to savepoint: %w", err)
+		}
+	}
+}
+
+// isSlugCollision reports whether err is another Practice already
+// holding this slug (SQLSTATE 23505 on the slug index), mirroring
+// plans.isUniqueViolation but naming the constraint: a conflict on
+// practice_id is the upsert working, not a collision to retry.
+func isSlugCollision(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == "23505" &&
+		pgErr.ConstraintName == "practice_websites_slug_key"
 }

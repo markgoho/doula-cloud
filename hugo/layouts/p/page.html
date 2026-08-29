@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+{{- /*
+  A Practice's public page (#441), at doula.cloud/p/<slug>.
+
+  Every connected account has to declare a website to Stripe, and #421
+  walked what happens to a Practice who has none: she completes hosted
+  onboarding, submits, and returns with charges_enabled false and nothing
+  on screen saying why. This page is what a Practice without a website of
+  her own declares instead.
+
+  It carries what Stripe's written standard asks for, established
+  first-party on #382: the business name, a description of the services, a
+  support contact, and a refund or cancellation position. Nothing is
+  optional here -- the sync script refuses to write a page missing any of
+  it, so there is no "if" around a required block.
+
+  Every field comes from front matter and none from the markdown body, so
+  none of it goes through a markdown renderer. Go's html/template escapes
+  each value for the context it lands in, which is the whole defence
+  against a cancellation policy with an angle bracket in it.
+*/ -}}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  {{/* Indexed and reachable: this is the Practice's public website, and
+       a hidden one would fail the job it exists to do. */}}
+  <meta name="description" content="{{ .Params.serviceDescription | replaceRE `\s+` " " | truncate 160 }}">
+  <link rel="canonical" href="{{ .Permalink }}">
+  <style>
+    /* The app's palette, by value: hugo/ has no asset pipeline and one
+       page type, so a shared stylesheet would be a build step bought for
+       a single file. Both sides read app/src/lib/styles/tokens.css. */
+    :root {
+      --surface: oklch(98.5% 0.008 7);
+      --surface-container: oklch(94.9% 0.011 357);
+      --on-surface: oklch(22.4% 0.009 352);
+      --on-surface-muted: oklch(50.8% 0.023 346);
+      --outline-variant: oklch(83.1% 0.026 346);
+      --primary: oklch(41.2% 0.119 339);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 2rem 1.25rem 3rem;
+      background: var(--surface);
+      color: var(--on-surface);
+      font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-size: 1.0625rem;
+      line-height: 1.55;
+      /* One column, capped for reading, centred. No media query needed:
+         the cap is what makes it a column on a desktop and the padding is
+         what makes it fit a phone. */
+      max-width: 42rem;
+      margin-inline: auto;
+    }
+
+    h1 {
+      font-size: 2rem;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0 0 1.5rem;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      line-height: 1.3;
+      letter-spacing: -0.012em;
+      margin: 2rem 0 0.5rem;
+    }
+
+    p { margin: 0 0 1rem; }
+
+    /* A Practice types one block of prose per box and may well put line
+       breaks in it. Preserving them costs nothing and losing them turns a
+       three-clause cancellation policy into a wall. */
+    .prose { white-space: pre-line; }
+
+    a { color: var(--primary); }
+    a:focus-visible {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--outline-variant);
+      color: var(--on-surface-muted);
+      font-size: 0.875rem;
+    }
+
+    .privacy {
+      margin-top: 2rem;
+      padding: 1rem 1.25rem;
+      background: var(--surface-container);
+      border-radius: 0.5rem;
+      color: var(--on-surface-muted);
+      font-size: 0.9375rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{{ .Title }}</h1>
+
+    <h2>What we offer</h2>
+    <p class="prose">{{ .Params.serviceDescription }}</p>
+
+    <h2>Cancellations and refunds</h2>
+    <p class="prose">{{ .Params.cancellationPolicy }}</p>
+
+    <h2>Contact us</h2>
+    {{/* An address element, because that is what it is, and a mailto so
+         the contact is one tap on the phone this is most often read on. */}}
+    <address>
+      {{ .Params.supportName }}<br>
+      <a href="mailto:{{ .Params.supportEmail }}">{{ .Params.supportEmail }}</a>
+    </address>
+
+    <section class="privacy" aria-label="Privacy">
+      <p>{{ .Params.privacyStatement }}</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      Last updated
+      <time datetime="{{ .Date.Format "2006-01-02" }}">{{ .Date.Format "2 January 2006" }}</time>.
+      Published with <a href="https://doula.cloud/">Doula Cloud</a>.
+    </p>
+  </footer>
+</body>
+</html>

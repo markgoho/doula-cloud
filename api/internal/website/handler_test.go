@@ -2,6 +2,7 @@ package website_test
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,8 @@ const ownerName = "Maya Chen"
 // same literal.
 const (
 	policyText = "Two weeks' notice."
+	// The slug seedOwner's Practice name mints (00046).
+	firstSlug  = "rochester-doulas"
 	ownSiteURL = "https://rochesterdoulas.com"
 )
 
@@ -486,5 +489,121 @@ func TestPutHandler_RefusesPastTheBudget(t *testing.T) {
 	}
 	if got := decodeError(t, resp); got.Details["serviceDescription"] != website.MsgTooLong {
 		t.Fatalf("details = %v, want serviceDescription over budget", got.Details)
+	}
+}
+
+// slugOf reads the stored slug directly, because nothing in the API
+// returns it: the page's address is #441's build step's business, and
+// the screen has no use for it yet.
+func slugOf(t *testing.T, db *testdb.DB, practiceID string) string {
+	t.Helper()
+	var slug sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT slug FROM practice_websites WHERE practice_id = $1`, practiceID,
+	).Scan(&slug); err != nil {
+		t.Fatalf("read slug: %v", err)
+	}
+	return slug.String
+}
+
+// TestPutHandler_MintsTheSlugOnceAndNeverAgain is the whole reason the
+// slug is a stored column rather than a function of the Practice's name.
+// Stripe holds doula.cloud/p/<slug> for the life of the connected
+// account and #382 established its review of that URL is ongoing, so a
+// slug that followed a rename would point a live review at a 404.
+func TestPutHandler_MintsTheSlugOnceAndNeverAgain(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "website-slug-stable"
+	practiceID, _ := seedOwner(t, db, uid)
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	published := putWebsite(t, srv, session, practiceID,
+		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
+	_ = published.Body.Close()
+
+	if got := slugOf(t, db, practiceID); got != firstSlug {
+		t.Fatalf("slug = %q, want %q", got, firstSlug)
+	}
+
+	// She renames the Practice, then republishes.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET name = 'Genesee Birth Collective' WHERE id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("rename practice: %v", err)
+	}
+	republished := putWebsite(t, srv, session, practiceID,
+		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
+	_ = republished.Body.Close()
+
+	if got := slugOf(t, db, practiceID); got != firstSlug {
+		t.Fatalf("slug after a rename = %q, want it unmoved", got)
+	}
+
+	// She switches to her own website and back. The slug survives that
+	// too, so switching back republishes the address Stripe already has
+	// rather than minting a second one.
+	switched := putWebsite(t, srv, session, practiceID,
+		`{"mode":"own","ownUrl":"https://rochesterdoulas.com"}`)
+	_ = switched.Body.Close()
+	if got := slugOf(t, db, practiceID); got != firstSlug {
+		t.Fatalf("slug after switching to her own site = %q, want it kept", got)
+	}
+
+	back := putWebsite(t, srv, session, practiceID,
+		`{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`)
+	_ = back.Body.Close()
+	if got := slugOf(t, db, practiceID); got != firstSlug {
+		t.Fatalf("slug after switching back = %q, want it kept", got)
+	}
+}
+
+// TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses proves
+// the collision retry. It is a retry rather than a lookup because RLS
+// hides the other Practice's row from this transaction entirely -- the
+// unique index is the only thing in the system that knows a slug is
+// taken, so the write asks it by trying.
+func TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses(t *testing.T) {
+	db := testdb.New(t)
+
+	const firstUID, secondUID = "website-slug-first", "website-slug-second"
+	// seedOwner names every Practice "Rochester Doulas", which is
+	// exactly the collision under test.
+	firstPractice, _ := seedOwner(t, db, firstUID)
+	secondPractice, _ := seedOwner(t, db, secondUID)
+
+	const body = `{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`
+
+	firstSrv, firstSession := newServer(t, db, firstUID)
+	defer firstSrv.Close()
+	first := putWebsite(t, firstSrv, firstSession, firstPractice, body)
+	_ = first.Body.Close()
+
+	secondSrv, secondSession := newServer(t, db, secondUID)
+	defer secondSrv.Close()
+	second := putWebsite(t, secondSrv, secondSession, secondPractice, body)
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusOK {
+		t.Fatalf("second publish: status = %d, want 200", second.StatusCode)
+	}
+
+	if got := slugOf(t, db, firstPractice); got != firstSlug {
+		t.Fatalf("first slug = %q", got)
+	}
+	if got := slugOf(t, db, secondPractice); got != "rochester-doulas-2" {
+		t.Fatalf("second slug = %q, want %q", got, "rochester-doulas-2")
+	}
+
+	// The audit row still landed: the retry is a savepoint, not a lost
+	// transaction, so the record of who published survives the collision.
+	var events int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_website_events WHERE practice_id = $1`, secondPractice,
+	).Scan(&events); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if events != 1 {
+		t.Fatalf("got %d events for the second Practice, want 1", events)
 	}
 }

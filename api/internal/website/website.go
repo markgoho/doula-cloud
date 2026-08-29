@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -278,4 +279,75 @@ func FormatUpdatedAt(t time.Time, valid bool) string {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339)
+}
+
+// MaxSlugLength caps the path segment of doula.cloud/p/<slug>. Sixty
+// characters is longer than any Practice name anyone has typed and short
+// enough that the URL a Client reads off a card statement or an invoice
+// stays a URL.
+const MaxSlugLength = 60
+
+// slugSeparators matches every run of characters that is not an
+// unreserved ASCII alphanumeric. Everything in a run collapses to one
+// hyphen, so "Rochester  Doulas, LLC" and "Rochester-Doulas-LLC" reach
+// the same shape.
+var slugSeparators = regexp.MustCompile(`[^a-z0-9]+`)
+
+// Slugify turns a Practice name into the path segment its page is
+// published under, falling back to the Practice id when the name leaves
+// nothing usable behind.
+//
+// Called once, at a Practice's first publish, and the result is stored
+// (00046). It is deliberately not called again: practices.name is an
+// Owner's to edit, Stripe holds the declared URL for the life of the
+// connected account, and #382 established that Stripe's review of that
+// URL is ongoing -- so a slug recomputed on a rename would point a live
+// review at a 404.
+//
+// Non-ASCII characters collapse to a separator rather than being
+// transliterated. A name written in another script therefore falls
+// through to the id-derived form, which is ugly and stable, rather than
+// to a guess at what its letters sound like in English.
+func Slugify(name, practiceID string) string {
+	slug := slugSeparators.ReplaceAllString(strings.ToLower(name), "-")
+	slug = strings.Trim(slug, "-")
+	if len(slug) > MaxSlugLength {
+		// Cut on a byte boundary and then re-trim: every character that
+		// survives slugSeparators is one ASCII byte, so the cut can only
+		// land mid-word, never mid-rune.
+		slug = strings.Trim(slug[:MaxSlugLength], "-")
+	}
+	if slug == "" {
+		// A uuid's first block is eight hex characters -- enough to tell
+		// two unnamed Practices apart, and the unique index is what
+		// actually guarantees it.
+		id := strings.ReplaceAll(practiceID, "-", "")
+		if len(id) > 8 {
+			id = id[:8]
+		}
+		return "practice-" + id
+	}
+	return slug
+}
+
+// SlugCandidate returns the nth slug to try for a name, counting from
+// zero. The first attempt is the plain slug; a collision with another
+// Practice's page moves to "-2", then "-3", and so on.
+//
+// A suffix rather than a random string, because the slug is a public URL
+// a Practice reads and repeats. "rochester-doulas-2" is a Practice whose
+// name someone else took first; "rochester-doulas-x7f2" is a support
+// question.
+func SlugCandidate(name, practiceID string, attempt int) string {
+	base := Slugify(name, practiceID)
+	if attempt == 0 {
+		return base
+	}
+	suffix := "-" + strconv.Itoa(attempt+1)
+	// The suffix has to fit inside the same ceiling the column holds, so
+	// the base gives way to it rather than the other way round.
+	if len(base)+len(suffix) > MaxSlugLength {
+		base = strings.Trim(base[:MaxSlugLength-len(suffix)], "-")
+	}
+	return base + suffix
 }

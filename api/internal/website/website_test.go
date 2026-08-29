@@ -236,3 +236,80 @@ func TestFormatUpdatedAt_IsEmptyWhenNobodyHasAnswered(t *testing.T) {
 		t.Fatalf("FormatUpdatedAt = %q, want RFC 3339 in UTC", got)
 	}
 }
+
+// TestSlugify covers the shapes a real Practice name arrives in. The
+// slug is minted once and is then a URL Stripe holds under an ongoing
+// review (#382), so what this function returns is not a display string
+// that can be tidied up later.
+const plainSlug = "rochester-doulas"
+
+func TestSlugify(t *testing.T) {
+	const practiceID = "3f2a91c4-77b1-4f0e-9d21-8c6b5a4e3d10"
+
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"a plain name", "Rochester Doulas", plainSlug},
+		{"punctuation and runs of space", "Rochester  Doulas, LLC.", "rochester-doulas-llc"},
+		{"already hyphenated", "Rochester-Doulas", plainSlug},
+		{"leading and trailing noise", "  ...Rochester Doulas!  ", plainSlug},
+		{"digits survive", "Birth 24/7", "birth-24-7"},
+		{
+			"a long name is cut on a word boundary",
+			"The Greater Rochester and Monroe County Birth and Postpartum Doula Collective",
+			"the-greater-rochester-and-monroe-county-birth-and-postpartum",
+		},
+		// Not transliterated: an id-derived slug is ugly and stable,
+		// where a guess at what the letters sound like in English is
+		// neither.
+		{"a name in another script falls back to the id", "助産師", "practice-3f2a91c4"},
+		{"a name of only punctuation falls back too", "!!!", "practice-3f2a91c4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := website.Slugify(tc.in, practiceID); got != tc.want {
+				t.Fatalf("Slugify(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+			if len(website.Slugify(tc.in, practiceID)) > website.MaxSlugLength {
+				t.Fatalf("Slugify(%q) is longer than %d", tc.in, website.MaxSlugLength)
+			}
+		})
+	}
+}
+
+// TestSlugify_ShortIDIsUsedWhole guards the fallback against an id that
+// is shorter than the eight characters it slices.
+func TestSlugify_ShortIDIsUsedWhole(t *testing.T) {
+	if got := website.Slugify("!!!", "abc"); got != "practice-abc" {
+		t.Fatalf("Slugify with a short id = %q, want %q", got, "practice-abc")
+	}
+}
+
+// TestSlugCandidate proves the collision sequence a Practice sharing a
+// name with another one walks through. A counted suffix rather than a
+// random string: the slug is a public URL she reads out loud.
+func TestSlugCandidate(t *testing.T) {
+	const practiceID = "3f2a91c4-77b1-4f0e-9d21-8c6b5a4e3d10"
+
+	if got := website.SlugCandidate("Rochester Doulas", practiceID, 0); got != plainSlug {
+		t.Fatalf("first candidate = %q", got)
+	}
+	if got := website.SlugCandidate("Rochester Doulas", practiceID, 1); got != "rochester-doulas-2" {
+		t.Fatalf("second candidate = %q", got)
+	}
+	if got := website.SlugCandidate("Rochester Doulas", practiceID, 8); got != "rochester-doulas-9" {
+		t.Fatalf("ninth candidate = %q", got)
+	}
+
+	// A name already at the ceiling gives way to the suffix rather than
+	// producing something the column would refuse.
+	long := "The Greater Rochester and Monroe County Birth and Postpartum Doula Collective"
+	got := website.SlugCandidate(long, practiceID, 1)
+	if len(got) > website.MaxSlugLength {
+		t.Fatalf("SlugCandidate(long, 1) = %q, longer than %d", got, website.MaxSlugLength)
+	}
+	if !strings.HasSuffix(got, "-2") {
+		t.Fatalf("SlugCandidate(long, 1) = %q, want a -2 suffix", got)
+	}
+}
