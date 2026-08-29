@@ -155,6 +155,18 @@
 
 	/* Layout -- #98, default line-length cap for the Center primitive. */
 	--measure: 65ch;
+
+	/* The page frame every Template owns (ADR-0018). The brief fixes the
+	   desktop gutter at 40px and leaves the width caps to the Template
+	   layer, so the numbers are chosen here and argued on #422: the gutter
+	   shrinks below desktop rather than crushing the content, --page-max
+	   holds a compact table wide enough for a 14-doula agency's caseload,
+	   and a form is capped far narrower because a 1200px-wide input is
+	   unreadable however wide the window is. Content-box, so a cap is the
+	   content width and the gutters sit outside it. */
+	--page-gutter: clamp(var(--space-4), 5vw, 2.5rem);
+	--page-max: 76rem;
+	--form-max: 44rem;
 }
 
 /*

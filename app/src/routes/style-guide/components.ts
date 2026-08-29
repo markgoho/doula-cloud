@@ -25,3 +25,15 @@ export const organismPages = [
 	{ name: 'Dynamic field editor', slug: 'dynamic-field-editor' },
 	{ name: 'Message thread', slug: 'message-thread' }
 ] as const;
+
+/*
+ * Templates own their own gutters and max-width (ADR-0018), so these pages
+ * render outside the style-guide's own padded wrapper -- see +layout.svelte.
+ */
+export const templatePages = [
+	{ name: 'Form page', slug: 'form-page' },
+	{ name: 'Overview hub', slug: 'overview-hub' },
+	{ name: 'Record detail', slug: 'record-detail' }
+] as const;
+
+export const templateSlugs: readonly string[] = templatePages.map((templatePage) => templatePage.slug);

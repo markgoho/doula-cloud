@@ -1,12 +1,29 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import { atomPages, moleculePages, organismPages } from './components.js';
+	import {
+		atomPages,
+		moleculePages,
+		organismPages,
+		templatePages,
+		templateSlugs
+	} from './components.js';
 
-	const componentPages = [...atomPages, ...moleculePages, ...organismPages];
+	const componentPages = [...atomPages, ...moleculePages, ...organismPages, ...templatePages];
 
 	let { children } = $props();
+
+	/*
+	 * A Template owns its own page gutters and max-width (ADR-0018), so
+	 * rendering one inside this page's padded, bordered wrapper shows
+	 * nothing like what the app shows. Template pages get the full window
+	 * instead, inside a frame that stands in for the viewport edge.
+	 */
+	const isTemplatePage = $derived(
+		templateSlugs.includes(page.url.pathname.split('/').findLast(Boolean) ?? '')
+	);
 
 	let isDark = $state(false);
 
@@ -35,6 +52,26 @@
 			</cluster-l>
 		</nav>
 
-		{@render children()}
+		{#if !isTemplatePage}
+			{@render children()}
+		{/if}
 	</stack-l>
 </box-l>
+
+{#if isTemplatePage}
+	<div class="viewport">
+		{@render children()}
+	</div>
+{/if}
+
+<style>
+	@layer components {
+		.viewport {
+			margin: var(--space-6);
+			border: var(--border-thin) solid var(--color-outline-variant);
+			border-radius: var(--radius);
+			background-color: var(--color-surface);
+			overflow: hidden;
+		}
+	}
+</style>

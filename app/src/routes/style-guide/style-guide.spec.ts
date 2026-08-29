@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const componentsRoot = new URL('../../lib/components/', import.meta.url);
-const tiers = ['atoms', 'molecules', 'organisms'] as const;
+const tiers = ['atoms', 'molecules', 'organisms', 'templates'] as const;
 
 function toKebabCase(name: string): string {
 	return name.replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
