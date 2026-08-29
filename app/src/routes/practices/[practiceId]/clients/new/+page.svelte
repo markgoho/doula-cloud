@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { createClient } from '#lib/client.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -19,15 +20,7 @@
 		error = '';
 		isSubmitting = true;
 		try {
-			const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/clients`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ givenName: name, email })
-			});
-			if (!response.ok) {
-				error = await response.text();
-				return;
-			}
+			await createClient(apiFetchWithSession, page.params.practiceId!, { givenName: name, email });
 
 			await goto(
 				resolve('/practices/[practiceId]/clients', {

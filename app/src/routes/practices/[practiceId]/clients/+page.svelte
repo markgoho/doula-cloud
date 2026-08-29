@@ -3,17 +3,10 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { loadClients, type ClientListItem } from '#lib/client.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
-
-	type ClientListItem = {
-		clientId: string;
-		name: string;
-		email: string;
-		hasWork: boolean;
-		portalInviteStatus?: string;
-	};
 
 	let clients = $state<ClientListItem[]>([]);
 	let error = $state('');
@@ -47,14 +40,12 @@
 	];
 
 	onMount(async () => {
-		const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/clients`);
-		if (!response.ok) {
-			error = await response.text();
-			return;
+		try {
+			clients = await loadClients(apiFetchWithSession, page.params.practiceId!);
+			isLoaded = true;
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to load Clients';
 		}
-
-		clients = await response.json();
-		isLoaded = true;
 	});
 </script>
 
