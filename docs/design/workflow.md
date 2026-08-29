@@ -136,6 +136,15 @@ Open the canvas and change what looks wrong. That is the point of the tool.
    custom properties. Turning canvas Variables back into CSS is an agent translating by hand, which is
    how a token drifts. Change `tokens.css`, then re-import.
 5. **Verify**: `bun run check`, `bun run lint`, `bun run test` in `app/`, with the coverage gate intact.
+6. **Then open it in a browser**, at a desktop and a narrow width, on the real route and not only the
+   style guide. Every ticket on this map that skipped this missed something the whole suite passed
+   over: `LabeledField`'s stacked orientation did not stack (#425), and `GET /clients` did not mean
+   what the empty state assumed (#423). `bun run dev:full` brings up the stack; seed a fixture the way
+   `e2e/stack.ts` does and log in as a real person.
+
+   **This machine's Chrome inverts page colours** with an extension, so a screenshot taken through it
+   is evidence about layout and never about the palette. For colour, use a clean browser
+   (`playwriter session new --browser headless`) or read the computed value rather than the picture.
 
 ## Committing
 
