@@ -40,24 +40,56 @@
 	}
 </script>
 
-<fieldset>
-	<legend>Roles</legend>
-	{#each roleOptions as option (option.value)}
-		<LabeledField label={option.label} orientation="inline">
-			{#snippet children(control)}
-				<Checkbox
-					checked={roles.includes(option.value)}
-					onChange={(isChecked) => toggleRole(option.value, isChecked)}
-					{...control}
-				/>
-			{/snippet}
-		</LabeledField>
-	{/each}
-</fieldset>
+<!--
+	Roles and Employment type are two labelled field groups, so the brief's
+	Density section puts 28px between them rather than the 20px a bare
+	stack would give. The spacing lives here, not on the two screens that
+	compose this, because it is the same decision on both (#425).
+-->
+<stack-l space="var(--space-7)">
+	<fieldset>
+		<legend>Roles</legend>
+		<stack-l space="var(--space-5)">
+			{#each roleOptions as option (option.value)}
+				<LabeledField label={option.label} orientation="inline">
+					{#snippet children(control)}
+						<Checkbox
+							checked={roles.includes(option.value)}
+							onChange={(isChecked) => toggleRole(option.value, isChecked)}
+							{...control}
+						/>
+					{/snippet}
+				</LabeledField>
+			{/each}
+		</stack-l>
+	</fieldset>
 
-<RadioGroup
-	legend="Employment type"
-	options={employmentOptions}
-	value={employmentType}
-	onChange={onEmploymentTypeChange}
-/>
+	<RadioGroup
+		legend="Employment type"
+		options={employmentOptions}
+		value={employmentType}
+		onChange={onEmploymentTypeChange}
+	/>
+</stack-l>
+
+<style>
+	@layer components {
+		/* The legend is the group's name; the options below it are
+		   consecutive fields, so 20px, per the same Density section.
+		   The fieldset stays a block -- a flex fieldset drags its own
+		   <legend> in as a flex item. */
+		fieldset {
+			margin: 0;
+			padding: 0;
+			border: 0;
+			min-inline-size: 0;
+		}
+
+		legend {
+			padding: 0;
+			margin-block-end: var(--space-5);
+			font-weight: var(--font-weight-medium);
+			color: var(--color-on-surface);
+		}
+	}
+</style>

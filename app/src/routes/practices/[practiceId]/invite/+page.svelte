@@ -1,13 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import Heading from '#lib/components/atoms/Heading.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
+	import FormPage from '#lib/components/templates/FormPage.svelte';
 
 	let email = $state('');
 	let roles = $state<string[]>(['doula']);
@@ -51,11 +50,9 @@
 	}
 </script>
 
-<Heading level={1} text="Invite a Staff member" />
-
 <!-- No name field: the Invitation carries an address and a Membership,
      and the person names herself when she accepts. -->
-<form onsubmit={handleSubmit}>
+{#snippet who()}
 	<LabeledField label="Their email">
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
@@ -69,21 +66,54 @@
 			/>
 		{/snippet}
 	</LabeledField>
+{/snippet}
+
+{#snippet membership()}
 	<MembershipFields
 		{roles}
 		{employmentType}
 		onRolesChange={(next) => (roles = next)}
 		onEmploymentTypeChange={(next) => (employmentType = next)}
 	/>
-	<Button type="submit" label="Send invite" loading={isSubmitting} />
-	{#if error}
-		<Notice variant="error" message={error} />
-	{/if}
-</form>
+{/snippet}
 
-<!-- The accept link is not shown here and never reaches this response:
-     it goes to the invited address only, so accepting is proof she
-     controls that mailbox. -->
-{#if invitedAddress}
-	<Text text="Invited. An email with a link to join is on its way to {invitedAddress}." />
-{/if}
+{#snippet errorNotice()}
+	<Notice variant="error" message={error} />
+{/snippet}
+
+{#snippet actions()}
+	<Button type="submit" label="Send invite" loading={isSubmitting} />
+	<!-- The accept link is not shown here and never reaches this response:
+	     it goes to the invited address only, so accepting is proof she
+	     controls that mailbox.
+
+	     The confirmation sits beside the button she just pressed rather
+	     than in a banner at the top, the same call `account` made; unlike
+	     `account` it stays inside the Template, which owns the page
+	     measure and gutters. -->
+	{#if invitedAddress}
+		<Notice
+			variant="status"
+			message="Invited. An email with a link to join is on its way to {invitedAddress}."
+		/>
+	{/if}
+{/snippet}
+
+<!--
+	Two groups, neither named. GOV.UK's grouping test is whether the fields
+	answer one question: "who are you inviting" is the address, and "what
+	will she be here" is the Membership. Naming them would print two
+	legends the Owner does not need -- the h1 already says what the page
+	is -- so they are unnamed groups, which is the case #425 asked this
+	Template to handle. Two groups rather than one because the brief puts
+	28px between labelled field groups and 20px between consecutive
+	fields, and `FormPage`'s outer stack is the 28px one.
+-->
+<form onsubmit={handleSubmit}>
+	<FormPage
+		title="Invite a Staff member"
+		fieldsets={[{ content: who }, { content: membership }]}
+		error={error ? errorNotice : undefined}
+		{actions}
+	/>
+</form>

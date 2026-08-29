@@ -20,8 +20,16 @@
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 
+	/*
+	 * `legend` is optional because a form can have a group that names
+	 * nothing: `invite` (#425) asks for one email address and then a
+	 * Membership, and neither group has a Practice-given name to print.
+	 * A <fieldset> whose <legend> is empty announces a group with no name,
+	 * which is worse than no group at all, so an unnamed entry renders as
+	 * a plain stack and no <fieldset> element is emitted.
+	 */
 	interface Fieldset {
-		legend: string;
+		legend?: string;
 		content: Snippet;
 	}
 
@@ -49,11 +57,21 @@
 				<div class="intro">{@render intro()}</div>
 			{/if}
 
-			{#each fieldsets as fieldset (fieldset.legend)}
-				<fieldset>
-					<legend>{fieldset.legend}</legend>
+			<!--
+				Keyed on index, not on the legend: two groups may share a
+				legend, and two unnamed groups share `undefined`, so a
+				legend key collides. The array is positional anyway -- a
+				fieldset has no identity beyond where it sits.
+			-->
+			{#each fieldsets as fieldset, index (index)}
+				{#if fieldset.legend === undefined}
 					<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
-				</fieldset>
+				{:else}
+					<fieldset>
+						<legend>{fieldset.legend}</legend>
+						<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
+					</fieldset>
+				{/if}
 			{/each}
 
 			<cluster-l space="var(--space-3)" align="center">{@render actions()}</cluster-l>

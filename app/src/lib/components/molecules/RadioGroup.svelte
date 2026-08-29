@@ -19,7 +19,7 @@
 
 <fieldset>
 	<legend>{legend}</legend>
-	<stack-l>
+	<stack-l space="var(--space-5)">
 		<!-- v8 ignore start: only the compiled branch for "was this keyed
 		     <cluster-l> added/removed from the DOM since the last render" is
 		     unreachable here (Svelte's own each-block diffing internals, not
@@ -50,8 +50,12 @@
 			border: none;
 		}
 
+		/* 20px from the group's name to its first option, the same gap
+		   the options keep between themselves -- the brief's Density
+		   section, and what a legend flush against a radio was missing. */
 		legend {
 			padding: 0;
+			margin-block-end: var(--space-5);
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
 		}

@@ -90,6 +90,25 @@ describe('LabeledField.svelte', () => {
 		expect(container.querySelector('cluster-l')).toBeNull();
 	});
 
+	/*
+	 * Regression, #425: "stacked" did not stack. A <label> is inline by
+	 * default and a text input is inline-block, so the pair shared a line
+	 * and every stacked field in the app read as label-beside-control.
+	 * Asserted on computed style rather than markup, because the markup
+	 * was already right and the rendering was not.
+	 */
+	it('puts a stacked label on its own line, above the control', async () => {
+		const { container } = await setup();
+
+		const label = container.querySelector('label') as HTMLLabelElement;
+		const input = container.querySelector('input') as HTMLInputElement;
+
+		expect(getComputedStyle(label).display).toBe('block');
+		expect(input.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			label.getBoundingClientRect().bottom
+		);
+	});
+
 	it('renders the control before the label inside a cluster-l wrapper in inline orientation', async () => {
 		const { container } = await setup({ orientation: 'inline' });
 

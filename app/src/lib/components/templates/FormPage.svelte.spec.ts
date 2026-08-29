@@ -46,6 +46,34 @@ describe('FormPage.svelte', () => {
 		await expect.element(page.getByText('Practice-defined fields')).toBeVisible();
 	});
 
+	// #425: `invite` has two groups and no name for either, so an entry
+	// with no legend must not print an empty one.
+	it('renders a group with no legend as a plain stack, not an unnamed fieldset', async () => {
+		const { container } = await setup({
+			fieldsets: [{ content: textSnippet('Their email') }, { content: textSnippet('Roles') }]
+		});
+
+		expect(container.querySelectorAll('fieldset')).toHaveLength(0);
+		expect(container.querySelectorAll('legend')).toHaveLength(0);
+		await expect.element(page.getByText('Their email')).toBeVisible();
+		await expect.element(page.getByText('Roles')).toBeVisible();
+	});
+
+	// The old key was the legend, so two groups sharing one -- or two
+	// unnamed groups, both `undefined` -- collided into a single node.
+	it('renders both of two fieldsets that share a legend', async () => {
+		const { container } = await setup({
+			fieldsets: [
+				{ legend: 'Birth preferences', content: textSnippet('First section') },
+				{ legend: 'Birth preferences', content: textSnippet('Second section') }
+			]
+		});
+
+		expect(container.querySelectorAll('fieldset')).toHaveLength(2);
+		await expect.element(page.getByText('First section')).toBeVisible();
+		await expect.element(page.getByText('Second section')).toBeVisible();
+	});
+
 	it('renders a variable number of fieldsets, as ADR-0017 requires', async () => {
 		const { container } = await setup({ fieldsets: [] });
 

@@ -34,7 +34,7 @@
 	<label for={id}>{label}</label>
 {/snippet}
 
-<stack-l>
+<stack-l space="var(--space-1)">
 	{#if orientation === 'inline'}
 		<cluster-l>
 			{@render control()}
@@ -51,7 +51,16 @@
 
 <style>
 	@layer components {
+		/*
+		 * Block, so that "stacked" stacks. A <label> is inline by default,
+		 * and a text input is inline-block, so the two shared a line and
+		 * every stacked field in the app read as a label beside its
+		 * control rather than above it (#425). The label sits above the
+		 * thing it names -- GOV.UK's pattern, and the one the brief's form
+		 * work is built on.
+		 */
 		label {
+			display: block;
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
 		}

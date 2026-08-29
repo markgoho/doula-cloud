@@ -24,7 +24,7 @@ async function setup({ response, rejectWith }: SetupOptions = {}) {
 				({ ok: true, json: () => Promise.resolve({ invitationId: 'invitation-1' }) } as Response)
 		);
 	}
-	await render(Page, {});
+	return render(Page, {});
 }
 
 beforeEach(() => {
@@ -66,6 +66,36 @@ describe('invite a Staff member screen', () => {
 			.element(testPage.getByText('An email with a link to join is on its way to lena@example.com.'))
 			.toBeVisible();
 		await expect.element(testPage.getByText('accept-invite?token=')).not.toBeInTheDocument();
+	});
+
+	// #425: the page is a FormPage instance, not hand-rolled layout. The
+	// h1 and the form measure come from the Template, and neither of the
+	// two groups is named, so `invite` must print no legend it did not ask
+	// for -- Roles and Employment type are MembershipFields' own.
+	it('renders through FormPage, with no legend either group did not ask for', async () => {
+		const { container } = await setup();
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 1, name: 'Invite a Staff member' }))
+			.toBeVisible();
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--form-max)');
+		expect([...container.querySelectorAll('legend')].map((legend) => legend.textContent)).toEqual([
+			'Roles',
+			'Employment type'
+		]);
+	});
+
+	// Fitts's Law, per the brief: the submit sits at the end of the form
+	// the person just filled in, not in a toolbar away from it.
+	it('renders the submit at the end of the form, after the last field', async () => {
+		await setup();
+
+		const lastField = testPage.getByRole('radio', { name: 'Contractor' }).element();
+		const submit = testPage.getByRole('button', { name: 'Send invite' }).element();
+
+		expect(
+			lastField.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
 	});
 
 	it('refuses to send an invitation carrying no roles', async () => {
