@@ -2280,216 +2280,108 @@
     },
     {
       "type": "frame",
-      "id": "C1O2zm",
-      "x": -1,
-      "y": 2008,
-      "name": "Cloud Mark - sizes",
+      "id": "yX08e",
+      "x": -889,
+      "y": -100,
+      "name": "CloudMark - size ramp",
       "clip": true,
       "width": 600,
-      "height": 260,
+      "height": 200,
       "fill": "$color-surface-bright",
-      "gap": 40,
+      "gap": 48,
       "padding": 40,
-      "alignItems": "center",
+      "alignItems": "end",
       "children": [
         {
           "type": "frame",
-          "id": "B9AjB6",
-          "name": "Cloud Mark",
-          "width": 120,
-          "height": 56,
-          "layout": "none",
+          "id": "MWJeG",
+          "name": "Large",
+          "layout": "vertical",
+          "gap": 12,
+          "alignItems": "center",
           "children": [
             {
-              "type": "path",
-              "id": "NEeAq",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 1",
-              "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
+              "id": "TszFV",
+              "type": "ref",
+              "ref": "yGKIG",
+              "name": "Mark lg",
+              "theme": {
+                "size": "lg"
+              },
               "width": 120,
-              "height": 56,
-              "stroke": "$color-primary",
-              "strokeWidth": 9,
-              "strokeLinecap": "round"
+              "height": 56
             },
             {
-              "type": "path",
-              "id": "D5qlM",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 2",
-              "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
-              "width": 120,
-              "height": 56,
-              "stroke": "$color-primary-hover",
-              "strokeWidth": 9,
-              "strokeLinecap": "round"
-            },
-            {
-              "type": "path",
-              "id": "zUtyE",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 3",
-              "geometry": "M100 160a32 32 0 0 1 64 0",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
-              "width": 120,
-              "height": 56,
-              "stroke": "$color-outline-variant",
-              "strokeWidth": 9,
-              "strokeLinecap": "round"
+              "type": "text",
+              "id": "I14910",
+              "name": "Caption",
+              "fill": "$color-on-surface-muted",
+              "content": "lg  120x56",
+              "fontFamily": "$font-family-base",
+              "fontSize": 12,
+              "fontWeight": "normal"
             }
           ]
         },
         {
           "type": "frame",
-          "id": "J4lVL",
-          "name": "Cloud Mark",
-          "width": 60,
-          "height": 28,
-          "layout": "none",
+          "id": "uUyJZ",
+          "name": "Medium",
+          "layout": "vertical",
+          "gap": 12,
+          "alignItems": "center",
           "children": [
             {
-              "type": "path",
-              "id": "MpChH",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 1",
-              "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
+              "id": "eFXvI",
+              "type": "ref",
+              "ref": "yGKIG",
+              "name": "Mark md",
+              "theme": {
+                "size": "md"
+              },
               "width": 60,
-              "height": 28,
-              "stroke": "$color-primary",
-              "strokeWidth": 4,
-              "strokeLinecap": "round"
+              "height": 28
             },
             {
-              "type": "path",
-              "id": "s4qi8w",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 2",
-              "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
-              "width": 60,
-              "height": 28,
-              "stroke": "$color-primary-hover",
-              "strokeWidth": 4,
-              "strokeLinecap": "round"
-            },
-            {
-              "type": "path",
-              "id": "WyHcy",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 3",
-              "geometry": "M100 160a32 32 0 0 1 64 0",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
-              "width": 60,
-              "height": 28,
-              "stroke": "$color-outline-variant",
-              "strokeWidth": 4,
-              "strokeLinecap": "round"
+              "type": "text",
+              "id": "bQv2t",
+              "name": "Caption",
+              "fill": "$color-on-surface-muted",
+              "content": "md  60x28",
+              "fontFamily": "$font-family-base",
+              "fontSize": 12,
+              "fontWeight": "normal"
             }
           ]
         },
         {
           "type": "frame",
-          "id": "VF6hE",
-          "name": "Cloud Mark",
-          "width": 38,
-          "height": 18,
-          "layout": "none",
+          "id": "k2Uk8",
+          "name": "Small",
+          "layout": "vertical",
+          "gap": 12,
+          "alignItems": "center",
           "children": [
             {
-              "type": "path",
-              "id": "VJe9A",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 1",
-              "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
-              "width": 38,
-              "height": 18,
-              "stroke": "$color-primary",
-              "strokeWidth": 3,
-              "strokeLinecap": "round"
+              "id": "F24Yqb",
+              "type": "ref",
+              "ref": "yGKIG",
+              "name": "Mark sm",
+              "theme": {
+                "size": "sm"
+              },
+              "width": 40,
+              "height": 19
             },
             {
-              "type": "path",
-              "id": "dwaYQ",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 2",
-              "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
-              "width": 38,
-              "height": 18,
-              "stroke": "$color-primary-hover",
-              "strokeWidth": 3,
-              "strokeLinecap": "round"
-            },
-            {
-              "type": "path",
-              "id": "DNbeJ",
-              "x": 0,
-              "y": 0,
-              "name": "Arc 3",
-              "geometry": "M100 160a32 32 0 0 1 64 0",
-              "viewBox": [
-                48,
-                76,
-                202,
-                94
-              ],
-              "width": 38,
-              "height": 18,
-              "stroke": "$color-outline-variant",
-              "strokeWidth": 3,
-              "strokeLinecap": "round"
+              "type": "text",
+              "id": "VnPog",
+              "name": "Caption",
+              "fill": "$color-on-surface-muted",
+              "content": "sm  40x19",
+              "fontFamily": "$font-family-base",
+              "fontSize": 12,
+              "fontWeight": "normal"
             }
           ]
         }
@@ -2785,6 +2677,9 @@
       "x": 0,
       "y": -280,
       "name": "CloudMark",
+      "theme": {
+        "size": "sm"
+      },
       "reusable": true,
       "width": 40,
       "height": 19,
@@ -2806,7 +2701,7 @@
           "width": 40,
           "height": 19,
           "stroke": "$color-primary",
-          "strokeWidth": 3,
+          "strokeWidth": "$mark-stroke",
           "strokeLinecap": "round"
         },
         {
@@ -2825,7 +2720,7 @@
           "width": 40,
           "height": 19,
           "stroke": "$color-primary-hover",
-          "strokeWidth": 3,
+          "strokeWidth": "$mark-stroke",
           "strokeLinecap": "round"
         },
         {
@@ -2844,7 +2739,7 @@
           "width": 40,
           "height": 19,
           "stroke": "$color-outline-variant",
-          "strokeWidth": 3,
+          "strokeWidth": "$mark-stroke",
           "strokeLinecap": "round"
         }
       ]
@@ -2865,7 +2760,10 @@
           "ref": "yGKIG",
           "name": "Mark",
           "width": 40,
-          "height": 19
+          "height": 19,
+          "theme": {
+            "size": "sm"
+          }
         },
         {
           "type": "text",
@@ -2885,6 +2783,11 @@
     "mode": [
       "light",
       "dark"
+    ],
+    "size": [
+      "lg",
+      "md",
+      "sm"
     ]
   },
   "variables": {
@@ -3589,6 +3492,29 @@
     "border-active": {
       "type": "number",
       "value": 2
+    },
+    "mark-stroke": {
+      "type": "number",
+      "value": [
+        {
+          "value": 9,
+          "theme": {
+            "size": "lg"
+          }
+        },
+        {
+          "value": 4,
+          "theme": {
+            "size": "md"
+          }
+        },
+        {
+          "value": 3,
+          "theme": {
+            "size": "sm"
+          }
+        }
+      ]
     }
   },
   "fileToken": "b667f666-7fab-4ee6-9121-8301303df90b"

@@ -39,7 +39,7 @@ Two consequences worth holding on to:
    alignment.
 5. **Save**, so the `.pen` change is on disk and in `git diff`.
 
-## Four `execute` rules that are not in Pen's own skill
+## Five `execute` rules that are not in Pen's own skill
 
 Each of these cost a rebuild on [#431](https://github.com/markgoho/doula-cloud/issues/431). They are
 about the tool, not about design, and none of them is discoverable from the API documentation.
@@ -64,6 +64,24 @@ onto the node's box; the stroke is not scaled with it. A mark authored at `strok
 202-unit-wide `viewBox` needs roughly `height / 6.5` once it is drawn at 40x19, or it renders as a
 blob. Re-derive the stroke for every size the mark is used at, rather than copying the number out of
 the source SVG.
+
+**There is no variant system, and theme axes are the substitute.** Pen has no Figma-style variants:
+a component is one tree, and an instance customises it through `ref` properties and a `descendants`
+map. What fills the gap is that **variables take a value per theme-axis value, and any node can be
+pinned to one** through its `theme` property. `SetVariables` registers a new axis on the fly, so
+`mark-stroke` carries `9`/`4`/`3` on a `size` axis of `lg`/`md`/`sm`, the `CloudMark` arcs reference
+`$mark-stroke`, and an instance picks its weight with `theme: {size: "sm"}`. One component, three
+sizes, no duplication — and it composes with the `mode` light/dark axis already in the document
+rather than competing with it. Reach for this whenever instances differ by a *value* rather than by
+structure; `descendants` is still the answer when they differ by content.
+
+**Pin the component master too.** An unpinned node resolves the variable on whatever the axis
+falls back to, so a master drawn at the small size but left unpinned renders with the large
+value and looks broken the moment somebody opens the component — which is exactly how this was
+found. Give the master an explicit `theme` matching the size it is drawn at, and never rely on
+which axis value happens to come first. Note also that an instance scales its subtree from the
+`ref`'s own `width`/`height`: if the component's *children* carry explicit sizes matching the
+master, the override stops scaling them and every instance renders at one size.
 
 **`phosphor` is a valid icon library on the canvas.** The schema's `Icon.library` accepts `lucide`,
 `feather`, three Material Symbols variants and `phosphor`, so a drawing is not forced onto Lucide
