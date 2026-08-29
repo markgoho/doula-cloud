@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 )
 
 // paymentReceivedSubject and paymentReceivedText are the "a Payment
@@ -52,12 +53,37 @@ func QueuePaymentReceivedNotification(ctx context.Context, tx *sql.Tx, paymentID
 // Cloud-Scheduler-driven half of ADR-0010's outbox for #344, mirroring
 // Worker's shape (payout_outbox's own worker, kept as a distinct type
 // since the two outbox tables, recipients, and copy are all unrelated).
+// outbox.ProcessPending owns the claim/retry/dead-letter machinery every
+// mail kind shares.
 type PaymentReceivedWorker struct {
 	Sender     mail.Sender
 	Now        func() time.Time
 	AppBaseURL string
 	From       string
 	ReplyTo    string
+}
+
+func (w PaymentReceivedWorker) inner() outbox.Worker {
+	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "payment_received_outbox"}
+}
+
+type paymentReceivedPendingRow struct {
+	id           string
+	practiceID   string
+	attemptCount int
+}
+
+const paymentReceivedClaimQuery = `SELECT id, practice_id, attempt_count
+	 FROM payment_received_outbox
+	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 ORDER BY next_attempt_at
+	 LIMIT $1
+	 FOR UPDATE SKIP LOCKED`
+
+func scanPaymentReceivedRow(rows *sql.Rows) (paymentReceivedPendingRow, error) {
+	var r paymentReceivedPendingRow
+	err := rows.Scan(&r.id, &r.practiceID, &r.attemptCount)
+	return r, wrapOutboxErr(err)
 }
 
 // ProcessPending sends every due payment_received_outbox row within tx.
@@ -69,80 +95,17 @@ type PaymentReceivedWorker struct {
 // payout_outbox's and low_credit_outbox's workers, whose notifications
 // map to Owner-only responsive actions this one has none of.
 func (w PaymentReceivedWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	now := w.Now()
+	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), paymentReceivedClaimQuery, scanPaymentReceivedRow, w.send))
+}
 
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, practice_id, attempt_count
-		 FROM payment_received_outbox
-		 WHERE status = 'pending' AND next_attempt_at <= now()
-		 ORDER BY next_attempt_at
-		 LIMIT $1
-		 FOR UPDATE SKIP LOCKED`,
-		maxOutboxBatch,
-	)
+func (w PaymentReceivedWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r paymentReceivedPendingRow, now time.Time) error {
+	emails, err := ownerAndAdminEmails(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("payments: query pending payment-received outbox rows: %w", err)
+		return err
 	}
-	defer func() { _ = rows.Close() }()
-
-	type pendingRow struct {
-		id           string
-		practiceID   string
-		attemptCount int
-	}
-	var pending []pendingRow
-	for rows.Next() {
-		var r pendingRow
-		if err := rows.Scan(&r.id, &r.practiceID, &r.attemptCount); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return fmt.Errorf("payments: scan payment-received outbox row: %w", err)
-		}
-		pending = append(pending, r)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return fmt.Errorf("payments: iterate payment-received outbox rows: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		// coverage:ignore reason: DB row close failure, not exercised by unit tests
-		return fmt.Errorf("payments: close payment-received outbox rows: %w", err)
-	}
-
-	for _, r := range pending {
-		emails, err := ownerAndAdminEmails(ctx, tx, r.practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return err
-		}
-
-		link := w.AppBaseURL + "/practices/" + r.practiceID
-		var sendErr error
-		for _, email := range emails {
-			if sendErr = w.Sender.Send(ctx, mail.Message{
-				To:      email,
-				From:    w.From,
-				ReplyTo: w.ReplyTo,
-				Subject: paymentReceivedSubject,
-				Text:    paymentReceivedText(link),
-			}); sendErr != nil {
-				break
-			}
-		}
-
-		if sendErr == nil {
-			if err := w.markSent(ctx, tx, r.id, now); err != nil {
-				// coverage:ignore reason: DB update failure, not exercised by unit tests
-				return err
-			}
-			continue
-		}
-		if err := w.markFailed(ctx, tx, r.id, r.attemptCount, sendErr, now); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return err
-		}
-	}
-	return nil
+	link := w.AppBaseURL + "/practices/" + r.practiceID
+	return wrapOutboxErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, paymentReceivedSubject, paymentReceivedText(link)))
 }
 
 // ownerAndAdminEmails returns the email of every Staff member holding
@@ -177,37 +140,4 @@ func ownerAndAdminEmails(ctx context.Context, tx *sql.Tx, practiceID string) ([]
 		return nil, fmt.Errorf("payments: iterate owner/admin emails: %w", err)
 	}
 	return emails, nil
-}
-
-func (w PaymentReceivedWorker) markSent(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE payment_received_outbox SET status = 'sent', sent_at = $1, last_error = NULL WHERE id = $2`,
-		now, id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("payments: mark payment-received outbox row sent: %w", err)
-	}
-	return nil
-}
-
-func (w PaymentReceivedWorker) markFailed(ctx context.Context, tx *sql.Tx, id string, attemptCount int, sendErr error, now time.Time) error {
-	nextAttempt := attemptCount + 1
-	if nextAttempt >= len(backoffSchedule) {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE payment_received_outbox SET status = 'dead_lettered', attempt_count = $1, last_error = $2 WHERE id = $3`,
-			nextAttempt, sendErr.Error(), id,
-		); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return fmt.Errorf("payments: dead-letter payment-received outbox row: %w", err)
-		}
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE payment_received_outbox SET attempt_count = $1, next_attempt_at = $2, last_error = $3 WHERE id = $4`,
-		nextAttempt, now.Add(backoffSchedule[nextAttempt-1]), sendErr.Error(), id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("payments: schedule payment-received outbox retry: %w", err)
-	}
-	return nil
 }

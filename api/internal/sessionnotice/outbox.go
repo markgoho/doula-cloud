@@ -16,19 +16,9 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
 )
-
-// backoffSchedule mirrors every other outbox in this codebase (ADR-0010):
-// attempt N (1-indexed) waits backoffSchedule[N-1] before retrying, and a
-// row whose attempt_count reaches len(backoffSchedule) is dead-lettered.
-var backoffSchedule = []time.Duration{
-	5 * time.Minute,
-	30 * time.Minute,
-	2 * time.Hour,
-	6 * time.Hour,
-	18 * time.Hour,
-}
 
 // signinIdleWindow is the "new sign-in" trigger condition this ticket's
 // AC asks to be decided, with reasoning: a sign-in is worth a notice only
@@ -45,11 +35,6 @@ var backoffSchedule = []time.Duration{
 // return after a real gap, which is when a stale, possibly compromised
 // credential is most likely to be the one still working.
 const signinIdleWindow = 7 * 24 * time.Hour
-
-// maxOutboxBatch bounds how many rows one ProcessPending call sends, so a
-// large backlog can't turn a single Scheduler tick into an unbounded
-// transaction. Mirrors billing.Worker/payments.Worker.
-const maxOutboxBatch = 100
 
 const newSignInSubject = "Doula Cloud: new sign-in to your account"
 
@@ -170,16 +155,20 @@ func QueueSessionRevoked(ctx context.Context, tx *sql.Tx, identityUID string) er
 }
 
 // Worker sends due session_notice_outbox rows -- the Cloud-Scheduler-
-// driven half of ADR-0010's outbox, mirroring billing.Worker/
-// payments.Worker's shape. No AppBaseURL: unlike its siblings, neither
-// notice's body links anywhere -- ADR-0004 built no "active sessions"
-// screen to link to, and a security notice needs no more than "reply if
-// this wasn't you" to be actionable.
+// driven half of ADR-0010's outbox (outbox.ProcessPending owns the claim/
+// retry/dead-letter machinery every mail kind shares). No AppBaseURL:
+// unlike its siblings, neither notice's body links anywhere -- ADR-0004
+// built no "active sessions" screen to link to, and a security notice
+// needs no more than "reply if this wasn't you" to be actionable.
 type Worker struct {
 	Sender  mail.Sender
 	Now     func() time.Time
 	From    string
 	ReplyTo string
+}
+
+func (w Worker) inner() outbox.Worker {
+	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "session_notice_outbox"}
 }
 
 type pendingRow struct {
@@ -189,6 +178,30 @@ type pendingRow struct {
 	attemptCount int
 }
 
+const claimQuery = `SELECT id, identity_uid, kind, attempt_count
+	 FROM session_notice_outbox
+	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 ORDER BY next_attempt_at
+	 LIMIT $1
+	 FOR UPDATE SKIP LOCKED`
+
+func scanRow(rows *sql.Rows) (pendingRow, error) {
+	var r pendingRow
+	err := rows.Scan(&r.id, &r.identityUID, &r.kind, &r.attemptCount)
+	return r, wrapOutboxErr(err)
+}
+
+// wrapOutboxErr gives an error from the outbox package (a sibling
+// package, so wrapcheck treats its errors as external) this package's
+// own prefix, without outbox's own already-descriptive message.
+func wrapOutboxErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
+	return fmt.Errorf("sessionnotice: %w", err)
+}
+
 // ProcessPending sends every due session_notice_outbox row within tx,
 // resolving the target Staff member's current email at send time (not
 // stored on the row, same reasoning as billing.Worker.ownerEmails) and
@@ -196,88 +209,37 @@ type pendingRow struct {
 // offboarded account deleted between queuing and send has no address
 // left to notify.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	now := w.Now()
+	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
+}
 
-	// The due-check compares against Postgres's own now(), not w.Now(),
-	// mirroring every other Worker.ProcessPending in this codebase --
-	// next_attempt_at's default is also Postgres's clock, and clock skew
-	// against the Go process's could make a freshly-queued row look not
-	// yet due.
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, identity_uid, kind, attempt_count
-		 FROM session_notice_outbox
-		 WHERE status = 'pending' AND next_attempt_at <= now()
-		 ORDER BY next_attempt_at
-		 LIMIT $1
-		 FOR UPDATE SKIP LOCKED`,
-		maxOutboxBatch,
-	)
+func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
+	email, found, err := staffEmail(ctx, tx, r.identityUID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("sessionnotice: query pending outbox rows: %w", err)
+		return err
 	}
-	defer func() { _ = rows.Close() }()
-
-	var pending []pendingRow
-	for rows.Next() {
-		var r pendingRow
-		if err := rows.Scan(&r.id, &r.identityUID, &r.kind, &r.attemptCount); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return fmt.Errorf("sessionnotice: scan outbox row: %w", err)
-		}
-		pending = append(pending, r)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return fmt.Errorf("sessionnotice: iterate outbox rows: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		// coverage:ignore reason: DB row close failure, not exercised by unit tests
-		return fmt.Errorf("sessionnotice: close outbox rows: %w", err)
+	if !found {
+		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	for _, r := range pending {
-		email, found, err := staffEmail(ctx, tx, r.identityUID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return err
-		}
-		if !found {
-			if err := w.markSent(ctx, tx, r.id, now); err != nil {
-				// coverage:ignore reason: DB update failure, not exercised by unit tests
-				return err
-			}
-			continue
-		}
-
-		var subject, text string
-		if r.kind == "session_revoked" {
-			subject, text = sessionRevokedSubject, sessionRevokedText()
-		} else {
-			subject, text = newSignInSubject, newSignInText()
-		}
-
-		sendErr := w.Sender.Send(ctx, mail.Message{
-			To:      email,
-			From:    w.From,
-			ReplyTo: w.ReplyTo,
-			Subject: subject,
-			Text:    text,
-		})
-
-		if sendErr == nil {
-			if err := w.markSent(ctx, tx, r.id, now); err != nil {
-				// coverage:ignore reason: DB update failure, not exercised by unit tests
-				return err
-			}
-			continue
-		}
-		if err := w.markFailed(ctx, tx, r.id, r.attemptCount, sendErr, now); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return err
-		}
+	var subject, text string
+	if r.kind == "session_revoked" {
+		subject, text = sessionRevokedSubject, sessionRevokedText()
+	} else {
+		subject, text = newSignInSubject, newSignInText()
 	}
-	return nil
+
+	sendErr := w.Sender.Send(ctx, mail.Message{
+		To:      email,
+		From:    w.From,
+		ReplyTo: w.ReplyTo,
+		Subject: subject,
+		Text:    text,
+	})
+	if sendErr == nil {
+		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
+	}
+	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
 }
 
 // staffEmail returns the email of the Staff member holding identityUID.
@@ -291,37 +253,4 @@ func staffEmail(ctx context.Context, tx *sql.Tx, identityUID string) (email stri
 		return "", false, fmt.Errorf("sessionnotice: resolve staff email: %w", err)
 	}
 	return email, true, nil
-}
-
-func (w Worker) markSent(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE session_notice_outbox SET status = 'sent', sent_at = $1, last_error = NULL WHERE id = $2`,
-		now, id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("sessionnotice: mark outbox row sent: %w", err)
-	}
-	return nil
-}
-
-func (w Worker) markFailed(ctx context.Context, tx *sql.Tx, id string, attemptCount int, sendErr error, now time.Time) error {
-	nextAttempt := attemptCount + 1
-	if nextAttempt >= len(backoffSchedule) {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE session_notice_outbox SET status = 'dead_lettered', attempt_count = $1, last_error = $2 WHERE id = $3`,
-			nextAttempt, sendErr.Error(), id,
-		); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return fmt.Errorf("sessionnotice: dead-letter outbox row: %w", err)
-		}
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE session_notice_outbox SET attempt_count = $1, next_attempt_at = $2, last_error = $3 WHERE id = $4`,
-		nextAttempt, now.Add(backoffSchedule[nextAttempt-1]), sendErr.Error(), id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("sessionnotice: schedule outbox retry: %w", err)
-	}
-	return nil
 }

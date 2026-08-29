@@ -7,19 +7,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 )
-
-// backoffSchedule mirrors every other outbox in this codebase (ADR-0010):
-// attempt N (1-indexed) waits backoffSchedule[N-1] before retrying, and a
-// row whose attempt_count reaches len(backoffSchedule) is dead-lettered
-// instead of scheduled again.
-var backoffSchedule = []time.Duration{
-	5 * time.Minute,
-	30 * time.Minute,
-	2 * time.Hour,
-	6 * time.Hour,
-	18 * time.Hour,
-}
 
 // offerSubject and offerText are the Offer email's fixed copy. Platform
 // voice (ADR-0009): she is told she has been offered work at a practice
@@ -59,8 +48,8 @@ func queue(ctx context.Context, tx *sql.Tx, offerID, token, code string) error {
 }
 
 // Worker sends due engagement_offer_outbox rows -- the
-// Cloud-Scheduler-driven half of ADR-0010's outbox, mirroring
-// staffinvite.Worker's shape.
+// Cloud-Scheduler-driven half of ADR-0010's outbox (outbox.ProcessPending
+// owns the claim/retry/dead-letter machinery every mail kind shares).
 type Worker struct {
 	Sender     mail.Sender
 	Now        func() time.Time
@@ -69,10 +58,17 @@ type Worker struct {
 	ReplyTo    string
 }
 
-// maxOutboxBatch bounds how many rows one ProcessPending call sends, so a
-// large backlog can't turn a single Scheduler tick into an unbounded
-// transaction.
-const maxOutboxBatch = 100
+// invite_token/access_code are cleared on both sent and dead-lettered
+// terminal states, not only on sent: this table's whole justification
+// for holding plaintext at all is that its exposure window is "queued
+// but not yet resolved", and a dead-lettered row is done retrying too.
+func (w Worker) inner() outbox.Worker {
+	return outbox.Worker{
+		Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo,
+		Table:           "engagement_offer_outbox",
+		ClearOnTerminal: []string{"invite_token", "access_code"},
+	}
+}
 
 // pendingRow is one due outbox row joined to the Offer and Invitation it
 // mails.
@@ -87,6 +83,34 @@ type pendingRow struct {
 	expiresAt    time.Time
 }
 
+const claimQuery = `SELECT o.id, o.offer_id, o.attempt_count, o.invite_token, o.access_code,
+	        pi.address, eo.state::text, eo.expires_at
+	   FROM engagement_offer_outbox o
+	   JOIN engagement_offers eo ON eo.id = o.offer_id
+	   JOIN practice_invitations pi ON pi.id = eo.invitation_id
+	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	  ORDER BY o.next_attempt_at
+	  LIMIT $1
+	  FOR UPDATE OF o SKIP LOCKED`
+
+func scanRow(rows *sql.Rows) (pendingRow, error) {
+	var p pendingRow
+	err := rows.Scan(&p.id, &p.offerID, &p.attemptCount, &p.inviteToken, &p.accessCode,
+		&p.address, &p.state, &p.expiresAt)
+	return p, wrapOutboxErr(err)
+}
+
+// wrapOutboxErr gives an error from the outbox package (a sibling
+// package, so wrapcheck treats its errors as external) this package's
+// own prefix, without outbox's own already-descriptive message.
+func wrapOutboxErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
+	return fmt.Errorf("offer: %w", err)
+}
+
 // ProcessPending sends every due engagement_offer_outbox row within tx.
 // It joins the Offer and its Invitation for the recipient's address and
 // the Offer's state at send time, so an Offer withdrawn, declined,
@@ -94,64 +118,17 @@ type pendingRow struct {
 // sent is never mailed. The credentials come from the outbox row, not
 // the join, and are cleared once the row leaves 'pending'.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	now := w.Now()
-
-	// The due-check compares against Postgres's own now(), not w.Now(),
-	// mirroring every other Worker.ProcessPending's reasoning.
-	rows, err := tx.QueryContext(ctx,
-		`SELECT o.id, o.offer_id, o.attempt_count, o.invite_token, o.access_code,
-		        pi.address, eo.state::text, eo.expires_at
-		   FROM engagement_offer_outbox o
-		   JOIN engagement_offers eo ON eo.id = o.offer_id
-		   JOIN practice_invitations pi ON pi.id = eo.invitation_id
-		  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
-		  ORDER BY o.next_attempt_at
-		  LIMIT $1
-		  FOR UPDATE OF o SKIP LOCKED`,
-		maxOutboxBatch,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("offer: query pending outbox rows: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var pending []pendingRow
-	for rows.Next() {
-		var p pendingRow
-		if err := rows.Scan(&p.id, &p.offerID, &p.attemptCount, &p.inviteToken, &p.accessCode,
-			&p.address, &p.state, &p.expiresAt); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return fmt.Errorf("offer: scan outbox row: %w", err)
-		}
-		pending = append(pending, p)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return fmt.Errorf("offer: iterate outbox rows: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		// coverage:ignore reason: DB row close failure, not exercised by unit tests
-		return fmt.Errorf("offer: close outbox rows: %w", err)
-	}
-
-	for _, p := range pending {
-		if err := w.send(ctx, tx, p, now); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return err
-		}
-	}
-	return nil
+	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
 }
 
 // send resolves one pending row: skipped if the Offer is no longer open,
 // mailed otherwise, and marked either way.
-func (w Worker) send(ctx context.Context, tx *sql.Tx, p pendingRow, now time.Time) error {
+func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, p pendingRow, now time.Time) error {
 	// Not (still) open, or past its own expires_at -- decided, withdrawn,
 	// or run out, whether or not something has gotten around to flipping
 	// the state column yet -- either way, nothing to deliver.
 	if p.state != stateOffered || !p.expiresAt.After(now) {
-		return w.markSent(ctx, tx, p.id, now)
+		return wrapOutboxErr(inner.MarkSent(ctx, tx, p.id, now))
 	}
 
 	link := w.AppBaseURL + "/offers/" + p.offerID + "?token=" + p.inviteToken.String
@@ -163,7 +140,7 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, p pendingRow, now time.Tim
 		Text:    offerText(link, p.accessCode.String),
 	})
 	if sendErr != nil {
-		return w.markFailed(ctx, tx, p.id, p.attemptCount, sendErr, now)
+		return wrapOutboxErr(inner.MarkFailed(ctx, tx, p.id, p.attemptCount, sendErr, now))
 	}
 	// access_code_sent_at is the Offer's own record that its code is in
 	// the post -- 00030 gave the column, and this is the only moment that
@@ -174,47 +151,5 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, p pendingRow, now time.Tim
 		// coverage:ignore reason: DB update failure, not exercised by unit tests
 		return fmt.Errorf("offer: stamp access code sent: %w", err)
 	}
-	return w.markSent(ctx, tx, p.id, now)
-}
-
-func (w Worker) markSent(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE engagement_offer_outbox
-		    SET status = 'sent', sent_at = $1, last_error = NULL, invite_token = NULL, access_code = NULL
-		  WHERE id = $2`,
-		now, id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("offer: mark outbox row sent: %w", err)
-	}
-	return nil
-}
-
-func (w Worker) markFailed(ctx context.Context, tx *sql.Tx, id string, attemptCount int, sendErr error, now time.Time) error {
-	nextAttempt := attemptCount + 1
-	if nextAttempt >= len(backoffSchedule) {
-		// The credentials are cleared here too, not only by markSent: a
-		// dead-lettered row is done retrying, and this table's whole
-		// justification for holding plaintext at all is that its exposure
-		// window is "queued but not yet resolved".
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE engagement_offer_outbox
-			    SET status = 'dead_lettered', attempt_count = $1, last_error = $2,
-			        invite_token = NULL, access_code = NULL
-			  WHERE id = $3`,
-			nextAttempt, sendErr.Error(), id,
-		); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return fmt.Errorf("offer: dead-letter outbox row: %w", err)
-		}
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE engagement_offer_outbox SET attempt_count = $1, next_attempt_at = $2, last_error = $3 WHERE id = $4`,
-		nextAttempt, now.Add(backoffSchedule[nextAttempt-1]), sendErr.Error(), id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("offer: schedule outbox retry: %w", err)
-	}
-	return nil
+	return wrapOutboxErr(inner.MarkSent(ctx, tx, p.id, now))
 }

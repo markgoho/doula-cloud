@@ -7,19 +7,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 )
-
-// backoffSchedule mirrors billing's own low-credit outbox (ADR-0010):
-// attempt N (1-indexed) waits backoffSchedule[N-1] before retrying, and a
-// row whose attempt_count reaches len(backoffSchedule) is dead-lettered
-// instead of scheduled again.
-var backoffSchedule = []time.Duration{
-	5 * time.Minute,
-	30 * time.Minute,
-	2 * time.Hour,
-	6 * time.Hour,
-	18 * time.Hour,
-}
 
 // payoutSubject and payoutText are the payout-account-incomplete Platform
 // Notification's fixed copy (ADR-0009's content rule: no Client name, no
@@ -58,7 +47,8 @@ func QueuePayoutIncompleteNotification(ctx context.Context, tx *sql.Tx, practice
 }
 
 // Worker sends due payout_outbox rows -- the Cloud-Scheduler-driven half
-// of ADR-0010's outbox, mirroring billing.Worker's shape.
+// of ADR-0010's outbox (outbox.ProcessPending owns the claim/retry/
+// dead-letter machinery every mail kind shares).
 type Worker struct {
 	Sender     mail.Sender
 	Now        func() time.Time
@@ -67,10 +57,42 @@ type Worker struct {
 	ReplyTo    string
 }
 
-// maxOutboxBatch bounds how many rows one ProcessPending call sends, so a
-// large backlog can't turn a single Scheduler tick into an unbounded
-// transaction.
-const maxOutboxBatch = 100
+func (w Worker) inner() outbox.Worker {
+	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "payout_outbox"}
+}
+
+type payoutPendingRow struct {
+	id           string
+	practiceID   string
+	attemptCount int
+}
+
+const payoutClaimQuery = `SELECT id, practice_id, attempt_count
+	 FROM payout_outbox
+	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 ORDER BY next_attempt_at
+	 LIMIT $1
+	 FOR UPDATE SKIP LOCKED`
+
+func scanPayoutRow(rows *sql.Rows) (payoutPendingRow, error) {
+	var r payoutPendingRow
+	err := rows.Scan(&r.id, &r.practiceID, &r.attemptCount)
+	return r, wrapOutboxErr(err)
+}
+
+// wrapOutboxErr gives an error from the outbox package (a sibling
+// package, so wrapcheck treats its errors as external) this package's
+// own prefix, without outbox's own already-descriptive message. Shared
+// by both Worker (payout_outbox) and PaymentReceivedWorker
+// (payment_outbox.go) -- one prefix for both, since it's a package-level
+// concern, not a per-table one.
+func wrapOutboxErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
+	return fmt.Errorf("payments: %w", err)
+}
 
 // ProcessPending sends every due payout_outbox row within tx. Each row's
 // grace window (00034's 48-hour next_attempt_at default) may have
@@ -82,96 +104,26 @@ const maxOutboxBatch = 100
 // separately; a row is marked sent once every resolved Owner has been
 // mailed without error.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	now := w.Now()
+	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), payoutClaimQuery, scanPayoutRow, w.send))
+}
 
-	// The due-check compares against Postgres's own now(), not w.Now(),
-	// mirroring billing.Worker.ProcessPending -- see that function's own
-	// comment for why.
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, practice_id, attempt_count
-		 FROM payout_outbox
-		 WHERE status = 'pending' AND next_attempt_at <= now()
-		 ORDER BY next_attempt_at
-		 LIMIT $1
-		 FOR UPDATE SKIP LOCKED`,
-		maxOutboxBatch,
-	)
+func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r payoutPendingRow, now time.Time) error {
+	stillOutstanding, err := requirementsStillOutstanding(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("payments: query pending payout outbox rows: %w", err)
+		return err
 	}
-	defer func() { _ = rows.Close() }()
-
-	type pendingRow struct {
-		id           string
-		practiceID   string
-		attemptCount int
-	}
-	var pending []pendingRow
-	for rows.Next() {
-		var r pendingRow
-		if err := rows.Scan(&r.id, &r.practiceID, &r.attemptCount); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return fmt.Errorf("payments: scan payout outbox row: %w", err)
-		}
-		pending = append(pending, r)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return fmt.Errorf("payments: iterate payout outbox rows: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		// coverage:ignore reason: DB row close failure, not exercised by unit tests
-		return fmt.Errorf("payments: close payout outbox rows: %w", err)
+	if !stillOutstanding {
+		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	for _, r := range pending {
-		stillOutstanding, err := requirementsStillOutstanding(ctx, tx, r.practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return err
-		}
-		if !stillOutstanding {
-			if err := w.markSent(ctx, tx, r.id, now); err != nil {
-				// coverage:ignore reason: DB update failure, not exercised by unit tests
-				return err
-			}
-			continue
-		}
-
-		emails, err := ownerEmails(ctx, tx, r.practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return err
-		}
-
-		link := w.AppBaseURL + "/practices/" + r.practiceID + "/settings/payments"
-		var sendErr error
-		for _, email := range emails {
-			if sendErr = w.Sender.Send(ctx, mail.Message{
-				To:      email,
-				From:    w.From,
-				ReplyTo: w.ReplyTo,
-				Subject: payoutSubject,
-				Text:    payoutText(link),
-			}); sendErr != nil {
-				break
-			}
-		}
-
-		if sendErr == nil {
-			if err := w.markSent(ctx, tx, r.id, now); err != nil {
-				// coverage:ignore reason: DB update failure, not exercised by unit tests
-				return err
-			}
-			continue
-		}
-		if err := w.markFailed(ctx, tx, r.id, r.attemptCount, sendErr, now); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return err
-		}
+	emails, err := ownerEmails(ctx, tx, r.practiceID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
 	}
-	return nil
+	link := w.AppBaseURL + "/practices/" + r.practiceID + "/settings/payments"
+	return wrapOutboxErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, payoutSubject, payoutText(link)))
 }
 
 // requirementsStillOutstanding reports whether practiceID's live
@@ -222,37 +174,4 @@ func ownerEmails(ctx context.Context, tx *sql.Tx, practiceID string) ([]string, 
 		return nil, fmt.Errorf("payments: iterate owner emails: %w", err)
 	}
 	return emails, nil
-}
-
-func (w Worker) markSent(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE payout_outbox SET status = 'sent', sent_at = $1, last_error = NULL WHERE id = $2`,
-		now, id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("payments: mark payout outbox row sent: %w", err)
-	}
-	return nil
-}
-
-func (w Worker) markFailed(ctx context.Context, tx *sql.Tx, id string, attemptCount int, sendErr error, now time.Time) error {
-	nextAttempt := attemptCount + 1
-	if nextAttempt >= len(backoffSchedule) {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE payout_outbox SET status = 'dead_lettered', attempt_count = $1, last_error = $2 WHERE id = $3`,
-			nextAttempt, sendErr.Error(), id,
-		); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return fmt.Errorf("payments: dead-letter payout outbox row: %w", err)
-		}
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE payout_outbox SET attempt_count = $1, next_attempt_at = $2, last_error = $3 WHERE id = $4`,
-		nextAttempt, now.Add(backoffSchedule[nextAttempt-1]), sendErr.Error(), id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("payments: schedule payout outbox retry: %w", err)
-	}
-	return nil
 }

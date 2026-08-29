@@ -7,20 +7,9 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
 )
-
-// backoffSchedule mirrors portalinvite's outbox (ADR-0010): attempt N
-// (1-indexed) waits backoffSchedule[N-1] before retrying, and a row whose
-// attempt_count reaches len(backoffSchedule) is dead-lettered instead of
-// scheduled again.
-var backoffSchedule = []time.Duration{
-	5 * time.Minute,
-	30 * time.Minute,
-	2 * time.Hour,
-	6 * time.Hour,
-	18 * time.Hour,
-}
 
 // lowCreditSubject and lowCreditText are the out-of-Credits Platform
 // Notification's fixed copy (ADR-0009's content rule: no Client name, no
@@ -95,7 +84,8 @@ func QueueOutOfCreditsNotification(ctx context.Context, db *sql.DB, practiceID s
 }
 
 // Worker sends due low_credit_outbox rows -- the Cloud-Scheduler-driven
-// half of ADR-0010's outbox, mirroring portalinvite.Worker's shape.
+// half of ADR-0010's outbox (outbox.ProcessPending owns the claim/retry/
+// dead-letter machinery every mail kind shares).
 type Worker struct {
 	Sender     mail.Sender
 	Now        func() time.Time
@@ -104,10 +94,39 @@ type Worker struct {
 	ReplyTo    string
 }
 
-// maxOutboxBatch bounds how many rows one ProcessPending call sends, so a
-// large backlog can't turn a single Scheduler tick into an unbounded
-// transaction.
-const maxOutboxBatch = 100
+func (w Worker) inner() outbox.Worker {
+	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "low_credit_outbox"}
+}
+
+type pendingRow struct {
+	id           string
+	practiceID   string
+	attemptCount int
+}
+
+const claimQuery = `SELECT id, practice_id, attempt_count
+	 FROM low_credit_outbox
+	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 ORDER BY next_attempt_at
+	 LIMIT $1
+	 FOR UPDATE SKIP LOCKED`
+
+func scanRow(rows *sql.Rows) (pendingRow, error) {
+	var r pendingRow
+	err := rows.Scan(&r.id, &r.practiceID, &r.attemptCount)
+	return r, wrapOutboxErr(err)
+}
+
+// wrapOutboxErr gives an error from the outbox package (a sibling
+// package, so wrapcheck treats its errors as external) this package's
+// own prefix, without outbox's own already-descriptive message.
+func wrapOutboxErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
+	return fmt.Errorf("billing: %w", err)
+}
 
 // ProcessPending sends every due low_credit_outbox row within tx,
 // resolving the Practice's current Owners at send time (not stored on
@@ -116,86 +135,17 @@ const maxOutboxBatch = 100
 // with zero Owners at send time is marked sent with nothing to mail --
 // there is no one left to notify.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	now := w.Now()
+	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
+}
 
-	// The due-check compares against Postgres's own now(), not w.Now():
-	// next_attempt_at's default (QueueOutOfCreditsNotification's INSERT)
-	// is also Postgres's clock, and even a few milliseconds of skew
-	// against the Go process's clock could make a row queued this
-	// instant look not yet due to a w.Now()-based comparison run
-	// immediately after -- mirrors portalinvite.Worker.ProcessPending.
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, practice_id, attempt_count
-		 FROM low_credit_outbox
-		 WHERE status = 'pending' AND next_attempt_at <= now()
-		 ORDER BY next_attempt_at
-		 LIMIT $1
-		 FOR UPDATE SKIP LOCKED`,
-		maxOutboxBatch,
-	)
+func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
+	emails, err := ownerEmails(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("billing: query pending low-credit outbox rows: %w", err)
+		return err
 	}
-	defer func() { _ = rows.Close() }()
-
-	type pendingRow struct {
-		id           string
-		practiceID   string
-		attemptCount int
-	}
-	var pending []pendingRow
-	for rows.Next() {
-		var r pendingRow
-		if err := rows.Scan(&r.id, &r.practiceID, &r.attemptCount); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return fmt.Errorf("billing: scan low-credit outbox row: %w", err)
-		}
-		pending = append(pending, r)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return fmt.Errorf("billing: iterate low-credit outbox rows: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		// coverage:ignore reason: DB row close failure, not exercised by unit tests
-		return fmt.Errorf("billing: close low-credit outbox rows: %w", err)
-	}
-
-	for _, r := range pending {
-		emails, err := ownerEmails(ctx, tx, r.practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return err
-		}
-
-		link := w.AppBaseURL + "/practices/" + r.practiceID + "/billing"
-		var sendErr error
-		for _, email := range emails {
-			if sendErr = w.Sender.Send(ctx, mail.Message{
-				To:      email,
-				From:    w.From,
-				ReplyTo: w.ReplyTo,
-				Subject: lowCreditSubject,
-				Text:    lowCreditText(link),
-			}); sendErr != nil {
-				break
-			}
-		}
-
-		if sendErr == nil {
-			if err := w.markSent(ctx, tx, r.id, now); err != nil {
-				// coverage:ignore reason: DB update failure, not exercised by unit tests
-				return err
-			}
-			continue
-		}
-		if err := w.markFailed(ctx, tx, r.id, r.attemptCount, sendErr, now); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return err
-		}
-	}
-	return nil
+	link := w.AppBaseURL + "/practices/" + r.practiceID + "/billing"
+	return wrapOutboxErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, lowCreditSubject, lowCreditText(link)))
 }
 
 // ownerEmails returns the email of every Staff member holding the owner
@@ -227,37 +177,4 @@ func ownerEmails(ctx context.Context, tx *sql.Tx, practiceID string) ([]string, 
 		return nil, fmt.Errorf("billing: iterate owner emails: %w", err)
 	}
 	return emails, nil
-}
-
-func (w Worker) markSent(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE low_credit_outbox SET status = 'sent', sent_at = $1, last_error = NULL WHERE id = $2`,
-		now, id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("billing: mark low-credit outbox row sent: %w", err)
-	}
-	return nil
-}
-
-func (w Worker) markFailed(ctx context.Context, tx *sql.Tx, id string, attemptCount int, sendErr error, now time.Time) error {
-	nextAttempt := attemptCount + 1
-	if nextAttempt >= len(backoffSchedule) {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE low_credit_outbox SET status = 'dead_lettered', attempt_count = $1, last_error = $2 WHERE id = $3`,
-			nextAttempt, sendErr.Error(), id,
-		); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return fmt.Errorf("billing: dead-letter low-credit outbox row: %w", err)
-		}
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE low_credit_outbox SET attempt_count = $1, next_attempt_at = $2, last_error = $3 WHERE id = $4`,
-		nextAttempt, now.Add(backoffSchedule[nextAttempt-1]), sendErr.Error(), id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("billing: schedule low-credit outbox retry: %w", err)
-	}
-	return nil
 }

@@ -99,88 +99,53 @@ func main() {
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
 	paymentsClient := payments.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("APP_BASE_URL"))
 
+	// All eight mail kinds share one Mailgun domain/credential and one
+	// APP_BASE_URL, so they share one Sender construction and the two
+	// From/ReplyTo identities ADR-0011 defines -- minting eight otherwise
+	// identical Mailgun senders bought nothing.
+	//
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunDomain := os.Getenv("MAILGUN_DOMAIN")
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	mailgunSender := mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain)
+	appBaseURL := os.Getenv("APP_BASE_URL")
+	notificationsFrom := "Doula Cloud <notifications@" + mailgunDomain + ">"
+	// Platform voice (ADR-0011): a monitored inbox, not noreply -- every
+	// kind except the Client portal invite below, which is Practice
+	// voice.
+	supportReplyTo := "support@" + mailgunDomain
+
 	outboxWorker := portalinvite.Worker{
-		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:        time.Now,
-		AppBaseURL: os.Getenv("APP_BASE_URL"),
-		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
-		ReplyTo:    "noreply@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: "noreply@" + mailgunDomain,
 	}
-
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	lowCreditOutboxWorker := billing.Worker{
-		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:        time.Now,
-		AppBaseURL: os.Getenv("APP_BASE_URL"),
-		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
-		// Platform voice (ADR-0011): a monitored inbox, not noreply --
-		// unlike the Client portal invite's Practice voice above.
-		ReplyTo: "support@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
-
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	payoutOutboxWorker := payments.Worker{
-		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:        time.Now,
-		AppBaseURL: os.Getenv("APP_BASE_URL"),
-		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
-		// Platform voice (ADR-0011), same as lowCreditOutboxWorker above.
-		ReplyTo: "support@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
-
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	paymentOutboxWorker := payments.PaymentReceivedWorker{
-		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:        time.Now,
-		AppBaseURL: os.Getenv("APP_BASE_URL"),
-		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
-		// Platform voice (ADR-0011), same as lowCreditOutboxWorker above.
-		ReplyTo: "support@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
-
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	sessionNoticeOutboxWorker := sessionnotice.Worker{
-		Sender: mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:    time.Now,
-		From:   "Doula Cloud <notifications@" + mailgunDomain + ">",
-		// Platform voice (ADR-0011), same as lowCreditOutboxWorker above.
-		ReplyTo: "support@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
-
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	staffInviteOutboxWorker := staffinvite.Worker{
-		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:        time.Now,
-		AppBaseURL: os.Getenv("APP_BASE_URL"),
-		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
-		// Platform voice (ADR-0011): the invited person isn't a Practice's
-		// Client, same as lowCreditOutboxWorker above.
-		ReplyTo: "support@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
-
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	offerOutboxWorker := offer.Worker{
-		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:        time.Now,
-		AppBaseURL: os.Getenv("APP_BASE_URL"),
-		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
-		// Platform voice (ADR-0011): the person offered work isn't a
-		// Practice's Client, same as staffInviteOutboxWorker above.
-		ReplyTo: "support@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
-
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	engagementRequestOutboxWorker := engagementrequest.Worker{
-		Sender:     mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		Now:        time.Now,
-		AppBaseURL: os.Getenv("APP_BASE_URL"),
-		From:       "Doula Cloud <notifications@" + mailgunDomain + ">",
-		// Platform voice (ADR-0011): the recipient is Staff, same as
-		// staffInviteOutboxWorker above.
-		ReplyTo: "support@" + mailgunDomain,
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
 
 	// ADR-0013: one shared queue nudging all eight outbox process-*
