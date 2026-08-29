@@ -39,6 +39,38 @@ Two consequences worth holding on to:
    alignment.
 5. **Save**, so the `.pen` change is on disk and in `git diff`.
 
+## Four `execute` rules that are not in Pen's own skill
+
+Each of these cost a rebuild on [#431](https://github.com/markgoho/doula-cloud/issues/431). They are
+about the tool, not about design, and none of them is discoverable from the API documentation.
+
+**Build a subtree in one declarative call, not by growing it.** `Insert` a node, then `Insert` its
+children into the returned id, and the layout comes out wrong — children land outside their parent's
+box and the frame renders blank or clipped, while `Get` reports bounds that do not match what the
+canvas draws. The reliable shape is `id = Insert(parent, {…empty frame…})` followed by
+`Replace(id, {…the whole tree, `children` nested…})`. Passing nested `children` to `Insert` directly
+fails the same way that growing it does; only `Replace` settles the layout.
+
+**`Replace` throws inside a reusable component.** Any descendant of a node marked `reusable: true`
+rejects `Replace` with `TypeError: Cannot read properties of undefined (reading 'type')`, whatever the
+replacement is — a bare text node fails as readily as a subtree. Inside a component, `Insert`,
+`Update`, `Delete` and `Move` all work. When a component needs a nested structure changed, build that
+structure as **its own root-level component** and `Insert` a single `ref` to it; a `ref` nests inside
+a component without complaint. That is why `BrandLockup` exists as a component rather than as two
+nodes inside `StaffTopBar`.
+
+**`strokeWidth` on a `path` is node pixels, not `viewBox` units.** The `viewBox` scales the geometry
+onto the node's box; the stroke is not scaled with it. A mark authored at `stroke-width: 14` in a
+202-unit-wide `viewBox` needs roughly `height / 6.5` once it is drawn at 40x19, or it renders as a
+blob. Re-derive the stroke for every size the mark is used at, rather than copying the number out of
+the source SVG.
+
+**`phosphor` is a valid icon library on the canvas.** The schema's `Icon.library` accepts `lucide`,
+`feather`, three Material Symbols variants and `phosphor`, so a drawing is not forced onto Lucide
+stand-ins. #411's `weight: 300` rendering bug still stands, so a drawn icon is not evidence about the
+shipped one either way; the code follows [#96](https://github.com/markgoho/doula-cloud/issues/96)
+regardless of what the canvas shows.
+
 ## Hand-correcting on the canvas
 
 Open the canvas and change what looks wrong. That is the point of the tool.

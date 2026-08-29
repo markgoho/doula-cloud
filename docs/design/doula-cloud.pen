@@ -106,257 +106,18 @@
       "id": "sKVjj",
       "x": 0,
       "y": 217,
-      "name": "Staff Dashboard",
+      "name": "Staff Shell - Desktop",
       "clip": true,
       "width": 1440,
       "fill": "$page-bg",
       "layout": "vertical",
       "children": [
         {
-          "type": "frame",
-          "id": "Ft8x5",
+          "id": "PCtn6",
+          "type": "ref",
+          "ref": "jI6Ch",
           "name": "Top Bar",
-          "width": "fill_container",
-          "height": 60,
-          "fill": "$surface",
-          "stroke": "$hairline",
-          "strokeWidth": {
-            "bottom": 1
-          },
-          "strokeAlignment": "inner",
-          "padding": [
-            0,
-            "$gutter"
-          ],
-          "justifyContent": "space_between",
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "frame",
-              "id": "erB37",
-              "name": "Brand and Nav",
-              "height": "fill_container",
-              "gap": 44,
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "S8qrIO",
-                  "name": "Wordmark",
-                  "fill": "$text",
-                  "content": "Doula Cloud",
-                  "fontFamily": "$font-sans",
-                  "fontSize": 17,
-                  "fontWeight": "600",
-                  "letterSpacing": -0.2
-                },
-                {
-                  "type": "frame",
-                  "id": "C1JthA",
-                  "name": "Nav",
-                  "height": "fill_container",
-                  "gap": 2,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "hELNt",
-                      "name": "Nav Overview",
-                      "height": "fill_container",
-                      "stroke": "$accent",
-                      "strokeWidth": {
-                        "bottom": 2
-                      },
-                      "strokeAlignment": "inner",
-                      "layout": "vertical",
-                      "padding": [
-                        0,
-                        14
-                      ],
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "MOmUe",
-                          "name": "Label",
-                          "fill": "$accent",
-                          "content": "Overview",
-                          "fontFamily": "$font-sans",
-                          "fontSize": 14,
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "VRWwM",
-                      "name": "Nav Clients",
-                      "height": "fill_container",
-                      "layout": "vertical",
-                      "padding": [
-                        0,
-                        14
-                      ],
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "BTBRZ",
-                          "name": "Label",
-                          "fill": "$muted",
-                          "content": "Clients",
-                          "fontFamily": "$font-sans",
-                          "fontSize": 14,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "ZysFz",
-                      "name": "Nav Billing",
-                      "height": "fill_container",
-                      "layout": "vertical",
-                      "padding": [
-                        0,
-                        14
-                      ],
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "xoLol",
-                          "name": "Label",
-                          "fill": "$muted",
-                          "content": "Billing",
-                          "fontFamily": "$font-sans",
-                          "fontSize": 14,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Mfre3",
-                      "name": "Nav Staff",
-                      "height": "fill_container",
-                      "layout": "vertical",
-                      "padding": [
-                        0,
-                        14
-                      ],
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "r3cVMJ",
-                          "name": "Label",
-                          "fill": "$muted",
-                          "content": "Staff",
-                          "fontFamily": "$font-sans",
-                          "fontSize": 14,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "jyoL1",
-                      "name": "Nav Offers",
-                      "height": "fill_container",
-                      "layout": "vertical",
-                      "padding": [
-                        0,
-                        14
-                      ],
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "y6lqBn",
-                          "name": "Label",
-                          "fill": "$muted",
-                          "content": "Offers",
-                          "fontFamily": "$font-sans",
-                          "fontSize": 14,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "J1FKfr",
-              "name": "Account",
-              "gap": 18,
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "Ns2EC",
-                  "name": "Practice Switcher",
-                  "gap": 7,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "YReTp",
-                      "name": "Practice Name",
-                      "fill": "$text",
-                      "content": "Riverside Doula Collective",
-                      "fontFamily": "$font-sans",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "icon",
-                      "id": "bsshh",
-                      "name": "Caret",
-                      "width": 15,
-                      "height": 15,
-                      "icon": "chevron-down",
-                      "library": "lucide",
-                      "fill": "$muted"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "j11Xw",
-                  "name": "Avatar",
-                  "width": 34,
-                  "height": 34,
-                  "fill": "$panel",
-                  "cornerRadius": 17,
-                  "stroke": "$hairline",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "U6nZA",
-                      "name": "Initials",
-                      "fill": "$text",
-                      "content": "MG",
-                      "fontFamily": "$font-sans",
-                      "fontSize": 13,
-                      "fontWeight": "600",
-                      "letterSpacing": 0.3
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
+          "width": "fill_container"
         },
         {
           "type": "frame",
@@ -715,6 +476,2407 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ZjXiI",
+      "x": 0,
+      "y": 1168,
+      "name": "Staff Shell - Menus Open",
+      "clip": true,
+      "width": 1440,
+      "height": 700,
+      "fill": "$color-surface",
+      "layout": "none",
+      "children": [
+        {
+          "id": "gG5lA",
+          "type": "ref",
+          "ref": "jI6Ch",
+          "name": "Top Bar",
+          "x": 0,
+          "y": 0,
+          "width": 1440
+        },
+        {
+          "type": "frame",
+          "id": "gQw0s",
+          "x": 1080,
+          "y": 66,
+          "name": "Practice Switcher Menu",
+          "width": 320,
+          "fill": "$color-surface-bright",
+          "cornerRadius": "$radius",
+          "stroke": "$color-surface-container-highest",
+          "strokeWidth": 1,
+          "strokeAlignment": "inner",
+          "layout": "vertical",
+          "padding": [
+            8,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "KOywt",
+              "name": "Switcher Heading",
+              "width": "fill_container",
+              "padding": [
+                8,
+                16,
+                6,
+                16
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "QOcHF",
+                  "name": "Heading",
+                  "fill": "$color-on-surface-muted",
+                  "content": "YOUR PRACTICES",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 12,
+                  "fontWeight": "normal",
+                  "letterSpacing": 0.01
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "CZUvF",
+              "name": "Practice Riverside Doula Collective",
+              "width": "fill_container",
+              "height": 52,
+              "fill": "$color-surface-container",
+              "gap": 12,
+              "padding": [
+                0,
+                16
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "zpHak",
+                  "name": "Text",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "O4nAO",
+                      "name": "Name",
+                      "fill": "$color-on-surface",
+                      "content": "Riverside Doula Collective",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "wKapn",
+                      "name": "Role",
+                      "fill": "$color-on-surface-muted",
+                      "content": "Owner, Admin",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "icon",
+                  "id": "lD073",
+                  "name": "Current",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "check",
+                  "library": "lucide",
+                  "fill": "$color-primary"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SABWP",
+              "name": "Practice Finger Lakes Birth Support",
+              "width": "fill_container",
+              "height": 52,
+              "gap": 12,
+              "padding": [
+                0,
+                16
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "lpF4T",
+                  "name": "Text",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "u0rIn",
+                      "name": "Name",
+                      "fill": "$color-on-surface",
+                      "content": "Finger Lakes Birth Support",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 14
+                    },
+                    {
+                      "type": "text",
+                      "id": "UdvAL",
+                      "name": "Role",
+                      "fill": "$color-on-surface-muted",
+                      "content": "Doula",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "icon",
+                  "id": "BBBHJ",
+                  "name": "Current",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "check",
+                  "library": "lucide",
+                  "fill": "$color-surface-bright"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "OHFPE",
+              "name": "Practice Genesee Valley Midwifery",
+              "width": "fill_container",
+              "height": 52,
+              "gap": 12,
+              "padding": [
+                0,
+                16
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "clV7W",
+                  "name": "Text",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "nxAqu",
+                      "name": "Name",
+                      "fill": "$color-on-surface",
+                      "content": "Genesee Valley Midwifery",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 14
+                    },
+                    {
+                      "type": "text",
+                      "id": "kWZTc",
+                      "name": "Role",
+                      "fill": "$color-on-surface-muted",
+                      "content": "Doula",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "icon",
+                  "id": "GtgBJ",
+                  "name": "Current",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "check",
+                  "library": "lucide",
+                  "fill": "$color-surface-bright"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "JR8lH",
+          "x": 40,
+          "y": 340,
+          "name": "Caption A",
+          "fill": "$color-on-surface-muted",
+          "content": "PRACTICE SWITCHER - one row per Membership. Contractor Doulas hold several.",
+          "fontFamily": "$font-family-base",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "id": "NOB6t",
+          "type": "ref",
+          "ref": "jI6Ch",
+          "name": "Top Bar B",
+          "x": 0,
+          "y": 370,
+          "width": 1440
+        },
+        {
+          "type": "text",
+          "id": "GoybX",
+          "x": 40,
+          "y": 626,
+          "name": "Caption B",
+          "fill": "$color-on-surface-muted",
+          "content": "AVATAR MENU - the person, never the Practice. Practice settings are a nav item, not here.",
+          "fontFamily": "$font-family-base",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "c54IG",
+          "x": 1140,
+          "y": 436,
+          "name": "Avatar Menu",
+          "width": 260,
+          "fill": "$color-surface-bright",
+          "cornerRadius": "$radius",
+          "stroke": "$color-surface-container-highest",
+          "strokeWidth": 1,
+          "strokeAlignment": "inner",
+          "layout": "vertical",
+          "padding": [
+            0,
+            0,
+            8,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "gfzdc",
+              "name": "Identity",
+              "width": "fill_container",
+              "stroke": "$color-outline-variant",
+              "strokeWidth": {
+                "bottom": 1
+              },
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 2,
+              "padding": [
+                14,
+                16,
+                12,
+                16
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "mXl8t",
+                  "name": "Name",
+                  "fill": "$color-on-surface",
+                  "content": "Mark Goho",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "oXdkZ",
+                  "name": "Email",
+                  "fill": "$color-on-surface-muted",
+                  "content": "markgoho@gmail.com",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 12
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "U6uxm",
+              "name": "Items",
+              "width": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                6,
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "QVZAy",
+                  "name": "Sign out",
+                  "width": "fill_container",
+                  "height": 44,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "s98cic",
+                      "name": "Label",
+                      "fill": "$color-error",
+                      "content": "Sign out",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 14
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "XvruE",
+      "x": 1560,
+      "y": 217,
+      "name": "Staff Shell - Narrow",
+      "clip": true,
+      "width": 390,
+      "height": 844,
+      "fill": "$color-surface",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "v0XuAa",
+          "name": "Top Bar",
+          "width": "fill_container",
+          "height": 60,
+          "fill": "$color-surface-bright",
+          "stroke": "$color-outline-variant",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "strokeAlignment": "inner",
+          "gap": 4,
+          "padding": [
+            0,
+            8
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "oKF35",
+              "name": "Menu Hit",
+              "width": 44,
+              "height": 44,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "bnrTV",
+                  "name": "Menu",
+                  "width": 22,
+                  "height": 22,
+                  "icon": "menu",
+                  "library": "lucide",
+                  "fill": "$color-on-surface"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Y1OhR",
+              "name": "Practice",
+              "width": "fill_container",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "sU96x",
+                  "name": "Practice Name",
+                  "fill": "$color-on-surface",
+                  "content": "Riverside Doula Collective",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "yius6",
+                  "name": "Caret",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "chevron-down",
+                  "library": "lucide",
+                  "fill": "$color-on-surface-variant"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cyEN7",
+              "name": "Avatar Hit",
+              "width": 44,
+              "height": 44,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "rVccB",
+                  "name": "Avatar",
+                  "width": 34,
+                  "height": 34,
+                  "fill": "$color-surface-container-high",
+                  "cornerRadius": 17,
+                  "stroke": "$color-outline-variant",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "C15uG",
+                      "name": "Initials",
+                      "fill": "$color-on-surface",
+                      "content": "MG",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "PqiQh",
+          "name": "Page Content",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            24,
+            20,
+            32,
+            20
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "M3kR7H",
+              "name": "Page Title",
+              "fill": "$color-on-surface",
+              "content": "Overview",
+              "fontFamily": "$font-family-base",
+              "fontSize": 28,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "zxAuR",
+              "name": "Card Clients",
+              "width": "fill_container",
+              "fill": "$color-surface-bright",
+              "cornerRadius": "$radius",
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                20,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "wGP6Y",
+                  "name": "Title",
+                  "fill": "$color-on-surface",
+                  "content": "Clients",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "Whf5s",
+                  "name": "Meta",
+                  "fill": "$color-on-surface-variant",
+                  "content": "14 active",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 14
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "GMifB",
+              "name": "Card Offers",
+              "width": "fill_container",
+              "fill": "$color-surface-bright",
+              "cornerRadius": "$radius",
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                20,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "IPFnH",
+                  "name": "Title",
+                  "fill": "$color-on-surface",
+                  "content": "Offers",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "Q9maVz",
+                  "name": "Meta",
+                  "fill": "$color-on-surface-variant",
+                  "content": "2 waiting on a Doula",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 14
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "plwK3",
+              "name": "Card Billing",
+              "width": "fill_container",
+              "fill": "$color-surface-bright",
+              "cornerRadius": "$radius",
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                20,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "a5O4Fk",
+                  "name": "Title",
+                  "fill": "$color-on-surface",
+                  "content": "Billing",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "XOeC8",
+                  "name": "Meta",
+                  "fill": "$color-on-surface-variant",
+                  "content": "31 Credits",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 14
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "LHRrw",
+      "x": 2010,
+      "y": 217,
+      "name": "Staff Shell - Narrow, Menu Open",
+      "clip": true,
+      "width": 390,
+      "height": 844,
+      "fill": "$color-surface-bright",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "jpIHA",
+          "name": "Top Bar",
+          "width": "fill_container",
+          "height": 60,
+          "fill": "$color-surface-bright",
+          "stroke": "$color-outline-variant",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "strokeAlignment": "inner",
+          "gap": 4,
+          "padding": [
+            0,
+            8
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "z9iudc",
+              "name": "Close Hit",
+              "width": 44,
+              "height": 44,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "GMf7g",
+                  "name": "Close",
+                  "width": 22,
+                  "height": 22,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$color-on-surface"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cdTpA",
+              "name": "Brand",
+              "width": "fill_container",
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "L264A9",
+                  "type": "ref",
+                  "ref": "y50ph5",
+                  "name": "Brand Lockup",
+                  "width": 145,
+                  "height": 22
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "iTLne",
+              "name": "Avatar Hit",
+              "width": 44,
+              "height": 44,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "bYRg2",
+                  "name": "Avatar",
+                  "width": 34,
+                  "height": 34,
+                  "fill": "$color-surface-container-high",
+                  "cornerRadius": 17,
+                  "stroke": "$color-outline-variant",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "g9JQGf",
+                      "name": "Initials",
+                      "fill": "$color-on-surface",
+                      "content": "MG",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "mLAj3",
+          "name": "Nav",
+          "width": "fill_container",
+          "layout": "vertical",
+          "padding": [
+            8,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "ft6Nt",
+              "name": "Nav Overview",
+              "width": "fill_container",
+              "height": 52,
+              "fill": "$color-surface-container",
+              "stroke": "$color-primary",
+              "strokeWidth": {
+                "left": 2
+              },
+              "strokeAlignment": "inner",
+              "padding": [
+                0,
+                20
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "pObed",
+                  "name": "Label",
+                  "fill": "$color-primary",
+                  "content": "Overview",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ReeZ1",
+              "name": "Nav Clients",
+              "width": "fill_container",
+              "height": 52,
+              "padding": [
+                0,
+                20
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "VrEzi",
+                  "name": "Label",
+                  "fill": "$color-on-surface",
+                  "content": "Clients",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "CNalR",
+              "name": "Nav Billing",
+              "width": "fill_container",
+              "height": 52,
+              "padding": [
+                0,
+                20
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ifIf7",
+                  "name": "Label",
+                  "fill": "$color-on-surface",
+                  "content": "Billing",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "rYVQ6",
+              "name": "Nav Staff",
+              "width": "fill_container",
+              "height": 52,
+              "padding": [
+                0,
+                20
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Psa6q",
+                  "name": "Label",
+                  "fill": "$color-on-surface",
+                  "content": "Staff",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "TvdV7",
+              "name": "Nav Offers",
+              "width": "fill_container",
+              "height": 52,
+              "padding": [
+                0,
+                20
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "XC0R8",
+                  "name": "Label",
+                  "fill": "$color-on-surface",
+                  "content": "Offers",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "rWA8E",
+              "name": "Nav Settings",
+              "width": "fill_container",
+              "height": 52,
+              "padding": [
+                0,
+                20
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "EgTui",
+                  "name": "Label",
+                  "fill": "$color-on-surface",
+                  "content": "Settings",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "eTy3w",
+          "name": "Switcher",
+          "width": "fill_container",
+          "stroke": "$color-outline-variant",
+          "strokeWidth": {
+            "top": 1
+          },
+          "strokeAlignment": "inner",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": [
+            12,
+            20,
+            0,
+            20
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "Si9o7",
+              "name": "Switcher Label",
+              "fill": "$color-on-surface-muted",
+              "content": "PRACTICE",
+              "fontFamily": "$font-family-base",
+              "fontSize": 12
+            },
+            {
+              "type": "frame",
+              "id": "ux68l",
+              "name": "Current Practice",
+              "width": "fill_container",
+              "height": 44,
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "xplIJ",
+                  "name": "Name",
+                  "fill": "$color-on-surface",
+                  "content": "Riverside Doula Collective",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "icon",
+                  "id": "M0GDW",
+                  "name": "Caret",
+                  "width": 15,
+                  "height": 15,
+                  "icon": "chevron-down",
+                  "library": "lucide",
+                  "fill": "$color-on-surface-variant"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "zjgOU",
+      "x": 1560,
+      "y": 1180,
+      "name": "Portal Shell - Desktop",
+      "clip": true,
+      "width": 1440,
+      "height": 620,
+      "fill": "$color-surface",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "u0Qw6c",
+          "name": "Top Bar",
+          "width": "fill_container",
+          "height": 60,
+          "fill": "$color-surface-bright",
+          "stroke": "$color-outline-variant",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "strokeAlignment": "inner",
+          "padding": [
+            0,
+            "$gutter"
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "rNfB8",
+              "name": "Brand and Nav",
+              "height": "fill_container",
+              "gap": 44,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "xa61F",
+                  "name": "Practice Name",
+                  "fill": "$color-on-surface",
+                  "content": "Riverside Doula Collective",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 17,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "viX3V",
+                  "name": "Nav",
+                  "height": "fill_container",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ruoql",
+                      "name": "Nav Your care",
+                      "height": "fill_container",
+                      "stroke": "$color-primary",
+                      "strokeWidth": {
+                        "bottom": 2
+                      },
+                      "strokeAlignment": "inner",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "h3VVmv",
+                          "name": "Label",
+                          "fill": "$color-primary",
+                          "content": "Your care",
+                          "fontFamily": "$font-family-base",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kcn0U",
+                      "name": "Nav Messages",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "puFVA",
+                          "name": "Label",
+                          "fill": "$color-on-surface-variant",
+                          "content": "Messages",
+                          "fontFamily": "$font-family-base",
+                          "fontSize": 14
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "c5SsD",
+                      "name": "Nav Birth plan",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YXak8",
+                          "name": "Label",
+                          "fill": "$color-on-surface-variant",
+                          "content": "Birth plan",
+                          "fontFamily": "$font-family-base",
+                          "fontSize": 14
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "TEfdG",
+                      "name": "Nav Contract",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "IdlAa",
+                          "name": "Label",
+                          "fill": "$color-on-surface-variant",
+                          "content": "Contract",
+                          "fontFamily": "$font-family-base",
+                          "fontSize": 14
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "d59ODR",
+              "name": "Account",
+              "height": 44,
+              "gap": 18,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "f0c7OW",
+                  "name": "Avatar Hit",
+                  "width": 44,
+                  "height": 44,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "H7Bf3s",
+                      "name": "Avatar",
+                      "width": 34,
+                      "height": 34,
+                      "fill": "$color-surface-container-high",
+                      "cornerRadius": 17,
+                      "stroke": "$color-outline-variant",
+                      "strokeWidth": 1,
+                      "strokeAlignment": "inner",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "i9ZjW2",
+                          "name": "Initials",
+                          "fill": "$color-on-surface",
+                          "content": "AB",
+                          "fontFamily": "$font-family-base",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Dc1pG",
+          "name": "Page Content",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            38,
+            "$gutter",
+            48,
+            "$gutter"
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "z9CTo",
+              "name": "Page Frame",
+              "width": 800,
+              "layout": "vertical",
+              "gap": 24,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "OHZas",
+                  "name": "Page Title",
+                  "fill": "$color-on-surface",
+                  "content": "Your care with Riverside Doula Collective",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 28,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "MYBsh",
+                  "name": "Intro",
+                  "fill": "$color-on-surface-variant",
+                  "content": "Your Doula is Sam Reyes. Your due date is 4 March 2027.",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 15
+                },
+                {
+                  "type": "frame",
+                  "id": "MDBoC",
+                  "name": "Card Birth plan",
+                  "width": "fill_container",
+                  "fill": "$color-surface-bright",
+                  "cornerRadius": "$radius",
+                  "stroke": "$color-outline-variant",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    20,
+                    22
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "LDyAu",
+                      "name": "Title",
+                      "fill": "$color-on-surface",
+                      "content": "Birth plan",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 16,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "HuufE",
+                      "name": "Meta",
+                      "fill": "$color-on-surface-variant",
+                      "content": "Last edited 12 January",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "H00fcm",
+                  "name": "Card Contract",
+                  "width": "fill_container",
+                  "fill": "$color-surface-bright",
+                  "cornerRadius": "$radius",
+                  "stroke": "$color-outline-variant",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    20,
+                    22
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "asB9N",
+                      "name": "Title",
+                      "fill": "$color-on-surface",
+                      "content": "Contract",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 16,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "eOb0I",
+                      "name": "Meta",
+                      "fill": "$color-on-surface-variant",
+                      "content": "Signed 2 December",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 14
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "CI32Y",
+      "x": 3100,
+      "y": 1180,
+      "name": "Portal Shell - Narrow",
+      "clip": true,
+      "width": 390,
+      "height": 844,
+      "fill": "$color-surface",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "toixt",
+          "name": "Top Bar",
+          "width": "fill_container",
+          "height": 60,
+          "fill": "$color-surface-bright",
+          "padding": [
+            0,
+            8,
+            0,
+            20
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "knIZX",
+              "name": "Brand",
+              "width": "fill_container",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "uOEOJ",
+                  "name": "Practice Name",
+                  "fill": "$color-on-surface",
+                  "content": "Riverside Doula Collective",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ixYL3",
+              "name": "Avatar Hit",
+              "width": 44,
+              "height": 44,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "lIlus",
+                  "name": "Avatar",
+                  "width": 34,
+                  "height": 34,
+                  "fill": "$color-surface-container-high",
+                  "cornerRadius": 17,
+                  "stroke": "$color-outline-variant",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "lPpmG",
+                      "name": "Initials",
+                      "fill": "$color-on-surface",
+                      "content": "AB",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "z4MIyk",
+          "name": "Nav",
+          "width": "fill_container",
+          "fill": "$color-surface-bright",
+          "stroke": "$color-outline-variant",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "strokeAlignment": "inner",
+          "children": [
+            {
+              "type": "frame",
+              "id": "M69xUU",
+              "name": "Nav Your care",
+              "width": "fill_container",
+              "height": 48,
+              "stroke": "$color-primary",
+              "strokeWidth": {
+                "bottom": 2
+              },
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "pcdIE",
+                  "name": "Label",
+                  "fill": "$color-primary",
+                  "content": "Your care",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "HGS3p",
+              "name": "Nav Messages",
+              "width": "fill_container",
+              "height": 48,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "NUH05",
+                  "name": "Label",
+                  "fill": "$color-on-surface-variant",
+                  "content": "Messages",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 13
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "O0y6V6",
+              "name": "Nav Birth plan",
+              "width": "fill_container",
+              "height": 48,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "e6AxlW",
+                  "name": "Label",
+                  "fill": "$color-on-surface-variant",
+                  "content": "Birth plan",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 13
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "hIf4L",
+              "name": "Nav Contract",
+              "width": "fill_container",
+              "height": 48,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "tSxTy",
+                  "name": "Label",
+                  "fill": "$color-on-surface-variant",
+                  "content": "Contract",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 13
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "IBxZ9",
+          "name": "Page Content",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            24,
+            20,
+            32,
+            20
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "sy2U3",
+              "name": "Page Title",
+              "fill": "$color-on-surface",
+              "content": "Your care",
+              "fontFamily": "$font-family-base",
+              "fontSize": 28,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "qZxXp",
+              "name": "Intro",
+              "fill": "$color-on-surface-variant",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Your Doula is Sam Reyes. Your due date is 4 March 2027.",
+              "fontFamily": "$font-family-base",
+              "fontSize": 15
+            },
+            {
+              "type": "frame",
+              "id": "k6bSa",
+              "name": "Card Birth plan",
+              "width": "fill_container",
+              "fill": "$color-surface-bright",
+              "cornerRadius": "$radius",
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                20,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ZlGpO",
+                  "name": "Title",
+                  "fill": "$color-on-surface",
+                  "content": "Birth plan",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "BpToP",
+                  "name": "Meta",
+                  "fill": "$color-on-surface-variant",
+                  "content": "Last edited 12 January",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 14
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "RCWTZ",
+              "name": "Card Contract",
+              "width": "fill_container",
+              "fill": "$color-surface-bright",
+              "cornerRadius": "$radius",
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                20,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ECy6M",
+                  "name": "Title",
+                  "fill": "$color-on-surface",
+                  "content": "Contract",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "mgeWo",
+                  "name": "Meta",
+                  "fill": "$color-on-surface-variant",
+                  "content": "Signed 2 December",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 14
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "zNozc",
+      "x": 1560,
+      "y": 2120,
+      "name": "Signed-out Shell",
+      "clip": true,
+      "width": 1440,
+      "height": 620,
+      "fill": "$color-surface",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "XZUZn",
+          "name": "Top Bar",
+          "width": "fill_container",
+          "height": 60,
+          "fill": "$color-surface-bright",
+          "stroke": "$color-outline-variant",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "strokeAlignment": "inner",
+          "padding": [
+            0,
+            "$gutter"
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "id": "k95Aq",
+              "type": "ref",
+              "ref": "y50ph5",
+              "name": "Brand Lockup",
+              "width": 145,
+              "height": 22
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "vZb1V",
+          "name": "Page Content",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "padding": [
+            64,
+            "$gutter"
+          ],
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "d1PaP",
+              "name": "Login Card",
+              "width": 400,
+              "fill": "$color-surface-bright",
+              "cornerRadius": "$radius",
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 20,
+              "padding": [
+                28,
+                30
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "OfSfe",
+                  "name": "Title",
+                  "fill": "$color-on-surface",
+                  "content": "Sign in",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 20,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "SHMNc",
+                  "name": "Field Email address",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "FSANU",
+                      "name": "Label",
+                      "fill": "$color-on-surface-variant",
+                      "content": "Email address",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "xC1QK",
+                      "name": "Input",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "$color-surface-bright",
+                      "cornerRadius": "$radius",
+                      "stroke": "$color-outline",
+                      "strokeWidth": 1,
+                      "strokeAlignment": "inner",
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "b1bReh",
+                          "name": "Value",
+                          "fill": "$color-on-surface",
+                          "fontFamily": "$font-family-base",
+                          "fontSize": 15
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "HHghf",
+                  "name": "Field Password",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "jjaLj",
+                      "name": "Label",
+                      "fill": "$color-on-surface-variant",
+                      "content": "Password",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "K3ieaL",
+                      "name": "Input",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "$color-surface-bright",
+                      "cornerRadius": "$radius",
+                      "stroke": "$color-outline",
+                      "strokeWidth": 1,
+                      "strokeAlignment": "inner",
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "HLOGz",
+                          "name": "Value",
+                          "fill": "$color-on-surface",
+                          "fontFamily": "$font-family-base",
+                          "fontSize": 15
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "C59fG",
+                  "name": "Submit",
+                  "width": "fill_container",
+                  "height": 40,
+                  "fill": "$color-primary",
+                  "cornerRadius": "$radius",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "oUfYm",
+                      "name": "Label",
+                      "fill": "$color-on-primary",
+                      "content": "Sign in",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 15,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "C1O2zm",
+      "x": -1,
+      "y": 2008,
+      "name": "Cloud Mark - sizes",
+      "clip": true,
+      "width": 600,
+      "height": 260,
+      "fill": "$color-surface-bright",
+      "gap": 40,
+      "padding": 40,
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "B9AjB6",
+          "name": "Cloud Mark",
+          "width": 120,
+          "height": 56,
+          "layout": "none",
+          "children": [
+            {
+              "type": "path",
+              "id": "NEeAq",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 1",
+              "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 120,
+              "height": 56,
+              "stroke": "$color-primary",
+              "strokeWidth": 9,
+              "strokeLinecap": "round"
+            },
+            {
+              "type": "path",
+              "id": "D5qlM",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 2",
+              "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 120,
+              "height": 56,
+              "stroke": "$color-primary-hover",
+              "strokeWidth": 9,
+              "strokeLinecap": "round"
+            },
+            {
+              "type": "path",
+              "id": "zUtyE",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 3",
+              "geometry": "M100 160a32 32 0 0 1 64 0",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 120,
+              "height": 56,
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 9,
+              "strokeLinecap": "round"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "J4lVL",
+          "name": "Cloud Mark",
+          "width": 60,
+          "height": 28,
+          "layout": "none",
+          "children": [
+            {
+              "type": "path",
+              "id": "MpChH",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 1",
+              "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 60,
+              "height": 28,
+              "stroke": "$color-primary",
+              "strokeWidth": 4,
+              "strokeLinecap": "round"
+            },
+            {
+              "type": "path",
+              "id": "s4qi8w",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 2",
+              "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 60,
+              "height": 28,
+              "stroke": "$color-primary-hover",
+              "strokeWidth": 4,
+              "strokeLinecap": "round"
+            },
+            {
+              "type": "path",
+              "id": "WyHcy",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 3",
+              "geometry": "M100 160a32 32 0 0 1 64 0",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 60,
+              "height": 28,
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 4,
+              "strokeLinecap": "round"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "VF6hE",
+          "name": "Cloud Mark",
+          "width": 38,
+          "height": 18,
+          "layout": "none",
+          "children": [
+            {
+              "type": "path",
+              "id": "VJe9A",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 1",
+              "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 38,
+              "height": 18,
+              "stroke": "$color-primary",
+              "strokeWidth": 3,
+              "strokeLinecap": "round"
+            },
+            {
+              "type": "path",
+              "id": "dwaYQ",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 2",
+              "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 38,
+              "height": 18,
+              "stroke": "$color-primary-hover",
+              "strokeWidth": 3,
+              "strokeLinecap": "round"
+            },
+            {
+              "type": "path",
+              "id": "DNbeJ",
+              "x": 0,
+              "y": 0,
+              "name": "Arc 3",
+              "geometry": "M100 160a32 32 0 0 1 64 0",
+              "viewBox": [
+                48,
+                76,
+                202,
+                94
+              ],
+              "width": 38,
+              "height": 18,
+              "stroke": "$color-outline-variant",
+              "strokeWidth": 3,
+              "strokeLinecap": "round"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "jI6Ch",
+      "x": 0,
+      "y": -140,
+      "name": "StaffTopBar",
+      "reusable": true,
+      "width": 1440,
+      "height": 60,
+      "fill": "$surface",
+      "stroke": "$hairline",
+      "strokeWidth": {
+        "bottom": 1
+      },
+      "strokeAlignment": "inner",
+      "padding": [
+        0,
+        "$gutter"
+      ],
+      "justifyContent": "space_between",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "moEBs",
+          "name": "Brand and Nav",
+          "height": "fill_container",
+          "gap": 44,
+          "alignItems": "center",
+          "children": [
+            {
+              "id": "J69Wxf",
+              "type": "ref",
+              "ref": "y50ph5",
+              "name": "Brand Lockup",
+              "width": 145,
+              "height": 22
+            },
+            {
+              "type": "frame",
+              "id": "luYHI",
+              "name": "Nav",
+              "height": "fill_container",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "adpio",
+                  "name": "Nav Overview",
+                  "height": "fill_container",
+                  "stroke": "$accent",
+                  "strokeWidth": {
+                    "bottom": 2
+                  },
+                  "strokeAlignment": "inner",
+                  "layout": "vertical",
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "lN1iD",
+                      "name": "Label",
+                      "fill": "$accent",
+                      "content": "Overview",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "LKOqs",
+                  "name": "Nav Clients",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Lw7F8",
+                      "name": "Label",
+                      "fill": "$muted",
+                      "content": "Clients",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "zqzu1",
+                  "name": "Nav Billing",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "MRwox",
+                      "name": "Label",
+                      "fill": "$muted",
+                      "content": "Billing",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bg4Co",
+                  "name": "Nav Staff",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "G742H3",
+                      "name": "Label",
+                      "fill": "$muted",
+                      "content": "Staff",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "QHQwj",
+                  "name": "Nav Offers",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "t8J6u",
+                      "name": "Label",
+                      "fill": "$muted",
+                      "content": "Offers",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SrtRk",
+                  "name": "Nav Settings",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "MNGnE",
+                      "name": "Label",
+                      "fill": "$muted",
+                      "content": "Settings",
+                      "fontFamily": "$font-sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ud5aQ",
+          "name": "Account",
+          "height": 44,
+          "gap": 18,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "kd9Gs",
+              "name": "Practice Switcher",
+              "height": 44,
+              "gap": 7,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "m9xE7",
+                  "name": "Practice Name",
+                  "fill": "$color-on-surface",
+                  "content": "Riverside Doula Collective",
+                  "fontFamily": "$font-family-base",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon",
+                  "id": "I9xjq",
+                  "name": "Caret",
+                  "width": 15,
+                  "height": 15,
+                  "icon": "chevron-down",
+                  "library": "lucide",
+                  "fill": "$color-on-surface-variant"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Yq3t6",
+              "name": "Avatar Hit Target",
+              "width": 44,
+              "height": 44,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "r82t01",
+                  "name": "Avatar",
+                  "width": 34,
+                  "height": 34,
+                  "fill": "$color-surface-container-high",
+                  "cornerRadius": 17,
+                  "stroke": "$color-outline-variant",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "lu1jw",
+                      "name": "Initials",
+                      "fill": "$color-on-surface",
+                      "content": "MG",
+                      "fontFamily": "$font-family-base",
+                      "fontSize": 13,
+                      "fontWeight": "600",
+                      "letterSpacing": 0.3
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "yGKIG",
+      "x": 0,
+      "y": -280,
+      "name": "CloudMark",
+      "reusable": true,
+      "width": 40,
+      "height": 19,
+      "layout": "none",
+      "children": [
+        {
+          "type": "path",
+          "id": "y4JFyd",
+          "x": 0,
+          "y": 0,
+          "name": "Arc 1",
+          "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
+          "viewBox": [
+            48,
+            76,
+            202,
+            94
+          ],
+          "width": 40,
+          "height": 19,
+          "stroke": "$color-primary",
+          "strokeWidth": 3,
+          "strokeLinecap": "round"
+        },
+        {
+          "type": "path",
+          "id": "omDp6",
+          "x": 0,
+          "y": 0,
+          "name": "Arc 2",
+          "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
+          "viewBox": [
+            48,
+            76,
+            202,
+            94
+          ],
+          "width": 40,
+          "height": 19,
+          "stroke": "$color-primary-hover",
+          "strokeWidth": 3,
+          "strokeLinecap": "round"
+        },
+        {
+          "type": "path",
+          "id": "WyIQC",
+          "x": 0,
+          "y": 0,
+          "name": "Arc 3",
+          "geometry": "M100 160a32 32 0 0 1 64 0",
+          "viewBox": [
+            48,
+            76,
+            202,
+            94
+          ],
+          "width": 40,
+          "height": 19,
+          "stroke": "$color-outline-variant",
+          "strokeWidth": 3,
+          "strokeLinecap": "round"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "y50ph5",
+      "x": 0,
+      "y": -380,
+      "name": "BrandLockup",
+      "reusable": true,
+      "gap": 10,
+      "alignItems": "center",
+      "children": [
+        {
+          "id": "sSmec",
+          "type": "ref",
+          "ref": "yGKIG",
+          "name": "Mark",
+          "width": 40,
+          "height": 19
+        },
+        {
+          "type": "text",
+          "id": "QQm2H",
+          "name": "Wordmark",
+          "fill": "$color-on-surface",
+          "content": "Doula Cloud",
+          "fontFamily": "$font-family-base",
+          "fontSize": 17,
+          "fontWeight": "600",
+          "letterSpacing": -0.2
         }
       ]
     }
