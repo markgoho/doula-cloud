@@ -18,23 +18,31 @@ describe('Text.svelte', () => {
 		await expect.element(page.getByText('Body copy')).toBeVisible();
 	});
 
-	it('applies a size-matching class for each size', async () => {
-		for (const size of ['sm', 'base', 'lg'] as const) {
-			const { container } = await setup({ size });
+	it('reads at the body step in the default tone when nothing is asked for', async () => {
+		await setup();
 
-			expect(container.querySelector(`p.size-${size}`)).toBeInTheDocument();
+		await expect.element(page.getByText('Body copy')).toHaveClass(/step-body\b/);
+		await expect.element(page.getByText('Body copy')).toHaveClass(/tone-default/);
+	});
+
+	it.each(['body', 'body-sm', 'label', 'meta'] as const)(
+		'applies the %s type step',
+		async (step) => {
+			const { container } = await setup({ step });
+
+			expect(container.querySelector(`p.step-${step}`)).toBeVisible();
 		}
+	);
+
+	it.each(['default', 'variant', 'muted'] as const)('applies the %s color tone', async (tone) => {
+		const { container } = await setup({ tone });
+
+		expect(container.querySelector(`p.tone-${tone}`)).toBeVisible();
 	});
 
-	it('applies the muted class when muted is true', async () => {
-		const { container } = await setup({ muted: true });
+	it('varies step and tone independently, so a quiet label is expressible', async () => {
+		const { container } = await setup({ step: 'label', tone: 'muted' });
 
-		expect(container.querySelector('p.muted')).toBeInTheDocument();
-	});
-
-	it('omits the muted class when muted is false', async () => {
-		const { container } = await setup({ muted: false });
-
-		expect(container.querySelector('p.muted')).not.toBeInTheDocument();
+		expect(container.querySelector('p.step-label.tone-muted')).toBeVisible();
 	});
 });

@@ -55,7 +55,7 @@
 			gap: var(--space-2);
 			font-family: var(--font-family-base);
 			font-weight: var(--font-weight-medium);
-			border-radius: var(--radius-sm);
+			border-radius: var(--radius);
 			border: var(--border-thin) solid transparent;
 		}
 
@@ -65,52 +65,52 @@
 		}
 
 		button:focus-visible {
-			outline: 2px solid var(--color-accent);
+			outline: 2px solid var(--color-primary);
 			outline-offset: 2px;
 		}
 
 		button.size-sm {
 			min-height: 2rem;
 			padding: var(--space-1) var(--space-3);
-			font-size: var(--text-sm);
+			font-size: var(--text-body-sm-size);
 		}
 
 		button.size-md {
 			min-height: 2.5rem;
 			padding: var(--space-2) var(--space-4);
-			font-size: var(--text-base);
+			font-size: var(--text-body-size);
 		}
 
 		button.size-lg {
 			min-height: 3rem;
 			padding: var(--space-3) var(--space-6);
-			font-size: var(--text-lg);
+			font-size: var(--text-subheading-size);
 		}
 
 		button.primary {
-			color: var(--color-accent-contrast);
-			background-color: var(--color-accent);
+			color: var(--color-on-primary);
+			background-color: var(--color-primary);
 		}
 
 		button.primary:not(:disabled):hover {
-			background-color: var(--color-accent-strong);
+			background-color: var(--color-primary-hover);
 		}
 
 		button.secondary {
-			color: var(--color-text);
+			color: var(--color-on-surface);
 			background-color: transparent;
-			border-color: var(--color-input-border);
+			border-color: var(--color-outline);
 		}
 
 		button.secondary:not(:disabled):hover {
-			background-color: var(--color-border);
+			background-color: var(--color-outline-variant);
 		}
 
-		/* --color-error's lightness tracks --color-accent's per theme (light:
-		   dark-on-light, dark: light-on-dark), so --color-accent-contrast
+		/* --color-error's lightness tracks --color-primary's per theme (light:
+		   dark-on-light, dark: light-on-dark), so --color-on-primary
 		   stays legible here too -- no separate error-contrast token needed. */
 		button.destructive {
-			color: var(--color-accent-contrast);
+			color: var(--color-on-primary);
 			background-color: var(--color-error);
 		}
 

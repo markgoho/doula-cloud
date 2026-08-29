@@ -34,27 +34,27 @@
 			margin: 0;
 			padding: var(--space-3) var(--space-4);
 			border: var(--border-thin) solid;
-			border-radius: var(--radius-sm);
+			border-radius: var(--radius);
 			font-family: var(--font-family-base);
-			font-size: var(--text-sm);
+			font-size: var(--text-body-sm-size);
 		}
 
 		p.error {
 			color: var(--color-error);
 			border-color: var(--color-error);
-			background-color: color-mix(in oklch, var(--color-error) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-error) 12%, var(--color-surface));
 		}
 
 		p.status {
 			color: var(--color-status);
 			border-color: var(--color-status);
-			background-color: color-mix(in oklch, var(--color-status) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-status) 12%, var(--color-surface));
 		}
 
 		p.info {
 			color: var(--color-info);
 			border-color: var(--color-info);
-			background-color: color-mix(in oklch, var(--color-info) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-info) 12%, var(--color-surface));
 		}
 	}
 </style>

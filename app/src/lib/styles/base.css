@@ -4,8 +4,10 @@
 
 body {
 	font-family: var(--font-family-base);
-	font-size: var(--text-base);
-	font-weight: var(--font-weight-normal);
-	color: var(--color-text);
-	background-color: var(--color-bg);
+	font-size: var(--text-body-size);
+	font-weight: var(--text-body-weight);
+	line-height: var(--text-body-leading);
+	letter-spacing: var(--text-body-tracking);
+	color: var(--color-on-surface);
+	background-color: var(--color-surface);
 }

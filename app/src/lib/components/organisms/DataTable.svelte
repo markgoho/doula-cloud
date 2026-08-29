@@ -82,7 +82,7 @@
 		td {
 			padding: var(--space-2) var(--space-3);
 			text-align: start;
-			border-block-end: var(--border-thin) solid var(--color-border);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
 		th {

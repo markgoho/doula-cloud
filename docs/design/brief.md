@@ -122,25 +122,44 @@ between the palette that won the comparison and the one that did not.
 OKLCH is authoritative; the hex is the value that was rendered and is given so
 the two can be checked against each other.
 
+> **Amended 2026-08-28 on [#417](https://github.com/markgoho/doula-cloud/issues/417).**
+> The values below are unchanged from the rendered direction. Three *role
+> assignments* changed, because the originals failed this brief's own contrast
+> floors when the arithmetic was actually run, and a fourth changed because
+> pure white is not used anywhere in this product. The reasoning is under
+> [Rules the palette must obey](#rules-the-palette-must-obey); the arithmetic
+> lives in `app/src/lib/styles/tokens.spec.ts` and runs in CI.
+
 | Token role | OKLCH | Hex | Used for |
 |---|---|---|---|
-| `surface` | `oklch(98.5% 0.008 7)` | `#fff8f9` | The page ground |
-| `surface-container-low` | `oklch(96.7% 0.011 357)` | `#fbf1f4` | A panel one step up from the page |
-| `surface-container` | `oklch(94.9% 0.011 357)` | `#f5ebee` | A panel two steps up |
-| `surface-container-high` | `oklch(93.3% 0.010 2)` | `#efe6e8` | A panel three steps up |
-| `surface-container-highest` | `oklch(91.5% 0.011 355)` | `#e9e0e3` | Hairline borders, dividers, the top-bar rule |
+| `surface-bright` | `oklch(98.5% 0.008 7)` | `#fff8f9` | **Cards, menus** — the raised surface |
+| `surface` | `oklch(96.7% 0.011 357)` | `#fbf1f4` | The page ground |
+| `surface-container` | `oklch(94.9% 0.011 357)` | `#f5ebee` | Inset panels, table headers |
+| `surface-container-high` | `oklch(93.3% 0.010 2)` | `#efe6e8` | A deeper panel |
+| `surface-container-highest` | `oklch(91.5% 0.011 355)` | `#e9e0e3` | The deepest panel |
 | `on-surface` | `oklch(22.4% 0.009 352)` | `#1f1a1c` | Body and heading text |
 | `on-surface-variant` | `oklch(40.0% 0.023 343)` | `#51434b` | Secondary text, nav items at rest |
-| `outline` | `oklch(57.3% 0.023 346)` | `#83737b` | Metadata, timestamps, icon strokes at rest |
-| `outline-variant` | `oklch(83.1% 0.026 346)` | `#d5c1cb` | Form-control borders |
+| `on-surface-muted` | `oklch(50.8% 0.023 346)` | `#706068` | Metadata, timestamps, help text |
+| `outline` | `oklch(57.3% 0.023 346)` | `#83737b` | Form-control borders, icon strokes at rest |
+| `outline-variant` | `oklch(83.1% 0.026 346)` | `#d5c1cb` | Hairlines, dividers, card edges, the top-bar rule |
 | `primary` | `oklch(41.2% 0.119 339)` | `#722c60` | Primary button fill, active nav, links |
-| `primary-container` | `oklch(49.9% 0.121 339)` | `#8e4479` | The lighter accent tone; hover on primary |
+| `primary-hover` | `oklch(49.9% 0.121 339)` | `#8e4479` | The lighter accent tone; hover on primary |
+| `on-primary` | `oklch(99% 0.005 339)` | — | Text and icons on the accent |
 | `error` | `oklch(50.6% 0.193 28)` | `#ba1a1a` | Validation and destructive |
+| `on-error` | `oklch(99% 0.005 28)` | — | Text on an error fill |
 
-Cards are **white** (`#ffffff`) on the `surface` ground, bounded by a one-pixel
-`surface-container-highest` border. That pairing is the direction's signature at
-the surface level: containers are declared by an edge, never by a fill and never
-by a shadow.
+Cards sit on the `surface` ground at `surface-bright`, bounded by a one-pixel
+`outline-variant` border. That pairing is the direction's signature at the
+surface level: containers are declared by an edge, never by a fill and never by
+a shadow.
+
+**A card is the top of the surface ladder, not an exception above it.** The
+original wording made cards pure `#ffffff` — lighter than a ground that every
+other step descends from, so the card was the one element escaping the ladder,
+and escaping it into a value this brief forbids by name two sections later. It
+is now simply the lightest rung. Nothing in this product is pure white or pure
+black, in either theme: those extremes fatigue the eye over a long shift, which
+is the wrong trade for a tool read at 3am.
 
 ### Rules the palette must obey
 
@@ -153,10 +172,25 @@ by a shadow.
 - **Status colour is not accent colour.** `error`, and the status / info /
   warning family already in `tokens.css`, keep their own hues and are not
   harmonised toward the plum.
-- **Contrast floors are non-negotiable.** Body text and its background meet
-  WCAG 2.2 SC 1.4.3 at 4.5:1; form-control borders and other non-text
-  boundaries meet SC 1.4.11 at 3:1. `outline-variant` was chosen for form
-  borders for exactly this reason — the lighter divider tone does not qualify.
+- **Contrast floors are non-negotiable, and are checked rather than claimed.**
+  Body text and its background meet WCAG 2.2 SC 1.4.3 at 4.5:1. The boundary of
+  a **user-interface component** — a form control, a focus ring — meets SC
+  1.4.11 at 3:1, which is why form borders use `outline` and not the lighter
+  `outline-variant`.
+
+  SC 1.4.11 covers UI components and graphics that carry meaning. It does **not**
+  cover a decorative divider, and this brief does not pretend otherwise: forcing
+  a hairline to 3:1 would drag it to a mid-grey and destroy "containers are
+  declared by an edge". `outline-variant` is exempt, deliberately.
+
+  These roles follow [Material Design 3](https://m3.material.io/styles/color/roles)
+  as M3 defines them: `outline` is a component's border, `outline-variant` is a
+  decorative divider, and `surface-bright` is the surface lighter than the page
+  ground. An earlier draft of this brief swapped the first two and hard-coded
+  the third, which is precisely what produced its failing pairs — a
+  form-control border at **1.62:1** against a 3:1 floor, and metadata text at
+  **3.83:1** against a 4.5:1 floor. Metadata now has its own tone,
+  `on-surface-muted`, because one value cannot serve two floors at once.
 
 ### Dark
 
@@ -438,9 +472,13 @@ the site can adopt it later without a redesign:
 
 Named here so nobody reads silence as permission:
 
-- **The token file itself.** Which custom properties exist, what they are
-  called, and how a component consumes them is the token-overhaul ticket's work.
-  This brief gives the values; it does not give the API.
+- ~~**The token file itself.**~~ **Settled** on
+  [#417](https://github.com/markgoho/doula-cloud/issues/417): M3 role names
+  under a `--color-` prefix, eight type steps at four properties each, and a
+  closed purpose-named prop on `Text` and `Heading` so a route never names a
+  size. Working through it amended the palette above; this brief gave the
+  values, and the API it did not give now exists in
+  `app/src/lib/styles/tokens.css`.
 - **The application shell's implementation.** The top bar described under
   Density is the shape the chosen direction rendered. Building it for the Staff
   side and the Client portal is separate work.

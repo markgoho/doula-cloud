@@ -48,8 +48,8 @@
 	@layer components {
 		.hint {
 			margin: 0;
-			color: var(--color-muted);
-			font-size: var(--text-sm);
+			color: var(--color-on-surface-variant);
+			font-size: var(--text-body-sm-size);
 		}
 	}
 </style>

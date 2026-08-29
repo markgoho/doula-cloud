@@ -53,16 +53,16 @@
 		legend {
 			padding: 0;
 			font-weight: var(--font-weight-medium);
-			color: var(--color-text);
+			color: var(--color-on-surface);
 		}
 
 		input {
-			accent-color: var(--color-accent);
+			accent-color: var(--color-primary);
 			cursor: pointer;
 		}
 
 		input:focus-visible {
-			outline: 2px solid var(--color-accent);
+			outline: 2px solid var(--color-primary);
 			outline-offset: 2px;
 		}
 	}

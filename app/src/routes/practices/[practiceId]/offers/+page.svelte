@@ -37,7 +37,7 @@
 <Heading level={1} text="Your offers" />
 <Text
 	text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer, and the practice may ask you again."
-	muted
+	tone="variant"
 />
 
 {#if error}

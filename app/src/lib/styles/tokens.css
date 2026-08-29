@@ -1,45 +1,123 @@
 /*
- * Doula Cloud design tokens — wayfinder ticket #94 (visual identity).
- * Mood: "Plum Dusk" — warm & calm, confident structure. Validated via
- * prototype on the login page (see branch worktree-visual-identity-94).
+ * Doula Cloud design tokens.
  *
- * Not yet wired into any page — consumption mechanism is decided by
- * wayfinder ticket #95 (CSS architecture).
+ * Values come from `docs/design/brief.md` ("Plum Dusk, evolved", #409). The
+ * token API -- which properties exist, what they are called, how a component
+ * consumes one -- is wayfinder ticket #417.
+ *
+ * OKLCH is authoritative. No hex, no rgb(), anywhere in this file or in any
+ * component: a perceptual lightness axis is what makes the dark theme a
+ * derivation rather than a second hand-tuned palette.
+ *
+ * Color names follow Material Design 3's roles, used as M3 defines them:
+ * `outline` is a component's border, `outline-variant` is a decorative
+ * divider, and `surface-bright` is the surface lighter than the page ground.
+ * The brief shuffled three of these; #417 put them back, which is what fixed
+ * its contrast failures. Every pair is proved against WCAG floors in both
+ * themes by `tokens.spec.ts` -- edit a value and the test tells you.
+ *
+ * Nothing here is pure white or pure black, in either theme, on purpose.
  */
 
 :root {
-	/* Color — light (default) */
-	--color-bg: oklch(96% 0.015 320);
-	--color-panel-bg: oklch(38% 0.08 320);
-	--color-panel-text: oklch(96% 0.01 320);
-	--color-text: oklch(24% 0.02 320);
-	--color-muted: oklch(46% 0.02 320);
-	--color-border: oklch(85% 0.02 320);
-	--color-accent: oklch(48% 0.13 325);
-	--color-accent-strong: oklch(40% 0.13 325);
-	--color-accent-contrast: oklch(99% 0.005 325);
-	/* --color-border is ~1.4:1 against --color-bg -- too light for SC 1.4.11's
-	   3:1 non-text contrast on a form-control boundary, so form atoms use this
-	   darker token instead (#99). */
-	--color-input-border: oklch(60% 0.02 320);
-	--color-error: oklch(45% 0.19 25);
+	/* ------------------------------------------------------------------
+	 * Color -- light (default)
+	 *
+	 * Surfaces, from the raised card down to the deepest inset panel. The
+	 * card is the TOP of this ladder, not an exception above it.
+	 * ------------------------------------------------------------------ */
+	--color-surface-bright: oklch(98.5% 0.008 7);
+	--color-surface: oklch(96.7% 0.011 357);
+	--color-surface-container: oklch(94.9% 0.011 357);
+	--color-surface-container-high: oklch(93.3% 0.01 2);
+	--color-surface-container-highest: oklch(91.5% 0.011 355);
+
+	/* Text, three tones. `on-surface-muted` exists because `outline` cannot
+	   carry text at 4.5:1 -- see #417's Q1. */
+	--color-on-surface: oklch(22.4% 0.009 352);
+	--color-on-surface-variant: oklch(40% 0.023 343);
+	--color-on-surface-muted: oklch(50.8% 0.023 346);
+
+	/* Borders. `outline` is a control boundary and must clear 3:1 (WCAG SC
+	   1.4.11); `outline-variant` is a decorative hairline and is exempt.
+	   This is #99's --color-input-border / --color-border distinction,
+	   preserved under M3's names. */
+	--color-outline: oklch(57.3% 0.023 346);
+	--color-outline-variant: oklch(83.1% 0.026 346);
+
+	/* Accent. Spent on primary actions and active state only. Note hover is
+	   LIGHTER than rest in both themes -- the brief's `primary-container`
+	   tone -- which is the reverse of the old --color-accent-strong. */
+	--color-primary: oklch(41.2% 0.119 339);
+	--color-primary-hover: oklch(49.9% 0.121 339);
+	--color-on-primary: oklch(99% 0.005 339);
+
+	/* Status. Keeps its own hues; deliberately not harmonized toward plum. */
+	--color-error: oklch(50.6% 0.193 28);
+	--color-on-error: oklch(99% 0.005 28);
 	--color-status: oklch(45% 0.15 145);
 	--color-info: oklch(45% 0.15 250);
 	--color-warning: oklch(45% 0.15 85);
-	/* Close to --color-muted's value but a distinct token on purpose: this
-	   sits in the error/status/info/warning severity family (45%/72%
-	   lightness pattern) for Badge's neutral variant, while --color-muted is
-	   a text-hierarchy token -- they can diverge independently later. */
-	--color-neutral: oklch(45% 0.02 320);
+	/* A text-hierarchy token would be --color-on-surface-*; this one sits in
+	   the error/status/info/warning severity family for Badge's neutral
+	   variant, so the two can diverge independently. */
+	--color-neutral: oklch(45% 0.02 350);
 
-	/* Typography */
-	--font-family-base: system-ui, sans-serif;
-	--text-sm: 0.875rem;
-	--text-base: 1rem;
-	--text-lg: 1.05rem;
-	--text-xl: 1.25rem;
-	--text-2xl: 1.5rem;
-	--text-3xl: 2rem;
+	/* ------------------------------------------------------------------
+	 * Typography -- eight steps, four axes each.
+	 *
+	 * Four properties rather than one `font` shorthand: the shorthand
+	 * silently resets `font-variant-numeric`, which would kill the brief's
+	 * "tabular figures wherever numbers are compared" rule at every call
+	 * site that used it.
+	 *
+	 * Step names are the brief's own. They are read only inside
+	 * src/lib/components/** and src/lib/styles/** -- a route names a
+	 * purpose (`<Heading variant="section">`), never a size.
+	 * ------------------------------------------------------------------ */
+	--font-family-base: 'Hanken Grotesk', 'Hanken Grotesk Fallback', ui-sans-serif, system-ui,
+		sans-serif;
+
+	--text-display-size: 2.25rem;
+	--text-display-weight: 600;
+	--text-display-leading: 1.15;
+	--text-display-tracking: -0.02em;
+
+	--text-heading-lg-size: 1.75rem;
+	--text-heading-lg-weight: 600;
+	--text-heading-lg-leading: 1.2;
+	--text-heading-lg-tracking: -0.018em;
+
+	--text-heading-size: 1.25rem;
+	--text-heading-weight: 600;
+	--text-heading-leading: 1.3;
+	--text-heading-tracking: -0.012em;
+
+	--text-subheading-size: 1rem;
+	--text-subheading-weight: 600;
+	--text-subheading-leading: 1.4;
+	--text-subheading-tracking: -0.006em;
+
+	--text-body-size: 0.9375rem;
+	--text-body-weight: 400;
+	--text-body-leading: 1.55;
+	--text-body-tracking: 0;
+
+	--text-body-sm-size: 0.875rem;
+	--text-body-sm-weight: 400;
+	--text-body-sm-leading: 1.5;
+	--text-body-sm-tracking: 0;
+
+	--text-label-size: 0.8125rem;
+	--text-label-weight: 500;
+	--text-label-leading: 1.35;
+	--text-label-tracking: 0.005em;
+
+	--text-meta-size: 0.75rem;
+	--text-meta-weight: 400;
+	--text-meta-leading: 1.4;
+	--text-meta-tracking: 0.01em;
+
 	--font-weight-normal: 400;
 	--font-weight-medium: 500;
 	--font-weight-semibold: 600;
@@ -49,55 +127,90 @@
 	--space-2: 0.5rem;
 	--space-3: 0.75rem;
 	--space-4: 1rem;
+	--space-5: 1.25rem;
 	--space-6: 1.5rem;
+	--space-7: 1.75rem;
 	--space-8: 2rem;
+	--space-10: 2.5rem;
 	--space-12: 3rem;
 
-	/* Radius */
-	--radius-sm: 8px;
+	/* Fixed dimensions the brief states as numbers. Tokens rather than magic
+	   numbers, so #431's shell and #422's Templates share one source. */
+	--control-height: 2.5rem;
+	--row-height: 2.5rem;
+	--top-bar-height: 3.75rem;
+	--hit-target-min: 2.75rem;
 
-	/* Border */
+	/* Shape. One radius only -- the brief forbids a second, larger one, so
+	   there is deliberately no --radius-md to reach for. */
+	--radius: 8px;
 	--border-thin: 1px;
+	--border-active: 2px;
 
-	/* Layout — wayfinder #98, default line-length cap for the Center primitive */
+	/* Motion. Enforcement (including prefers-reduced-motion) is #418. */
+	--motion-state: 120ms;
+	--motion-enter: 180ms;
+	--motion-nav: 200ms;
+	--ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+	/* Layout -- #98, default line-length cap for the Center primitive. */
 	--measure: 65ch;
 }
 
-/* Dark — follows system preference unless a manual [data-theme] override wins */
+/*
+ * Dark -- derived, not invented. Hues are held; only lightness moves, and the
+ * surface ladder inverts so the page ground is the darkest step and each
+ * container gets lighter. Type, spacing, shape and motion do not vary by
+ * theme and are declared once above.
+ *
+ * The two blocks below are byte-identical on purpose: `prefers-color-scheme`
+ * follows the system, `[data-theme]` is a manual override that wins. CSS has
+ * no way to share one declaration set across a media query and a plain
+ * selector, so `tokens.spec.ts` asserts the two stay in sync rather than
+ * trusting whoever edits next.
+ */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
-		--color-bg: oklch(21% 0.015 320);
-		--color-panel-bg: oklch(16% 0.05 320);
-		--color-panel-text: oklch(94% 0.01 320);
-		--color-text: oklch(92% 0.01 320);
-		--color-muted: oklch(65% 0.02 320);
-		--color-border: oklch(32% 0.02 320);
-		--color-accent: oklch(72% 0.14 325);
-		--color-accent-strong: oklch(80% 0.14 325);
-		--color-accent-contrast: oklch(18% 0.02 325);
-		--color-input-border: oklch(55% 0.02 320);
-		--color-error: oklch(72% 0.19 25);
+		--color-surface-bright: oklch(22% 0.01 350);
+		--color-surface: oklch(17.5% 0.01 350);
+		--color-surface-container: oklch(26% 0.011 350);
+		--color-surface-container-high: oklch(29.5% 0.011 350);
+		--color-surface-container-highest: oklch(33% 0.011 350);
+		--color-on-surface: oklch(93% 0.008 350);
+		--color-on-surface-variant: oklch(78% 0.02 346);
+		--color-on-surface-muted: oklch(71% 0.022 346);
+		--color-outline: oklch(60% 0.023 346);
+		--color-outline-variant: oklch(40% 0.024 346);
+		--color-primary: oklch(84% 0.116 341);
+		--color-primary-hover: oklch(90% 0.08 341);
+		--color-on-primary: oklch(22% 0.03 339);
+		--color-error: oklch(75% 0.19 28);
+		--color-on-error: oklch(22% 0.03 28);
 		--color-status: oklch(72% 0.15 145);
 		--color-info: oklch(72% 0.15 250);
 		--color-warning: oklch(72% 0.15 85);
-		--color-neutral: oklch(72% 0.02 320);
+		--color-neutral: oklch(72% 0.02 350);
 	}
 }
 
 :root[data-theme='dark'] {
-	--color-bg: oklch(21% 0.015 320);
-	--color-panel-bg: oklch(16% 0.05 320);
-	--color-panel-text: oklch(94% 0.01 320);
-	--color-text: oklch(92% 0.01 320);
-	--color-muted: oklch(65% 0.02 320);
-	--color-border: oklch(32% 0.02 320);
-	--color-accent: oklch(72% 0.14 325);
-	--color-accent-strong: oklch(80% 0.14 325);
-	--color-accent-contrast: oklch(18% 0.02 325);
-	--color-input-border: oklch(55% 0.02 320);
-	--color-error: oklch(72% 0.19 25);
+	--color-surface-bright: oklch(22% 0.01 350);
+	--color-surface: oklch(17.5% 0.01 350);
+	--color-surface-container: oklch(26% 0.011 350);
+	--color-surface-container-high: oklch(29.5% 0.011 350);
+	--color-surface-container-highest: oklch(33% 0.011 350);
+	--color-on-surface: oklch(93% 0.008 350);
+	--color-on-surface-variant: oklch(78% 0.02 346);
+	--color-on-surface-muted: oklch(71% 0.022 346);
+	--color-outline: oklch(60% 0.023 346);
+	--color-outline-variant: oklch(40% 0.024 346);
+	--color-primary: oklch(84% 0.116 341);
+	--color-primary-hover: oklch(90% 0.08 341);
+	--color-on-primary: oklch(22% 0.03 339);
+	--color-error: oklch(75% 0.19 28);
+	--color-on-error: oklch(22% 0.03 28);
 	--color-status: oklch(72% 0.15 145);
 	--color-info: oklch(72% 0.15 250);
 	--color-warning: oklch(72% 0.15 85);
-	--color-neutral: oklch(72% 0.02 320);
+	--color-neutral: oklch(72% 0.02 350);
 }

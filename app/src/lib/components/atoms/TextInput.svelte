@@ -48,10 +48,10 @@
 		input {
 			min-height: 2.5rem;
 			padding: var(--space-2) var(--space-3);
-			color: var(--color-text);
-			background-color: var(--color-bg);
-			border: var(--border-thin) solid var(--color-input-border);
-			border-radius: var(--radius-sm);
+			color: var(--color-on-surface);
+			background-color: var(--color-surface);
+			border: var(--border-thin) solid var(--color-outline);
+			border-radius: var(--radius);
 		}
 
 		input.invalid {
@@ -64,7 +64,7 @@
 		}
 
 		input:focus-visible {
-			outline: 2px solid var(--color-accent);
+			outline: 2px solid var(--color-primary);
 			outline-offset: 2px;
 		}
 	}

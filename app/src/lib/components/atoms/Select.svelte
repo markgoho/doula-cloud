@@ -60,11 +60,11 @@
 			width: 100%;
 			padding: var(--space-2) var(--space-3);
 			font-family: var(--font-family-base);
-			font-size: var(--text-base);
-			color: var(--color-text);
-			background-color: var(--color-bg);
-			border: var(--border-thin) solid var(--color-input-border);
-			border-radius: var(--radius-sm);
+			font-size: var(--text-body-size);
+			color: var(--color-on-surface);
+			background-color: var(--color-surface);
+			border: var(--border-thin) solid var(--color-outline);
+			border-radius: var(--radius);
 		}
 
 		select::picker(select) {
@@ -72,32 +72,32 @@
 			margin-top: var(--space-1);
 			padding: var(--space-1);
 			font-family: var(--font-family-base);
-			font-size: var(--text-base);
-			color: var(--color-text);
-			background-color: var(--color-bg);
-			border: var(--border-thin) solid var(--color-input-border);
-			border-radius: var(--radius-sm);
+			font-size: var(--text-body-size);
+			color: var(--color-on-surface);
+			background-color: var(--color-surface);
+			border: var(--border-thin) solid var(--color-outline);
+			border-radius: var(--radius);
 		}
 
 		select::picker-icon {
-			color: var(--color-muted);
+			color: var(--color-on-surface-variant);
 		}
 
 		select option {
 			padding: var(--space-2) var(--space-3);
-			border-radius: var(--radius-sm);
+			border-radius: var(--radius);
 		}
 
 		select option:hover {
-			background-color: var(--color-border);
+			background-color: var(--color-outline-variant);
 		}
 
 		select option::checkmark {
-			color: var(--color-accent);
+			color: var(--color-primary);
 		}
 
 		select:focus-visible {
-			outline: 2px solid var(--color-accent);
+			outline: 2px solid var(--color-primary);
 			outline-offset: 2px;
 		}
 

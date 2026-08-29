@@ -47,7 +47,7 @@
 		input {
 			inline-size: 1.5rem;
 			block-size: 1.5rem;
-			accent-color: var(--color-accent);
+			accent-color: var(--color-primary);
 			cursor: pointer;
 		}
 
@@ -62,7 +62,7 @@
 		}
 
 		input:focus-visible {
-			outline: 2px solid var(--color-accent);
+			outline: 2px solid var(--color-primary);
 			outline-offset: 2px;
 		}
 
@@ -71,9 +71,9 @@
 			position: relative;
 			inline-size: 2.5rem;
 			block-size: 1.5rem;
-			border: var(--border-thin) solid var(--color-input-border);
+			border: var(--border-thin) solid var(--color-outline);
 			border-radius: 999px;
-			background-color: var(--color-border);
+			background-color: var(--color-outline-variant);
 		}
 
 		input.toggle::before {
@@ -84,11 +84,11 @@
 			inline-size: 1.2rem;
 			block-size: 1.2rem;
 			border-radius: 50%;
-			background-color: var(--color-bg);
+			background-color: var(--color-surface);
 		}
 
 		input.toggle:checked {
-			background-color: var(--color-accent);
+			background-color: var(--color-primary);
 		}
 
 		input.toggle:checked::before {

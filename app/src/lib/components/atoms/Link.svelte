@@ -55,33 +55,33 @@
 		}
 
 		a:focus-visible {
-			outline: 2px solid var(--color-accent);
+			outline: 2px solid var(--color-primary);
 			outline-offset: 2px;
 		}
 
 		a[aria-current='page'] {
-			color: var(--color-accent);
+			color: var(--color-primary);
 			font-weight: var(--font-weight-semibold);
 		}
 
 		a.primary {
-			color: var(--color-accent);
+			color: var(--color-primary);
 		}
 
 		a.primary:hover {
-			color: var(--color-accent-strong);
+			color: var(--color-primary-hover);
 		}
 
 		a.secondary {
-			color: var(--color-text);
+			color: var(--color-on-surface);
 		}
 
 		a.secondary:hover {
-			color: var(--color-accent);
+			color: var(--color-primary);
 		}
 
 		/* A block-level tile: icon over label, its own chrome. tokens.css has
-		   no --color-surface / --space-5 yet -- both are asked for by name
+		   no --color-surface-bright / --space-5 yet -- both are asked for by name
 		   with a light fallback so this picks them up unchanged once they
 		   land (see docs/design/brief.md). */
 		a.card {
@@ -90,25 +90,25 @@
 			gap: 14px;
 			inline-size: 100%;
 			padding: var(--space-5, 1.25rem);
-			border: var(--border-thin) solid var(--color-border);
-			border-radius: var(--radius-sm);
-			background-color: var(--color-surface, oklch(99% 0.004 320));
-			color: var(--color-text);
-			font-size: var(--text-base);
+			border: var(--border-thin) solid var(--color-outline-variant);
+			border-radius: var(--radius);
+			background-color: var(--color-surface-bright, oklch(99% 0.004 320));
+			color: var(--color-on-surface);
+			font-size: var(--text-body-size);
 			font-weight: var(--font-weight-medium);
 			line-height: 1.2;
 		}
 
 		a.card:hover {
-			border-color: var(--color-accent);
+			border-color: var(--color-primary);
 		}
 
 		a.card :global(svg) {
-			color: var(--color-muted);
+			color: var(--color-on-surface-variant);
 		}
 
 		a.card:hover :global(svg) {
-			color: var(--color-accent);
+			color: var(--color-primary);
 		}
 
 		/* WCAG-standard clip technique: stays in the accessibility tree and

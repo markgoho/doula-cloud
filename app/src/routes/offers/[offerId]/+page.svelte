@@ -68,7 +68,7 @@
 {#if !token}
 	<Notice message="This link is missing its token. Open the offer from the email you were sent." variant="error" />
 {:else if !offer}
-	<Text text="Enter the six-digit code from the email to open this offer." muted />
+	<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
 	<form onsubmit={handleOpen}>
 		<label>
 			Access code
@@ -100,7 +100,7 @@
 	</dl>
 
 	{#if offer.state === 'offered'}
-		<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." muted />
+		<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." tone="variant" />
 		<Link href={`${resolve('/accept-invite')}?token=${encodeURIComponent(token)}`} label="Join and accept" />
 		<Button label="Decline" variant="secondary" onClick={handleDecline} loading={isDeclining} />
 	{/if}

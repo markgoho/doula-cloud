@@ -1,57 +1,67 @@
 <script lang="ts">
+	/*
+	 * Two axes, two owners (#417). `level` is document structure -- it sets
+	 * the screen-reader outline, and only the page's author knows it.
+	 * `variant` is what the heading IS, and the design system decides how
+	 * big that looks. The map below is the single place a size lives.
+	 *
+	 * The brief's `display` step is deliberately unreachable here: it is
+	 * allowed on "the one page title on a hub", so the OverviewHub Template
+	 * (#422) owns it. A one-per-app rule that depends on everyone
+	 * remembering it is not a rule.
+	 */
 	interface Properties {
 		level: 1 | 2 | 3 | 4 | 5 | 6;
+		variant?: 'page' | 'section' | 'card';
 		text: string;
 	}
 
-	let { level, text }: Properties = $props();
+	let { level, variant, text }: Properties = $props();
 
+	const fallbackByLevel = {
+		1: 'page',
+		2: 'section',
+		3: 'card',
+		4: 'card',
+		5: 'card',
+		6: 'card'
+	} as const;
+	const resolved = $derived(variant ?? fallbackByLevel[level]);
 	const tag = $derived(`h${level}`);
+	const classes = $derived(`variant-${resolved}`);
 </script>
 
-<svelte:element this={tag} class={`level-${level}`}>{text}</svelte:element>
+<svelte:element this={tag} class={classes}>{text}</svelte:element>
 
 <style>
 	@layer components {
-		.level-1,
-		.level-2,
-		.level-3,
-		.level-4,
-		.level-5,
-		.level-6 {
+		.variant-page,
+		.variant-section,
+		.variant-card {
 			margin: 0;
 			font-family: var(--font-family-base);
-			color: var(--color-text);
-			line-height: 1.2;
-			font-weight: var(--font-weight-semibold);
+			color: var(--color-on-surface);
 		}
 
-		.level-1 {
-			font-size: var(--text-3xl);
+		.variant-page {
+			font-size: var(--text-heading-lg-size);
+			font-weight: var(--text-heading-lg-weight);
+			line-height: var(--text-heading-lg-leading);
+			letter-spacing: var(--text-heading-lg-tracking);
 		}
 
-		.level-2 {
-			font-size: var(--text-2xl);
+		.variant-section {
+			font-size: var(--text-heading-size);
+			font-weight: var(--text-heading-weight);
+			line-height: var(--text-heading-leading);
+			letter-spacing: var(--text-heading-tracking);
 		}
 
-		.level-3 {
-			font-size: var(--text-xl);
-		}
-
-		.level-4 {
-			font-size: var(--text-lg);
-		}
-
-		.level-5 {
-			font-size: var(--text-base);
-		}
-
-		/* Same size as Text's "sm", so weight/case/tracking carry the
-		   hierarchy instead of size alone at this end of the scale. */
-		.level-6 {
-			font-size: var(--text-sm);
-			text-transform: uppercase;
-			letter-spacing: 0.05em;
+		.variant-card {
+			font-size: var(--text-subheading-size);
+			font-weight: var(--text-subheading-weight);
+			line-height: var(--text-subheading-leading);
+			letter-spacing: var(--text-subheading-tracking);
 		}
 	}
 </style>

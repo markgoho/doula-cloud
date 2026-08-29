@@ -59,10 +59,10 @@
 	<section>
 		<h2>Layer styling via --icon-fg / --icon-bg</h2>
 		<cluster-l space="var(--space-4)">
-			<div style:--icon-fg="var(--color-error)" style:--icon-bg="var(--color-accent)">
+			<div style:--icon-fg="var(--color-error)" style:--icon-bg="var(--color-primary)">
 				<Icon name="warning" size={48} label="Warning, custom colors" />
 			</div>
-			<span>--icon-fg: var(--color-error); --icon-bg: var(--color-accent);</span>
+			<span>--icon-fg: var(--color-error); --icon-bg: var(--color-primary);</span>
 		</cluster-l>
 	</section>
 </stack-l>

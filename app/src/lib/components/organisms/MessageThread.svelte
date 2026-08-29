@@ -133,25 +133,25 @@
 
 		li {
 			padding-block: var(--space-3);
-			border-block-end: var(--border-thin) solid var(--color-border);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
 		.meta {
-			color: var(--color-muted);
-			font-size: var(--text-sm);
+			color: var(--color-on-surface-variant);
+			font-size: var(--text-body-sm-size);
 		}
 
 		.attachment-preview {
 			display: block;
 			max-inline-size: 240px;
 			max-block-size: 240px;
-			border-radius: var(--radius-sm);
+			border-radius: var(--radius);
 		}
 
 		label {
 			display: block;
 			font-weight: var(--font-weight-medium);
-			color: var(--color-text);
+			color: var(--color-on-surface);
 		}
 
 		textarea {
@@ -161,14 +161,14 @@
 			margin-block-start: var(--space-1);
 			padding: var(--space-2) var(--space-3);
 			font-family: var(--font-family-base);
-			color: var(--color-text);
-			background-color: var(--color-bg);
-			border: var(--border-thin) solid var(--color-input-border);
-			border-radius: var(--radius-sm);
+			color: var(--color-on-surface);
+			background-color: var(--color-surface);
+			border: var(--border-thin) solid var(--color-outline);
+			border-radius: var(--radius);
 		}
 
 		textarea:focus-visible {
-			outline: 2px solid var(--color-accent);
+			outline: 2px solid var(--color-primary);
 			outline-offset: 2px;
 		}
 

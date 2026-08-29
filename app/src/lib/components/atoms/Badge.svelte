@@ -33,7 +33,7 @@
 			border: var(--border-thin) solid;
 			border-radius: 999px;
 			font-family: var(--font-family-base);
-			font-size: var(--text-sm);
+			font-size: var(--text-body-sm-size);
 			font-weight: var(--font-weight-medium);
 			line-height: 1.2;
 		}
@@ -41,7 +41,7 @@
 		span.info {
 			color: var(--color-info);
 			border-color: var(--color-info);
-			background-color: color-mix(in oklch, var(--color-info) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-info) 12%, var(--color-surface));
 		}
 
 		/* --color-status is the shared green "positive" token (Notice's status
@@ -49,25 +49,25 @@
 		span.success {
 			color: var(--color-status);
 			border-color: var(--color-status);
-			background-color: color-mix(in oklch, var(--color-status) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-status) 12%, var(--color-surface));
 		}
 
 		span.warning {
 			color: var(--color-warning);
 			border-color: var(--color-warning);
-			background-color: color-mix(in oklch, var(--color-warning) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-warning) 12%, var(--color-surface));
 		}
 
 		span.error {
 			color: var(--color-error);
 			border-color: var(--color-error);
-			background-color: color-mix(in oklch, var(--color-error) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-error) 12%, var(--color-surface));
 		}
 
 		span.neutral {
 			color: var(--color-neutral);
 			border-color: var(--color-neutral);
-			background-color: color-mix(in oklch, var(--color-neutral) 12%, var(--color-bg));
+			background-color: color-mix(in oklch, var(--color-neutral) 12%, var(--color-surface));
 		}
 	}
 </style>

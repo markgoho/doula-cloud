@@ -24,16 +24,16 @@ stack-l > * + * {
 box-l {
 	display: block;
 	padding: var(--space-4);
-	border: var(--border-thin) solid var(--color-border);
-	color: var(--color-text);
-	background-color: var(--color-bg);
+	border: var(--border-thin) solid var(--color-outline-variant);
+	color: var(--color-on-surface);
+	background-color: var(--color-surface);
 }
 box-l * {
 	color: inherit;
 }
 box-l[invert] {
-	color: var(--color-bg);
-	background-color: var(--color-text);
+	color: var(--color-surface);
+	background-color: var(--color-on-surface);
 }
 
 /* Center */

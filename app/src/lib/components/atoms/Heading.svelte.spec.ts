@@ -18,12 +18,42 @@ describe('Heading.svelte', () => {
 		await expect.element(page.getByText('Page title')).toBeVisible();
 	});
 
-	it('renders the matching heading tag and level class for each level', async () => {
-		for (const level of [1, 2, 3, 4, 5, 6] as const) {
-			const { container } = await setup({ level });
+	it.each([1, 2, 3, 4, 5, 6] as const)('renders level %i as its own heading tag', async (level) => {
+		const { container } = await setup({ level });
 
-			const element = container.querySelector(`h${level}.level-${level}`);
-			expect(element).toBeInTheDocument();
+		expect(container.querySelector(`h${level}`)).toBeVisible();
+	});
+
+	/*
+	 * The default map is the point of the component: a route that only knows
+	 * its document outline still gets the right size, so `variant` is a
+	 * deliberate override rather than a thing every call site must remember.
+	 */
+	it.each([
+		[1, 'page'],
+		[2, 'section'],
+		[3, 'card'],
+		[4, 'card'],
+		[5, 'card'],
+		[6, 'card']
+	] as const)('defaults level %i to the %s variant', async (level, variant) => {
+		const { container } = await setup({ level });
+
+		expect(container.querySelector(`h${level}.variant-${variant}`)).toBeVisible();
+	});
+
+	it.each(['page', 'section', 'card'] as const)(
+		'lets %s be chosen independently of the heading level',
+		async (variant) => {
+			const { container } = await setup({ level: 3, variant });
+
+			expect(container.querySelector(`h3.variant-${variant}`)).toBeVisible();
 		}
+	);
+
+	it('does not expose the display step, which the OverviewHub Template owns', async () => {
+		const { container } = await setup({ level: 1 });
+
+		expect(container.querySelector('[class*="display"]')).toBeNull();
 	});
 });

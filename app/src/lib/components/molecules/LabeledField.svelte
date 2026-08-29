@@ -53,12 +53,12 @@
 	@layer components {
 		label {
 			font-weight: var(--font-weight-medium);
-			color: var(--color-text);
+			color: var(--color-on-surface);
 		}
 
 		p[role='alert'] {
 			color: var(--color-error);
-			font-size: var(--text-sm);
+			font-size: var(--text-body-sm-size);
 		}
 	}
 </style>

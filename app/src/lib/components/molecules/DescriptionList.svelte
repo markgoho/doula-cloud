@@ -29,12 +29,12 @@
 
 		dt {
 			font-weight: var(--font-weight-medium);
-			color: var(--color-muted);
+			color: var(--color-on-surface-variant);
 		}
 
 		dd {
 			margin: 0;
-			color: var(--color-text);
+			color: var(--color-on-surface);
 		}
 	}
 </style>
