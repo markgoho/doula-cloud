@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 
 vi.mock('$app/state', () => ({
@@ -15,16 +16,6 @@ vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession,
 	apiErrorMessage: (response: Response) => response.text()
 }));
-
-// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
-function jsonResponse(body: unknown, ok = true, status = 200): Response {
-	return {
-		ok,
-		status,
-		text: () => Promise.resolve(JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
 
 const undeclared = {
 	mode: 'undeclared',
@@ -67,7 +58,7 @@ async function setup({ website = undeclared, roles = ['owner'], websiteOk = true
 					: jsonResponse({ ...undeclared, ...body, updatedBy: 'Maya Chen', updatedAt: '2026-08-29T14:30:00Z' })
 			);
 		}
-		return Promise.resolve(jsonResponse(website, websiteOk));
+		return Promise.resolve(jsonResponse(website, websiteOk ? 200 : 403));
 	});
 	await render(Page, {});
 	return { puts };
@@ -132,7 +123,6 @@ describe('website settings screen', () => {
 						message: 'invalid request body',
 						details: { ownUrl: 'Enter a web address in the correct format, like https://example.com/your-practice' }
 					},
-					false,
 					400
 				)
 		});
@@ -337,7 +327,7 @@ describe('website settings screen', () => {
 	});
 
 	it('reports a refusal that names no field', async () => {
-		await setup({ put: () => jsonResponse('only a Practice Owner can do that', false, 403) });
+		await setup({ put: () => jsonResponse('only a Practice Owner can do that', 403) });
 
 		await testPage.getByRole('radio', { name: 'I have my own website or social profile' }).click();
 		await testPage

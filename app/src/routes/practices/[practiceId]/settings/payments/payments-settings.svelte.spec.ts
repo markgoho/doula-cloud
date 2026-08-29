@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 
 /* The screen reads the `connect` query parameter Stripe redirects back
@@ -24,11 +25,6 @@ vi.mock('#lib/api.js', () => ({
 	// module tree imports.
 	apiErrorMessage: (response: Response) => response.text()
 }));
-
-// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
-function jsonResponse(body: unknown, ok = true): Response {
-	return { ok, text: () => Promise.resolve(JSON.stringify(body)), json: () => Promise.resolve(body) } as Response;
-}
 
 interface MockOptions {
 	status?: string;
@@ -55,7 +51,7 @@ function mockApi({
 }: MockOptions = {}) {
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.endsWith('/session')) {
-			return Promise.resolve(jsonResponse({ roles }, sessionOk));
+			return Promise.resolve(jsonResponse({ roles }, sessionOk ? 200 : 401));
 		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(

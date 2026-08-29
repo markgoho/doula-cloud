@@ -11,15 +11,7 @@ import {
 	signContract,
 	voidContract
 } from './contract.js';
-
-function jsonResponse(body: unknown, status = 200): Response {
-	return {
-		ok: status >= 200 && status < 300,
-		status,
-		text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse } from './testResponse.js';
 
 describe('loadContract', () => {
 	it('fetches the practice+engagement contract path and returns the decoded contract', async () => {

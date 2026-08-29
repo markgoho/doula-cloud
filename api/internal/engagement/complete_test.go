@@ -45,19 +45,7 @@ func completeAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practice
 // requires.
 func seedOwnerAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Owner', $2, 'NY') RETURNING id`,
-		identityUID, identityUID+"@example.com",
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed owner: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{owner}', 'employee')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed owner membership: %v", err)
-	}
-	return staffID
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
 }
 
 // Completion is one act with three effects: the Engagement's status, the

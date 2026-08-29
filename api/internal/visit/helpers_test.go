@@ -3,7 +3,6 @@ package visit_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
@@ -33,47 +32,18 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-// seedStaffAtPracticeWithRoles inserts a Staff row bound to identityUID and
-// a practice_memberships row linking them to an existing practiceID with
-// the given roles, using the superuser Admin connection (which bypasses
-// RLS) so fixture setup isn't gated by the policies under test.
+// seedStaffAtPracticeWithRoles seeds an employee Staff member holding
+// roles at practiceID.
 func seedStaffAtPracticeWithRoles(t *testing.T, db *testdb.DB, practiceID, identityUID string, roles []string) (staffID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
-		identityUID, "Test Staff "+identityUID, identityUID+"@example.com",
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	literal := "{" + strings.Join(roles, ",") + "}"
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
-		practiceID, staffID, literal,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-	return staffID
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, roles, "employee")
 }
 
 // seedContractorAtPractice mirrors seedStaffAtPracticeWithRoles but for a
 // contractor Doula -- ADR-0008's attachment-narrowed column.
 func seedContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
-		identityUID, "Test Staff "+identityUID, identityUID+"@example.com",
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'contractor')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed contractor membership: %v", err)
-	}
-	return staffID
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "contractor")
 }
 
 // seedGrantedAttachment inserts an open, granted-origin
@@ -93,13 +63,7 @@ func seedGrantedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID st
 // connection.
 func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-	return practiceID
+	return testdb.SeedPractice(t, db, "Test Practice")
 }
 
 // seedDoulaWithMembership inserts a new Practice plus a Staff member

@@ -1,14 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { connect, loadConnectStatus } from './payments.js';
-
-// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
-function jsonResponse(body: unknown, ok = true): Response {
-	return {
-		ok,
-		text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse } from './testResponse.js';
 
 describe('loadConnectStatus', () => {
 	it('fetches the practice payments connect path and returns the decoded status', async () => {
@@ -27,7 +19,7 @@ describe('loadConnectStatus', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden', false));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden', 403));
 
 		await expect(loadConnectStatus(fetcher, 'practice-1')).rejects.toThrow('forbidden');
 	});
@@ -44,7 +36,7 @@ describe('connect', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden: owner only', false));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden: owner only', 403));
 
 		await expect(connect(fetcher, 'practice-1')).rejects.toThrow('forbidden: owner only');
 	});
@@ -56,7 +48,7 @@ describe('connect', () => {
 					code: 'FAILED_PRECONDITION',
 					message: 'Tell us where Clients can find you online before you connect Stripe.'
 				},
-				false
+				400
 			)
 		);
 

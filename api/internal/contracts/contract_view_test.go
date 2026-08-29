@@ -51,10 +51,8 @@ func TestReadContract_OwnerAndAdminGetMoney(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Contract View Test Practice")
 
-	ownerID := seedStaff(t, db, "view-owner")
-	seedMembership(t, db, practiceID, ownerID, "{owner}")
-	adminID := seedStaff(t, db, "view-admin")
-	seedMembership(t, db, practiceID, adminID, "{admin}")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "view-owner", []string{"owner"}, "employee")
+	adminID := testdb.SeedStaffAtPractice(t, db, practiceID, "view-admin", []string{"admin"}, "employee")
 
 	for _, staffID := range []string{ownerID, adminID} {
 		reader := contractReader(t, db, practiceID, staffID)
@@ -82,8 +80,7 @@ func TestReadContract_OwnerAndAdminGetMoney(t *testing.T) {
 func TestReadContract_DoulaNeverGetsMoney(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Contract View Doula Practice")
-	doulaID := seedStaff(t, db, "view-doula")
-	seedMembership(t, db, practiceID, doulaID, "{doula}")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "view-doula", []string{doulaRole}, "employee")
 
 	reader := contractReader(t, db, practiceID, doulaID)
 	view := contracts.ReadContract(reader, fullContractResponse())

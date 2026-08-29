@@ -1,14 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { loadContractTemplate, saveContractTemplate, validateProse } from './contractTemplate.js';
-
-// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
-function jsonResponse(body: unknown, ok = true): Response {
-	return {
-		ok,
-		text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse } from './testResponse.js';
 
 describe('loadContractTemplate', () => {
 	it('fetches the practice path and returns the decoded template', async () => {
@@ -22,7 +14,7 @@ describe('loadContractTemplate', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not found', false));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not found', 404));
 
 		await expect(loadContractTemplate(fetcher, 'practice-1')).rejects.toThrow('not found');
 	});
@@ -44,7 +36,7 @@ describe('saveContractTemplate', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner can do that', false));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner can do that', 403));
 
 		await expect(saveContractTemplate(fetcher, 'practice-1', 'prose')).rejects.toThrow(
 			'only a Practice Owner can do that'

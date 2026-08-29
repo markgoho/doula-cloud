@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
+import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 
 // Mutable rather than a fixed literal: the screen refuses outright when
@@ -37,16 +38,11 @@ vi.mock('#lib/api.js', () => ({
 const REPORTED_AT = '2026-08-28T14:02:11Z';
 
 function jsonResponse(body: unknown): Response {
-	return {
-		ok: true,
-		status: 200,
-		text: () => Promise.resolve(JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
+	return buildResponse(body);
 }
 
 function refusal(status: number, message: string): Response {
-	return { ok: false, status, text: () => Promise.resolve(message) } as Response;
+	return buildResponse(message, status);
 }
 
 const existingStaff = {

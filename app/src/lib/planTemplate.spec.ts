@@ -9,15 +9,7 @@ import {
 	validateFields,
 	type Field
 } from './planTemplate.js';
-
-// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
-function jsonResponse(body: unknown, ok = true): Response {
-	return {
-		ok,
-		text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse } from './testResponse.js';
 
 describe('isSelectType', () => {
 	it('is true for single_select and multi_select', () => {
@@ -45,7 +37,7 @@ describe('loadTemplate', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not found', false));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not found', 404));
 
 		await expect(loadTemplate(fetcher, 'practice-1', 'care_plan')).rejects.toThrow('not found');
 	});
@@ -68,7 +60,7 @@ describe('saveTemplate', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner can do that', false));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner can do that', 403));
 
 		await expect(saveTemplate(fetcher, 'practice-1', 'care_plan', [])).rejects.toThrow(
 			'only a Practice Owner can do that'

@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 // The Skeleton reserves a line of body copy with `var(--text-body-size)`,
 // so without the tokens it draws at zero height and reserves nothing --
@@ -27,16 +28,8 @@ vi.mock('#lib/pushRegistration.js', () => ({
 		`/api/practices/${practiceId}/push-subscriptions`
 }));
 
-function jsonResponse(body: unknown): Response {
-	return {
-		ok: true,
-		text: () => Promise.resolve(JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
-
 function refusal(body: string): Response {
-	return { ok: false, text: () => Promise.resolve(body) } as Response;
+	return jsonResponse(body, 403);
 }
 
 const offer = {

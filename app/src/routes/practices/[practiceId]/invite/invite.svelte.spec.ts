@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 
 vi.mock('$app/state', () => ({
@@ -19,10 +20,7 @@ async function setup({ response, rejectWith }: SetupOptions = {}) {
 	if (rejectWith) {
 		apiFetchWithSession.mockRejectedValue(rejectWith);
 	} else {
-		apiFetchWithSession.mockResolvedValue(
-			response ??
-				({ ok: true, json: () => Promise.resolve({ invitationId: 'invitation-1' }) } as Response)
-		);
+		apiFetchWithSession.mockResolvedValue(response ?? jsonResponse({ invitationId: 'invitation-1' }));
 	}
 	return render(Page, {});
 }
@@ -113,10 +111,7 @@ describe('invite a Staff member screen', () => {
 
 	it('shows the error the server gives back', async () => {
 		await setup({
-			response: {
-				ok: false,
-				text: () => Promise.resolve('that address already holds a membership at this practice')
-			} as Response
+			response: jsonResponse('that address already holds a membership at this practice', 409)
 		});
 
 		await fillAndSubmit('here@example.com');

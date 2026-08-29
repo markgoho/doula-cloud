@@ -70,22 +70,9 @@ func TestGrant_EngagementRequestsHasNoDelete(t *testing.T) {
 	}
 }
 
-// seedGrantStaffAt inserts a Staff row and an owner practice_memberships
-// row at practiceID -- the actor these tests' rows are attributed to.
+// seedGrantStaffAt inserts an owner Staff member at practiceID -- the
+// actor these tests' rows are attributed to.
 func seedGrantStaffAt(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Grant Test Staff', 'grant-test@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{owner}', 'employee')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-	return staffID
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
 }

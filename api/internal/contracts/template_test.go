@@ -15,35 +15,11 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+const doulaRole = "doula"
+
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
-}
-
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
-	return id
-}
-
-func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string, roles string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
-		practiceID, staffID, roles,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
+	return testdb.SeedPractice(t, db, name)
 }
 
 // seedMember seeds a Practice and a Staff member holding a doula (non-Owner)
@@ -51,8 +27,7 @@ func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string, rol
 func seedMember(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
 	t.Helper()
 	practiceID = seedPractice(t, db, "Test Practice")
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{doula}")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 	return practiceID
 }
 
@@ -61,8 +36,7 @@ func seedMember(t *testing.T, db *testdb.DB, identityUID string) (practiceID str
 func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
 	t.Helper()
 	practiceID = seedPractice(t, db, "Test Practice")
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{owner}")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
 	return practiceID
 }
 
@@ -72,13 +46,7 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 func seedContractorAtPractice(t *testing.T, db *testdb.DB, identityUID string) (practiceID, staffID string) {
 	t.Helper()
 	practiceID = seedPractice(t, db, "Test Practice")
-	staffID = seedStaff(t, db, identityUID)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'contractor')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed contractor membership: %v", err)
-	}
+	staffID = testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "contractor")
 	return practiceID, staffID
 }
 

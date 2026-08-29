@@ -6,16 +6,7 @@ import {
 	MAX_FACT_LENGTH,
 	type Fetcher
 } from './website.js';
-
-function response(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
-	const text = typeof body === 'string' ? body : JSON.stringify(body);
-	return {
-		ok: init.ok ?? true,
-		status: init.status ?? 200,
-		text: () => Promise.resolve(text),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse as response } from './testResponse.js';
 
 const undeclared = {
 	mode: 'undeclared',
@@ -37,7 +28,7 @@ describe('loadWebsite', () => {
 	it('throws with the server sentence on a failure', async () => {
 		const fetcher: Fetcher = vi.fn(() =>
 			Promise.resolve(
-				response({ code: 'INTERNAL_ERROR', message: 'internal error' }, { ok: false, status: 500 })
+				response({ code: 'INTERNAL_ERROR', message: 'internal error' }, 500)
 			)
 		);
 
@@ -72,7 +63,7 @@ describe('saveWebsite', () => {
 						message: 'invalid request body',
 						details: { ownUrl: 'Enter a web address in the correct format' }
 					},
-					{ ok: false, status: 400 }
+					400
 				)
 			)
 		);
@@ -94,7 +85,7 @@ describe('saveWebsite', () => {
 
 	it('still reports a 400 that is not JSON, with no field details', async () => {
 		const fetcher: Fetcher = vi.fn(() =>
-			Promise.resolve(response('only a Practice Owner can do that', { ok: false, status: 400 }))
+			Promise.resolve(response('only a Practice Owner can do that', 400))
 		);
 
 		try {
@@ -108,7 +99,7 @@ describe('saveWebsite', () => {
 	});
 
 	it('reads a 400 whose body names no details and no message', async () => {
-		const fetcher: Fetcher = vi.fn(() => Promise.resolve(response({}, { ok: false, status: 400 })));
+		const fetcher: Fetcher = vi.fn(() => Promise.resolve(response({}, 400)));
 
 		try {
 			await saveWebsite(fetcher, 'practice-1', { mode: 'own', ownUrl: 'example.com' });
@@ -120,7 +111,7 @@ describe('saveWebsite', () => {
 
 	it('throws a plain Error for a refusal that is not a validation failure', async () => {
 		const fetcher: Fetcher = vi.fn(() =>
-			Promise.resolve(response('only a Practice Owner can do that', { ok: false, status: 403 }))
+			Promise.resolve(response('only a Practice Owner can do that', 403))
 		);
 
 		await expect(

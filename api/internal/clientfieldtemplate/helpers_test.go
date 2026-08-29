@@ -22,31 +22,7 @@ const (
 
 func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
 	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-	return practiceID
-}
-
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) (staffID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', $1 || '@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
-	return staffID
-}
-
-func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID, roles string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
-		practiceID, staffID, roles,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
+	return testdb.SeedPractice(t, db, "Test Practice")
 }
 
 // seedDoula seeds a Practice and a Staff member holding only the doula
@@ -54,8 +30,7 @@ func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID, roles stri
 func seedDoula(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
 	t.Helper()
 	practiceID = seedPractice(t, db)
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{doula}")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "employee")
 	return practiceID
 }
 
@@ -63,8 +38,7 @@ func seedDoula(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
 	t.Helper()
 	practiceID = seedPractice(t, db)
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{owner}")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
 	return practiceID
 }
 
@@ -74,8 +48,7 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 func seedAdmin(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
 	t.Helper()
 	practiceID = seedPractice(t, db)
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{admin}")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"admin"}, "employee")
 	return practiceID
 }
 

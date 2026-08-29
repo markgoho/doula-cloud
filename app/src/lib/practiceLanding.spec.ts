@@ -6,17 +6,10 @@ import {
 	loadPracticeLanding,
 	type PracticeLanding
 } from './practiceLanding.js';
-
-function jsonResponse(body: unknown): Response {
-	return {
-		ok: true,
-		text: () => Promise.resolve(JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse } from './testResponse.js';
 
 function refusal(body: string): Response {
-	return { ok: false, text: () => Promise.resolve(body) } as Response;
+	return jsonResponse(body, 403);
 }
 
 const session = { practiceName: 'Riverside Doula Collective', roles: ['owner'] };

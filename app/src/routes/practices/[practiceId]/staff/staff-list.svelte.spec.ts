@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 
 vi.mock('$app/state', () => ({
@@ -10,12 +11,8 @@ vi.mock('$app/state', () => ({
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-function jsonResponse(body: unknown): Response {
-	return { ok: true, text: () => Promise.resolve(JSON.stringify(body)), json: () => Promise.resolve(body) } as Response;
-}
-
 function textResponse(body: string): Response {
-	return { ok: false, text: () => Promise.resolve(body) } as Response;
+	return jsonResponse(body, 403);
 }
 
 const members = [

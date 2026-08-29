@@ -1,14 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createClient, loadClients } from './client.js';
-
-// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native Response.ok property this mock stands in for
-function response(body: unknown, ok = true): Response {
-	return {
-		ok,
-		text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse as response } from './testResponse.js';
 
 describe('loadClients', () => {
 	it('fetches the practice clients path and returns the decoded list', async () => {
@@ -25,7 +17,7 @@ describe('loadClients', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(response('forbidden', false));
+		const fetcher = vi.fn().mockResolvedValue(response('forbidden', 403));
 
 		await expect(loadClients(fetcher, 'practice-1')).rejects.toThrow('forbidden');
 	});
@@ -45,7 +37,7 @@ describe('createClient', () => {
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(response('givenName is required', false));
+		const fetcher = vi.fn().mockResolvedValue(response('givenName is required', 400));
 
 		await expect(createClient(fetcher, 'practice-1', { givenName: '', email: '' })).rejects.toThrow(
 			'givenName is required'

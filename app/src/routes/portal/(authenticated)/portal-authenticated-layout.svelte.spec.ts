@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { SignOutOutcome } from '#lib/signOut.js';
+import { jsonResponse } from '#lib/testResponse.js';
 import Layout from './+layout.svelte';
 
 // The nav marks the current section off the pathname, so the URL moves per
@@ -52,12 +53,12 @@ async function setup({
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
 	apiFetchWithSession.mockReset();
-	apiFetchWithSession.mockResolvedValue({
-		ok: !detailRefuses,
-		text: () => Promise.resolve('nope'),
-		json: () =>
-			Promise.resolve({ practiceName: 'Riverside Doula Collective', clientName: 'Tasha Bell' })
-	} as Response);
+	apiFetchWithSession.mockResolvedValue(
+		jsonResponse(
+			{ practiceName: 'Riverside Doula Collective', clientName: 'Tasha Bell' },
+			detailRefuses ? 403 : 200
+		)
+	);
 	await render(Layout, {
 		children: createRawSnippet(() => ({ render: () => '<p>portal child content</p>' }))
 	});

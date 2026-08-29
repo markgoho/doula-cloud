@@ -13,15 +13,7 @@ import {
 	withdrawOffer,
 	type Offer
 } from './offer.js';
-
-function jsonResponse(body: unknown, status = 200): Response {
-	return {
-		ok: status >= 200 && status < 300,
-		status,
-		text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
-		json: () => Promise.resolve(body)
-	} as Response;
-}
+import { jsonResponse } from './testResponse.js';
 
 const offer: Offer = {
 	offerId: 'offer-1',

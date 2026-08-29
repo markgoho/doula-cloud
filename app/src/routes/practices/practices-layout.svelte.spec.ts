@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { SignOutOutcome } from '#lib/signOut.js';
+import { jsonResponse } from '#lib/testResponse.js';
 import Layout from './+layout.svelte';
 
 // Mutable rather than a fixed literal: the layout skips the push
@@ -63,17 +64,11 @@ async function setup({
 	apiFetchWithSession.mockImplementation((path: string) =>
 		Promise.resolve(
 			path === '/api/staff/session'
-				? ({
-						ok: !staffSessionRefuses,
-						text: () => Promise.resolve('nope'),
-						json: () =>
-							Promise.resolve({ name: 'Mark Goho', email: 'mark@example.test', memberships })
-					} as Response)
-				: ({
-						ok: !sessionRefuses,
-						text: () => Promise.resolve('nope'),
-						json: () => Promise.resolve({ roles })
-					} as Response)
+				? jsonResponse(
+						{ name: 'Mark Goho', email: 'mark@example.test', memberships },
+						staffSessionRefuses ? 403 : 200
+					)
+				: jsonResponse({ roles }, sessionRefuses ? 403 : 200)
 		)
 	);
 	await render(Layout, {

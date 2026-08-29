@@ -6,79 +6,34 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+const doulaRole = "doula"
+
 // seedPractice inserts a Practice using the superuser Admin connection.
 func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
+	return testdb.SeedPractice(t, db, name)
 }
 
-// seedStaffAtPractice inserts a Staff row bound to identityUID and a
-// practice_memberships row linking them to an existing practiceID, using
-// the superuser Admin connection so fixture setup isn't gated by the
-// policies under test.
+// seedStaffAtPractice seeds an employee Doula at practiceID.
 func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'employee')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-	return staffID
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 }
 
 // seedStaffAtPracticeNamed mirrors seedStaffAtPractice but takes an
 // explicit name, for tests that assert a specific Staff member's name
-// shows up as a Message's sender -- seedStaffAtPractice always hardcodes
-// "Test Staff", which would make such an assertion vacuous once two Staff
-// are seeded in the same test.
+// shows up as a Message's sender -- seedStaffAtPractice always derives a
+// name from identityUID, which would make such an assertion vacuous.
 func seedStaffAtPracticeNamed(t *testing.T, db *testdb.DB, practiceID, identityUID, name string) (staffID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, 'staff@example.com', 'NY') RETURNING id`,
-		identityUID, name,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'employee')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-	return staffID
+	return testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, name, []string{doulaRole}, "employee")
 }
 
 // seedContractorAtPractice mirrors seedStaffAtPractice but for a
 // contractor Doula -- ADR-0008's attachment-narrowed column.
 func seedContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'contractor')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed contractor membership: %v", err)
-	}
-	return staffID
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "contractor")
 }
 
 // seedGrantedAttachment inserts an open, granted-origin
