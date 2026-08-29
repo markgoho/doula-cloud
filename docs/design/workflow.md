@@ -82,9 +82,37 @@ a route that picks an existing Template goes straight to code.
 
 The test exists because "once the design system is mature" is not a thing anyone ever declares.
 
-## Known unknown
+## Autosave, and the one operation it misses
 
-**Whether the desktop app autosaves.** Not settled. A canvas edit made through `execute` did not reach
-disk in testing, but the editor in that test had been opened against a file that no longer existed, so
-the result does not distinguish "no autosave" from "editor detached". Settle it on the first real screen
-and correct this document.
+**The desktop app does autosave, and the trigger is a scenegraph change** — settled on
+[#417](https://github.com/markgoho/doula-cloud/issues/417), against a healthy editor opened on the real
+`docs/design/doula-cloud.pen`, which is the condition the earlier test could not rule out. The app's own
+title bar states which it is: a document reads `— Auto-saved` once written, and `— Edited` while dirty.
+
+**What is not established is the trigger, and it is not worth guessing at.** On #417: `SetVariables`
+wrote 76 tokens and registered the `mode` axis, and the file stayed untouched on disk for four minutes
+while `GetVariables()` read every one of them back. A save did land later, around a throwaway frame
+insert. But a subsequent `Delete`, and then a net-zero insert-and-delete in one call, each failed to
+flush within 90 seconds. One observation is not a mechanism, so treat the trigger as **unpredictable
+from an agent's side**.
+
+Two consequences, and they are the durable part:
+
+> **No read can tell you whether your work is on disk.** `GetVariables()` and `Get()` both return the
+> in-memory document and will happily confirm work that was never written. **`git status` on the `.pen`
+> file is the only check that distinguishes saved from unsaved**, and it belongs at the end of every
+> canvas pass.
+
+> **⌘S in Pen is the only deterministic write.** There is no save in the `execute` API — `Export()`
+> writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`. An agent that has finished a canvas change should
+> verify with `git status` and, if the file is unchanged, ask for the keystroke rather than waiting on
+> an autosave that may not come.
+
+A related trap: because the disk file can lag the live document by an arbitrary amount, whatever autosave
+does eventually write is a **snapshot of some intermediate state**, not necessarily the state you left.
+On #417 the flush captured a throwaway probe frame that had already been deleted in memory. Never commit
+a `.pen` without confirming the diff is what you meant.
+
+The CLI (`bunx pen --in … --out …`) is unaffected: it writes the file paths it is given, which is why
+[ADR-0019](../adr/0019-pen-dev-is-the-working-surface-and-code-is-the-truth.md) calls it the
+file-writing path.
