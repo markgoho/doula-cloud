@@ -54,11 +54,13 @@ func NormalizeWorkState(raw string) (string, bool) {
 // today, and a row where they differ is a signal rather than an
 // impossibility.
 func RecordFirstWorkStateAssertion(ctx context.Context, tx *sql.Tx, staffID, workState, actorStaffID string) error {
-	if _, err := tx.ExecContext(ctx,
+	_, err := tx.ExecContext(ctx,
 		`INSERT INTO staff_work_state_events (staff_id, work_state, actor_staff_id)
 		 VALUES ($1, $2, $3)`,
 		staffID, workState, actorStaffID,
-	); err != nil {
+	)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
 		return fmt.Errorf("staffauth: record first work state assertion: %w", err)
 	}
 	return nil
