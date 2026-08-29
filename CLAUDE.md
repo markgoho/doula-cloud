@@ -49,6 +49,14 @@ Default canonical labels (needs-triage, needs-info, ready-for-agent, ready-for-h
 
 Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Service patterns
+
+The GOV.UK Design System is the default reference for any screen that asks a person for
+something or reports a failure — the decision, never the markup or the look. See
+`docs/adr/0021-govuk-is-the-reference-for-service-patterns.md` for the rule and
+`docs/design/govuk-alignment.md` for the pattern-by-pattern table. Check the table before
+building such a screen; a departure needs a recorded reason.
+
 ### Testing
 
 100% line coverage gate (with justified inline exceptions), the Podman-based
