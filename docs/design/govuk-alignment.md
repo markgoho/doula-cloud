@@ -1,74 +1,38 @@
 # The GOV.UK Design System, and what Doula Cloud takes from it
 
-The [GOV.UK Design System](https://design-system.service.gov.uk/) is the reference
-Doula Cloud reaches for whenever a screen has to **ask a person for something, or tell
-a person something went wrong**. This document says why, draws the line around what is
-taken, and holds the table that maps their catalogue onto ours.
+The [GOV.UK Design System](https://design-system.service.gov.uk/) is the reference Doula Cloud reaches for whenever a screen has to **ask a person for something, or tell a person something went wrong**. This document says why, draws the line around what is taken, and holds the table that maps their catalogue onto ours.
 
-The decision itself is [ADR-0021](../adr/0021-govuk-is-the-reference-for-service-patterns.md).
-This document is the living half of it -- the ADR should not change, and the table below
-changes every time a screen is built.
+The decision itself is [ADR-0021](../adr/0021-govuk-is-the-reference-for-service-patterns.md). This document is the living half of it -- the ADR should not change, and the table below changes every time a screen is built.
 
 ## Why this system and not another
 
-Most design systems publish components. GOV.UK publishes **decisions**, and it publishes
-the research that produced them. When their Dates pattern says a memorable date is three
-text inputs and never a date picker, that is not taste -- it is what happened when they
-watched people try. A four-month runway to launch cannot re-run that research, and does
-not have to.
+Most design systems publish components. GOV.UK publishes **decisions**, and it publishes the research that produced them. When their Dates pattern says a memorable date is three text inputs and never a date picker, that is not taste -- it is what happened when they watched people try. A four-month runway to launch cannot re-run that research, and does not have to.
 
 The fit is unusually close, for three reasons:
 
-1. **Doula Cloud is a service, not an app to browse.** A doula opens it to complete a
-   task -- add a Client, send an Invoice, answer a message -- and leave. That is the
-   shape of thing GOV.UK is built for.
-2. **It is form-heavy and low-frequency.** A person who adds four Clients a month never
-   builds fluency. Their patterns assume exactly that person.
-3. **The users are people mid-crisis, some of the time.** A client filling in a birth
-   plan after a loss, a doula doing admin between two births. GOV.UK's whole posture --
-   one question at a time, plain words, an obvious way out -- is designed for someone who
-   has no attention to spare.
+1. **Doula Cloud is a service, not an app to browse.** A doula opens it to complete a task -- add a Client, send an Invoice, answer a message -- and leave. That is the shape of thing GOV.UK is built for.
+2. **It is form-heavy and low-frequency.** A person who adds four Clients a month never builds fluency. Their patterns assume exactly that person.
+3. **The users are people mid-crisis, some of the time.** A client filling in a birth plan after a loss, a doula doing admin between two births. GOV.UK's whole posture -- one question at a time, plain words, an obvious way out -- is designed for someone who has no attention to spare.
 
-This is already how the product has been built. [ADR-0018](../adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md)'s
-Template layer, the intake sequence drawn in `doula-cloud.pen`, and the three-box date of
-birth in `b7e8ab7` all came from there. This document makes that explicit rather than
-leaving it as a habit that only holds while someone remembers.
-
+This is already how the product has been built. [ADR-0018](../adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md)'s Template layer, the intake sequence drawn in `doula-cloud.pen`, and the three-box date of birth in `b7e8ab7` all came from there. This document makes that explicit rather than leaving it as a habit that only holds while someone remembers.
 
 ## What is adopted, and what is not
 
-**Adopted: the decision.** What to ask, in what order, on how many pages. How to word a
-question, a hint, an error. Where the error summary sits and what its heading says. What
-happens to focus after a submit. Which of these things research says people get wrong.
+**Adopted: the decision.** What to ask, in what order, on how many pages. How to word a question, a hint, an error. Where the error summary sits and what its heading says. What happens to focus after a submit. Which of these things research says people get wrong.
 
-**Adopted: the behavior.** A back link that really goes back. A `Change` link that returns
-to the question and comes back. A `Save and come back later` that saves a half-finished
-record. Three boxes for a memorable date.
+**Adopted: the behavior.** A back link that really goes back. A `Change` link that returns to the question and comes back. A `Save and come back later` that saves a half-finished record. Three boxes for a memorable date.
 
-**Not adopted: the markup.** No `govuk-*` classes, no Nunjucks, no `govuk-frontend`
-package. Our components are Svelte, our layout primitives are the custom elements of
-[ADR-0003](../adr/0003-css-layout-primitives-as-native-custom-elements.md), and the
-component tiers are Atomic Design per [ADR-0018](../adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md).
+**Not adopted: the markup.** No `govuk-*` classes, no Nunjucks, no `govuk-frontend` package. Our components are Svelte, our layout primitives are the custom elements of [ADR-0003](../adr/0003-css-layout-primitives-as-native-custom-elements.md), and the component tiers are Atomic Design per [ADR-0018](../adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md).
 
-**Not adopted: the look.** Transport, the yellow focus bar, the black-and-white chrome,
-the 1px-on-everything borders. The look is [the design brief](brief.md)'s -- Plum Dusk,
-evolved -- and the color, type and spacing truth is `app/src/lib/styles/tokens.css`.
-GOV.UK never overrules a token.
+**Not adopted: the look.** Transport, the yellow focus bar, the black-and-white chrome, the 1px-on-everything borders. The look is [the design brief](brief.md)'s -- Plum Dusk, evolved -- and the color, type and spacing truth is `app/src/lib/styles/tokens.css`. GOV.UK never overrules a token.
 
-**Not adopted: the content.** Their patterns are written for UK government services. A
-National Insurance number, a UK postcode lookup, a sort code, a Welsh language toggle and
-a phase banner have no counterpart here. Those rows are marked N/A below with the reason,
-so nobody re-derives the same conclusion later.
+**Not adopted: the content.** Their patterns are written for UK government services. A National Insurance number, a UK postcode lookup, a sort code, a Welsh language toggle and a phase banner have no counterpart here. Those rows are marked N/A below with the reason, so nobody re-derives the same conclusion later.
 
-The one-line version, which is also [the brief](brief.md)'s governing principle:
-**conventional in pattern and behavior, distinctive in execution.**
-
+The one-line version, which is also [the brief](brief.md)'s governing principle: **conventional in pattern and behavior, distinctive in execution.**
 
 ## Patterns
 
-Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns/), and where
-it stands here. **Aligned** means it is built or drawn and matches. **Open** means it is
-ours to build and a ticket says so. **N/A** carries its reason.
+Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns/), and where it stands here. **Aligned** means it is built or drawn and matches. **Open** means it is ours to build and a ticket says so. **N/A** carries its reason.
 
 ### Ask users for...
 
@@ -97,7 +61,7 @@ ours to build and a ticket says so. **N/A** carries its reason.
 | [Contact a department or service team](https://design-system.service.gov.uk/patterns/contact-a-department-or-service-team/) | `/support`, which Stripe also requires | Open -- [#419](https://github.com/markgoho/doula-cloud/issues/419) |
 | [Create a username](https://design-system.service.gov.uk/patterns/create-a-username/) | Email is the identifier; there are no usernames | N/A, deliberately |
 | [Create accounts](https://design-system.service.gov.uk/patterns/create-accounts/) | Signup, and both accept-invite routes | Open -- [#470](https://github.com/markgoho/doula-cloud/issues/470), [#469](https://github.com/markgoho/doula-cloud/issues/469) |
-| [Exit a page quickly](https://design-system.service.gov.uk/patterns/exit-a-page-quickly/) | Undecided; the portal holds a pregnancy nobody may know about | Open decision -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
+| [Exit a page quickly](https://design-system.service.gov.uk/patterns/exit-a-page-quickly/) | Adopted, **client portal only** -- never the staff side, because a doula is at work and a client may not be | Decided, open to build -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
 | [Navigate a service](https://design-system.service.gov.uk/patterns/navigate-a-service/) | Flat six-item nav, no breadcrumbs, per the brief | Drawn -- [#452](https://github.com/markgoho/doula-cloud/issues/452) |
 | [Recover from validation errors](https://design-system.service.gov.uk/patterns/validation/) | No form in the app does this today | Open -- [#467](https://github.com/markgoho/doula-cloud/issues/467) |
 | [Start using a service](https://design-system.service.gov.uk/patterns/start-using-a-service/) | The root route still renders SvelteKit's scaffold | Open -- [#357](https://github.com/markgoho/doula-cloud/issues/357) |
@@ -115,12 +79,9 @@ ours to build and a ticket says so. **N/A** carries its reason.
 | [Step by step navigation](https://design-system.service.gov.uk/patterns/step-by-step-navigation/) | Their pattern is for guidance across many services; our step rail is a progress indicator inside one flow | N/A -- do not confuse the two |
 | [There is a problem with the service](https://design-system.service.gov.uk/patterns/problem-with-the-service-pages/) | Same gap | Open -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
 
-
 ## Components
 
-Their [component list](https://design-system.service.gov.uk/components/) against our
-Atomic Design set. Where a row says a name of ours, the **behavior** is theirs and the
-**markup and look** are ours.
+Their [component list](https://design-system.service.gov.uk/components/) against our Atomic Design set. Where a row says a name of ours, the **behavior** is theirs and the **markup and look** are ours.
 
 | GOV.UK component | Doula Cloud | Status |
 | --- | --- | --- |
@@ -135,7 +96,7 @@ Atomic Design set. Where a row says a name of ours, the **behavior** is theirs a
 | [Details](https://design-system.service.gov.uk/components/details/) | No progressive-disclosure component; `<details>` is the whole implementation when one is needed | N/A for now |
 | [Error message](https://design-system.service.gov.uk/components/error-message/) | `LabeledField`'s `error` prop, which no route passes | Open -- [#467](https://github.com/markgoho/doula-cloud/issues/467) |
 | [Error summary](https://design-system.service.gov.uk/components/error-summary/) | Does not exist | Open -- [#467](https://github.com/markgoho/doula-cloud/issues/467) |
-| [Exit this page](https://design-system.service.gov.uk/components/exit-this-page/) | Undecided | Open decision -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
+| [Exit this page](https://design-system.service.gov.uk/components/exit-this-page/) | Adopted on the portal. The button is the easy half; what the app leaves behind is the ticket | Open -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
 | [Feedback](https://design-system.service.gov.uk/components/feedback/) | Their footer prompt for feedback on a government service. `/support` is the contact route here | N/A |
 | [Fieldset](https://design-system.service.gov.uk/components/fieldset/) | `FormPage` and `QuestionPage` own the fieldset and legend | Aligned |
 | [File upload](https://design-system.service.gov.uk/components/file-upload/) | Nothing in the app uploads a file; PDFs are generated, not received | N/A for now |
@@ -161,49 +122,24 @@ Atomic Design set. Where a row says a name of ours, the **behavior** is theirs a
 | [Textarea](https://design-system.service.gov.uk/components/textarea/) | Five raw `<textarea>` elements and no atom | Open -- [#468](https://github.com/markgoho/doula-cloud/issues/468) |
 | [Warning text](https://design-system.service.gov.uk/components/warning-text/) | Nothing. `Notice.svelte:7` is `error \| status \| info` and must not grow a fourth variant -- it announces what happened, not what is about to | Open -- [#473](https://github.com/markgoho/doula-cloud/issues/473) |
 
-
 ## Where we depart on purpose
 
 A departure is only legitimate if the reason is written down. These are the four.
 
-**Names are split into given, family and preferred.** GOV.UK asks for a full name in one
-field, because splitting it breaks for people whose names do not fit the shape. We split
-because [ADR-0017](../adr/0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md)
-makes given name the one required column -- a Client can be saved with nothing else -- and
-because the product addresses a Client by her first name on every screen, which
-[#463](https://github.com/markgoho/doula-cloud/issues/463) makes a copy rule. A single
-field cannot do either. **Preferred name** is what carries the risk their guidance is
-about: a person whose name is not what a document says gets a field for it, and the
-product uses that field.
+**Names are split into given, family and preferred.** GOV.UK asks for a full name in one field, because splitting it breaks for people whose names do not fit the shape. We split because [ADR-0017](../adr/0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md) makes given name the one required column -- a Client can be saved with nothing else -- and because the product addresses a Client by her first name on every screen, which [#463](https://github.com/markgoho/doula-cloud/issues/463) makes a copy rule. A single field cannot do either. **Preferred name** is what carries the risk their guidance is about: a person whose name is not what a document says gets a field for it, and the product uses that field.
 
-**No confirmation pages.** Their pattern gives a completed transaction its own page with a
-green panel. Doula Cloud announces outcomes in place with `Notice` and leaves the person
-where they were, because a doula sending an invoice is mid-task and has four more things
-to do, not finishing a once-a-year interaction with a government. This is a genuine
-trade -- the outcome is less emphatic -- and it is the right one for a tool someone works
-in all day. The `Panel` component follows the pattern out.
+**No confirmation pages.** Their pattern gives a completed transaction its own page with a green panel. Doula Cloud announces outcomes in place with `Notice` and leaves the person where they were, because a doula sending an invoice is mid-task and has four more things to do, not finishing a once-a-year interaction with a government. This is a genuine trade -- the outcome is less emphatic -- and it is the right one for a tool someone works in all day. The `Panel` component follows the pattern out.
 
-**No task list, and no "complete multiple tasks".** Their task list is for a long
-application a person returns to over days. Doula Cloud's equivalent surface is the
-Practice landing page, which answers *what needs doing today* out of live data --
-unsigned contracts, unpaid invoices, unanswered messages -- rather than tracking one
-person's progress through one submission. A task list would be a second, weaker answer to
-a question already answered.
+**No task list, and no "complete multiple tasks".** Their task list is for a long application a person returns to over days. Doula Cloud's equivalent surface is the Practice landing page, which answers *what needs doing today* out of live data -- unsigned contracts, unpaid invoices, unanswered messages -- rather than tracking one person's progress through one submission. A task list would be a second, weaker answer to a question already answered.
 
-**No breadcrumbs.** [The brief](brief.md) settles a flat six-item nav. A flat structure
-has nothing to breadcrumb, and adding them would imply a hierarchy that is not there.
+**No breadcrumbs.** [The brief](brief.md) settles a flat six-item nav. A flat structure has nothing to breadcrumb, and adding them would imply a hierarchy that is not there.
 
 ## Keeping this table honest
 
 Three rules, so this does not become a document that was true once.
 
-1. **A new screen that asks a person for something checks this table first.** If GOV.UK
-   has a pattern for it, the burden is on departing, not on adopting.
-2. **A departure gets a row here with its reason** on the same commit that departs. A
-   departure with no recorded reason is a defect, and it is the only kind of GOV.UK
-   finding this project treats as one.
+1. **A new screen that asks a person for something checks this table first.** If GOV.UK has a pattern for it, the burden is on departing, not on adopting.
+2. **A departure gets a row here with its reason** on the same commit that departs. A departure with no recorded reason is a defect, and it is the only kind of GOV.UK finding this project treats as one.
 3. **A row that says Open names a ticket.** No row says "someday".
 
-What this document deliberately does not do is track GOV.UK's own releases. Their system
-changes; ours does not have to follow. The table is checked when we build a screen, not
-when they ship a version.
+What this document deliberately does not do is track GOV.UK's own releases. Their system changes; ours does not have to follow. The table is checked when we build a screen, not when they ship a version.
