@@ -83,6 +83,28 @@ which axis value happens to come first. Note also that an instance scales its su
 `ref`'s own `width`/`height`: if the component's *children* carry explicit sizes matching the
 master, the override stops scaling them and every instance renders at one size.
 
+**`TakeScreenshot` renders the file on disk, not the document in memory.** Found on
+[#433](https://github.com/markgoho/doula-cloud/issues/433): a solid red 400x200 probe rectangle inserted
+into a frame screenshotted as blank white, while the pre-existing top bar in the same frame rendered
+correctly. Everything created since the last save is simply absent from the image. Combined with the
+autosave section below, this means **a screenshot can silently show you the previous version of your own
+work** — the one review step you would trust most is the one that lies. Verify structure with `Get` and
+`ctx.bounds`; take a screenshot only after `git status` confirms the file is written.
+
+**`ctx.bounds.y` carries a uniform +50px offset, so `ctx.problems` cries "clipped" constantly.** Also
+#433: every node at every depth reported a y 50px lower than its true position, which made a correctly
+laid-out page report `partially clipped` on most of its frames. The **heights are right** and they are
+what to check — a root that sums to its children (`453 = 60` top bar `+ 393` content) is correct however
+loudly `problems` complains. Treat a clipping warning as a prompt to check the arithmetic, never as the
+finding itself. What `problems` still catches honestly is a **collapsed** node, which `execute` reports
+separately as a `Collapsed size` issue and is always real.
+
+**Globals do not survive between `execute` calls, whatever the API notes say.** `execute.md` states that
+assigning without `const`/`let` persists a value to later calls, and the response even labels the ids it
+captured `(= variable)`. A later call referencing one fails with `ReferenceError`. Capture the ids from
+the response's name-to-id mapping and paste them as string literals, and **redefine helper functions in
+every call** that uses them.
+
 **`phosphor` is a valid icon library on the canvas.** The schema's `Icon.library` accepts `lucide`,
 `feather`, three Material Symbols variants and `phosphor`, so a drawing is not forced onto Lucide
 stand-ins. #411's `weight: 300` rendering bug still stands, so a drawn icon is not evidence about the
