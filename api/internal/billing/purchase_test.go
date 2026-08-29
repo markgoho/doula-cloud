@@ -95,6 +95,11 @@ func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T
 	if calls[0].PracticeID != practiceID || calls[0].Quantity != 5 {
 		t.Fatalf("checkout session call = %+v, want practiceID %q, quantity 5", calls[0], practiceID)
 	}
+	// The sole Staff member works in New York, so the sale is wholly
+	// taxable and the Checkout page keeps its ordinary single line item.
+	if calls[0].NewYorkStaff != 1 || calls[0].TotalStaff != 1 {
+		t.Fatalf("apportionment = %d of %d, want 1 of 1", calls[0].NewYorkStaff, calls[0].TotalStaff)
+	}
 
 	id := stripeCustomerID(t, db, practiceID)
 	if id == nil || *id == "" {
@@ -244,5 +249,91 @@ func TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500(t *testing.T
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+}
+
+// seedStaffInState seeds a Staff member who works in workState and gives
+// her a Membership at practiceID.
+func seedStaffInState(t *testing.T, db *testdb.DB, practiceID, identityUID, workState string) {
+	t.Helper()
+	var staffID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $1, $1 || '@example.com', $2) RETURNING id`,
+		identityUID, workState,
+	).Scan(&staffID); err != nil {
+		t.Fatalf("seed staff %q in %q: %v", identityUID, workState, err)
+	}
+	seedMembership(t, db, practiceID, staffID, "{doula}")
+}
+
+// TestPostPurchaseHandler_ApportionsByWhereStaffWork proves the headcount
+// New York's sales tax is computed on (#389) is counted from the
+// Practice's own roster: two of its four people work in New York, and
+// that pair -- not the quantity, and not the caseload -- is what reaches
+// Stripe.
+func TestPostPurchaseHandler_ApportionsByWhereStaffWork(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-apportion-owner"
+	practiceID := seedOwner(t, db, uid) // the Owner herself works in NY
+	seedStaffInState(t, db, practiceID, "purchase-apportion-ny", "NY")
+	seedStaffInState(t, db, practiceID, "purchase-apportion-nj", "NJ")
+	seedStaffInState(t, db, practiceID, "purchase-apportion-ca", "CA")
+
+	// A second Practice's out-of-state doula must not dilute the ratio.
+	other := seedPractice(t, db, "Other Practice")
+	seedStaffInState(t, db, other, "purchase-apportion-other", "TX")
+
+	stripeClient := billing.NewFakeStripeClient()
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 20}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	calls := stripeClient.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("CreateCheckoutSession calls = %d, want 1", len(calls))
+	}
+	if calls[0].NewYorkStaff != 2 || calls[0].TotalStaff != 4 {
+		t.Fatalf("apportionment = %d of %d, want 2 of 4", calls[0].NewYorkStaff, calls[0].TotalStaff)
+	}
+}
+
+// TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff
+// proves a Practice with nobody in New York reaches Stripe with a zero
+// numerator, which is what makes her purchase carry no New York tax.
+func TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "purchase-out-of-state-owner"
+	practiceID := seedPractice(t, db, "Out Of State Practice")
+	var ownerID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Owner', 'oos-owner@example.com', 'NJ') RETURNING id`,
+		uid,
+	).Scan(&ownerID); err != nil {
+		t.Fatalf("seed owner: %v", err)
+	}
+	seedMembership(t, db, practiceID, ownerID, "{owner}")
+	seedStaffInState(t, db, practiceID, "purchase-out-of-state-pa", "PA")
+
+	stripeClient := billing.NewFakeStripeClient()
+	srv, session := newPurchaseServer(t, db, uid, stripeClient)
+	defer srv.Close()
+
+	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 4}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	calls := stripeClient.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("CreateCheckoutSession calls = %d, want 1", len(calls))
+	}
+	if calls[0].NewYorkStaff != 0 || calls[0].TotalStaff != 2 {
+		t.Fatalf("apportionment = %d of %d, want 0 of 2", calls[0].NewYorkStaff, calls[0].TotalStaff)
 	}
 }

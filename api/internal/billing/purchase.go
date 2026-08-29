@@ -80,7 +80,30 @@ func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 			customerID = sql.NullString{String: id, Valid: true}
 		}
 
-		checkoutURL, err := stripeClient.CreateCheckoutSession(r.Context(), customerID.String, practiceID, req.Quantity)
+		// How the sale is apportioned for New York sales tax: the share
+		// taxed as prewritten software is New York-located Staff over all
+		// Staff (#389). Counted here, inside the request's transaction,
+		// because row-level security is what scopes staff to this
+		// Practice -- the Stripe client has no database.
+		var newYorkStaff, totalStaff int
+		if err := tx.QueryRowContext(r.Context(),
+			`SELECT count(*) FILTER (WHERE s.work_state = 'NY'), count(*)
+			 FROM staff s
+			 JOIN practice_memberships pm ON pm.staff_id = s.id
+			 WHERE pm.practice_id = $1`, practiceID,
+		).Scan(&newYorkStaff, &totalStaff); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		checkoutURL, err := stripeClient.CreateCheckoutSession(r.Context(), CheckoutSessionRequest{
+			CustomerID:   customerID.String,
+			PracticeID:   practiceID,
+			Quantity:     req.Quantity,
+			NewYorkStaff: newYorkStaff,
+			TotalStaff:   totalStaff,
+		})
 		if err != nil {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return

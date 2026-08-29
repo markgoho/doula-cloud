@@ -6,14 +6,6 @@ import (
 	"sync"
 )
 
-// FakeCheckoutSession records one CreateCheckoutSession call, for tests to
-// assert against.
-type FakeCheckoutSession struct {
-	CustomerID string
-	PracticeID string
-	Quantity   int
-}
-
 // FakeStripeClient is an in-memory StripeClient double, injected into
 // handler tests instead of a real Stripe account -- mirrors
 // push.FakePusher. CreateCustomerErr and CreateCheckoutSessionErr, when
@@ -24,7 +16,7 @@ type FakeStripeClient struct {
 	mu            sync.Mutex
 	nextID        int
 	CustomerCalls []string
-	Sessions      []FakeCheckoutSession
+	Sessions      []CheckoutSessionRequest
 
 	CreateCustomerErr        error
 	CreateCheckoutSessionErr error
@@ -50,23 +42,23 @@ func (f *FakeStripeClient) CreateCustomer(_ context.Context, practiceID string) 
 
 // CreateCheckoutSession records the call and returns a deterministic fake
 // checkout URL, or CreateCheckoutSessionErr if a test set one.
-func (f *FakeStripeClient) CreateCheckoutSession(_ context.Context, customerID, practiceID string, quantity int) (string, error) {
+func (f *FakeStripeClient) CreateCheckoutSession(_ context.Context, req CheckoutSessionRequest) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.CreateCheckoutSessionErr != nil {
 		return "", f.CreateCheckoutSessionErr
 	}
-	f.Sessions = append(f.Sessions, FakeCheckoutSession{CustomerID: customerID, PracticeID: practiceID, Quantity: quantity})
+	f.Sessions = append(f.Sessions, req)
 	f.nextID++
 	return fmt.Sprintf("https://checkout.stripe.test/session/%d", f.nextID), nil
 }
 
 // Calls returns a copy of every CreateCheckoutSession call recorded so
 // far.
-func (f *FakeStripeClient) Calls() []FakeCheckoutSession {
+func (f *FakeStripeClient) Calls() []CheckoutSessionRequest {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]FakeCheckoutSession(nil), f.Sessions...)
+	return append([]CheckoutSessionRequest(nil), f.Sessions...)
 }
 
 // CustomerCallCount returns how many times CreateCustomer has been called

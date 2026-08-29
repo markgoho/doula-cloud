@@ -2,6 +2,21 @@ package billing
 
 import "context"
 
+// CheckoutSessionRequest is everything CreateCheckoutSession needs to
+// build one credit purchase.
+//
+// NewYorkStaff and TotalStaff ride along because the taxable share of the
+// sale is a headcount of where the Practice's Staff work (#389), and only
+// the handler can count them -- it holds the request's transaction, and
+// row-level security scopes the count to the Practice being billed.
+type CheckoutSessionRequest struct {
+	CustomerID   string
+	PracticeID   string
+	Quantity     int
+	NewYorkStaff int
+	TotalStaff   int
+}
+
 // StripeClient is the seam over the outbound Stripe API calls that
 // PostPurchaseHandler makes -- creating a Practice's Stripe Customer and
 // its Checkout Session -- so tests can inject FakeStripeClient instead of
@@ -17,9 +32,10 @@ type StripeClient interface {
 	// CreateCustomer creates a Stripe Customer tagged with practiceID and
 	// returns its Stripe id.
 	CreateCustomer(ctx context.Context, practiceID string) (string, error)
-	// CreateCheckoutSession creates a Stripe Checkout Session for quantity
-	// credits against the Stripe Customer customerID, tagged with
-	// practiceID and quantity in metadata so the webhook can credit the
-	// right Practice's ledger. Returns the Session's hosted checkout URL.
-	CreateCheckoutSession(ctx context.Context, customerID, practiceID string, quantity int) (string, error)
+	// CreateCheckoutSession creates a Stripe Checkout Session for
+	// req.Quantity credits against the Stripe Customer req.CustomerID,
+	// tagged with the Practice id and quantity in metadata so the webhook
+	// can credit the right Practice's ledger. Returns the Session's hosted
+	// checkout URL.
+	CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error)
 }
