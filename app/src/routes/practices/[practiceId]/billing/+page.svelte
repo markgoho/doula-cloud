@@ -2,7 +2,13 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { billingPath, originLabel, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
+	import {
+		billingPath,
+		formatSignedQuantity,
+		originLabel,
+		purchaseCredits,
+		type LedgerEntry
+	} from '#lib/billing.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -34,7 +40,7 @@
 		{ label: 'Origin', accessor: (entry: LedgerEntry) => originLabel(entry.origin) },
 		{
 			label: 'Quantity',
-			accessor: (entry: LedgerEntry) => `${entry.quantity > 0 ? '+' : ''}${entry.quantity}`,
+			accessor: (entry: LedgerEntry) => formatSignedQuantity(entry.quantity),
 			numeric: true
 		}
 	];

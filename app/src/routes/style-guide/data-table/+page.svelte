@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import { formatSignedQuantity } from '#lib/billing.js';
 
 	interface Client {
 		name: string;
@@ -26,7 +27,7 @@
 		{ label: 'Origin', accessor: (row: CreditRow) => row.origin },
 		{
 			label: 'Quantity',
-			accessor: (row: CreditRow) => `${row.quantity > 0 ? '+' : ''}${row.quantity}`,
+			accessor: (row: CreditRow) => formatSignedQuantity(row.quantity),
 			numeric: true
 		}
 	];

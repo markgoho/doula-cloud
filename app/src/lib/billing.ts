@@ -48,6 +48,13 @@ export function originLabel(origin: string): string {
 	return ORIGIN_LABELS[origin] ?? origin;
 }
 
+/** A ledger quantity with its sign always shown -- a credit reads "+3", a
+ * debit reads "-1" on its own, with nothing to compare it to in the same
+ * cell (#509). */
+export function formatSignedQuantity(quantity: number): string {
+	return `${quantity > 0 ? '+' : ''}${quantity}`;
+}
+
 /** A minimal fetch-shaped function, injected rather than imported, so load
  * can be unit-tested without mocking the global fetch or SvelteKit's `$app`
  * modules -- mirrors planTemplate.ts's Fetcher. */

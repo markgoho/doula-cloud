@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadBalance, originLabel, purchaseCredits } from './billing.js';
+import { formatSignedQuantity, loadBalance, originLabel, purchaseCredits } from './billing.js';
 import { jsonResponse } from './testResponse.js';
 
 describe('loadBalance', () => {
@@ -64,5 +64,19 @@ describe('originLabel', () => {
 
 	it('falls back to the raw origin, so an unknown value reads oddly rather than blank', () => {
 		expect(originLabel('something_new')).toBe('something_new');
+	});
+});
+
+describe('formatSignedQuantity', () => {
+	it('prefixes a credit with +', () => {
+		expect(formatSignedQuantity(20)).toBe('+20');
+	});
+
+	it('leaves a debit as its own negative sign', () => {
+		expect(formatSignedQuantity(-1)).toBe('-1');
+	});
+
+	it('adds no sign to zero', () => {
+		expect(formatSignedQuantity(0)).toBe('0');
 	});
 });
