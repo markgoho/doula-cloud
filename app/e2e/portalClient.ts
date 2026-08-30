@@ -24,14 +24,14 @@ export interface SeededPortalClient {
 	clientEmail: string;
 }
 
-/** The structural fields `seedClient` writes. Everything else on the
- * record is left at whatever the create endpoint defaults to. */
+/** The fields a caller states about a seeded Client. Only the names,
+ * because ADR-0017's match query is what these fixtures exist to feed and
+ * the name columns are the only part of it a spec ever sets deliberately
+ * -- everything else on the record is left at whatever the create
+ * endpoint defaults to. */
 export interface NewClientFields {
 	givenName: string;
 	familyName?: string;
-	email?: string;
-	phone?: string;
-	dateOfBirth?: string;
 }
 
 /**
@@ -43,6 +43,11 @@ export interface NewClientFields {
  *
  * Takes the Staff cookie header rather than minting its own session, so a
  * caller that already signed in does not pay for a second signup.
+ *
+ * The email is generated rather than asked for, and generated *unique*:
+ * FindMatches matches an email exactly, so a fixture that shared one with
+ * another Client would collide on the email as well as on the name, and a
+ * spec about a name collision would no longer be testing what it says.
  */
 export async function seedClient(
 	request: APIRequestContext,
@@ -50,9 +55,10 @@ export async function seedClient(
 	staffHeaders: { Cookie: string },
 	fields: NewClientFields
 ): Promise<string> {
+	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const created = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
-		data: fields
+		data: { ...fields, email: `client-${unique}@example.com` }
 	});
 	const body = await created.text();
 	expect(created.ok(), `seedClient failed: ${created.status()} ${body}`).toBe(true);

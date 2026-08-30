@@ -140,8 +140,7 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 	// empty message, which is a different set of nodes for axe to read.
 	const clientId = await seedClient(request, practiceId, seeded.staffHeaders, {
 		givenName: 'Jane',
-		familyName: 'Smith',
-		email: `jane-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
+		familyName: 'Smith'
 	});
 	seedEngagement(clientId, practiceId);
 

@@ -159,14 +159,16 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 
 	// The record the rename below collides with. Plain, no portal account:
 	// it exists only to be matched.
-	await seedClient(request, practiceId, staffHeaders, {
-		givenName: 'Jane',
-		familyName: 'Smith',
-		email: `jane-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
-	});
+	await seedClient(request, practiceId, staffHeaders, { givenName: 'Jane', familyName: 'Smith' });
 
 	await signInByKeyboard(page, seeded.staffEmail, practiceId);
 
+	// The one `goto` inside a walk, and it is an entry point rather than a
+	// shortcut past a control: #516 asks for the path that starts *at* the
+	// detail hub. The roster row that links to the hub is therefore not
+	// walked here -- the Clients list is already scanned by axe, and its
+	// row link is the same `Link` primitive the first walk proves
+	// reachable on the Staff roster.
 	const hubURL = `/practices/${practiceId}/clients/${clientId}`;
 	await page.goto(hubURL);
 
