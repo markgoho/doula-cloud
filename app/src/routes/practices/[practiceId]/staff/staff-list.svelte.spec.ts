@@ -256,6 +256,8 @@ describe('staff screen', () => {
 		await setup();
 
 		await testPage.getByRole('button', { name: 'Revoke' }).first().click();
+		const dialog = testPage.getByRole('dialog', { name: 'Revoke invitation' });
+		await dialog.getByRole('button', { name: 'Revoke invitation' }).click();
 
 		await expect
 			.element(testPage.getByRole('cell', { name: 'lena@example.com' }))
@@ -284,6 +286,8 @@ describe('staff screen', () => {
 		await setup();
 
 		await testPage.getByRole('button', { name: 'Remove from practice' }).first().click();
+		const dialog = testPage.getByRole('dialog', { name: 'Remove from Practice' });
+		await dialog.getByRole('button', { name: 'Remove from Practice' }).click();
 
 		await expect
 			.element(testPage.getByRole('cell', { name: 'Ada Lovelace' }))
@@ -295,6 +299,8 @@ describe('staff screen', () => {
 		await setup({ removeResponse: textResponse('a practice must keep at least one Owner') });
 
 		await testPage.getByRole('button', { name: 'Remove from practice' }).first().click();
+		const dialog = testPage.getByRole('dialog', { name: 'Remove from Practice' });
+		await dialog.getByRole('button', { name: 'Remove from Practice' }).click();
 
 		await expect
 			.element(testPage.getByText('a practice must keep at least one Owner'))
@@ -305,6 +311,8 @@ describe('staff screen', () => {
 		await setup({ revokeResponse: textResponse('no pending invitation found at this practice') });
 
 		await testPage.getByRole('button', { name: 'Revoke' }).first().click();
+		const dialog = testPage.getByRole('dialog', { name: 'Revoke invitation' });
+		await dialog.getByRole('button', { name: 'Revoke invitation' }).click();
 
 		await expect
 			.element(testPage.getByText('no pending invitation found at this practice'))
@@ -316,6 +324,8 @@ describe('staff screen', () => {
 
 		const buttons = testPage.getByRole('button', { name: 'End sessions everywhere' });
 		await buttons.nth(1).click();
+		const dialog = testPage.getByRole('dialog', { name: 'End sessions everywhere' });
+		await dialog.getByRole('button', { name: 'End sessions everywhere' }).click();
 
 		const successNotices = testPage.getByText('Sessions ended.');
 		await expect.element(successNotices).toBeVisible();
@@ -330,6 +340,8 @@ describe('staff screen', () => {
 
 		const buttons = testPage.getByRole('button', { name: 'End sessions everywhere' });
 		await buttons.nth(0).click();
+		const dialog = testPage.getByRole('dialog', { name: 'End sessions everywhere' });
+		await dialog.getByRole('button', { name: 'End sessions everywhere' }).click();
 
 		await expect.element(testPage.getByText('Failed to end sessions')).toBeVisible();
 	});

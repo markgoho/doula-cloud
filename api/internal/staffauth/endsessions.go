@@ -2,9 +2,11 @@ package staffauth
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/tasknudge"
@@ -26,6 +28,10 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		if !ok {
 			return
 		}
+		if !RequireConfirmed(w, r) {
+			return
+		}
+		actorStaffID, _ := StaffID(r.Context())
 		targetStaffID := r.PathValue("staffId")
 
 		var identityUID string
@@ -46,6 +52,23 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		if err := authn.EndAllSessions(r.Context(), tx, identityUID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// #473: this handler recorded nothing before -- who ended a Staff
+		// member's sessions, and when, existed nowhere. Same subject kind
+		// as a membership edit or removal, since it is the same
+		// relationship the row names.
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: "membership",
+			SubjectID:   targetStaffID,
+			Action:      "sessions_ended",
+			Diff:        json.RawMessage("{}"),
+			Actor:       activity.StaffActor(actorStaffID),
+		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return

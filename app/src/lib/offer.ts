@@ -195,7 +195,7 @@ export async function declinePreAccountOffer(
 	return readOrThrow(
 		await fetcher(`/api/offers/${offerId}/decline`, {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: { 'Content-Type': 'application/json', 'X-Confirmed': 'true' },
 			body: JSON.stringify({ token, code })
 		})
 	);

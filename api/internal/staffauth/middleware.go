@@ -76,6 +76,23 @@ func ParseUUID(w http.ResponseWriter, label, value string) (ok bool) {
 	return true
 }
 
+// RequireConfirmed guards the four undoable actions #473 found with no
+// confirmation at all. It checks for the one signal ConfirmDialog sends
+// -- the X-Confirmed header -- and writes its own 400 if it is missing.
+// This is honest about what a server can verify: the header's presence
+// proves the client attempted to signal confirmation, not that a person
+// actually meant it; the real enforcement is client-side, ConfirmDialog
+// never sending the request until its own confirm button is pressed.
+// Shared across staffauth and offer, both of which already import this
+// package.
+func RequireConfirmed(w http.ResponseWriter, r *http.Request) (ok bool) {
+	if r.Header.Get("X-Confirmed") != "true" {
+		http.Error(w, "this action requires confirmation", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
 // Middleware wraps an http.Handler with Staff population resolution and
 // practice-membership authorization. db must be a connection using the
 // low-privilege app_runtime role -- the role the RLS policies in

@@ -162,7 +162,7 @@ describe('declinePreAccountOffer', () => {
 
 		expect(fetcher).toHaveBeenCalledWith('/api/offers/offer-1/decline', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: { 'Content-Type': 'application/json', 'X-Confirmed': 'true' },
 			body: JSON.stringify({ token: 'token', code: '123456' })
 		});
 		expect(result.state).toBe('declined');

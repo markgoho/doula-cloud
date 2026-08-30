@@ -52,6 +52,7 @@ func doInviteRequest(t *testing.T, srv *httptest.Server, session, path string, p
 	}
 	authntest.AddSessionCookie(req, session)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Confirmed", "true")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -340,6 +341,42 @@ func TestRevokeInvitationHandler_NotFound(t *testing.T) {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 		}
 	})
+}
+
+func TestRevokeInvitationHandler_RequiresConfirmation(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-forgets-to-confirm-revoke"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	invitationID := seedInvitation(t, db, practiceID, ownerID, "unconfirmed@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+
+	srv, session, _ := newInviteServer(t, db, ownerUID)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		srv.URL+"/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	var status string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID,
+	).Scan(&status); err != nil {
+		t.Fatalf("read invitation: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("status = %q, want the unconfirmed request to have revoked nothing", status)
+	}
 }
 
 func TestRevokeInvitationHandler_NonOwnerForbidden(t *testing.T) {

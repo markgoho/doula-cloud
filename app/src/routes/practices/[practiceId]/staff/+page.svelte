@@ -12,6 +12,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	type StaffSummary = {
@@ -80,11 +81,13 @@
 	let historyLoading = $state<Record<string, boolean>>({});
 	let historyError = $state<Record<string, string>>({});
 
-	let revokingInvitationId = $state('');
 	let revokeError = $state<Record<string, string>>({});
 
-	let removingStaffId = $state('');
 	let removeError = $state<Record<string, string>>({});
+
+	let confirmEndSessionsFor = $state('');
+	let confirmRemoveStaffId = $state('');
+	let confirmRevokeInvitationId = $state('');
 
 	const memberColumns = [
 		{ label: 'Name', accessor: (member: StaffSummary) => member.name },
@@ -205,7 +208,7 @@
 		try {
 			const response = await apiFetchWithSession(
 				`/api/practices/${page.params.practiceId}/staff/${staffId}/sessions`,
-				{ method: 'DELETE' }
+				{ method: 'DELETE', headers: { 'X-Confirmed': 'true' } }
 			);
 			if (!response.ok) {
 				endSessionsError[staffId] = await response.text();
@@ -257,11 +260,10 @@
 	// account and everything she did while she was here stay (#291).
 	async function handleRemoveMembership(staffId: string) {
 		removeError[staffId] = '';
-		removingStaffId = staffId;
 		try {
 			const response = await apiFetchWithSession(
 				`/api/practices/${page.params.practiceId}/staff/${staffId}/membership`,
-				{ method: 'DELETE' }
+				{ method: 'DELETE', headers: { 'X-Confirmed': 'true' } }
 			);
 			if (!response.ok) {
 				removeError[staffId] = await response.text();
@@ -271,18 +273,15 @@
 		} catch (error_) {
 			removeError[staffId] =
 				error_ instanceof Error ? error_.message : 'Failed to remove membership';
-		} finally {
-			removingStaffId = '';
 		}
 	}
 
 	async function handleRevoke(invitationId: string) {
 		revokeError[invitationId] = '';
-		revokingInvitationId = invitationId;
 		try {
 			const response = await apiFetchWithSession(
 				`/api/practices/${page.params.practiceId}/staff/invitations/${invitationId}/revoke`,
-				{ method: 'POST' }
+				{ method: 'POST', headers: { 'X-Confirmed': 'true' } }
 			);
 			if (!response.ok) {
 				revokeError[invitationId] = await response.text();
@@ -292,8 +291,6 @@
 		} catch (error_) {
 			revokeError[invitationId] =
 				error_ instanceof Error ? error_.message : 'Failed to revoke invitation';
-		} finally {
-			revokingInvitationId = '';
 		}
 	}
 </script>
@@ -373,10 +370,21 @@
 	{/if}
 	<Button
 		label="End sessions everywhere"
-		variant="secondary"
+		variant="destructive"
 		size="sm"
-		onClick={() => handleEndSessions(member.staffId)}
-		loading={endingSessionsFor[member.staffId]}
+		onClick={() => (confirmEndSessionsFor = member.staffId)}
+	/>
+	<ConfirmDialog
+		bind:open={
+			() => confirmEndSessionsFor === member.staffId,
+			(value) => {
+				if (!value) confirmEndSessionsFor = '';
+			}
+		}
+		title="End sessions everywhere"
+		consequence={`${member.name} is signed out on every device immediately.`}
+		confirmLabel="End sessions everywhere"
+		onConfirm={() => handleEndSessions(member.staffId)}
 	/>
 	{#if endSessionsDone[member.staffId]}
 		<Notice variant="status" message="Sessions ended." />
@@ -386,10 +394,21 @@
 	{/if}
 	<Button
 		label="Remove from practice"
-		variant="secondary"
+		variant="destructive"
 		size="sm"
-		onClick={() => handleRemoveMembership(member.staffId)}
-		loading={removingStaffId === member.staffId}
+		onClick={() => (confirmRemoveStaffId = member.staffId)}
+	/>
+	<ConfirmDialog
+		bind:open={
+			() => confirmRemoveStaffId === member.staffId,
+			(value) => {
+				if (!value) confirmRemoveStaffId = '';
+			}
+		}
+		title="Remove from Practice"
+		consequence={`${member.name} loses access to this Practice's Clients immediately.`}
+		confirmLabel="Remove from Practice"
+		onConfirm={() => handleRemoveMembership(member.staffId)}
 	/>
 	{#if removeError[member.staffId]}
 		<Notice variant="error" message={removeError[member.staffId]} />
@@ -405,10 +424,21 @@
 	{/if}
 	<Button
 		label="Revoke"
-		variant="secondary"
+		variant="destructive"
 		size="sm"
-		onClick={() => handleRevoke(invitation.invitationId)}
-		loading={revokingInvitationId === invitation.invitationId}
+		onClick={() => (confirmRevokeInvitationId = invitation.invitationId)}
+	/>
+	<ConfirmDialog
+		bind:open={
+			() => confirmRevokeInvitationId === invitation.invitationId,
+			(value) => {
+				if (!value) confirmRevokeInvitationId = '';
+			}
+		}
+		title="Revoke invitation"
+		consequence={`The invitation to ${invitation.address} no longer works.`}
+		confirmLabel="Revoke invitation"
+		onConfirm={() => handleRevoke(invitation.invitationId)}
 	/>
 	{#if revokeError[invitation.invitationId]}
 		<Notice variant="error" message={revokeError[invitation.invitationId]} />

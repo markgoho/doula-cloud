@@ -1,6 +1,8 @@
 package offer_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"testing"
@@ -141,6 +143,45 @@ func TestDeclineByTokenHandler_DeclinesWithoutAnAccount(t *testing.T) {
 
 	// Durable and repeatable, the same as a Staff member's decline.
 	expectStatus(t, do(t, http.MethodPost, declineURL, "", body), http.StatusOK)
+}
+
+// #473: an unconfirmed decline must not even spend one of the ten
+// code-guess attempts 00041 bounds -- checked before withTokenTx.
+func TestDeclineByTokenHandler_RequiresConfirmation(t *testing.T) {
+	f := newFixture(t)
+	offerID, token, code := seedEmailOffer(t, f)
+	declineURL := f.srv + "/offers/" + offerID + "/decline"
+	payload, err := json.Marshal(offer.DeclineByTokenRequest{Token: token, Code: code})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, declineURL, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	state, _ := offerState(t, f.db, offerID)
+	if state != "offered" {
+		t.Fatalf("state = %q, want the unconfirmed request to have declined nothing", state)
+	}
+
+	// The right code, still unconfirmed, still spent no guess -- the
+	// correct code works a moment later, confirmed.
+	var decided offer.DecisionResponse
+	decode(t, do(t, http.MethodPost, declineURL, "", offer.DeclineByTokenRequest{Token: token, Code: code}), http.StatusOK, &decided)
+	if decided.State != stateDeclined {
+		t.Fatalf("state = %q, want declined", decided.State)
+	}
 }
 
 func TestDeclineByTokenHandler_RefusesBadInput(t *testing.T) {

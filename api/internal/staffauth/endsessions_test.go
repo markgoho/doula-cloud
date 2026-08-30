@@ -27,11 +27,79 @@ func deleteSessions(t *testing.T, srv *httptest.Server, session string, practice
 		t.Fatalf("build request: %v", err)
 	}
 	authntest.AddSessionCookie(req, session)
+	req.Header.Set("X-Confirmed", "true")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
 	return resp
+}
+
+func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-forgets-to-confirm-sessions"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	const targetUID = "target-unconfirmed-end-sessions"
+	targetID := seedStaff(t, db, targetUID)
+	seedMembership(t, db, practiceID, targetID)
+	authntest.SeedSession(t, db.App, targetUID)
+
+	srv, session := newEndSessionsServer(t, db, ownerUID)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
+		srv.URL+"/practices/"+practiceID+"/staff/"+targetID+"/sessions", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if got := authntest.CountFor(t, db.App, targetUID); got != 1 {
+		t.Fatalf("target session rows = %d, want the unconfirmed request to have ended nothing", got)
+	}
+}
+
+// TestEndSessionsHandler_RecordsActivity is #473's fix: ending a Staff
+// member's sessions used to leave no record of who did it or when.
+func TestEndSessionsHandler_RecordsActivity(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-records-end-sessions"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	const targetUID = "target-end-sessions-audited"
+	targetID := seedStaff(t, db, targetUID)
+	seedMembership(t, db, practiceID, targetID)
+	authntest.SeedSession(t, db.App, targetUID)
+
+	srv, session := newEndSessionsServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := deleteSessions(t, srv, session, practiceID, targetID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
+	var action, actor string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT action, actor_staff_id FROM activity WHERE subject_kind = 'membership' AND subject_id = $1 AND action = 'sessions_ended'`,
+		targetID,
+	).Scan(&action, &actor); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	if actor != ownerID {
+		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
+	}
 }
 
 func TestEndSessionsHandler_NonOwnerForbidden(t *testing.T) {

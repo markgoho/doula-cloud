@@ -30,6 +30,7 @@ func deleteMembership(t *testing.T, srv *httptest.Server, session, practiceID, s
 		t.Fatalf("build request: %v", err)
 	}
 	authntest.AddSessionCookie(req, session)
+	req.Header.Set("X-Confirmed", "true")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -392,6 +393,44 @@ func TestRemoveMembershipHandler_Refuses(t *testing.T) {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 		}
 	})
+}
+
+func TestRemoveMembershipHandler_RequiresConfirmation(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-forgets-to-confirm"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	targetID := seedStaff(t, db, "unconfirmed-removal")
+	seedMembership(t, db, practiceID, targetID)
+
+	srv, session := newMembershipServer(t, db, ownerUID)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
+		srv.URL+"/practices/"+practiceID+"/staff/"+targetID+"/membership", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	var memberships int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
+		practiceID, targetID,
+	).Scan(&memberships); err != nil {
+		t.Fatalf("count memberships: %v", err)
+	}
+	if memberships != 1 {
+		t.Fatalf("memberships = %d, want the unconfirmed request to have removed nothing", memberships)
+	}
 }
 
 func TestRemoveMembershipHandler_NonOwnerForbidden(t *testing.T) {

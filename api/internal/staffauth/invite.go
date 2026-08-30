@@ -222,6 +222,9 @@ func RevokeInvitationHandler() http.Handler {
 		if !ok {
 			return
 		}
+		if !RequireConfirmed(w, r) {
+			return
+		}
 		actorStaffID, _ := StaffID(r.Context())
 
 		invitationID := r.PathValue("invitationId")

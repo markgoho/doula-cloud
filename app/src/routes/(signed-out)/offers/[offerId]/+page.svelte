@@ -26,6 +26,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 
 	const token = $derived(page.url.searchParams.get('token') ?? '');
 	const offerId = $derived(page.params.offerId!);
@@ -34,7 +35,7 @@
 	let offer = $state<PreAccountOffer | undefined>();
 	let error = $state('');
 	let isOpening = $state(false);
-	let isDeclining = $state(false);
+	let isDeclineDialogOpen = $state(false);
 
 	async function handleOpen(event: SubmitEvent) {
 		event.preventDefault();
@@ -51,14 +52,11 @@
 
 	async function handleDecline() {
 		error = '';
-		isDeclining = true;
 		try {
 			const decided = await declinePreAccountOffer(apiFetch, offerId, token, code);
 			offer &&= { ...offer, state: decided.state };
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Could not decline this offer';
-		} finally {
-			isDeclining = false;
 		}
 	}
 </script>
@@ -102,7 +100,14 @@
 	{#if offer.state === 'offered'}
 		<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." tone="variant" />
 		<Link href={`${resolve('/(signed-out)/accept-invite')}?token=${encodeURIComponent(token)}`} label="Join and accept" />
-		<Button label="Decline" variant="secondary" onClick={handleDecline} loading={isDeclining} />
+		<Button label="Decline" variant="destructive" onClick={() => (isDeclineDialogOpen = true)} />
+		<ConfirmDialog
+			bind:open={isDeclineDialogOpen}
+			title="Decline this offer"
+			consequence="Declining this offer cannot be undone."
+			confirmLabel="Decline this offer"
+			onConfirm={handleDecline}
+		/>
 	{/if}
 {/if}
 

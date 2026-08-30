@@ -294,6 +294,9 @@ func RemoveMembershipHandler() http.Handler {
 		if !ok {
 			return
 		}
+		if !RequireConfirmed(w, r) {
+			return
+		}
 		actorStaffID, _ := StaffID(r.Context())
 		targetStaffID := r.PathValue("staffId")
 		if !ParseUUID(w, "staff", targetStaffID) {

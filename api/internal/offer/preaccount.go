@@ -87,6 +87,11 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+		// Checked before withTokenTx: an unconfirmed request must not
+		// spend one of 00041's bounded code-guess attempts (#473).
+		if !staffauth.RequireConfirmed(w, r) {
+			return
+		}
 		withTokenTx(w, r, db, strings.TrimSpace(req.Token), strings.TrimSpace(req.Code),
 			func(ctx context.Context, tx *sql.Tx, o PreAccountOffer) (any, int, string) {
 				if o.State == stateDeclined {

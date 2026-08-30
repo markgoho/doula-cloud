@@ -94,6 +94,7 @@ func do(t *testing.T, method, url, session string, body any) response {
 	if session != "" {
 		authntest.AddSessionCookie(req, session)
 	}
+	req.Header.Set("X-Confirmed", "true")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
