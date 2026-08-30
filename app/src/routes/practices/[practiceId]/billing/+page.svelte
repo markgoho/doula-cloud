@@ -34,7 +34,8 @@
 		{ label: 'Origin', accessor: (entry: LedgerEntry) => originLabel(entry.origin) },
 		{
 			label: 'Quantity',
-			accessor: (entry: LedgerEntry) => `${entry.quantity > 0 ? '+' : ''}${entry.quantity}`
+			accessor: (entry: LedgerEntry) => `${entry.quantity > 0 ? '+' : ''}${entry.quantity}`,
+			numeric: true
 		}
 	];
 

@@ -17,6 +17,25 @@
 		{ name: 'Grace Hopper', status: 'Prospective' }
 	];
 
+	interface CreditRow {
+		origin: string;
+		quantity: number;
+	}
+
+	const creditColumns = [
+		{ label: 'Origin', accessor: (row: CreditRow) => row.origin },
+		{
+			label: 'Quantity',
+			accessor: (row: CreditRow) => `${row.quantity > 0 ? '+' : ''}${row.quantity}`,
+			numeric: true
+		}
+	];
+
+	const credits: CreditRow[] = [
+		{ origin: 'Purchase', quantity: 20 },
+		{ origin: 'Engagement started', quantity: -1 }
+	];
+
 	let hasMore = $state(true);
 
 	function onLoadMore() {
@@ -56,6 +75,11 @@
 	<section>
 		<h2>Empty</h2>
 		<DataTable {columns} rows={[]} emptyMessage="No clients yet." />
+	</section>
+
+	<section>
+		<h2>Numeric column</h2>
+		<DataTable columns={creditColumns} rows={credits} emptyMessage="No credit history yet." />
 	</section>
 
 	<section>

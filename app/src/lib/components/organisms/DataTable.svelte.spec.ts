@@ -33,7 +33,13 @@ const rows: Row[] = [
 	{ name: 'Grace Hopper', status: 'Inactive' }
 ];
 
+const numericColumns = [
+	{ label: 'Name', accessor: (row: Row) => row.name },
+	{ label: 'Quantity', accessor: (row: Row) => row.status, numeric: true }
+];
+
 interface SetupOptions {
+	columns?: typeof columns;
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
 	rowActions?: { label: string; onRemove: (row: Row) => void };
@@ -43,6 +49,7 @@ interface SetupOptions {
 }
 
 async function setup({
+	columns: columnsOption = columns,
 	rows: rowsOption = rows,
 	rowHref,
 	rowActions,
@@ -51,7 +58,7 @@ async function setup({
 	emptyMessage = 'No records yet.'
 }: SetupOptions = {}) {
 	const { container } = await render(DataTable<Row>, {
-		columns,
+		columns: columnsOption,
 		rows: rowsOption,
 		rowHref,
 		rowActions: rowActions && {
@@ -151,5 +158,17 @@ describe('DataTable.svelte', () => {
 		const { container } = await setup({ rows: [], rowActions: { label: 'Actions', onRemove: vi.fn() } });
 
 		expect(container.querySelector('td[colspan]')).toHaveAttribute('colspan', '3');
+	});
+
+	it('right-aligns a numeric column, header and body cells alike, and leaves a text column start-aligned', async () => {
+		await setup({ columns: numericColumns });
+
+		const header = page.getByRole('columnheader', { name: 'Quantity' });
+		const cell = page.getByRole('cell', { name: 'Active', exact: true });
+		expect(getComputedStyle(header.element()).textAlign).toBe('end');
+		expect(getComputedStyle(cell.element()).textAlign).toBe('end');
+
+		const nameHeader = page.getByRole('columnheader', { name: 'Name' });
+		expect(getComputedStyle(nameHeader.element()).textAlign).toBe('start');
 	});
 });

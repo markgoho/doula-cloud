@@ -6,6 +6,19 @@
 	interface Column<T> {
 		label: string;
 		accessor: (row: T) => string;
+		/*
+		 * Explicit, not inferred from what accessor(row) returns (#509):
+		 * accessor already formats to a string -- Billing's Quantity column
+		 * returns "+3", not 3 -- so there is no numeric value left at render
+		 * time to infer from. The caller knows a column is a quantity or an
+		 * amount before it is ever formatted, so it says so here. GOV.UK's
+		 * Table guidance: right-align numbers so digits compare by place
+		 * value; tabular figures are what actually lines them up in a
+		 * proportional typeface, and the brief asks for both together
+		 * wherever a number is compared (brief.md's Typography section), so
+		 * one flag turns on both.
+		 */
+		numeric?: boolean;
 	}
 
 	interface RowActions<T> {
@@ -32,7 +45,7 @@
 		<thead>
 			<tr>
 				{#each columns as column (column.label)}
-					<th scope="col">{column.label}</th>
+					<th scope="col" class:numeric={column.numeric}>{column.label}</th>
 				{/each}
 				{#if rowActions}
 					<th scope="col">{rowActions.label}</th>
@@ -48,7 +61,7 @@
 				{#each rows as row, index (index)}
 					<tr>
 						{#each columns as column, columnIndex (column.label)}
-							<td>
+							<td class:numeric={column.numeric}>
 								{#if columnIndex === 0 && rowHref}
 									<Link href={rowHref(row)} label={column.accessor(row)} />
 								{:else}
@@ -94,6 +107,15 @@
 
 		th {
 			font-weight: var(--font-weight-semibold);
+		}
+
+		/* A numeric column's header moves with its body cells (#509) --
+		   both carry the same class off the same Column, so they can never
+		   drift apart the way two separately-set rules could. */
+		th.numeric,
+		td.numeric {
+			text-align: end;
+			font-variant-numeric: tabular-nums;
 		}
 	}
 </style>
