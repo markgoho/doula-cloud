@@ -215,6 +215,21 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 			archetype: 'F',
 			url: `/practices/${practiceId}/settings/plan-templates`,
 			h1: 'Plan Templates'
+		},
+		// The last two settings screens postdate #405's A-G survey -- they
+		// arrived with #452's Settings hub -- so they are archetype F by
+		// shape rather than by that table.
+		{
+			key: 'practices/[practiceId]/settings/website',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/website`,
+			h1: 'Your website'
+		},
+		{
+			key: 'practices/[practiceId]/settings/client-fields',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/client-fields`,
+			h1: 'Client Fields'
 		}
 	];
 
@@ -268,6 +283,14 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 			archetype: 'G',
 			url: `/portal/engagements/${engagementId}/contract`,
 			h1: 'Contract'
+		},
+		// Also younger than the archetype survey: Messages joined the
+		// portal nav on #431, and it is a RecordDetail like the hub above.
+		{
+			key: 'portal/engagements/[engagementId]/messages',
+			archetype: 'D',
+			url: `/portal/engagements/${engagementId}/messages`,
+			h1: 'Messages'
 		}
 	];
 
