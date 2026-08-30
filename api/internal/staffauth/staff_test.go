@@ -2,6 +2,7 @@ package staffauth_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -109,7 +110,7 @@ func TestListStaffHandler_Success(t *testing.T) {
 	if len(roster.Members) != 3 {
 		t.Fatalf("members = %+v, want 3 entries", roster.Members)
 	}
-	if len(roster.Invitations) != 0 {
+	if len(roster.Invitations.Items) != 0 {
 		t.Fatalf("invitations = %+v, want none", roster.Invitations)
 	}
 
@@ -176,12 +177,12 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	if len(roster.Members) != 1 {
 		t.Fatalf("members = %+v, want only the Owner", roster.Members)
 	}
-	if len(roster.Invitations) != 3 {
+	if len(roster.Invitations.Items) != 3 {
 		t.Fatalf("invitations = %+v, want 3 pending", roster.Invitations)
 	}
 
 	byID := map[string]staffauth.InvitationSummary{}
-	for _, inv := range roster.Invitations {
+	for _, inv := range roster.Invitations.Items {
 		byID[inv.InvitationID] = inv
 	}
 	pending := byID[pendingID]
@@ -233,11 +234,88 @@ func TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&roster); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(roster.Invitations) != 1 {
+	if len(roster.Invitations.Items) != 1 {
 		t.Fatalf("invitations = %+v, want exactly 1", roster.Invitations)
 	}
-	if roster.Invitations[0].DeliveryFailed {
-		t.Fatalf("invitation = %+v, want the re-send to clear the flag", roster.Invitations[0])
+	if roster.Invitations.Items[0].DeliveryFailed {
+		t.Fatalf("invitation = %+v, want the re-send to clear the flag", roster.Invitations.Items[0])
+	}
+}
+
+// TestListStaffHandler_InvalidCursorRejected mirrors
+// message.TestListHandler_InvalidCursorRejected.
+func TestListStaffHandler_InvalidCursorRejected(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-staff-bad-cursor"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	srv, session := newStaffListServer(t, db, ownerUID)
+	defer srv.Close()
+
+	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+			srv.URL+"/practices/"+practiceID+"/staff?cursor="+cursor, nil)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		authntest.AddSessionCookie(req, session)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
+		}
+	}
+}
+
+// TestListStaffHandler_PaginatesInvitationsNewestFirst seeds more than
+// one page of pending Invitations and walks the cursor, mirroring
+// message.TestListHandler_PaginatesNewestFirst. Members stays whole
+// (#446), so only Invitations has a cursor to walk.
+func TestListStaffHandler_PaginatesInvitationsNewestFirst(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-staff-paging"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	const total = 31 // invitationPageSize (30) + 1, to force a second page
+	for i := range total {
+		seedInvitation(t, db, practiceID, ownerID, fmt.Sprintf("invite-%d@example.com", i), "{doula}", employeeType, time.Now().Add(time.Hour))
+	}
+
+	srv, session := newStaffListServer(t, db, ownerUID)
+	defer srv.Close()
+
+	firstResp := getStaffList(t, srv, session, practiceID)
+	defer firstResp.Body.Close()
+	var first staffauth.Roster
+	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(first.Invitations.Items) != 30 || !first.Invitations.HasMore || first.Invitations.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
+			len(first.Invitations.Items), first.Invitations.HasMore, first.Invitations.NextCursor)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		srv.URL+"/practices/"+practiceID+"/staff?cursor="+*first.Invitations.NextCursor, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	secondResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer secondResp.Body.Close()
+	var second staffauth.Roster
+	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(second.Invitations.Items) != 1 || second.Invitations.HasMore || second.Invitations.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
+			len(second.Invitations.Items), second.Invitations.HasMore, second.Invitations.NextCursor)
 	}
 }
 

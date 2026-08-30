@@ -114,20 +114,23 @@ async function readOpenOffers(fetcher: Fetcher, practiceId: string): Promise<Off
  * which is the exact failure this page exists to stop. The question here
  * is whether the Practice has a Client at all, so it asks that.
  *
- * The endpoint still returns every row -- it is one of the four waiting
- * on a cursor (#446). The page counts the list and renders none of it, so
- * nothing here is unbounded to draw, but the request is far bigger than
- * the question; when #446 lands, this asks for one row instead.
+ * Now that #446 has the endpoint cursor-paginated, one page (at most 30
+ * rows) answers the question -- items.length > 0 -- without ever needing
+ * hasMore or a second request.
  */
 async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promise<boolean> {
 	const response = await fetcher(`/api/practices/${practiceId}/clients?all=true`);
 	if (!response.ok) {
 		throw new Error(await response.text());
 	}
-	const clients: unknown[] = await response.json();
-	return clients.length > 0;
+	const clients: { items: unknown[] } = await response.json();
+	return clients.items.length > 0;
 }
 
+// The pending/expired invitation counts are read off the roster's first
+// page only (#446 paginates invitations at 30/page): undercounting past
+// that is an accepted approximation for a 14-doula pilot practice, not a
+// promise this is exact for an unbounded invitation history.
 async function loadRoster(fetcher: Fetcher, practiceId: string): Promise<RosterHealth> {
 	const response = await fetcher(`/api/practices/${practiceId}/staff`);
 	if (!response.ok) {
@@ -135,12 +138,12 @@ async function loadRoster(fetcher: Fetcher, practiceId: string): Promise<RosterH
 	}
 	const roster: {
 		members: unknown[];
-		invitations: { expired: boolean }[];
+		invitations: { items: { expired: boolean }[] };
 	} = await response.json();
 	return {
 		members: roster.members.length,
-		pendingInvitations: roster.invitations.length,
-		expiredInvitations: roster.invitations.filter((invitation) => invitation.expired).length
+		pendingInvitations: roster.invitations.items.length,
+		expiredInvitations: roster.invitations.items.filter((invitation) => invitation.expired).length
 	};
 }
 

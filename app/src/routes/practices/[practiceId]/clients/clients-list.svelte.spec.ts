@@ -35,7 +35,7 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
-async function setup(response: Response = jsonResponse(clients)) {
+async function setup(response: Response = jsonResponse({ items: clients, hasMore: false })) {
 	apiFetchWithSession.mockResolvedValue(response);
 	await render(Page, {});
 }
@@ -57,15 +57,18 @@ describe('clients list screen', () => {
 		['accepted', 'Accepted']
 	])('shows %s as %s', async (portalInviteStatus, label) => {
 		await setup(
-			jsonResponse([
-				{
-					clientId: 'client-1',
-					name: 'Ada Lovelace',
-					email: 'ada@example.com',
-					hasWork: true,
-					portalInviteStatus
-				}
-			])
+			jsonResponse({
+				items: [
+					{
+						clientId: 'client-1',
+						name: 'Ada Lovelace',
+						email: 'ada@example.com',
+						hasWork: true,
+						portalInviteStatus
+					}
+				],
+				hasMore: false
+			})
 		);
 
 		await expect.element(testPage.getByRole('cell', { name: label })).toBeVisible();
@@ -73,22 +76,25 @@ describe('clients list screen', () => {
 
 	it('distinguishes complained from bounced and dead-lettered as non-actionable', async () => {
 		await setup(
-			jsonResponse([
-				{
-					clientId: 'client-1',
-					name: 'Complained Client',
-					email: 'complained@example.com',
-					hasWork: true,
-					portalInviteStatus: 'complained'
-				},
-				{
-					clientId: 'client-2',
-					name: 'Bounced Client',
-					email: 'bounced@example.com',
-					hasWork: true,
-					portalInviteStatus: 'bounced'
-				}
-			])
+			jsonResponse({
+				items: [
+					{
+						clientId: 'client-1',
+						name: 'Complained Client',
+						email: 'complained@example.com',
+						hasWork: true,
+						portalInviteStatus: 'complained'
+					},
+					{
+						clientId: 'client-2',
+						name: 'Bounced Client',
+						email: 'bounced@example.com',
+						hasWork: true,
+						portalInviteStatus: 'bounced'
+					}
+				],
+				hasMore: false
+			})
 		);
 
 		await expect
@@ -98,7 +104,7 @@ describe('clients list screen', () => {
 	});
 
 	it('shows the empty message when there are no Clients', async () => {
-		await setup(jsonResponse([]));
+		await setup(jsonResponse({ items: [], hasMore: false }));
 
 		await expect.element(testPage.getByText('No Clients yet.')).toBeVisible();
 	});

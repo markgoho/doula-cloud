@@ -17,7 +17,7 @@ afterEach(() => {
 describe('billing/+page.ts load', () => {
 	it('fetches the practice billing path and returns the balance', async () => {
 		const { load } = await import('./+page.js');
-		const balance = { balance: 8, ledger: [] };
+		const balance = { balance: 8, ledger: { items: [], hasMore: false } };
 		const { fetchMock } = setup(200, balance);
 
 		const result = await load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0]);

@@ -19,7 +19,7 @@ const decidedOffer = { offerId: 'offer-2', state: 'accepted' };
 
 const roster = {
 	members: [{ staffId: 'staff-1' }, { staffId: 'staff-2' }],
-	invitations: [{ expired: false }, { expired: true }]
+	invitations: { items: [{ expired: false }, { expired: true }], hasMore: false }
 };
 
 const connectStatus = {
@@ -35,9 +35,9 @@ function fetcherFor(overrides: Record<string, Response> = {}) {
 	const answers: Record<string, Response> = {
 		session: jsonResponse(session),
 		offers: jsonResponse({ items: [openOffer, decidedOffer] }),
-		clients: jsonResponse([{ clientId: 'client-1' }]),
+		clients: jsonResponse({ items: [{ clientId: 'client-1' }], hasMore: false }),
 		staff: jsonResponse(roster),
-		billing: jsonResponse({ balance: 7, ledger: [] }),
+		billing: jsonResponse({ balance: 7, ledger: { items: [], hasMore: false } }),
 		connect: jsonResponse(connectStatus),
 		...overrides
 	};
@@ -100,7 +100,10 @@ describe('loadPracticeLanding', () => {
 	});
 
 	it('reports a Practice with no Clients as empty', async () => {
-		const landing = await loadPracticeLanding(fetcherFor({ clients: jsonResponse([]) }), 'practice-1');
+		const landing = await loadPracticeLanding(
+			fetcherFor({ clients: jsonResponse({ items: [], hasMore: false }) }),
+			'practice-1'
+		);
 
 		expect(landing.hasClients).toBe(false);
 	});

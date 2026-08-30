@@ -11,6 +11,8 @@
 	let clients = $state<ClientListItem[]>([]);
 	let error = $state('');
 	let isLoaded = $state(false);
+	let cursor = $state('');
+	let isMoreAvailable = $state(false);
 
 	// #346: labels for portal_invite_outbox's states, plus "accepted"
 	// (from client_portal_users.identity_uid) and the absent-key
@@ -41,12 +43,26 @@
 
 	onMount(async () => {
 		try {
-			clients = await loadClients(apiFetchWithSession, page.params.practiceId!);
+			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!);
+			clients = loaded.items;
+			cursor = loaded.nextCursor ?? '';
+			isMoreAvailable = loaded.hasMore;
 			isLoaded = true;
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Clients';
 		}
 	});
+
+	async function handleLoadMore() {
+		try {
+			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!, cursor);
+			clients = [...clients, ...loaded.items];
+			cursor = loaded.nextCursor ?? '';
+			isMoreAvailable = loaded.hasMore;
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to load more Clients';
+		}
+	}
 </script>
 
 <h1>Clients</h1>
@@ -59,7 +75,13 @@
 {#if error}
 	<p role="alert">{error}</p>
 {:else if isLoaded}
-	<DataTable {columns} rows={clients} emptyMessage="No Clients yet." />
+	<DataTable
+		{columns}
+		rows={clients}
+		hasMore={isMoreAvailable}
+		onLoadMore={handleLoadMore}
+		emptyMessage="No Clients yet."
+	/>
 {:else}
 	<Skeleton variant="row" lines={8} label="Loading Clients" />
 {/if}

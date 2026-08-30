@@ -9,8 +9,13 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
+
+// pageSize is the fixed number of Visits returned per page, matching
+// message.pageSize's reasoning.
+const pageSize = 30
 
 // Visit is one row of a Visit list: who it's assigned to and when it was
 // created.
@@ -21,11 +26,25 @@ type Visit struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// ListHandler lists every Visit under an Engagement, regardless of which
-// Doula it's assigned to -- same "any Staff at the Practice can see it"
-// visibility as engagement.ListHandler, narrowed the same way by
-// ADR-0008's attachment rule for a contractor Doula. Must be mounted
-// behind staffauth.Middleware.
+// ListResponse is the standard cursor-pagination envelope from
+// docs/api-design.md section 4.
+type ListResponse struct {
+	Items      []Visit `json:"items"`
+	NextCursor *string `json:"nextCursor,omitempty"`
+	HasMore    bool    `json:"hasMore"`
+}
+
+// ListHandler lists Visits under an Engagement, most recent first,
+// cursor-paginated, regardless of which Doula it's assigned to -- same
+// "any Staff at the Practice can see it" visibility as
+// engagement.ListHandler, narrowed the same way by ADR-0008's attachment
+// rule for a contractor Doula. Must be mounted behind
+// staffauth.Middleware.
+//
+// Ordering flipped from ascending (oldest first) to (created_at, id) DESC
+// -- #446, matching docs/api-design.md section 4's own worked example,
+// which is literally this query. The frontend reverses a page for
+// display, the same pattern message.ListHandler already established.
 func ListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
@@ -66,16 +85,37 @@ func ListHandler() http.Handler {
 			return
 		}
 
-		list, err := listVisits(r.Context(), tx, engagementID)
+		var after *pagecursor.Cursor
+		if raw := r.URL.Query().Get("cursor"); raw != "" {
+			c, err := pagecursor.Decode(raw)
+			if err != nil {
+				http.Error(w, "invalid cursor", http.StatusBadRequest)
+				return
+			}
+			after = &c
+		}
+
+		list, err := listVisits(r.Context(), tx, engagementID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
+		hasMore := len(list) > pageSize
+		if hasMore {
+			list = list[:pageSize]
+		}
+		resp := ListResponse{Items: list, HasMore: hasMore}
+		if hasMore {
+			last := list[len(list)-1]
+			next := pagecursor.Encode(last.CreatedAt, last.VisitID)
+			resp.NextCursor = &next
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(list); err != nil {
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
@@ -84,15 +124,21 @@ func ListHandler() http.Handler {
 // listVisits is filtered by engagementID explicitly, on top of the RLS
 // scoping staffauth.Middleware already set up on tx -- the app layer's own
 // filter, so a bug in either one alone can't leak rows.
-func listVisits(ctx context.Context, tx *sql.Tx, engagementID string) ([]Visit, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT v.id, s.id, s.name, v.created_at
+func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor) ([]Visit, error) {
+	query := `SELECT v.id, s.id, s.name, v.created_at
 		 FROM visits v
 		 JOIN staff s ON s.id = v.staff_id
-		 WHERE v.engagement_id = $1
-		 ORDER BY v.created_at`,
-		engagementID,
-	)
+		 WHERE v.engagement_id = $1`
+	args := []any{engagementID}
+	if after != nil {
+		query += ` AND (v.created_at, v.id) < ($2, $3) ORDER BY v.created_at DESC, v.id DESC LIMIT $4`
+		args = append(args, after.At, after.ID, pageSize+1)
+	} else {
+		query += ` ORDER BY v.created_at DESC, v.id DESC LIMIT $2`
+		args = append(args, pageSize+1)
+	}
+
+	rows, err := tx.QueryContext(ctx, query, args...)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
 		return nil, fmt.Errorf("visit: list visits: %w", err)

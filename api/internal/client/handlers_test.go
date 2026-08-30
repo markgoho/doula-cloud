@@ -3,6 +3,7 @@ package client_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -572,20 +573,22 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var list []client.ListItem
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	list := listResp.Items
 	if len(list) != 1 || list[0].ClientID != withTwoEngagements {
 		t.Fatalf("default list = %+v, want exactly one row for the two-Engagement Client", list)
 	}
 
 	all := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
 	defer all.Body.Close()
-	var allList []client.ListItem
-	if err := json.NewDecoder(all.Body).Decode(&allList); err != nil {
+	var allListResp client.ListResponse
+	if err := json.NewDecoder(all.Body).Decode(&allListResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	allList := allListResp.Items
 	if len(allList) != 2 {
 		t.Fatalf("all=true list length = %d, want 2", len(allList))
 	}
@@ -628,13 +631,13 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
-	var list []client.ListItem
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
 	byID := map[string]client.ListItem{}
-	for _, item := range list {
+	for _, item := range listResp.Items {
 		byID[item.ClientID] = item
 	}
 	if byID[neverInvited].PortalInviteStatus != nil {
@@ -669,10 +672,11 @@ func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 
 	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
-	var list []client.ListItem
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	list := listResp.Items
 	if len(list) != 1 || list[0].ClientID != attachedClient {
 		t.Fatalf("contractor list = %+v, want exactly the attached client", list)
 	}
@@ -894,6 +898,106 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 		if out.History[i-1].At.Before(out.History[i].At) {
 			t.Fatalf("history not sorted newest-first: %+v", out.History)
 		}
+	}
+}
+
+// TestListHandler_InvalidCursorRejected mirrors
+// message.TestListHandler_InvalidCursorRejected: malformed base64 and
+// valid base64 with an unparseable timestamp both 400.
+func TestListHandler_InvalidCursorRejected(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-clients-bad-cursor"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
+		resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?cursor="+cursor)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
+		}
+	}
+}
+
+// TestListHandler_PaginatesNewestFirst seeds more than one page of
+// Clients (?all=true, so no Engagement is needed) and walks the cursor,
+// mirroring message.TestListHandler_PaginatesNewestFirst.
+func TestListHandler_PaginatesNewestFirst(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-clients-paging"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+
+	const total = 31 // pageSize (30) + 1, to force a second page
+	for i := range total {
+		seedClient(t, db, practiceID, "Client", fmt.Sprintf("client-%d@example.com", i))
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	defer firstResp.Body.Close()
+	var first client.ListResponse
+	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
+			len(first.Items), first.HasMore, first.NextCursor)
+	}
+
+	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
+	defer secondResp.Body.Close()
+	var second client.ListResponse
+	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
+			len(second.Items), second.HasMore, second.NextCursor)
+	}
+}
+
+// TestListHandler_ContractorPaginatesNewestFirst hits
+// listAttachedClients' cursor branch, the contractor counterpart to
+// TestListHandler_PaginatesNewestFirst.
+func TestListHandler_ContractorPaginatesNewestFirst(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-contractor-paging")
+	const contractorUID = "contractor-paging"
+	staffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+
+	const total = 31
+	for i := range total {
+		_, engagementID := seedClientEngagement(t, db, practiceID, "Client", fmt.Sprintf("attached-%d@example.com", i))
+		seedGrantedAttachment(t, db, engagementID, staffID)
+	}
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	defer firstResp.Body.Close()
+	var first client.ListResponse
+	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
+			len(first.Items), first.HasMore, first.NextCursor)
+	}
+
+	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
+	defer secondResp.Body.Close()
+	var second client.ListResponse
+	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
+			len(second.Items), second.HasMore, second.NextCursor)
 	}
 }
 

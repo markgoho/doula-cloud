@@ -24,23 +24,13 @@ import { describe, expect, it } from 'vitest';
 const ROUTES_ROOT = new URL('../../../routes/', import.meta.url).pathname;
 
 /*
- * The four callers that render every row today. Each needs its BFF
- * endpoint to grow a cursor first, which is Go work against
- * `docs/api-design.md` section 4 -- itself already naming Clients and
- * Visits as datasets that must paginate. That is #446, not this ticket.
- *
- * This list only shrinks. A new unbounded list is a new failure, and
- * clearing one here without wiring the route fails the second test below.
+ * The four callers that used to render every row are all wired to a
+ * cursor now (#446): Clients, Billing, Staff's Invitations, and Visits.
+ * The waiting list is empty rather than deleted -- an unbounded caller
+ * this suite finds tomorrow re-adds itself here, or fails the first test
+ * below instead.
  */
-const AWAITING_A_CURSOR = new Map([
-	['practices/[practiceId]/clients/+page.svelte', 'GET /clients returns a bare array -- #446'],
-	['practices/[practiceId]/billing/+page.svelte', 'GET /billing returns the whole ledger -- #446'],
-	['practices/[practiceId]/staff/+page.svelte', 'GET /staff returns roster and invitations whole -- #446'],
-	[
-		'practices/[practiceId]/engagements/[engagementId]/+page.svelte',
-		'GET /visits returns a bare array -- #446'
-	]
-]);
+const AWAITING_A_CURSOR = new Map<string, string>();
 
 /**
 Route files only: the style guide deliberately renders fixed demo data.

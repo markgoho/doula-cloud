@@ -11,9 +11,17 @@ export interface LedgerEntry {
 	createdAt: string;
 }
 
+/** One page of the ledger -- the cursor-pagination envelope from
+ * docs/api-design.md section 4, mirroring billing.LedgerPage (#446). */
+export interface LedgerPage {
+	items: LedgerEntry[];
+	nextCursor?: string;
+	hasMore: boolean;
+}
+
 export interface Balance {
 	balance: number;
-	ledger: LedgerEntry[];
+	ledger: LedgerPage;
 }
 
 /** What each `credit_ledger` origin is called on the Billing screen.

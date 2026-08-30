@@ -11,6 +11,66 @@ import (
 	"doula-cloud/api/internal/visit"
 )
 
+// TestListHandler_InvalidCursorRejected mirrors
+// message.TestListHandler_InvalidCursorRejected.
+func TestListHandler_InvalidCursorRejected(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-visits-bad-cursor"
+	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
+	engagementID := seedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
+		resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+cursor)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
+		}
+	}
+}
+
+// TestListHandler_PaginatesNewestFirst seeds more than one page of
+// Visits and walks the cursor, mirroring
+// message.TestListHandler_PaginatesNewestFirst.
+func TestListHandler_PaginatesNewestFirst(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-visits-paging"
+	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
+	engagementID := seedEngagement(t, db, practiceID)
+
+	const total = 31 // pageSize (30) + 1, to force a second page
+	for range total {
+		seedVisit(t, db, engagementID, staffID)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer firstResp.Body.Close()
+	var first visit.ListResponse
+	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
+			len(first.Items), first.HasMore, first.NextCursor)
+	}
+
+	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+*first.NextCursor)
+	defer secondResp.Body.Close()
+	var second visit.ListResponse
+	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
+			len(second.Items), second.HasMore, second.NextCursor)
+	}
+}
+
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
@@ -142,10 +202,11 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	var list []visit.Visit
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+	var listResp visit.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	list := listResp.Items
 	if len(list) != 1 || list[0].StaffID != staffID {
 		t.Fatalf("list = %+v, want one Visit assigned to %q", list, staffID)
 	}

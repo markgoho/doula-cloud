@@ -6,10 +6,13 @@ describe('loadBalance', () => {
 	it('fetches the practice billing path and returns the decoded balance', async () => {
 		const balance = {
 			balance: 8,
-			ledger: [
-				{ origin: 'purchase', quantity: 5, createdAt: '2026-08-16T00:00:00Z' },
-				{ origin: 'signup_bonus', quantity: 3, createdAt: '2026-08-01T00:00:00Z' }
-			]
+			ledger: {
+				items: [
+					{ origin: 'purchase', quantity: 5, createdAt: '2026-08-16T00:00:00Z' },
+					{ origin: 'signup_bonus', quantity: 3, createdAt: '2026-08-01T00:00:00Z' }
+				],
+				hasMore: false
+			}
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(balance));
 

@@ -58,6 +58,8 @@
 	let visits = $state<Visit[]>([]);
 	let visitsError = $state('');
 	let isCreatingVisit = $state(false);
+	let visitsCursor = $state('');
+	let isMoreVisitsAvailable = $state(false);
 
 	let portalInviteLink = $state('');
 	let portalInviteError = $state('');
@@ -147,7 +149,25 @@
 			visitsError = await response.text();
 			return;
 		}
-		visits = await response.json();
+		const loaded = await response.json();
+		visits = loaded.items;
+		visitsCursor = loaded.nextCursor ?? '';
+		isMoreVisitsAvailable = loaded.hasMore;
+	}
+
+	// Visits are newest-first from the BFF (#446); appended to the end of
+	// what's already on screen rather than reversed, since this is a
+	// table read top-to-bottom, not a chat thread.
+	async function handleLoadMoreVisits() {
+		const response = await apiFetchWithSession(`${visitsURL()}?cursor=${encodeURIComponent(visitsCursor)}`);
+		if (!response.ok) {
+			visitsError = await response.text();
+			return;
+		}
+		const loaded = await response.json();
+		visits = [...visits, ...loaded.items];
+		visitsCursor = loaded.nextCursor ?? '';
+		isMoreVisitsAvailable = loaded.hasMore;
 	}
 
 	function messagesURL() {
@@ -578,6 +598,8 @@
 		]}
 		rows={visits}
 		rowActions={{ label: 'Reassign', content: reassignAction }}
+		hasMore={isMoreVisitsAvailable}
+		onLoadMore={handleLoadMoreVisits}
 		emptyMessage="No Visits yet."
 	/>
 {/snippet}

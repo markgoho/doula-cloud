@@ -2,15 +2,23 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { originLabel, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
+	import { billingPath, originLabel, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
-	// Balance and ledger come from +page.ts's load now, not an onMount
-	// fetch (#471) -- a role refusal has to reach practices/+error.svelte
-	// rather than sit in a local `error` string this page owned before.
+	// Balance and the ledger's first page come from +page.ts's load now,
+	// not an onMount fetch (#471) -- a role refusal has to reach
+	// practices/+error.svelte rather than sit in a local `error` string
+	// this page owned before. Later pages (#446) are appended locally.
 	let { data }: PageProperties = $props();
+
+	// Deliberately captures data.ledger's initial value only (#446):
+	// handleLoadMoreLedger grows this list itself from here on, so
+	// re-deriving from `data` on every change would drop appended pages.
+	let ledgerEntries = $state(data.ledger.items);
+	let ledgerCursor = $state(data.ledger.nextCursor ?? '');
+	let isMoreLedgerAvailable = $state(data.ledger.hasMore);
 
 	let roles = $state<string[]>([]);
 	let isOwner = $derived(roles.includes('owner'));
@@ -41,6 +49,18 @@
 		}
 	});
 
+	async function handleLoadMoreLedger() {
+		const response = await apiFetchWithSession(
+			`${billingPath(page.params.practiceId!)}?cursor=${encodeURIComponent(ledgerCursor)}`
+		);
+		if (!response.ok) return;
+		const loaded: { ledger: { items: LedgerEntry[]; nextCursor?: string; hasMore: boolean } } =
+			await response.json();
+		ledgerEntries = [...ledgerEntries, ...loaded.ledger.items];
+		ledgerCursor = loaded.ledger.nextCursor ?? '';
+		isMoreLedgerAvailable = loaded.ledger.hasMore;
+	}
+
 	async function handlePurchase(event: SubmitEvent) {
 		event.preventDefault();
 		purchaseError = '';
@@ -60,7 +80,13 @@
 
 <p>Credit balance: {data.balance}</p>
 
-<DataTable {columns} rows={data.ledger} emptyMessage="No ledger history yet." />
+<DataTable
+	{columns}
+	rows={ledgerEntries}
+	hasMore={isMoreLedgerAvailable}
+	onLoadMore={handleLoadMoreLedger}
+	emptyMessage="No ledger history yet."
+/>
 
 {#if checkoutStatus === 'success'}
 	<p role="status">Credit purchase complete. The balance updates once Stripe confirms payment.</p>

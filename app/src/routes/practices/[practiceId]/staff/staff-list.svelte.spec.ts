@@ -145,7 +145,12 @@ function mockApi({
 			return Promise.resolve(jsonResponse({}));
 		}
 		return Promise.resolve(
-			listOk ? jsonResponse(state) : textResponse('Server rejected the Staff list request')
+			listOk
+				? jsonResponse({
+						members: state.members,
+						invitations: { items: state.invitations, hasMore: false }
+					})
+				: textResponse('Server rejected the Staff list request')
 		);
 	});
 }

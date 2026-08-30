@@ -16,6 +16,14 @@ export interface ClientListItem {
 	portalInviteStatus?: string;
 }
 
+/** One page of the Clients list -- the cursor-pagination envelope from
+ * docs/api-design.md section 4, mirroring client.ListResponse (#446). */
+export interface ClientListPage {
+	items: ClientListItem[];
+	nextCursor?: string;
+	hasMore: boolean;
+}
+
 /** The body of an Add-a-Client submission -- the two fields the screen
  * collects today; GivenName is the only fact ADR-0017 requires. */
 export interface NewClient {
@@ -31,12 +39,18 @@ function clientsPath(practiceId: string): string {
 	return `/api/practices/${practiceId}/clients`;
 }
 
-/** Loads a Practice's Clients, Client-shaped -- ListHandler's default
- * "Clients with work" filter (ADR-0017), narrowed further for a
- * contractor Doula server-side. Throws with the response body text on a
- * non-2xx response, mirroring loadBalance's error-surfacing convention. */
-export async function loadClients(fetcher: Fetcher, practiceId: string): Promise<ClientListItem[]> {
-	const response = await fetcher(clientsPath(practiceId));
+/** Loads one page of a Practice's Clients, Client-shaped -- ListHandler's
+ * default "Clients with work" filter (ADR-0017), narrowed further for a
+ * contractor Doula server-side. `cursor` is undefined for the first page.
+ * Throws with the response body text on a non-2xx response, mirroring
+ * loadBalance's error-surfacing convention. */
+export async function loadClients(
+	fetcher: Fetcher,
+	practiceId: string,
+	cursor?: string
+): Promise<ClientListPage> {
+	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+	const response = await fetcher(`${clientsPath(practiceId)}${query}`);
 	if (!response.ok) {
 		throw new Error(await response.text());
 	}

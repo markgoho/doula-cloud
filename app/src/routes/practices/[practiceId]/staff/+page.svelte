@@ -35,10 +35,13 @@
 		deliveryFailed: boolean;
 	};
 
-	type Roster = { members: StaffSummary[]; invitations: InvitationSummary[] };
+	type InvitationPage = { items: InvitationSummary[]; nextCursor?: string; hasMore: boolean };
+	type Roster = { members: StaffSummary[]; invitations: InvitationPage };
 
 	let members = $state<StaffSummary[]>([]);
 	let invitations = $state<InvitationSummary[]>([]);
+	let invitationsCursor = $state('');
+	let isMoreInvitationsAvailable = $state(false);
 	let error = $state('');
 	let isLoaded = $state(false);
 
@@ -132,11 +135,30 @@
 
 		const roster: Roster = await response.json();
 		members = roster.members;
-		invitations = roster.invitations;
+		invitations = roster.invitations.items;
+		invitationsCursor = roster.invitations.nextCursor ?? '';
+		isMoreInvitationsAvailable = roster.invitations.hasMore;
 		isLoaded = true;
 	}
 
 	onMount(loadRoster);
+
+	// Loads one more page of pending Invitations, appended to what is
+	// already on screen -- the Members roster stays whole (#446: it is
+	// bounded, unlike the Invitation history), so only this list grows.
+	async function handleLoadMoreInvitations() {
+		const response = await apiFetchWithSession(
+			`/api/practices/${page.params.practiceId}/staff?cursor=${encodeURIComponent(invitationsCursor)}`
+		);
+		if (!response.ok) {
+			error = await response.text();
+			return;
+		}
+		const roster: Roster = await response.json();
+		invitations = [...invitations, ...roster.invitations.items];
+		invitationsCursor = roster.invitations.nextCursor ?? '';
+		isMoreInvitationsAvailable = roster.invitations.hasMore;
+	}
 
 	// One page of a member's work state history, appended to whatever is
 	// already on screen. cursor is undefined for the first page.
@@ -472,10 +494,14 @@
 	{#if members.length === 0}
 		<Text text="No Staff yet." />
 	{:else}
+		<!-- hasMore is always false: the roster is a bounded population
+		     (server-capped at maxMembers, #446) and never paginates, unlike
+		     Invitations below. -->
 		<DataTable
 			columns={memberColumns}
 			rows={members}
 			rowActions={{ label: 'Actions', content: memberActions }}
+			hasMore={false}
 			emptyMessage="No Staff yet."
 		/>
 	{/if}
@@ -488,6 +514,8 @@
 			columns={invitationColumns}
 			rows={invitations}
 			rowActions={{ label: 'Actions', content: invitationActions }}
+			hasMore={isMoreInvitationsAvailable}
+			onLoadMore={handleLoadMoreInvitations}
 			emptyMessage="No pending invitations."
 		/>
 	{/if}

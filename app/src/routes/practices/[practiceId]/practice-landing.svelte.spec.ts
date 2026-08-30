@@ -54,12 +54,12 @@ async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overri
 	const answers: Record<string, Response> = {
 		session: jsonResponse({ practiceName: 'Riverside Doula Collective', roles }),
 		offers: jsonResponse({ items: [offer, { offerId: 'offer-2', state: 'declined' }] }),
-		clients: jsonResponse(clients),
+		clients: jsonResponse({ items: clients, hasMore: false }),
 		staff: jsonResponse({
 			members: [{ staffId: 's1' }, { staffId: 's2' }],
-			invitations: [{ expired: true }]
+			invitations: { items: [{ expired: true }], hasMore: false }
 		}),
-		billing: jsonResponse({ balance: 12, ledger: [] }),
+		billing: jsonResponse({ balance: 12, ledger: { items: [], hasMore: false } }),
 		connect: jsonResponse({
 			status: 'onboarding_incomplete',
 			cardPaymentsStatus: 'restricted',

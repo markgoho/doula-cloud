@@ -3,17 +3,28 @@ import { createClient, loadClients } from './client.js';
 import { jsonResponse as response } from './testResponse.js';
 
 describe('loadClients', () => {
-	it('fetches the practice clients path and returns the decoded list', async () => {
-		const clients = [
-			{ clientId: 'client-1', name: 'Ada Lovelace', email: 'ada@example.com', hasWork: true, portalInviteStatus: 'sent' },
-			{ clientId: 'client-2', name: 'Grace Hopper', email: 'grace@example.com', hasWork: false }
-		];
-		const fetcher = vi.fn().mockResolvedValue(response(clients));
+	it('fetches the practice clients path and returns the decoded page', async () => {
+		const page = {
+			items: [
+				{ clientId: 'client-1', name: 'Ada Lovelace', email: 'ada@example.com', hasWork: true, portalInviteStatus: 'sent' },
+				{ clientId: 'client-2', name: 'Grace Hopper', email: 'grace@example.com', hasWork: false }
+			],
+			hasMore: false
+		};
+		const fetcher = vi.fn().mockResolvedValue(response(page));
 
 		const result = await loadClients(fetcher, 'practice-1');
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients');
-		expect(result).toEqual(clients);
+		expect(result).toEqual(page);
+	});
+
+	it('appends the cursor when given one', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', 'next-page');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?cursor=next-page');
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {

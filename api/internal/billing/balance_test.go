@@ -186,16 +186,16 @@ func TestGetBalanceHandler_AdminAllowed(t *testing.T) {
 	if out.Balance != 8 {
 		t.Fatalf("balance = %d, want 8", out.Balance)
 	}
-	if len(out.Ledger) != 2 {
+	if len(out.Ledger.Items) != 2 {
 		t.Fatalf("ledger = %+v, want 2 entries", out.Ledger)
 	}
 	// Most recent first: the purchase (seeded second) precedes the
 	// signup_bonus (seeded first).
-	if out.Ledger[0].Origin != "purchase" || out.Ledger[0].Quantity != 5 {
-		t.Fatalf("ledger[0] = %+v, want purchase +5", out.Ledger[0])
+	if out.Ledger.Items[0].Origin != "purchase" || out.Ledger.Items[0].Quantity != 5 {
+		t.Fatalf("ledger[0] = %+v, want purchase +5", out.Ledger.Items[0])
 	}
-	if out.Ledger[1].Origin != "signup_bonus" || out.Ledger[1].Quantity != 3 {
-		t.Fatalf("ledger[1] = %+v, want signup_bonus +3", out.Ledger[1])
+	if out.Ledger.Items[1].Origin != "signup_bonus" || out.Ledger.Items[1].Quantity != 3 {
+		t.Fatalf("ledger[1] = %+v, want signup_bonus +3", out.Ledger.Items[1])
 	}
 }
 
@@ -224,7 +224,7 @@ func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 	if out.Balance != 0 {
 		t.Fatalf("balance = %d, want 0", out.Balance)
 	}
-	if out.Ledger == nil || len(out.Ledger) != 0 {
+	if out.Ledger.Items == nil || len(out.Ledger.Items) != 0 {
 		t.Fatalf("ledger = %+v, want empty non-nil slice", out.Ledger)
 	}
 }
@@ -247,5 +247,81 @@ func TestGetBalanceHandler_DoulaForbidden(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+// TestGetBalanceHandler_InvalidCursorRejected mirrors
+// message.TestListHandler_InvalidCursorRejected.
+func TestGetBalanceHandler_InvalidCursorRejected(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-owner-bad-cursor"
+	practiceID := seedMember(t, db, uid, "{owner}")
+
+	srv, session := newBillingServer(t, db, uid)
+	defer srv.Close()
+
+	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+			srv.URL+"/practices/"+practiceID+"/billing?cursor="+cursor, nil)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		authntest.AddSessionCookie(req, session)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
+		}
+	}
+}
+
+// TestGetBalanceHandler_PaginatesNewestFirst seeds more than one page of
+// credit_ledger rows and walks the cursor, mirroring
+// message.TestListHandler_PaginatesNewestFirst.
+func TestGetBalanceHandler_PaginatesNewestFirst(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-owner-paging"
+	practiceID := seedMember(t, db, uid, "{owner}")
+
+	const total = 31 // pageSize (30) + 1, to force a second page
+	for range total {
+		seedLedgerRow(t, db, practiceID, "purchase", 1)
+	}
+
+	srv, session := newBillingServer(t, db, uid)
+	defer srv.Close()
+
+	firstResp := getBalance(t, srv, session, practiceID)
+	defer firstResp.Body.Close()
+	var first billing.BalanceResponse
+	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(first.Ledger.Items) != 30 || !first.Ledger.HasMore || first.Ledger.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
+			len(first.Ledger.Items), first.Ledger.HasMore, first.Ledger.NextCursor)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		srv.URL+"/practices/"+practiceID+"/billing?cursor="+*first.Ledger.NextCursor, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	secondResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer secondResp.Body.Close()
+	var second billing.BalanceResponse
+	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(second.Ledger.Items) != 1 || second.Ledger.HasMore || second.Ledger.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
+			len(second.Ledger.Items), second.Ledger.HasMore, second.Ledger.NextCursor)
 	}
 }
