@@ -179,6 +179,11 @@
 	--page-gutter: clamp(var(--space-4), 5vw, 2.5rem);
 	--page-max: 76rem;
 	--form-max: 44rem;
+	/* The rail beside a page's column -- RecordDetail's contents list
+	   (#424) and the intake step rail (#464) are the same 260px the
+	   drawing put there, and three consumers is past the bar at which a
+	   number copied into three stylesheets stops being one decision. */
+	--page-rail: 16.25rem;
 
 	/* The application shell (#452), for the same reason as the page frame
 	   above: the brief fixes the 60px bar and --hit-target-min, and leaves

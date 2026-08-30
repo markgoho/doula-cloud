@@ -54,7 +54,7 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | GOV.UK pattern | Doula Cloud | Status |
 | --- | --- | --- |
 | [Check a service is suitable](https://design-system.service.gov.uk/patterns/check-a-service-is-suitable/) | The Hugo marketing site does this job, not the app | N/A here |
-| [Check answers](https://design-system.service.gov.uk/patterns/check-answers/) | The `CheckAnswers` Template, wider column for long lists | Drawn -- [#464](https://github.com/markgoho/doula-cloud/issues/464), [#466](https://github.com/markgoho/doula-cloud/issues/466) |
+| [Check answers](https://design-system.service.gov.uk/patterns/check-answers/) | `templates/CheckAnswers.svelte` -- key / value / Change rows on hairline dividers, `isWide` for a long list | Aligned -- built on [#464](https://github.com/markgoho/doula-cloud/issues/464); its first route is [#466](https://github.com/markgoho/doula-cloud/issues/466) |
 | [Complete multiple tasks](https://design-system.service.gov.uk/patterns/complete-multiple-tasks/) | The Practice landing page's roll-ups are the nearest thing; a task list is not adopted | Considered -- see below |
 | [Confirm a phone number](https://design-system.service.gov.uk/patterns/confirm-a-phone-number/) | No SMS is sent, so no code to confirm | N/A |
 | [Confirm an email address](https://design-system.service.gov.uk/patterns/confirm-an-email-address/) | Invitation acceptance already proves the address | Aligned by way of the invite flow |
@@ -76,7 +76,7 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | [Page not found](https://design-system.service.gov.uk/patterns/page-not-found-pages/) | No `+error.svelte` exists at all | Open -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
 | [Question pages](https://design-system.service.gov.uk/patterns/question-pages/) | The `QuestionPage` Template; one thing per page, legend or label as the `<h1>` | Drawn -- `e994dc7`, [#464](https://github.com/markgoho/doula-cloud/issues/464) |
 | [Service unavailable](https://design-system.service.gov.uk/patterns/service-unavailable-pages/) | Same gap | Open -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
-| [Step by step navigation](https://design-system.service.gov.uk/patterns/step-by-step-navigation/) | Their pattern is for guidance across many services; our step rail is a progress indicator inside one flow | N/A -- do not confuse the two |
+| [Step by step navigation](https://design-system.service.gov.uk/patterns/step-by-step-navigation/) | Their pattern is for guidance across many services; our `organisms/StepRail.svelte` is a progress indicator inside one flow, taking step-by-step's anatomy and Complete-multiple-tasks' semantics ([#432](https://github.com/markgoho/doula-cloud/issues/432)'s departure 1) | N/A -- do not confuse the two |
 | [There is a problem with the service](https://design-system.service.gov.uk/patterns/problem-with-the-service-pages/) | Same gap | Open -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
 
 ## Components
@@ -86,7 +86,7 @@ Their [component list](https://design-system.service.gov.uk/components/) against
 | GOV.UK component | Doula Cloud | Status |
 | --- | --- | --- |
 | [Accordion](https://design-system.service.gov.uk/components/accordion/) | Nothing needs one | N/A for now |
-| [Back link](https://design-system.service.gov.uk/components/back-link/) | A region of `QuestionPage` | Drawn -- [#464](https://github.com/markgoho/doula-cloud/issues/464) |
+| [Back link](https://design-system.service.gov.uk/components/back-link/) | `molecules/BackLink.svelte`, rendered by `QuestionPage` and `CheckAnswers` above the error summary | Aligned -- built on [#464](https://github.com/markgoho/doula-cloud/issues/464) |
 | [Breadcrumbs](https://design-system.service.gov.uk/components/breadcrumbs/) | A flat six-item nav means there is no hierarchy to breadcrumb | N/A, deliberately |
 | [Button](https://design-system.service.gov.uk/components/button/) | `atoms/Button.svelte` | Aligned |
 | [Character count](https://design-system.service.gov.uk/components/character-count/) | Nothing counts anything | Open -- [#468](https://github.com/markgoho/doula-cloud/issues/468) |
@@ -113,7 +113,7 @@ Their [component list](https://design-system.service.gov.uk/components/) against
 | [Select](https://design-system.service.gov.uk/components/select/) | `atoms/Select.svelte` | Aligned |
 | [Service navigation](https://design-system.service.gov.uk/components/service-navigation/) | The staff and portal top bars | Drawn -- [#452](https://github.com/markgoho/doula-cloud/issues/452) |
 | [Skip link](https://design-system.service.gov.uk/components/skip-link/) | None anywhere in the app | Open -- added to [#452](https://github.com/markgoho/doula-cloud/issues/452) |
-| [Summary list](https://design-system.service.gov.uk/components/summary-list/) | `molecules/DescriptionList.svelte`, which has no action column yet | Partly open -- [#464](https://github.com/markgoho/doula-cloud/issues/464) |
+| [Summary list](https://design-system.service.gov.uk/components/summary-list/) | Two things, deliberately: `molecules/DescriptionList.svelte` for a record's facts, and `CheckAnswers`'s own rows where there is a Change action | Aligned -- [#464](https://github.com/markgoho/doula-cloud/issues/464) kept the action row internal to `CheckAnswers` rather than growing a molecule for one consumer; it moves out when a second page wants it |
 | [Table](https://design-system.service.gov.uk/components/table/) | `organisms/DataTable.svelte` | Aligned |
 | [Tabs](https://design-system.service.gov.uk/components/tabs/) | Nothing needs one | N/A for now |
 | [Tag](https://design-system.service.gov.uk/components/tag/) | `atoms/Badge.svelte` | Aligned |

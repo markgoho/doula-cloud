@@ -12,7 +12,14 @@
 </script>
 
 <dl>
-	{#each items as item (item.label)}
+	<!--
+		Keyed on index, not on the label (#464). A record can legitimately
+		show the same label twice -- two phone numbers, two Practice-defined
+		fields a Practice named alike -- and a duplicate key collapses both
+		rows into one silently. The array is positional anyway: a row has no
+		identity beyond where it sits.
+	-->
+	{#each items as item, index (index)}
 		<dt>{item.label}</dt>
 		<dd>{item.value}</dd>
 	{/each}

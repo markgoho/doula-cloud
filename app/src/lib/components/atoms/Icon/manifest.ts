@@ -8,6 +8,7 @@ export const iconManifest = [
 	'warning',
 	'info',
 	'arrow-right',
+	'arrow-left',
 	'arrow-square-out',
 	'minus-circle',
 	'paperclip',

@@ -179,7 +179,7 @@
 		 */
 		@container (min-width: 60rem) {
 			.body.has-contents {
-				grid-template-columns: 16.25rem minmax(0, 1fr);
+				grid-template-columns: var(--page-rail) minmax(0, 1fr);
 				column-gap: var(--space-12);
 			}
 

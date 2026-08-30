@@ -5,12 +5,37 @@
 	interface Properties {
 		href: string;
 		label: string;
-		variant?: 'primary' | 'secondary' | 'card' | 'rail' | 'chip' | 'nav' | 'sheet' | 'skip';
+		variant?:
+			| 'primary'
+			| 'secondary'
+			| 'card'
+			| 'rail'
+			| 'chip'
+			| 'nav'
+			| 'sheet'
+			| 'skip'
+			| 'step';
 		icon?: IconName;
 		current?: boolean;
+		/*
+		 * Text elsewhere on the page that qualifies this link, joined to it
+		 * the way `TextInput` joins a hint to a control. `StepRail` (#464)
+		 * needs it: a step's status is a sibling of its link, so without
+		 * this a keyboard user tabbing the rail hears "Where Sarah lives"
+		 * and never "Not started" -- which is the half that says whether
+		 * there is anything to go back for.
+		 */
+		describedBy?: string;
 	}
 
-	let { href, label, variant = 'primary', icon, current = false }: Properties = $props();
+	let {
+		href,
+		label,
+		variant = 'primary',
+		icon,
+		current = false,
+		describedBy
+	}: Properties = $props();
 
 	// Absolute (http(s)) or protocol-relative hrefs leave the app; every
 	// internal route in this codebase is a relative or root-relative path
@@ -24,6 +49,7 @@
 	class={variant}
 	class:has-icon={Boolean(icon)}
 	aria-current={current ? 'page' : undefined}
+	aria-describedby={describedBy}
 	target={isExternal ? '_blank' : undefined}
 	rel={isExternal ? 'noopener noreferrer' : undefined}
 >
@@ -198,6 +224,36 @@
 		a.sheet[aria-current='page'] {
 			border-inline-start-color: var(--color-primary);
 			background-color: var(--color-surface-container);
+			color: var(--color-primary);
+		}
+
+		/* A step in a journey's own rail (`StepRail`, #464). Unlike `rail`,
+		   whose entries are in-page anchors, a step is a route -- so it
+		   takes the shell's nav treatment rather than the link treatment:
+		   neutral text with the 2px bar the brief reserves for an active
+		   nav marker. #432's first pass used ordinary prose links, which
+		   put five accent-coloured titles and ten accent sub-links on one
+		   page, against the brief's Von Restorff rule. The accent is now
+		   spent once in the rail -- on the step you are on -- and once on
+		   `Continue`. */
+		a.step {
+			align-items: baseline;
+			inline-size: 100%;
+			padding-block: var(--space-2);
+			padding-inline-start: var(--space-4);
+			border-inline-start: var(--border-active) solid transparent;
+			color: var(--color-on-surface);
+			font-size: var(--text-body-sm-size);
+			font-weight: var(--font-weight-medium);
+			text-decoration: none;
+		}
+
+		a.step:hover {
+			background-color: var(--color-surface-container);
+		}
+
+		a.step[aria-current='page'] {
+			border-inline-start-color: var(--color-primary);
 			color: var(--color-primary);
 		}
 

@@ -84,4 +84,44 @@ describe('RadioGroup.svelte', () => {
 			.element(page.getByLabelText("I'm new here -- create an account"))
 			.toHaveAttribute('name', 'mode');
 	});
+
+	/*
+	 * #464: a question page makes the group's name the page's own <h1>, so
+	 * the Template already owns the <fieldset> and its <legend>. A second
+	 * one here would nest fieldsets and announce the question twice.
+	 */
+	it('renders no fieldset and no legend when the group is unnamed', async () => {
+		const { container } = await render(RadioGroup<Mode>, {
+			options,
+			value: 'signup',
+			onChange: vi.fn()
+		});
+
+		expect(container.querySelectorAll('fieldset')).toHaveLength(0);
+		expect(container.querySelectorAll('legend')).toHaveLength(0);
+		await expect.element(page.getByLabelText("I'm new here -- create an account")).toBeVisible();
+	});
+
+	/*
+	 * The duplicate-check page (#432) offers the Practice's existing Clients
+	 * as options, and a name alone cannot tell two Sarahs apart -- the
+	 * history and the consequence belong to the option.
+	 */
+	it('describes an option from its own description', async () => {
+		const { container } = await render(RadioGroup<Mode>, {
+			legend: 'Mode',
+			options: [
+				{ value: 'signup' as Mode, label: 'Sarah Whitfield', description: 'Added 4 March 2026.' },
+				{ value: 'login' as Mode, label: 'No, this is a different person' }
+			],
+			value: 'signup',
+			onChange: vi.fn()
+		});
+
+		const described = page.getByLabelText('Sarah Whitfield').element().getAttribute('aria-describedby');
+		expect(container.querySelector(`#${described}`)?.textContent).toBe('Added 4 March 2026.');
+		expect(
+			page.getByLabelText('No, this is a different person').element().getAttribute('aria-describedby')
+		).toBeNull();
+	});
 });

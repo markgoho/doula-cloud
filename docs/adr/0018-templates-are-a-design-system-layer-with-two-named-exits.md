@@ -66,6 +66,8 @@ named Snippet props and the repeatable part is a typed array, `DataTable.rowActi
 | **B** Overview hub | `templates/OverviewHub.svelte` | `title`, `primary`, `secondary?`, and **`isEmpty` + `empty`, both required** |
 | **D** Record detail | `templates/RecordDetail.svelte` | `title`, `summary?`, `actions?`, `sections: { heading, content }[]`, **`contents?`** — see the amendment below |
 | **E** Long form | `templates/FormPage.svelte` | `title`, `intro?`, `fieldsets: { legend, content }[]`, `error?`, `actions` |
+| **E** Question page | `templates/QuestionPage.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `errorSummary?`, `caption?`, `question`, `hint?`, `content`, `actions` — see the second amendment below |
+| **E** Check answers | `templates/CheckAnswers.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `title`, `caption?`, `errorSummary?`, `sections`, `isWide?`, `actions` — same amendment |
 
 `FormPage.fieldsets` is ADR-0017's shape: the twelve-column structural core is one fieldset and each
 Practice-defined section is another appended below it — the pattern the
@@ -131,7 +133,8 @@ are the least visible.
 ## Scope
 
 Seven layout archetypes were found across all 23 routes and are recorded in #405's Notes. **Three get
-Templates here** — B, D and E. A (unauthenticated entry), C (index/list), F (settings/editor) and G
+Templates here** — B, D and E. (Archetype E later turned out to be three Templates rather than one; see
+the 2026-08-29 amendment below.) A (unauthenticated entry), C (index/list), F (settings/editor) and G
 (document/print) are deliberately left, as is retrofitting the remaining routes onto these three.
 
 The Practice landing page's *content* is not decided here either. The persona and journey documents supply
@@ -184,3 +187,68 @@ The same list is rendered twice — a rail and a jump-to strip — with exactly 
 at any width, which takes the other out of the accessibility tree entirely. One list restyled by a
 container query is not available: the two looks are `Link` variants (`rail` and `chip`), and an atom does
 not get to know how wide its page frame is.
+
+## Amendment, 2026-08-29 — archetype E is three Templates, and one of them renders a landmark
+
+Added on [#464](https://github.com/markgoho/doula-cloud/issues/464), building what
+[#432](https://github.com/markgoho/doula-cloud/issues/432) drew. There are now **five** Templates, not
+three.
+
+### Why a prop could not do it
+
+`FormPage` renders `<Heading level={1}>` and, separately, `<fieldset><legend>`. A GOV.UK question page
+needs the legend — or the `<label>`, where the page holds a single input — to **be** the `<h1>`, so a
+screen reader announces the question once rather than twice. The [Dates
+pattern](https://design-system.service.gov.uk/patterns/dates/) ships the markup:
+`<legend><h1 class="govuk-fieldset__heading">`. That is a different tree, not a different attribute.
+
+A mode flag on `FormPage` was considered and rejected on the account owner's call: it hides two
+genuinely different page shapes behind a boolean, which is the thing the *two named exits* rule above
+exists to prevent. `FormPage` keeps the job it is right for — a genuinely multi-fieldset form — and
+after this its caller is `invite`, not `clients/new`.
+
+- **`QuestionPage`** — one question per page, where GOV.UK's *one thing* is a question and not a field.
+  The question is a discriminated union, `{ as: 'legend' }` or `{ as: 'label', for }`, so the `for` a
+  label needs cannot be forgotten and cannot be supplied where it means nothing.
+- **`CheckAnswers`** — the summary page that ends the sequence, with key / value / **Change** rows on
+  hairline dividers and GOV.UK's two column widths.
+
+### The step rail is a `<nav>`, which amends *What a Template owns*
+
+The rule above says a Template never renders navigation and never renders a landmark. `QuestionPage`
+and `CheckAnswers` both render `organisms/StepRail.svelte`, which is a `<nav>` named after the journey.
+That is a deliberate amendment, decided by the account owner on #464 over the two alternatives (a plain
+unnamed list, or a slot in the shell).
+
+The rule's *reason* was that chrome is site-wide and session-derived, so a Template rendering it could
+not be dropped into any route or rendered in a test with no session. A journey rail is neither: it is
+page-scoped, handed in as data by the route, and means nothing outside the one sequence it belongs to.
+**The shell cannot render it, because the shell does not know the journey.** So the amended rule is
+that a Template renders no *chrome* navigation; journey navigation scoped to the page's own task
+sequence is a Template region. `banner` and `main` stay the shell's, and no Template renders either.
+
+#432's drawing asked for the `<nav>` *before* `<main>`. That is not available:
+[#452](https://github.com/markgoho/doula-cloud/issues/452) put `<main>` in the shell, so everything a
+Template renders is already inside it. A `<nav>` inside `<main>` is valid and is a landmark either way.
+
+This does **not** reopen the `contents` region above. That one stays a boolean deriving its list from
+`sections`, because its entries are in-page anchors and "it is not a nav" has to stay enforceable. A
+step rail's entries are routes, so it is the opposite case: it *is* navigation, and saying so is what
+makes the step number announceable.
+
+### Three smaller calls recorded here
+
+- **`StepRail` is an organism, not a region on each Template.** Two identical consumers is exactly the
+  extraction bar above, and #424's rule — a molecule is a part of a section, an organism is a whole one
+  — puts it in the organism tier. `BackLink` is extracted as a **molecule** on the same bar: GOV.UK's
+  Back link is a named component with rules of its own (top of the page, above the error summary, the
+  word is *Back*), and without it those rules are copied into two stylesheets.
+- **The error summary is a position, never markup.** Both Templates take `errorSummary?: Snippet` and
+  render it below the back link and above the `<h1>`, which is GOV.UK's position and is page-level
+  arrangement. Neither renders a `Notice` or an error box of its own; the component is
+  [#467](https://github.com/markgoho/doula-cloud/issues/467)'s, and a second one built here is the
+  duplication that ticket exists to remove.
+- **`CheckAnswers` keeps its row markup internal rather than growing `DescriptionList`.** A
+  check-answers row is a label, a value and an action, and `DescriptionList` has no action column.
+  Growing a molecule for exactly one consumer is what the extraction bar exists to prevent. The row
+  moves out when a second page wants it.

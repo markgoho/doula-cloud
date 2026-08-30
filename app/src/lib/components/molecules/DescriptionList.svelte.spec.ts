@@ -32,4 +32,25 @@ describe('DescriptionList.svelte', () => {
 		expect(container.querySelectorAll('dt')).toHaveLength(2);
 		expect(container.querySelectorAll('dd')).toHaveLength(2);
 	});
+
+	/*
+	 * #464: keyed on index rather than on the label, because a record can
+	 * legitimately show the same label twice -- two phone numbers, two
+	 * Practice-defined fields a Practice named alike -- and a duplicate key
+	 * collapsed both rows into one silently.
+	 */
+	it('renders both rows when two items share a label', async () => {
+		const { container } = await render(DescriptionList, {
+			items: [
+				{ label: 'Phone', value: '(585) 555 0142' },
+				{ label: 'Phone', value: '(585) 555 0199' }
+			]
+		});
+
+		expect(container.querySelectorAll('dt')).toHaveLength(2);
+		expect([...container.querySelectorAll('dd')].map((node) => node.textContent)).toEqual([
+			'(585) 555 0142',
+			'(585) 555 0199'
+		]);
+	});
 });

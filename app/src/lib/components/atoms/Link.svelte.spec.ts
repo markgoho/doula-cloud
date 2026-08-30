@@ -116,4 +116,26 @@ describe('Link.svelte', () => {
 
 		await expect.element(page.getByRole('link')).toHaveClass('chip');
 	});
+
+	// #464: a step in a journey rail takes the shell's nav treatment rather
+	// than the link treatment, so the accent is spent once per screen.
+	it('renders the step variant class', async () => {
+		await setup({ variant: 'step' });
+
+		await expect.element(page.getByRole('link')).toHaveClass('step');
+	});
+
+	// StepRail puts a step's status in a sibling element, so without this a
+	// keyboard user tabbing the rail never hears it.
+	it('joins itself to qualifying text elsewhere on the page', async () => {
+		await setup({ describedBy: 'step-2-status' });
+
+		await expect.element(page.getByRole('link')).toHaveAttribute('aria-describedby', 'step-2-status');
+	});
+
+	it('carries no aria-describedby when none is given', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('link')).not.toHaveAttribute('aria-describedby');
+	});
 });
