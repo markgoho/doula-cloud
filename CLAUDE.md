@@ -34,6 +34,7 @@ ranked against the feature, and no ticket has to ask for them.
   only a fixture's.
 - **Security.** What is built refuses what it should refuse, at the boundary
   that can actually enforce it.
+- **Layout.** What is built adapts intrinsically to the space it is given, never to a device it assumes it is on. Every screen is complete and usable from 320px up, and a component behaves correctly wherever it is placed — full page, narrow column, or embedded in a Practice's own website. See `docs/adr/0023-layout-is-intrinsic-and-320px-is-the-floor.md`.
 
 ## Agent skills
 

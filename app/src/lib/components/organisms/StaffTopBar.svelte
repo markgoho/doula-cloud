@@ -135,7 +135,7 @@
 			justify-content: space-between;
 		}
 
-		/* One breakpoint, and it is where six nav items plus a Practice name
+		/* layout:ignore -- ADR-0023 rule 3. One breakpoint, and it is where six nav items plus a Practice name
 		   stop fitting rather than a device width. Below it the same items
 		   are in the sheet, which is why both trees are in the document and
 		   one is display:none -- a hidden subtree is out of the accessibility

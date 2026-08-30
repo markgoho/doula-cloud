@@ -90,7 +90,7 @@
 		.panel {
 			inline-size: max-content;
 			min-inline-size: var(--menu-panel-min);
-			max-inline-size: min(var(--menu-panel-max), calc(100vw - var(--space-4) * 2));
+			max-inline-size: min(var(--menu-panel-max), calc(100dvw - var(--space-4) * 2));
 			margin: 0;
 			padding: var(--space-2) 0;
 			overflow: hidden;

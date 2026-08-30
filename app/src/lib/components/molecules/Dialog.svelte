@@ -44,7 +44,7 @@
 <style>
 	@layer components {
 		dialog {
-			max-inline-size: min(32rem, calc(100vw - var(--space-8)));
+			max-inline-size: min(32rem, calc(100dvw - var(--space-8)));
 			padding: var(--space-6);
 			border: 0;
 			border-radius: var(--radius);

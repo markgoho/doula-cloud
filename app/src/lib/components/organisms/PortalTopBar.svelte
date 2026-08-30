@@ -97,6 +97,12 @@
 			padding-inline: var(--space-2);
 		}
 
+		/* layout:ignore -- ADR-0023 rule 3. The portal top bar's box is the
+		   viewport by construction, so a containment context here would exist
+		   only to be queried. One threshold, and it is where the four portal
+		   nav items stop fitting beside the sign-out control rather than a
+		   device width. Below it the same items are in the narrow row, which
+		   is why both trees are in the document and one is display:none. */
 		@media (min-width: 48rem) {
 			.wide {
 				display: flex;
