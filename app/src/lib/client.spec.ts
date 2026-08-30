@@ -37,9 +37,25 @@ describe('loadClients', () => {
 	it('appends the cursor when given one', async () => {
 		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
 
-		await loadClients(fetcher, 'practice-1', 'next-page');
+		await loadClients(fetcher, 'practice-1', { cursor: 'next-page' });
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?cursor=next-page');
+	});
+
+	it('appends all=true when showAll is set', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { showAll: true });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?all=true');
+	});
+
+	it('combines all=true and the cursor when both are given', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { showAll: true, cursor: 'next-page' });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?all=true&cursor=next-page');
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {

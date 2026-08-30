@@ -603,6 +603,73 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 	}
 }
 
+// TestListHandler_PendingRequestKindsOnRow proves ADR-0017's "Refusal, and
+// the Client it leaves behind" and #499's row-level pending indicator
+// together: a pending Request's kind(s) surface on the row, a refused-only
+// Client carries none, has no work, and appears only under "see everyone".
+func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
+	const birthKind = "birth"
+
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	const identityUID = "staff-pending-request"
+	staffID := seedStaffAtPractice(t, db, practiceID, identityUID)
+
+	pendingBirth := seedClient(t, db, practiceID, "Pending Birth", "pending-birth@example.com")
+	seedPendingRequest(t, db, practiceID, pendingBirth, staffID, birthKind)
+
+	pendingBoth := seedClient(t, db, practiceID, "Pending Both", "pending-both@example.com")
+	seedPendingRequest(t, db, practiceID, pendingBoth, staffID, birthKind)
+	seedPendingRequest(t, db, practiceID, pendingBoth, staffID, "postpartum")
+
+	refusedOnly := seedClient(t, db, practiceID, "Refused Only", "refused-only@example.com")
+	seedRefusedRequest(t, db, practiceID, refusedOnly, staffID, birthKind)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	all := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	defer all.Body.Close()
+	var allResp client.ListResponse
+	if err := json.NewDecoder(all.Body).Decode(&allResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]client.ListItem{}
+	for _, item := range allResp.Items {
+		byID[item.ClientID] = item
+	}
+
+	if got := byID[pendingBirth].PendingRequestKinds; len(got) != 1 || got[0] != birthKind {
+		t.Fatalf("pending-birth kinds = %v, want [birth]", got)
+	}
+	if got := byID[pendingBoth].PendingRequestKinds; len(got) != 2 || got[0] != birthKind || got[1] != "postpartum" {
+		t.Fatalf("pending-both kinds = %v, want [birth postpartum]", got)
+	}
+	if got := byID[refusedOnly].PendingRequestKinds; len(got) != 0 {
+		t.Fatalf("refused-only kinds = %v, want empty", got)
+	}
+	if byID[refusedOnly].HasWork {
+		t.Fatalf("refused-only HasWork = true, want false")
+	}
+
+	def := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	defer def.Body.Close()
+	var defResp client.ListResponse
+	if err := json.NewDecoder(def.Body).Decode(&defResp); err != nil {
+		t.Fatalf("decode default response: %v", err)
+	}
+	defByID := map[string]client.ListItem{}
+	for _, item := range defResp.Items {
+		defByID[item.ClientID] = item
+	}
+	if _, ok := defByID[refusedOnly]; ok {
+		t.Fatalf("default filter unexpectedly includes the refused-only Client")
+	}
+	if got := defByID[pendingBirth].PendingRequestKinds; len(got) != 1 || got[0] != birthKind {
+		t.Fatalf("default filter's pending-birth kinds = %v, want [birth]", got)
+	}
+}
+
 // TestListHandler_PortalInviteStatusVariants proves the four shapes
 // PortalInviteStatus can take: nil (never invited), "pending" (an
 // outbox row), "accepted" (identity_uid set, taking precedence over

@@ -4,15 +4,28 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 
+// Mirrors new-client.svelte.spec.ts's pattern: a hoisted, mutable
+// URLSearchParams stands in for `page.url.searchParams`, set per test
+// before render() rather than mutated mid-test -- the mock is a plain
+// object, not Svelte-reactive, so a change after mount would never
+// re-trigger the component's own `$derived`/`$effect`.
+const searchParameters = vi.hoisted(() => new URLSearchParams());
 vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' } }
+	page: { params: { practiceId: 'practice-1' }, url: { searchParams: searchParameters } }
 }));
+
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 function textResponse(body: string): Response {
 	return jsonResponse(body, 403);
+}
+
+function requestUrl(callIndex = 0): string {
+	return apiFetchWithSession.mock.calls[callIndex][0] as string;
 }
 
 const clients = [
@@ -33,6 +46,8 @@ const clients = [
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	goto.mockReset();
+	searchParameters.delete('all');
 });
 
 async function setup(response: Response = jsonResponse({ items: clients, hasMore: false })) {
@@ -122,5 +137,99 @@ describe('clients list screen', () => {
 
 		await expect.element(testPage.getByText('Server rejected the Clients list request')).toBeVisible();
 		await expect.element(testPage.getByRole('table')).not.toBeInTheDocument();
+	});
+});
+
+// #499: the default view is "Clients with work" -- ListHandler's own
+// default -- and a visible toggle switches to everyone, including a
+// Client whose only Request was refused.
+describe('the "see everyone" toggle', () => {
+	it('defaults to the "Clients with work" filter, unchecked and no `all` param on the wire', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('switch', { name: 'See everyone' }))
+			.not.toBeChecked();
+		expect(requestUrl()).toBe('/api/practices/practice-1/clients');
+	});
+
+	it('reflects `?all=true` from the URL: checked, and threaded through to the fetch', async () => {
+		searchParameters.set('all', 'true');
+
+		await setup();
+
+		await expect.element(testPage.getByRole('switch', { name: 'See everyone' })).toBeChecked();
+		expect(requestUrl()).toBe('/api/practices/practice-1/clients?all=true');
+	});
+
+	it('navigates to `?all=true` when switched on from the default view', async () => {
+		await setup();
+
+		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+
+		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients?all=true');
+	});
+
+	it('navigates back to the default view when switched off', async () => {
+		searchParameters.set('all', 'true');
+		await setup();
+
+		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+
+		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients');
+	});
+});
+
+// #499: a pending Engagement Request shows on its Client's row.
+describe('a pending Request on the row', () => {
+	it('shows the kind and "request pending" for a Client with one pending Request', async () => {
+		await setup(
+			jsonResponse({
+				items: [
+					{
+						clientId: 'client-1',
+						name: 'Pending Client',
+						email: 'pending@example.com',
+						hasWork: true,
+						pendingRequestKinds: ['birth']
+					}
+				],
+				hasMore: false
+			})
+		);
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Birth request pending' }))
+			.toBeVisible();
+	});
+
+	it('joins both kinds when a Client holds a pending Request of each', async () => {
+		await setup(
+			jsonResponse({
+				items: [
+					{
+						clientId: 'client-1',
+						name: 'Both Kinds Client',
+						email: 'both@example.com',
+						hasWork: true,
+						pendingRequestKinds: ['birth', 'postpartum']
+					}
+				],
+				hasMore: false
+			})
+		);
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Birth & Postpartum request pending' }))
+			.toBeVisible();
+	});
+
+	it('leaves the cell blank for a Client with no pending Request', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('columnheader', { name: 'Pending request' }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('request pending')).not.toBeInTheDocument();
 	});
 });

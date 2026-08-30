@@ -94,6 +94,34 @@ func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, givenName, em
 	return clientID, engagementID
 }
 
+// seedPendingRequest inserts a pending engagement_requests row for
+// clientID -- ADR-0017's Engagement Request record, in its default
+// 'pending' state.
+func seedPendingRequest(t *testing.T, db *testdb.DB, practiceID, clientID, staffID, kind string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO engagement_requests (practice_id, client_id, kind, requested_by) VALUES ($1, $2, $3, $4)`,
+		practiceID, clientID, kind, staffID,
+	); err != nil {
+		t.Fatalf("seed pending request: %v", err)
+	}
+}
+
+// seedRefusedRequest inserts a refused engagement_requests row for
+// clientID -- ADR-0017's "Refusal, and the Client it leaves behind": a
+// recorded state with a required reason, no Engagement, and nothing else
+// built for her.
+func seedRefusedRequest(t *testing.T, db *testdb.DB, practiceID, clientID, staffID, kind string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO engagement_requests (practice_id, client_id, kind, requested_by, state, decided_by, decided_at, reason)
+		 VALUES ($1, $2, $3, $4, 'refused', $4, now(), 'not now')`,
+		practiceID, clientID, kind, staffID,
+	); err != nil {
+		t.Fatalf("seed refused request: %v", err)
+	}
+}
+
 // seedFieldTemplate inserts a client_field_templates row for practiceID
 // directly, bypassing clientfieldtemplate.PutHandler -- for tests
 // exercising resolveFields' live-read against the template in isolation

@@ -16,6 +16,11 @@ export interface ClientListItem {
 	email: string;
 	hasWork: boolean;
 	portalInviteStatus?: string;
+	/** The kind ('birth', 'postpartum') of each of this Client's pending
+	 * Engagement Requests -- empty/absent when she has none. Can hold both
+	 * at once (ADR-0017: at most one pending Request per kind, not per
+	 * Client). What the list row (#499) shows to surface a pending ask. */
+	pendingRequestKinds?: string[];
 }
 
 /** One page of the Clients list -- the cursor-pagination envelope from
@@ -34,18 +39,33 @@ function clientsPath(practiceId: string): string {
 	return `/api/practices/${practiceId}/clients`;
 }
 
+/** The two axes `loadClients` reads: the default "Clients with work" filter
+ * flips to everyone with `showAll` (ListHandler's `?all=true`, #499), and
+ * `cursor` is undefined for the first page. Built by hand rather than with
+ * a mutable `URLSearchParams` -- `svelte/prefer-svelte-reactivity` bans
+ * that pattern. */
+export interface LoadClientsOptions {
+	cursor?: string;
+	showAll?: boolean;
+}
+
+function clientsQuery({ cursor, showAll }: LoadClientsOptions): string {
+	const parts: string[] = [];
+	if (showAll) parts.push('all=true');
+	if (cursor) parts.push(`cursor=${encodeURIComponent(cursor)}`);
+	return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
 /** Loads one page of a Practice's Clients, Client-shaped -- ListHandler's
  * default "Clients with work" filter (ADR-0017), narrowed further for a
- * contractor Doula server-side. `cursor` is undefined for the first page.
- * Throws with the response body text on a non-2xx response, mirroring
- * loadBalance's error-surfacing convention. */
+ * contractor Doula server-side. Throws with the response body text on a
+ * non-2xx response, mirroring loadBalance's error-surfacing convention. */
 export async function loadClients(
 	fetcher: Fetcher,
 	practiceId: string,
-	cursor?: string
+	options: LoadClientsOptions = {}
 ): Promise<ClientListPage> {
-	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-	const response = await fetcher(`${clientsPath(practiceId)}${query}`);
+	const response = await fetcher(`${clientsPath(practiceId)}${clientsQuery(options)}`);
 	if (!response.ok) {
 		throw new Error(await response.text());
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"doula-cloud/api/internal/pagecursor"
@@ -32,6 +33,15 @@ type ListItem struct {
 	// portal_invite_outbox, since accept.go never touches that row),
 	// otherwise the most recent outbox row's status.
 	PortalInviteStatus *string `json:"portalInviteStatus,omitempty"`
+
+	// PendingRequestKinds is the kind ('birth', 'postpartum') of each of
+	// this Client's pending Engagement Requests -- empty when she has
+	// none. Can hold both at once: engagement_requests_one_pending is
+	// keyed on (client_id, kind), so a Client can have a pending Request
+	// of each kind at the same time (ADR-0017). This is what makes a
+	// pending Request visible on the list row (#499) without a second
+	// round trip to her detail history.
+	PendingRequestKinds []string `json:"pendingRequestKinds,omitempty"`
 
 	createdAt time.Time
 }
@@ -124,12 +134,23 @@ const hasWorkExpr = `(
 	OR EXISTS (SELECT 1 FROM engagement_requests r WHERE r.client_id = c.id AND r.state = 'pending')
 )`
 
+// pendingRequestKindsExpr is also shared: the comma-joined kind of each of
+// a Client's pending Requests, NULL when she has none. Postgres can serve
+// this off engagement_requests_one_pending (client_id, kind) WHERE state =
+// 'pending' -- the same partial index the ADR-0017 migration already
+// carries for the one-pending-per-kind rule -- so this costs no new
+// migration to stay quick against a fourteen-doula Practice's data.
+const pendingRequestKindsExpr = `(
+	SELECT string_agg(r.kind::text, ',' ORDER BY r.kind)
+	FROM engagement_requests r WHERE r.client_id = c.id AND r.state = 'pending'
+)`
+
 // listClients is the ambient-reach query -- Owner, Admin, or employee
 // Doula -- filtered by practiceID explicitly, on top of the RLS scoping
 // staffauth.Middleware already set up on tx.
 func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnly bool, after *pagecursor.Cursor) ([]ListItem, error) {
 	query := `SELECT c.id, c.given_name, c.preferred_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
-		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status, c.created_at
+		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status, ` + pendingRequestKindsExpr + `, c.created_at
 		 FROM clients c
 		 LEFT JOIN client_portal_users pu ON pu.client_id = c.id
 		 LEFT JOIN LATERAL (
@@ -169,7 +190,8 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 	// inner DISTINCT's column list.
 	query := `SELECT * FROM (
 		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
-		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, latest.status, c.created_at
+		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, latest.status,
+		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, c.created_at
 		     FROM clients c
 		     JOIN engagements e ON e.client_id = c.id
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
@@ -209,16 +231,20 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 		var preferredName sql.NullString
 		var hasPortalUser, accepted bool
 		var outboxStatus sql.NullString
+		var pendingKinds sql.NullString
 		var createdAt time.Time
 		if err := rows.Scan(
 			&item.ClientID, &givenName, &preferredName, &item.Email, &item.HasWork,
-			&hasPortalUser, &accepted, &outboxStatus, &createdAt,
+			&hasPortalUser, &accepted, &outboxStatus, &pendingKinds, &createdAt,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
 		}
 		item.Name = PreferredName(givenName, preferredName.String)
 		item.PortalInviteStatus = portalInviteStatus(hasPortalUser, accepted, outboxStatus)
+		if pendingKinds.Valid {
+			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")
+		}
 		item.createdAt = createdAt
 		list = append(list, item)
 	}
