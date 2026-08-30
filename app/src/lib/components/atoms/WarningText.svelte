@@ -28,19 +28,5 @@
 			font-size: var(--text-body-sm-size);
 			color: var(--color-on-surface);
 		}
-
-		/* tokens:ignore -- the WCAG clip technique's own geometry, matching
-		   Button.svelte's, not a design value. */
-		.visually-hidden {
-			position: absolute;
-			inline-size: 1px;
-			block-size: 1px;
-			margin: -1px;
-			padding: 0;
-			overflow: hidden;
-			clip: rect(0, 0, 0, 0);
-			white-space: nowrap;
-			border: 0;
-		}
 	}
 </style>

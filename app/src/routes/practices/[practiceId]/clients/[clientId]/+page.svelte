@@ -82,7 +82,14 @@
 </script>
 
 {#snippet actions()}
-	<Link href={editHref()} label="Edit" />
+	<!--
+		"Edit" alone doesn't say whose record it edits, the #513 violation
+		CheckAnswers's Change links already solved -- a sibling
+		visually-hidden span joined by aria-describedby, so the announced
+		name becomes "Edit, Jane Smith" without a second visible word.
+	-->
+	<Link href={editHref()} label="Edit" describedBy="edit-client-name" />
+	<span class="visually-hidden" id="edit-client-name">{detail ? displayName(detail) : ''}</span>
 {/snippet}
 
 {#snippet summary()}

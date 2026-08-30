@@ -233,21 +233,6 @@
 			color: var(--color-on-surface-muted);
 		}
 
-		/* tokens:ignore -- the WCAG clip technique's own geometry, not a
-		   design value. The 1px box and the -1px pull are what the
-		   technique is; a token would imply somebody may retune them. */
-		.visually-hidden {
-			position: absolute;
-			inline-size: 1px;
-			block-size: 1px;
-			margin: -1px;
-			padding: 0;
-			overflow: hidden;
-			clip: rect(0, 0, 0, 0);
-			white-space: nowrap;
-			border: 0;
-		}
-
 		/*
 		 * A row stacks before the page frame does, at its own threshold:
 		 * three columns of a label, a value and a Change fit a phone badly

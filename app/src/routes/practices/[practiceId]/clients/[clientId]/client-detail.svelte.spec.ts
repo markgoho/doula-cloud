@@ -36,7 +36,7 @@ beforeEach(() => {
 
 async function setup(overrides: Partial<ClientDetail> = {}) {
 	apiFetchWithSession.mockResolvedValue(jsonResponse({ ...baseDetail, ...overrides }));
-	await render(Page, {});
+	return render(Page, {});
 }
 
 describe('client detail hub', () => {
@@ -147,12 +147,18 @@ describe('client detail hub', () => {
 			.toBeVisible();
 	});
 
-	it('renders an edit link', async () => {
-		await setup();
+	it('renders an edit link naming whose record it edits', async () => {
+		const { container } = await setup();
 
-		await expect
-			.element(testPage.getByRole('link', { name: 'Edit' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/client-1/edit');
+		const link = testPage.getByRole('link', { name: 'Edit' });
+		await expect.element(link).toHaveAttribute('href', '/practices/practice-1/clients/client-1/edit');
+
+		// "Edit" alone doesn't say whose record it edits (#513); the
+		// distinguishing name is a sibling joined by aria-describedby, the
+		// same pattern CheckAnswers' Change links use, so no accessible
+		// query names it directly.
+		const describedBy = link.element().getAttribute('aria-describedby') ?? '';
+		expect(container.querySelector(`#${describedBy}`)?.textContent).toBe('Ada');
 	});
 
 	it('shows an error notice when the Client fails to load', async () => {

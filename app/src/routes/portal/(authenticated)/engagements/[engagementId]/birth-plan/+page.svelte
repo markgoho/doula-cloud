@@ -9,7 +9,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Link from '#lib/components/atoms/Link.svelte';
+	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	let instance = $state<Instance | null | undefined>();
@@ -25,9 +25,8 @@
 </script>
 
 <div class="no-print">
-	<Link
+	<BackLink
 		href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
-		label="Back"
 	/>
 </div>
 

@@ -10,7 +10,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Link from '#lib/components/atoms/Link.svelte';
+	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	let contract = $state<Contract | null | undefined>();
@@ -29,9 +29,8 @@
 	}
 </script>
 
-<Link
+<BackLink
 	href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
-	label="Back"
 />
 
 <PageTitle page="Contract" serviceName={page.data.practiceName} />
