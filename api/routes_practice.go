@@ -34,10 +34,17 @@ var ownerAndAdmin = []string{"owner", "admin"}
 // caller landed on -- and, as a side effect of running through
 // staffauth.Middleware, records it as the Staff member's last-used
 // Practice for their next login.
+//
+// IsContractor carries ADR-0008's employment-type axis alongside Roles.
+// It exists because #501's contractor Add-a-Client door needs to branch
+// on employment type before ever calling client.SearchHandler -- the same
+// UX-only mirror of a BFF role gate this endpoint's Roles field already
+// is for the Owner/Admin screens that read it.
 type practiceSessionResponse struct {
 	PracticeID   string   `json:"practiceId"`
 	PracticeName string   `json:"practiceName"`
 	Roles        []string `json:"roles"`
+	IsContractor bool     `json:"isContractor"`
 }
 
 func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -52,16 +59,22 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := staffauth.Roles(r.Context(), tx, practiceID, staffID)
+	reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
+	resp := practiceSessionResponse{
+		PracticeID:   practiceID,
+		PracticeName: name,
+		Roles:        reader.Roles(),
+		IsContractor: reader.IsContractor(),
+	}
 	w.Header().Set("Content-Type", "application/json")
 	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(practiceSessionResponse{PracticeID: practiceID, PracticeName: name, Roles: roles}); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Printf("practiceSessionHandler: encode response: %v", err)
 	}
 }

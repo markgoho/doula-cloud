@@ -184,7 +184,11 @@ func TestReader_CanAccessClient(t *testing.T) {
 
 // TestReader_IsContractor confirms the axis ResolveReader carries
 // besides roles: an employee reader (Owner and Admin included, #227's
-// "employee means inside the business") is not a contractor.
+// "employee means inside the business") is not a contractor. It also
+// covers Reader.Roles() -- the accessor #501's practiceSessionHandler
+// reads to hand the frontend both axes off one Reader -- on both a
+// populated and an empty roles array, since ResolveReader only sets its
+// private slice when the DB's CSV is non-empty.
 func TestReader_IsContractor(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Employment Type Test Practice")
@@ -194,6 +198,14 @@ func TestReader_IsContractor(t *testing.T) {
 
 	contractorID := seedStaff(t, db, "employment-contractor")
 	seedContractorMembership(t, db, practiceID, contractorID)
+
+	zeroRoleID := seedStaff(t, db, "employment-zero-role")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{}', 'employee')`,
+		practiceID, zeroRoleID,
+	); err != nil {
+		t.Fatalf("seed zero-role membership: %v", err)
+	}
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -211,6 +223,9 @@ func TestReader_IsContractor(t *testing.T) {
 	if employeeReader.IsContractor() {
 		t.Fatal("employee reader reported IsContractor() = true")
 	}
+	if roles := employeeReader.Roles(); len(roles) != 1 || roles[0] != doulaRole {
+		t.Fatalf("employeeReader.Roles() = %v, want [doula]", roles)
+	}
 
 	contractorReader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, contractorID)
 	if err != nil {
@@ -218,5 +233,13 @@ func TestReader_IsContractor(t *testing.T) {
 	}
 	if !contractorReader.IsContractor() {
 		t.Fatal("contractor reader reported IsContractor() = false")
+	}
+
+	zeroRoleReader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, zeroRoleID)
+	if err != nil {
+		t.Fatalf("ResolveReader zero-role: %v", err)
+	}
+	if roles := zeroRoleReader.Roles(); len(roles) != 0 {
+		t.Fatalf("zeroRoleReader.Roles() = %v, want empty", roles)
 	}
 }

@@ -374,6 +374,9 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	if landing.PracticeName != "Riverside Doulas" {
 		t.Fatalf("practiceName = %q, want %q", landing.PracticeName, "Riverside Doulas")
 	}
+	if landing.IsContractor {
+		t.Fatalf("isContractor = %v, want false for a signed-up Owner", landing.IsContractor)
+	}
 
 	var lastPracticeID string
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT last_practice_id FROM staff WHERE id = $1`, signedUp.StaffID).Scan(&lastPracticeID); err != nil {
@@ -381,6 +384,47 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	}
 	if lastPracticeID != signedUp.PracticeID {
 		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, signedUp.PracticeID)
+	}
+}
+
+// TestRoutes_PracticeSessionContractorFlag confirms
+// practiceSessionHandler's IsContractor field, which #501's contractor
+// Add-a-Client door reads to branch before ever calling
+// client.SearchHandler -- straight fixtures rather than a full
+// signup/invite/accept round trip, since only the response's employment-
+// type axis is under test here.
+func TestRoutes_PracticeSessionContractorFlag(t *testing.T) {
+	db := testdb.New(t)
+	deps := testDeps()
+	deps.DB = db.App
+	mux, _, _ := routes(deps)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	const identityUID = "e2e-contractor-uid"
+	practiceID := testdb.SeedPractice(t, db, "Contractor's Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "contractor")
+	sessionCookie := authntest.SeedSession(t, db.App, identityUID)
+
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/session", nil)
+	authntest.AddSessionCookie(req, sessionCookie)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("session request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var landing practiceSessionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&landing); err != nil {
+		t.Fatalf("decode landing response: %v", err)
+	}
+	if !landing.IsContractor {
+		t.Fatalf("isContractor = %v, want true for a contractor Doula", landing.IsContractor)
+	}
+	if len(landing.Roles) != 1 || landing.Roles[0] != "doula" {
+		t.Fatalf("roles = %v, want [doula]", landing.Roles)
 	}
 }
 

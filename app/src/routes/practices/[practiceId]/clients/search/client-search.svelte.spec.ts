@@ -32,8 +32,8 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
-async function setup() {
-	await render(Page, {});
+async function setup(isContractor = false) {
+	await render(Page, { data: { isContractor } });
 }
 
 function requestUrl(callIndex = 0): string {
@@ -147,5 +147,36 @@ describe('the search that fronts intake (#498)', () => {
 		await expect
 			.element(testPage.getByText('a contractor doula does not search for clients at a practice she contracts for'))
 			.toBeVisible();
+	});
+});
+
+describe("the contractor's Add a Client door (#501, ADR-0017)", () => {
+	it('shows the explainer instead of the search screen, and never calls the search API', async () => {
+		await setup(true);
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Add a Client' })).toBeVisible();
+		await expect.element(testPage.getByLabelText('Name')).not.toBeInTheDocument();
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	it('names the actual mechanism -- work arrives as an Offer', async () => {
+		await setup(true);
+
+		await expect.element(testPage.getByText('reaches you as an Offer', { exact: false })).toBeVisible();
+	});
+
+	it('links to plain /signup, keyboard-reachable as an ordinary link', async () => {
+		await setup(true);
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Set up a Practice' }))
+			.toHaveAttribute('href', '/signup');
+	});
+
+	it('leaves the search screen (#498) unchanged for an Owner, Admin or employee Doula', async () => {
+		await setup(false);
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Find a Client' })).toBeVisible();
+		await expect.element(testPage.getByLabelText('Name')).toBeVisible();
 	});
 });

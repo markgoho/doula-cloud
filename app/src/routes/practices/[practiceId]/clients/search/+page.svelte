@@ -28,6 +28,16 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import type { PageProps as PageProperties } from './$types';
+
+	// #501 (ADR-0017): +page.ts's load already decided, before this
+	// component mounted, whether the caller is a contractor Doula with
+	// neither the owner nor the admin role. `data` is optional only so
+	// this component's own spec (which renders it directly, bypassing
+	// SvelteKit's load cycle) keeps working without a fixture -- every
+	// real navigation always supplies it.
+	let { data }: { data?: PageProperties['data'] } = $props();
+	const isContractorDoor = $derived(data?.isContractor ?? false);
 
 	const nameId = 'client-search-name';
 	const dateOfBirthId = 'client-search-date-of-birth';
@@ -128,8 +138,9 @@
 		} catch (error_) {
 			// SearchHandler refuses a contractor Doula with a readable 403
 			// body (client/search.go), which lands here as plain error text
-			// rather than as a raw crash -- #501 builds the door that
-			// intercepts before that refusal is ever reached.
+			// rather than as a raw crash. #501's load-gate above intercepts
+			// her before this branch is ever reached in practice; this stays
+			// as the fallback for any other refusal this form can hit.
 			pageErrors = [
 				{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }
 			];
@@ -144,141 +155,167 @@
 	}
 </script>
 
-<PageTitle page="Find a Client" isError={pageErrors.length > 0} />
+{#if isContractorDoor}
+	<!--
+		#501 (ADR-0017): "a contractor originates nothing" -- a contractor
+		Doula's Add a Client is a door that only explains, in place of the
+		search screen SearchHandler would otherwise refuse her from with a
+		403. Every route below still exists, and this branch never calls
+		any of them.
+	-->
+	<PageTitle page="Add a Client" />
 
-<container-l>
-	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-		<stack-l space="var(--space-7)">
-			<Heading level={1} variant="page" text="Find a Client" />
-			<p class="lede">
-				Search for a Client already on file before adding her as new. Name, date of birth, email
-				and phone all match — use whatever you have, none of them is required on its own.
-			</p>
+	<container-l>
+		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
+			<stack-l space="var(--space-6)">
+				<Heading level={1} variant="page" text="Add a Client" />
+				<p class="lede">
+					Work at this Practice reaches you as an Offer, so there is no Client to search for or
+					add here. To take on Clients of your own, set up a Practice.
+				</p>
+				<cluster-l space="var(--space-3)" align="center">
+					<Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" />
+				</cluster-l>
+			</stack-l>
+		</center-l>
+	</container-l>
+{:else}
+	<PageTitle page="Find a Client" isError={pageErrors.length > 0} />
 
-			{#if pageErrors.length > 0}
-				<ErrorSummary errors={pageErrors} />
-			{/if}
+	<container-l>
+		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
+			<stack-l space="var(--space-7)">
+				<Heading level={1} variant="page" text="Find a Client" />
+				<p class="lede">
+					Search for a Client already on file before adding her as new. Name, date of birth,
+					email and phone all match — use whatever you have, none of them is required on its own.
+				</p>
 
-			<form onsubmit={handleSearch} novalidate>
-				<stack-l space="var(--space-5)">
-					<LabeledField id={nameId} label="Name" error={errorFor(nameId)}>
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								value={name}
-								onInput={(v) => (name = v)}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-					<LabeledField id={dateOfBirthId} label="Date of birth">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								type="date"
-								value={dateOfBirth}
-								onInput={(v) => (dateOfBirth = v)}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-					<LabeledField id={emailId} label="Email">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								type="email"
-								value={email}
-								onInput={(v) => (email = v)}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-					<LabeledField id={phoneId} label="Phone">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								type="tel"
-								value={phone}
-								onInput={(v) => (phone = v)}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-					<cluster-l space="var(--space-3)" align="center">
-						<Button type="submit" label="Search" loading={isSearching} />
-					</cluster-l>
-				</stack-l>
-			</form>
+				{#if pageErrors.length > 0}
+					<ErrorSummary errors={pageErrors} />
+				{/if}
 
-			{#if hasSearched}
-				<section aria-labelledby="client-search-results-heading">
-					<stack-l space="var(--space-6)">
-						<div bind:this={resultsStart} id="client-search-results" tabindex="-1">
-							<Heading
-								level={2}
-								variant="section"
-								text={resultsHeading()}
-								id="client-search-results-heading"
-							/>
-						</div>
-
-						{#if matches.length > 0}
-							<stack-l space="var(--space-6)">
-								{#each matches as match (match.id)}
-									<section class="match">
-										<stack-l space="var(--space-3)">
-											<Heading level={3} variant="card" text={displayName(match)} />
-											<DescriptionList
-												items={[
-													{ label: 'Date of birth', value: match.dateOfBirth || '—' },
-													{ label: 'Email', value: match.email || '—' },
-													{ label: 'Phone', value: match.phone || '—' }
-												]}
-											/>
-											{#if match.engagements.length > 0}
-												<ul>
-													{#each match.engagements as engagement (engagement.engagementId)}
-														<li>
-															{engagement.kind === 'birth' ? 'Birth' : 'Postpartum'} · {engagement.status}
-														</li>
-													{/each}
-												</ul>
-											{:else}
-												<p class="quiet">No Engagements with this Client yet.</p>
-											{/if}
-											<Link href={detailHref(match.id)} label="Open {displayName(match)}'s record" />
-										</stack-l>
-									</section>
-								{/each}
-							</stack-l>
-						{:else}
-							<stack-l space="var(--space-4)">
-								<p class="lede">
-									{#if name.trim()}
-										Nothing at this Practice matches what was typed. Add her as a new Client
-										instead — the name typed here carries onto intake's first page, so it does
-										not have to be retyped.
-									{:else}
-										Nothing at this Practice matches what was typed. Add her as a new Client
-										instead.
-									{/if}
-								</p>
-								<cluster-l space="var(--space-3)" align="center">
-									<Link href={startIntakeHref()} label="Add a new Client" />
-								</cluster-l>
-							</stack-l>
-						{/if}
+				<form onsubmit={handleSearch} novalidate>
+					<stack-l space="var(--space-5)">
+						<LabeledField id={nameId} label="Name" error={errorFor(nameId)}>
+							{#snippet children({ id, describedBy, invalid })}
+								<TextInput
+									{id}
+									{describedBy}
+									{invalid}
+									value={name}
+									onInput={(v) => (name = v)}
+									autocomplete="off"
+								/>
+							{/snippet}
+						</LabeledField>
+						<LabeledField id={dateOfBirthId} label="Date of birth">
+							{#snippet children({ id, describedBy })}
+								<TextInput
+									{id}
+									{describedBy}
+									type="date"
+									value={dateOfBirth}
+									onInput={(v) => (dateOfBirth = v)}
+									autocomplete="off"
+								/>
+							{/snippet}
+						</LabeledField>
+						<LabeledField id={emailId} label="Email">
+							{#snippet children({ id, describedBy })}
+								<TextInput
+									{id}
+									{describedBy}
+									type="email"
+									value={email}
+									onInput={(v) => (email = v)}
+									autocomplete="off"
+								/>
+							{/snippet}
+						</LabeledField>
+						<LabeledField id={phoneId} label="Phone">
+							{#snippet children({ id, describedBy })}
+								<TextInput
+									{id}
+									{describedBy}
+									type="tel"
+									value={phone}
+									onInput={(v) => (phone = v)}
+									autocomplete="off"
+								/>
+							{/snippet}
+						</LabeledField>
+						<cluster-l space="var(--space-3)" align="center">
+							<Button type="submit" label="Search" loading={isSearching} />
+						</cluster-l>
 					</stack-l>
-				</section>
-			{/if}
-		</stack-l>
-	</center-l>
-</container-l>
+				</form>
+
+				{#if hasSearched}
+					<section aria-labelledby="client-search-results-heading">
+						<stack-l space="var(--space-6)">
+							<div bind:this={resultsStart} id="client-search-results" tabindex="-1">
+								<Heading
+									level={2}
+									variant="section"
+									text={resultsHeading()}
+									id="client-search-results-heading"
+								/>
+							</div>
+
+							{#if matches.length > 0}
+								<stack-l space="var(--space-6)">
+									{#each matches as match (match.id)}
+										<section class="match">
+											<stack-l space="var(--space-3)">
+												<Heading level={3} variant="card" text={displayName(match)} />
+												<DescriptionList
+													items={[
+														{ label: 'Date of birth', value: match.dateOfBirth || '—' },
+														{ label: 'Email', value: match.email || '—' },
+														{ label: 'Phone', value: match.phone || '—' }
+													]}
+												/>
+												{#if match.engagements.length > 0}
+													<ul>
+														{#each match.engagements as engagement (engagement.engagementId)}
+															<li>
+																{engagement.kind === 'birth' ? 'Birth' : 'Postpartum'} · {engagement.status}
+															</li>
+														{/each}
+													</ul>
+												{:else}
+													<p class="quiet">No Engagements with this Client yet.</p>
+												{/if}
+												<Link href={detailHref(match.id)} label="Open {displayName(match)}'s record" />
+											</stack-l>
+										</section>
+									{/each}
+								</stack-l>
+							{:else}
+								<stack-l space="var(--space-4)">
+									<p class="lede">
+										{#if name.trim()}
+											Nothing at this Practice matches what was typed. Add her as a new Client
+											instead — the name typed here carries onto intake's first page, so it
+											does not have to be retyped.
+										{:else}
+											Nothing at this Practice matches what was typed. Add her as a new Client
+											instead.
+										{/if}
+									</p>
+									<cluster-l space="var(--space-3)" align="center">
+										<Link href={startIntakeHref()} label="Add a new Client" />
+									</cluster-l>
+								</stack-l>
+							{/if}
+						</stack-l>
+					</section>
+				{/if}
+				</stack-l>
+			</center-l>
+		</container-l>
+{/if}
 
 <style>
 	@layer components {

@@ -23,6 +23,17 @@ func (r Reader) Has(role string) bool {
 	return slices.Contains(r.roles, role)
 }
 
+// Roles reports every role the Reader's caller holds at the resolved
+// Practice, never nil -- so a caller that JSON-encodes it (the practice
+// session endpoint) sends "[]" rather than "null" for a Staff member with
+// no roles.
+func (r Reader) Roles() []string {
+	if r.roles == nil {
+		return []string{}
+	}
+	return r.roles
+}
+
 // IsContractor reports whether the Reader's caller's membership at the
 // resolved Practice is employment_type = 'contractor' -- the axis
 // ADR-0008 gates ambient reach on. False for 'employee', including every
