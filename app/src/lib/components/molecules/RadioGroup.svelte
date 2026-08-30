@@ -26,12 +26,32 @@
 		options: Option<T>[];
 		value: T;
 		onChange: (value: T) => void;
+		/*
+		 * The refusal for this group, in the reader's words. GOV.UK asks
+		 * for the message twice -- once in the error summary at the top of
+		 * the page, and again against the control itself -- because a
+		 * summary alone leaves a reader who has scrolled past it with
+		 * nothing to act on. `LabeledField` already carries an `error` for
+		 * a single input; a radio group needs its own, since the message
+		 * belongs to the question rather than to any one option. Announced
+		 * by role="alert", so it reaches a screen reader whether or not a
+		 * legend gave it a <fieldset> to be described by.
+		 */
+		error?: string;
 	}
 
 	const generatedName = $props.id();
 
-	let { legend, name = generatedName, options, value, onChange }: Properties<T> = $props();
+	let { legend, name = generatedName, options, value, onChange, error }: Properties<T> = $props();
+
+	const errorId = $derived(`${name}-error`);
 </script>
+
+{#snippet errorMessage()}
+	{#if error}
+		<p id={errorId} class="error" role="alert">{error}</p>
+	{/if}
+{/snippet}
 
 {#snippet radios()}
 	<stack-l space="var(--space-5)">
@@ -65,10 +85,15 @@
 {/snippet}
 
 {#if legend === undefined}
+	{@render errorMessage()}
 	{@render radios()}
 {:else}
-	<fieldset>
+	<!-- aria-describedby only: aria-invalid is not supported on role="group",
+	     which <fieldset> carries implicitly. The refusal reaches the reader
+	     through the description and through role="alert". -->
+	<fieldset aria-describedby={error ? errorId : undefined}>
 		<legend>{legend}</legend>
+		{@render errorMessage()}
 		{@render radios()}
 	</fieldset>
 {/if}
@@ -88,6 +113,14 @@
 			margin-block-end: var(--space-5);
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
+		}
+
+		/* The same weight and colour LabeledField gives a refusal, so one
+		   error reads the same as the next whichever control it belongs to. */
+		.error {
+			margin: 0 0 var(--space-3);
+			color: var(--color-error);
+			font-size: var(--text-body-sm-size);
 		}
 
 		input {

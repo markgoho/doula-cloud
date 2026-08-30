@@ -124,4 +124,47 @@ describe('RadioGroup.svelte', () => {
 			page.getByLabelText('No, this is a different person').element().getAttribute('aria-describedby')
 		).toBeNull();
 	});
+
+	/*
+	 * GOV.UK asks for a refusal twice -- in the summary at the top, and
+	 * again against the control -- because a reader who has scrolled past
+	 * the summary has nothing left to act on.
+	 */
+	it('prints a refusal against the group and joins it to the fieldset', async () => {
+		const { container } = await render(RadioGroup<Mode>, {
+			legend: 'Mode',
+			name: 'mode',
+			options: [
+				{ value: 'signup' as Mode, label: 'Sign up' },
+				{ value: 'login' as Mode, label: 'Log in' }
+			],
+			value: '' as Mode,
+			onChange: vi.fn(),
+			error: 'Select whether you are signing up or logging in'
+		});
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Select whether you are signing up or logging in');
+		const fieldset = container.querySelector('fieldset')!;
+		expect(container.querySelector(`#${fieldset.getAttribute('aria-describedby')}`)?.textContent).toBe(
+			'Select whether you are signing up or logging in'
+		);
+	});
+
+	/*
+	 * A legend-less group has no <fieldset> to be described by, so the
+	 * refusal has to carry itself -- role="alert" announces it either way.
+	 */
+	it('still announces a refusal when the Template owns the legend', async () => {
+		await render(RadioGroup<Mode>, {
+			options: [
+				{ value: 'signup' as Mode, label: 'Sign up' },
+				{ value: 'login' as Mode, label: 'Log in' }
+			],
+			value: '' as Mode,
+			onChange: vi.fn(),
+			error: 'Choose one'
+		});
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Choose one');
+	});
 });

@@ -111,6 +111,13 @@ describe('the Engagement Request screen', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Select whether this is birth or postpartum work' }))
 			.toBeVisible();
+		// GOV.UK asks for the refusal twice: the summary link above, and
+		// again against the radio group itself. Both are role="alert" -- the
+		// summary comes first in the DOM, so the group's own message is the
+		// last one.
+		await expect
+			.element(testPage.getByRole('alert').last())
+			.toHaveTextContent('Select whether this is birth or postpartum work');
 		// The load calls (detail, session) are the only requests made -- the
 		// refusal never reached the network.
 		expect(apiFetchWithSession).not.toHaveBeenCalledWith(

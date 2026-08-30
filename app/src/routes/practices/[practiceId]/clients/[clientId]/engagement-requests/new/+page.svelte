@@ -248,6 +248,7 @@
 	<RadioGroup
 		legend="Kind of work"
 		name={KIND_NAME}
+		error={errorFor(kindFieldId)}
 		options={[
 			{ value: 'birth', label: 'Birth' },
 			{ value: 'postpartum', label: 'Postpartum' }
