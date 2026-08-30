@@ -38,6 +38,7 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import StepRail, { type JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 
 	interface Properties {
@@ -45,6 +46,11 @@
 		 * Names the rail's landmark. "Adding a client".
 		 */
 		journey: string;
+		/**
+		 * The Staff side leaves this unset and gets the product name; the
+		 * Client portal passes its Practice's name (#431, #487).
+		 */
+		serviceName?: string;
 		steps: JourneyStep[];
 		allStepsHref?: string;
 		backHref: string;
@@ -81,6 +87,7 @@
 
 	let {
 		journey,
+		serviceName,
 		steps,
 		allStepsHref,
 		backHref,
@@ -95,6 +102,8 @@
 	const pageId = $props.id();
 	const hintId = $derived(hint ? `${pageId}-hint` : undefined);
 </script>
+
+<PageTitle page={question.text} {serviceName} isError={Boolean(errorSummary)} />
 
 {#snippet questionCaption()}
 	{#if caption}

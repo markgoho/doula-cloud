@@ -14,6 +14,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import type { ErrorKind } from '#lib/errorPage.js';
 
 	interface Properties {
@@ -45,6 +46,8 @@
 
 	const copy = $derived(copyByKind[kind]);
 </script>
+
+<PageTitle page={copy.title} />
 
 <container-l>
 	<center-l max="var(--page-max)" gutters="var(--page-gutter)">

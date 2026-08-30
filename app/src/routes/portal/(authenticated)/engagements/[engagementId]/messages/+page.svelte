@@ -173,4 +173,8 @@
 	Archetype D with one section, and no contents region: a contents list
 	above a single section is furniture (ADR-0018).
 -->
-<RecordDetail title="Messages" sections={[{ heading: 'Your thread', content: thread }]} />
+<RecordDetail
+	title="Messages"
+	serviceName={page.data.practiceName}
+	sections={[{ heading: 'Your thread', content: thread }]}
+/>

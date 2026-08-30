@@ -10,6 +10,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
 
 	const emailId = 'portal-login-email';
@@ -92,6 +93,8 @@
 		}
 	}
 </script>
+
+<PageTitle page="Log in" isError={errors.length > 0} />
 
 <ErrorSummary {errors} />
 

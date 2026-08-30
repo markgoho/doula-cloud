@@ -47,6 +47,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import StepRail, { type JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 
 	interface Properties {
@@ -55,6 +56,11 @@
 		allStepsHref?: string;
 		backHref: string;
 		title: string;
+		/**
+		 * The Staff side leaves this unset and gets the product name; the
+		 * Client portal passes its Practice's name (#431, #487).
+		 */
+		serviceName?: string;
 		caption?: string;
 		/**
 		 * Positioned here, built by the route (#467). Same rule as
@@ -75,6 +81,7 @@
 		allStepsHref,
 		backHref,
 		title,
+		serviceName,
 		caption,
 		errorSummary,
 		sections,
@@ -84,6 +91,8 @@
 
 	const pageId = $props.id();
 </script>
+
+<PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} />
 
 <container-l>
 	<center-l max="var(--page-max)" gutters="var(--page-gutter)">

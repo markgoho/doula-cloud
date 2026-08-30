@@ -4,6 +4,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import ClientFieldTemplateEditor from '#lib/components/organisms/ClientFieldTemplateEditor.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -66,6 +67,7 @@
 	});
 </script>
 
+<PageTitle page="Client Fields" />
 <Heading level={1} text="Client Fields" />
 <Text
 	text="Extra facts your Practice records about every Client, beyond her name, contact details and address. Every field here is staff-only -- a Client never sees it."

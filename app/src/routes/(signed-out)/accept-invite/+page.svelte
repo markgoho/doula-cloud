@@ -41,6 +41,7 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
@@ -274,6 +275,8 @@
 	two forms is on screen: they never render together, and each handler
 	clears the array before it runs.
 -->
+<PageTitle page="Accept your Staff invite" isError={errors.length > 0} />
+
 <ErrorSummary {errors} />
 
 <h1>Accept your Staff invite</h1>

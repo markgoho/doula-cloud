@@ -9,6 +9,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 
 	const nameId = 'new-client-name';
@@ -61,6 +62,8 @@
 		}
 	}
 </script>
+
+<PageTitle page="Add a Client" isError={errors.length > 0} />
 
 <ErrorSummary {errors} />
 

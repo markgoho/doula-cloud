@@ -6,6 +6,7 @@
 	import { loadClients, type ClientListItem } from '#lib/client.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	let clients = $state<ClientListItem[]>([]);
@@ -74,6 +75,7 @@
 	}
 </script>
 
+<PageTitle page="Clients" />
 <h1>Clients</h1>
 
 <Link

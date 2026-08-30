@@ -74,6 +74,7 @@
 -->
 <RecordDetail
 	title={detail ? `Welcome to ${detail.practiceName}` : ''}
+	serviceName={page.data.practiceName}
 	{summary}
 	{actions}
 	sections={[]}

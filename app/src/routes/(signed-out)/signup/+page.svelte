@@ -9,6 +9,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
 	import { workStateCode } from '#lib/workStates.js';
 
@@ -105,6 +106,8 @@
 		}
 	}
 </script>
+
+<PageTitle page="Sign up your Practice" isError={errors.length > 0} />
 
 <ErrorSummary {errors} />
 

@@ -6,6 +6,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -467,6 +468,7 @@
 	{/if}
 {/snippet}
 
+<PageTitle page="Staff" />
 <Heading level={1} text="Staff" />
 
 <!--

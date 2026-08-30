@@ -11,6 +11,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	let contract = $state<Contract | null | undefined>();
 	let error = $state('');
@@ -32,6 +33,8 @@
 	href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
 	label="Back"
 />
+
+<PageTitle page="Contract" serviceName={page.data.practiceName} />
 
 {#if error}
 	<Notice variant="error" message={error} />

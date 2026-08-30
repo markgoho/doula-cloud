@@ -5,6 +5,7 @@
 	import ContractTemplateEditor from '#lib/components/organisms/ContractTemplateEditor.svelte';
 	import { loadContractTemplate, saveContractTemplate, validateProse } from '#lib/contractTemplate.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -46,6 +47,7 @@
 	});
 </script>
 
+<PageTitle page="Contract Template" />
 <Heading level={1} text="Contract Template" />
 
 {#if error}

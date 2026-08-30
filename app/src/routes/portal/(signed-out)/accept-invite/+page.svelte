@@ -14,6 +14,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
 		{ value: 'signup', label: "I'm new here -- create an account" },
@@ -115,6 +116,8 @@
 		}
 	}
 </script>
+
+<PageTitle page="Accept your portal invite" isError={errors.length > 0} />
 
 <ErrorSummary {errors} />
 

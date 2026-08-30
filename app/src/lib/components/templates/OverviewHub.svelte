@@ -16,10 +16,16 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	interface Properties {
 		title: string;
+		/**
+		 * The Staff side leaves this unset and gets the product name; the
+		 * Client portal passes its Practice's name (#431, #487).
+		 */
+		serviceName?: string;
 		primary: Snippet;
 		secondary?: Snippet;
 		isEmpty: boolean;
@@ -38,8 +44,11 @@
 		loadError?: string;
 	}
 
-	let { title, primary, secondary, isEmpty, empty, loading, loadError }: Properties = $props();
+	let { title, serviceName, primary, secondary, isEmpty, empty, loading, loadError }: Properties =
+		$props();
 </script>
+
+<PageTitle page={title} {serviceName} />
 
 <container-l>
 	<center-l max="var(--page-max)" gutters="var(--page-gutter)">

@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import {
 		atomPages,
 		moleculePages,
@@ -41,6 +42,8 @@
 		document.documentElement.dataset.theme = isChecked ? 'dark' : 'light';
 	}
 </script>
+
+<PageTitle page="Style guide" />
 
 <box-l>
 	<stack-l space="var(--space-6)">

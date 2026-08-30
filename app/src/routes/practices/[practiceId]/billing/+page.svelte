@@ -7,6 +7,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	const quantityId = 'buy-credits-quantity';
@@ -80,6 +81,7 @@
 	}
 </script>
 
+<PageTitle page="Billing" />
 <h1>Billing</h1>
 
 <p>Credit balance: {data.balance}</p>

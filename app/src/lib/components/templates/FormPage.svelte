@@ -25,6 +25,7 @@
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	/*
@@ -42,6 +43,11 @@
 
 	interface Properties {
 		title: string;
+		/**
+		 * The Staff side leaves this unset and gets the product name; the
+		 * Client portal passes its Practice's name (#431, #487).
+		 */
+		serviceName?: string;
 		intro?: Snippet;
 		fieldsets: Fieldset[];
 		/**
@@ -71,6 +77,7 @@
 
 	let {
 		title,
+		serviceName,
 		intro,
 		fieldsets,
 		errorSummary,
@@ -79,6 +86,8 @@
 		loadError
 	}: Properties = $props();
 </script>
+
+<PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} />
 
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">

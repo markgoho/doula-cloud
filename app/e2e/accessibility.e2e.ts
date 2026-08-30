@@ -63,15 +63,11 @@ interface Known {
 	reason: string;
 }
 
-const KNOWN: Known[] = [
-	{
-		key: '*',
-		ruleId: 'document-title',
-		issue: 487,
-		reason:
-			'No route in the application sets a <title> at all -- app.html has none and the root layout writes only the favicon link. What the title says, and whether a Template or the route owns it, is a decision (#487), not a mechanical fix.'
-	}
-];
+// Empty since #487: every scanned route now sets a real <title> via the
+// shared `PageTitle` primitive, so `document-title` no longer needs an
+// allowance here. Left as a typed, empty list rather than deleted -- the
+// shape stays ready for the next genuinely-known violation.
+const KNOWN: Known[] = [];
 
 async function scan(page: Page, route: Route) {
 	await page.goto(route.url);

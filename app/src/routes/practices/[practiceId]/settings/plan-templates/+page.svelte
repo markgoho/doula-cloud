@@ -4,6 +4,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DynamicFieldEditor from '#lib/components/organisms/DynamicFieldEditor.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -70,6 +71,7 @@
 	});
 </script>
 
+<PageTitle page="Plan Templates" />
 <Heading level={1} text="Plan Templates" />
 
 <nav>

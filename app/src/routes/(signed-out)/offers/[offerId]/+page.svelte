@@ -29,6 +29,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	const token = $derived(page.url.searchParams.get('token') ?? '');
 	const offerId = $derived(page.params.offerId!);
@@ -63,6 +64,7 @@
 	}
 </script>
 
+<PageTitle page="An offer of work" />
 <Heading level={1} text="An offer of work" />
 
 {#if !token}

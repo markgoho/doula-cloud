@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetch } from '#lib/api.js';
 	import {
 		portalPushSubscriptionsPath,
 		registerPushSubscription,
@@ -17,22 +17,17 @@
 
 	let { children } = $props();
 
-	type Detail = { practiceName: string; clientName: string };
-
-	let detail = $state<Detail | undefined>();
+	/*
+	 * The Practice's name is the portal's identity (#431), so the bar used
+	 * to wait on an onMount fetch to draw it -- the same flash #487 exists
+	 * to remove from the tab title. `engagements/[engagementId]/+layout.ts`
+	 * now loads it before first paint, so it is read here instead.
+	 */
+	const detail = $derived(page.data as { practiceName?: string; clientName?: string });
 
 	const engagementId = $derived(page.params.engagementId!);
 
-	onMount(async () => {
-		// The Practice's name is the portal's identity, so the bar cannot be
-		// drawn without it. Same endpoint the hub already reads; the client
-		// caches nothing, so this is one extra request per session on a
-		// screen that is not data-heavy.
-		const response = await apiFetchWithSession(
-			`/api/portal/engagements/${engagementId}`
-		);
-		if (response.ok) detail = await response.json();
-
+	onMount(() => {
 		// Push registration lives here rather than on the hub page (#61's
 		// "once per device after login"). It used to sit on the hub, which
 		// stopped being the only authenticated portal screen the moment

@@ -13,6 +13,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	interface Section {
@@ -22,6 +23,11 @@
 
 	interface Properties {
 		title: string;
+		/**
+		 * The Staff side leaves this unset and gets the product name; the
+		 * Client portal passes its Practice's name (#431, #487).
+		 */
+		serviceName?: string;
 		summary?: Snippet;
 		actions?: Snippet;
 		sections: Section[];
@@ -51,6 +57,7 @@
 
 	let {
 		title,
+		serviceName,
 		summary,
 		actions,
 		sections,
@@ -69,6 +76,8 @@
 			.replaceAll(/^-|-$/g, '');
 	}
 </script>
+
+<PageTitle page={title} {serviceName} />
 
 <container-l>
 	<center-l max="var(--page-max)" gutters="var(--page-gutter)">

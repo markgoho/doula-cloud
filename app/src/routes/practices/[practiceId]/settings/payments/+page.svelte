@@ -27,6 +27,7 @@
 	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -199,6 +200,7 @@
 	);
 </script>
 
+<PageTitle page="Payments" />
 <Heading level={1} text="Payments" />
 
 {#if error}

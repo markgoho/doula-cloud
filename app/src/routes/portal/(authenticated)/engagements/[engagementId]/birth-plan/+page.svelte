@@ -10,6 +10,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	let instance = $state<Instance | null | undefined>();
 	let error = $state('');
@@ -29,6 +30,8 @@
 		label="Back"
 	/>
 </div>
+
+<PageTitle page="Birth Plan" serviceName={page.data.practiceName} />
 
 {#if error}
 	<div class="no-print"><Notice variant="error" message={error} /></div>
