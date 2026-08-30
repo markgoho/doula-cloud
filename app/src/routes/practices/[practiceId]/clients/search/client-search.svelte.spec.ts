@@ -100,7 +100,12 @@ describe('the search that fronts intake (#498)', () => {
 			.toHaveAttribute('href', '/practices/practice-1/clients/new?name=Nadia%20Haddad');
 	});
 
-	it('offers to start intake with no name carried when none was typed', async () => {
+	/*
+	 * A staff member with nothing but a phone number searches on it and
+	 * finds no one. Carrying only the name would lose the one thing she
+	 * had -- ADR-0017's "searching costs nothing" holds for every key.
+	 */
+	it('carries a phone-only search into intake', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
 		await setup();
 
@@ -109,7 +114,25 @@ describe('the search that fronts intake (#498)', () => {
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/new');
+			.toHaveAttribute('href', '/practices/practice-1/clients/new?phone=555-0100');
+	});
+
+	it('carries every key that was typed, not only the name', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
+		await setup();
+
+		await testPage.getByLabelText('Name').fill('Nadia');
+		await testPage.getByLabelText('Date of birth').fill('1994-02-11');
+		await testPage.getByLabelText('Email').fill('nadia@example.com');
+		await testPage.getByLabelText('Phone').fill('555-0100');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
+			.toHaveAttribute(
+				'href',
+				'/practices/practice-1/clients/new?name=Nadia&dateOfBirth=1994-02-11&email=nadia%40example.com&phone=555-0100'
+			);
 	});
 
 	it('surfaces a refusal as a readable message rather than a raw crash -- e.g. a contractor\'s 403 (#501)', async () => {

@@ -79,14 +79,35 @@
 		});
 	}
 
-	// The miss's next step: intake's first page, with whatever name was
-	// typed carried along so it is not retyped (see the module comment).
+	/*
+	 * The miss's next step: intake's first page, carrying every key that
+	 * was typed here so none of it is retyped (see the module comment).
+	 * All four, not only the name -- a staff member with nothing but a
+	 * phone number searches on it, finds no one, and would otherwise lose
+	 * the one thing she had. Intake reads each on mount and shows it on
+	 * the page that asks for it.
+	 */
 	function startIntakeHref(): string {
 		const base = resolve('/practices/[practiceId]/clients/new', {
 			practiceId: page.params.practiceId!
 		});
-		const typedName = name.trim();
-		return typedName ? `${base}?name=${encodeURIComponent(typedName)}` : base;
+		const fields = currentFields();
+		// Built by hand rather than through URLSearchParams: this is a
+		// throwaway local, and svelte/prefer-svelte-reactivity rightly
+		// refuses a mutable one. encodeURIComponent also writes a space as
+		// %20 rather than "+", which reads better in the address bar.
+		const query = (
+			[
+				['name', fields.name],
+				['dateOfBirth', fields.dateOfBirth],
+				['email', fields.email],
+				['phone', fields.phone]
+			] as const
+		)
+			.filter(([, value]) => value)
+			.map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+			.join('&');
+		return query ? `${base}?${query}` : base;
 	}
 
 	async function handleSearch(event: SubmitEvent) {

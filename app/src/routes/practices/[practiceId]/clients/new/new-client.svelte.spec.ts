@@ -135,12 +135,33 @@ describe('client intake (#497)', () => {
 		await expect.element(testPage.getByLabelText('Date of birth')).toHaveAttribute('autocomplete', 'off');
 	});
 
-	it('prefills the given name from a query param, for the search that will front intake (#498)', async () => {
+	it('prefills the given name from a query param, for the search that fronts intake (#498)', async () => {
 		searchParameters.set('name', 'Grace');
 
 		await setup();
 
 		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('Grace');
+	});
+
+	/*
+	 * The search hands over every key it was given, not only the name --
+	 * a staff member who searched on a phone number alone would otherwise
+	 * lose the one thing she had. Each lands on the page that asks for it.
+	 */
+	it('prefills the contact and date-of-birth pages from the search handoff too', async () => {
+		searchParameters.set('name', 'Grace');
+		searchParameters.set('phone', '555-0100');
+		searchParameters.set('email', 'grace@example.com');
+		searchParameters.set('dateOfBirth', '1994-02-11');
+
+		await setup();
+
+		await testPage.getByRole('button', { name: 'Add contact details' }).click();
+		await expect.element(testPage.getByLabelText('Phone')).toHaveValue('555-0100');
+		await expect.element(testPage.getByLabelText('Email')).toHaveValue('grace@example.com');
+
+		await testPage.getByRole('button', { name: "Add Grace's date of birth" }).click();
+		await expect.element(testPage.getByLabelText('Date of birth')).toHaveValue('1994-02-11');
 	});
 
 	it('saves with only a given name filled, spending no Credit, and lands on the Client detail hub', async () => {

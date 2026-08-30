@@ -54,16 +54,24 @@
 	/*
 	 * The empty state of the search that fronts intake (#498) carries
 	 * whatever a staff member typed into it, so a genuinely new Client
-	 * costs nothing to search first. That handoff is a `?name=` query
-	 * param -- #498's own build, not this ticket's -- read once here to
-	 * prefill the given name rather than making her retype it.
+	 * costs nothing to search first (ADR-0017, "Finding a returning
+	 * Client"). The handoff carries all four of the search's keys, not
+	 * only the name: a staff member who searched by phone alone found
+	 * nothing and would otherwise retype the one thing she had. Each
+	 * lands on the page that asks for it -- the name here, phone and
+	 * email on page two, the date of birth on page three -- so a carried
+	 * value is still shown and still editable before the save.
 	 */
-	let givenName = $state(page.url.searchParams.get('name')?.trim() ?? '');
+	function carried(key: string): string {
+		return page.url.searchParams.get(key)?.trim() ?? '';
+	}
+
+	let givenName = $state(carried('name'));
 	let familyName = $state('');
 	let preferredName = $state('');
-	let phone = $state('');
-	let email = $state('');
-	let dateOfBirth = $state('');
+	let phone = $state(carried('phone'));
+	let email = $state(carried('email'));
+	let dateOfBirth = $state(carried('dateOfBirth'));
 
 	let step = $state<Step>('name');
 	let pageErrors = $state<FormError[]>([]);
