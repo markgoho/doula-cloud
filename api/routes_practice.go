@@ -165,10 +165,13 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	// Client, and the act that creates an Engagement. Request is any
 	// Staff member but a contractor Doula (enforced here and,
 	// independently, by engagement_requests_insert's RLS policy);
-	// approve/refuse are Owner/Admin; withdraw is the requester alone,
-	// so it carries no role declaration.
+	// approve/refuse are Owner/Admin, and so is the approval screen's own
+	// read (#502) -- the seat that decides is the seat that reads, and the
+	// balance the read carries is Owner/Admin-only on its own; withdraw is
+	// the requester alone, so it carries no role declaration.
 	ir.Replayable("POST /api/practices/{practiceId}/clients/{clientId}/engagement-requests",
 		staffauth.Middleware(d.DB)(idempotency.Wrap(engagementrequest.RequestHandler(d.DB, d.NudgeEnqueuer))))
+	g.Get("/api/practices/{practiceId}/engagement-requests/{requestId}", ownerAndAdmin, engagementrequest.DetailHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/approve",
 		"approve() locks the Request FOR UPDATE and checks state = pending inside the same transaction; a retry after the first commit finds it already decided and 409s instead of creating a second Engagement or spending a second Credit",
 		staffauth.Middleware(d.DB)(engagementrequest.ApproveHandler(d.DB, d.NudgeEnqueuer)))

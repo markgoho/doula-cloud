@@ -1,6 +1,7 @@
 // Package engagementrequest is the Staff-side BFF surface for ADR-0017's
-// Engagement Request: the four endpoints (request, approve, refuse,
-// withdraw) and the act that turns an approval into an Engagement.
+// Engagement Request: the four decision endpoints (request, approve,
+// refuse, withdraw), the approval screen's own read (detail.go), and the
+// act that turns an approval into an Engagement.
 // Approval is the only path anywhere in the codebase that inserts an
 // engagements row -- see approve() in approve.go, shared by ApproveHandler
 // and RequestHandler's solo-Practice collapsed path.

@@ -70,3 +70,104 @@ export async function requestEngagement(
 	}
 	return { noCredits: false, outcome: await response.json() };
 }
+
+/** The approval screen's read (#502), mirroring the Go BFF's
+ * engagementrequest.DetailResponse. `balance` travels beside
+ * `balanceAfter` so the screen can offer Buy Credits before an approval
+ * that would fail; `balanceAfter` is honestly negative on an empty
+ * balance. */
+export interface ApprovalDetail {
+	requestId: string;
+	state: 'pending';
+	kind: 'birth' | 'postpartum';
+	dueDate?: string;
+	note?: string;
+	requestedBy: string;
+	requestedByName: string;
+	requestedAt: string;
+	client: {
+		clientId: string;
+		givenName: string;
+		familyName: string;
+		preferredName: string;
+		isNewToPractice: boolean;
+	};
+	creditCost: number;
+	balance: number;
+	balanceAfter: number;
+	engagements: { engagementId: string; kind: string; status: string; createdAt: string }[];
+	warning?: string;
+}
+
+/** ApproveResponse, mirrored -- the Engagement approval created, and the
+ * second-live-Engagement warning it carries at the approver's seat. */
+export interface ApprovalOutcome {
+	requestId: string;
+	engagementId: string;
+	state: 'approved';
+	warning?: string;
+}
+
+/** The two shapes `approveRequest` can settle to, the same discriminated
+ * union `requestEngagement` gives a 402: an empty balance is an expected
+ * outcome with a real next step (Buy Credits), not a thrown error. */
+export type ApproveRequestResult = { noCredits: false; outcome: ApprovalOutcome } | { noCredits: true };
+
+function requestPath(practiceId: string, requestId: string): string {
+	return `/api/practices/${practiceId}/engagement-requests/${requestId}`;
+}
+
+/** Loads one pending Request's full approval context
+ * (engagementrequest.DetailHandler). Throws with the response body text
+ * on any refusal -- a Doula's 403, an unknown id's 404, or the 409 a
+ * Request somebody already decided answers with -- mirroring
+ * loadClientDetail's error-surfacing convention. */
+export async function loadApprovalDetail(
+	fetcher: Fetcher,
+	practiceId: string,
+	requestId: string
+): Promise<ApprovalDetail> {
+	const response = await fetcher(requestPath(practiceId, requestId));
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
+}
+
+/** Approves a pending Request (engagementrequest.ApproveHandler): the one
+ * act that creates an Engagement and spends the Credit. A 402 decodes
+ * into `{ noCredits: true }` rather than throwing. */
+export async function approveRequest(
+	fetcher: Fetcher,
+	practiceId: string,
+	requestId: string
+): Promise<ApproveRequestResult> {
+	const response = await fetcher(`${requestPath(practiceId, requestId)}/approve`, { method: 'POST' });
+	if (response.status === 402) {
+		return { noCredits: true };
+	}
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return { noCredits: false, outcome: await response.json() };
+}
+
+/** Refuses a pending Request (engagementrequest.RefuseHandler). The
+ * reason is required -- the endpoint 400s without one and
+ * engagement_requests_refusal_reason refuses the row -- so the screen
+ * asks for it before it ever calls this. */
+export async function refuseRequest(
+	fetcher: Fetcher,
+	practiceId: string,
+	requestId: string,
+	reason: string
+): Promise<void> {
+	const response = await fetcher(`${requestPath(practiceId, requestId)}/refuse`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ reason })
+	});
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+}

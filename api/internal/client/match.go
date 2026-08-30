@@ -87,7 +87,7 @@ func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyN
 	}
 
 	for i := range matches {
-		engagements, err := listEngagementsForClient(ctx, tx, matches[i].ID)
+		engagements, err := ListEngagementsForClient(ctx, tx, matches[i].ID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return nil, err
@@ -97,10 +97,13 @@ func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyN
 	return matches, nil
 }
 
-// listEngagementsForClient reads clientID's Engagement history, oldest
-// first -- shared by FindMatches (the save-time prompt's "history") and
-// DetailHandler (her record's own Engagements past and present).
-func listEngagementsForClient(ctx context.Context, tx *sql.Tx, clientID string) ([]EngagementSummary, error) {
+// ListEngagementsForClient reads clientID's Engagement history, oldest
+// first -- shared by FindMatches (the save-time prompt's "history"),
+// DetailHandler (her record's own Engagements past and present) and
+// engagementrequest.DetailHandler (the approval screen's same list).
+// Exported for that third consumer: RLS scopes the read to the caller's
+// Practice, so it carries no access rule of its own.
+func ListEngagementsForClient(ctx context.Context, tx *sql.Tx, clientID string) ([]EngagementSummary, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id, kind::text, status, created_at FROM engagements WHERE client_id = $1 ORDER BY created_at`,
 		clientID,

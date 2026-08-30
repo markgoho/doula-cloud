@@ -120,7 +120,7 @@ func DetailHandler() http.Handler {
 			return
 		}
 
-		engagements, err := listEngagementsForClient(r.Context(), tx, clientID)
+		engagements, err := ListEngagementsForClient(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)

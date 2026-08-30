@@ -36,6 +36,8 @@ const (
 func newServer(t *testing.T, db *testdb.DB, uid string, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.Handle("GET /practices/{practiceId}/engagement-requests/{requestId}",
+		staffauth.Middleware(db.App)(engagementrequest.DetailHandler()))
 	mux.Handle("POST /practices/{practiceId}/clients/{clientId}/engagement-requests",
 		staffauth.Middleware(db.App)(engagementrequest.RequestHandler(db.App, enq)))
 	mux.Handle("POST /practices/{practiceId}/engagement-requests/{requestId}/approve",
@@ -68,6 +70,29 @@ func do(t *testing.T, url, session string, body any) response {
 		payload = encoded
 	}
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	if session != "" {
+		authntest.AddSessionCookie(req, session)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	read, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return response{status: resp.StatusCode, body: read}
+}
+
+// get GETs url carrying session's __session cookie -- the one read path
+// in this package (DetailHandler), next to do's POST-only exchanges.
+func get(t *testing.T, url, session string) response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -257,4 +282,16 @@ func lowCreditOutboxCount(t *testing.T, db *testdb.DB, practiceID string) int {
 		t.Fatalf("count low_credit_outbox rows: %v", err)
 	}
 	return count
+}
+
+// setRequestNote writes a note onto an already-seeded Request, so a test
+// can prove the note reaches the approver without pendingRequest growing
+// a parameter every one of its other callers would have to pass.
+func setRequestNote(t *testing.T, db *testdb.DB, requestID, note string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagement_requests SET note = $1 WHERE id = $2`, note, requestID,
+	); err != nil {
+		t.Fatalf("set request note: %v", err)
+	}
 }
