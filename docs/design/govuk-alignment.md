@@ -52,8 +52,8 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | --- | --- | --- |
 | [Addresses](https://design-system.service.gov.uk/patterns/addresses/) | `client.Record`'s five address columns; one fieldset, one input per line, no lookup | Drawn -- [#466](https://github.com/markgoho/doula-cloud/issues/466) |
 | [Bank details](https://design-system.service.gov.uk/patterns/bank-details/) | Stripe Connect owns this end to end; we never see an account number | N/A -- and it must stay N/A |
-| [Dates](https://design-system.service.gov.uk/patterns/dates/) | Date of birth as three text inputs, Month/Day/Year, never a picker | Aligned -- `b7e8ab7`, built by [#466](https://github.com/markgoho/doula-cloud/issues/466) |
-| [Email addresses](https://design-system.service.gov.uk/patterns/email-addresses/) | Signup, login, invite, Client email | Wording aligned; `autocomplete` set per [the rule above](#autocomplete-whose-data-it-is), built by [#469](https://github.com/markgoho/doula-cloud/issues/469) -- the Client intake fields wait on [#466](https://github.com/markgoho/doula-cloud/issues/466), which must follow the same rule |
+| [Dates](https://design-system.service.gov.uk/patterns/dates/) | Date of birth as three text inputs, Month/Day/Year, never a picker | Drawn -- `b7e8ab7` touched [`doula-cloud.pen`](doula-cloud.pen) only, and [#466](https://github.com/markgoho/doula-cloud/issues/466) is open, so nothing in `app/src` asks for a date of birth at all; walked 2026-08-30, which is how the stale **Aligned** was caught |
+| [Email addresses](https://design-system.service.gov.uk/patterns/email-addresses/) | Signup, login, invite, Client email | Wording aligned; `autocomplete` set per [the rule above](#autocomplete-whose-data-it-is), built by [#469](https://github.com/markgoho/doula-cloud/issues/469) -- the Client intake fields wait on [#466](https://github.com/markgoho/doula-cloud/issues/466), which must follow the same rule; walked 2026-08-30 |
 | [Equality information](https://design-system.service.gov.uk/patterns/equality-information/) | No equality monitoring is collected | N/A |
 | [Names](https://design-system.service.gov.uk/patterns/names/) | Given, family and preferred, split | Departed on purpose -- see below |
 | [National Insurance numbers](https://design-system.service.gov.uk/patterns/national-insurance-numbers/) | UK-only identifier | N/A |
@@ -66,16 +66,16 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | GOV.UK pattern | Doula Cloud | Status |
 | --- | --- | --- |
 | [Check a service is suitable](https://design-system.service.gov.uk/patterns/check-a-service-is-suitable/) | The Hugo marketing site does this job, not the app | N/A here |
-| [Check answers](https://design-system.service.gov.uk/patterns/check-answers/) | `templates/CheckAnswers.svelte` -- key / value / Change rows on hairline dividers, `isWide` for a long list | Aligned -- built on [#464](https://github.com/markgoho/doula-cloud/issues/464); its first route is [#466](https://github.com/markgoho/doula-cloud/issues/466) |
+| [Check answers](https://design-system.service.gov.uk/patterns/check-answers/) | `templates/CheckAnswers.svelte` -- key / value / Change rows on hairline dividers, `isWide` for a long list | Aligned -- built on [#464](https://github.com/markgoho/doula-cloud/issues/464); its first route is [#466](https://github.com/markgoho/doula-cloud/issues/466); walked 2026-08-30 |
 | [Complete multiple tasks](https://design-system.service.gov.uk/patterns/complete-multiple-tasks/) | The Practice landing page's roll-ups are the nearest thing; a task list is not adopted | Considered -- see below |
 | [Confirm a phone number](https://design-system.service.gov.uk/patterns/confirm-a-phone-number/) | No SMS is sent, so no code to confirm | N/A |
-| [Confirm an email address](https://design-system.service.gov.uk/patterns/confirm-an-email-address/) | Invitation acceptance already proves the address | Aligned by way of the invite flow |
+| [Confirm an email address](https://design-system.service.gov.uk/patterns/confirm-an-email-address/) | Invitation acceptance already proves the address | Aligned by way of the invite flow; walked 2026-08-30 |
 | [Contact a department or service team](https://design-system.service.gov.uk/patterns/contact-a-department-or-service-team/) | `/support`, which Stripe also requires | Open -- [#419](https://github.com/markgoho/doula-cloud/issues/419) |
 | [Create a username](https://design-system.service.gov.uk/patterns/create-a-username/) | Email is the identifier; there are no usernames | N/A, deliberately |
-| [Create accounts](https://design-system.service.gov.uk/patterns/create-accounts/) | Signup, and both accept-invite routes | `autocomplete` built by [#469](https://github.com/markgoho/doula-cloud/issues/469); the password control itself is still Open -- [#470](https://github.com/markgoho/doula-cloud/issues/470) |
+| [Create accounts](https://design-system.service.gov.uk/patterns/create-accounts/) | Signup, and both accept-invite routes | `autocomplete` built by [#469](https://github.com/markgoho/doula-cloud/issues/469); the password control itself is still Open -- [#470](https://github.com/markgoho/doula-cloud/issues/470); walked 2026-08-30 |
 | [Exit a page quickly](https://design-system.service.gov.uk/patterns/exit-a-page-quickly/) | Adopted, **client portal only** -- never the staff side, because a doula is at work and a client may not be | Decided, open to build -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
 | [Navigate a service](https://design-system.service.gov.uk/patterns/navigate-a-service/) | Flat six-item nav, no breadcrumbs, per the brief | Drawn -- [#452](https://github.com/markgoho/doula-cloud/issues/452) |
-| [Recover from validation errors](https://design-system.service.gov.uk/patterns/validation/) | Every form that submits: `ErrorSummary` above the `<h1>`, the same string beside the field, `novalidate` so the page refuses rather than the browser. The Engagement detail page is a deliberate exception -- its failures are section-local operation outcomes, not a refused form, so they stay `Notice` where they happen ([#467](https://github.com/markgoho/doula-cloud/issues/467)) | Aligned -- built on [#467](https://github.com/markgoho/doula-cloud/issues/467) |
+| [Recover from validation errors](https://design-system.service.gov.uk/patterns/validation/) | Every form that submits: `ErrorSummary` above the `<h1>`, the same string beside the field, `novalidate` so the page refuses rather than the browser. The Engagement detail page is a deliberate exception -- its failures are section-local operation outcomes, not a refused form, so they stay `Notice` where they happen ([#467](https://github.com/markgoho/doula-cloud/issues/467)) | Aligned -- built on [#467](https://github.com/markgoho/doula-cloud/issues/467); walked 2026-08-30 on a really refused `/login` and `/invite` |
 | [Start using a service](https://design-system.service.gov.uk/patterns/start-using-a-service/) | The root route still renders SvelteKit's scaffold | Open -- [#357](https://github.com/markgoho/doula-cloud/issues/357) |
 
 ### Pages
@@ -85,11 +85,11 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | [Confirmation pages](https://design-system.service.gov.uk/patterns/confirmation-pages/) | Outcomes are announced with `Notice` in place, not on their own page | Departed -- see below |
 | [Cookies page](https://design-system.service.gov.uk/patterns/cookies-page/) | [ADR-0016](../adr/0016-teaser-analytics-are-cookieless-and-the-channel-rides-on-the-form.md) keeps analytics cookieless; the only cookie is `__session` | N/A |
 | [Interruption pages](https://design-system.service.gov.uk/patterns/interruption-pages/) | Nothing yet needs a full-page stop before a consequential step | N/A for now |
-| [Page not found](https://design-system.service.gov.uk/patterns/page-not-found-pages/) | `templates/ErrorPage.svelte`'s `notFound` state, rendered by a `+error.svelte` at every chrome boundary | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
+| [Page not found](https://design-system.service.gov.uk/patterns/page-not-found-pages/) | `templates/ErrorPage.svelte`'s `notFound` state, rendered by a `+error.svelte` at every chrome boundary | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471); walked 2026-08-30 |
 | [Question pages](https://design-system.service.gov.uk/patterns/question-pages/) | The `QuestionPage` Template; one thing per page, legend or label as the `<h1>` | Drawn -- `e994dc7`, [#464](https://github.com/markgoho/doula-cloud/issues/464) |
-| [Service unavailable](https://design-system.service.gov.uk/patterns/service-unavailable-pages/) | `templates/ErrorPage.svelte`'s `unavailable` state (503) | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
+| [Service unavailable](https://design-system.service.gov.uk/patterns/service-unavailable-pages/) | `templates/ErrorPage.svelte`'s `unavailable` state (503) | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471); walked 2026-08-30 |
 | [Step by step navigation](https://design-system.service.gov.uk/patterns/step-by-step-navigation/) | Their pattern is for guidance across many services; our `organisms/StepRail.svelte` is a progress indicator inside one flow, taking step-by-step's anatomy and Complete-multiple-tasks' semantics ([#432](https://github.com/markgoho/doula-cloud/issues/432)'s departure 1) | N/A -- do not confuse the two |
-| [There is a problem with the service](https://design-system.service.gov.uk/patterns/problem-with-the-service-pages/) | `templates/ErrorPage.svelte`'s `problem` state (500 and any other unexpected status) | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
+| [There is a problem with the service](https://design-system.service.gov.uk/patterns/problem-with-the-service-pages/) | `templates/ErrorPage.svelte`'s `problem` state (500 and any other unexpected status) | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471); walked 2026-08-30 |
 
 ## Components
 
@@ -98,41 +98,41 @@ Their [component list](https://design-system.service.gov.uk/components/) against
 | GOV.UK component | Doula Cloud | Status |
 | --- | --- | --- |
 | [Accordion](https://design-system.service.gov.uk/components/accordion/) | Nothing needs one | N/A for now |
-| [Back link](https://design-system.service.gov.uk/components/back-link/) | `molecules/BackLink.svelte`, rendered by `QuestionPage` and `CheckAnswers` above the error summary | Aligned -- built on [#464](https://github.com/markgoho/doula-cloud/issues/464) |
+| [Back link](https://design-system.service.gov.uk/components/back-link/) | `molecules/BackLink.svelte`, rendered by `QuestionPage` and `CheckAnswers` above the error summary | Aligned -- built on [#464](https://github.com/markgoho/doula-cloud/issues/464); walked 2026-08-30 |
 | [Breadcrumbs](https://design-system.service.gov.uk/components/breadcrumbs/) | A flat six-item nav means there is no hierarchy to breadcrumb | N/A, deliberately |
-| [Button](https://design-system.service.gov.uk/components/button/) | `atoms/Button.svelte` | Aligned |
+| [Button](https://design-system.service.gov.uk/components/button/) | `atoms/Button.svelte` | Aligned; walked 2026-08-30 |
 | [Character count](https://design-system.service.gov.uk/components/character-count/) | Nothing counts anything | Open -- [#468](https://github.com/markgoho/doula-cloud/issues/468) |
-| [Checkboxes](https://design-system.service.gov.uk/components/checkboxes/) | `atoms/Checkbox.svelte` | Aligned |
+| [Checkboxes](https://design-system.service.gov.uk/components/checkboxes/) | `atoms/Checkbox.svelte` | Aligned; walked 2026-08-30 |
 | [Cookie banner](https://design-system.service.gov.uk/components/cookie-banner/) | No cookies to consent to | N/A |
-| [Date input](https://design-system.service.gov.uk/components/date-input/) | Three inputs for a memorable date; a control for a known date is still open | Partly open -- [#404](https://github.com/markgoho/doula-cloud/issues/404) |
+| [Date input](https://design-system.service.gov.uk/components/date-input/) | A **known** date is `TextInput type="date"` wrapping the native control ([#404](https://github.com/markgoho/doula-cloud/issues/404), `65f0974`); a **memorable** date is three inputs, and those are drawn rather than built | Partly open -- the known half is Aligned, the memorable half waits on [#466](https://github.com/markgoho/doula-cloud/issues/466); walked 2026-08-30 |
 | [Details](https://design-system.service.gov.uk/components/details/) | No progressive-disclosure component; `<details>` is the whole implementation when one is needed | N/A for now |
-| [Error message](https://design-system.service.gov.uk/components/error-message/) | `LabeledField`'s `error` prop, passed by every form; `MembershipFields` renders a group's under its legend. Wording is gated: `formErrors.usage.spec.ts` fails a commit on "please", "valid", "invalid" or "required" in any component or route | Aligned -- built on [#467](https://github.com/markgoho/doula-cloud/issues/467) |
-| [Error summary](https://design-system.service.gov.uk/components/error-summary/) | `molecules/ErrorSummary.svelte`, positioned by `FormPage` and `QuestionPage` as a named Snippet region. Takes focus on appear; an entry's link focuses its control through HTML's own fragment-focusing steps, no script | Aligned -- built on [#467](https://github.com/markgoho/doula-cloud/issues/467) |
+| [Error message](https://design-system.service.gov.uk/components/error-message/) | `LabeledField`'s `error` prop, passed by every form; `MembershipFields` renders a group's under its legend. Wording is gated: `formErrors.usage.spec.ts` fails a commit on "please", "valid", "invalid" or "required" in any component or route | Aligned -- built on [#467](https://github.com/markgoho/doula-cloud/issues/467); the message rendered *below* the control it refuses until `198953e` moved it between the hint and the control, found by walking the pages 2026-08-30 |
+| [Error summary](https://design-system.service.gov.uk/components/error-summary/) | `molecules/ErrorSummary.svelte`, positioned by `FormPage` and `QuestionPage` as a named Snippet region. Takes focus on appear; an entry's link focuses its control through HTML's own fragment-focusing steps, no script | Aligned -- built on [#467](https://github.com/markgoho/doula-cloud/issues/467); walked 2026-08-30 |
 | [Exit this page](https://design-system.service.gov.uk/components/exit-this-page/) | Adopted on the portal. The button is the easy half; what the app leaves behind is the ticket | Open -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
 | [Feedback](https://design-system.service.gov.uk/components/feedback/) | Their footer prompt for feedback on a government service. `/support` is the contact route here | N/A |
-| [Fieldset](https://design-system.service.gov.uk/components/fieldset/) | `FormPage` and `QuestionPage` own the fieldset and legend | Aligned |
+| [Fieldset](https://design-system.service.gov.uk/components/fieldset/) | `FormPage` and `QuestionPage` own the fieldset and legend | Aligned; walked 2026-08-30 |
 | [File upload](https://design-system.service.gov.uk/components/file-upload/) | Nothing in the app uploads a file; PDFs are generated, not received | N/A for now |
 | [Footer](https://design-system.service.gov.uk/components/footer/) / [Header](https://design-system.service.gov.uk/components/header/) | Ours, from [the brief](brief.md) | Departed -- look, not behavior |
 | [Generic header](https://design-system.service.gov.uk/components/generic-header/) | Their unbranded header for services that are not GOV.UK. Nearest in spirit to our top bar, and still replaced by it | Departed -- look, not behavior |
 | [Inset text](https://design-system.service.gov.uk/components/inset-text/) | `Notice` covers the announcement job | N/A for now |
 | [Language navigation](https://design-system.service.gov.uk/components/language-navigation/) | English only | N/A |
-| [Notification banner](https://design-system.service.gov.uk/components/notification-banner/) | `atoms/Notice.svelte`, with the same `role="alert"` / `role="status"` split | Aligned |
+| [Notification banner](https://design-system.service.gov.uk/components/notification-banner/) | `atoms/Notice.svelte`, with the same `role="alert"` / `role="status"` split | Aligned; walked 2026-08-30 |
 | [Pagination](https://design-system.service.gov.uk/components/pagination/) | Four list endpoints return every row | Open -- [#446](https://github.com/markgoho/doula-cloud/issues/446) |
 | [Panel](https://design-system.service.gov.uk/components/panel/) | Belongs with confirmation pages, which are departed from | N/A -- see below |
 | [Password input](https://design-system.service.gov.uk/components/password-input/) | Plain `TextInput` with `type="password"` | Open -- [#470](https://github.com/markgoho/doula-cloud/issues/470) |
 | [Phase banner](https://design-system.service.gov.uk/components/phase-banner/) | Alpha/beta/live is a government service standard | N/A |
-| [Radios](https://design-system.service.gov.uk/components/radios/) | `molecules/RadioGroup.svelte`, which cannot yet carry a hint per option | Partly open -- [#464](https://github.com/markgoho/doula-cloud/issues/464) |
-| [Select](https://design-system.service.gov.uk/components/select/) | `atoms/Select.svelte` | Aligned |
+| [Radios](https://design-system.service.gov.uk/components/radios/) | `molecules/RadioGroup.svelte`, which cannot yet carry a hint per option | Partly open -- [#464](https://github.com/markgoho/doula-cloud/issues/464); walked 2026-08-30 |
+| [Select](https://design-system.service.gov.uk/components/select/) | `atoms/Select.svelte` | Aligned; walked 2026-08-30 |
 | [Service navigation](https://design-system.service.gov.uk/components/service-navigation/) | The staff and portal top bars | Drawn -- [#452](https://github.com/markgoho/doula-cloud/issues/452) |
 | [Skip link](https://design-system.service.gov.uk/components/skip-link/) | None anywhere in the app | Open -- added to [#452](https://github.com/markgoho/doula-cloud/issues/452) |
-| [Summary list](https://design-system.service.gov.uk/components/summary-list/) | Two things, deliberately: `molecules/DescriptionList.svelte` for a record's facts, and `CheckAnswers`'s own rows where there is a Change action | Aligned -- [#464](https://github.com/markgoho/doula-cloud/issues/464) kept the action row internal to `CheckAnswers` rather than growing a molecule for one consumer; it moves out when a second page wants it |
-| [Table](https://design-system.service.gov.uk/components/table/) | `organisms/DataTable.svelte` | Aligned |
+| [Summary list](https://design-system.service.gov.uk/components/summary-list/) | Two things, deliberately: `molecules/DescriptionList.svelte` for a record's facts, and `CheckAnswers`'s own rows where there is a Change action | Aligned -- [#464](https://github.com/markgoho/doula-cloud/issues/464) kept the action row internal to `CheckAnswers` rather than growing a molecule for one consumer; it moves out when a second page wants it; walked 2026-08-30 |
+| [Table](https://design-system.service.gov.uk/components/table/) | `organisms/DataTable.svelte` | Partly open -- walked 2026-08-30: aligned at a desktop width, but the six-column Staff table scrolls the whole page sideways at 320px ([#508](https://github.com/markgoho/doula-cloud/issues/508)), and a numeric column cannot be right-aligned ([#509](https://github.com/markgoho/doula-cloud/issues/509)) |
 | [Tabs](https://design-system.service.gov.uk/components/tabs/) | Nothing needs one | N/A for now |
-| [Tag](https://design-system.service.gov.uk/components/tag/) | `atoms/Badge.svelte` | Aligned |
+| [Tag](https://design-system.service.gov.uk/components/tag/) | `atoms/Badge.svelte` | Aligned; walked 2026-08-30 |
 | [Task list](https://design-system.service.gov.uk/components/task-list/) | Not adopted; see the note on multiple tasks below | Considered |
-| [Text input](https://design-system.service.gov.uk/components/text-input/) | `atoms/TextInput.svelte` | Aligned |
+| [Text input](https://design-system.service.gov.uk/components/text-input/) | `atoms/TextInput.svelte` | Aligned; walked 2026-08-30 |
 | [Textarea](https://design-system.service.gov.uk/components/textarea/) | Five raw `<textarea>` elements and no atom | Open -- [#468](https://github.com/markgoho/doula-cloud/issues/468) |
-| [Warning text](https://design-system.service.gov.uk/components/warning-text/) | `atoms/WarningText.svelte` -- `Notice.svelte:7` stayed `error \| status \| info` and did not grow a fourth variant, since it announces what happened, not what is about to | Aligned -- [#473](https://github.com/markgoho/doula-cloud/issues/473) |
+| [Warning text](https://design-system.service.gov.uk/components/warning-text/) | `atoms/WarningText.svelte` -- `Notice.svelte:7` stayed `error \| status \| info` and did not grow a fourth variant, since it announces what happened, not what is about to | Aligned -- [#473](https://github.com/markgoho/doula-cloud/issues/473); walked 2026-08-30 |
 
 ## Where we depart on purpose
 
@@ -150,10 +150,11 @@ A departure is only legitimate if the reason is written down. These are the five
 
 ## Keeping this table honest
 
-Three rules, so this does not become a document that was true once.
+Four rules, so this does not become a document that was true once.
 
 1. **A new screen that asks a person for something checks this table first.** If GOV.UK has a pattern for it, the burden is on departing, not on adopting.
 2. **A departure gets a row here with its reason** on the same commit that departs. A departure with no recorded reason is a defect, and it is the only kind of GOV.UK finding this project treats as one.
 3. **A row that says Open names a ticket.** No row says "someday".
+4. **A row only says Aligned once somebody has seen it render**, at a desktop width and at 320px, and it carries the date that happened. Source is not evidence here. This table's first version was written by reading the code, which is the right way to audit a *decision* -- whether a date is three inputs, whether a page asks one thing -- and the wrong way to audit a *rendering*. Four rows failed the first walk ([#475](https://github.com/markgoho/doula-cloud/issues/475), 2026-08-30) and none of them could have been caught any other way: the error message sat below its control, the six-column table scrolled the page sideways only at 320px, and two rows named a commit or a ticket that no longer said what the row claimed. `LabeledField`'s label did the same thing before them ([#425](https://github.com/markgoho/doula-cloud/issues/425)). A row whose walk date is older than the component it names has not been checked.
 
 What this document deliberately does not do is track GOV.UK's own releases. Their system changes; ours does not have to follow. The table is checked when we build a screen, not when they ship a version.
