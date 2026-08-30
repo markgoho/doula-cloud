@@ -110,6 +110,7 @@
 				value={email}
 				onInput={(value) => (email = value)}
 				required
+				autocomplete="username"
 			/>
 		{/snippet}
 	</LabeledField>
@@ -123,6 +124,7 @@
 				value={password}
 				onInput={(value) => (password = value)}
 				required
+				autocomplete="current-password"
 			/>
 		{/snippet}
 	</LabeledField>

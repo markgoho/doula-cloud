@@ -86,6 +86,12 @@
 	 * copied here -- it stays where it has always been, after the accept
 	 * POST, on both outcomes.
 	 */
+	// The email field is either establishing a new identity or naming an
+	// existing one, and the password field is either being set or being
+	// recalled -- `mode` is what tells the two apart (#469).
+	const emailAutocomplete = $derived(mode === 'signup' ? 'email' : 'username');
+	const passwordAutocomplete = $derived(mode === 'signup' ? 'new-password' : 'current-password');
+
 	let credential = $state<UserCredential | undefined>();
 	// What the session read after sign-in found: an existing Staff record,
 	// or nothing (a 404, meaning she is new here). Undefined until step one
@@ -294,6 +300,7 @@
 					value={email}
 					onInput={(value) => (email = value)}
 					required
+					autocomplete={emailAutocomplete}
 				/>
 			{/snippet}
 		</LabeledField>
@@ -308,6 +315,7 @@
 					onInput={(value) => (password = value)}
 					required
 					minlength={6}
+					autocomplete={passwordAutocomplete}
 				/>
 			{/snippet}
 		</LabeledField>
@@ -356,6 +364,7 @@
 						value={name}
 						onInput={(value) => (name = value)}
 						required
+						autocomplete="name"
 					/>
 				{/snippet}
 			</LabeledField>

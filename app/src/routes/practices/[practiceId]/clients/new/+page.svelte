@@ -66,7 +66,13 @@
 
 <Heading level={1} text="Add a Client" />
 
-<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
+<!--
+	`novalidate`: the page refuses the submit, not the browser (#467).
+	`autocomplete="off"` on both fields below: this asks for the Client's
+	name and email, not the signed-in doula's own, and offering her stored
+	values here would be both a data-entry hazard and a privacy one on a
+	shared device (#469).
+-->
 <form onsubmit={handleSubmit} novalidate>
 	<LabeledField id={nameId} label="Their name" error={errorFor(nameId)}>
 		{#snippet children({ id, describedBy, invalid })}
@@ -77,6 +83,7 @@
 				value={name}
 				onInput={(value) => (name = value)}
 				required
+				autocomplete="off"
 			/>
 		{/snippet}
 	</LabeledField>
@@ -90,6 +97,7 @@
 				value={email}
 				onInput={(value) => (email = value)}
 				required
+				autocomplete="off"
 			/>
 		{/snippet}
 	</LabeledField>

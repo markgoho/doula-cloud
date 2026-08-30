@@ -49,6 +49,31 @@ type RefundReceipt struct {
 	PaymentIntentID string `json:"paymentIntentId"`
 }
 
+// refundByRequestKey returns the refund already issued under requestKey,
+// if there is one. The PaymentIntent comes from the lot the refund drew
+// against, since that is where the money went back to.
+func refundByRequestKey(ctx context.Context, tx *sql.Tx, requestKey string) (RefundReceipt, bool, error) {
+	var receipt RefundReceipt
+	var quantity, taxCents int64
+	err := tx.QueryRowContext(ctx,
+		`SELECT -r.quantity, -r.tax_cents, r.stripe_refund_id, l.stripe_payment_intent_id,
+		        -r.quantity * r.unit_price_cents - r.tax_cents
+		 FROM credit_ledger r
+		 JOIN credit_ledger l ON l.id = r.drawn_lot_id
+		 WHERE r.refund_request_key = $1`, requestKey,
+	).Scan(&quantity, &taxCents, &receipt.StripeRefundID, &receipt.PaymentIntentID, &receipt.AmountCents)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RefundReceipt{}, false, nil
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return RefundReceipt{}, false, fmt.Errorf("billing: look up refund by request key: %w", err)
+	}
+	receipt.Credits = int(quantity)
+	receipt.TaxCents = taxCents
+	return receipt, true, nil
+}
+
 // refundableLots is the FIFO-ordered subset of a Practice's open lots that
 // a refund may draw from: purchases only, inside the window.
 //
@@ -118,9 +143,17 @@ func Refundable(ctx context.Context, tx *sql.Tx, practiceID string, now time.Tim
 // caller's transaction: money moves first, then the record of it. The
 // reverse order would leave a ledger claiming a refund that Stripe
 // refused.
-func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, practiceID string, quantity int, now time.Time) (RefundReceipt, error) {
+func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, practiceID, requestKey string, quantity int, now time.Time) (RefundReceipt, error) {
 	if quantity < 1 {
 		return RefundReceipt{}, fmt.Errorf("billing: refund quantity must be at least 1")
+	}
+
+	// Answered from the row the first attempt wrote, if there was one.
+	// This is what makes a retry safe rather than merely rare: the
+	// operator reruns the same request, and gets the refund already
+	// made instead of a second one.
+	if receipt, found, err := refundByRequestKey(ctx, tx, requestKey); err != nil || found {
+		return receipt, err
 	}
 
 	// Same lock ConsumeCredit takes, for the same reason: two refunds
@@ -147,18 +180,24 @@ func Refund(ctx context.Context, tx *sql.Tx, client StripeClient, practiceID str
 	taxCents := taxOnCredits(l.taxCents, l.quantity, l.refundedCount, quantity, l.taxRefundedCents)
 	amountCents := int64(quantity)*l.unitPriceCents + taxCents
 
-	refundID, err := client.RefundPayment(ctx, l.stripePaymentIntentID.String, amountCents)
+	// requestKey rides through to Stripe as its idempotency key too, so
+	// a retry that raced past the lookup above -- the first attempt's
+	// transaction not yet committed -- replays the same Refund rather
+	// than moving the money twice.
+	refundID, err := client.RefundPayment(ctx, l.stripePaymentIntentID.String, requestKey, amountCents)
 	if err != nil {
 		return RefundReceipt{}, fmt.Errorf("billing: refund %d cents to practice %s: %w", amountCents, practiceID, err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO credit_ledger
-		     (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id)
-		 VALUES ($1, 'refund', $2, $3, $4, $5, $6)`,
-		practiceID, -quantity, l.unitPriceCents, -taxCents, refundID, l.id,
+		     (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id, refund_request_key)
+		 VALUES ($1, 'refund', $2, $3, $4, $5, $6, $7)`,
+		practiceID, -quantity, l.unitPriceCents, -taxCents, refundID, l.id, requestKey,
 	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		// Two attempts at one request, racing: 00054 makes both the
+		// request key and the Stripe Refund unique, so the second is
+		// refused here rather than recorded twice.
 		return RefundReceipt{}, fmt.Errorf("billing: insert refund row: %w", err)
 	}
 

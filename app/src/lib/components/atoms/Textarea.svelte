@@ -49,6 +49,8 @@
 	person a budget the server does not enforce.
 -->
 <script lang="ts">
+	import type { HTMLTextareaAttributes } from 'svelte/elements';
+
 	/*
 	 * govuk-frontend's own figure: long enough that a touch typist is not
 	 * interrupted mid-word, short enough that the count is current by the
@@ -75,7 +77,8 @@
 		 */
 		ariaLabel,
 		rows = 4,
-		maxLength
+		maxLength,
+		autocomplete
 	}: {
 		id?: string;
 		value: string;
@@ -89,6 +92,8 @@
 		ariaLabel?: string;
 		rows?: number;
 		maxLength?: number;
+		// Whose data this is, per docs/design/govuk-alignment.md (#469).
+		autocomplete?: HTMLTextareaAttributes['autocomplete'];
 	} = $props();
 
 	const isCounted = $derived(maxLength !== undefined);
@@ -131,6 +136,7 @@
 	{placeholder}
 	{required}
 	{disabled}
+	{autocomplete}
 	aria-label={ariaLabel}
 	class:invalid
 	style:--textarea-rows={rows}

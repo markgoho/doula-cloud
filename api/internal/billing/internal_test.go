@@ -34,6 +34,10 @@ func internalRequest(t *testing.T, srv *httptest.Server, method, path, secret, b
 	if secret != "" {
 		req.Header.Set("X-Internal-Secret", secret)
 	}
+	// One name per test, which is what a retry within a test would
+	// reuse. TestRefundHandler_RefusesAnUnnamedRequest builds its own
+	// request instead, to send none.
+	req.Header.Set("Idempotency-Key", t.Name())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -80,6 +84,31 @@ func TestRefundHandler_IssuesTheRefundAndRecordsIt(t *testing.T) {
 	}
 	if calls := client.RefundCalls(); len(calls) != 1 {
 		t.Fatalf("stripe refund calls = %+v, want 1", calls)
+	}
+}
+
+// TestRefundHandler_RefusesAnUnnamedRequest proves a refund request must
+// name itself: without the header there is nothing to recognise a retry
+// by, and the retry would move the money a second time.
+func TestRefundHandler_RefusesAnUnnamedRequest(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Unnamed")
+	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		srv.URL+"/api/internal/billing/refunds",
+		bytes.NewReader([]byte(`{"practiceId":"`+practiceID+`","quantity":1}`)))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("X-Internal-Secret", internalTestSecret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
 }
 

@@ -23,12 +23,18 @@ type FakeStripeClient struct {
 	CreateCustomerErr        error
 	CreateCheckoutSessionErr error
 	RefundPaymentErr         error
+
+	// ReplayedRefundID, when set, is returned by every RefundPayment
+	// call -- what Stripe does when a retry carries an idempotency key
+	// it has already seen.
+	ReplayedRefundID string
 }
 
 // RefundCall is one recorded RefundPayment call: which payment was
-// reversed, and by how much.
+// reversed, under which idempotency key, and by how much.
 type RefundCall struct {
 	PaymentIntentID string
+	IdempotencyKey  string
 	AmountCents     int64
 }
 
@@ -83,13 +89,20 @@ func (f *FakeStripeClient) CustomerCallCount() int {
 
 // RefundPayment records the call and returns a deterministic fake Stripe
 // Refund id, or RefundPaymentErr if a test set one.
-func (f *FakeStripeClient) RefundPayment(_ context.Context, paymentIntentID string, amountCents int64) (string, error) {
+func (f *FakeStripeClient) RefundPayment(_ context.Context, paymentIntentID, idempotencyKey string, amountCents int64) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.RefundPaymentErr != nil {
 		return "", f.RefundPaymentErr
 	}
-	f.Refunds = append(f.Refunds, RefundCall{PaymentIntentID: paymentIntentID, AmountCents: amountCents})
+	f.Refunds = append(f.Refunds, RefundCall{
+		PaymentIntentID: paymentIntentID,
+		IdempotencyKey:  idempotencyKey,
+		AmountCents:     amountCents,
+	})
+	if f.ReplayedRefundID != "" {
+		return f.ReplayedRefundID, nil
+	}
 	f.nextID++
 	return fmt.Sprintf("re_fake_%d", f.nextID), nil
 }

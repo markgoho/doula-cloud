@@ -85,6 +85,18 @@ describe('Textarea.svelte', () => {
 
 		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
 	});
+
+	it('reflects autocomplete', async () => {
+		await setup({ autocomplete: 'street-address' });
+
+		await expect.element(page.getByRole('textbox')).toHaveAttribute('autocomplete', 'street-address');
+	});
+
+	it('omits autocomplete when not provided', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('autocomplete');
+	});
 });
 
 describe('Textarea.svelte starting height', () => {

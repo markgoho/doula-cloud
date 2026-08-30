@@ -30,6 +30,18 @@ This is already how the product has been built. [ADR-0018](../adr/0018-templates
 
 The one-line version, which is also [the brief](brief.md)'s governing principle: **conventional in pattern and behavior, distinctive in execution.**
 
+## Autocomplete: whose data it is
+
+Every field that asks for a piece of personal information carries an `autocomplete` token, for two reasons. The browser can fill it, so a doula entering her own email or a Client entering her own address costs nothing rather than a re-type. And [WCAG 2.2's 1.3.5, Identify Input Purpose](https://www.w3.org/WAI/WCAG22/Understanding/identify-input-purpose.html), is level AA, so this is a standing accessibility obligation, not a nicety.
+
+**The rule is the token names whose data it is.** A field about the person filling the form in gets the WHATWG token that names it -- `email`, `name`, `tel`. A field where a doula is entering **someone else's** information -- a Client, during intake -- gets `autocomplete="off"`. Offering the signed-in doula's own stored address for a Client's record is a data-entry hazard, and on a shared laptop it is a privacy one. This is [GOV.UK's own answer](https://design-system.service.gov.uk/patterns/addresses/): a form with two subjects keeps them apart rather than letting the browser guess which one it is filling in.
+
+One field is not "whose data", but "which of two things is happening to it": on the two accept-invite screens, the email is either registering a new address (`email`) or naming an existing one (`username`), and the password is either being set (`new-password`) or recalled (`current-password`), depending on which of the two modes the person picked -- both derived from `mode`, not fixed markup. The plain login screens ask for the identifier only, which is always `username` even though the control is `type="email"`: that is the account identifier, not a new self-declaration, and matches how a browser's own credential manager reads a sign-in form.
+
+`autocomplete="off"` is advisory -- browsers ignore it for passwords, and Chrome ignores it in other places too. Stating it is still worth doing, and a browser overriding it is not a defect this project can fix.
+
+`TextInput` and `Textarea` both accept and forward the attribute, so a route never reaches around the atom to set it by hand.
+
 ## Patterns
 
 Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns/), and where it stands here. **Aligned** means it is built or drawn and matches. **Open** means it is ours to build and a ticket says so. **N/A** carries its reason.
@@ -41,7 +53,7 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | [Addresses](https://design-system.service.gov.uk/patterns/addresses/) | `client.Record`'s five address columns; one fieldset, one input per line, no lookup | Drawn -- [#466](https://github.com/markgoho/doula-cloud/issues/466) |
 | [Bank details](https://design-system.service.gov.uk/patterns/bank-details/) | Stripe Connect owns this end to end; we never see an account number | N/A -- and it must stay N/A |
 | [Dates](https://design-system.service.gov.uk/patterns/dates/) | Date of birth as three text inputs, Month/Day/Year, never a picker | Aligned -- `b7e8ab7`, built by [#466](https://github.com/markgoho/doula-cloud/issues/466) |
-| [Email addresses](https://design-system.service.gov.uk/patterns/email-addresses/) | Signup, login, invite, Client email | Open -- wording and `autocomplete` in [#469](https://github.com/markgoho/doula-cloud/issues/469) |
+| [Email addresses](https://design-system.service.gov.uk/patterns/email-addresses/) | Signup, login, invite, Client email | Wording aligned; `autocomplete` set per [the rule above](#autocomplete-whose-data-it-is), built by [#469](https://github.com/markgoho/doula-cloud/issues/469) -- the Client intake fields wait on [#466](https://github.com/markgoho/doula-cloud/issues/466), which must follow the same rule |
 | [Equality information](https://design-system.service.gov.uk/patterns/equality-information/) | No equality monitoring is collected | N/A |
 | [Names](https://design-system.service.gov.uk/patterns/names/) | Given, family and preferred, split | Departed on purpose -- see below |
 | [National Insurance numbers](https://design-system.service.gov.uk/patterns/national-insurance-numbers/) | UK-only identifier | N/A |
@@ -60,7 +72,7 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | [Confirm an email address](https://design-system.service.gov.uk/patterns/confirm-an-email-address/) | Invitation acceptance already proves the address | Aligned by way of the invite flow |
 | [Contact a department or service team](https://design-system.service.gov.uk/patterns/contact-a-department-or-service-team/) | `/support`, which Stripe also requires | Open -- [#419](https://github.com/markgoho/doula-cloud/issues/419) |
 | [Create a username](https://design-system.service.gov.uk/patterns/create-a-username/) | Email is the identifier; there are no usernames | N/A, deliberately |
-| [Create accounts](https://design-system.service.gov.uk/patterns/create-accounts/) | Signup, and both accept-invite routes | Open -- [#470](https://github.com/markgoho/doula-cloud/issues/470), [#469](https://github.com/markgoho/doula-cloud/issues/469) |
+| [Create accounts](https://design-system.service.gov.uk/patterns/create-accounts/) | Signup, and both accept-invite routes | `autocomplete` built by [#469](https://github.com/markgoho/doula-cloud/issues/469); the password control itself is still Open -- [#470](https://github.com/markgoho/doula-cloud/issues/470) |
 | [Exit a page quickly](https://design-system.service.gov.uk/patterns/exit-a-page-quickly/) | Adopted, **client portal only** -- never the staff side, because a doula is at work and a client may not be | Decided, open to build -- [#472](https://github.com/markgoho/doula-cloud/issues/472) |
 | [Navigate a service](https://design-system.service.gov.uk/patterns/navigate-a-service/) | Flat six-item nav, no breadcrumbs, per the brief | Drawn -- [#452](https://github.com/markgoho/doula-cloud/issues/452) |
 | [Recover from validation errors](https://design-system.service.gov.uk/patterns/validation/) | Every form that submits: `ErrorSummary` above the `<h1>`, the same string beside the field, `novalidate` so the page refuses rather than the browser. The Engagement detail page is a deliberate exception -- its failures are section-local operation outcomes, not a refused form, so they stay `Notice` where they happen ([#467](https://github.com/markgoho/doula-cloud/issues/467)) | Aligned -- built on [#467](https://github.com/markgoho/doula-cloud/issues/467) |

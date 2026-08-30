@@ -60,6 +60,17 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 			http.Error(w, "quantity must be at least 1", http.StatusBadRequest)
 			return
 		}
+		// The name of this request, and the reason a retry is safe: the
+		// same key returns the refund already issued instead of issuing
+		// a second one. Required, not optional -- a refund moves money,
+		// and an unnamed request cannot be recognised on its way back
+		// through. Same header docs/api-design.md sets for every other
+		// repeatable write.
+		requestKey := r.Header.Get("Idempotency-Key")
+		if requestKey == "" {
+			http.Error(w, "Idempotency-Key header is required", http.StatusBadRequest)
+			return
+		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
@@ -86,7 +97,7 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 			return
 		}
 
-		receipt, err := Refund(r.Context(), tx, client, req.PracticeID, req.Quantity, time.Now())
+		receipt, err := Refund(r.Context(), tx, client, req.PracticeID, requestKey, req.Quantity, time.Now())
 		if errors.Is(err, ErrNothingRefundable) || errors.Is(err, ErrRefundExceedsLot) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return

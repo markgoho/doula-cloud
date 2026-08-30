@@ -69,8 +69,8 @@ func seedLedgerRow(t *testing.T, db *testdb.DB, practiceID, origin string, quant
 func seedRefundRow(t *testing.T, db *testdb.DB, practiceID, lotID string, quantity int) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id)
-		 VALUES ($1, 'refund', $2, $3, 0, 're_seed', $4)`,
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id, refund_request_key)
+		 VALUES ($1, 'refund', $2, $3, 0, 're_seed', $4, 'req-seed')`,
 		practiceID, -quantity, seedUnitPriceCents, lotID,
 	); err != nil {
 		t.Fatalf("seed refund row: %v", err)

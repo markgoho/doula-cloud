@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { HTMLInputAttributes } from 'svelte/elements';
+
 	const generatedId = $props.id();
 
 	let {
@@ -13,7 +15,8 @@
 		invalid = false,
 		describedBy,
 		minlength,
-		inputmode
+		inputmode,
+		autocomplete
 	}: {
 		id?: string;
 		value: string;
@@ -26,6 +29,14 @@
 		invalid?: boolean;
 		describedBy?: string;
 		minlength?: number;
+		/*
+		 * Whose data this is, per docs/design/govuk-alignment.md: a WHATWG
+		 * token on a field about the person filling the form in, "off" on a
+		 * field about someone else (#469). Left undefined rather than
+		 * defaulted, so a caller that forgets it gets the browser's own
+		 * default rather than a false "off".
+		 */
+		autocomplete?: HTMLInputAttributes['autocomplete'];
 		/*
 		 * The on-screen keyboard a phone offers. Separate from `type`
 		 * because the two do different jobs: `type` decides what the browser
@@ -48,6 +59,7 @@
 	{disabled}
 	{minlength}
 	{inputmode}
+	{autocomplete}
 	class:invalid
 	aria-invalid={invalid}
 	aria-describedby={describedBy}

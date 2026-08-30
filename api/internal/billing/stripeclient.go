@@ -40,9 +40,13 @@ type StripeClient interface {
 	CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error)
 	// RefundPayment refunds amountCents against the PaymentIntent a
 	// credit purchase arrived on, and returns the Stripe Refund's id.
+	// idempotencyKey is what makes a retried request replay the first
+	// refund instead of issuing a second one -- the endpoint is run by
+	// hand, so a timeout followed by a second attempt is the expected
+	// failure, not an exotic one.
 	// Refunding against the original payment -- rather than paying the
 	// money out some other way -- is what makes Stripe Tax reverse the
 	// sales tax it reported, so the ST-100 does not overstate what New
 	// York is owed (#420).
-	RefundPayment(ctx context.Context, paymentIntentID string, amountCents int64) (string, error)
+	RefundPayment(ctx context.Context, paymentIntentID, idempotencyKey string, amountCents int64) (string, error)
 }

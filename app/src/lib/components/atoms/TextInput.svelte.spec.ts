@@ -110,4 +110,22 @@ describe('TextInput.svelte', () => {
 
 		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
 	});
+
+	it('reflects autocomplete', async () => {
+		await setup({ autocomplete: 'email' });
+
+		await expect.element(page.getByRole('textbox')).toHaveAttribute('autocomplete', 'email');
+	});
+
+	it('reflects autocomplete=off, for a field about someone else', async () => {
+		await setup({ autocomplete: 'off' });
+
+		await expect.element(page.getByRole('textbox')).toHaveAttribute('autocomplete', 'off');
+	});
+
+	it('omits autocomplete when not provided', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('autocomplete');
+	});
 });

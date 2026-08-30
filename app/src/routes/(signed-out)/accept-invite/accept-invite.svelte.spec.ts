@@ -158,6 +158,24 @@ async function identifyAsNewPerson() {
 	await stateField().selectOptions('New Jersey');
 }
 
+describe('step one -- autocomplete follows which mode is picked (#469)', () => {
+	it('offers to fill a new email and set a new password by default (signup)', async () => {
+		await setup();
+
+		await expect.element(emailField()).toHaveAttribute('autocomplete', 'email');
+		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'new-password');
+	});
+
+	it('asks for the account identifier and its existing password once she says she has one', async () => {
+		await setup();
+
+		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+
+		await expect.element(emailField()).toHaveAttribute('autocomplete', 'username');
+		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'current-password');
+	});
+});
+
 describe('step one -- identifying yourself', () => {
 	// The name and the work state are deliberately absent here: which of
 	// them she still has to answer depends on whether she is Staff
@@ -261,6 +279,14 @@ describe('step two -- a person who is new here', () => {
 			.toBeVisible();
 		await expect.element(nameField()).toBeVisible();
 		await expect.element(stateField()).toBeVisible();
+	});
+
+	it('offers to fill her own name from the browser (#469)', async () => {
+		await setup();
+
+		await identify();
+
+		await expect.element(nameField()).toHaveAttribute('autocomplete', 'name');
 	});
 
 	// A step that replaces the form without moving focus leaves a keyboard

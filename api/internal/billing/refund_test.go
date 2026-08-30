@@ -3,6 +3,7 @@ package billing_test
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -162,7 +163,7 @@ func TestRefund_ReturnsPriceAndTaxAgainstTheOriginalPayment(t *testing.T) {
 	client := billing.NewFakeStripeClient()
 
 	tx := practiceTx(t, db, practiceID)
-	receipt, err := billing.Refund(t.Context(), tx, client, practiceID, 5, time.Now())
+	receipt, err := billing.Refund(t.Context(), tx, client, practiceID, "req-full", 5, time.Now())
 	if err != nil {
 		t.Fatalf("Refund: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestRefund_PartialRefundsReturnExactlyTheTaxCharged(t *testing.T) {
 	tx := practiceTx(t, db, practiceID)
 	total := int64(0)
 	for i := range 3 {
-		receipt, err := billing.Refund(t.Context(), tx, client, practiceID, 1, time.Now())
+		receipt, err := billing.Refund(t.Context(), tx, client, practiceID, fmt.Sprintf("req-partial-%d", i), 1, time.Now())
 		if err != nil {
 			t.Fatalf("refund %d: %v", i, err)
 		}
@@ -229,7 +230,7 @@ func TestRefund_RefusesCreditsGivenFreeOfCharge(t *testing.T) {
 	seedSignupBonus(t, db, practiceID)
 
 	tx := practiceTx(t, db, practiceID)
-	_, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, 1, time.Now())
+	_, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-refused", 1, time.Now())
 	if !errors.Is(err, billing.ErrNothingRefundable) {
 		t.Fatalf("Refund err = %v, want ErrNothingRefundable", err)
 	}
@@ -248,7 +249,7 @@ func TestRefund_RefusesCreditsAlreadySpent(t *testing.T) {
 	if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
 		t.Fatalf("consume: %v", err)
 	}
-	_, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, 1, time.Now())
+	_, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-refused", 1, time.Now())
 	if !errors.Is(err, billing.ErrNothingRefundable) {
 		t.Fatalf("Refund err = %v, want ErrNothingRefundable", err)
 	}
@@ -263,7 +264,7 @@ func TestRefund_RefusesAPurchaseOlderThanTheWindow(t *testing.T) {
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_stale", now.AddDate(-billing.RefundWindowYears, 0, -1))
 
 	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, 1, now); !errors.Is(err, billing.ErrNothingRefundable) {
+	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-stale", 1, now); !errors.Is(err, billing.ErrNothingRefundable) {
 		t.Fatalf("Refund err = %v, want ErrNothingRefundable", err)
 	}
 	quote, err := billing.Refundable(t.Context(), tx, practiceID, now)
@@ -293,7 +294,7 @@ func TestRefund_RefusesMoreThanTheLotHolds(t *testing.T) {
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_second", now.AddDate(0, -1, 0))
 
 	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, 3, now); !errors.Is(err, billing.ErrRefundExceedsLot) {
+	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-too-many", 3, now); !errors.Is(err, billing.ErrRefundExceedsLot) {
 		t.Fatalf("Refund err = %v, want ErrRefundExceedsLot", err)
 	}
 }
@@ -304,7 +305,7 @@ func TestRefund_RefusesQuantityBelowOne(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Zero")
 	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, 0, time.Now()); err == nil {
+	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-zero", 0, time.Now()); err == nil {
 		t.Fatal("Refund accepted a quantity of 0")
 	}
 }
@@ -319,7 +320,7 @@ func TestRefund_StripeFailureWritesNoLedgerRow(t *testing.T) {
 	client.RefundPaymentErr = errStripeUnavailable
 
 	tx := practiceTx(t, db, practiceID)
-	if _, err := billing.Refund(t.Context(), tx, client, practiceID, 1, time.Now()); err == nil {
+	if _, err := billing.Refund(t.Context(), tx, client, practiceID, "req-stripe-down", 1, time.Now()); err == nil {
 		t.Fatal("Refund reported success on a failed Stripe call")
 	}
 	var rows int
@@ -404,5 +405,84 @@ func seedStaffLastActive(t *testing.T, db *testdb.DB, practiceID, identityUID st
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE staff SET last_active_at = $1 WHERE id = $2`, lastActive, staffID); err != nil {
 		t.Fatalf("seed last_active_at: %v", err)
+	}
+}
+
+// TestRefund_ARetriedRefundIsTheSameRefund proves the endpoint survives
+// the failure it will actually meet: a request run by hand that times
+// out, and is run again under the same name. The second attempt is
+// answered with the refund the first one made -- no second Stripe call,
+// and no second negative row.
+func TestRefund_ARetriedRefundIsTheSameRefund(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Retried")
+	seedPurchase(t, db, practiceID, 4, 2000, 200, "pi_retried", time.Now())
+	client := billing.NewFakeStripeClient()
+
+	tx := practiceTx(t, db, practiceID)
+	first, err := billing.Refund(t.Context(), tx, client, practiceID, "req-retried", 1, time.Now())
+	if err != nil {
+		t.Fatalf("first refund: %v", err)
+	}
+	second, err := billing.Refund(t.Context(), tx, client, practiceID, "req-retried", 1, time.Now())
+	if err != nil {
+		t.Fatalf("retried refund: %v", err)
+	}
+	if second != first {
+		t.Fatalf("retry returned %+v, want the first refund %+v", second, first)
+	}
+
+	if calls := client.RefundCalls(); len(calls) != 1 {
+		t.Fatalf("stripe refund calls = %+v, want only the first", calls)
+	}
+	var rows, balance int
+	if err := tx.QueryRowContext(t.Context(),
+		`SELECT count(*), COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE origin = 'refund'`,
+	).Scan(&rows, &balance); err != nil {
+		t.Fatalf("count refund rows: %v", err)
+	}
+	if rows != 1 || balance != -1 {
+		t.Fatalf("refund rows = %d totalling %d, want one row of -1", rows, balance)
+	}
+}
+
+// TestRefund_ADifferentRequestIsADifferentRefund proves the key is not so
+// blunt that it blocks a Practice asking for the rest of her money: a
+// second, deliberate request carries its own name and is honoured.
+func TestRefund_ADifferentRequestIsADifferentRefund(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Twice Over")
+	seedPurchase(t, db, practiceID, 4, 2000, 0, "pi_twice", time.Now())
+	client := billing.NewFakeStripeClient()
+
+	tx := practiceTx(t, db, practiceID)
+	for i := range 2 {
+		if _, err := billing.Refund(t.Context(), tx, client, practiceID, fmt.Sprintf("req-twice-%d", i), 1, time.Now()); err != nil {
+			t.Fatalf("refund %d: %v", i, err)
+		}
+	}
+
+	if calls := client.RefundCalls(); len(calls) != 2 {
+		t.Fatalf("stripe refund calls = %+v, want two", calls)
+	}
+}
+
+// TestRefund_TheSameStripeRefundIsRecordedOnce proves the second guard,
+// from the other side: two differently-named requests that Stripe answers
+// with one Refund -- what a replayed idempotency key looks like when the
+// first attempt's transaction never committed -- record one row, not two.
+func TestRefund_TheSameStripeRefundIsRecordedOnce(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "One Stripe Refund")
+	seedPurchase(t, db, practiceID, 4, 2000, 0, "pi_once", time.Now())
+	client := billing.NewFakeStripeClient()
+	client.ReplayedRefundID = "re_replayed"
+
+	tx := practiceTx(t, db, practiceID)
+	if _, err := billing.Refund(t.Context(), tx, client, practiceID, "req-once-a", 1, time.Now()); err != nil {
+		t.Fatalf("first refund: %v", err)
+	}
+	if _, err := billing.Refund(t.Context(), tx, client, practiceID, "req-once-b", 1, time.Now()); err == nil {
+		t.Fatal("one Stripe Refund was recorded twice")
 	}
 }

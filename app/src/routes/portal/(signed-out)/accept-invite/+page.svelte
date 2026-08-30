@@ -32,6 +32,12 @@
 	let isSubmitting = $state(false);
 	let picker = $state<Engagement[] | undefined>();
 
+	// Whichever `mode` is chosen decides whether the email is a new
+	// identity or an existing one, and whether the password is being set
+	// or recalled (#469).
+	const emailAutocomplete = $derived(mode === 'signup' ? 'email' : 'username');
+	const passwordAutocomplete = $derived(mode === 'signup' ? 'new-password' : 'current-password');
+
 	function errorFor(targetId: string): string | undefined {
 		return errors.find((entry) => entry.targetId === targetId)?.message;
 	}
@@ -129,6 +135,7 @@
 					value={email}
 					onInput={(value) => (email = value)}
 					required
+					autocomplete={emailAutocomplete}
 				/>
 			{/snippet}
 		</LabeledField>
@@ -143,6 +150,7 @@
 					onInput={(value) => (password = value)}
 					required
 					minlength={6}
+					autocomplete={passwordAutocomplete}
 				/>
 			{/snippet}
 		</LabeledField>

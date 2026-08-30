@@ -135,18 +135,26 @@ func (c *StripeAPIClient) CreateCheckoutSession(ctx context.Context, req Checkou
 
 // RefundPayment refunds amountCents against paymentIntentID.
 //
+// The idempotency key is Stripe's own replay guard: a retry carrying the
+// same key returns the refund the first call made, rather than moving the
+// money twice.
+//
 // Naming the PaymentIntent rather than building a payout is deliberate:
 // Stripe Tax reverses the tax it reported on the original payment in
 // proportion to what is refunded, so the ST-100 stays correct without a
 // second act. The amount includes the tax share the ledger computed, so
 // what Stripe reverses and what credit_ledger records are the same
 // number.
-func (c *StripeAPIClient) RefundPayment(ctx context.Context, paymentIntentID string, amountCents int64) (string, error) {
+func (c *StripeAPIClient) RefundPayment(ctx context.Context, paymentIntentID, idempotencyKey string, amountCents int64) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	refund, err := c.client.V1Refunds.Create(ctx, &stripe.RefundCreateParams{
+	params := &stripe.RefundCreateParams{
 		PaymentIntent: stripe.String(paymentIntentID),
 		Amount:        new(amountCents),
-	})
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params.SetIdempotencyKey(idempotencyKey)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	refund, err := c.client.V1Refunds.Create(ctx, params)
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
 		return "", fmt.Errorf("billing: refund payment %q: %w", paymentIntentID, err)

@@ -123,6 +123,7 @@
 				value={practiceName}
 				onInput={(value) => (practiceName = value)}
 				required
+				autocomplete="organization"
 			/>
 		{/snippet}
 	</LabeledField>
@@ -135,6 +136,7 @@
 				value={staffName}
 				onInput={(value) => (staffName = value)}
 				required
+				autocomplete="name"
 			/>
 		{/snippet}
 	</LabeledField>
@@ -149,6 +151,7 @@
 				value={email}
 				onInput={(value) => (email = value)}
 				required
+				autocomplete="email"
 			/>
 		{/snippet}
 	</LabeledField>
@@ -163,6 +166,7 @@
 				onInput={(value) => (password = value)}
 				required
 				minlength={6}
+				autocomplete="new-password"
 			/>
 		{/snippet}
 	</LabeledField>
