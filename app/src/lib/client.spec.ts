@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createClient, editClient, loadClients, type ClientEditFields } from './client.js';
+import { createClient, editClient, loadClients, searchClients, type ClientEditFields } from './client.js';
 import { jsonResponse as response } from './testResponse.js';
 
 const editFields: ClientEditFields = {
@@ -97,6 +97,63 @@ describe('createClient', () => {
 		await expect(
 			createClient(fetcher, 'practice-1', { ...createFields, givenName: '' }, false)
 		).rejects.toThrow('givenName is required');
+	});
+});
+
+describe('searchClients', () => {
+	it('queries only the fields given, in order', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ matches: [] }));
+
+		await searchClients(fetcher, 'practice-1', { name: 'Ada', dateOfBirth: '', email: '', phone: '' });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/search?name=Ada');
+	});
+
+	it('queries every field when all four are given', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ matches: [] }));
+
+		await searchClients(fetcher, 'practice-1', {
+			name: 'Ada',
+			dateOfBirth: '1815-12-10',
+			email: 'ada@example.com',
+			phone: '555-0100'
+		});
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/clients/search?name=Ada&dateOfBirth=1815-12-10&email=ada%40example.com&phone=555-0100'
+		);
+	});
+
+	it('queries with no query string when every field is blank', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ matches: [] }));
+
+		await searchClients(fetcher, 'practice-1', { name: '', dateOfBirth: '', email: '', phone: '' });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/search');
+	});
+
+	it('returns the decoded matches', async () => {
+		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [] }];
+		const fetcher = vi.fn().mockResolvedValue(response({ matches }));
+
+		const result = await searchClients(fetcher, 'practice-1', {
+			name: 'Ada',
+			dateOfBirth: '',
+			email: '',
+			phone: ''
+		});
+
+		expect(result).toEqual(matches);
+	});
+
+	it('throws with the response body text on a non-ok response, including a contractor 403', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			response('a contractor doula does not search for clients at a practice she contracts for', 403)
+		);
+
+		await expect(
+			searchClients(fetcher, 'practice-1', { name: 'Ada', dateOfBirth: '', email: '', phone: '' })
+		).rejects.toThrow('a contractor doula does not search for clients');
 	});
 });
 

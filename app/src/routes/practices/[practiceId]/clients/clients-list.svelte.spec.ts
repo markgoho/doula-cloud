@@ -41,6 +41,14 @@ async function setup(response: Response = jsonResponse({ items: clients, hasMore
 }
 
 describe('clients list screen', () => {
+	it('sends "Add a Client" to the search that fronts intake, not straight to intake (#498)', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a Client' }))
+			.toHaveAttribute('href', '/practices/practice-1/clients/search');
+	});
+
 	it('renders a Portal invite column showing the label for each status', async () => {
 		await setup();
 

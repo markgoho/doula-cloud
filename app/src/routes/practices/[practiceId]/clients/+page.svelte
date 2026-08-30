@@ -78,8 +78,13 @@
 <PageTitle page="Clients" />
 <h1>Clients</h1>
 
+<!--
+	The search that fronts intake (#498, ADR-0017): there is no top-level
+	"Add a Client" action, so this button lands on the search screen, not
+	on intake directly. A miss there hands the reader on to intake.
+-->
 <Link
-	href={resolve('/practices/[practiceId]/clients/new', { practiceId: page.params.practiceId! })}
+	href={resolve('/practices/[practiceId]/clients/search', { practiceId: page.params.practiceId! })}
 	label="Add a Client"
 />
 

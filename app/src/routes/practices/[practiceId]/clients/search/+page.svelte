@@ -1,0 +1,302 @@
+<script lang="ts">
+	/*
+	 * The search that fronts intake (#498, ADR-0017): "Clients -> Add a
+	 * Client -> search -> her record -> Request Engagement start". There
+	 * is no top-level "Add a Client" action anywhere else in the product
+	 * -- the Clients list's own button lands here, not on intake directly
+	 * (`clients/+page.svelte`), so a returning Client is found rather
+	 * than retyped, and searching costs nothing when she genuinely is
+	 * new.
+	 *
+	 * A miss carries the typed name into intake's first page via `?name=`
+	 * -- `clients/new/+page.svelte`'s own module comment reads that
+	 * param. Only `name` carries: intake's first page asks for a name
+	 * alone, so an email, phone or date of birth typed here has no field
+	 * on that page to land in.
+	 */
+	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
+	import { apiFetchWithSession } from '#lib/api.js';
+	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
+	import { displayName } from '#lib/clientDetail.js';
+	import PageTitle from '#lib/components/PageTitle.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+
+	const nameId = 'client-search-name';
+	const dateOfBirthId = 'client-search-date-of-birth';
+	const emailId = 'client-search-email';
+	const phoneId = 'client-search-phone';
+
+	let name = $state('');
+	let dateOfBirth = $state('');
+	let email = $state('');
+	let phone = $state('');
+
+	let pageErrors = $state<FormError[]>([]);
+	let isSearching = $state(false);
+	let hasSearched = $state(false);
+	let matches = $state<ClientMatch[]>([]);
+	let searchToken = $state(0);
+
+	/*
+	 * A client-side result set carries no navigation, so nothing moves
+	 * focus to it on its own (the same fact intake's own module comment
+	 * names for a step change). `searchToken` increments on every
+	 * completed search -- including a repeat search with the same typed
+	 * values -- so the results heading is re-focused and re-announced
+	 * every time, not only the first.
+	 */
+	let resultsStart = $state<HTMLElement | undefined>();
+	$effect(() => {
+		void searchToken;
+		resultsStart?.focus();
+	});
+
+	function errorFor(targetId: string): string | undefined {
+		return pageErrors.find((entry) => entry.targetId === targetId)?.message;
+	}
+
+	function currentFields(): ClientSearchFields {
+		return {
+			name: name.trim(),
+			dateOfBirth: dateOfBirth.trim(),
+			email: email.trim(),
+			phone: phone.trim()
+		};
+	}
+
+	function detailHref(clientId: string): string {
+		return resolve('/practices/[practiceId]/clients/[clientId]', {
+			practiceId: page.params.practiceId!,
+			clientId
+		});
+	}
+
+	// The miss's next step: intake's first page, with whatever name was
+	// typed carried along so it is not retyped (see the module comment).
+	function startIntakeHref(): string {
+		const base = resolve('/practices/[practiceId]/clients/new', {
+			practiceId: page.params.practiceId!
+		});
+		const typedName = name.trim();
+		return typedName ? `${base}?name=${encodeURIComponent(typedName)}` : base;
+	}
+
+	async function handleSearch(event: SubmitEvent) {
+		event.preventDefault();
+		pageErrors = [];
+		const fields = currentFields();
+		if (!fields.name && !fields.dateOfBirth && !fields.email && !fields.phone) {
+			pageErrors = [
+				{ message: 'Enter a name, date of birth, email or phone to search', targetId: nameId }
+			];
+			return;
+		}
+		isSearching = true;
+		try {
+			matches = await searchClients(apiFetchWithSession, page.params.practiceId!, fields);
+			hasSearched = true;
+			searchToken += 1;
+		} catch (error_) {
+			// SearchHandler refuses a contractor Doula with a readable 403
+			// body (client/search.go), which lands here as plain error text
+			// rather than as a raw crash -- #501 builds the door that
+			// intercepts before that refusal is ever reached.
+			pageErrors = [
+				{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }
+			];
+		} finally {
+			isSearching = false;
+		}
+	}
+
+	function resultsHeading(): string {
+		if (matches.length === 0) return 'No matches';
+		return matches.length === 1 ? '1 match' : `${matches.length} matches`;
+	}
+</script>
+
+<PageTitle page="Find a Client" isError={pageErrors.length > 0} />
+
+<container-l>
+	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
+		<stack-l space="var(--space-7)">
+			<Heading level={1} variant="page" text="Find a Client" />
+			<p class="lede">
+				Search for a Client already on file before adding her as new. Name, date of birth, email
+				and phone all match — use whatever you have, none of them is required on its own.
+			</p>
+
+			{#if pageErrors.length > 0}
+				<ErrorSummary errors={pageErrors} />
+			{/if}
+
+			<form onsubmit={handleSearch} novalidate>
+				<stack-l space="var(--space-5)">
+					<LabeledField id={nameId} label="Name" error={errorFor(nameId)}>
+						{#snippet children({ id, describedBy, invalid })}
+							<TextInput
+								{id}
+								{describedBy}
+								{invalid}
+								value={name}
+								onInput={(v) => (name = v)}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+					<LabeledField id={dateOfBirthId} label="Date of birth">
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								type="date"
+								value={dateOfBirth}
+								onInput={(v) => (dateOfBirth = v)}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+					<LabeledField id={emailId} label="Email">
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								type="email"
+								value={email}
+								onInput={(v) => (email = v)}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+					<LabeledField id={phoneId} label="Phone">
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								type="tel"
+								value={phone}
+								onInput={(v) => (phone = v)}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+					<cluster-l space="var(--space-3)" align="center">
+						<Button type="submit" label="Search" loading={isSearching} />
+					</cluster-l>
+				</stack-l>
+			</form>
+
+			{#if hasSearched}
+				<section aria-labelledby="client-search-results-heading">
+					<stack-l space="var(--space-6)">
+						<div bind:this={resultsStart} id="client-search-results" tabindex="-1">
+							<Heading
+								level={2}
+								variant="section"
+								text={resultsHeading()}
+								id="client-search-results-heading"
+							/>
+						</div>
+
+						{#if matches.length > 0}
+							<stack-l space="var(--space-6)">
+								{#each matches as match (match.id)}
+									<section class="match">
+										<stack-l space="var(--space-3)">
+											<Heading level={3} variant="card" text={displayName(match)} />
+											<DescriptionList
+												items={[
+													{ label: 'Date of birth', value: match.dateOfBirth || '—' },
+													{ label: 'Email', value: match.email || '—' },
+													{ label: 'Phone', value: match.phone || '—' }
+												]}
+											/>
+											{#if match.engagements.length > 0}
+												<ul>
+													{#each match.engagements as engagement (engagement.engagementId)}
+														<li>
+															{engagement.kind === 'birth' ? 'Birth' : 'Postpartum'} · {engagement.status}
+														</li>
+													{/each}
+												</ul>
+											{:else}
+												<p class="quiet">No Engagements with this Client yet.</p>
+											{/if}
+											<Link href={detailHref(match.id)} label="Open {displayName(match)}'s record" />
+										</stack-l>
+									</section>
+								{/each}
+							</stack-l>
+						{:else}
+							<stack-l space="var(--space-4)">
+								<p class="lede">
+									{#if name.trim()}
+										Nothing at this Practice matches what was typed. Add her as a new Client
+										instead — the name typed here carries onto intake's first page, so it does
+										not have to be retyped.
+									{:else}
+										Nothing at this Practice matches what was typed. Add her as a new Client
+										instead.
+									{/if}
+								</p>
+								<cluster-l space="var(--space-3)" align="center">
+									<Link href={startIntakeHref()} label="Add a new Client" />
+								</cluster-l>
+							</stack-l>
+						{/if}
+					</stack-l>
+				</section>
+			{/if}
+		</stack-l>
+	</center-l>
+</container-l>
+
+<style>
+	@layer components {
+		container-l {
+			padding-block: var(--space-8);
+		}
+
+		/*
+		 * Focused programmatically after every search, never by the
+		 * keyboard -- so, per ErrorSummary's own note, `:focus-visible`
+		 * would never fire here and the ring has to be `:focus` instead.
+		 */
+		[tabindex='-1']:focus {
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
+		}
+
+		.lede {
+			margin: 0;
+			max-inline-size: 62ch;
+			color: var(--color-on-surface-variant);
+		}
+
+		.quiet {
+			margin: 0;
+			font-size: var(--text-body-sm-size);
+			color: var(--color-on-surface-muted);
+		}
+
+		.match {
+			padding: var(--space-4);
+			border: var(--border-thin) solid var(--color-outline-variant);
+			border-radius: var(--radius);
+		}
+
+		ul {
+			margin: 0;
+			padding-inline-start: var(--space-5);
+			font-size: var(--text-body-sm-size);
+		}
+	}
+</style>

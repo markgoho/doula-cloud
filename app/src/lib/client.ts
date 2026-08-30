@@ -114,6 +114,48 @@ export async function createClient(
 	return { conflict: false, record: await response.json() };
 }
 
+/** What the search that fronts intake (#498, ADR-0017) collects -- the
+ * same four keys `client.SearchHandler` reads off the query string:
+ * `?name=&dateOfBirth=&email=&phone=`. `name` matches given, family and
+ * preferred name alike (search.go passes it as both of FindMatches' two
+ * name arguments), so this is a single free-text field rather than the
+ * split `givenName`/`familyName` intake collects. */
+export interface ClientSearchFields {
+	name: string;
+	dateOfBirth: string;
+	email: string;
+	phone: string;
+}
+
+function searchPath(practiceId: string, fields: ClientSearchFields): string {
+	const query = new URLSearchParams();
+	if (fields.name) query.set('name', fields.name);
+	if (fields.dateOfBirth) query.set('dateOfBirth', fields.dateOfBirth);
+	if (fields.email) query.set('email', fields.email);
+	if (fields.phone) query.set('phone', fields.phone);
+	const queryString = query.toString();
+	return `${clientsPath(practiceId)}/search${queryString ? `?${queryString}` : ''}`;
+}
+
+/** Runs the search that fronts intake -- the only door to it (ADR-0017).
+ * Blank fields are left off the query string entirely, matching
+ * `FindMatches`' own "blank fields are ignored" contract. Throws with the
+ * response body text on a non-2xx response -- including a contractor
+ * Doula's 403, which `SearchHandler` returns with a readable reason
+ * rather than a bare status. */
+export async function searchClients(
+	fetcher: Fetcher,
+	practiceId: string,
+	fields: ClientSearchFields
+): Promise<ClientMatch[]> {
+	const response = await fetcher(searchPath(practiceId, fields));
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	const body: { matches: ClientMatch[] } = await response.json();
+	return body.matches;
+}
+
 /** The full structural core an edit submits -- every column but `id`,
  * which the endpoint takes from the path rather than the body. Includes
  * `fieldValues` so a save round-trips her Practice-defined values
