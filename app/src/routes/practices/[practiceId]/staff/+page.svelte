@@ -480,9 +480,17 @@
 			padding-block: var(--space-1);
 		}
 
+		/* WCAG 2.2 target size (minimum), which the axe archetype scan
+		   enforces and caught here: the summary is a touch target, and
+		   body-sm alone gives it a 21px line box. --space-6 is 24px
+		   exactly, and the padding puts it clear of the boundary rather
+		   than on it. */
 		summary {
 			font-size: var(--text-body-sm-size);
+			line-height: var(--text-body-sm-leading);
 			cursor: pointer;
+			min-block-size: var(--space-6);
+			padding-block: var(--space-1);
 		}
 
 		/* Quieter than the assertion it qualifies -- it is a caveat about
