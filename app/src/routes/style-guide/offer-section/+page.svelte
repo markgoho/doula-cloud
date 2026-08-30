@@ -42,7 +42,7 @@
 		<OfferSection
 			{offers}
 			{doulas}
-			clientFirstInitial="S"
+			clientName="Sarah Whitfield"
 			onCreate={async () => {}}
 			onWithdraw={async () => {}}
 		/>

@@ -711,7 +711,7 @@
 	<OfferSection
 		{offers}
 		{doulas}
-		clientFirstInitial={detail!.clientName}
+		clientName={detail!.clientName}
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}
 	/>

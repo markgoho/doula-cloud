@@ -27,7 +27,7 @@
 	let {
 		offers,
 		doulas,
-		clientFirstInitial = '',
+		clientName = '',
 		onCreate,
 		onWithdraw
 	}: {
@@ -35,7 +35,12 @@
 		/** The Practice's Doula memberships, for the "someone already here"
 		 * target. employmentType decides whether a fee is required. */
 		doulas: { staffId: string; name: string; employmentType: string }[];
-		clientFirstInitial?: string;
+		/** The Client's full name, from which the Offer's first-initial
+		 * field is seeded. Not an initial: an Offer carries only an
+		 * initial (ADR-0017), but the seed for it is the name the
+		 * Engagement already holds, and a prop asking for an initial that
+		 * is handed a whole name reads as a bug. */
+		clientName?: string;
 		onCreate: (offer: NewOffer) => Promise<void>;
 		onWithdraw: (offerId: string) => Promise<void>;
 	} = $props();
@@ -48,7 +53,7 @@
 	// Pre-filled from the Client's name once, then hers to change -- hence
 	// untrack: the row holds what was actually sent, so this is a
 	// convenience at first render, not a binding to the Engagement.
-	let initial = $state(untrack(() => clientFirstInitial).slice(0, 1));
+	let initial = $state(untrack(() => clientName).slice(0, 1));
 	let clientArea = $state('');
 	let dueDate = $state('');
 	let isSending = $state(false);

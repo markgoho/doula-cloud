@@ -25,7 +25,7 @@ const openOffer: Offer = {
 interface SetupOptions {
 	offers?: Offer[];
 	doulas?: { staffId: string; name: string; employmentType: string }[];
-	clientFirstInitial?: string;
+	clientName?: string;
 	onCreate?: (offer: NewOffer) => Promise<void>;
 	onWithdraw?: (offerId: string) => Promise<void>;
 }
@@ -33,11 +33,11 @@ interface SetupOptions {
 async function setup({
 	offers = [],
 	doulas = [contractor, employee],
-	clientFirstInitial = 'Rosa Martinez',
+	clientName = 'Rosa Martinez',
 	onCreate = vi.fn().mockResolvedValue(undefined),
 	onWithdraw = vi.fn().mockResolvedValue(undefined)
 }: SetupOptions = {}) {
-	await render(OfferSection, { offers, doulas, clientFirstInitial, onCreate, onWithdraw });
+	await render(OfferSection, { offers, doulas, clientName, onCreate, onWithdraw });
 	return { onCreate, onWithdraw };
 }
 
