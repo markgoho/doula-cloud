@@ -121,7 +121,31 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			if _, err := tx.ExecContext(r.Context(), `UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceID, staffID); err != nil {
+			// last_active_at rides along with last_practice_id because
+			// both are the same act -- somebody from this Practice was
+			// here -- and neither is worth a second round trip.
+			//
+			// It is the durable record that a Practice made contact. New
+			// York escheats her unspent Credit balance at three years'
+			// dormancy (APL 1315(1-b)), and 2 NYCRR 125.1 accepts "a
+			// verifiable login by the owner" as what stops that clock --
+			// so the evidence has to outlive a rotated request log and a
+			// swept sessions row, both long gone before three years
+			// (#420). It is written here, and not at sign-in, because
+			// this is the first point in a request where
+			// app.current_practice_id is set, and that is the variable
+			// staff_practice_visibility reads -- the only policy
+			// admitting an UPDATE of a staff row.
+			//
+			// Stamped at most once a day: the question it answers is
+			// three years wide, so a fresher timestamp buys nothing.
+			if _, err := tx.ExecContext(r.Context(),
+				`UPDATE staff
+				 SET last_practice_id = $1,
+				     last_active_at = CASE
+				         WHEN last_active_at IS NULL OR last_active_at < now() - interval '1 day'
+				         THEN now() ELSE last_active_at END
+				 WHERE id = $2`, practiceID, staffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return

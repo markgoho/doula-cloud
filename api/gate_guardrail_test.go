@@ -33,6 +33,7 @@ var exemptGETRoutes = map[string]bool{
 	"GET /api/portal/engagements/{engagementId}/contract/pdf":                    true,
 	"GET /api/portal/engagements/{engagementId}/messages":                        true,
 	"GET /api/portal/engagements/{engagementId}/messages/{messageId}/attachment": true,
+	"GET /api/internal/billing/dormant-practices":                                true, // X-Internal-Secret, not a session -- the operator's escheatment mailing list (#420), the same position every /api/internal worker endpoint holds
 }
 
 // muxGetPattern finds every GET route registered directly on the raw mux

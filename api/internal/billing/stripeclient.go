@@ -38,4 +38,11 @@ type StripeClient interface {
 	// can credit the right Practice's ledger. Returns the Session's hosted
 	// checkout URL.
 	CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error)
+	// RefundPayment refunds amountCents against the PaymentIntent a
+	// credit purchase arrived on, and returns the Stripe Refund's id.
+	// Refunding against the original payment -- rather than paying the
+	// money out some other way -- is what makes Stripe Tax reverse the
+	// sales tax it reported, so the ST-100 does not overstate what New
+	// York is owed (#420).
+	RefundPayment(ctx context.Context, paymentIntentID string, amountCents int64) (string, error)
 }

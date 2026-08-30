@@ -22,6 +22,10 @@ const (
 	stripeObjectCheckoutSession      = "checkout.session"
 	stripeEventTypeCheckoutCompleted = "checkout.session.completed"
 	stripeTestSessionID              = "cs_test_session"
+	stripeTestPaymentIntentID        = "pi_test_payment"
+	paymentStatusKey                 = "payment_status"
+	practiceIDKey                    = "practice_id"
+	quantityKey                      = "quantity"
 	metadataKey                      = "metadata"
 	objectKey                        = "object"
 )
@@ -57,10 +61,15 @@ func checkoutCompletedPayload(t *testing.T, eventID, practiceID string, quantity
 	return buildEventPayload(t, eventID, stripeEventTypeCheckoutCompleted, map[string]any{
 		"id":             stripeTestSessionID,
 		objectKey:        stripeObjectCheckoutSession,
-		"payment_status": paymentStatus,
+		paymentStatusKey: paymentStatus,
+		// What the lot cost and the payment it arrived on: the webhook
+		// records both on the purchase row (#420), so a Session without
+		// them is not a Session this handler will credit.
+		"amount_subtotal": seedUnitPriceCents * quantity,
+		"payment_intent":  stripeTestPaymentIntentID,
 		metadataKey: map[string]any{
-			"practice_id": practiceID,
-			"quantity":    strconv.Itoa(quantity),
+			practiceIDKey: practiceID,
+			quantityKey:   strconv.Itoa(quantity),
 		},
 	})
 }
@@ -124,7 +133,7 @@ func TestPostPurchaseWebhookHandler_CreditsLedgerOnConfirmedCheckout(t *testing.
 	).Scan(&origin, &quantity); err != nil {
 		t.Fatalf("query ledger row: %v", err)
 	}
-	if origin != "purchase" || quantity != 7 {
+	if origin != originPurchase || quantity != 7 {
 		t.Fatalf("ledger row = (%q, %d), want (\"purchase\", 7)", origin, quantity)
 	}
 }
@@ -331,7 +340,7 @@ func TestPostPurchaseWebhookHandler_InvalidQuantityMetadataRejected(t *testing.T
 		objectKey:        stripeObjectCheckoutSession,
 		"payment_status": "paid",
 		metadataKey: map[string]any{
-			"practice_id": practiceID,
+			practiceIDKey: practiceID,
 			"quantity":    "not-a-number",
 		},
 	})
@@ -344,5 +353,80 @@ func TestPostPurchaseWebhookHandler_InvalidQuantityMetadataRejected(t *testing.T
 	}
 	if got := sumLedger(t, db, practiceID); got != 0 {
 		t.Fatalf("ledger sum = %d, want 0", got)
+	}
+}
+
+// pricedCheckoutPayload builds a paid checkout.session.completed event
+// with an explicit subtotal, tax and payment -- the three facts #420's
+// purchase row records, so a refund can be computed from the ledger
+// alone.
+func pricedCheckoutPayload(t *testing.T, eventID, practiceID string, quantity int, subtotal, tax int64, paymentIntent any) []byte {
+	t.Helper()
+	session := map[string]any{
+		"id":              stripeTestSessionID,
+		objectKey:         stripeObjectCheckoutSession,
+		paymentStatusKey:  "paid",
+		"amount_subtotal": subtotal,
+		"total_details":   map[string]any{"amount_tax": tax},
+		metadataKey: map[string]any{
+			practiceIDKey: practiceID,
+			quantityKey:   strconv.Itoa(quantity),
+		},
+	}
+	if paymentIntent != nil {
+		session["payment_intent"] = paymentIntent
+	}
+	return buildEventPayload(t, eventID, stripeEventTypeCheckoutCompleted, session)
+}
+
+// TestPostPurchaseWebhookHandler_RecordsWhatTheLotCost proves the purchase
+// row keeps the price paid, the tax charged and the payment it arrived
+// on -- the three things a refund three years later is computed from.
+func TestPostPurchaseWebhookHandler_RecordsWhatTheLotCost(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Priced Webhook")
+	srv := newWebhookServer(db)
+
+	resp := postWebhook(t, srv, pricedCheckoutPayload(t, "evt_priced", practiceID, 5, 10000, 686, "pi_recorded"), webhookTestSecret)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var unitPrice, tax int
+	var paymentIntent string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT unit_price_cents, tax_cents, stripe_payment_intent_id FROM credit_ledger
+		 WHERE practice_id = $1 AND origin = 'purchase'`, practiceID,
+	).Scan(&unitPrice, &tax, &paymentIntent); err != nil {
+		t.Fatalf("read purchase row: %v", err)
+	}
+	if unitPrice != 2000 || tax != 686 || paymentIntent != "pi_recorded" {
+		t.Fatalf("purchase row = (%d, %d, %s), want (2000, 686, pi_recorded)", unitPrice, tax, paymentIntent)
+	}
+}
+
+// TestPostPurchaseWebhookHandler_RefusesASessionItCannotPrice proves a
+// Session the handler cannot turn into an exact unit price, or cannot tie
+// to a payment, is refused rather than stored lossily -- Stripe retries,
+// and nothing has been written.
+func TestPostPurchaseWebhookHandler_RefusesASessionItCannotPrice(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Unpriceable Webhook")
+	srv := newWebhookServer(db)
+
+	for name, payload := range map[string][]byte{
+		"subtotal does not divide by quantity": pricedCheckoutPayload(t, "evt_uneven", practiceID, 3, 10000, 0, "pi_uneven"),
+		"no subtotal at all":                   pricedCheckoutPayload(t, "evt_free", practiceID, 5, 0, 0, "pi_free"),
+		"no payment to refund against":         pricedCheckoutPayload(t, "evt_nopi", practiceID, 5, 10000, 0, nil),
+	} {
+		resp := postWebhook(t, srv, payload, webhookTestSecret)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400", name, resp.StatusCode)
+		}
+	}
+	if got := sumLedger(t, db, practiceID); got != 0 {
+		t.Fatalf("ledger sum = %d, want nothing credited", got)
 	}
 }

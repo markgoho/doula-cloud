@@ -43,15 +43,47 @@ func seedMember(t *testing.T, db *testdb.DB, identityUID string, roles string) (
 	return practiceID
 }
 
-func seedLedgerRow(t *testing.T, db *testdb.DB, practiceID, origin string, quantity int) {
+// seedLedgerRow seeds one lot. A purchase carries what it cost and the
+// payment it arrived on (#420); a grant carries the defaults, which are a
+// real $0.00 rather than an unknown price.
+func seedLedgerRow(t *testing.T, db *testdb.DB, practiceID, origin string, quantity int) string {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, $2::credit_ledger_origin, $3)`,
-		practiceID, origin, quantity,
-	); err != nil {
+	unitPriceCents, taxCents := 0, 0
+	var paymentIntentID any
+	if origin == originPurchase {
+		unitPriceCents, paymentIntentID = seedUnitPriceCents, "pi_seed"
+	}
+	var id string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id)
+		 VALUES ($1, $2::credit_ledger_origin, $3, $4, $5, $6) RETURNING id`,
+		practiceID, origin, quantity, unitPriceCents, taxCents, paymentIntentID,
+	).Scan(&id); err != nil {
 		t.Fatalf("seed credit_ledger row: %v", err)
 	}
+	return id
 }
+
+// seedRefundRow seeds a refund drawn against lotID: a negative row that
+// names the lot it reverses, which is the only shape #420 admits.
+func seedRefundRow(t *testing.T, db *testdb.DB, practiceID, lotID string, quantity int) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id)
+		 VALUES ($1, 'refund', $2, $3, 0, 're_seed', $4)`,
+		practiceID, -quantity, seedUnitPriceCents, lotID,
+	); err != nil {
+		t.Fatalf("seed refund row: %v", err)
+	}
+}
+
+// seedUnitPriceCents is what a seeded purchase charged per Credit -- the
+// live $20.00 Price (#448).
+const seedUnitPriceCents = 2000
+
+// originPurchase is credit_ledger's purchase origin, the one origin the
+// seeds treat specially because it is the only one that cost money.
+const originPurchase = "purchase"
 
 // newBillingServer mounts GetBalanceHandler the way main.go really does --
 // through GatedRouter with the "owner","admin" declaration -- since the
@@ -86,8 +118,8 @@ func TestBalance_SumsLedgerRows(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Test Practice")
 	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
-	seedLedgerRow(t, db, practiceID, "purchase", 5)
-	seedLedgerRow(t, db, practiceID, "purchase", -1)
+	lotID := seedLedgerRow(t, db, practiceID, "purchase", 5)
+	seedRefundRow(t, db, practiceID, lotID, 1)
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {

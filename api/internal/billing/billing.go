@@ -48,19 +48,23 @@ func ConsumeCredit(ctx context.Context, tx *sql.Tx, practiceID, engagementID str
 		return fmt.Errorf("billing: lock practice: %w", err)
 	}
 
-	balance, err := Balance(ctx, tx, practiceID)
+	// Which Credit is spent is no longer arbitrary: #420 made a Credit's
+	// price part of its own row, so a consumption has to name the lot it
+	// drew from. The oldest open lot is that lot -- one FIFO rule for
+	// consumption and refunds alike, documented on openLots.
+	lots, err := openLots(ctx, tx, practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if balance <= 0 {
+	if len(lots) == 0 {
 		return ErrNoCreditsRemaining
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO credit_ledger (practice_id, origin, quantity, consumed_engagement_id, consumed_at)
-		 VALUES ($1, 'consumption', -1, $2, now())`,
-		practiceID, engagementID,
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, consumed_engagement_id, consumed_at, drawn_lot_id)
+		 VALUES ($1, 'consumption', -1, $2, now(), $3)`,
+		practiceID, engagementID, lots[0].id,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("billing: insert consumption row: %w", err)

@@ -55,4 +55,12 @@ func registerInternalRoutes(mux *http.ServeMux, d Deps) {
 	// the last step of the deploy workflow itself.
 	mux.Handle("POST /api/internal/site/process-build-outbox", sitebuild.ProcessOutboxHandler(d.DB, d.SiteBuildWorker, d.WorkerSecret))
 	mux.Handle("POST /api/internal/site/verify-pages", sitebuild.VerifyHandler(d.DB, d.PageVerifier, d.WorkerSecret))
+	// #420's two billing endpoints, on the same X-Internal-Secret guard.
+	// Neither is a screen: /support tells a Practice to email us for a
+	// refund, because a refund issued on her recorded request restarts
+	// the dormancy clock that one we initiated would not (APL 1315), and
+	// the dormancy list is an operator's yearly mailing, not a tenant's
+	// view of anything.
+	mux.Handle("POST /api/internal/billing/refunds", billing.RefundHandler(d.DB, d.StripeClient, d.WorkerSecret))
+	mux.Handle("GET /api/internal/billing/dormant-practices", billing.DormantPracticesHandler(d.DB, d.WorkerSecret))
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
@@ -302,4 +303,46 @@ func TestParseUUID(t *testing.T) {
 			t.Fatalf("body = %q, want %q", got, "invalid practice id\n")
 		}
 	})
+}
+
+// TestMiddleware_RecordsThatThePracticeWasHere proves the durable contact
+// record #420 needs: an authenticated request stamps staff.last_active_at,
+// and a second request the same day leaves it where it is. New York
+// escheats an unspent Credit balance at three years' dormancy and accepts
+// a verifiable login as the contact that stops the clock -- a request log
+// would have rotated away long before then.
+func TestMiddleware_RecordsThatThePracticeWasHere(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-recording-contact"
+	staffID, practiceID := seedStaffWithMembership(t, db, identityUID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	lastActive := func() time.Time {
+		t.Helper()
+		var seen sql.NullTime
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT last_active_at FROM staff WHERE id = $1`, staffID).Scan(&seen); err != nil {
+			t.Fatalf("query last_active_at: %v", err)
+		}
+		if !seen.Valid {
+			t.Fatal("last_active_at is unset after an authenticated request")
+		}
+		return seen.Time
+	}
+
+	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	first := lastActive()
+
+	resp2 := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp2.Body.Close()
+	if second := lastActive(); !second.Equal(first) {
+		t.Fatalf("last_active_at moved from %v to %v within the same day", first, second)
+	}
 }

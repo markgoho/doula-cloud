@@ -78,6 +78,35 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 			return
 		}
 
+		// What the lot cost, taken from the Session rather than from our
+		// own idea of the price, because the Session is what the Practice
+		// actually paid. amount_subtotal is the pre-tax figure -- every
+		// line item is tax_behavior "exclusive" (apportion.go), so
+		// amount_total would fold New York's tax into the unit price and
+		// refund it twice.
+		//
+		// A subtotal that does not divide evenly by the quantity would
+		// mean storing a lossy price, and a lossy price is a refund
+		// computed wrong three years from now. Refuse it and let Stripe
+		// retry: nothing has been written yet.
+		if session.AmountSubtotal <= 0 || session.AmountSubtotal%int64(quantity) != 0 {
+			http.Error(w, "checkout session subtotal does not divide by quantity", http.StatusBadRequest)
+			return
+		}
+		unitPriceCents := session.AmountSubtotal / int64(quantity)
+		var taxCents int64
+		if session.TotalDetails != nil {
+			taxCents = session.TotalDetails.AmountTax
+		}
+		// The object a refund has to be issued against, so Stripe Tax
+		// reverses the tax it reported to New York. Unexpanded in a
+		// webhook payload, so this carries the id and nothing else --
+		// which is all the ledger keeps.
+		if session.PaymentIntent == nil || session.PaymentIntent.ID == "" {
+			http.Error(w, "checkout session has no payment intent", http.StatusBadRequest)
+			return
+		}
+
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
@@ -128,8 +157,10 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'purchase', $2)`,
-			practiceID, quantity,
+			`INSERT INTO credit_ledger
+			     (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id)
+			 VALUES ($1, 'purchase', $2, $3, $4, $5)`,
+			practiceID, quantity, unitPriceCents, taxCents, session.PaymentIntent.ID,
 		); err != nil {
 			// Includes a foreign-key violation if practiceID -- taken
 			// verbatim from event metadata -- doesn't name a real Practice.

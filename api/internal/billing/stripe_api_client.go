@@ -132,3 +132,25 @@ func (c *StripeAPIClient) CreateCheckoutSession(ctx context.Context, req Checkou
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	return sess.URL, nil
 }
+
+// RefundPayment refunds amountCents against paymentIntentID.
+//
+// Naming the PaymentIntent rather than building a payout is deliberate:
+// Stripe Tax reverses the tax it reported on the original payment in
+// proportion to what is refunded, so the ST-100 stays correct without a
+// second act. The amount includes the tax share the ledger computed, so
+// what Stripe reverses and what credit_ledger records are the same
+// number.
+func (c *StripeAPIClient) RefundPayment(ctx context.Context, paymentIntentID string, amountCents int64) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	refund, err := c.client.V1Refunds.Create(ctx, &stripe.RefundCreateParams{
+		PaymentIntent: stripe.String(paymentIntentID),
+		Amount:        new(amountCents),
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("billing: refund payment %q: %w", paymentIntentID, err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return refund.ID, nil
+}

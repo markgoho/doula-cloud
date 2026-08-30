@@ -18,8 +18,18 @@ type FakeStripeClient struct {
 	CustomerCalls []string
 	Sessions      []CheckoutSessionRequest
 
+	Refunds []RefundCall
+
 	CreateCustomerErr        error
 	CreateCheckoutSessionErr error
+	RefundPaymentErr         error
+}
+
+// RefundCall is one recorded RefundPayment call: which payment was
+// reversed, and by how much.
+type RefundCall struct {
+	PaymentIntentID string
+	AmountCents     int64
 }
 
 // NewFakeStripeClient returns a FakeStripeClient with no recorded calls.
@@ -69,4 +79,24 @@ func (f *FakeStripeClient) CustomerCallCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.CustomerCalls)
+}
+
+// RefundPayment records the call and returns a deterministic fake Stripe
+// Refund id, or RefundPaymentErr if a test set one.
+func (f *FakeStripeClient) RefundPayment(_ context.Context, paymentIntentID string, amountCents int64) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.RefundPaymentErr != nil {
+		return "", f.RefundPaymentErr
+	}
+	f.Refunds = append(f.Refunds, RefundCall{PaymentIntentID: paymentIntentID, AmountCents: amountCents})
+	f.nextID++
+	return fmt.Sprintf("re_fake_%d", f.nextID), nil
+}
+
+// RefundCalls returns a copy of every RefundPayment call recorded so far.
+func (f *FakeStripeClient) RefundCalls() []RefundCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]RefundCall(nil), f.Refunds...)
 }
