@@ -20,6 +20,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 
 	let {
@@ -174,7 +175,7 @@
 	</label>
 	<label>
 		Due date
-		<input type="date" bind:value={dueDate} required />
+		<TextInput type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
 	</label>
 	<label>
 		Terms

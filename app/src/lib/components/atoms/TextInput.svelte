@@ -21,7 +21,20 @@
 		id?: string;
 		value: string;
 		onInput: (value: string) => void;
-		type?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search' | 'number';
+		/*
+		 * type="date" wraps the native control rather than composing a
+		 * day/month/year set of its own (#404): the native control already
+		 * owns locale-correct formatting, a calendar picker and keyboard
+		 * support, and Chromium exposes it with the same accessible role
+		 * ("textbox") as the rest of this atom, so LabeledField's id/
+		 * describedBy/invalid wiring needs no special case for it. Its three
+		 * segments (day, month, year) each get their own accessible name
+		 * from the browser in the page's locale -- this atom's `label`
+		 * names the field as a whole, not each segment. Arrow keys move
+		 * within a segment, Tab moves between them, and a screen reader
+		 * announces each segment's name and value as it is focused.
+		 */
+		type?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search' | 'number' | 'date';
 		name?: string;
 		placeholder?: string;
 		required?: boolean;

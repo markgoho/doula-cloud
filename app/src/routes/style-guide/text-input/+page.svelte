@@ -6,6 +6,7 @@
 	let name = $state('');
 	let email = $state('');
 	let quantity = $state('1');
+	let dueDate = $state('');
 </script>
 
 <stack-l space="var(--space-6)">
@@ -34,6 +35,11 @@
 			onInput={(value) => (quantity = value)}
 			placeholder="1"
 		/>
+	</section>
+
+	<section>
+		<h2>Date type</h2>
+		<TextInput type="date" value={dueDate} onInput={(value) => (dueDate = value)} />
 	</section>
 
 	<section>
