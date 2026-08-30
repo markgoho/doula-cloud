@@ -172,3 +172,34 @@ func TestRLS_NotificationWorkerTrustedFlagOpensStaffAndMemberships(t *testing.T)
 		t.Fatalf("staffCount/membershipCount = %d/%d, want 1/1", staffCount, membershipCount)
 	}
 }
+
+// TestRLS_CreditLedgerIsAppendOnlyForTheRuntime proves nothing the BFF
+// runs can write off a Credit balance: app_runtime holds SELECT and
+// INSERT on credit_ledger and nothing else, so a stale balance can be
+// corrected only by a new row that says so -- and New York's abandoned
+// property law is owed the whole balance, not a written-down one (#420).
+func TestRLS_CreditLedgerIsAppendOnlyForTheRuntime(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db, "Append Only")
+	seedSignupBonus(t, db, practiceID)
+
+	// A refused statement aborts its transaction, so each attempt runs
+	// in one of its own.
+	for name, statement := range map[string]string{
+		"zero a balance":   `UPDATE credit_ledger SET quantity = 0`,
+		"delete a balance": `DELETE FROM credit_ledger`,
+	} {
+		tx, err := db.App.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatalf("%s: begin: %v", name, err)
+		}
+		if _, err := tx.ExecContext(t.Context(),
+			`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+			t.Fatalf("%s: set practice: %v", name, err)
+		}
+		if _, err := tx.ExecContext(t.Context(), statement); err == nil {
+			t.Fatalf("%s: the runtime was allowed to rewrite credit_ledger", name)
+		}
+		_ = tx.Rollback()
+	}
+}
