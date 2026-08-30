@@ -41,6 +41,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
@@ -108,8 +109,8 @@
 	 * built by `RadioGroup` from its `name` and each option's value, so the
 	 * group's target is its first option -- GOV.UK sends a reader to the
 	 * first control of a refused group, a <fieldset> not being focusable.
-	 * The two textareas name their own, since they are raw markup until
-	 * #468 makes them an atom.
+	 * The two textareas name their own, passed down to `LabeledField` so
+	 * the anchor lands on the control rather than on a generated id.
 	 */
 	const MODE_NAME = 'website-mode';
 	const modeFieldId = `${MODE_NAME}-own`;
@@ -278,13 +279,14 @@
 {/snippet}
 
 <!--
-	A raw <textarea> with its own label, hint, counter and error, rather
-	than LabeledField: the live counter has to be named in
-	aria-describedby alongside the hint, and LabeledField builds that list
-	from a hint and an error only. #468 is the ticket that turns this into
-	a Textarea atom with a character count; until it lands, the wiring is
-	spelled out here rather than half-done through a component that cannot
-	express it.
+	`LabeledField` + `Textarea`, since #468 made the count part of the atom.
+	The two facts are the only fields in the application with a
+	server-enforced maximum -- `website.MaxFactLength`, refused by the
+	handler and again by 00045's CHECK -- which is why they are the only
+	two that carry a counter at all.
+
+	The ids stay caller-supplied, because the error summary above links to
+	them by name.
 
 	No maxlength. GOV.UK's research is that a hard cap silently truncates
 	pasted text, so the count is allowed to go negative, turns red, and the
@@ -296,31 +298,14 @@
 	label: string,
 	hint: string,
 	value: string,
-	remaining: number,
 	error: string,
 	onInput: (next: string) => void
 )}
-	<stack-l space="var(--space-1)">
-		<label for="{name}-input">{label}</label>
-		<p id="{name}-hint" class="hint">{hint}</p>
-		<textarea
-			id="{name}-input"
-			rows="5"
-			aria-describedby="{name}-hint {name}-count{error ? ` ${name}-error` : ''}"
-			aria-invalid={error ? 'true' : undefined}
-			class:invalid={Boolean(error)}
-			{value}
-			oninput={(event) => onInput(event.currentTarget.value)}
-		></textarea>
-		<p id="{name}-count" class="count" class:over={remaining < 0} aria-live="polite">
-			{remaining < 0
-				? `You have ${-remaining} characters too many`
-				: `You have ${remaining} characters remaining`}
-		</p>
-		{#if error}
-			<p id="{name}-error" class="field-error" role="alert">{error}</p>
-		{/if}
-	</stack-l>
+	<LabeledField id="{name}-input" {label} {hint} error={error || undefined}>
+		{#snippet children({ id, describedBy, invalid })}
+			<Textarea {id} {describedBy} {invalid} {value} {onInput} rows={5} maxLength={MAX_FACT_LENGTH} />
+		{/snippet}
+	</LabeledField>
 {/snippet}
 
 {#snippet hostedFacts()}
@@ -329,7 +314,6 @@
 		'What your Practice offers',
 		'Stripe reads this to understand what Clients are paying for. Say what kind of support you provide and where you work.',
 		serviceDescription,
-		descriptionRemaining,
 		fieldErrors.serviceDescription ?? '',
 		(next) => (serviceDescription = next)
 	)}
@@ -338,7 +322,6 @@
 		'Your cancellation or refund policy',
 		'What happens if a Client cancels, and whether any of what she paid comes back. Stripe requires this on your page.',
 		cancellationPolicy,
-		policyRemaining,
 		fieldErrors.cancellationPolicy ?? '',
 		(next) => (cancellationPolicy = next)
 	)}
@@ -495,46 +478,6 @@
 	@layer components {
 		container-l {
 			padding-block: var(--space-8);
-		}
-
-		label {
-			display: block;
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface);
-		}
-
-		.hint {
-			margin: 0;
-			color: var(--color-on-surface-muted);
-			font-size: var(--text-body-sm-size);
-		}
-
-		textarea {
-			inline-size: 100%;
-			min-block-size: calc(var(--space-7) * 4);
-			padding: var(--space-3);
-			font: inherit;
-			color: var(--color-on-surface);
-			background-color: var(--color-surface);
-			border: var(--border-thin) solid var(--color-outline);
-			border-radius: var(--radius);
-		}
-
-		textarea.invalid {
-			border-color: var(--color-error);
-		}
-
-		.count {
-			margin: 0;
-			color: var(--color-on-surface-muted);
-			font-size: var(--text-body-sm-size);
-		}
-
-		/* Over the budget is an error she can still fix by typing, so it
-		   reads like one before the submit ever refuses. */
-		.count.over {
-			color: var(--color-error);
-			font-weight: var(--font-weight-medium);
 		}
 
 		.field-error {

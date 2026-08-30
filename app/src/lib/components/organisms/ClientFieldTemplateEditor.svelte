@@ -2,6 +2,7 @@
 	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/clientFieldTemplate.js';
 	import Button from '../atoms/Button.svelte';
 	import Select from '../atoms/Select.svelte';
+	import Textarea from '../atoms/Textarea.svelte';
 
 	/**
 	 * Sibling of DynamicFieldEditor.svelte for ADR-0017's Client Field
@@ -73,11 +74,12 @@
 			</select>
 			<!-- v8 ignore stop -->
 			{#if isSelectType(field.type)}
-				<textarea
-					aria-label="Options, one per line"
+				<Textarea
+					ariaLabel="Options, one per line"
 					value={optionsText(field)}
-					oninput={(event_) => handleOptionsInput(field.id, event_.currentTarget.value)}
-				></textarea>
+					onInput={(next) => handleOptionsInput(field.id, next)}
+					rows={2}
+				/>
 			{/if}
 			{#if field.archived}
 				<span>Archived -- no longer collected</span>

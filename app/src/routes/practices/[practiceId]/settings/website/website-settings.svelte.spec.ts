@@ -187,7 +187,7 @@ describe('website settings screen', () => {
 			.toBeVisible();
 
 		await testPage.getByLabelText('What your Practice offers').fill('a'.repeat(501));
-		await expect.element(testPage.getByText('You have 1 characters too many')).toBeVisible();
+		await expect.element(testPage.getByText('You have 1 character too many')).toBeVisible();
 
 		await testPage.getByLabelText('Your cancellation or refund policy').fill('Two weeks.');
 		await expect.element(testPage.getByText('You have 490 characters remaining')).toBeVisible();

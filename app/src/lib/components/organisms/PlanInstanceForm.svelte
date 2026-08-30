@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from '#lib/planInstance.js';
+	import Textarea from '#lib/components/atoms/Textarea.svelte';
 
 	let {
 		fields,
@@ -47,10 +48,10 @@
 					<!-- v8 ignore start: same unreachable null-guard as above -->
 					{field.label}
 					<!-- v8 ignore stop -->
-					<textarea
+					<Textarea
 						value={textValue(field)}
-						oninput={(event_) => onAnswerChange(field.id, event_.currentTarget.value)}
-					></textarea>
+						onInput={(next) => onAnswerChange(field.id, next)}
+					/>
 				</label>
 			{:else if field.type === 'checkbox'}
 				<label>

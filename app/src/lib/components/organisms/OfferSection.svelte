@@ -19,6 +19,7 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 
 	let {
@@ -177,7 +178,7 @@
 	</label>
 	<label>
 		Terms
-		<textarea bind:value={terms}></textarea>
+		<Textarea value={terms} onInput={(next) => (terms = next)} />
 	</label>
 
 	<Button label="Send Offer" type="submit" loading={isSending} />

@@ -13,6 +13,8 @@
 
 <script lang="ts">
 	import Button from '../atoms/Button.svelte';
+	import Textarea from '../atoms/Textarea.svelte';
+	import LabeledField from '../molecules/LabeledField.svelte';
 	import Notice from '../atoms/Notice.svelte';
 
 	interface Properties {
@@ -113,10 +115,17 @@
 
 	<form onsubmit={handleSubmit}>
 		<stack-l space="var(--space-2)">
-			<label>
-				Message
-				<textarea bind:value={body}></textarea>
-			</label>
+			<LabeledField label="Message">
+				{#snippet children({ id, describedBy, invalid })}
+					<Textarea
+						{id}
+						{describedBy}
+						{invalid}
+						value={body}
+						onInput={(next) => (body = next)}
+					/>
+				{/snippet}
+			</LabeledField>
 			<label>
 				Attachment (image or PDF, up to 10MB)
 				<input
@@ -162,24 +171,6 @@
 			display: block;
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
-		}
-
-		textarea {
-			display: block;
-			inline-size: 100%;
-			min-block-size: 4rem;
-			margin-block-start: var(--space-1);
-			padding: var(--space-2) var(--space-3);
-			font-family: var(--font-family-base);
-			color: var(--color-on-surface);
-			background-color: var(--color-surface);
-			border: var(--border-thin) solid var(--color-outline);
-			border-radius: var(--radius);
-		}
-
-		textarea:focus-visible {
-			outline: var(--focus-ring-width) solid var(--color-primary);
-			outline-offset: var(--focus-ring-offset);
 		}
 
 		input[type='file'] {

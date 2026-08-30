@@ -79,7 +79,8 @@ export default defineConfig(
 		ignores: [
 			'src/lib/components/atoms/Button.svelte',
 			'src/lib/components/atoms/Link.svelte',
-			'src/lib/components/atoms/Select.svelte'
+			'src/lib/components/atoms/Select.svelte',
+			'src/lib/components/atoms/Textarea.svelte'
 		],
 		rules: {
 			'svelte/no-restricted-html-elements': [
@@ -95,6 +96,10 @@ export default defineConfig(
 				{
 					elements: ['select'],
 					message: 'Use the Select atom (#lib/components/atoms/Select.svelte) instead of a raw <select> element.'
+				},
+				{
+					elements: ['textarea'],
+					message: 'Use the Textarea atom (#lib/components/atoms/Textarea.svelte) instead of a raw <textarea> element.'
 				}
 			]
 		}

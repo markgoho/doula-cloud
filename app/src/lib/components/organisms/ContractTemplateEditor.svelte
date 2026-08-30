@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { MERGE_FIELDS } from '#lib/contractTemplate.js';
+	import Textarea from '#lib/components/atoms/Textarea.svelte';
 
 	let {
 		prose,
@@ -12,10 +13,7 @@
 
 <label>
 	Contract template prose
-	<textarea
-		value={prose}
-		oninput={(event_) => onProseChange(event_.currentTarget.value)}
-	></textarea>
+	<Textarea value={prose} onInput={onProseChange} rows={12} />
 </label>
 
 <section>
