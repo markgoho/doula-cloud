@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+{{- /*
+  The default single-page template: the site's own pages, as opposed to a
+  Practice's page at /p/<slug>, which has its own more specific
+  layouts/p/page.html.
+
+  The first page built on it is /pilot-terms (#444). It is unlisted --
+  noindex, in no navigation, reachable only from the invitation a
+  Practice accepts the pilot from -- so this template carries the
+  noindex tag and every page it renders inherits it. A page that wants
+  to be found sets `robots: index` in its front matter and says so out
+  loud; /support (#419) is the one that will, because #390 reversed
+  noindex there deliberately.
+*/ -}}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }} | {{ .Site.Title }}</title>
+  <meta name="robots" content="{{ .Params.robots | default "noindex, nofollow" }}">
+  <link rel="canonical" href="{{ .Permalink }}">
+  <style>
+    /* The app's palette, by value -- the same set and the same reason as
+       layouts/p/page.html: hugo/ has no asset pipeline, and a shared
+       stylesheet would be a build step bought for two files. Both sides
+       read app/src/lib/styles/tokens.css. */
+    :root {
+      --surface: oklch(98.5% 0.008 7);
+      --surface-container: oklch(94.9% 0.011 357);
+      --on-surface: oklch(22.4% 0.009 352);
+      --on-surface-muted: oklch(50.8% 0.023 346);
+      --outline-variant: oklch(83.1% 0.026 346);
+      --primary: oklch(41.2% 0.119 339);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 2rem 1.25rem 3rem;
+      background: var(--surface);
+      color: var(--on-surface);
+      font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-size: 1.0625rem;
+      line-height: 1.55;
+      max-width: 42rem;
+      margin-inline: auto;
+    }
+
+    h1 {
+      font-size: 2rem;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0 0 1.5rem;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      line-height: 1.3;
+      letter-spacing: -0.012em;
+      margin: 2rem 0 0.5rem;
+    }
+
+    p, ul { margin: 0 0 1rem; }
+    li { margin-bottom: 0.25rem; }
+
+    a { color: var(--primary); }
+    a:focus-visible {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--outline-variant);
+      color: var(--on-surface-muted);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{{ .Title }}</h1>
+    {{ .Content }}
+  </main>
+
+  <footer>
+    <p>
+      Last updated
+      <time datetime="{{ .Date.Format "2006-01-02" }}">{{ .Date.Format "2 January 2006" }}</time>.
+    </p>
+  </footer>
+</body>
+</html>

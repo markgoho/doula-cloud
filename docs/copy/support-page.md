@@ -4,6 +4,8 @@ The copy below is **final and verbatim**. It was settled on [#390](https://githu
 
 Do not reword it without reading #390 first. Every sentence in the refund section is load-bearing against a specific New York statute or a Stripe contract term, and several of them read like ordinary marketing prose while doing legal work.
 
+**The refund section is duplicated on [`pilot-terms-page.md`](pilot-terms-page.md)**, which a pilot Practice reads at the moment she agrees to take part. The two must say the same thing: change both, or neither.
+
 ## Where it lives, and how it is served
 
 - URL: `https://doula.cloud/support`

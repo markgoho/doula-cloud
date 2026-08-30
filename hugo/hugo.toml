@@ -6,4 +6,10 @@ title = 'Doula Cloud'
 # no taxonomy. Without this Hugo publishes empty /categories/ and /tags/
 # pages and lists them in the sitemap, which is a crawler and a Stripe
 # reviewer being pointed at nothing.
-disableKinds = ['taxonomy', 'term']
+#
+# 'rss' joins them for #444: /pilot-terms is unlisted, and an RSS feed
+# republishes every page's URL and its whole body at /index.xml, which
+# hands out exactly what the noindex tag is there to withhold. The site
+# is a handful of static pages with nothing to subscribe to, so the feed
+# was never earning its place.
+disableKinds = ['taxonomy', 'term', 'rss']
