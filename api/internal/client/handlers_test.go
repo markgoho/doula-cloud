@@ -733,6 +733,7 @@ func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 	const contractorUID = "contractor-listing"
 	staffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
 	seedGrantedAttachment(t, db, engagementID, staffID)
+	seedPendingRequest(t, db, practiceID, attachedClient, staffID, "birth")
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
@@ -746,6 +747,12 @@ func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 	list := listResp.Items
 	if len(list) != 1 || list[0].ClientID != attachedClient {
 		t.Fatalf("contractor list = %+v, want exactly the attached client", list)
+	}
+	// The narrowed query is a second SELECT, not the same one with an
+	// extra predicate, so PendingRequestKinds has to be proved on this
+	// path as well as on the Practice-wide one -- the two could drift.
+	if len(list[0].PendingRequestKinds) != 1 || list[0].PendingRequestKinds[0] != "birth" {
+		t.Fatalf("attached client PendingRequestKinds = %v, want [birth]", list[0].PendingRequestKinds)
 	}
 }
 

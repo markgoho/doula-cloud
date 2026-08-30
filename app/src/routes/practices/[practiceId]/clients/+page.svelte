@@ -32,6 +32,9 @@
 
 	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
 	async function handleToggleAll(checked: boolean) {
+		// Before the navigation, so a "Load more" already in flight is
+		// abandoned rather than merged into the new filter's list.
+		filterToken += 1;
 		await goto(clientsPath(checked));
 	}
 
@@ -90,6 +93,22 @@
 		void loadFirstPage(isShowingEveryone);
 	});
 
+	/*
+	 * Bumped the moment the filter changes. "Load more" is the only fetch
+	 * that *merges* into what is on screen, so it is the only one a stale
+	 * response can corrupt: a page-two request already in flight when the
+	 * reader flips the toggle would append the old filter's Clients onto
+	 * the new filter's list, and nothing afterwards would take them back
+	 * out. It therefore carries the counter's value from when it started
+	 * and drops its own response if the counter has moved.
+	 *
+	 * loadFirstPage needs no such guard. It *replaces* `clients` wholesale
+	 * rather than appending, so two of them racing can only leave a whole,
+	 * self-consistent result set from a filter one flip out of date --
+	 * which the effect's next run corrects -- never a list mixing both.
+	 */
+	let filterToken = 0;
+
 	async function loadFirstPage(isShowingEveryone: boolean) {
 		isLoaded = false;
 		error = '';
@@ -107,15 +126,18 @@
 	}
 
 	async function handleLoadMore() {
+		const token = filterToken;
 		try {
 			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!, {
 				cursor,
 				showAll: isShowingEveryone
 			});
+			if (token !== filterToken) return;
 			clients = [...clients, ...loaded.items];
 			cursor = loaded.nextCursor ?? '';
 			isMoreAvailable = loaded.hasMore;
 		} catch (error_) {
+			if (token !== filterToken) return;
 			error = error_ instanceof Error ? error_.message : 'Failed to load more Clients';
 		}
 	}

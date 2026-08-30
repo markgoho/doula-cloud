@@ -233,3 +233,73 @@ describe('a pending Request on the row', () => {
 		await expect.element(testPage.getByText('request pending')).not.toBeInTheDocument();
 	});
 });
+
+describe('a "Load more" already in flight when the filter changes', () => {
+	/*
+	 * "Load more" is the only fetch that merges into what is on screen, so
+	 * it is the only one a stale response can corrupt -- the old filter's
+	 * Clients appended onto the new filter's list, with nothing afterwards
+	 * to take them back out. Flipping the toggle has to abandon it.
+	 */
+	it('drops its response rather than appending the old filter\'s Clients', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ items: clients, hasMore: true, nextCursor: 'cursor-1' })
+		);
+		await render(Page, {});
+		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+
+		// Page two never settles until the test says so.
+		const pageTwo = Promise.withResolvers<Response>();
+		apiFetchWithSession.mockReturnValueOnce(pageTwo.promise);
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+		pageTwo.resolve(
+			jsonResponse({
+				items: [
+					{
+						clientId: 'client-9',
+						name: 'Stale Filter Client',
+						email: 'stale@example.com',
+						hasWork: true
+					}
+				],
+				hasMore: false
+			})
+		);
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Stale Filter Client' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('surfaces a "Load more" failure only while the filter has not moved', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ items: clients, hasMore: true, nextCursor: 'cursor-1' })
+		);
+		await render(Page, {});
+		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+
+		apiFetchWithSession.mockResolvedValueOnce(textResponse('the practice is gone'));
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(testPage.getByText('the practice is gone')).toBeVisible();
+	});
+
+	it('swallows a "Load more" failure whose filter has since moved', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ items: clients, hasMore: true, nextCursor: 'cursor-1' })
+		);
+		await render(Page, {});
+		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+
+		const pageTwo = Promise.withResolvers<Response>();
+		apiFetchWithSession.mockReturnValueOnce(pageTwo.promise);
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await testPage.getByRole('switch', { name: 'See everyone' }).click();
+		pageTwo.resolve(textResponse('the practice is gone'));
+
+		await expect.element(testPage.getByText('the practice is gone')).not.toBeInTheDocument();
+	});
+});
