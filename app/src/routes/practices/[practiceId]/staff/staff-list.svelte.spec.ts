@@ -53,6 +53,32 @@ const invitations = [
 	}
 ];
 
+// One page of #459's work state history, keyed by staff id. memberSince
+// dates the Membership, which is what lets the screen mark an assertion
+// made before she joined -- a contractor doula carries her earlier
+// Practice's rows in with her.
+const workStateHistories: Record<string, unknown> = {
+	'staff-1': {
+		memberSince: '2026-08-01T00:00:00Z',
+		items: [
+			{
+				eventId: 'event-2',
+				previousWorkState: 'NY',
+				workState: 'NJ',
+				createdAt: '2027-03-14T09:30:00Z'
+			},
+			{ eventId: 'event-1', workState: 'NY', createdAt: '2026-08-28T12:00:00Z' }
+		],
+		hasMore: false
+	},
+	'staff-2': {
+		// Asserted at another Practice, a year before this Membership.
+		memberSince: '2026-08-01T00:00:00Z',
+		items: [{ eventId: 'event-3', workState: 'CA', createdAt: '2025-05-04T12:00:00Z' }],
+		hasMore: false
+	}
+};
+
 interface MockOptions {
 	roster?: { members: typeof members; invitations: typeof invitations };
 	listOk?: boolean;
@@ -60,6 +86,7 @@ interface MockOptions {
 	membershipResponse?: Response;
 	revokeResponse?: Response;
 	removeResponse?: Response;
+	historyResponse?: Response;
 }
 
 // The API double is stateful: a successful PATCH or revoke changes what
@@ -71,10 +98,18 @@ function mockApi({
 	sessionsResponse,
 	membershipResponse,
 	revokeResponse,
-	removeResponse
+	removeResponse,
+	historyResponse
 }: MockOptions = {}) {
 	const state = structuredClone(roster);
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		if (path.includes('/work-state-history')) {
+			if (historyResponse) {
+				return Promise.resolve(historyResponse);
+			}
+			const staffId = path.split('/').at(-2);
+			return Promise.resolve(jsonResponse(workStateHistories[String(staffId)]));
+		}
 		if (path.endsWith('/sessions') && init?.method === 'DELETE') {
 			return Promise.resolve(sessionsResponse ?? jsonResponse({}));
 		}
@@ -297,5 +332,60 @@ describe('staff screen', () => {
 		await buttons.nth(0).click();
 
 		await expect.element(testPage.getByText('Failed to end sessions')).toBeVisible();
+	});
+
+	// #459: the roster column shows the current value and the day it was
+	// asserted, which answers "how did this get set?" only while the value
+	// has never moved. These four hold the four things it had to decide.
+	describe('work state history', () => {
+		it('is closed until it is opened, and then names both sides of a move', async () => {
+			await setup();
+
+			const disclosures = testPage.getByText('Work state history');
+			await expect.element(disclosures.first()).toBeVisible();
+			// Nothing is fetched until she asks for it: the roster read is
+			// the only request so far.
+			expect(
+				apiFetchWithSession.mock.calls.filter((call: unknown[]) =>
+					String(call[0]).includes('/work-state-history')
+				)
+			).toHaveLength(0);
+
+			await disclosures.first().click();
+
+			await expect
+				.element(testPage.getByText('Changed from New York to New Jersey'))
+				.toBeVisible();
+		});
+
+		// A first assertion has no previous value (migration 00043 leaves it
+		// NULL), and printing it as a change would invent one she never made.
+		it('prints a first assertion as a report, not as a change', async () => {
+			await setup();
+
+			await testPage.getByText('Work state history').first().click();
+
+			await expect.element(testPage.getByText('Reported New York')).toBeVisible();
+		});
+
+		// A contractor doula who asserted her work state at another Practice
+		// carries that row into this one, and the screen must not read as
+		// though she said it here.
+		it('marks an assertion made before she joined this practice', async () => {
+			await setup();
+
+			await testPage.getByText('Work state history').nth(1).click();
+
+			await expect.element(testPage.getByText('Reported California')).toBeVisible();
+			await expect.element(testPage.getByText('(before joining this practice)')).toBeVisible();
+		});
+
+		it('shows a per-row error notice when the history fails to load', async () => {
+			await setup({ historyResponse: textResponse('Failed to load work state history') });
+
+			await testPage.getByText('Work state history').first().click();
+
+			await expect.element(testPage.getByText('Failed to load work state history')).toBeVisible();
+		});
 	});
 });

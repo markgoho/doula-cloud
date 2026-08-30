@@ -77,6 +77,28 @@ one. An audit trail whose only surviving form is *"2 hours ago"* is not an audit
 place where the ledger's two jobs — being readable and being evidence — actually conflict, and both are
 served rather than one traded for the other.
 
+## The fourth event table, and why it stays
+
+`staff_work_state_events` (`00043`) is the same shape again — append-only, `GRANT SELECT, INSERT` and no
+`UPDATE` or `DELETE`, a subject, a previous and a next value, an actor and a timestamp — and it does
+**not** fold in. It is not an oversight, and it is not a preference: `activity` cannot hold its rows.
+
+`activity.practice_id` is `NOT NULL`, and the one policy above gates `INSERT` as well as `SELECT`. A work
+state is a fact about a *person*, not about a Membership — `00043` argues that at length, and it is why
+that table carries no `practice_id` — and its only writer, `PUT /api/staff/work-state`, is mounted
+**outside** the Practice-scoped middleware on purpose, so `app.current_practice_id` is unset while it
+runs. An `INSERT` into `activity` from there is refused by its own policy.
+
+The two ways out are both worse than the fourth table. Making `practice_id` nullable removes the single
+comparison the whole table's isolation rests on. Writing one row per Membership makes a contractor doula
+on three rosters assert three times, and gives a Practice that hires her *next* year no history at all,
+because the fan-out happened before it existed.
+
+So the rule this ADR sets is about Practice-scoped history, which is all the history the product had
+when it was written. A fact about a person, visible to every Practice that person works for, is a
+different subject, and `00043`'s own `EXISTS` policy is what scopes it. Recorded on
+[#459](https://github.com/markgoho/doula-cloud/issues/459), which built that table's first reader.
+
 ## Considered and rejected
 
 - **A third `engagement_events` table.** Rejected above: cheaper now, five tables by January, and no

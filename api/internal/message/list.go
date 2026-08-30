@@ -3,15 +3,14 @@ package message
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -210,26 +209,18 @@ type messageCursor struct {
 }
 
 // encodeCursor packs a cursor as opaque base64 so callers never construct
-// one by hand.
+// one by hand. The packing is pagecursor's, shared with offer and
+// payments.
 func encodeCursor(createdAt time.Time, messageID string) string {
-	raw := createdAt.Format(time.RFC3339Nano) + "|" + messageID
-	return base64.URLEncoding.EncodeToString([]byte(raw))
+	return pagecursor.Encode(createdAt, messageID)
 }
 
 // decodeCursor reverses encodeCursor, rejecting anything malformed rather
 // than letting a bad cursor silently return the wrong page.
 func decodeCursor(s string) (messageCursor, error) {
-	raw, err := base64.URLEncoding.DecodeString(s)
+	c, err := pagecursor.Decode(s)
 	if err != nil {
 		return messageCursor{}, fmt.Errorf("message: decode cursor: %w", err)
 	}
-	parts := strings.SplitN(string(raw), "|", 2)
-	if len(parts) != 2 {
-		return messageCursor{}, errors.New("message: malformed cursor")
-	}
-	createdAt, err := time.Parse(time.RFC3339Nano, parts[0])
-	if err != nil {
-		return messageCursor{}, fmt.Errorf("message: parse cursor timestamp: %w", err)
-	}
-	return messageCursor{createdAt: createdAt, messageID: parts[1]}, nil
+	return messageCursor{createdAt: c.At, messageID: c.ID}, nil
 }

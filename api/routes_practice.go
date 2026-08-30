@@ -97,6 +97,11 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	// Admin only (ADR-0008's read table) -- a Doula has no reason to see
 	// the full roster.
 	g.Get("/api/practices/{practiceId}/staff", ownerAndAdmin, staffauth.ListStaffHandler())
+	// The history behind one roster row's "Works from" value (#459). Same
+	// gate as the roster it hangs off, and the same rows 00043's existing
+	// policy already admits -- a reader, not a widening.
+	g.Get("/api/practices/{practiceId}/staff/{staffId}/work-state-history",
+		ownerAndAdmin, staffauth.ListWorkStateHistoryHandler())
 	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
 		"EndAllSessions ends whatever remains and no-ops once already ended, and QueueSessionRevoked's own ON CONFLICT ... WHERE status = 'pending' DO NOTHING dedupes the notification; a retry can't double-notify",
 		staffauth.Middleware(d.DB)(staffauth.EndSessionsHandler(d.NudgeEnqueuer)))

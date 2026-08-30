@@ -3,16 +3,15 @@ package payments
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -429,27 +428,19 @@ type invoiceCursor struct {
 }
 
 // encodeInvoiceCursor packs a cursor as opaque base64 so callers never
-// construct one by hand -- mirrors message.encodeCursor.
+// construct one by hand. The packing is pagecursor's, shared with offer
+// and message.
 func encodeInvoiceCursor(createdAt time.Time, invoiceID string) string {
-	raw := createdAt.Format(time.RFC3339Nano) + "|" + invoiceID
-	return base64.URLEncoding.EncodeToString([]byte(raw))
+	return pagecursor.Encode(createdAt, invoiceID)
 }
 
 // decodeInvoiceCursor reverses encodeInvoiceCursor, rejecting anything
 // malformed rather than letting a bad cursor silently return the wrong
-// page -- mirrors message.decodeCursor.
+// page.
 func decodeInvoiceCursor(s string) (invoiceCursor, error) {
-	raw, err := base64.URLEncoding.DecodeString(s)
+	c, err := pagecursor.Decode(s)
 	if err != nil {
 		return invoiceCursor{}, fmt.Errorf("payments: decode invoice cursor: %w", err)
 	}
-	parts := strings.SplitN(string(raw), "|", 2)
-	if len(parts) != 2 {
-		return invoiceCursor{}, errors.New("payments: malformed invoice cursor")
-	}
-	createdAt, err := time.Parse(time.RFC3339Nano, parts[0])
-	if err != nil {
-		return invoiceCursor{}, fmt.Errorf("payments: parse invoice cursor timestamp: %w", err)
-	}
-	return invoiceCursor{createdAt: createdAt, invoiceID: parts[1]}, nil
+	return invoiceCursor{createdAt: c.At, invoiceID: c.ID}, nil
 }

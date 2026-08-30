@@ -18,15 +18,13 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
-	"strings"
 	"time"
 
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -138,28 +136,23 @@ type cursor struct {
 	offerID   string
 }
 
-// encodeCursor renders a cursor for the wire, mirroring
-// payments.encodeInvoiceCursor.
+// encodeCursor renders a cursor for the wire. The packing itself is
+// pagecursor's, shared with message and payments, which had written the
+// same thirty lines three times over.
 func encodeCursor(offeredAt time.Time, offerID string) string {
-	return base64.URLEncoding.EncodeToString([]byte(offeredAt.Format(time.RFC3339Nano) + "|" + offerID))
+	return pagecursor.Encode(offeredAt, offerID)
 }
 
 // decodeCursor reverses encodeCursor, rejecting anything malformed
-// rather than letting a bad cursor silently return the wrong page.
+// rather than letting a bad cursor silently return the wrong page. It
+// names this package's own two fields, which is all that is left here
+// once the packing moved: offered_at is what the Offer list sorts on.
 func decodeCursor(s string) (cursor, error) {
-	raw, err := base64.URLEncoding.DecodeString(s)
+	c, err := pagecursor.Decode(s)
 	if err != nil {
 		return cursor{}, fmt.Errorf("offer: decode cursor: %w", err)
 	}
-	parts := strings.SplitN(string(raw), "|", 2)
-	if len(parts) != 2 {
-		return cursor{}, errors.New("offer: malformed cursor")
-	}
-	offeredAt, err := time.Parse(time.RFC3339Nano, parts[0])
-	if err != nil {
-		return cursor{}, fmt.Errorf("offer: parse cursor timestamp: %w", err)
-	}
-	return cursor{offeredAt: offeredAt, offerID: parts[1]}, nil
+	return cursor{offeredAt: c.At, offerID: c.ID}, nil
 }
 
 // writeJSON encodes a 200 response body, the one shape every handler in

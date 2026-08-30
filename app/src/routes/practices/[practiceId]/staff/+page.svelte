@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -51,6 +52,33 @@
 	let editEmploymentType = $state<'employee' | 'contractor'>('employee');
 	let isSavingEdit = $state(false);
 	let editError = $state('');
+
+	// The history behind one member's "Works from" value (#459). Fetched
+	// when its disclosure is opened, never with the roster: the roster is
+	// one row per person and would otherwise grow with every correction
+	// anybody has ever made, which is the one thing this screen must not
+	// do.
+	type WorkStateChange = {
+		eventId: string;
+		previousWorkState?: string;
+		workState: string;
+		createdAt: string;
+	};
+	type WorkStateHistory = {
+		memberSince: string;
+		items: WorkStateChange[];
+		nextCursor?: string;
+		hasMore: boolean;
+	};
+
+	let histories = $state<Record<string, WorkStateHistory>>({});
+	// Who has been asked for already: it stops a second open from asking
+	// again, because an append-only trail that was right a second ago is
+	// still right. Nothing renders it, but it is a SvelteSet because the
+	// repo's lint rule admits no unreactive Set.
+	const requestedHistories = new SvelteSet<string>();
+	let historyLoading = $state<Record<string, boolean>>({});
+	let historyError = $state<Record<string, string>>({});
 
 	let revokingInvitationId = $state('');
 	let revokeError = $state<Record<string, string>>({});
@@ -106,6 +134,66 @@
 	}
 
 	onMount(loadRoster);
+
+	// One page of a member's work state history, appended to whatever is
+	// already on screen. cursor is undefined for the first page.
+	async function loadWorkStateHistory(staffId: string, cursor?: string) {
+		historyError[staffId] = '';
+		historyLoading[staffId] = true;
+		try {
+			const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+			const response = await apiFetchWithSession(
+				`/api/practices/${page.params.practiceId}/staff/${staffId}/work-state-history${query}`
+			);
+			if (!response.ok) {
+				historyError[staffId] = await response.text();
+				return;
+			}
+			const loaded: WorkStateHistory = await response.json();
+			const existing = cursor ? (histories[staffId]?.items ?? []) : [];
+			histories[staffId] = { ...loaded, items: [...existing, ...loaded.items] };
+		} catch (error_) {
+			historyError[staffId] =
+				error_ instanceof Error ? error_.message : 'Failed to load work state history';
+		} finally {
+			historyLoading[staffId] = false;
+		}
+	}
+
+	// Opening the disclosure is what asks for the history; closing and
+	// reopening does not ask again, because an append-only trail that was
+	// correct a second ago is still correct.
+	function handleHistoryToggle(staffId: string, isOpen: boolean) {
+		if (!isOpen || requestedHistories.has(staffId)) {
+			return;
+		}
+		requestedHistories.add(staffId);
+		void loadWorkStateHistory(staffId);
+	}
+
+	// What one entry says. A first assertion (no previous value, migration
+	// 00043 leaves it NULL) and a move are different sentences, not the
+	// same sentence with a blank in it: printing "changed from — to New
+	// York" for somebody's onboarding would invent a change she never
+	// made.
+	//
+	// Neither sentence names this Practice. Only the person herself may
+	// write a work state, and 00043's table records no Practice at all, so
+	// an entry says what she reported and never that she reported it here
+	// -- which for a contractor doula carrying an assertion in from
+	// another Practice would be untrue.
+	function workStateChangeSentence(change: WorkStateChange): string {
+		return change.previousWorkState
+			? `Changed from ${workStateName(change.previousWorkState)} to ${workStateName(change.workState)}`
+			: `Reported ${workStateName(change.workState)}`;
+	}
+
+	// An entry older than the Membership was made somewhere else, before
+	// this Practice had her. Saying so is the whole of #459's "must not
+	// read as she told us this here".
+	function isBeforeJoining(change: WorkStateChange, memberSince: string): boolean {
+		return new Date(change.createdAt) < new Date(memberSince);
+	}
 
 	// Offboarding or a lost device: ends every session that Staff member
 	// holds, on every device, at once -- not the same thing as sign-out,
@@ -211,6 +299,51 @@
 </script>
 
 {#snippet memberActions(member: StaffSummary)}
+	<!--
+		The history behind the "Works from" value on this row (#459). The
+		column shows the current state and the day it was asserted, which
+		answers "how did this get set?" only while the value has never
+		moved; once it has, the earlier assertion -- the one every Credit
+		purchase before that date was apportioned on -- had nowhere to be
+		read.
+
+		A native <details>, so opening and closing costs no JavaScript and
+		the keyboard and screen-reader behaviour is the browser's own
+		(GOV.UK's Details pattern, ADR-0021). The only script here is the
+		fetch the first open triggers.
+	-->
+	{@const history = histories[member.staffId]}
+	<details ontoggle={(event) => handleHistoryToggle(member.staffId, event.currentTarget.open)}>
+		<summary>Work state history</summary>
+		{#if historyError[member.staffId]}
+			<Notice variant="error" message={historyError[member.staffId]} />
+		{:else if !history}
+			<Text text="Loading..." />
+		{:else if history.items.length === 0}
+			<Text text="Nothing recorded." />
+		{:else}
+			<ol>
+				{#each history.items as change (change.eventId)}
+					<li>
+						{workStateChangeSentence(change)} &mdash;
+						<time datetime={change.createdAt}>{workStateReportedOn(change.createdAt)}</time>
+						{#if isBeforeJoining(change, history.memberSince)}
+							<span class="elsewhere">(before joining this practice)</span>
+						{/if}
+					</li>
+				{/each}
+			</ol>
+			{#if history.hasMore}
+				<Button
+					label="Show older changes"
+					variant="secondary"
+					size="sm"
+					loading={historyLoading[member.staffId]}
+					onClick={() => loadWorkStateHistory(member.staffId, history.nextCursor)}
+				/>
+			{/if}
+		{/if}
+	</details>
 	{#if editingStaffId === member.staffId}
 		<form onsubmit={handleSaveMembership}>
 			<MembershipFields
@@ -329,3 +462,33 @@
 		/>
 	{/if}
 {/if}
+
+<style>
+	@layer components {
+		/* A dated list of assertions, not a bulleted aside: the order is the
+		   history, so it is an <ol> with its markers off and the dates doing
+		   the numbering's job. */
+		ol {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+			font-size: var(--text-body-sm-size);
+			line-height: var(--text-body-sm-leading);
+		}
+
+		li {
+			padding-block: var(--space-1);
+		}
+
+		summary {
+			font-size: var(--text-body-sm-size);
+			cursor: pointer;
+		}
+
+		/* Quieter than the assertion it qualifies -- it is a caveat about
+		   where the row came from, not part of what she said. */
+		.elsewhere {
+			color: var(--color-on-surface-muted);
+		}
+	}
+</style>
