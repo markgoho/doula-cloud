@@ -302,13 +302,26 @@ Doula Cloud takes **no per-transaction cut**: there is no
 `ApplicationFeeAmount` anywhere. Practices pay for credits in a separate
 transaction, which is what surface A is.
 
-### One credit costs $5.00
+### One credit costs $20.00
 
-Sandbox Price, USD, one-time. One credit is one Engagement, which is
-one birth; the first three per Practice are free forever (#45). $5 is a
-deliberate pilot number: low enough that a 14-doula agency can try the
-platform without a procurement conversation, and a real amount rather
-than a `$1` placeholder nobody could show a customer.
+Sandbox Price, USD, one-time. One credit is one Engagement, which is one
+birth. $20.00 was settled on #439 against a $500–$2,000 birth engagement:
+4% at the bottom of that range and 1% at the top, and about $30 a month
+for a doula carrying roughly 1.5 births a month, which is ordinary
+practice-management pricing. A joining Practice is granted three Credits
+for each Staff member it has on the day it joins, so nobody rides the
+whole pilot free and nobody hits a wall in week one.
+
+**The Price object is the only authority for that number.** Nothing the
+software reads holds a second copy: `STRIPE_CREDIT_PRICE_ID` carries an
+id, not an amount, and the BFF reads the unit amount back off the Price
+at purchase time (`0d492c8`) because an apportioned Session has to state
+cent amounts itself. Stripe cannot edit `unit_amount` on an existing
+Price, so changing the price means a new Price on the same Product, the
+old one archived, and this variable moved everywhere it is set. #448 did
+exactly that: `price_1U7NKZ…` at $5.00 is archived, `price_1U9yTw…` at
+$20.00 replaced it. A replacement must carry `tax_behavior: exclusive`,
+or `automatic_tax` refuses to compute at all.
 
 ### No PHI reaches Stripe
 
