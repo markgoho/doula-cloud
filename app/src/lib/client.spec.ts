@@ -49,25 +49,54 @@ describe('loadClients', () => {
 	});
 });
 
-describe('createClient', () => {
-	it('posts the given name and email to the practice clients path', async () => {
-		const fetcher = vi.fn().mockResolvedValue(response({ id: 'client-1' }));
+const createFields = {
+	givenName: 'Ada',
+	familyName: 'Lovelace',
+	preferredName: '',
+	email: 'ada@example.com',
+	phone: '',
+	dateOfBirth: ''
+};
 
-		await createClient(fetcher, 'practice-1', { givenName: 'Ada', email: 'ada@example.com' });
+describe('createClient', () => {
+	it('posts the typed fields and override flag to the practice clients path', async () => {
+		const saved = { id: 'client-1', ...createFields, addressLine1: '', addressLine2: '', addressLocality: '', addressRegion: '', addressPostalCode: '' };
+		const fetcher = vi.fn().mockResolvedValue(response(saved));
+
+		const result = await createClient(fetcher, 'practice-1', createFields, false);
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ givenName: 'Ada', email: 'ada@example.com' })
+			body: JSON.stringify({ ...createFields, override: false })
 		});
+		expect(result).toEqual({ conflict: false, record: saved });
 	});
 
-	it('throws with the response body text on a non-ok response', async () => {
+	it('sends override: true when told to', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ id: 'client-1', ...createFields }));
+
+		await createClient(fetcher, 'practice-1', createFields, true);
+
+		const body: { override: boolean } = JSON.parse(fetcher.mock.calls[0][1].body as string);
+		expect(body.override).toBe(true);
+	});
+
+	it('decodes a 409 into a named conflict rather than throwing', async () => {
+		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [] }];
+		const fetcher = vi.fn().mockResolvedValue(response({ matches }, 409));
+
+		const result = await createClient(fetcher, 'practice-1', createFields, false);
+
+		expect(result).toEqual({ conflict: true, matches });
+	});
+
+	it('throws with the response body text on a non-conflict, non-ok response', async () => {
 		const fetcher = vi.fn().mockResolvedValue(response('givenName is required', 400));
 
-		await expect(createClient(fetcher, 'practice-1', { givenName: '', email: '' })).rejects.toThrow(
-			'givenName is required'
-		);
+		await expect(
+			createClient(fetcher, 'practice-1', { ...createFields, givenName: '' }, false)
+		).rejects.toThrow('givenName is required');
 	});
 });
 

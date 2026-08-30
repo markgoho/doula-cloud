@@ -180,7 +180,7 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 			key: 'practices/[practiceId]/clients/new',
 			archetype: 'E',
 			url: `/practices/${practiceId}/clients/new`,
-			h1: 'Add a Client'
+			h1: "What is the Client's name?"
 		},
 		{
 			key: 'practices/[practiceId]/invite',

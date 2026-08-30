@@ -26,13 +26,6 @@ export interface ClientListPage {
 	hasMore: boolean;
 }
 
-/** The body of an Add-a-Client submission -- the two fields the screen
- * collects today; GivenName is the only fact ADR-0017 requires. */
-export interface NewClient {
-	givenName: string;
-	email: string;
-}
-
 /** A minimal fetch-shaped function, injected rather than imported -- see
  * invoice.ts's Fetcher for why. */
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
@@ -59,20 +52,66 @@ export async function loadClients(
 	return response.json();
 }
 
-/** Creates a free-standing Client: no Engagement, no Credit spent.
- * Throws with the response body text on a non-2xx response -- e.g. a
- * contractor Doula's refusal, or ADR-0017's possible-duplicate match
- * conflict, whose JSON body this does not decode into anything more than
- * its raw text (the screen has no override flow yet to act on it). */
-export async function createClient(fetcher: Fetcher, practiceId: string, client: NewClient): Promise<void> {
+/** One Client ADR-0017's match query turned up against a create or an
+ * edit's values -- her record plus her Engagement history, unrestricted
+ * inside the Practice -- mirrors the Go BFF's client.Match. Declared
+ * before `ClientCreateFields`/`ClientEditFields` since both result types
+ * below reference it. */
+export interface ClientMatch extends ClientRecord {
+	engagements: EngagementSummary[];
+}
+
+/** The fields intake collects, across its three pages -- the four match
+ * keys plus the two name columns that ride along with the given name
+ * (ADR-0017: the name splits into three, only `givenName` required). No
+ * address and no `fieldValues`: intake never asks for either, and
+ * CreateHandler's `normalizeAndValidate` defaults an omitted
+ * `fieldValues` to `{}` server-side, so leaving it off the wire is the
+ * correct empty rather than a wipe. */
+export interface ClientCreateFields {
+	givenName: string;
+	familyName: string;
+	preferredName: string;
+	email: string;
+	phone: string;
+	dateOfBirth: string;
+}
+
+/** The outcome of a create attempt: either it went through, or the match
+ * query refused it and named who it matched -- the same discriminated
+ * union `editClient` returns, and for the same reason: a conflict is an
+ * expected outcome intake has a real next step for (the save-time
+ * prompt), not a failure. */
+export type CreateClientResult =
+	| { conflict: false; record: ClientRecord }
+	| { conflict: true; matches: ClientMatch[] };
+
+/** Saves a free-standing Client: no Engagement, no Credit spent
+ * (api/internal/client/create.go). `shouldOverride`, when true, is
+ * ADR-0017's "No, a different person" -- send it only after the caller
+ * has shown the reader the match a prior call returned and she chose to
+ * proceed anyway. A 409 decodes into `{ conflict: true, matches }` rather
+ * than throwing, mirroring `editClient`. Any other non-2xx response
+ * throws with the response body text. */
+export async function createClient(
+	fetcher: Fetcher,
+	practiceId: string,
+	fields: ClientCreateFields,
+	shouldOverride: boolean
+): Promise<CreateClientResult> {
 	const response = await fetcher(clientsPath(practiceId), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(client)
+		body: JSON.stringify({ ...fields, override: shouldOverride })
 	});
+	if (response.status === 409) {
+		const body: { matches: ClientMatch[] } = await response.json();
+		return { conflict: true, matches: body.matches };
+	}
 	if (!response.ok) {
 		throw new Error(await response.text());
 	}
+	return { conflict: false, record: await response.json() };
 }
 
 /** The full structural core an edit submits -- every column but `id`,
@@ -80,13 +119,6 @@ export async function createClient(fetcher: Fetcher, practiceId: string, client:
  * `fieldValues` so a save round-trips her Practice-defined values
  * unchanged rather than wiping them (see ClientRecord.fieldValues). */
 export type ClientEditFields = Omit<ClientRecord, 'id'>;
-
-/** One Client ADR-0017's match query turned up against an edit's values --
- * her record plus her Engagement history, unrestricted inside the
- * Practice -- mirrors the Go BFF's client.Match. */
-export interface ClientMatch extends ClientRecord {
-	engagements: EngagementSummary[];
-}
 
 /** The outcome of a save attempt: either it went through, or the match
  * query refused it and named who it matched. A discriminated union
