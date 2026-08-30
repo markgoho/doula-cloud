@@ -50,8 +50,42 @@ discovered: frame rate, the 100ms and 400ms latency budgets, route-level
 Cumulative Layout Shift, and the blank first frame an SPA paints before its
 JavaScript boots. Scroll feel is a human check on a real display when a
 ticket touches a list. Focus visibility and keyboard reachability belong to
-accessibility ([#447](https://github.com/markgoho/doula-cloud/issues/447)),
-not to this gate, so nothing is asserted twice under two names.
+accessibility — the next section is what that sentence points at — not to
+this gate, so nothing is asserted twice under two names.
+
+## Accessibility: axe on every archetype, and a keyboard walk beside it
+
+Two e2e specs carry it, both blocking, both in the Playwright suite rather than the unit one — they need the real production build the suite already starts (`bun run build && bun run preview`), so a scan sees what a person sees rather than what a component renders in isolation.
+
+### `app/e2e/accessibility.e2e.ts` — the automated half
+
+`@axe-core/playwright` scans twenty routes, one per screen in the A–G layout-archetype table on [#405](https://github.com/markgoho/doula-cloud/issues/405). The route inventory is in the spec itself, typed and grouped by archetype; that table *is* the documented set, so adding a route means adding a row rather than remembering a convention. Three tests, one per session the routes need — signed out, Staff, Client portal — because signup and login cost the same four seconds however many routes follow them.
+
+The ruleset is `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`: WCAG 2.2 AA, the bar GDS holds its own services to, and this repo already takes the GOV.UK Design System as its reference for service patterns ([ADR-0021](adr/0021-govuk-is-the-reference-for-service-patterns.md)). axe's `best-practice` tag is deliberately off — those are opinions, not conformance failures, and a gate that blocks on an opinion is a gate people learn to route around. Light theme only, following the same scope call the design map made: dark is derived later and rendering both would double the run for nothing.
+
+Every route waits on its own `<h1>` before axe runs. This matters more than it looks: the app is a client-rendered SPA, `goto` resolves long before the data lands, and axe against a half-painted page finds a different set of violations every time — which CI's `retries: 2` would then quietly launder into green, the exact failure mode [ADR-0020](adr/0020-smoothness-is-gated-on-causes-because-the-outcome-is-not-measurable-where-the-gate-lives.md) documents.
+
+**A violation fails the build.** It was a real choice, and the argument against it is in [#447](https://github.com/markgoho/doula-cloud/issues/447): a first adoption against twenty unaudited routes will be red on day one, and a red check people learn to ignore is worse than no check. What settles it is that the ticket also required every violation the first run surfaced to be fixed or filed — so day one is green, and red afterwards means a regression somebody just introduced, not a backlog. `CLAUDE.md` carries accessibility as a standing expectation on every feature; a check that only reports does not enforce an expectation.
+
+What is filed rather than fixed lives in the spec's `KNOWN` list, one entry per allowance, each naming the issue that owns it. The list is **self-emptying**, the same shape as `DataTable.usage.spec.ts`'s pagination waiting list: an entry whose rule no longer fires on that route fails the scan until it is narrowed or deleted, so finishing the work is what removes it and a partial fix says so out loud. One entry stands today — `document-title`, keyed `'*'` because no route in the application sets a `<title>` at all ([#487](https://github.com/markgoho/doula-cloud/issues/487)).
+
+Routes deliberately not scanned, so the gap is a decision rather than an oversight: `style-guide/*` (component demos, not archetypes — sixty pages for no additional archetype coverage), `demo/*` (SvelteKit scaffolding), and `/` and `/account`, which render with no shell at all and are already filed as [#484](https://github.com/markgoho/doula-cloud/issues/484).
+
+### `app/e2e/keyboard.e2e.ts` — the half axe cannot see
+
+axe reads one rendered page. It can tell you a control has an accessible name; it cannot tell you the control is reachable, reachable in a sane order, or that pressing Enter on it does what clicking it does. So one persona journey is walked with `page.keyboard` and nothing else — no `.click()`, no `.fill()`, no `.focus()`. `.fill()` is banned there specifically: it sets a value without the field ever being focused, which is the one step a keyboard user cannot skip.
+
+The walk is Stages 1 and 2 of [`docs/journeys/practice-owner.md`](journeys/practice-owner.md) — Renata signs in and invites a Doula — chosen because one task crosses the signed-out shell, the Staff shell's nav, a record list and a form that writes. Order is asserted only where order is a real obligation: the skip link is the first stop, and the password field follows the email. Everything else is asserted as *reachable within a budget of Tab presses*, because freezing the exact count would turn every nav change into a failing test for no accessibility reason.
+
+### What this owns, and what it does not
+
+Focus visibility and keyboard reachability are asserted **here and nowhere else** — the smoothness gate above hands its requirements 4 and 5 to these two specs on purpose, so do not add a second focus or keyboard assertion under another name.
+
+Three things are outside both specs, and each has somewhere else to be met:
+
+- **`:focus-visible` rendering.** Neither spec can honestly read whether a focus ring is *perceptible*. axe checks that a focus style is not suppressed; it cannot judge contrast against whatever is behind it. That is a human check on a real display, and the token floors it depends on are proved in `app/src/lib/styles/tokens.spec.ts`.
+- **Focus return.** Whether closing a dialog puts focus back on the control that opened it is a sequence, not a snapshot, and axe never sees it. The shell's own menus and its narrow-viewport sheet get this from the platform — they are a native `popover` and a `<dialog>` opened with `showModal()`, and the browser owns the top layer, light dismiss, Escape and the focus return. **Anything hand-rolled does not, and the obligation lands on the first `Dialog` component ([#473](https://github.com/markgoho/doula-cloud/issues/473)): its own spec must assert that dismissing it returns focus to the trigger.** Prefer the platform element, and inherit the behaviour instead of testing for it.
+- **Assistive-technology output.** No automated check hears what a screen reader says. axe covers roughly a third of WCAG by rule count; a passing scan is a floor, not a pass.
 
 ## `api/`: lint with golangci-lint, matching CI exactly
 

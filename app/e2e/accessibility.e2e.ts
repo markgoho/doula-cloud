@@ -1,0 +1,277 @@
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type Page } from '@playwright/test';
+import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { seedPortalClient, PORTAL_CLIENT_PASSWORD } from './portalClient';
+
+const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+
+/**
+ * The automated half of the accessibility gate (#447). Everything about
+ * why this exists, what it owns, and what it deliberately cannot see is
+ * in docs/testing.md -- read that before adding an assertion here.
+ */
+
+// WCAG 2.2 AA, which is the bar GDS holds its own services to, and this
+// repo has already adopted the GOV.UK Design System as its reference for
+// service patterns (ADR-0021) -- so the level is pre-argued rather than
+// picked here. axe's `best-practice` tag is deliberately off: those are
+// opinions, not conformance failures, and a gate that blocks on an
+// opinion is a gate people learn to route around.
+const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+
+/*
+ * Not scanned, and each is a decision rather than an oversight:
+ *
+ * - `style-guide/*` -- sixty-odd component demo pages. They are not
+ *   archetype routes, and scanning them would roughly triple the run for
+ *   no additional archetype coverage. Every component on them is already
+ *   scanned in the place a person meets it.
+ * - `demo/*` -- SvelteKit's own scaffolding, not a screen in the product.
+ * - `/` and `/account` -- both sit outside every route group that carries
+ *   chrome, so they render with no shell, no `<main>` and no skip link at
+ *   all. Filed as #484; scanning them here would only re-find it.
+ */
+
+/**
+ * One route to scan. `key` is the stable name a KNOWN entry points at --
+ * the route pattern, not the provisioned URL, so an allowance survives a
+ * new fixture. `h1` is the ready signal: this is a client-rendered SPA,
+ * so `goto` resolves long before the data lands, and axe run against a
+ * half-loaded page finds a different set of violations every time --
+ * which CI's `retries: 2` would then quietly launder into green.
+ */
+interface Route {
+	key: string;
+	archetype: string;
+	url: string;
+	h1: string | RegExp;
+}
+
+/**
+ * A violation that is real, filed, and not fixed here. Every entry names
+ * the issue that owns it, so nothing is left as prose. The list is
+ * self-emptying: an entry whose rule no longer fires on that route fails
+ * the scan, exactly like DataTable.usage.spec.ts's pagination list.
+ */
+interface Known {
+	/**
+	 * A Route's `key`, or `'*'` for a violation every route carries.
+	 */
+	key: string;
+	ruleId: string;
+	issue: number;
+	reason: string;
+}
+
+const KNOWN: Known[] = [
+	{
+		key: '*',
+		ruleId: 'document-title',
+		issue: 487,
+		reason:
+			'No route in the application sets a <title> at all -- app.html has none and the root layout writes only the favicon link. What the title says, and whether a Template or the route owns it, is a decision (#487), not a mechanical fix.'
+	}
+];
+
+async function scan(page: Page, route: Route) {
+	await page.goto(route.url);
+	await expect(
+		page.getByRole('heading', { level: 1, name: route.h1 }),
+		`${route.key} never finished loading -- axe would have scanned a skeleton`
+	).toBeVisible();
+
+	const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+
+	const found = new Set(violations.map((violation) => violation.id));
+	const allowed = KNOWN.filter((k) => k.key === route.key || k.key === '*').map((k) => k.ruleId);
+
+	const unexpected = violations.filter((v) => !allowed.includes(v.id));
+	expect(
+		unexpected.map(
+			(v) => `${v.id} (${v.impact}) on ${v.nodes.length}: ${v.nodes[0]?.target.join(' ')} -- ${v.help}`
+		),
+		`accessibility violations on ${route.key} (archetype ${route.archetype}, ${route.url})`
+	).toEqual([]);
+
+	const stale = allowed.filter((ruleId) => !found.has(ruleId));
+	expect(
+		stale,
+		`${route.key} no longer breaks these rules -- narrow or delete their KNOWN entries`
+	).toEqual([]);
+}
+
+// Archetype A, and the only batch that needs no fixtures at all: every
+// one of these is what a person meets before there is an account. The
+// two token-bearing screens are scanned in their no-token entry state,
+// which is the state a person actually arrives in when the link is
+// stale -- the form is the page.
+test('Archetype A -- the screens a person meets signed out', async ({ page }) => {
+	const routes: Route[] = [
+		{ key: 'login', archetype: 'A', url: '/login', h1: 'Log in' },
+		{ key: 'signup', archetype: 'A', url: '/signup', h1: 'Sign up your Practice' },
+		{
+			key: 'accept-invite',
+			archetype: 'A',
+			url: '/accept-invite',
+			h1: 'Accept your Staff invite'
+		},
+		{
+			key: 'offers/[offerId]',
+			archetype: 'A',
+			url: '/offers/00000000-0000-0000-0000-000000000000',
+			h1: 'An offer of work'
+		},
+		{ key: 'portal/login', archetype: 'A', url: '/portal/login', h1: 'Log in' }
+	];
+
+	for (const route of routes) {
+		await scan(page, route);
+	}
+});
+
+// Archetypes B, C, D, E and F, all behind one Staff session. Provisioned
+// once and looped rather than a test per route: signup + login is ~4s of
+// the same work every time, and none of these scans depends on any other
+// having run.
+test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => {
+	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+	const { practiceId, engagementId } = seeded;
+
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(seeded.staffEmail);
+	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
+	await page.getByRole('button', { name: 'Log in' }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+
+	const routes: Route[] = [
+		{
+			key: 'practices/[practiceId]',
+			archetype: 'B',
+			url: `/practices/${practiceId}`,
+			h1: 'Welcome to Riverside Doulas'
+		},
+		{
+			key: 'practices/[practiceId]/clients',
+			archetype: 'C',
+			url: `/practices/${practiceId}/clients`,
+			h1: 'Clients'
+		},
+		{
+			key: 'practices/[practiceId]/billing',
+			archetype: 'C',
+			url: `/practices/${practiceId}/billing`,
+			h1: 'Billing'
+		},
+		{
+			key: 'practices/[practiceId]/staff',
+			archetype: 'C',
+			url: `/practices/${practiceId}/staff`,
+			h1: 'Staff'
+		},
+		{
+			key: 'practices/[practiceId]/offers',
+			archetype: 'C',
+			url: `/practices/${practiceId}/offers`,
+			h1: 'Your offers'
+		},
+		{
+			key: 'practices/[practiceId]/engagements/[engagementId]',
+			archetype: 'D',
+			url: `/practices/${practiceId}/engagements/${engagementId}`,
+			h1: 'Pat'
+		},
+		{
+			key: 'practices/[practiceId]/clients/new',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/new`,
+			h1: 'Add a Client'
+		},
+		{
+			key: 'practices/[practiceId]/invite',
+			archetype: 'E',
+			url: `/practices/${practiceId}/invite`,
+			h1: 'Invite a Staff member'
+		},
+		{
+			key: 'practices/[practiceId]/settings',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings`,
+			h1: 'Settings'
+		},
+		{
+			key: 'practices/[practiceId]/settings/payments',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/payments`,
+			h1: 'Payments'
+		},
+		{
+			key: 'practices/[practiceId]/settings/contract-template',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/contract-template`,
+			h1: 'Contract Template'
+		},
+		{
+			key: 'practices/[practiceId]/settings/plan-templates',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/plan-templates`,
+			h1: 'Plan Templates'
+		}
+	];
+
+	for (const route of routes) {
+		await scan(page, route);
+	}
+});
+
+// Archetypes D and G, behind a Client-portal session. Both G routes
+// render nothing but a "none yet" line until the record exists, so the
+// Birth Plan and the Contract are provisioned through the API first --
+// scanning the empty state would prove nothing about the document view,
+// which is the whole point of archetype G.
+test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
+	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+	const { practiceId, engagementId, staffHeaders } = seeded;
+	const engagementURL = `${API_URL}/api/practices/${practiceId}/engagements/${engagementId}`;
+
+	const plan = await request.post(`${engagementURL}/plans/birth_plan`, { headers: staffHeaders });
+	expect(plan.ok(), `create birth plan failed: ${plan.status()} ${await plan.text()}`).toBe(true);
+
+	const contract = await request.post(`${engagementURL}/contract`, { headers: staffHeaders });
+	expect(
+		contract.ok(),
+		`create contract failed: ${contract.status()} ${await contract.text()}`
+	).toBe(true);
+	const sent = await request.post(`${engagementURL}/contract/send`, { headers: staffHeaders });
+	expect(sent.ok(), `send contract failed: ${sent.status()} ${await sent.text()}`).toBe(true);
+
+	await page.goto('/portal/login');
+	await page.getByLabel('Email').fill(seeded.clientEmail);
+	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
+	await page.getByRole('button', { name: 'Log in' }).click();
+	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
+
+	const routes: Route[] = [
+		{
+			key: 'portal/engagements/[engagementId]',
+			archetype: 'D',
+			url: `/portal/engagements/${engagementId}`,
+			h1: 'Welcome to Riverside Doulas'
+		},
+		{
+			key: 'portal/engagements/[engagementId]/birth-plan',
+			archetype: 'G',
+			url: `/portal/engagements/${engagementId}/birth-plan`,
+			h1: 'Birth Plan'
+		},
+		{
+			key: 'portal/engagements/[engagementId]/contract',
+			archetype: 'G',
+			url: `/portal/engagements/${engagementId}/contract`,
+			h1: 'Contract'
+		}
+	];
+
+	for (const route of routes) {
+		await scan(page, route);
+	}
+});
