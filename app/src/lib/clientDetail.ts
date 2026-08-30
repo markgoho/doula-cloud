@@ -23,6 +23,13 @@ export interface ClientRecord {
 	addressRegion: string;
 	addressPostalCode: string;
 	dateOfBirth: string;
+	/** Her Practice-defined values, raw -- mirrors client.Record's
+	 * FieldValues. This screen reads it only to echo it back unedited on
+	 * a save (#495): EditHandler's PUT replaces field_values wholesale
+	 * (client/db.go's updateClient), so a save that sent nothing here
+	 * would silently wipe her Practice-defined values. Untyped because
+	 * this layer never interprets it, only carries it. */
+	fieldValues?: unknown;
 }
 
 /** One Practice-defined field, resolved live against the current Client

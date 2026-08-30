@@ -1,6 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createClient, loadClients } from './client.js';
+import { createClient, editClient, loadClients, type ClientEditFields } from './client.js';
 import { jsonResponse as response } from './testResponse.js';
+
+const editFields: ClientEditFields = {
+	givenName: 'Ada',
+	familyName: 'Lovelace',
+	preferredName: '',
+	email: 'ada@example.com',
+	phone: '',
+	addressLine1: '',
+	addressLine2: '',
+	addressLocality: '',
+	addressRegion: '',
+	addressPostalCode: '',
+	dateOfBirth: '',
+	fieldValues: { pronouns: 'she/her' }
+};
 
 describe('loadClients', () => {
 	it('fetches the practice clients path and returns the decoded page', async () => {
@@ -52,6 +67,48 @@ describe('createClient', () => {
 
 		await expect(createClient(fetcher, 'practice-1', { givenName: '', email: '' })).rejects.toThrow(
 			'givenName is required'
+		);
+	});
+});
+
+describe('editClient', () => {
+	it('puts the full record, override flag included, to the client path', async () => {
+		const saved = { id: 'client-1', ...editFields };
+		const fetcher = vi.fn().mockResolvedValue(response(saved));
+
+		const result = await editClient(fetcher, 'practice-1', 'client-1', editFields, false);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/client-1', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ...editFields, override: false })
+		});
+		expect(result).toEqual({ conflict: false, record: saved });
+	});
+
+	it('sends override: true when told to', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ id: 'client-1', ...editFields }));
+
+		await editClient(fetcher, 'practice-1', 'client-1', editFields, true);
+
+		const body: { override: boolean } = JSON.parse(fetcher.mock.calls[0][1].body as string);
+		expect(body.override).toBe(true);
+	});
+
+	it('decodes a 409 into a named conflict rather than throwing', async () => {
+		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [] }];
+		const fetcher = vi.fn().mockResolvedValue(response({ matches }, 409));
+
+		const result = await editClient(fetcher, 'practice-1', 'client-1', editFields, false);
+
+		expect(result).toEqual({ conflict: true, matches });
+	});
+
+	it('throws with the response body text on a non-conflict, non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('client not found', 404));
+
+		await expect(editClient(fetcher, 'practice-1', 'client-1', editFields, false)).rejects.toThrow(
+			'client not found'
 		);
 	});
 });
