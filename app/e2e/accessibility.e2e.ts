@@ -1,7 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT } from './ports';
-import { seedPortalClient, PORTAL_CLIENT_PASSWORD } from './portalClient';
+import { seedClient, seedPortalClient, PORTAL_CLIENT_PASSWORD } from './portalClient';
+import { seedEngagement } from './stack';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -133,6 +134,17 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId, engagementId } = seeded;
 
+	// A second, plain Client -- no portal account -- for the three
+	// clients/[clientId] screens (#516). Given an Engagement of her own so
+	// the hub's Engagements table scans with a row in it rather than its
+	// empty message, which is a different set of nodes for axe to read.
+	const clientId = await seedClient(request, practiceId, seeded.staffHeaders, {
+		givenName: 'Jane',
+		familyName: 'Smith',
+		email: `jane-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
+	});
+	seedEngagement(clientId, practiceId);
+
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(seeded.staffEmail);
 	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
@@ -175,6 +187,30 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 			archetype: 'D',
 			url: `/practices/${practiceId}/engagements/${engagementId}`,
 			h1: 'Pat'
+		},
+		{
+			key: 'practices/[practiceId]/clients/[clientId]',
+			archetype: 'D',
+			url: `/practices/${practiceId}/clients/${clientId}`,
+			h1: 'Jane Smith'
+		},
+		{
+			key: 'practices/[practiceId]/clients/[clientId]/edit',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/${clientId}/edit`,
+			h1: 'Edit Jane Smith'
+		},
+		{
+			// Anchored, unlike every other h1 here: the heading is the submit
+			// button's own label, and the Doula wording ("Ask to start work
+			// with Jane Smith") renders in the window between the Client
+			// landing and the session roles arriving. A substring match --
+			// Playwright's default -- would accept that intermediate heading
+			// and let axe scan a page still one fetch from done.
+			key: 'practices/[practiceId]/clients/[clientId]/engagement-requests/new',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`,
+			h1: /^Start work with Jane Smith$/
 		},
 		{
 			key: 'practices/[practiceId]/clients/search',

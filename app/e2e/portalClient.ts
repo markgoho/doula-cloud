@@ -24,6 +24,42 @@ export interface SeededPortalClient {
 	clientEmail: string;
 }
 
+/** The structural fields `seedClient` writes. Everything else on the
+ * record is left at whatever the create endpoint defaults to. */
+export interface NewClientFields {
+	givenName: string;
+	familyName?: string;
+	email?: string;
+	phone?: string;
+	dateOfBirth?: string;
+}
+
+/**
+ * Provisions a plain Client at an existing Practice -- no portal account,
+ * no Identity Platform user, nothing but the record itself. The sibling
+ * of `seedPortalClient` for the specs that only need a Client to exist:
+ * the Client detail hub, her edit screen, and the second record a
+ * match-override prompt needs something to match against.
+ *
+ * Takes the Staff cookie header rather than minting its own session, so a
+ * caller that already signed in does not pay for a second signup.
+ */
+export async function seedClient(
+	request: APIRequestContext,
+	practiceId: string,
+	staffHeaders: { Cookie: string },
+	fields: NewClientFields
+): Promise<string> {
+	const created = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
+		headers: staffHeaders,
+		data: fields
+	});
+	const body = await created.text();
+	expect(created.ok(), `seedClient failed: ${created.status()} ${body}`).toBe(true);
+	const { id } = JSON.parse(body);
+	return id;
+}
+
 /**
  * Provisions everything a Client needs to log in to their portal: a
  * Practice with a Staff owner, a Client + Engagement at that Practice,
