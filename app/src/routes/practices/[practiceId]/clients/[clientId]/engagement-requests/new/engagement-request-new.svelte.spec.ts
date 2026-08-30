@@ -103,7 +103,7 @@ describe('the Engagement Request screen', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Start work with Ada' })).toBeVisible();
 	});
 
-	it('refuses a submit with no kind or due date chosen, client-side, before any request', async () => {
+	it('refuses a submit with no kind chosen, client-side, before any request', async () => {
 		await setup();
 
 		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
@@ -111,13 +111,40 @@ describe('the Engagement Request screen', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Select whether this is birth or postpartum work' }))
 			.toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Enter the due date' })).toBeVisible();
 		// The load calls (detail, session) are the only requests made -- the
 		// refusal never reached the network.
 		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
 			expect.stringContaining('/engagement-requests'),
 			expect.anything()
 		);
+	});
+
+	it('demands a due date on birth work', async () => {
+		await setup();
+
+		await testPage.getByLabelText('Birth').click();
+		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+
+		await expect.element(testPage.getByRole('link', { name: 'Enter the due date' })).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
+			expect.stringContaining('/engagement-requests'),
+			expect.anything()
+		);
+	});
+
+	it('sends postpartum work with no due date, which ADR-0017 makes nullable', async () => {
+		await setup();
+
+		await testPage.getByLabelText('Postpartum').click();
+		await expect.element(testPage.getByText('Optional for postpartum work')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+
+		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+		const body: { kind: string; dueDate: string } = JSON.parse(
+			(apiFetchWithSession.mock.calls.find(([path]) => (path as string).endsWith('/engagement-requests'))![1] as RequestInit)
+				.body as string
+		);
+		expect(body).toEqual({ kind: 'postpartum', dueDate: '', note: '' });
 	});
 
 	it('warns on a second live Engagement without blocking the submit', async () => {

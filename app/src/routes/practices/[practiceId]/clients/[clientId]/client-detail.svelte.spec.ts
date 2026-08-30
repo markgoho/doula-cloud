@@ -161,6 +161,14 @@ describe('client detail hub', () => {
 		expect(container.querySelector(`#${describedBy}`)?.textContent).toBe('Ada');
 	});
 
+	it('offers the Engagement Request as an action naming her', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Start new work with Ada' }))
+			.toHaveAttribute('href', '/practices/practice-1/clients/client-1/engagement-requests/new');
+	});
+
 	it('shows an error notice when the Client fails to load', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse('client not found', 404));
 

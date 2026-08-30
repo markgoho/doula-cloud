@@ -135,12 +135,28 @@
 		}
 	}
 
+	/*
+	 * The due date is asked for on both kinds and demanded only on birth
+	 * work. ADR-0017 makes `due_date` nullable "because a postpartum-only
+	 * Engagement has none", and `parseRequestBody` accepts an empty
+	 * dueDate, so demanding one on postpartum would refuse a request the
+	 * endpoint and the schema both allow. It stays optional rather than
+	 * hidden on postpartum: a postpartum package bought before the birth
+	 * has a due date the approver wants to see.
+	 */
+	const isDueDateRequired = $derived(kind === 'birth');
+
 	function findRefusals(): FormError[] {
 		const found: FormError[] = [];
 		if (kind === '')
 			found.push({ message: 'Select whether this is birth or postpartum work', targetId: kindFieldId });
-		if (dueDate.trim() === '') found.push({ message: 'Enter the due date', targetId: dueDateId });
+		if (isDueDateRequired && dueDate.trim() === '')
+			found.push({ message: 'Enter the due date', targetId: dueDateId });
 		return found;
+	}
+
+	function errorFor(targetId: string): string | undefined {
+		return errors.find((entry) => entry.targetId === targetId)?.message;
 	}
 
 	onMount(async () => {
@@ -239,9 +255,22 @@
 		value={kind}
 		onChange={(value: string) => (kind = value as 'birth' | 'postpartum')}
 	/>
-	<LabeledField id={dueDateId} label="Due date">
+	<LabeledField
+		id={dueDateId}
+		label="Due date"
+		hint={isDueDateRequired ? undefined : 'Optional for postpartum work'}
+		error={errorFor(dueDateId)}
+	>
 		{#snippet children({ id, describedBy, invalid })}
-			<TextInput {id} {describedBy} {invalid} type="date" value={dueDate} onInput={(v) => (dueDate = v)} required />
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				type="date"
+				value={dueDate}
+				onInput={(v) => (dueDate = v)}
+				required={isDueDateRequired}
+			/>
 		{/snippet}
 	</LabeledField>
 	<LabeledField id={noteId} label="Note" hint="Anything the approver should know -- optional">

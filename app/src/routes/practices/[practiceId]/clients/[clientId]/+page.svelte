@@ -25,6 +25,10 @@
 		return `/practices/${page.params.practiceId}/clients/${page.params.clientId}/edit`;
 	}
 
+	function newEngagementRequestHref(): string {
+		return `/practices/${page.params.practiceId}/clients/${page.params.clientId}/engagement-requests/new`;
+	}
+
 	function formattedDate(iso: string): string {
 		return new Date(iso).toLocaleDateString();
 	}
@@ -90,6 +94,17 @@
 	-->
 	<Link href={editHref()} label="Edit" describedBy="edit-client-name" />
 	<span class="visually-hidden" id="edit-client-name">{detail ? displayName(detail) : ''}</span>
+	<!--
+		The hub is the only door to an Engagement Request (#496). The label
+		names her rather than saying "her", so it reads on its own out of
+		context and needs no describedBy sibling. The request screen itself
+		then splits the wording by role -- "Ask to start work with" for an
+		employee Doula, "Start work with" for an Owner or Admin -- because
+		only there is the Credit cost known.
+	-->
+	{#if detail}
+		<Link href={newEngagementRequestHref()} label="Start new work with {displayName(detail)}" />
+	{/if}
 {/snippet}
 
 {#snippet summary()}
