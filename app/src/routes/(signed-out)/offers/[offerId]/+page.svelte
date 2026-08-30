@@ -26,6 +26,8 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 
 	const token = $derived(page.url.searchParams.get('token') ?? '');
@@ -68,10 +70,20 @@
 {:else if !offer}
 	<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
 	<form onsubmit={handleOpen}>
-		<label>
-			Access code
-			<input type="text" inputmode="numeric" maxlength="6" bind:value={code} required />
-		</label>
+		<LabeledField label="Access code">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					inputmode="numeric"
+					maxlength={6}
+					value={code}
+					onInput={(value) => (code = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
 		<Button label="Open offer" type="submit" loading={isOpening} />
 	</form>
 {:else}

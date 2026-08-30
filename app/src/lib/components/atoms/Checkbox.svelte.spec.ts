@@ -27,6 +27,18 @@ describe('Checkbox.svelte', () => {
 		expect(onChange).toHaveBeenCalledWith(true);
 	});
 
+	it('reflects ariaLabel', async () => {
+		await setup({ ariaLabel: 'Roles: doula' });
+
+		await expect.element(page.getByRole('checkbox')).toHaveAttribute('aria-label', 'Roles: doula');
+	});
+
+	it('omits aria-label when ariaLabel is not provided', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('checkbox')).not.toHaveAttribute('aria-label');
+	});
+
 	it('auto-generates a distinct id per instance, so external labels can target each safely', async () => {
 		const { unmount } = await render(Checkbox, { checked: false, onChange: vi.fn() });
 		const firstId = page.getByRole('checkbox').element().id;

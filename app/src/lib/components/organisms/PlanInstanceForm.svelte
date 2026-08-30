@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from '#lib/planInstance.js';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	let {
 		fields,
@@ -33,16 +36,17 @@
 			{#if field.type === 'section_header'}
 				<h3>{field.label}</h3>
 			{:else if field.type === 'short_text'}
-				<label>
-					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- field.label is always a string -->
-					{field.label}
-					<!-- v8 ignore stop -->
-					<input
-						type="text"
-						value={textValue(field)}
-						oninput={(event_) => onAnswerChange(field.id, event_.currentTarget.value)}
-					/>
-				</label>
+				<LabeledField label={field.label}>
+					{#snippet children({ id, describedBy, invalid })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							value={textValue(field)}
+							onInput={(value) => onAnswerChange(field.id, value)}
+						/>
+					{/snippet}
+				</LabeledField>
 			{:else if field.type === 'long_text'}
 				<label>
 					<!-- v8 ignore start: same unreachable null-guard as above -->
@@ -54,16 +58,17 @@
 					/>
 				</label>
 			{:else if field.type === 'checkbox'}
-				<label>
-					<input
-						type="checkbox"
-						checked={isCheckboxChecked(field)}
-						onchange={(event_) => onAnswerChange(field.id, event_.currentTarget.checked)}
-					/>
-					<!-- v8 ignore start: same unreachable null-guard as above -->
-					{field.label}
-					<!-- v8 ignore stop -->
-				</label>
+				<LabeledField label={field.label} orientation="inline">
+					{#snippet children({ id, describedBy, invalid })}
+						<Checkbox
+							{id}
+							{describedBy}
+							{invalid}
+							checked={isCheckboxChecked(field)}
+							onChange={(checked) => onAnswerChange(field.id, checked)}
+						/>
+					{/snippet}
+				</LabeledField>
 			<!-- v8 ignore start: only the specific compiled branch for "was the
 			     <select>/<option> pair added/removed from the DOM since the last
 			     render" is actually unreachable here (Svelte's own reactivity
@@ -95,12 +100,17 @@
 						<!-- v8 ignore stop -->
 					</legend>
 					{#each field.options ?? [] as option (option)}
+						<!--
+							No LabeledField: the option text is already visible as
+							this checkbox's plain label below; ariaLabel only
+							overrides the accessible name to prefix the question,
+							since the same option text repeats across fields (#492).
+						-->
 						<label>
-							<input
-								type="checkbox"
-								aria-label={`${field.label}: ${option}`}
+							<Checkbox
+								ariaLabel={`${field.label}: ${option}`}
 								checked={selectedOptions(field).includes(option)}
-								onchange={() => onToggleOption(field.id, option)}
+								onChange={() => onToggleOption(field.id, option)}
 							/>
 							<!-- v8 ignore start: same unreachable null-guard as above -->
 							{option}

@@ -3,6 +3,7 @@
 	import Button from '../atoms/Button.svelte';
 	import Select from '../atoms/Select.svelte';
 	import Textarea from '../atoms/Textarea.svelte';
+	import TextInput from '../atoms/TextInput.svelte';
 
 	let {
 		fields,
@@ -41,12 +42,14 @@
 <ul>
 	{#each fields as field, index (field.id)}
 		<li>
-			<input
-				type="text"
-				aria-label="Field label"
-				value={field.label}
-				oninput={(event_) => onLabelChange(field.id, event_.currentTarget.value)}
-			/>
+			<!--
+				No wrapping label or LabeledField: this row's visible name is
+				`field.label`'s own value, so a LabeledField would put the
+				thing the field types beside the box that types it. ariaLabel
+				is the recorded exception, the same one the Select right after
+				it takes for the same reason (#492).
+			-->
+			<TextInput ariaLabel="Field label" value={field.label} onInput={(value) => onLabelChange(field.id, value)} />
 			<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for the
 			     bound <select>/<option> pair below aren't reachable from app-level
 			     interaction tests, only from Svelte's own reactivity internals -->

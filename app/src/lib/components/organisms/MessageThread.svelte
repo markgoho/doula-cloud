@@ -128,6 +128,7 @@
 			</LabeledField>
 			<label>
 				Attachment (image or PDF, up to 10MB)
+				<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- no atom exists for a file input (#492) -->
 				<input
 					type="file"
 					accept="image/*,application/pdf"

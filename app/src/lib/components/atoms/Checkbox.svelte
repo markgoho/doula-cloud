@@ -10,6 +10,14 @@
 		invalid?: boolean;
 		describedBy?: string;
 		variant?: 'checkbox' | 'toggle';
+		/*
+		 * Overrides the accessible name for a checkbox whose wrapping
+		 * <label> text isn't enough to tell it apart -- a multi-select
+		 * option repeated under several different questions, each needing
+		 * its own question name prefixed on (#492). LabeledField remains
+		 * the default; this is the recorded exception to it.
+		 */
+		ariaLabel?: string;
 	}
 
 	const generatedId = $props.id();
@@ -23,7 +31,8 @@
 		required = false,
 		invalid = false,
 		describedBy,
-		variant = 'checkbox'
+		variant = 'checkbox',
+		ariaLabel
 	}: Properties = $props();
 </script>
 
@@ -39,6 +48,7 @@
 	role={variant === 'toggle' ? 'switch' : undefined}
 	aria-invalid={invalid}
 	aria-describedby={describedBy}
+	aria-label={ariaLabel}
 	onchange={(event_) => onChange(event_.currentTarget.checked)}
 />
 

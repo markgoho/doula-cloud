@@ -13,6 +13,8 @@
 	 */
 	import { formatAmount, type Invoice } from '#lib/invoice.js';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	let {
 		invoices,
@@ -103,10 +105,20 @@
 	<p>Ask a Practice Owner to connect Stripe.</p>
 {:else}
 	<form onsubmit={handleCreate}>
-		<label>
-			Amount (USD)
-			<input type="number" step="0.01" bind:value={amountDollars} required />
-		</label>
+		<LabeledField label="Amount (USD)">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="number"
+					step={0.01}
+					value={amountDollars}
+					onInput={(value) => (amountDollars = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</form>
 	{#if createError}

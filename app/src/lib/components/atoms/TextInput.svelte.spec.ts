@@ -94,6 +94,42 @@ describe('TextInput.svelte', () => {
 		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('minlength');
 	});
 
+	it('reflects maxlength', async () => {
+		await setup({ maxlength: 6 });
+
+		await expect.element(page.getByRole('textbox')).toHaveAttribute('maxlength', '6');
+	});
+
+	it('omits maxlength when not provided', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('maxlength');
+	});
+
+	it('reflects step', async () => {
+		await setup({ type: 'number', step: 0.01 });
+
+		await expect.element(page.getByRole('spinbutton')).toHaveAttribute('step', '0.01');
+	});
+
+	it('omits step when not provided', async () => {
+		await setup({ type: 'number' });
+
+		await expect.element(page.getByRole('spinbutton')).not.toHaveAttribute('step');
+	});
+
+	it('reflects ariaLabel', async () => {
+		await setup({ ariaLabel: 'Field label' });
+
+		await expect.element(page.getByRole('textbox')).toHaveAttribute('aria-label', 'Field label');
+	});
+
+	it('omits aria-label when ariaLabel is not provided', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('aria-label');
+	});
+
 	it('reflects min', async () => {
 		await setup({ type: 'number', min: 1 });
 

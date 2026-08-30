@@ -21,6 +21,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 
 	let {
@@ -151,36 +152,74 @@
 			onChange={(value) => (staffId = value)}
 		/>
 	{:else}
-		<label>
-			Email address
-			<input type="email" bind:value={email} required />
-		</label>
+		<LabeledField label="Email address">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
 		<p>She joins the practice as a contractor doula, so this offer carries a fee.</p>
 	{/if}
 
 	{#if isFeeRequired}
-		<label>
-			Fee (USD)
-			<input type="number" step="0.01" bind:value={feeDollars} required />
-		</label>
+		<LabeledField label="Fee (USD)">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="number"
+					step={0.01}
+					value={feeDollars}
+					onInput={(value) => (feeDollars = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
 	{/if}
 
-	<label>
-		Client's first initial
-		<input type="text" maxlength="1" bind:value={initial} required />
-	</label>
-	<label>
-		General area
-		<input type="text" bind:value={clientArea} required />
-	</label>
-	<label>
-		Due date
-		<TextInput type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
-	</label>
-	<label>
-		Terms
-		<Textarea value={terms} onInput={(next) => (terms = next)} />
-	</label>
+	<LabeledField label="Client's first initial">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				maxlength={1}
+				value={initial}
+				onInput={(value) => (initial = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="General area">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				value={clientArea}
+				onInput={(value) => (clientArea = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Due date">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput {id} {describedBy} {invalid} type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Terms">
+		{#snippet children({ id, describedBy, invalid })}
+			<Textarea {id} {describedBy} {invalid} value={terms} onInput={(next) => (terms = next)} />
+		{/snippet}
+	</LabeledField>
 
 	<Button label="Send Offer" type="submit" loading={isSending} />
 </form>

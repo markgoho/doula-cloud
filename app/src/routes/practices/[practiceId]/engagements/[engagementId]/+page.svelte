@@ -35,6 +35,8 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -572,10 +574,18 @@
 
 {#snippet reassignAction(visit: Visit)}
 	<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-		<label>
-			Reassign to Staff id
-			<input type="text" bind:value={reassignStaffId[visit.visitId]} required />
-		</label>
+		<LabeledField id={`reassign-staff-${visit.visitId}`} label="Reassign to Staff id">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					value={reassignStaffId[visit.visitId] ?? ''}
+					onInput={(value) => (reassignStaffId[visit.visitId] = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
 		<Button label="Reassign" type="submit" size="sm" variant="secondary" />
 	</form>
 	{#if reassignError[visit.visitId]}

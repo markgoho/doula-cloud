@@ -15,9 +15,12 @@
 		invalid = false,
 		describedBy,
 		minlength,
+		maxlength,
 		min,
+		step,
 		inputmode,
-		autocomplete
+		autocomplete,
+		ariaLabel
 	}: {
 		id?: string;
 		value: string;
@@ -44,11 +47,25 @@
 		describedBy?: string;
 		minlength?: number;
 		/*
+		 * The hard cap #468 found missing: a one-character initial and a
+		 * six-digit access code both silently truncate pasted text without
+		 * it, which is the behaviour the two callers want rather than a
+		 * side effect (#492).
+		 */
+		maxlength?: number;
+		/*
 		 * The floor a type="number" field will accept -- a quantity of
 		 * credits starts at 1, not at 0 or -3. Separate from `minlength`,
 		 * which counts characters rather than reading the value.
 		 */
 		min?: number;
+		/*
+		 * type="number"'s increment, so a money field can accept cents
+		 * (`step={0.01}`) instead of whole units only. No dedicated money
+		 * control exists yet -- a prefix and rune-safe cents parsing stay
+		 * fog until a third money field justifies one (#492).
+		 */
+		step?: number;
 		/*
 		 * Whose data this is, per docs/design/govuk-alignment.md: a WHATWG
 		 * token on a field about the person filling the form in, "off" on a
@@ -66,6 +83,13 @@
 		 * keyboard.
 		 */
 		inputmode?: 'text' | 'url' | 'email' | 'tel' | 'numeric' | 'decimal' | 'search';
+		/*
+		 * The only accessible name when a row has no wrapping <label> or
+		 * LabeledField -- a table-style editor where the visible text
+		 * belongs to the row, not the field (#492). LabeledField remains
+		 * the default; this is the recorded exception to it.
+		 */
+		ariaLabel?: string;
 	} = $props();
 </script>
 
@@ -78,9 +102,12 @@
 	{required}
 	{disabled}
 	{minlength}
+	{maxlength}
 	{min}
+	{step}
 	{inputmode}
 	{autocomplete}
+	aria-label={ariaLabel}
 	class:invalid
 	aria-invalid={invalid}
 	aria-describedby={describedBy}

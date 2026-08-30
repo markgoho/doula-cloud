@@ -80,7 +80,10 @@ export default defineConfig(
 			'src/lib/components/atoms/Button.svelte',
 			'src/lib/components/atoms/Link.svelte',
 			'src/lib/components/atoms/Select.svelte',
-			'src/lib/components/atoms/Textarea.svelte'
+			'src/lib/components/atoms/Textarea.svelte',
+			'src/lib/components/atoms/TextInput.svelte',
+			'src/lib/components/atoms/Checkbox.svelte',
+			'src/lib/components/molecules/RadioGroup.svelte'
 		],
 		rules: {
 			'svelte/no-restricted-html-elements': [
@@ -100,6 +103,11 @@ export default defineConfig(
 				{
 					elements: ['textarea'],
 					message: 'Use the Textarea atom (#lib/components/atoms/Textarea.svelte) instead of a raw <textarea> element.'
+				},
+				{
+					elements: ['input'],
+					message:
+						'Use the TextInput atom (#lib/components/atoms/TextInput.svelte), the Checkbox atom, or the RadioGroup molecule instead of a raw <input> element. A file input has no atom -- disable this rule on that one line with a comment saying so (#492).'
 				}
 			]
 		}
