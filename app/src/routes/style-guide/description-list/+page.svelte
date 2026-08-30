@@ -10,7 +10,11 @@
 		<DescriptionList
 			items={[
 				{ label: 'Status', value: 'Active' },
-				{ label: 'Created', value: '1/1/2026' }
+				{ label: 'Created', value: '1/1/2026' },
+				{
+					label: 'Address',
+					value: '128 Meadowbrook Lane, Apartment 4B, Rochester, NY 14620'
+				}
 			]}
 		/>
 	</section>

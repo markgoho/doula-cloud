@@ -30,18 +30,22 @@
 		dl {
 			display: grid;
 			grid-template-columns: auto 1fr;
-			gap: var(--space-1) var(--space-4);
+			gap: 0 var(--space-4);
 			margin: 0;
 		}
 
 		dt {
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface-variant);
+			padding-block: var(--space-3);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
 		dd {
 			margin: 0;
 			color: var(--color-on-surface);
+			padding-block: var(--space-3);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 	}
 </style>
