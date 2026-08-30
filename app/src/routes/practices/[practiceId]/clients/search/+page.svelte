@@ -8,11 +8,12 @@
 	 * than retyped, and searching costs nothing when she genuinely is
 	 * new.
 	 *
-	 * A miss carries the typed name into intake's first page via `?name=`
-	 * -- `clients/new/+page.svelte`'s own module comment reads that
-	 * param. Only `name` carries: intake's first page asks for a name
-	 * alone, so an email, phone or date of birth typed here has no field
-	 * on that page to land in.
+	 * A miss carries every key that was typed into intake as query params
+	 * -- `clients/new/+page.svelte` reads all four on mount and shows each
+	 * on the page that asks for it: the name on page one, phone and email
+	 * on page two, the date of birth on page three. All four, not only the
+	 * name, because a staff member holding nothing but a phone number
+	 * would otherwise lose the one thing she had.
 	 */
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
