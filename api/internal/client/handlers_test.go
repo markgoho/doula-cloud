@@ -875,8 +875,14 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 		switch h.Type {
 		case "client_event":
 			events++
+			if h.ClientEvent.ActorName == nil || *h.ClientEvent.ActorName == "" {
+				t.Fatalf("client event missing actorName: %+v", h.ClientEvent)
+			}
 		case "engagement_request":
 			requests++
+			if h.EngagementRequest.RequestedByName != "Test Staff requesting-staff-history" {
+				t.Fatalf("requestedByName = %q, want %q", h.EngagementRequest.RequestedByName, "Test Staff requesting-staff-history")
+			}
 			if h.EngagementRequest.State == "approved" {
 				sawApproved = true
 				if h.EngagementRequest.EngagementID == nil || *h.EngagementRequest.EngagementID != approvedEngagementID {
@@ -888,6 +894,12 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 				if h.EngagementRequest.DecidedBy == nil || h.EngagementRequest.Reason == nil {
 					t.Fatalf("decided request missing decidedBy/reason: %+v", h.EngagementRequest)
 				}
+				if h.EngagementRequest.DecidedByName == nil || *h.EngagementRequest.DecidedByName == "" {
+					t.Fatalf("decided request missing decidedByName: %+v", h.EngagementRequest)
+				}
+			}
+			if h.EngagementRequest.State == "pending" && h.EngagementRequest.DecidedByName != nil {
+				t.Fatalf("pending request should have no decidedByName: %+v", h.EngagementRequest)
 			}
 		}
 	}

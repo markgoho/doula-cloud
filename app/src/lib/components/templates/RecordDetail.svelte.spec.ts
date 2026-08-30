@@ -42,6 +42,13 @@ describe('RecordDetail.svelte', () => {
 		await expect.element(page.getByText('Three visits booked')).toBeVisible();
 	});
 
+	it('labels each section as a landmark region named for its heading (#507)', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('region', { name: 'Visits' })).toBeVisible();
+		await expect.element(page.getByRole('region', { name: 'Invoices' })).toBeVisible();
+	});
+
 	it('renders a variable number of sections, including none', async () => {
 		const { container } = await setup({ sections: [] });
 

@@ -41,6 +41,15 @@
 		{ label: 'Portal invite', accessor: portalInviteStatusText }
 	];
 
+	// The Client detail hub (#494) -- DataTable links only its first
+	// column, per rowHref's own contract.
+	function clientHref(client: ClientListItem): string {
+		return resolve('/practices/[practiceId]/clients/[clientId]', {
+			practiceId: page.params.practiceId!,
+			clientId: client.clientId
+		});
+	}
+
 	onMount(async () => {
 		try {
 			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!);
@@ -78,6 +87,7 @@
 	<DataTable
 		{columns}
 		rows={clients}
+		rowHref={clientHref}
 		hasMore={isMoreAvailable}
 		onLoadMore={handleLoadMore}
 		emptyMessage="No Clients yet."

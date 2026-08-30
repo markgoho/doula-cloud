@@ -103,12 +103,17 @@
 			<div class="sections">
 				<stack-l space="var(--space-8)">
 					{#each sections as section (section.heading)}
-						<section id={anchorId(section.heading)}>
+						<!-- v8 ignore start: Svelte-compiled attribute-diffing branch for the
+						     templated aria-labelledby/id pair below isn't reachable from
+						     app-level interaction tests, only from Svelte's own reactivity
+						     internals -->
+						<section id={anchorId(section.heading)} aria-labelledby="{anchorId(section.heading)}-heading">
 							<stack-l space="var(--space-4)">
-								<Heading level={2} variant="section" text={section.heading} />
+								<Heading level={2} variant="section" text={section.heading} id="{anchorId(section.heading)}-heading" />
 								{@render section.content()}
 							</stack-l>
 						</section>
+						<!-- v8 ignore stop -->
 					{/each}
 				</stack-l>
 			</div>

@@ -14,9 +14,13 @@
 		level: 1 | 2 | 3 | 4 | 5 | 6;
 		variant?: 'page' | 'section' | 'card';
 		text: string;
+		/**
+		Lets a caller point an `aria-labelledby` at this heading -- RecordDetail's section landmarks (#507).
+		*/
+		id?: string;
 	}
 
-	let { level, variant, text }: Properties = $props();
+	let { level, variant, text, id }: Properties = $props();
 
 	const fallbackByLevel = {
 		1: 'page',
@@ -31,7 +35,7 @@
 	const classes = $derived(`variant-${resolved}`);
 </script>
 
-<svelte:element this={tag} class={classes}>{text}</svelte:element>
+<svelte:element this={tag} {id} class={classes}>{text}</svelte:element>
 
 <style>
 	@layer components {
