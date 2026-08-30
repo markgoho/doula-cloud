@@ -85,11 +85,11 @@ Every pattern in [their catalogue](https://design-system.service.gov.uk/patterns
 | [Confirmation pages](https://design-system.service.gov.uk/patterns/confirmation-pages/) | Outcomes are announced with `Notice` in place, not on their own page | Departed -- see below |
 | [Cookies page](https://design-system.service.gov.uk/patterns/cookies-page/) | [ADR-0016](../adr/0016-teaser-analytics-are-cookieless-and-the-channel-rides-on-the-form.md) keeps analytics cookieless; the only cookie is `__session` | N/A |
 | [Interruption pages](https://design-system.service.gov.uk/patterns/interruption-pages/) | Nothing yet needs a full-page stop before a consequential step | N/A for now |
-| [Page not found](https://design-system.service.gov.uk/patterns/page-not-found-pages/) | No `+error.svelte` exists at all | Open -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
+| [Page not found](https://design-system.service.gov.uk/patterns/page-not-found-pages/) | `templates/ErrorPage.svelte`'s `notFound` state, rendered by a `+error.svelte` at every chrome boundary | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
 | [Question pages](https://design-system.service.gov.uk/patterns/question-pages/) | The `QuestionPage` Template; one thing per page, legend or label as the `<h1>` | Drawn -- `e994dc7`, [#464](https://github.com/markgoho/doula-cloud/issues/464) |
-| [Service unavailable](https://design-system.service.gov.uk/patterns/service-unavailable-pages/) | Same gap | Open -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
+| [Service unavailable](https://design-system.service.gov.uk/patterns/service-unavailable-pages/) | `templates/ErrorPage.svelte`'s `unavailable` state (503) | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
 | [Step by step navigation](https://design-system.service.gov.uk/patterns/step-by-step-navigation/) | Their pattern is for guidance across many services; our `organisms/StepRail.svelte` is a progress indicator inside one flow, taking step-by-step's anatomy and Complete-multiple-tasks' semantics ([#432](https://github.com/markgoho/doula-cloud/issues/432)'s departure 1) | N/A -- do not confuse the two |
-| [There is a problem with the service](https://design-system.service.gov.uk/patterns/problem-with-the-service-pages/) | Same gap | Open -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
+| [There is a problem with the service](https://design-system.service.gov.uk/patterns/problem-with-the-service-pages/) | `templates/ErrorPage.svelte`'s `problem` state (500 and any other unexpected status) | Aligned -- [#471](https://github.com/markgoho/doula-cloud/issues/471) |
 
 ## Components
 
