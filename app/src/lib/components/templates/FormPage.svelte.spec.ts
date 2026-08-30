@@ -87,11 +87,24 @@ describe('FormPage.svelte', () => {
 		await expect.element(page.getByText('Save client')).toBeVisible();
 	});
 
-	it('omits the intro and the error region when neither is given', async () => {
+	it('omits the intro and the error summary region when neither is given', async () => {
 		await setup();
 
 		await expect.element(page.getByText('Tell us about the birth')).not.toBeInTheDocument();
-		await expect.element(page.getByText('Enter a due date')).not.toBeInTheDocument();
+		await expect.element(page.getByText('There is a problem')).not.toBeInTheDocument();
+	});
+
+	/*
+	 * ADR-0018's rule, asserted rather than trusted (#467): the region is a
+	 * named Snippet prop and the Template renders nothing of its own into
+	 * it -- no empty box, no hidden live region for a screen reader to trip
+	 * over on a clean form. Four children: the h1, two fieldsets and the
+	 * actions cluster.
+	 */
+	it('renders nothing in the error summary region when no snippet is passed', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelectorAll(':scope center-l > stack-l > *')).toHaveLength(4);
 	});
 
 	it('renders the intro between the title and the first fieldset', async () => {
@@ -103,15 +116,26 @@ describe('FormPage.svelte', () => {
 		expect(intro.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
-	it('renders the error region above the intro and the fields, not below them', async () => {
-		await setup({ error: textSnippet('Enter a due date'), intro: textSnippet('Tell us about the birth') });
+	/*
+	 * Above the <h1>, which is GOV.UK's position and the one `QuestionPage`
+	 * already takes. It sat below the title until #467: on a refused submit
+	 * the problem is why the reader is back on this page at all, so she
+	 * meets it before the page's own name.
+	 */
+	it('renders the error summary above the title, the intro and the fields', async () => {
+		await setup({
+			errorSummary: textSnippet('There is a problem'),
+			intro: textSnippet('Tell us about the birth')
+		});
 
-		const error = page.getByText('Enter a due date').element();
+		const summary = page.getByText('There is a problem').element();
+		const title = page.getByRole('heading', { level: 1, name: 'New client' }).element();
 		const intro = page.getByText('Tell us about the birth').element();
 		const legend = page.getByText('About the client').element();
 
-		expect(error.compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-		expect(error.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(summary.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(summary.compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(summary.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
 	it('caps the form at the form measure, not the full page width, and renders no chrome', async () => {

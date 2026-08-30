@@ -2,7 +2,7 @@
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 
@@ -14,6 +14,8 @@
 
 	let hasError = $state(false);
 
+	const dueDateId = 'style-guide-form-page-due-date';
+
 	const noop = () => {};
 </script>
 
@@ -24,8 +26,8 @@
 	/>
 {/snippet}
 
-{#snippet error()}
-	<Notice message="Enter a due date before saving this client." variant="error" />
+{#snippet errorSummary()}
+	<ErrorSummary errors={[{ message: 'Enter a due date', targetId: dueDateId }]} />
 {/snippet}
 
 {#snippet coreFields()}
@@ -47,7 +49,9 @@
 		{/snippet}
 	</LabeledField>
 
-	<LabeledField label="Due date" error={hasError ? 'Enter a due date.' : undefined}>
+	<!-- Word for word the summary entry above, which is the point of the
+	     pattern: two wordings for one refusal is the defect it prevents. -->
+	<LabeledField id={dueDateId} label="Due date" error={hasError ? 'Enter a due date' : undefined}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -97,7 +101,7 @@
 <FormPage
 	title="New client"
 	{intro}
-	error={hasError ? error : undefined}
+	errorSummary={hasError ? errorSummary : undefined}
 	fieldsets={[
 		{ legend: 'About the client', content: coreFields },
 		{ legend: 'Birth preferences', content: practiceFields }

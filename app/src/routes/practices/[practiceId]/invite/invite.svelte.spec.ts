@@ -102,7 +102,14 @@ describe('invite a Staff member screen', () => {
 		await testPage.getByRole('checkbox', { name: 'Doula' }).click();
 		await fillAndSubmit('lena@example.com');
 
-		await expect.element(testPage.getByText('Choose at least one role.')).toBeVisible();
+		// GOV.UK's verb for picking from options on screen is "Select", and an
+		// error message is not a sentence in prose, so it takes no full stop
+		// (#467). It appears twice: in the summary, linking to the group's
+		// first checkbox, and under the group's own legend.
+		await expect
+			.element(testPage.getByRole('link', { name: 'Select at least one role' }))
+			.toHaveAttribute('href', '#invite-roles');
+		await expect.element(testPage.getByText('Select at least one role').last()).toBeVisible();
 		// Nothing was sent, so nothing is confirmed as on its way.
 		await expect
 			.element(testPage.getByText('An email with a link to join is on its way to lena@example.com.'))
@@ -121,11 +128,20 @@ describe('invite a Staff member screen', () => {
 			.toBeVisible();
 	});
 
-	it('shows a message when the request itself fails', async () => {
+	/*
+	 * The thrown message is the network's, not the Invitation's -- an
+	 * `Error: Network down` is not something the Owner can act on, and it
+	 * names nothing on this page. Since #467 the reader gets one sentence
+	 * she can act on instead.
+	 */
+	it('owns the failure when the request never reaches the server', async () => {
 		await setup({ rejectWith: new Error('Network down') });
 
 		await fillAndSubmit('lena@example.com');
 
-		await expect.element(testPage.getByText('Network down')).toBeVisible();
+		await expect
+			.element(testPage.getByText('There is a problem with the service. Try again in a few minutes.'))
+			.toBeVisible();
+		await expect.element(testPage.getByText('Network down')).not.toBeInTheDocument();
 	});
 });

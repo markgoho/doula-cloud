@@ -13,9 +13,14 @@
 	 * how GOV.UK builds the same page. Submission is behaviour, and a Template
 	 * owns page-level arrangement and nothing else.
 	 *
-	 * `error` renders directly under the title, above the first fieldset,
-	 * because that is where an error summary belongs: the reader meets the
-	 * problem before the fields it is about, not after scrolling past them.
+	 * `errorSummary` renders **above** the title, which is GOV.UK's own
+	 * position for it and the one `QuestionPage` already takes. It sat
+	 * under the title until #467: the reader has to meet the problem
+	 * before the page's own name, because on a refused submit the problem
+	 * is why she is back here at all. This Template owns *where* it goes
+	 * and none of what goes in it -- ADR-0018's rule that a fixed region is
+	 * a named Snippet prop, so `ErrorSummary` lives in exactly one place
+	 * (#467) rather than being rebuilt by each Template that positions it.
 	 */
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -37,21 +42,26 @@
 		title: string;
 		intro?: Snippet;
 		fieldsets: Fieldset[];
-		error?: Snippet;
+		/**
+		 * GOV.UK's error summary, positioned by this Template and built by
+		 * the route (#467). Nothing renders here when it is absent -- not an
+		 * empty box, not a hidden live region.
+		 */
+		errorSummary?: Snippet;
 		actions: Snippet;
 	}
 
-	let { title, intro, fieldsets, error, actions }: Properties = $props();
+	let { title, intro, fieldsets, errorSummary, actions }: Properties = $props();
 </script>
 
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 		<stack-l space="var(--space-7)">
-			<Heading level={1} variant="page" text={title} />
-
-			{#if error}
-				{@render error()}
+			{#if errorSummary}
+				{@render errorSummary()}
 			{/if}
+
+			<Heading level={1} variant="page" text={title} />
 
 			{#if intro}
 				<div class="intro">{@render intro()}</div>

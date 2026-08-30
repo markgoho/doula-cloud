@@ -4,7 +4,8 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiBaseURL, apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -12,6 +13,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
 		{ value: 'signup', label: "I'm new here -- create an account" },
@@ -20,24 +22,43 @@
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 
+	const emailId = 'portal-accept-invite-email';
+	const passwordId = 'portal-accept-invite-password';
+
 	let email = $state('');
 	let password = $state('');
 	let mode = $state<'signup' | 'login'>('signup');
-	let error = $state('');
+	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Engagement[] | undefined>();
 
+	function errorFor(targetId: string): string | undefined {
+		return errors.find((entry) => entry.targetId === targetId)?.message;
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
+		errors = [];
 		picker = undefined;
+
+		const refusals: FormError[] = [];
+		if (email.trim() === '')
+			refusals.push({ message: 'Enter your email address', targetId: emailId });
+		if (password === '') {
+			refusals.push({ message: 'Enter your password', targetId: passwordId });
+		} else if (mode === 'signup' && password.length < 6) {
+			// Only when she is creating the account: an existing password is
+			// whatever it already is, and refusing a short one here would shut
+			// out anyone who set one before the rule existed.
+			refusals.push({ message: 'Password must be 6 characters or more', targetId: passwordId });
+		}
+		if (refusals.length > 0) {
+			errors = refusals;
+			return;
+		}
+
 		isSubmitting = true;
 		try {
-			if (!inviteToken) {
-				error = 'Missing invite token';
-				return;
-			}
-
 			const credential =
 				mode === 'signup'
 					? await createUserWithEmailAndPassword(getFirebaseAuth(), email, password)
@@ -53,7 +74,7 @@
 				body: JSON.stringify({ inviteToken })
 			});
 			if (!acceptResponse.ok) {
-				error = await apiErrorMessage(acceptResponse);
+				errors = [{ message: await refusalMessage(acceptResponse) }];
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -65,7 +86,7 @@
 
 			const sessionResponse = await apiFetchWithSession('/api/portal/session');
 			if (!sessionResponse.ok) {
-				error = await apiErrorMessage(sessionResponse);
+				errors = [{ message: await refusalMessage(sessionResponse) }];
 				return;
 			}
 			const session: PortalSessionInfo = await sessionResponse.json();
@@ -77,25 +98,28 @@
 			} else {
 				picker = landing.engagements;
 			}
-		} catch {
-			// A clear, non-technical failure message -- not whatever Identity
-			// Platform's SDK throws (e.g. "Firebase: Error
-			// (auth/invalid-credential).") -- covers both account-creation
-			// and sign-in errors, since this form handles both modes.
-			error = 'Accept invite failed';
+		} catch (error_) {
+			// Identity Platform's own words name a product and carry a banned
+			// adjective; `authRefusal` maps the code onto a message and, where
+			// there is one, the control that caused it. It covers both modes
+			// this form handles (#467).
+			errors = [authRefusal(error_, { emailId, passwordId })];
 		} finally {
 			isSubmitting = false;
 		}
 	}
 </script>
 
+<ErrorSummary {errors} />
+
 <h1>Accept your portal invite</h1>
 
 {#if !inviteToken}
 	<Notice variant="error" message="Missing invite token" />
 {:else}
-	<form onsubmit={handleSubmit}>
-		<LabeledField label="Email">
+	<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
+	<form onsubmit={handleSubmit} novalidate>
+		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -108,7 +132,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<LabeledField label="Password">
+		<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -130,9 +154,6 @@
 			onChange={(value) => (mode = value)}
 		/>
 		<Button type="submit" label="Accept invite" loading={isSubmitting} />
-		{#if error}
-			<Notice variant="error" message={error} />
-		{/if}
 	</form>
 {/if}
 

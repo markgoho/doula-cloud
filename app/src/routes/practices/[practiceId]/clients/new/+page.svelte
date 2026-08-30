@@ -7,17 +7,42 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+
+	const nameId = 'new-client-name';
+	const emailId = 'new-client-email';
 
 	let name = $state('');
 	let email = $state('');
-	let error = $state('');
+	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
+
+	function errorFor(targetId: string): string | undefined {
+		return errors.find((entry) => entry.targetId === targetId)?.message;
+	}
+
+	// No pronouns, per #463: the domain noun until the name is known.
+	function findRefusals(): FormError[] {
+		const found: FormError[] = [];
+		if (name.trim() === '')
+			found.push({ message: "Enter the Client's name", targetId: nameId });
+		if (email.trim() === '')
+			found.push({ message: "Enter the Client's email address", targetId: emailId });
+		return found;
+	}
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
+		errors = [];
+
+		const refusals = findRefusals();
+		if (refusals.length > 0) {
+			errors = refusals;
+			return;
+		}
+
 		isSubmitting = true;
 		try {
 			await createClient(apiFetchWithSession, page.params.practiceId!, { givenName: name, email });
@@ -28,17 +53,22 @@
 				})
 			);
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to add Client';
+			// `createClient` throws the server's own words for a refusal it
+			// alone knows the reason for; anything else is ours to own.
+			errors = [{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }];
 		} finally {
 			isSubmitting = false;
 		}
 	}
 </script>
 
+<ErrorSummary {errors} />
+
 <Heading level={1} text="Add a Client" />
 
-<form onsubmit={handleSubmit}>
-	<LabeledField label="Their name">
+<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
+<form onsubmit={handleSubmit} novalidate>
+	<LabeledField id={nameId} label="Their name" error={errorFor(nameId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -50,7 +80,7 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<LabeledField label="Their email">
+	<LabeledField id={emailId} label="Their email" error={errorFor(emailId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -64,7 +94,4 @@
 		{/snippet}
 	</LabeledField>
 	<Button type="submit" label="Add Client" loading={isSubmitting} />
-	{#if error}
-		<Notice variant="error" message={error} />
-	{/if}
 </form>

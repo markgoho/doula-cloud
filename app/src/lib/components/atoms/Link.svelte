@@ -14,7 +14,8 @@
 			| 'nav'
 			| 'sheet'
 			| 'skip'
-			| 'step';
+			| 'step'
+			| 'error';
 		icon?: IconName;
 		current?: boolean;
 		/*
@@ -96,6 +97,23 @@
 
 		a.primary:hover {
 			color: var(--color-primary-hover);
+		}
+
+		/* An entry in the error summary (#467): the one reason a submit was
+		   refused, and the way to the control that caused it. Red and bold
+		   because it has to read as part of the error treatment rather than
+		   as ordinary prose inside a red box, which is GOV.UK's own call.
+		   It is a variant rather than a `class` an ErrorSummary passes down
+		   because ADR-0018 allows no such passthrough -- naming the
+		   treatment here is what keeps it the same in every consumer, the
+		   same reason `step` and `chip` exist. */
+		a.error {
+			color: var(--color-error);
+			font-weight: var(--font-weight-semibold);
+		}
+
+		a.error:focus-visible {
+			outline-color: var(--color-error);
 		}
 
 		a.secondary {

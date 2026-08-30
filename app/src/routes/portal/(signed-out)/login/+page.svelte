@@ -7,20 +7,44 @@
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
+
+	const emailId = 'portal-login-email';
+	const passwordId = 'portal-login-password';
 
 	let email = $state('');
 	let password = $state('');
-	let error = $state('');
+	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Engagement[] | undefined>();
 
+	// The Staff login's mechanism, deliberately identical (#467): the two
+	// screens ask the same two questions and must refuse them the same way.
+	function errorFor(targetId: string): string | undefined {
+		return errors.find((entry) => entry.targetId === targetId)?.message;
+	}
+
+	function findEmptyFields(): FormError[] {
+		const found: FormError[] = [];
+		if (email.trim() === '') found.push({ message: 'Enter your email address', targetId: emailId });
+		if (password === '') found.push({ message: 'Enter your password', targetId: passwordId });
+		return found;
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
+		errors = [];
 		picker = undefined;
+
+		const empty = findEmptyFields();
+		if (empty.length > 0) {
+			errors = empty;
+			return;
+		}
+
 		isSubmitting = true;
 		try {
 			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
@@ -37,7 +61,7 @@
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {
-				error = 'Login failed';
+				errors = [{ message: await refusalMessage(exchangeResponse) }];
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -45,7 +69,7 @@
 
 			const response = await apiFetchWithSession('/api/portal/session');
 			if (!response.ok) {
-				error = await response.text();
+				errors = [{ message: await refusalMessage(response) }];
 				return;
 			}
 
@@ -58,21 +82,25 @@
 			} else {
 				picker = landing.engagements;
 			}
-		} catch {
-			// A clear, non-technical failure message -- not whatever Identity
-			// Platform's SDK throws (e.g. "Firebase: Error
-			// (auth/invalid-credential).").
-			error = 'Login failed';
+		} catch (error_) {
+			// Identity Platform's own words name a product and carry a banned
+			// adjective; `authRefusal` maps the code onto a message and the
+			// control that caused it (#467).
+			errors = [authRefusal(error_, { emailId, passwordId })];
 		} finally {
 			isSubmitting = false;
 		}
 	}
 </script>
 
+<ErrorSummary {errors} />
+
 <h1>Log in</h1>
 
-<form onsubmit={handleSubmit}>
-	<LabeledField label="Email">
+<!-- `novalidate`: this page refuses the submit, not the browser. See the
+     Staff login for the argument. -->
+<form onsubmit={handleSubmit} novalidate>
+	<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -85,7 +113,7 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<LabeledField label="Password">
+	<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -99,9 +127,6 @@
 		{/snippet}
 	</LabeledField>
 	<Button type="submit" label="Log in" loading={isSubmitting} />
-	{#if error}
-		<Notice variant="error" message={error} />
-	{/if}
 </form>
 
 {#if picker}

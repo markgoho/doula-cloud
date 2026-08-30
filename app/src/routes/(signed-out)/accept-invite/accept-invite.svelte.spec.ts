@@ -205,12 +205,17 @@ describe('step one -- identifying yourself', () => {
 		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
 	});
 
+	// #467: the SDK's own string names a product and carries a banned
+	// adjective, and the flat "Accept invite failed" that replaced it said
+	// nothing she could act on either.
 	it('reports a non-technical failure rather than whatever the auth SDK threw', async () => {
 		await setup({ signInThrows: true });
 
 		await identify();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Accept invite failed');
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
 		await expect.element(continueButton()).toBeVisible();
 	});
 
@@ -219,21 +224,28 @@ describe('step one -- identifying yourself', () => {
 
 		await identify();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Accept invite failed');
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('no');
 		expect(signOut).toHaveBeenCalled();
 		await expect.element(continueButton()).toBeVisible();
 	});
 
-	// Not a 404, so not "she is new here" -- and not a reason to navigate
-	// away either, which would throw the invite token out of the URL.
-	it('stays put and shows the message when the staff read fails some other way', async () => {
+	/*
+	 * Not a 404, so not "she is new here" -- and not a reason to navigate
+	 * away either, which would throw the invite token out of the URL.
+	 *
+	 * A 5xx is ours, and since #467 it is reported as ours: "the database
+	 * is having a moment" is a sentence about our infrastructure, and there
+	 * is nothing she can do with it.
+	 */
+	it('stays put and owns the failure when the staff read fails some other way', async () => {
 		await setup({ probe: refusal(500, 'the database is having a moment') });
 
 		await identify();
 
 		await expect
 			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('the database is having a moment');
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
+		await expect.element(testPage.getByText('the database is having a moment')).not.toBeInTheDocument();
 		await expect.element(continueButton()).toBeVisible();
 	});
 });
@@ -381,22 +393,26 @@ describe('what happens after the invite is accepted', () => {
 		expect(signOut).toHaveBeenCalled();
 	});
 
-	it('reports a session read that fails after an accepted invite', async () => {
+	it('owns a session read that fails after an accepted invite', async () => {
 		await setup({ afterAccept: refusal(500, 'no session for you') });
 
 		await identifyAsNewPerson();
 		await acceptButton().click();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('no session for you');
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
 	});
 
-	it('reports a non-technical failure when the accept never reaches the server', async () => {
+	it('owns the failure when the accept never reaches the server', async () => {
 		await setup();
 
 		await identifyAsNewPerson();
 		globalFetch.mockRejectedValue(new Error('the network dropped'));
 		await acceptButton().click();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Accept invite failed');
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
 	});
 });

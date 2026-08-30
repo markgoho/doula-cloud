@@ -28,7 +28,8 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiBaseURL, apiErrorMessage, apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { authRefusal, refusalMessage, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -39,6 +40,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
@@ -48,6 +50,11 @@
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 
+	const emailId = 'accept-invite-email';
+	const passwordId = 'accept-invite-password';
+	const nameId = 'accept-invite-name';
+	const workStateId = 'accept-invite-work-state';
+
 	let email = $state('');
 	let password = $state('');
 	let mode = $state<'signup' | 'login'>('signup');
@@ -56,9 +63,18 @@
 	// already carrying one.
 	let name = $state('');
 	let workStateName_ = $state('');
-	let error = $state('');
+	/*
+	 * One array for both steps: they never render at the same time, and
+	 * each handler clears it before it starts, so an entry can only ever
+	 * describe the form on screen.
+	 */
+	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Membership[] | undefined>();
+
+	function errorFor(targetId: string): string | undefined {
+		return errors.find((entry) => entry.targetId === targetId)?.message;
+	}
 
 	/*
 	 * The credential from step one, kept in memory across the two steps.
@@ -85,7 +101,24 @@
 	 */
 	async function handleIdentify(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
+		errors = [];
+
+		const refusals: FormError[] = [];
+		if (email.trim() === '')
+			refusals.push({ message: 'Enter your email address', targetId: emailId });
+		if (password === '') {
+			refusals.push({ message: 'Enter your password', targetId: passwordId });
+		} else if (mode === 'signup' && password.length < 6) {
+			// Only on the signup branch: an existing account's password is
+			// whatever it already is, and refusing a short one here would
+			// lock out anyone who set one before the rule existed.
+			refusals.push({ message: 'Password must be 6 characters or more', targetId: passwordId });
+		}
+		if (refusals.length > 0) {
+			errors = refusals;
+			return;
+		}
+
 		isSubmitting = true;
 		try {
 			credential =
@@ -105,7 +138,7 @@
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {
-				error = 'Accept invite failed';
+				errors = [{ message: await refusalMessage(exchangeResponse) }];
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -128,17 +161,18 @@
 				// and step two is the two questions only she can answer.
 				existing = undefined;
 			} else {
-				error = await apiErrorMessage(sessionResponse);
+				errors = [{ message: await refusalMessage(sessionResponse) }];
 				await signOut(getFirebaseAuth());
 				return;
 			}
 			step = 'accept';
-		} catch {
-			// A clear, non-technical failure message -- not whatever Identity
-			// Platform's SDK throws (e.g. "Firebase: Error
-			// (auth/invalid-credential).") -- covers both account-creation
-			// and sign-in errors, since this form handles both modes.
-			error = 'Accept invite failed';
+		} catch (error_) {
+			// Identity Platform's own words name a product and carry a banned
+			// adjective. `authRefusal` covers both modes this form handles --
+			// "already has an account" on the signup branch is the one it was
+			// worth mapping, since this screen offers the other branch right
+			// underneath (#467).
+			errors = [authRefusal(error_, { emailId, passwordId })];
 		} finally {
 			isSubmitting = false;
 		}
@@ -160,8 +194,22 @@
 
 	async function handleAccept(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
+		errors = [];
 		picker = undefined;
+
+		// Nothing to check on the existing-Staff branch: it asks no
+		// questions, it only shows what she already asserted.
+		if (!existing) {
+			const refusals: FormError[] = [];
+			if (name.trim() === '') refusals.push({ message: 'Enter your name', targetId: nameId });
+			if (workStateName_ === '')
+				refusals.push({ message: 'Choose the state you work from', targetId: workStateId });
+			if (refusals.length > 0) {
+				errors = refusals;
+				return;
+			}
+		}
+
 		isSubmitting = true;
 		try {
 			const idToken = await credential!.user.getIdToken();
@@ -182,7 +230,7 @@
 				})
 			});
 			if (!acceptResponse.ok) {
-				error = await apiErrorMessage(acceptResponse);
+				errors = [{ message: await refusalMessage(acceptResponse) }];
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -194,7 +242,7 @@
 
 			const sessionResponse = await apiFetchWithSession('/api/staff/session');
 			if (!sessionResponse.ok) {
-				error = await apiErrorMessage(sessionResponse);
+				errors = [{ message: await refusalMessage(sessionResponse) }];
 				return;
 			}
 			const session: SessionInfo = await sessionResponse.json();
@@ -205,13 +253,22 @@
 				picker = landing.memberships;
 			}
 		} catch {
-			error = 'Accept invite failed';
+			// A throw past validation is the network or the SDK, not an answer
+			// on this form, so the entry names no control.
+			errors = [{ message: SERVICE_PROBLEM }];
 		} finally {
 			isSubmitting = false;
 		}
 	}
 </script>
 
+
+<!--
+	One summary above the <h1>, GOV.UK's position, serving whichever of the
+	two forms is on screen: they never render together, and each handler
+	clears the array before it runs.
+-->
+<ErrorSummary {errors} />
 
 <h1>Accept your Staff invite</h1>
 
@@ -224,9 +281,10 @@
 		need those answers depends on whether she is Staff already, and
 		signing in is what settles that.
 	-->
-	<form onsubmit={handleIdentify}>
+	<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
+	<form onsubmit={handleIdentify} novalidate>
 		<Text text="First, sign in or create an account with the address your invite was sent to." />
-		<LabeledField label="Email">
+		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -239,7 +297,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<LabeledField label="Password">
+		<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -261,12 +319,9 @@
 			onChange={(value) => (mode = value)}
 		/>
 		<Button type="submit" label="Continue" loading={isSubmitting} />
-		{#if error}
-			<Notice variant="error" message={error} />
-		{/if}
 	</form>
 {:else}
-	<form onsubmit={handleAccept}>
+	<form onsubmit={handleAccept} novalidate>
 		<h2 tabindex="-1" {@attach focusOnAppearing}>
 			{existing ? 'Check your details' : 'Tell us about yourself'}
 		</h2>
@@ -292,7 +347,7 @@
 			-->
 			<Link href={resolve('/account')} label="Change where you work" variant="secondary" />
 		{:else}
-			<LabeledField label="Your name">
+			<LabeledField id={nameId} label="Your name" error={errorFor(nameId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -304,13 +359,10 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<WorkStateField bind:value={workStateName_} />
+			<WorkStateField id={workStateId} bind:value={workStateName_} error={errorFor(workStateId)} />
 		{/if}
 
 		<Button type="submit" label="Accept invite" loading={isSubmitting} />
-		{#if error}
-			<Notice variant="error" message={error} />
-		{/if}
 	</form>
 {/if}
 

@@ -14,9 +14,34 @@
 		employmentType: 'employee' | 'contractor';
 		onRolesChange: (roles: string[]) => void;
 		onEmploymentTypeChange: (employmentType: 'employee' | 'contractor') => void;
+		/**
+		 * A refusal that belongs to the Roles group rather than to any one
+		 * checkbox in it -- "Select at least one role" (#467). It renders
+		 * under the legend, which is GOV.UK's position for a group's error
+		 * message.
+		 */
+		rolesError?: string;
+		/**
+		 * The id given to the *first* role checkbox, so an error summary
+		 * entry can link to the group: GOV.UK sends a reader to the first
+		 * control of the group that was refused, and the group itself is a
+		 * <fieldset>, which is not focusable. Handed in rather than
+		 * generated because the route builds the summary and the two have
+		 * to agree on one string.
+		 */
+		rolesFieldId?: string;
 	}
 
-	let { roles, employmentType, onRolesChange, onEmploymentTypeChange }: Properties = $props();
+	let {
+		roles,
+		employmentType,
+		onRolesChange,
+		onEmploymentTypeChange,
+		rolesError,
+		rolesFieldId
+	}: Properties = $props();
+
+	const rolesErrorId = $props.id();
 
 	const roleOptions: { value: string; label: string }[] = [
 		{ value: 'owner', label: 'Owner' },
@@ -47,11 +72,18 @@
 	compose this, because it is the same decision on both (#425).
 -->
 <stack-l space="var(--space-7)">
-	<fieldset>
+	<fieldset aria-describedby={rolesError ? rolesErrorId : undefined} class:refused={Boolean(rolesError)}>
 		<legend>Roles</legend>
+		{#if rolesError}
+			<p id={rolesErrorId} class="error" role="alert">{rolesError}</p>
+		{/if}
 		<stack-l space="var(--space-5)">
-			{#each roleOptions as option (option.value)}
-				<LabeledField label={option.label} orientation="inline">
+			{#each roleOptions as option, index (option.value)}
+				<LabeledField
+					id={index === 0 ? rolesFieldId : undefined}
+					label={option.label}
+					orientation="inline"
+				>
 					{#snippet children(control)}
 						<Checkbox
 							checked={roles.includes(option.value)}
@@ -90,6 +122,21 @@
 			margin-block-end: var(--space-5);
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
+		}
+
+		/* The group's error message sits between its name and its first
+		   option, close to the name it qualifies rather than adrift between
+		   the two -- so the legend gives up its own 20px when there is one,
+		   and the message keeps it instead. Same treatment `LabeledField`
+		   gives a field's own message. */
+		fieldset.refused legend {
+			margin-block-end: var(--space-1);
+		}
+
+		.error {
+			margin: 0 0 var(--space-5);
+			color: var(--color-error);
+			font-size: var(--text-body-sm-size);
 		}
 	}
 </style>

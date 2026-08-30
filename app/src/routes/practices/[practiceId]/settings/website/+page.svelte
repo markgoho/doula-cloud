@@ -45,6 +45,8 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import type { FormError } from '#lib/formErrors.js';
 
 	type Choice = '' | 'own' | 'hosted';
 
@@ -100,6 +102,43 @@
 			roles = body.roles;
 		}
 	});
+
+	/*
+	 * The ids the error summary links to (#467). The radio group's are
+	 * built by `RadioGroup` from its `name` and each option's value, so the
+	 * group's target is its first option -- GOV.UK sends a reader to the
+	 * first control of a refused group, a <fieldset> not being focusable.
+	 * The two textareas name their own, since they are raw markup until
+	 * #468 makes them an atom.
+	 */
+	const MODE_NAME = 'website-mode';
+	const modeFieldId = `${MODE_NAME}-own`;
+	const ownUrlId = 'website-own-url';
+	const targetByField: Record<string, string> = {
+		mode: modeFieldId,
+		ownUrl: ownUrlId,
+		serviceDescription: 'serviceDescription-input',
+		cancellationPolicy: 'cancellationPolicy-input'
+	};
+	// Field order, not object order: the summary is read top to bottom and
+	// its entries have to match the order of the questions below it.
+	const FIELD_ORDER = ['mode', 'ownUrl', 'serviceDescription', 'cancellationPolicy'];
+
+	/*
+	 * One array, built from the field errors that already existed here plus
+	 * whatever the save refused for. The field keeps rendering its own
+	 * message from the same `fieldErrors` record, so the two wordings are
+	 * one string shown twice rather than two strings kept in step.
+	 */
+	const summaryErrors = $derived<FormError[]>([
+		...FIELD_ORDER.filter((field) => fieldErrors[field]).map((field) => ({
+			message: fieldErrors[field]!,
+			targetId: targetByField[field]
+		})),
+		// No target: a refused save is about the submission, not about a box
+		// on the page.
+		...(submitError ? [{ message: submitError }] : [])
+	]);
 
 	function localErrors(): Record<string, string> {
 		const errors: Record<string, string> = {};
@@ -197,6 +236,7 @@
 {#snippet howFound()}
 	<RadioGroup
 		legend="How will Clients and Stripe find you online?"
+		name={MODE_NAME}
 		options={[
 			{ value: 'own', label: 'I have my own website or social profile' },
 			{ value: 'hosted', label: 'Publish a page for me' }
@@ -219,6 +259,7 @@
 		not write. inputmode still asks a phone for the URL keyboard.
 	-->
 	<LabeledField
+		id={ownUrlId}
 		label="The web address of your website or social profile"
 		hint="A Facebook page or an Instagram profile counts. For example, https://facebook.com/your-practice"
 		error={fieldErrors.ownUrl}
@@ -310,9 +351,7 @@
 {/snippet}
 
 {#snippet errorSummary()}
-	{#if submitError}
-		<Notice variant="error" message={submitError} />
-	{/if}
+	<ErrorSummary errors={summaryErrors} />
 {/snippet}
 
 {#snippet actions()}
@@ -338,11 +377,14 @@
 	{/if}
 
 	{#if step === 'answers'}
-		<form onsubmit={handleContinue}>
+		<!-- `novalidate`: this page refuses the submit and says so once, at
+		     the top, rather than the browser stopping at the first empty
+		     field (#467). -->
+		<form onsubmit={handleContinue} novalidate>
 			<FormPage
 				title="Your website"
 				{intro}
-				error={errorSummary}
+				errorSummary={summaryErrors.length > 0 ? errorSummary : undefined}
 				fieldsets={choice === '' ? [{ content: howFound }] : [{ content: howFound }, { content: choice === 'own' ? ownWebsite : hostedFacts }]}
 				{actions}
 			/>
@@ -351,14 +393,14 @@
 		<container-l>
 			<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 				<stack-l space="var(--space-7)">
+					<!-- Above the <h1>, GOV.UK's position and the one `FormPage`
+					     takes on the step before this (#467). -->
+					<ErrorSummary errors={summaryErrors} />
+
 					<Heading level={1} variant="page" text="Check your page before you publish it" />
 					<Text
 						text="This is what Clients and Stripe will see at your page. You can change any of it later."
 					/>
-
-					{#if submitError}
-						<Notice variant="error" message={submitError} />
-					{/if}
 
 					<DescriptionList
 						items={[

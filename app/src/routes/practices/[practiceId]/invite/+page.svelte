@@ -6,23 +6,50 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { refusalMessage, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+
+	const emailId = 'invite-email';
+	const rolesFieldId = 'invite-roles';
 
 	let email = $state('');
 	let roles = $state<string[]>(['doula']);
 	let employmentType = $state<'employee' | 'contractor'>('employee');
-	let error = $state('');
+	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let invitedAddress = $state('');
 
+	function errorFor(targetId: string): string | undefined {
+		return errors.find((entry) => entry.targetId === targetId)?.message;
+	}
+
+	/*
+	 * "Select", not "Choose", for a checkbox group -- GOV.UK's own verb for
+	 * picking from options on screen, where "Enter" is for typing. The old
+	 * wording was "Choose at least one role." with a full stop; an error
+	 * message is not a sentence in prose, so it takes neither.
+	 */
+	function findRefusals(): FormError[] {
+		const found: FormError[] = [];
+		if (email.trim() === '')
+			found.push({ message: "Enter the Staff member's email address", targetId: emailId });
+		if (roles.length === 0)
+			found.push({ message: 'Select at least one role', targetId: rolesFieldId });
+		return found;
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
+		errors = [];
 		invitedAddress = '';
-		if (roles.length === 0) {
-			error = 'Choose at least one role.';
+
+		const refusals = findRefusals();
+		if (refusals.length > 0) {
+			errors = refusals;
 			return;
 		}
+
 		isSubmitting = true;
 		try {
 			const response = await apiFetchWithSession(
@@ -34,7 +61,7 @@
 				}
 			);
 			if (!response.ok) {
-				error = await response.text();
+				errors = [{ message: await refusalMessage(response) }];
 				return;
 			}
 
@@ -42,8 +69,10 @@
 			email = '';
 			roles = ['doula'];
 			employmentType = 'employee';
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Invite failed';
+		} catch {
+			// A throw here is the network, not the Invitation: nothing on this
+			// page is what went wrong, so the entry carries no target.
+			errors = [{ message: SERVICE_PROBLEM }];
 		} finally {
 			isSubmitting = false;
 		}
@@ -53,7 +82,7 @@
 <!-- No name field: the Invitation carries an address and a Membership,
      and the person names herself when she accepts. -->
 {#snippet who()}
-	<LabeledField label="Their email">
+	<LabeledField id={emailId} label="Their email" error={errorFor(emailId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -72,13 +101,15 @@
 	<MembershipFields
 		{roles}
 		{employmentType}
+		{rolesFieldId}
+		rolesError={errorFor(rolesFieldId)}
 		onRolesChange={(next) => (roles = next)}
 		onEmploymentTypeChange={(next) => (employmentType = next)}
 	/>
 {/snippet}
 
-{#snippet errorNotice()}
-	<Notice variant="error" message={error} />
+{#snippet errorSummary()}
+	<ErrorSummary {errors} />
 {/snippet}
 
 {#snippet actions()}
@@ -109,11 +140,13 @@
 	28px between labelled field groups and 20px between consecutive
 	fields, and `FormPage`'s outer stack is the 28px one.
 -->
-<form onsubmit={handleSubmit}>
+<!-- `novalidate`: the page refuses the submit and lists every reason at
+     once, rather than the browser stopping at the first empty field (#467). -->
+<form onsubmit={handleSubmit} novalidate>
 	<FormPage
 		title="Invite a Staff member"
 		fieldsets={[{ content: who }, { content: membership }]}
-		error={error ? errorNotice : undefined}
+		errorSummary={errors.length > 0 ? errorSummary : undefined}
 		{actions}
 	/>
 </form>

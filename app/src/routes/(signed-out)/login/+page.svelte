@@ -7,20 +7,52 @@
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
+
+	const emailId = 'login-email';
+	const passwordId = 'login-password';
 
 	let email = $state('');
 	let password = $state('');
-	let error = $state('');
+	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Membership[] | undefined>();
 
+	/*
+	 * One array is the whole mechanism (#467). The summary lists it and
+	 * each field reads its own entry out of it, so the two wordings cannot
+	 * drift -- they are one string rendered twice.
+	 */
+	function errorFor(targetId: string): string | undefined {
+		return errors.find((entry) => entry.targetId === targetId)?.message;
+	}
+
+	// GOV.UK's wording rules: what to do, not what is wrong with it.
+	// "Enter your email address", never "Email is required".
+	function findEmptyFields(): FormError[] {
+		const found: FormError[] = [];
+		if (email.trim() === '') found.push({ message: 'Enter your email address', targetId: emailId });
+		if (password === '') found.push({ message: 'Enter your password', targetId: passwordId });
+		return found;
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
+		// Cleared first, so a second refused submit unmounts the summary and
+		// remounts it -- which is what announces the new failure to anyone
+		// who has already tabbed away from the old one.
+		errors = [];
 		picker = undefined;
+
+		const empty = findEmptyFields();
+		if (empty.length > 0) {
+			errors = empty;
+			return;
+		}
+
 		isSubmitting = true;
 		try {
 			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
@@ -44,7 +76,7 @@
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {
-				error = 'Login failed';
+				errors = [{ message: await refusalMessage(exchangeResponse) }];
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -52,7 +84,7 @@
 
 			const response = await apiFetchWithSession('/api/staff/session');
 			if (!response.ok) {
-				error = await response.text();
+				errors = [{ message: await refusalMessage(response) }];
 				return;
 			}
 
@@ -63,21 +95,33 @@
 			} else {
 				picker = landing.memberships;
 			}
-		} catch {
-			// A clear, non-technical failure message -- not whatever Identity
-			// Platform's SDK throws (e.g. "Firebase: Error
-			// (auth/invalid-credential).").
-			error = 'Login failed';
+		} catch (error_) {
+			// Identity Platform's own words are a product name, a code and a
+			// banned adjective ("Firebase: Error (auth/invalid-credential)."),
+			// and the flat "Login failed" that replaced them said nothing
+			// about which field to look at. `authRefusal` maps the code onto
+			// a message and, where there is one, the control that caused it.
+			errors = [authRefusal(error_, { emailId, passwordId })];
 		} finally {
 			isSubmitting = false;
 		}
 	}
 </script>
 
+<ErrorSummary {errors} />
+
 <h1>Log in</h1>
 
-<form onsubmit={handleSubmit}>
-	<LabeledField label="Email">
+<!--
+	`novalidate`, per GOV.UK's Recover from validation errors pattern: the
+	browser's own bubbles refuse the submit before this page can, they
+	vanish on the next keystroke, and they are worded by the browser
+	rather than by us. `required` stays on the controls, because it is a
+	true statement about the field and assistive technology reads it; what
+	it no longer does is block.
+-->
+<form onsubmit={handleSubmit} novalidate>
+	<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -90,7 +134,7 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<LabeledField label="Password">
+	<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -104,9 +148,6 @@
 		{/snippet}
 	</LabeledField>
 	<Button type="submit" label="Log in" loading={isSubmitting} />
-	{#if error}
-		<Notice variant="error" message={error} />
-	{/if}
 </form>
 
 {#if picker}

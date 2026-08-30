@@ -84,7 +84,18 @@ describe('website settings screen', () => {
 
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
-		await expect.element(testPage.getByText('Choose how Clients will find you online')).toBeVisible();
+		// Twice, and that is the pattern (#467): once in the error summary at
+		// the top as a link to the group, and once beside the group itself.
+		// The two are one string rendered twice, so they cannot drift.
+		await expect
+			.element(testPage.getByRole('heading', { name: 'There is a problem' }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Choose how Clients will find you online' }))
+			.toHaveAttribute('href', '#website-mode-own');
+		await expect
+			.element(testPage.getByText('Choose how Clients will find you online').last())
+			.toBeVisible();
 	});
 
 	it('asks for a web address when she has her own site, and refuses an empty one', async () => {
@@ -97,7 +108,12 @@ describe('website settings screen', () => {
 
 		await testPage.getByRole('button', { name: 'Save' }).click();
 		await expect
-			.element(testPage.getByText('Enter the web address of your website or social profile'))
+			.element(
+				testPage.getByRole('link', { name: 'Enter the web address of your website or social profile' })
+			)
+			.toHaveAttribute('href', '#website-own-url');
+		await expect
+			.element(testPage.getByText('Enter the web address of your website or social profile').last())
 			.toBeVisible();
 	});
 
@@ -131,9 +147,21 @@ describe('website settings screen', () => {
 		await testPage.getByLabelText('The web address of your website or social profile').fill('coming soon');
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
+		// A field error the *server* found, now carried into the summary as
+		// well as beside the box -- the server's own words, in both places,
+		// because it is the only thing that knows what was wrong with it.
 		await expect
 			.element(
-				testPage.getByText('Enter a web address in the correct format, like https://example.com/your-practice')
+				testPage.getByRole('link', {
+					name: 'Enter a web address in the correct format, like https://example.com/your-practice'
+				})
+			)
+			.toHaveAttribute('href', '#website-own-url');
+		await expect
+			.element(
+				testPage
+					.getByText('Enter a web address in the correct format, like https://example.com/your-practice')
+					.last()
 			)
 			.toBeVisible();
 	});
@@ -164,7 +192,12 @@ describe('website settings screen', () => {
 		await testPage.getByLabelText('Your cancellation or refund policy').fill('Two weeks.');
 		await expect.element(testPage.getByText('You have 490 characters remaining')).toBeVisible();
 		await testPage.getByRole('button', { name: 'Continue' }).click();
-		await expect.element(testPage.getByText('Shorten this to 500 characters or fewer')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Shorten this to 500 characters or fewer' }))
+			.toHaveAttribute('href', '#serviceDescription-input');
+		await expect
+			.element(testPage.getByText('Shorten this to 500 characters or fewer').last())
+			.toBeVisible();
 	});
 
 	it('shows her the assembled page before it goes live, and publishes only when she says so', async () => {

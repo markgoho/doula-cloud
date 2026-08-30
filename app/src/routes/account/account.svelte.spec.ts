@@ -187,12 +187,20 @@ describe('when the account screen cannot do its job', () => {
 			.toHaveTextContent('workState is required, and must be a two-letter US state abbreviation');
 	});
 
-	it('reports a save that never reached the server at all', async () => {
+	/*
+	 * The thrown message is the network's. Since #467 this screen owns the
+	 * failure in words she can act on rather than repeating an exception,
+	 * and reports it in the error summary above the title.
+	 */
+	it('owns a save that never reached the server at all', async () => {
 		mockApi({ saveThrows: true });
 		await render(Page, {});
 
 		await saveButton().click();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('The network dropped');
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
+		await expect.element(testPage.getByText('The network dropped')).not.toBeInTheDocument();
 	});
 });

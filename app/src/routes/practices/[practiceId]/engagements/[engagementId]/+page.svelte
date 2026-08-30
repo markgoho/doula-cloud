@@ -560,7 +560,7 @@
 		<Button label="Reassign" type="submit" size="sm" variant="secondary" />
 	</form>
 	{#if reassignError[visit.visitId]}
-		<p role="alert">{reassignError[visit.visitId]}</p>
+		<Notice variant="error" message={reassignError[visit.visitId]} />
 	{/if}
 {/snippet}
 
@@ -568,7 +568,7 @@
 	<Button label="Add a Visit" onClick={handleCreateVisit} loading={isCreatingVisit} />
 
 	{#if visitsError}
-		<p role="alert">{visitsError}</p>
+		<Notice variant="error" message={visitsError} />
 	{/if}
 
 	<DataTable
@@ -590,7 +590,7 @@
 -->
 {#snippet planSectionBody(planType: PlanType, heading: string)}
 	{#if planError[planType]}
-		<p role="alert">{planError[planType]}</p>
+		<Notice variant="error" message={planError[planType]} />
 	{/if}
 
 	{#if planLoaded[planType]}
@@ -618,7 +618,7 @@
 
 {#snippet contractSection()}
 	{#if contractError}
-		<p role="alert">{contractError}</p>
+		<Notice variant="error" message={contractError} />
 	{/if}
 
 	{#if isContractLoaded}
@@ -642,7 +642,7 @@
 
 {#snippet invoicesSection()}
 	{#if invoicesError}
-		<p role="alert">{invoicesError}</p>
+		<Notice variant="error" message={invoicesError} />
 	{/if}
 
 	<InvoiceSection {invoices} {connectGate} onCreate={handleCreateInvoice} onConnect={handleConnectInvoicing} />

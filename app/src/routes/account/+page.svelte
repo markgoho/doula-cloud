@@ -27,6 +27,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import type { Membership, SessionInfo } from '#lib/landing.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
@@ -36,6 +37,10 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import type { FormError } from '#lib/formErrors.js';
+
+	const workStateId = 'account-work-state';
 
 	let name = $state('');
 	let memberships = $state<Membership[]>([]);
@@ -45,7 +50,7 @@
 	let selectedState = $state('');
 	let isLoaded = $state(false);
 	let loadError = $state('');
-	let saveError = $state('');
+	let saveError = $state<FormError[]>([]);
 	let savedState = $state('');
 	let isSaving = $state(false);
 
@@ -88,8 +93,15 @@
 	 */
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		saveError = '';
+		saveError = [];
 		savedState = '';
+
+		// The one question this page asks. Nothing else on it is editable.
+		if (selectedState === '') {
+			saveError = [{ message: 'Choose the state you work from', targetId: workStateId }];
+			return;
+		}
+
 		isSaving = true;
 		try {
 			/*
@@ -113,7 +125,7 @@
 				body: JSON.stringify({ workState: workStateCode(selectedState) })
 			});
 			if (!response.ok) {
-				saveError = await apiErrorMessage(response);
+				saveError = [{ message: await refusalMessage(response) }];
 				return;
 			}
 
@@ -121,8 +133,10 @@
 			reportedAt = saved.workStateReportedAt;
 			selectedState = workStateName(saved.workState);
 			savedState = selectedState;
-		} catch (error_) {
-			saveError = error_ instanceof Error ? error_.message : 'Could not save your work state';
+		} catch {
+			// A throw here is the network, not her answer, so no field is
+			// named.
+			saveError = [{ message: SERVICE_PROBLEM }];
 		} finally {
 			isSaving = false;
 		}
@@ -153,7 +167,11 @@
 	{#if reportedAt}
 		<Text text={`Last confirmed ${workStateReportedOn(reportedAt)}.`} step="meta" tone="muted" />
 	{/if}
-	<WorkStateField bind:value={selectedState} />
+	<WorkStateField
+		id={workStateId}
+		bind:value={selectedState}
+		error={saveError.find((entry) => entry.targetId === workStateId)?.message}
+	/>
 	<!--
 		Saving the same state again is a re-assertion, not a no-op -- see
 		the comment on handleSubmit. Hence no `disabled` on an unchanged
@@ -161,8 +179,8 @@
 	-->
 {/snippet}
 
-{#snippet saveNotice()}
-	<Notice variant="error" message={saveError} />
+{#snippet errorSummary()}
+	<ErrorSummary errors={saveError} />
 {/snippet}
 
 {#snippet actions()}
@@ -185,12 +203,13 @@
 		</center-l>
 	</container-l>
 {:else if isLoaded}
-	<form onsubmit={handleSubmit}>
+	<!-- `novalidate`: this page refuses the submit, not the browser (#467). -->
+	<form onsubmit={handleSubmit} novalidate>
 		<FormPage
 			title="Your account"
 			{intro}
 			fieldsets={[{ legend: `Your details, ${name}`, content: workState }]}
-			error={saveError ? saveNotice : undefined}
+			errorSummary={saveError.length > 0 ? errorSummary : undefined}
 			{actions}
 		/>
 	</form>
