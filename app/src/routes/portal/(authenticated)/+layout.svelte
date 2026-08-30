@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { apiFetch } from '#lib/api.js';
@@ -85,7 +85,19 @@
 		});
 		// The portal login screen, not the Staff one: a Client sent to
 		// /login would be shown a door that is not theirs (#153).
-		if (outcome.ok) await goto(resolve('/portal/(signed-out)/login'));
+		if (outcome.ok) {
+			// engagements/[engagementId]/+layout.ts's load result is keyed on
+			// params alone (#487), so pressing Back to the exact URL it last
+			// resolved for would otherwise reuse that stale, still-signed-in
+			// data instead of re-checking the session -- SvelteKit skips a
+			// rerun when nothing it tracks has changed, and signing out
+			// changes nothing it tracks. `invalidateAll` marks it (and every
+			// other active load) stale, so the next visit -- Back included --
+			// re-fetches and hits the same 401 the page's own reads already
+			// bounce on.
+			await invalidateAll();
+			await goto(resolve('/portal/(signed-out)/login'));
+		}
 		return outcome;
 	}
 </script>

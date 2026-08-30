@@ -20,7 +20,8 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+const invalidateAll = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
 
 const signOutOfSession = vi.hoisted(() => vi.fn<() => Promise<SignOutOutcome>>());
 vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
@@ -61,6 +62,7 @@ async function setup({
 		? {}
 		: { practiceName: 'Riverside Doula Collective', clientName: 'Tasha Bell' };
 	goto.mockReset();
+	invalidateAll.mockReset();
 	registerPushSubscription.mockReset();
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
@@ -130,6 +132,10 @@ describe('Client portal authenticated layout', () => {
 		// The portal door, not the Staff one -- a Client sent to /login
 		// would be looking at a screen that is not theirs.
 		expect(goto).toHaveBeenCalledWith('/portal/login');
+		// Otherwise a Back press to the Engagement URL would reuse the
+		// still-signed-in load result instead of re-checking the session
+		// (#487).
+		expect(invalidateAll).toHaveBeenCalled();
 	});
 
 	it('stays put and reports a sign-out that failed', async () => {
