@@ -21,7 +21,10 @@ export interface Balance {
  * modules -- mirrors planTemplate.ts's Fetcher. */
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
-function billingPath(practiceId: string): string {
+/** Exported for `billing/+page.ts` (#471), which needs the response's raw
+ * status to distinguish a role refusal (403) from any other failure --
+ * `loadBalance` below discards it. */
+export function billingPath(practiceId: string): string {
 	return `/api/practices/${practiceId}/billing`;
 }
 
