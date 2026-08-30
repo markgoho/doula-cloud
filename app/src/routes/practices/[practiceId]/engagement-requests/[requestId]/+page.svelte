@@ -25,7 +25,10 @@
 	 * storage here, unlike the request form: every fact on this screen
 	 * derives from the Request id in the URL, so coming back to the same
 	 * address rebuilds it. The one piece of typed state is the refusal
-	 * reason, and refusing never runs out of Credits.
+	 * reason, and refusing never runs out of Credits. What the round trip
+	 * does need is the way back -- Stripe returns to the Billing page and
+	 * nowhere else -- so this screen remembers its own address on the way
+	 * out and forgets it on the way in (see engagementRequest.ts).
 	 */
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -35,7 +38,9 @@
 	import {
 		approveRequest,
 		loadApprovalDetail,
+		forgetApprovalReturn,
 		refuseRequest,
+		rememberApprovalReturn,
 		type ApprovalDetail
 	} from '#lib/engagementRequest.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -127,7 +132,21 @@
 		return resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! });
 	}
 
+	function approvalHref(): string {
+		return resolve('/practices/[practiceId]/engagement-requests/[requestId]', {
+			practiceId: page.params.practiceId!,
+			requestId: page.params.requestId!
+		});
+	}
+
+	// Remembered only while the way back is actually being offered, so a
+	// reader who never runs out of Credits never touches storage at all.
+	$effect(() => {
+		if (hasNoCredits || isBalanceEmpty) rememberApprovalReturn(approvalHref());
+	});
+
 	onMount(async () => {
+		forgetApprovalReturn();
 		try {
 			detail = await loadApprovalDetail(apiFetchWithSession, page.params.practiceId!, page.params.requestId!);
 		} catch (error_) {

@@ -158,3 +158,4 @@ describe('refuseRequest', () => {
 		await expect(refuseRequest(fetcher, 'practice-1', 'request-1', '')).rejects.toThrow('reason is required');
 	});
 });
+

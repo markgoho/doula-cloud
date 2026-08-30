@@ -23,6 +23,40 @@ const data: Balance = {
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	apiFetchWithSession.mockResolvedValue(jsonResponse({ roles: [] }));
+	sessionStorage.clear();
+});
+
+describe('the way back to an approval an empty balance interrupted (#502)', () => {
+	it('offers the remembered approval screen', async () => {
+		sessionStorage.setItem('engagement-request-approval-return', '/practices/practice-1/engagement-requests/request-1');
+
+		await render(Page, { params: { practiceId: 'practice-1' }, data });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
+			.toHaveAttribute('href', '/practices/practice-1/engagement-requests/request-1');
+	});
+
+	it('offers nothing when storage itself is unreachable, rather than failing the page', async () => {
+		vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+			throw new Error('site data blocked');
+		});
+
+		await render(Page, { params: { practiceId: 'practice-1' }, data });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
+			.not.toBeInTheDocument();
+		vi.restoreAllMocks();
+	});
+
+	it('offers nothing to somebody who came here on her own', async () => {
+		await render(Page, { params: { practiceId: 'practice-1' }, data });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
+			.not.toBeInTheDocument();
+	});
 });
 
 describe('billing ledger', () => {

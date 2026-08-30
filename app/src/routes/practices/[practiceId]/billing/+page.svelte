@@ -9,7 +9,9 @@
 		purchaseCredits,
 		type LedgerEntry
 	} from '#lib/billing.js';
+	import { readApprovalReturn } from '#lib/engagementRequest.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -45,11 +47,22 @@
 		}
 	];
 
+	/*
+	 * An approver sent here by an empty balance mid-decision (#502) is
+	 * given the way back to the Request she was deciding. Stripe's return
+	 * URLs point at this page and nothing else, so the approval screen
+	 * leaves its own address in sessionStorage on the way out and this
+	 * page reads it -- read once on mount rather than derived, because
+	 * nothing on this page changes it.
+	 */
+	let approvalReturn = $state('');
+
 	let quantity = $state(1);
 	let purchaseError = $state('');
 	let isPurchasing = $state(false);
 
 	onMount(async () => {
+		approvalReturn = readApprovalReturn();
 		// The buy-credits button's enabled state mirrors the "owner"-role
 		// gating the root Practice page already uses -- server-side
 		// enforcement (RequireOwner) is what actually matters, this is UX
@@ -100,6 +113,10 @@
 	onLoadMore={handleLoadMoreLedger}
 	emptyMessage="No ledger history yet."
 />
+
+{#if approvalReturn}
+	<Link href={approvalReturn} label="Back to the engagement request you were deciding" />
+{/if}
 
 {#if checkoutStatus === 'success'}
 	<p role="status">Credit purchase complete. The balance updates once Stripe confirms payment.</p>

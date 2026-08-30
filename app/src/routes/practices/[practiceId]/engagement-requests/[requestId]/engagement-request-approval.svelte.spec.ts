@@ -40,6 +40,7 @@ const baseDetail: ApprovalDetail = {
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
+	sessionStorage.clear();
 });
 
 interface MockOptions {
@@ -163,6 +164,25 @@ describe('the approval screen', () => {
 		await expect.element(testPage.getByText("There are no credits left on this practice's balance.")).toBeVisible();
 		await expect.element(testPage.getByText('Ada Doula on Aug 1, 2026')).toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('leaves the way back to this decision behind before sending her to buy credits', async () => {
+		await setup({ detail: { ...baseDetail, balance: 0, balanceAfter: -1 } });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Buy credits' }))
+			.toBeVisible();
+		expect(sessionStorage.getItem('engagement-request-approval-return')).toBe(
+			'/practices/practice-1/engagement-requests/request-1'
+		);
+	});
+
+	it('forgets the way back once she is on the screen again, so it is offered only once', async () => {
+		sessionStorage.setItem('engagement-request-approval-return', '/practices/practice-1/engagement-requests/request-1');
+
+		await setup();
+
+		expect(sessionStorage.getItem('engagement-request-approval-return')).toBeNull();
 	});
 
 	it('refuses to submit a refusal with no reason, client-side, before any request', async () => {

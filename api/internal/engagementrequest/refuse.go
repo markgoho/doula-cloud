@@ -69,9 +69,12 @@ func RefuseHandler() http.Handler {
 	})
 }
 
-// writeRequestNotDecidable reports why a decision UPDATE affected zero
-// rows: no such Request at this Practice (RLS already scopes the read),
-// or one that has already been decided or withdrawn.
+// writeRequestNotDecidable reports why a Request could not be acted on:
+// no such Request at this Practice (RLS already scopes the read), or one
+// that has already been decided or withdrawn. Shared by the decision
+// handlers, where it explains an UPDATE that affected zero rows, and by
+// DetailHandler, where it explains a Request that is no longer pending --
+// the same two answers either way.
 func writeRequestNotDecidable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, requestID string) {
 	var state string
 	err := tx.QueryRowContext(r.Context(), `SELECT state::text FROM engagement_requests WHERE id = $1`, requestID).Scan(&state)

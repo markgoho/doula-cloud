@@ -171,3 +171,50 @@ export async function refuseRequest(
 		throw new Error(await response.text());
 	}
 }
+
+/*
+ * Where an approver was when she ran out of Credits. Stripe's Checkout
+ * success and cancel URLs are hardcoded to the Billing page
+ * (billing/stripe_api_client.go), so there is no server-side way to carry
+ * a return-to URL through the purchase. sessionStorage carries it
+ * instead: the approval screen remembers its own address the moment an
+ * empty balance is discovered, the Billing page offers the way back, and
+ * the approval screen forgets it again the next time it is opened. Every
+ * access is wrapped, because sessionStorage throws in a private window
+ * with site data blocked and losing the shortcut is far smaller than
+ * losing the screen.
+ */
+const APPROVAL_RETURN_KEY = 'engagement-request-approval-return';
+
+/**
+ * Remembers the approval screen to come back to after buying Credits.
+ */
+export function rememberApprovalReturn(href: string): void {
+	try {
+		sessionStorage.setItem(APPROVAL_RETURN_KEY, href);
+	} catch {
+		// Best effort: Buy Credits still works, she navigates back herself.
+	}
+}
+
+/**
+ * The approval screen waiting for a decision, if there is one.
+ */
+export function readApprovalReturn(): string {
+	try {
+		return sessionStorage.getItem(APPROVAL_RETURN_KEY) ?? '';
+	} catch {
+		return '';
+	}
+}
+
+/** Forgets the remembered approval screen -- called by that screen itself
+ * on its way in, so the way back is never offered to somebody who has
+ * already taken it. */
+export function forgetApprovalReturn(): void {
+	try {
+		sessionStorage.removeItem(APPROVAL_RETURN_KEY);
+	} catch {
+		// Nothing left to clean up if storage was never reachable.
+	}
+}
