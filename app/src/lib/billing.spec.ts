@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadBalance, purchaseCredits } from './billing.js';
+import { loadBalance, originLabel, purchaseCredits } from './billing.js';
 import { jsonResponse } from './testResponse.js';
 
 describe('loadBalance', () => {
@@ -44,5 +44,22 @@ describe('purchaseCredits', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden: owner only', 403));
 
 		await expect(purchaseCredits(fetcher, 'practice-1', 5)).rejects.toThrow('forbidden: owner only');
+	});
+});
+
+describe('originLabel', () => {
+	it('tells a founding grant apart from a signup bonus', () => {
+		expect(originLabel('founding_grant')).toBe('Founding member credits');
+		expect(originLabel('signup_bonus')).toBe('Welcome credits');
+	});
+
+	it('names the other three origins in words rather than enum values', () => {
+		expect(originLabel('purchase')).toBe('Purchase');
+		expect(originLabel('consumption')).toBe('Engagement started');
+		expect(originLabel('refund')).toBe('Refund');
+	});
+
+	it('falls back to the raw origin, so an unknown value reads oddly rather than blank', () => {
+		expect(originLabel('something_new')).toBe('something_new');
 	});
 });

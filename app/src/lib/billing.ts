@@ -16,6 +16,30 @@ export interface Balance {
 	ledger: LedgerEntry[];
 }
 
+/** What each `credit_ledger` origin is called on the Billing screen.
+ *
+ * A founding grant and a signup bonus are two different things (#439, and
+ * #449 gave them two enum values so the pilot terms can say "one-time"
+ * about one and not the other), so the screen has to tell them apart
+ * rather than printing whichever enum value arrived. It also stops
+ * printing the enum at all: `signup_bonus` is an engineering word on a
+ * screen a doula reads, which ADR-0022 already refused for "System".
+ */
+const ORIGIN_LABELS: Record<string, string> = {
+	signup_bonus: 'Welcome credits',
+	founding_grant: 'Founding member credits',
+	purchase: 'Purchase',
+	consumption: 'Engagement started',
+	refund: 'Refund'
+};
+
+/** The label for a ledger row's origin. An origin with no label falls back
+ * to the raw value: a new enum value should read oddly on the screen, not
+ * leave the row blank. */
+export function originLabel(origin: string): string {
+	return ORIGIN_LABELS[origin] ?? origin;
+}
+
 /** A minimal fetch-shaped function, injected rather than imported, so load
  * can be unit-tested without mocking the global fetch or SvelteKit's `$app`
  * modules -- mirrors planTemplate.ts's Fetcher. */

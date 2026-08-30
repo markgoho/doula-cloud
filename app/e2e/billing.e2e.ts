@@ -37,8 +37,10 @@ test('Staff member can view the signup-bonus balance and ledger history', async 
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/billing$`));
 
 	// A brand-new Practice's balance is the +3 signup_bonus grant from
-	// staffauth.signup, and nothing else.
+	// staffauth.signup, and nothing else. The cell reads "Welcome
+	// credits", not the enum value -- #449 gave the ledger a second kind
+	// of grant, and the screen names both in words.
 	await expect(page.getByText('Credit balance: 3')).toBeVisible();
-	await expect(page.getByRole('cell', { name: 'signup_bonus' })).toBeVisible();
+	await expect(page.getByRole('cell', { name: 'Welcome credits' })).toBeVisible();
 	await expect(page.getByRole('cell', { name: '+3' })).toBeVisible();
 });

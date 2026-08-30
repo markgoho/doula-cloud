@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { purchaseCredits, type LedgerEntry } from '#lib/billing.js';
+	import { originLabel, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import type { PageProps as PageProperties } from './$types';
@@ -18,7 +18,7 @@
 
 	const columns = [
 		{ label: 'Date', accessor: (entry: LedgerEntry) => new Date(entry.createdAt).toLocaleString() },
-		{ label: 'Origin', accessor: (entry: LedgerEntry) => entry.origin },
+		{ label: 'Origin', accessor: (entry: LedgerEntry) => originLabel(entry.origin) },
 		{
 			label: 'Quantity',
 			accessor: (entry: LedgerEntry) => `${entry.quantity > 0 ? '+' : ''}${entry.quantity}`

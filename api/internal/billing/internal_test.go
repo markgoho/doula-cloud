@@ -19,6 +19,7 @@ func newInternalBillingServer(db *testdb.DB, client billing.StripeClient) *httpt
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/internal/billing/refunds", billing.RefundHandler(db.App, client, internalTestSecret))
 	mux.Handle("GET /api/internal/billing/dormant-practices", billing.DormantPracticesHandler(db.App, internalTestSecret))
+	mux.Handle("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(db.App, internalTestSecret))
 	return httptest.NewServer(mux)
 }
 

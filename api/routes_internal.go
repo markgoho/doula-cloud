@@ -63,4 +63,9 @@ func registerInternalRoutes(mux *http.ServeMux, d Deps) {
 	// view of anything.
 	mux.Handle("POST /api/internal/billing/refunds", billing.RefundHandler(d.DB, d.StripeClient, d.WorkerSecret))
 	mux.Handle("GET /api/internal/billing/dormant-practices", billing.DormantPracticesHandler(d.DB, d.WorkerSecret))
+	// #449's founding grant, on the same guard again. A pilot Practice's
+	// Credits are issued by a person, by hand, roughly a dozen times in
+	// total -- so this is an operator endpoint that records who issued
+	// them, not a screen and not an ad-hoc INSERT.
+	mux.Handle("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(d.DB, d.WorkerSecret))
 }
