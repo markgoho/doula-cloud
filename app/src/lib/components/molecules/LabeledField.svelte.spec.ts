@@ -68,6 +68,30 @@ describe('LabeledField.svelte', () => {
 		expect(alert.element().id).toBe(describedBy);
 	});
 
+	/*
+	 * Position, not just presence: GOV.UK's Error message sits between the
+	 * hint and the control it refuses, and this rendered below the control
+	 * until #475 opened the pages in a browser. Document order is what the
+	 * eye reads down the page, so it is what is asserted.
+	 */
+	it('renders the error message above the control it refuses', async () => {
+		await setup({ error: 'Name is required' });
+
+		const alert = page.getByRole('alert').element();
+		const control = page.getByLabelText('Client name').element();
+
+		expect(alert.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('renders the hint above the error, and both above the control', async () => {
+		await setup({ hint: 'The name she goes by', error: 'Name is required' });
+
+		const hint = page.getByText('The name she goes by').element();
+		const alert = page.getByRole('alert').element();
+
+		expect(hint.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('marks the control invalid when there is an error', async () => {
 		await setup({ error: 'Name is required' });
 

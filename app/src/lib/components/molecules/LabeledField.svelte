@@ -57,8 +57,22 @@
 	{/if}
 {/snippet}
 
+{#snippet fieldError()}
+	<!--
+		Above the control, not below it: GOV.UK's Error message sits between
+		the hint and the thing it refuses, so a person reading down the page
+		meets the reason before the box they have to correct rather than
+		after it. It rendered below until #475 walked the pages (#425 found
+		the same class of defect on the label).
+	-->
+	{#if error}
+		<p id={errorId} role="alert">{error}</p>
+	{/if}
+{/snippet}
+
 <stack-l space="var(--space-1)">
 	{#if orientation === 'inline'}
+		{@render fieldError()}
 		<cluster-l>
 			{@render control()}
 			{@render fieldLabel()}
@@ -66,10 +80,8 @@
 	{:else}
 		{@render fieldLabel()}
 		{@render fieldHint()}
+		{@render fieldError()}
 		{@render control()}
-	{/if}
-	{#if error}
-		<p id={errorId} role="alert">{error}</p>
 	{/if}
 </stack-l>
 

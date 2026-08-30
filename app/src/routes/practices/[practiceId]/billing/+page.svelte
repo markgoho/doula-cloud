@@ -5,7 +5,11 @@
 	import { billingPath, originLabel, purchaseCredits, type LedgerEntry } from '#lib/billing.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import type { PageProps as PageProperties } from './$types';
+
+	const quantityId = 'buy-credits-quantity';
 
 	// Balance and the ledger's first page come from +page.ts's load now,
 	// not an onMount fetch (#471) -- a role refusal has to reach
@@ -95,10 +99,27 @@
 {/if}
 
 <form onsubmit={handlePurchase}>
-	<label>
-		Quantity
-		<input type="number" min="1" bind:value={quantity} required />
-	</label>
+	<!--
+		Through LabeledField and TextInput rather than a raw <label> around a
+		raw <input>: reaching around the atoms put the word "Quantity" on the
+		same line as its box, which is the defect #425 found and #475 walked
+		the pages to catch the rest of.
+	-->
+	<LabeledField id={quantityId} label="Quantity">
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				type="number"
+				inputmode="numeric"
+				min={1}
+				required
+				value={String(quantity)}
+				onInput={(entered) => (quantity = Number(entered))}
+			/>
+		{/snippet}
+	</LabeledField>
 	<Button label="Buy credits" type="submit" disabled={!isOwner} loading={isPurchasing} />
 	{#if purchaseError}
 		<p role="alert">{purchaseError}</p>

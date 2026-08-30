@@ -94,6 +94,18 @@ describe('TextInput.svelte', () => {
 		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('minlength');
 	});
 
+	it('reflects min', async () => {
+		await setup({ type: 'number', min: 1 });
+
+		await expect.element(page.getByRole('spinbutton')).toHaveAttribute('min', '1');
+	});
+
+	it('omits min when not provided', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('min');
+	});
+
 	it('sets aria-invalid=false by default', async () => {
 		await setup();
 

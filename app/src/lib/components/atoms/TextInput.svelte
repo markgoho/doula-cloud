@@ -15,6 +15,7 @@
 		invalid = false,
 		describedBy,
 		minlength,
+		min,
 		inputmode,
 		autocomplete
 	}: {
@@ -42,6 +43,12 @@
 		invalid?: boolean;
 		describedBy?: string;
 		minlength?: number;
+		/*
+		 * The floor a type="number" field will accept -- a quantity of
+		 * credits starts at 1, not at 0 or -3. Separate from `minlength`,
+		 * which counts characters rather than reading the value.
+		 */
+		min?: number;
 		/*
 		 * Whose data this is, per docs/design/govuk-alignment.md: a WHATWG
 		 * token on a field about the person filling the form in, "off" on a
@@ -71,6 +78,7 @@
 	{required}
 	{disabled}
 	{minlength}
+	{min}
 	{inputmode}
 	{autocomplete}
 	class:invalid
