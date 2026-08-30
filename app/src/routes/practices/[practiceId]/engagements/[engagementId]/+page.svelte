@@ -30,6 +30,7 @@
 	import { connect as connectStripe } from '#lib/payments.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
@@ -138,6 +139,13 @@
 
 	function portalInviteURL() {
 		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/portal-invite`;
+	}
+
+	// The Client detail hub (#494). `detail.clientId` comes straight off
+	// the Engagement's own read (engagement.Detail), so no extra fetch is
+	// needed to build the link.
+	function clientDetailHref(): string {
+		return `/practices/${page.params.practiceId}/clients/${detail!.clientId}`;
 	}
 
 	function visitsURL() {
@@ -545,10 +553,30 @@
 	<stack-l space="var(--space-4)">
 		<DescriptionList
 			items={[
+				{ label: 'Client', value: detail!.clientName },
 				{ label: 'Status', value: detail!.status },
 				{ label: 'Created', value: new Date(detail!.createdAt).toLocaleDateString() }
 			]}
 		/>
+
+		<!--
+			#500: the Client block. "View Client" alone doesn't say whose
+			record it opens -- the same #513 defect the Client detail hub's
+			own "Edit" link already solves, the same way: a sibling
+			visually-hidden span joined by aria-describedby, so the announced
+			name becomes "View Client, Pat Jordan" without a second visible
+			word. Staff-only by construction rather than by a guard here: the
+			portal's Engagement page is a wholly separate route
+			(portal/(authenticated)/engagements/[engagementId]/+page.svelte)
+			that never imports this component, matching ADR-0017's read table
+			(a Client record is staff-only, never shown in the portal). The
+			link itself needs no fresh access check either -- it only ever
+			targets the Client this reader is already looking at through this
+			Engagement, and reading this Engagement at all already passed
+			ADR-0008's gate.
+		-->
+		<Link href={clientDetailHref()} label="View Client" describedBy="engagement-client-name" />
+		<span class="visually-hidden" id="engagement-client-name">{detail!.clientName}</span>
 
 		<!--
 			The outcome of the header's own action, and the only block-level
