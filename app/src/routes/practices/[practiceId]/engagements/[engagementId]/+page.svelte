@@ -32,7 +32,6 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -694,30 +693,28 @@
 	/>
 {/snippet}
 
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if detail}
-	<!--
-		Archetype D, ADR-0018. The Invoices and Offers sections are still
-		conditional exactly as before -- Invoices needs a Contract to exist
-		and Offers is Owner/Admin-only -- which is why `sections` is a typed
-		array and not a run of named regions.
-	-->
-	<RecordDetail
-		title={detail.clientName}
-		{summary}
-		{actions}
-		isContentsShown
-		sections={[
-			{ heading: 'Visits', content: visitsSection },
-			{ heading: 'Care Plan', content: carePlanSection },
-			{ heading: 'Birth Plan', content: birthPlanSection },
-			{ heading: 'Contract', content: contractSection },
-			...(contract ? [{ heading: 'Invoices', content: invoicesSection }] : []),
-			...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
-			{ heading: 'Messages', content: messagesSection }
-		]}
-	/>
-{:else}
-	<Skeleton variant="text" lines={6} label="Loading the Engagement" />
-{/if}
+<!--
+	Archetype D, ADR-0018. The Invoices and Offers sections are still
+	conditional exactly as before -- Invoices needs a Contract to exist
+	and Offers is Owner/Admin-only -- which is why `sections` is a typed
+	array and not a run of named regions.
+-->
+<RecordDetail
+	title={detail ? detail.clientName : ''}
+	{summary}
+	{actions}
+	isContentsShown
+	sections={detail
+		? [
+				{ heading: 'Visits', content: visitsSection },
+				{ heading: 'Care Plan', content: carePlanSection },
+				{ heading: 'Birth Plan', content: birthPlanSection },
+				{ heading: 'Contract', content: contractSection },
+				...(contract ? [{ heading: 'Invoices', content: invoicesSection }] : []),
+				...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
+				{ heading: 'Messages', content: messagesSection }
+			]
+		: []}
+	loading={detail || error ? undefined : 'Loading the Engagement'}
+	loadError={error || undefined}
+/>

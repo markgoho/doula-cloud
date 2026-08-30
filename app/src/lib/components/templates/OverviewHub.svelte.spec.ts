@@ -4,6 +4,10 @@ import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OverviewHub from './OverviewHub.svelte';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See practice-landing.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 function textSnippet(text: string) {
 	return createRawSnippet(() => ({ render: () => `<p>${text}</p>` }));
@@ -92,5 +96,35 @@ describe('OverviewHub.svelte', () => {
 		};
 
 		expect(withoutEmptyState.title).toBe('Willow Birth Collective');
+	});
+
+	it('reserves the page frame for a skeleton while loading, instead of rendering the title or content (#480)', async () => {
+		const { container } = await setup({ loading: 'Loading your Practice' });
+
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		await expect.element(page.getByRole('status', { name: 'Loading your Practice' })).toBeVisible();
+		await expect
+			.element(page.getByRole('heading', { level: 1, name: 'Willow Birth Collective' }))
+			.not.toBeInTheDocument();
+		await expect.element(page.getByText('Six open Offers')).not.toBeInTheDocument();
+	});
+
+	it('reserves the page frame for a Notice on a load failure, instead of rendering the title or content (#480)', async () => {
+		const { container } = await setup({ loadError: 'Failed to load your Practice' });
+
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		await expect.element(page.getByText('Failed to load your Practice')).toBeVisible();
+		await expect
+			.element(page.getByRole('heading', { level: 1, name: 'Willow Birth Collective' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('prefers loadError over loading when both are somehow given', async () => {
+		await setup({ loadError: 'Failed to load your Practice', loading: 'Loading your Practice' });
+
+		await expect.element(page.getByText('Failed to load your Practice')).toBeVisible();
+		await expect
+			.element(page.getByRole('status', { name: 'Loading your Practice' }))
+			.not.toBeInTheDocument();
 	});
 });

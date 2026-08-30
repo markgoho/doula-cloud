@@ -17,7 +17,6 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	let detail = $state<ClientDetail | undefined>();
 	let error = $state('');
@@ -174,19 +173,15 @@
 	/>
 {/snippet}
 
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if detail}
-	<RecordDetail
-		title={displayName(detail)}
-		{summary}
-		{actions}
-		sections={[
-			{ heading: 'Practice-defined fields', content: practiceDefinedFieldsSection },
-			{ heading: 'Engagements', content: engagementsSection },
-			{ heading: 'History', content: historySection }
-		]}
-	/>
-{:else}
-	<Skeleton variant="text" lines={6} label="Loading the Client" />
-{/if}
+<RecordDetail
+	title={detail ? displayName(detail) : ''}
+	{summary}
+	{actions}
+	sections={[
+		{ heading: 'Practice-defined fields', content: practiceDefinedFieldsSection },
+		{ heading: 'Engagements', content: engagementsSection },
+		{ heading: 'History', content: historySection }
+	]}
+	loading={detail || error ? undefined : 'Loading the Client'}
+	loadError={error || undefined}
+/>

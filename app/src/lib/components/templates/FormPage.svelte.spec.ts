@@ -4,6 +4,10 @@ import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import FormPage from './FormPage.svelte';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See practice-landing.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 function textSnippet(text: string) {
 	return createRawSnippet(() => ({ render: () => `<p>${text}</p>` }));
@@ -145,5 +149,33 @@ describe('FormPage.svelte', () => {
 		expect(container.querySelector('center-l')).toHaveAttribute('gutters', 'var(--page-gutter)');
 		expect(container.querySelector('form')).toBeNull();
 		expect(container.querySelector('nav')).toBeNull();
+	});
+
+	it('renders the title and a skeleton while loading, instead of the fieldsets (#480)', async () => {
+		const { container } = await setup({ loading: 'Loading your account' });
+
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--form-max)');
+		await expect.element(page.getByRole('heading', { level: 1, name: 'New client' })).toBeVisible();
+		await expect.element(page.getByRole('status', { name: 'Loading your account' })).toBeVisible();
+		expect(container.querySelectorAll('fieldset')).toHaveLength(0);
+		await expect.element(page.getByText('Save client')).not.toBeInTheDocument();
+	});
+
+	it('renders the title and a Notice on a load failure, instead of the fieldsets (#480)', async () => {
+		const { container } = await setup({ loadError: 'Failed to load your account' });
+
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--form-max)');
+		await expect.element(page.getByRole('heading', { level: 1, name: 'New client' })).toBeVisible();
+		await expect.element(page.getByText('Failed to load your account')).toBeVisible();
+		expect(container.querySelectorAll('fieldset')).toHaveLength(0);
+	});
+
+	it('prefers loadError over loading when both are somehow given', async () => {
+		await setup({ loadError: 'Failed to load your account', loading: 'Loading your account' });
+
+		await expect.element(page.getByText('Failed to load your account')).toBeVisible();
+		await expect
+			.element(page.getByRole('status', { name: 'Loading your account' }))
+			.not.toBeInTheDocument();
 	});
 });

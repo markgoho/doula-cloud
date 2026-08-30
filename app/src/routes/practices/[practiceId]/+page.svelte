@@ -30,8 +30,6 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
 	let landing = $state<PracticeLanding | undefined>();
@@ -197,16 +195,12 @@
 	</stack-l>
 {/snippet}
 
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if landing}
-	<OverviewHub
-		title={`Welcome to ${landing.practiceName}`}
-		isEmpty={!landing.hasClients}
-		{primary}
-		secondary={hasSecondary(landing) ? secondary : undefined}
-		{empty}
-	/>
-{:else}
-	<Skeleton variant="text" lines={6} label="Loading your Practice" />
-{/if}
+<OverviewHub
+	title={landing ? `Welcome to ${landing.practiceName}` : ''}
+	isEmpty={landing ? !landing.hasClients : false}
+	{primary}
+	secondary={landing && hasSecondary(landing) ? secondary : undefined}
+	{empty}
+	loading={landing || error ? undefined : 'Loading your Practice'}
+	loadError={error || undefined}
+/>

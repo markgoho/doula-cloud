@@ -12,6 +12,8 @@
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	interface Section {
 		heading: string;
@@ -30,12 +32,32 @@
 		 * not a nav. A Snippet would let a route put routes in it.
 		 *
 		 * Optional because archetype D covers short records too, and a
-		 * contents list above three sections is furniture.
+		 * contents list above three sections is furniture. It is also
+		 * consulted while `loading` -- a route knows whether its record has
+		 * a rail before the record has loaded, since it never varied by
+		 * data (#480) -- to reserve the rail's column width so the layout
+		 * does not shift width once `sections` exists to derive links from.
 		 */
 		isContentsShown?: boolean;
+		/**
+		Presence is the state, value is the Skeleton's accessible label (#480).
+		*/
+		loading?: string;
+		/**
+		Presence is the state, value is the Notice's message (#480).
+		*/
+		loadError?: string;
 	}
 
-	let { title, summary, actions, sections, isContentsShown = false }: Properties = $props();
+	let {
+		title,
+		summary,
+		actions,
+		sections,
+		isContentsShown = false,
+		loading,
+		loadError
+	}: Properties = $props();
 
 	// The `#each` below is already keyed on the heading, so two sections
 	// sharing one is a pre-existing error rather than a new one this
@@ -50,6 +72,21 @@
 
 <container-l>
 	<center-l max="var(--page-max)" gutters="var(--page-gutter)">
+		{#if loadError}
+			<Notice variant="error" message={loadError} />
+		{:else if loading}
+			<div class="body" class:has-contents={isContentsShown}>
+				{#if isContentsShown}
+					<!-- Reserves the rail's column width; empty rather than
+					     filled with placeholder links, because `sections` --
+					     and so the links -- do not exist yet, and a second
+					     "loading" announcement here would double up on the
+					     Skeleton's own. -->
+					<div class="contents-rail"></div>
+				{/if}
+				<Skeleton variant="text" lines={6} label={loading} />
+			</div>
+		{:else}
 		<div class="body" class:has-contents={isContentsShown}>
 			<!--
 				A plain div, not <header>: a <header> outside article/aside/main/
@@ -118,6 +155,7 @@
 				</stack-l>
 			</div>
 		</div>
+		{/if}
 	</center-l>
 </container-l>
 

@@ -40,6 +40,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -350,7 +351,15 @@
 {/snippet}
 
 {#if loadError}
-	<Notice variant="error" message={loadError} />
+	<!-- Same frame the other three steps below build by hand -- #480. -->
+	<container-l>
+		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
+			<stack-l space="var(--space-7)">
+				<Heading level={1} variant="page" text="Your website" />
+				<Notice variant="error" message={loadError} />
+			</stack-l>
+		</center-l>
+	</container-l>
 {:else if current}
 	{#if !isOwner}
 		<Notice
@@ -472,6 +481,17 @@
 			</center-l>
 		</container-l>
 	{/if}
+{:else}
+	<!-- The loading gap between mount and the first response: previously
+	     nothing rendered here at all, not even outside the frame. -->
+	<container-l>
+		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
+			<stack-l space="var(--space-7)">
+				<Heading level={1} variant="page" text="Your website" />
+				<Skeleton variant="text" lines={4} label="Loading your website settings" />
+			</stack-l>
+		</center-l>
+	</container-l>
 {/if}
 
 <style>

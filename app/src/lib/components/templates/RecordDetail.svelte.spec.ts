@@ -4,6 +4,10 @@ import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import RecordDetail from './RecordDetail.svelte';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See practice-landing.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 function textSnippet(text: string) {
 	return createRawSnippet(() => ({ render: () => `<p>${text}</p>` }));
@@ -135,5 +139,45 @@ describe('RecordDetail.svelte', () => {
 
 		expect(title.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(strip.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('reserves the page frame for a skeleton while loading, instead of rendering the record (#480)', async () => {
+		const { container } = await setup({ loading: 'Loading the Engagement' });
+
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		await expect
+			.element(page.getByRole('status', { name: 'Loading the Engagement' }))
+			.toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).not.toBeInTheDocument();
+	});
+
+	it('reserves the contents rail column while loading, if the loaded record will have one (#480)', async () => {
+		const { container } = await setup({ loading: 'Loading the Engagement', isContentsShown: true });
+
+		expect(container.querySelector('.contents-rail')).not.toBeNull();
+		// No links yet: `sections` does not exist during loading, and a
+		// second "loading" announcement here would double the Skeleton's own.
+		expect(container.querySelector(':scope .contents-rail a')).toBeNull();
+	});
+
+	it('does not reserve a contents rail while loading a record with no rail', async () => {
+		const { container } = await setup({ loading: 'Loading the Engagement' });
+
+		expect(container.querySelector('.contents-rail')).toBeNull();
+	});
+
+	it('reserves the page frame for a Notice on a load failure, instead of rendering the record (#480)', async () => {
+		const { container } = await setup({ loadError: 'Failed to load the Engagement' });
+
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		await expect.element(page.getByText('Failed to load the Engagement')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).not.toBeInTheDocument();
+	});
+
+	it('prefers loadError over loading when both are somehow given', async () => {
+		await setup({ loadError: 'Failed to load the Engagement', loading: 'Loading the Engagement' });
+
+		await expect.element(page.getByText('Failed to load the Engagement')).toBeVisible();
+		await expect.element(page.getByRole('status', { name: 'Loading the Engagement' })).not.toBeInTheDocument();
 	});
 });

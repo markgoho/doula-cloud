@@ -252,3 +252,65 @@ makes the step number announceable.
   check-answers row is a label, a value and an action, and `DescriptionList` has no action column.
   Growing a molecule for exactly one consumer is what the extraction bar exists to prevent. The row
   moves out when a second page wants it.
+
+## Amendment, 2026-08-30 — a Template owns its own loading and load-error states
+
+Filed as [#480](https://github.com/markgoho/doula-cloud/issues/480), found while retrofitting the two
+Engagement detail pages: every retrofitted route had the same three-branch shape —
+`{#if error}<Notice/>{:else if data}<Template/>{:else}<Skeleton/>{/if}` — and only the middle branch
+ever reached the Template's frame. A `Notice` or a `Skeleton` rendered bare, at the viewport edge, so
+the loaded state jumped into gutters and a max-width that its own placeholder never reserved.
+
+**"What a Template owns" now covers the states a page is in before it has content, not only laid-out
+content.** `OverviewHub`, `RecordDetail` and `FormPage` each gain two optional props:
+
+- **`loading?: string`** — presence is the state, and the value is also the `Skeleton`'s accessible
+  label, so a caller cannot ask for "loading" without saying what is loading (`Skeleton`'s own rule,
+  extended to the prop that reaches it).
+- **`loadError?: string`** — presence is the state, value is the `Notice`'s message.
+
+Precedence is `loadError` → `loading` → normal content, matching the order every route already wrote by
+hand. A route now renders its Template exactly once, unconditionally, and lets these two props carry
+the state instead of branching outside it — deleting the three-way `{#if}` from every retrofitted route
+rather than adding a competing frame primitive. That was the real choice this ticket carried: a route
+could instead have been handed a bare, Template-free frame wrapper to put its `Notice`/`Skeleton` in,
+but this map's own "Not yet specified" section already treats *"a frame lives only on a Template"* as
+load-bearing — the next map's whole approach to archetypes A, C, F and G is "which Template does this
+route get," not "here is a frame primitive it can reach for instead." A bare frame escape hatch would
+have undercut that before the next map even starts.
+
+This is the same kind of amendment the `isEmpty`/`empty` pair already made: a Template owning a named
+*state*, not only content layout. It is not a third named exit — `loading`/`loadError` are alternate
+values of the Template's own required inputs, not a new way to deviate from one.
+
+**`loadError` is a new name, not `FormPage`'s existing `error?`.** The regions table above still lists
+`FormPage` as taking `error?`; the shipped prop has always been `errorSummary?: Snippet` — GOV.UK's
+validation error summary for a form the person is actively filling in, built by the route (#467). That
+is a different concern from `loadError`, which is the page's own data failing to arrive before there is
+a form to fail at all, and the two can be true independently (a page could, in principle, load and then
+have its own submission refused). `loadError` borrows its name from the route-local variable
+`account/+page.svelte` already used for exactly this state, rather than reusing or renaming
+`errorSummary`.
+
+**`RecordDetail`'s rail is not derived during loading, because it cannot be — `isContentsShown` already
+does not depend on data.** Every call site sets `isContentsShown` as a static literal known at the
+route's own authoring time (`isContentsShown` is unconditionally `true` on the staff Engagement page,
+absent on the portal one); it has never varied by what `sections` turns out to hold. So `loading`
+reuses the same prop to reserve the rail's column width in the container-query grid, filled with
+nothing rather than placeholder links — an empty region carries no ARIA role, so it does not compete
+with the `Skeleton`'s own `role="status"` for what gets announced.
+
+**Fixed on six routes**: the Practice landing page and both Engagement detail pages (`OverviewHub`,
+`RecordDetail` ×2 — #423, #424), the Client detail page (`RecordDetail`), and `account` and
+`settings/website` (`FormPage` ×2, #474's `account` and a second, previously-unticketed instance on
+`settings/website`). Two of the six — `account` and `settings/website` — had no loading branch at all
+before this: `account`'s `{#if loadError}{:else if isLoaded}{/if}` and `settings/website`'s
+`{#if loadError}{:else if current}{/if}` both left the gap between mount and the first response
+uncovered, so nothing rendered there, not even outside the frame. `settings/website`
+composes `FormPage` for only one of its three steps; the other two (`review`, `saved`) already built
+`container-l`/`center-l` by hand and keep doing so — its `loadError` branch was made to match that
+existing hand-built frame rather than routed through `FormPage`, since `FormPage` covers only the
+`answers` step there.
+
+`QuestionPage` and `CheckAnswers` are not touched: neither is wired into a real route yet, both are
+style-guide-only per the amendment above, so there is no retrofitted `{#if error}` to find on either.

@@ -24,6 +24,8 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	/*
 	 * `legend` is optional because a form can have a group that names
@@ -46,46 +48,82 @@
 		 * GOV.UK's error summary, positioned by this Template and built by
 		 * the route (#467). Nothing renders here when it is absent -- not an
 		 * empty box, not a hidden live region.
+		 *
+		 * Distinct from `loadError` below: this is a validation failure on a
+		 * form the person is actively filling in; `loadError` is the page's
+		 * own data failing to arrive at all, before there is a form to fail.
 		 */
 		errorSummary?: Snippet;
 		actions: Snippet;
+		/**
+		 * Presence is the state, value is the Skeleton's accessible label
+		 * (#480). Unlike `OverviewHub`/`RecordDetail`, `title` still renders
+		 * here: every `FormPage` route names its page statically ("Your
+		 * account", "Your website"), so the heading is never itself
+		 * data-dependent the way a hub's welcome line is.
+		 */
+		loading?: string;
+		/**
+		Presence is the state, value is the Notice's message (#480).
+		*/
+		loadError?: string;
 	}
 
-	let { title, intro, fieldsets, errorSummary, actions }: Properties = $props();
+	let {
+		title,
+		intro,
+		fieldsets,
+		errorSummary,
+		actions,
+		loading,
+		loadError
+	}: Properties = $props();
 </script>
 
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-		<stack-l space="var(--space-7)">
-			{#if errorSummary}
-				{@render errorSummary()}
-			{/if}
-
-			<Heading level={1} variant="page" text={title} />
-
-			{#if intro}
-				<div class="intro">{@render intro()}</div>
-			{/if}
-
-			<!--
-				Keyed on index, not on the legend: two groups may share a
-				legend, and two unnamed groups share `undefined`, so a
-				legend key collides. The array is positional anyway -- a
-				fieldset has no identity beyond where it sits.
-			-->
-			{#each fieldsets as fieldset, index (index)}
-				{#if fieldset.legend === undefined}
-					<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
-				{:else}
-					<fieldset>
-						<legend>{fieldset.legend}</legend>
-						<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
-					</fieldset>
+		{#if loadError}
+			<stack-l space="var(--space-7)">
+				<Heading level={1} variant="page" text={title} />
+				<Notice variant="error" message={loadError} />
+			</stack-l>
+		{:else if loading}
+			<stack-l space="var(--space-7)">
+				<Heading level={1} variant="page" text={title} />
+				<Skeleton variant="text" lines={4} label={loading} />
+			</stack-l>
+		{:else}
+			<stack-l space="var(--space-7)">
+				{#if errorSummary}
+					{@render errorSummary()}
 				{/if}
-			{/each}
 
-			<cluster-l space="var(--space-3)" align="center">{@render actions()}</cluster-l>
-		</stack-l>
+				<Heading level={1} variant="page" text={title} />
+
+				{#if intro}
+					<div class="intro">{@render intro()}</div>
+				{/if}
+
+				<!--
+					Keyed on index, not on the legend: two groups may share a
+					legend, and two unnamed groups share `undefined`, so a
+					legend key collides. The array is positional anyway -- a
+					fieldset has no identity beyond where it sits.
+				-->
+				{#each fieldsets as fieldset, index (index)}
+					{#if fieldset.legend === undefined}
+						<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
+					{:else}
+						<fieldset>
+							<legend>{fieldset.legend}</legend>
+							<stack-l space="var(--space-5)">{@render fieldset.content()}</stack-l>
+						</fieldset>
+					{/if}
+				{/each}
+
+				<cluster-l space="var(--space-3)" align="center">{@render actions()}</cluster-l>
+			</stack-l>
+		{/if}
 	</center-l>
 </container-l>
 

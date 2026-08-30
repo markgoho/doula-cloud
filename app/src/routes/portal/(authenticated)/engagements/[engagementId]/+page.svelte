@@ -14,9 +14,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 
@@ -68,16 +66,17 @@
 	/>
 {/snippet}
 
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if detail}
-	<!--
-		Archetype D, ADR-0018 -- the same Template the staff Engagement page
-		uses, which is the point of putting both on it. No sections and no
-		contents region: what this page holds is the record's own summary
-		and the way to its documents.
-	-->
-	<RecordDetail title={`Welcome to ${detail.practiceName}`} {summary} {actions} sections={[]} />
-{:else}
-	<Skeleton variant="text" lines={5} label="Loading your Engagement" />
-{/if}
+<!--
+	Archetype D, ADR-0018 -- the same Template the staff Engagement page
+	uses, which is the point of putting both on it. No sections and no
+	contents region: what this page holds is the record's own summary
+	and the way to its documents.
+-->
+<RecordDetail
+	title={detail ? `Welcome to ${detail.practiceName}` : ''}
+	{summary}
+	{actions}
+	sections={[]}
+	loading={detail || error ? undefined : 'Loading your Engagement'}
+	loadError={error || undefined}
+/>

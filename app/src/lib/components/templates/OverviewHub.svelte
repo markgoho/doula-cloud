@@ -15,6 +15,8 @@
 	 * so the step lives here and nowhere a route can pass it.
 	 */
 	import type { Snippet } from 'svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
 	interface Properties {
 		title: string;
@@ -22,27 +24,45 @@
 		secondary?: Snippet;
 		isEmpty: boolean;
 		empty: Snippet;
+		/**
+		 * Presence, not a paired boolean: the value is also the Skeleton's
+		 * accessible label, so a caller cannot supply "loading" without
+		 * saying what is loading. `title` is not known yet in every caller
+		 * (the Practice landing page's welcome line is built from the data
+		 * this state is standing in for), so nothing here reads it.
+		 */
+		loading?: string;
+		/**
+		Same shape as `loading`: presence is the state, value is the message.
+		*/
+		loadError?: string;
 	}
 
-	let { title, primary, secondary, isEmpty, empty }: Properties = $props();
+	let { title, primary, secondary, isEmpty, empty, loading, loadError }: Properties = $props();
 </script>
 
 <container-l>
 	<center-l max="var(--page-max)" gutters="var(--page-gutter)">
-		<stack-l space="var(--space-8)">
-			<h1>{title}</h1>
+		{#if loadError}
+			<Notice variant="error" message={loadError} />
+		{:else if loading}
+			<Skeleton variant="text" lines={6} label={loading} />
+		{:else}
+			<stack-l space="var(--space-8)">
+				<h1>{title}</h1>
 
-			{#if isEmpty}
-				<div class="empty">{@render empty()}</div>
-			{:else}
-				<div class="body" class:has-secondary={secondary}>
-					<stack-l space="var(--space-6)">{@render primary()}</stack-l>
-					{#if secondary}
-						<aside><stack-l space="var(--space-6)">{@render secondary()}</stack-l></aside>
-					{/if}
-				</div>
-			{/if}
-		</stack-l>
+				{#if isEmpty}
+					<div class="empty">{@render empty()}</div>
+				{:else}
+					<div class="body" class:has-secondary={secondary}>
+						<stack-l space="var(--space-6)">{@render primary()}</stack-l>
+						{#if secondary}
+							<aside><stack-l space="var(--space-6)">{@render secondary()}</stack-l></aside>
+						{/if}
+					</div>
+				{/if}
+			</stack-l>
+		{/if}
 	</center-l>
 </container-l>
 

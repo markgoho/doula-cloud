@@ -187,46 +187,41 @@
 	<Button type="submit" label="Save work state" loading={isSaving} />
 {/snippet}
 
-{#if loadError}
-	<!--
-		Same frame as the form, without the form. A 404 here means the
-		verified identity has no staff row behind it -- signed in, but
-		nobody here yet -- so there is nothing to edit and offering a
-		control whose save could never land would be worse than saying so.
-	-->
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<stack-l space="var(--space-7)">
-				<Heading level={1} variant="page" text="Your account" />
-				<Notice variant="error" message={loadError} />
-			</stack-l>
-		</center-l>
-	</container-l>
-{:else if isLoaded}
-	<!-- `novalidate`: this page refuses the submit, not the browser (#467). -->
-	<form onsubmit={handleSubmit} novalidate>
-		<FormPage
-			title="Your account"
-			{intro}
-			fieldsets={[{ legend: `Your details, ${name}`, content: workState }]}
-			errorSummary={saveError.length > 0 ? errorSummary : undefined}
-			{actions}
-		/>
-	</form>
+<!--
+	A 404 `loadError` means the verified identity has no staff row behind
+	it -- signed in, but nobody here yet -- so there is nothing to edit and
+	offering a control whose save could never land would be worse than
+	saying so. `loading`/`loadError` are `FormPage`'s own frame-reserving
+	states (#480), which is why this is one call rather than a branch per
+	state -- `novalidate`: this page refuses the submit, not the browser
+	(#467).
+-->
+<form onsubmit={handleSubmit} novalidate>
+	<FormPage
+		title="Your account"
+		{intro}
+		fieldsets={isLoaded ? [{ legend: `Your details, ${name}`, content: workState }] : []}
+		errorSummary={saveError.length > 0 ? errorSummary : undefined}
+		{actions}
+		loading={isLoaded || loadError ? undefined : 'Loading your account'}
+		{loadError}
+	/>
+</form>
 
-	<!--
-		Confirmation sits where she just was -- immediately under the Save
-		button she pressed, not in a banner at the top of a page she would
-		have to scroll back up to read. Notice's status variant carries
-		role="status", so a screen reader announces it politely wherever it
-		is; a sighted reader is looking at the button. The "Last confirmed"
-		line above the field moves to the new date at the same moment,
-		which is the durable half of the same answer.
-	-->
-	{#if savedState}
-		<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
-	{/if}
+<!--
+	Confirmation sits where she just was -- immediately under the Save
+	button she pressed, not in a banner at the top of a page she would
+	have to scroll back up to read. Notice's status variant carries
+	role="status", so a screen reader announces it politely wherever it
+	is; a sighted reader is looking at the button. The "Last confirmed"
+	line above the field moves to the new date at the same moment,
+	which is the durable half of the same answer.
+-->
+{#if savedState}
+	<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
+{/if}
 
+{#if isLoaded}
 	<!--
 		A way back. The session response already carries every Practice she
 		belongs to, so this screen can return her to the one she came from

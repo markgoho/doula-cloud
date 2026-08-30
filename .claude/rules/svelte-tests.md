@@ -73,6 +73,38 @@ against a real browser, so `page` locators are the direct equivalent —
 adding `user-event` would mean also adding jsdom + `@testing-library/svelte`
 as a second, less-realistic test path alongside this one.
 
+## Assertions: default to accessible queries; `querySelector` is a named exception
+
+Assert what a user actually perceives — sighted, screen reader, or keyboard
+— with `page.getByRole`/`getByText`/`getByLabelText` and
+`toBeVisible()`/`toBeInTheDocument()`. This is the same bet intrinsic
+layout makes on the markup side: correct semantic HTML and modern CSS
+(container queries, `:has()`, subgrid) mean the accessible role tree
+already carries almost everything worth asserting, with minimal nesting
+needed to get there. A test that has to reach past that tree into class
+names or DOM structure is often a sign the markup itself nests deeper than
+the layout needs — treat it as a prompt to check the component, not only
+the test.
+
+`container.querySelector(...)` stays, but only for facts that genuinely
+have no accessible signal:
+
+1. **Distinguishing two elements with the identical accessible role and
+   name**, where the only difference is which one CSS hides at the current
+   viewport — `RecordDetail`'s `.contents-rail` and `.contents-strip` are
+   the same links rendered twice, one per breakpoint, and `getByRole('link')`
+   cannot tell them apart.
+2. **A deliberately non-accessible element** — a placeholder `<div>`
+   reserving a grid column's width while loading, with no ARIA role at all
+   so it doesn't double up on a `Skeleton`'s own `role="status"` next to it.
+   There is nothing for an accessible query to find, because the whole
+   point is that nothing is announced there.
+
+Reach for `querySelector` only after confirming there is no accessible
+query that says the same thing — never as a shortcut past one that exists.
+When it is used, the surrounding comment should say which of the two cases
+applies, so the exception reads as deliberate rather than habitual.
+
 ## Callback props are the contract, not implementation detail
 
 `testing-philosophy.md` says not to assert on how a mocked collaborator was
