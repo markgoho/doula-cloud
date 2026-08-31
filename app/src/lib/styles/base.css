@@ -15,9 +15,15 @@
  *
  * It is on `body` rather than on the SvelteKit mount point, because that
  * is a `display: contents` wrapper with no principal box and therefore
- * cannot be a container. `html` is not used either: `container-type`
- * makes an element the containing block for fixed-position descendants,
- * and the root element is one place that is worth not disturbing.
+ * cannot be a container.
+ *
+ * `container-type` makes an element the containing block for
+ * fixed-position descendants, so this would move any `position: fixed`
+ * element that scrolls with the page. It moves none: the only fixed
+ * element in the app is `MenuButton`'s panel, which is a native
+ * `popover` and therefore in the top layer, where the viewport stays its
+ * containing block whatever an ancestor declares. Add a fixed element
+ * outside the top layer and this comment stops being true.
  */
 body {
 	container-type: inline-size;
