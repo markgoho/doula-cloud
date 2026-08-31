@@ -216,3 +216,15 @@ _Avoid_: Width matrix, size sweep, responsive test
 **The drag surface**:
 The style-guide surface with a handle a person drags, so a component can be watched passing through its configurations continuously rather than inspected at chosen sizes. The human half of **the continuum check**.
 _Avoid_: Width matrix, size panel, breakpoint preview
+
+**Fluid step**:
+A design token whose value is a `clamp()` between a floor and a ceiling, growing continuously with the space its consumer is given rather than holding one number everywhere. Every type size and every spacing step is one. The growth term is a container unit (`cqi`), never a viewport unit, so a fluid step answers **available space** like everything else here — the same token is smaller in a rail than on a full page, by design. Its floor and ceiling are `rem`, so a person's own font-size setting still moves it (WCAG 1.4.4).
+_Avoid_: Responsive type, fluid typography (the industry term is viewport-derived and this is not), t-shirt size
+
+**The ramp**:
+The span of available space across which a **fluid step** grows, 320px to 1920px, shared by the type scale and the spacing scale so the two cannot drift apart. Outside it a step is pinned: below 320px to its floor, above 1920px to its ceiling. The upper end is a plateau on purpose — past it, more room buys more content, not larger letters. It is a property of the scale, not of any component, and it is the one place in this repo where two widths are written down.
+_Avoid_: Breakpoint range, min/max viewport, screen sizes
+
+**Growth factor**:
+How much a **fluid step** grows from floor to ceiling, expressed as a multiple: 1.2 for type, 1.5 for spacing. It is chosen once for a whole scale rather than per step, so the relationships inside the scale hold at both ends of **the ramp**. Its ceiling is 2.5 — past that a step cannot be shown to reach 200% under browser zoom, which is a WCAG 1.4.4 failure.
+_Avoid_: Scale ratio, modular ratio (those name the relationship between neighboring steps, which is a different number this repo does not use)
