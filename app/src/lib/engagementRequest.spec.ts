@@ -8,6 +8,7 @@ import {
 	loadPendingRequests,
 	refuseRequest,
 	requestEngagement,
+	withdrawRequest,
 	type NewEngagementRequest
 } from './engagementRequest.js';
 import { jsonResponse as response } from './testResponse.js';
@@ -160,6 +161,26 @@ describe('refuseRequest', () => {
 		const fetcher = vi.fn().mockResolvedValue(response('reason is required', 400));
 
 		await expect(refuseRequest(fetcher, 'practice-1', 'request-1', '')).rejects.toThrow('reason is required');
+	});
+});
+
+describe('withdrawRequest', () => {
+	it('posts to the withdraw path', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ requestId: 'request-1', state: 'withdrawn' }));
+
+		await withdrawRequest(fetcher, 'practice-1', 'request-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagement-requests/request-1/withdraw', {
+			method: 'POST'
+		});
+	});
+
+	it('throws with the response body text on a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('only the staff member who made this request may withdraw it', 403));
+
+		await expect(withdrawRequest(fetcher, 'practice-1', 'request-1')).rejects.toThrow(
+			'only the staff member who made this request may withdraw it'
+		);
 	});
 });
 

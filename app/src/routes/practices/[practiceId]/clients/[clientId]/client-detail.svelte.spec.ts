@@ -2,7 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { ClientDetail } from '#lib/clientDetail.js';
+import type { ClientDetail, HistoryEntry } from '#lib/clientDetail.js';
 import Page from './+page.svelte';
 
 vi.mock('$app/state', () => ({
@@ -34,8 +34,29 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
-async function setup(overrides: Partial<ClientDetail> = {}) {
-	apiFetchWithSession.mockResolvedValue(jsonResponse({ ...baseDetail, ...overrides }));
+interface SetupOptions {
+	overrides?: Partial<ClientDetail>;
+	/** The signed-in Staff member's own id, as `/api/staff/session` would
+	 * report it -- defaults to somebody who made no Request on this
+	 * Client, so the Withdraw button stays absent unless a test opts a
+	 * specific requester in. */
+	sessionStaffId?: string;
+	/** `/api/staff/session`'s own response, when a test needs it to fail
+	 * rather than to name somebody. */
+	sessionOk?: boolean;
+}
+
+// Two endpoints now share one mocked fetcher (#504's session read joins
+// the existing detail read), so setup() dispatches on the path and hands
+// back a fresh Response per call -- one shared Response object would have
+// its body consumed by the first .json()/.text() and throw on the second.
+async function setup({ overrides = {}, sessionStaffId = 'nobody', sessionOk = true }: SetupOptions = {}) {
+	apiFetchWithSession.mockImplementation((path: string) => {
+		if (path === '/api/staff/session') {
+			return Promise.resolve(sessionOk ? jsonResponse({ staffId: sessionStaffId }) : jsonResponse('signed out', 401));
+		}
+		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
+	});
 	return render(Page, {});
 }
 
@@ -53,11 +74,13 @@ describe('client detail hub', () => {
 
 	it('shows every active Practice-defined field, blank or not, and labels an archived one held', async () => {
 		await setup({
-			resolvedFields: [
-				{ fieldId: 'f1', label: 'Doula notes', type: 'short_text' },
-				{ fieldId: 'f2', label: 'Pronouns', type: 'short_text', value: 'she/her' },
-				{ fieldId: 'f3', label: 'Old field', type: 'short_text', value: 'kept value', note: 'No longer collected' }
-			]
+			overrides: {
+				resolvedFields: [
+					{ fieldId: 'f1', label: 'Doula notes', type: 'short_text' },
+					{ fieldId: 'f2', label: 'Pronouns', type: 'short_text', value: 'she/her' },
+					{ fieldId: 'f3', label: 'Old field', type: 'short_text', value: 'kept value', note: 'No longer collected' }
+				]
+			}
 		});
 
 		await expect.element(testPage.getByText('Doula notes')).toBeVisible();
@@ -67,7 +90,7 @@ describe('client detail hub', () => {
 
 	it("renders her Engagements identifying each one's kind and status", async () => {
 		await setup({
-			engagements: [{ engagementId: 'e1', kind: 'birth', status: 'active', createdAt: '2026-01-01T00:00:00Z' }]
+			overrides: { engagements: [{ engagementId: 'e1', kind: 'birth', status: 'active', createdAt: '2026-01-01T00:00:00Z' }] }
 		});
 
 		await expect.element(testPage.getByRole('cell', { name: 'Birth' })).toBeVisible();
@@ -76,31 +99,33 @@ describe('client detail hub', () => {
 
 	it('renders client_events and engagement_requests as one merged timeline', async () => {
 		await setup({
-			history: [
-				{
-					type: 'engagement_request',
-					at: '2026-01-02T00:00:00Z',
-					engagementRequest: {
-						requestId: 'r1',
-						kind: 'birth',
-						state: 'pending',
-						requestedBy: 's1',
-						requestedByName: 'Jamie Doula',
-						requestedAt: '2026-01-02T00:00:00Z'
+			overrides: {
+				history: [
+					{
+						type: 'engagement_request',
+						at: '2026-01-02T00:00:00Z',
+						engagementRequest: {
+							requestId: 'r1',
+							kind: 'birth',
+							state: 'pending',
+							requestedBy: 's1',
+							requestedByName: 'Jamie Doula',
+							requestedAt: '2026-01-02T00:00:00Z'
+						}
+					},
+					{
+						type: 'client_event',
+						at: '2026-01-01T00:00:00Z',
+						clientEvent: {
+							eventType: 'created',
+							diff: {},
+							actorKind: 'staff',
+							actorName: 'Sam Admin',
+							createdAt: '2026-01-01T00:00:00Z'
+						}
 					}
-				},
-				{
-					type: 'client_event',
-					at: '2026-01-01T00:00:00Z',
-					clientEvent: {
-						eventType: 'created',
-						diff: {},
-						actorKind: 'staff',
-						actorName: 'Sam Admin',
-						createdAt: '2026-01-01T00:00:00Z'
-					}
-				}
-			]
+				]
+			}
 		});
 
 		await expect.element(testPage.getByRole('cell', { name: 'Birth Engagement requested' })).toBeVisible();
@@ -111,13 +136,15 @@ describe('client detail hub', () => {
 
 	it('names a system-authored event "Doula Cloud", never "System" (ADR-0022)', async () => {
 		await setup({
-			history: [
-				{
-					type: 'client_event',
-					at: '2026-01-01T00:00:00Z',
-					clientEvent: { eventType: 'updated', diff: {}, actorKind: 'system', createdAt: '2026-01-01T00:00:00Z' }
-				}
-			]
+			overrides: {
+				history: [
+					{
+						type: 'client_event',
+						at: '2026-01-01T00:00:00Z',
+						clientEvent: { eventType: 'updated', diff: {}, actorKind: 'system', createdAt: '2026-01-01T00:00:00Z' }
+					}
+				]
+			}
 		});
 
 		await expect.element(testPage.getByRole('cell', { name: 'Doula Cloud' })).toBeVisible();
@@ -126,20 +153,22 @@ describe('client detail hub', () => {
 
 	it('shows a block naming who asked and when while a Request is pending', async () => {
 		await setup({
-			history: [
-				{
-					type: 'engagement_request',
-					at: '2026-01-02T12:00:00Z',
-					engagementRequest: {
-						requestId: 'r1',
-						kind: 'postpartum',
-						state: 'pending',
-						requestedBy: 's1',
-						requestedByName: 'Jamie Doula',
-						requestedAt: '2026-01-02T12:00:00Z'
+			overrides: {
+				history: [
+					{
+						type: 'engagement_request',
+						at: '2026-01-02T12:00:00Z',
+						engagementRequest: {
+							requestId: 'r1',
+							kind: 'postpartum',
+							state: 'pending',
+							requestedBy: 's1',
+							requestedByName: 'Jamie Doula',
+							requestedAt: '2026-01-02T12:00:00Z'
+						}
 					}
-				}
-			]
+				]
+			}
 		});
 
 		await expect
@@ -170,10 +199,121 @@ describe('client detail hub', () => {
 	});
 
 	it('shows an error notice when the Client fails to load', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse('client not found', 404));
+		apiFetchWithSession.mockImplementation((path: string) =>
+			Promise.resolve(
+				path === '/api/staff/session' ? jsonResponse({ staffId: 'nobody' }) : jsonResponse('client not found', 404)
+			)
+		);
 
 		await render(Page, {});
 
 		await expect.element(testPage.getByText('client not found')).toBeVisible();
+	});
+});
+
+describe('the pending-request block: Withdraw (#504)', () => {
+	// Both engagement_requests kinds can be pending on the same Client at
+	// once (ADR-0017's unique index is per kind), so the fixture below
+	// carries one of each -- the surface a bare "Withdraw" label would
+	// have hidden.
+	const requestedByHerself: HistoryEntry = {
+		type: 'engagement_request',
+		at: '2026-01-02T12:00:00Z',
+		engagementRequest: {
+			requestId: 'request-mendoza-riquelme-postpartum',
+			kind: 'postpartum',
+			state: 'pending',
+			requestedBy: 'staff-mendoza-riquelme',
+			requestedByName: 'Alejandra Mendoza-Riquelme',
+			requestedAt: '2026-01-02T12:00:00Z'
+		}
+	};
+	const requestedBySomeoneElse: HistoryEntry = {
+		type: 'engagement_request',
+		at: '2026-01-03T09:00:00Z',
+		engagementRequest: {
+			requestId: 'request-okonkwo-birth',
+			kind: 'birth',
+			state: 'pending',
+			requestedBy: 'staff-okonkwo',
+			requestedByName: 'Chidinma Okonkwo',
+			requestedAt: '2026-01-03T09:00:00Z'
+		}
+	};
+
+	it('offers Withdraw, naming its own kind, only on the Request the signed-in Staff member made herself', async () => {
+		await setup({
+			overrides: { history: [requestedByHerself, requestedBySomeoneElse] },
+			sessionStaffId: 'staff-mendoza-riquelme'
+		});
+
+		await expect.element(testPage.getByRole('button', { name: 'Withdraw Postpartum request' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Withdraw Birth request' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('offers no Withdraw button when the signed-in Staff member requested nothing pending here', async () => {
+		await setup({
+			overrides: { history: [requestedByHerself] },
+			sessionStaffId: 'staff-someone-uninvolved'
+		});
+
+		await expect.element(testPage.getByText('Postpartum Engagement requested by')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
+	});
+
+	it('offers no Withdraw button when the session read itself fails', async () => {
+		await setup({
+			overrides: { history: [requestedByHerself] },
+			sessionStaffId: 'staff-mendoza-riquelme',
+			sessionOk: false
+		});
+
+		await expect.element(testPage.getByText('Postpartum Engagement requested by')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
+	});
+
+	it('withdraws on click: the block disappears and a status notice announces it', async () => {
+		await setup({
+			overrides: { history: [requestedByHerself] },
+			sessionStaffId: 'staff-mendoza-riquelme'
+		});
+
+		await testPage.getByRole('button', { name: 'Withdraw Postpartum request' }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagement-requests/request-mendoza-riquelme-postpartum/withdraw',
+			{ method: 'POST' }
+		);
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('Postpartum Engagement request withdrawn');
+		await expect
+			.element(testPage.getByText('Postpartum Engagement requested by Alejandra Mendoza-Riquelme'))
+			.not.toBeInTheDocument();
+		// The merged history row reflects the same withdrawal rather than
+		// staying frozen on "requested" until a reload.
+		await expect.element(testPage.getByRole('cell', { name: 'Postpartum Engagement request withdrawn' })).toBeVisible();
+	});
+
+	it('shows the refusal text and leaves the block standing when withdraw fails', async () => {
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path === '/api/staff/session') {
+				return Promise.resolve(jsonResponse({ staffId: 'staff-mendoza-riquelme' }));
+			}
+			if (path.endsWith('/withdraw')) {
+				return Promise.resolve(jsonResponse('that request is no longer pending -- it is approved', 409));
+			}
+			return Promise.resolve(jsonResponse({ ...baseDetail, history: [requestedByHerself] }));
+		});
+
+		await render(Page, {});
+		await testPage.getByRole('button', { name: 'Withdraw Postpartum request' }).click();
+
+		await expect
+			.element(testPage.getByText('that request is no longer pending -- it is approved'))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText('Postpartum Engagement requested by Alejandra Mendoza-Riquelme'))
+			.toBeVisible();
 	});
 });

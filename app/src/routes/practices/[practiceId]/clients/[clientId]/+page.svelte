@@ -8,18 +8,32 @@
 		pendingRequests,
 		resolvedFieldValueText,
 		type ClientDetail,
+		type EngagementRequestSummary,
 		type EngagementSummary,
 		type HistoryEntry
 	} from '#lib/clientDetail.js';
+	import { kindLabel, withdrawRequest } from '#lib/engagementRequest.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 
 	let detail = $state<ClientDetail | undefined>();
 	let error = $state('');
+	// The signed-in Staff member's own id, read once alongside the Client
+	// (#504): "Withdraw, available to the requester alone" is a fact about
+	// who is looking, not about the Client record itself. Left blank on a
+	// failed read rather than surfaced as a page error -- the endpoint
+	// enforces the real rule (ADR-0017's requested_by = $1) regardless, so
+	// the worst a lost session read costs is a Withdraw button that does
+	// not render for its own requester this one time.
+	let staffId = $state('');
+	let withdrawingRequestId = $state('');
+	let withdrawError = $state('');
+	let withdrawnConfirmation = $state('');
 
 	function editHref(): string {
 		return `/practices/${page.params.practiceId}/clients/${page.params.clientId}/edit`;
@@ -52,22 +66,22 @@
 			return entry.clientEvent.eventType === 'created' ? 'Record created' : 'Record updated';
 		}
 		const request = entry.engagementRequest;
-		const kindLabel = request.kind === 'birth' ? 'Birth' : 'Postpartum';
+		const label = kindLabel(request.kind);
 		switch (request.state) {
 			case 'pending': {
-				return `${kindLabel} Engagement requested`;
+				return `${label} Engagement requested`;
 			}
 			case 'approved': {
-				return `${kindLabel} Engagement approved`;
+				return `${label} Engagement approved`;
 			}
 			case 'refused': {
-				return `${kindLabel} Engagement refused${request.reason ? `: ${request.reason}` : ''}`;
+				return `${label} Engagement refused${request.reason ? `: ${request.reason}` : ''}`;
 			}
 			case 'withdrawn': {
-				return `${kindLabel} Engagement request withdrawn`;
+				return `${label} Engagement request withdrawn`;
 			}
 			default: {
-				return `${kindLabel} Engagement request`;
+				return `${label} Engagement request`;
 			}
 		}
 	}
@@ -76,7 +90,46 @@
 		return formattedDate(entry.at);
 	}
 
+	// Best-effort, and deliberately not folded into the try/catch below:
+	// a lost read here costs one Staff member her own Withdraw button for
+	// one page load, not the Client record she came here to see.
+	async function loadStaffId() {
+		const response = await apiFetchWithSession('/api/staff/session');
+		if (response.ok) {
+			const session: { staffId: string } = await response.json();
+			staffId = session.staffId;
+		}
+	}
+
+	// Withdraws request, then flips its own history entry to "withdrawn" in
+	// place rather than reloading the whole Client -- pendingRequests()
+	// re-derives from that same array, so the block disappears on the next
+	// render for free. The disappearance itself is silent to a screen
+	// reader, which is why a role=status confirmation follows it (#504 AC:
+	// "keyboard-reachable and announced") rather than standing in as the
+	// only signal that anything happened.
+	async function handleWithdraw(request: EngagementRequestSummary) {
+		withdrawError = '';
+		withdrawnConfirmation = '';
+		withdrawingRequestId = request.requestId;
+		try {
+			await withdrawRequest(apiFetchWithSession, page.params.practiceId!, request.requestId);
+			const entry = detail!.history.find(
+				(historyEntry) => historyEntry.type === 'engagement_request' && historyEntry.engagementRequest.requestId === request.requestId
+			);
+			if (entry?.type === 'engagement_request') {
+				entry.engagementRequest.state = 'withdrawn';
+			}
+			withdrawnConfirmation = `${kindLabel(request.kind)} Engagement request withdrawn`;
+		} catch (error_) {
+			withdrawError = error_ instanceof Error ? error_.message : 'Failed to withdraw request';
+		} finally {
+			withdrawingRequestId = '';
+		}
+	}
+
 	onMount(async () => {
+		loadStaffId();
 		try {
 			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
 		} catch (error_) {
@@ -134,15 +187,41 @@
 		/>
 
 		{#each pendingRequests(detail!.history) as request (request.requestId)}
-			<Notice
-				variant="info"
-				message="{request.kind === 'birth'
-					? 'Birth'
-					: 'Postpartum'} Engagement requested by {request.requestedByName} on {formattedDate(
-					request.requestedAt
-				)}"
-			/>
+			<!--
+				cluster-l composes an existing layout primitive rather than
+				writing new layout CSS (the temporary block on new components,
+				CLAUDE.md) -- Notice carries no action slot of its own, so
+				Withdraw sits beside it rather than inside it. Birth and
+				postpartum can both be pending at once (ADR-0017's unique index
+				is per kind), so the button names its own kind: two bare
+				"Withdraw" controls in one tab order would be indistinguishable
+				by ear.
+			-->
+			<cluster-l space="var(--space-3)" align="center">
+				<Notice
+					variant="info"
+					message="{kindLabel(request.kind)} Engagement requested by {request.requestedByName} on {formattedDate(
+						request.requestedAt
+					)}"
+				/>
+				{#if request.requestedBy === staffId}
+					<Button
+						label="Withdraw {kindLabel(request.kind)} request"
+						variant="secondary"
+						size="sm"
+						loading={withdrawingRequestId === request.requestId}
+						onClick={() => handleWithdraw(request)}
+					/>
+				{/if}
+			</cluster-l>
 		{/each}
+
+		{#if withdrawnConfirmation}
+			<Notice variant="status" message={withdrawnConfirmation} />
+		{/if}
+		{#if withdrawError}
+			<Notice variant="error" message={withdrawError} />
+		{/if}
 	</stack-l>
 {/snippet}
 

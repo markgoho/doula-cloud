@@ -172,6 +172,22 @@ export async function refuseRequest(
 	}
 }
 
+/** Withdraws the caller's own pending Request (engagementrequest.WithdrawHandler,
+ * #504). ADR-0017: withdraw is the requester's own route out of a typo,
+ * so the Client detail hub calls this only when she made the ask
+ * herself -- the endpoint enforces that same rule server-side
+ * (`requested_by = $1`) and 403s a requester mismatch it is asked to
+ * trust anyway. Throws with the response body text on a refusal, the
+ * same convention every other write in this module follows -- a 403 a
+ * stale page still let through, or the 409 a Request somebody else
+ * already decided answers with. */
+export async function withdrawRequest(fetcher: Fetcher, practiceId: string, requestId: string): Promise<void> {
+	const response = await fetcher(`${requestPath(practiceId, requestId)}/withdraw`, { method: 'POST' });
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+}
+
 /*
  * Where an approver was when she ran out of Credits. Stripe's Checkout
  * success and cancel URLs are hardcoded to the Billing page
