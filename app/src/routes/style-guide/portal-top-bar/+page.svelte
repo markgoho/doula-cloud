@@ -2,6 +2,12 @@
 	import PortalTopBar from '#lib/components/organisms/PortalTopBar.svelte';
 	import type { SignOutOutcome } from '#lib/signOut.js';
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): the
+	 * nav labels are the product's own and cannot grow, but the Practice
+	 * name and the Client's name are hers, and they are what decide whether
+	 * the four items still fit beside them.
+	 */
 	const navItems = [
 		{ label: 'Your care', href: '#care', current: true },
 		{ label: 'Messages', href: '#messages', current: false },
@@ -26,9 +32,9 @@
 	</p>
 
 	<PortalTopBar
-		practiceName="Riverside Doula Collective"
+		practiceName="Highland Midwifery &amp; Birth Support Collective of Western New York"
 		{navItems}
-		name="Tasha Bell"
+		name="Anne-Marie Ochieng-Whitfield"
 		{signOut}
 	/>
 </stack-l>

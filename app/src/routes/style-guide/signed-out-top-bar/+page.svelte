@@ -11,5 +11,9 @@
 		below it reflows at the moment a person's session starts.
 	</p>
 
+	<!--
+		No hostile value exists for this component (ADR-0025): the bar holds
+		the lockup and nothing else, so no Practice content can reach it.
+	-->
 	<SignedOutTopBar />
 </stack-l>

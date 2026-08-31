@@ -2,17 +2,34 @@
 	import ClientFieldTemplateEditor from '#lib/components/organisms/ClientFieldTemplateEditor.svelte';
 	import { addField, archiveField, unarchiveField, moveField, type Field, type FieldType } from '#lib/clientFieldTemplate.js';
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): a
+	 * Practice writes these labels and options itself, so each one is the
+	 * whole question it means to ask rather than a two-word heading.
+	 */
 	let fields = $state<Field[]>([
-		{ id: 'a', type: 'short_text', label: 'Intake note', order: 0, archived: false },
+		{
+			id: 'a',
+			type: 'short_text',
+			label: 'What the intake call turned up that the Contract does not say',
+			order: 0,
+			archived: false
+		},
 		{
 			id: 'b',
 			type: 'single_select',
-			label: 'Referral source',
-			options: ['Hospital', 'Word of mouth'],
+			label: 'How did this Client hear about the Practice?',
+			options: ['Referred by Rochester General Hospital Birthing Center', 'Word of mouth'],
 			order: 1,
 			archived: false
 		},
-		{ id: 'c', type: 'short_text', label: 'Emergency contact phone', order: 2, archived: true }
+		{
+			id: 'c',
+			type: 'short_text',
+			label: 'Emergency contact, and their phone number',
+			order: 2,
+			archived: true
+		}
 	]);
 
 	function updateField(id: string, patch: Partial<Field>) {

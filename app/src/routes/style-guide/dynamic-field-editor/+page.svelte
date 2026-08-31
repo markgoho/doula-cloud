@@ -2,9 +2,25 @@
 	import DynamicFieldEditor from '#lib/components/organisms/DynamicFieldEditor.svelte';
 	import { addField, removeField, moveField, type Field, type FieldType } from '#lib/planTemplate.js';
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): a
+	 * Practice writes its own plan template, so a label is the whole
+	 * question and an option is the whole answer.
+	 */
 	let fields = $state<Field[]>([
-		{ id: 'a', type: 'short_text', label: 'Support people', order: 0 },
-		{ id: 'b', type: 'single_select', label: 'Pain management', options: ['Unmedicated', 'Epidural'], order: 1 }
+		{
+			id: 'a',
+			type: 'short_text',
+			label: 'Who do you want in the room with you?',
+			order: 0
+		},
+		{
+			id: 'b',
+			type: 'single_select',
+			label: 'What pain relief do you want offered, and when?',
+			options: ['Nothing unless I ask for it', 'Epidural, as early as it can be given'],
+			order: 1
+		}
 	]);
 
 	function updateField(id: string, patch: Partial<Field>) {

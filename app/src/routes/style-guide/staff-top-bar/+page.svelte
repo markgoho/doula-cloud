@@ -12,16 +12,22 @@
 		{ label: 'Settings', href: '#settings', current: false }
 	];
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): the
+	 * nav labels are the product's own and cannot grow, but a Practice
+	 * registers under its legal name and a Doula's address is on the
+	 * Practice's domain -- those are what the bar has to fit.
+	 */
 	const practices: PracticeOption[] = [
 		{
 			practiceId: 'p1',
-			practiceName: 'Riverside Doula Collective',
+			practiceName: 'Highland Midwifery & Birth Support Collective of Western New York',
 			roles: ['owner', 'admin'],
 			href: '#riverside'
 		},
 		{
 			practiceId: 'p2',
-			practiceName: 'Finger Lakes Birth Support',
+			practiceName: 'Finger Lakes Birth Support and Postpartum Care Cooperative',
 			roles: ['doula'],
 			href: '#finger-lakes'
 		}
@@ -46,8 +52,8 @@
 		{navItems}
 		{practices}
 		currentPracticeId="p1"
-		name="Mark Goho"
-		email="markgoho@gmail.com"
+		name="Persephone Adeyemi-Wollstonecraft"
+		email="persephone.adeyemi-wollstonecraft@highland-midwifery-group.example.org"
 		accountHref="#account"
 		{signOut}
 	/>

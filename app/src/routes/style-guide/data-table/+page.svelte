@@ -13,9 +13,15 @@
 		{ label: 'Status', accessor: (client: Client) => client.status }
 	];
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): the
+	 * two-column demos carry the same hostile names as the six-column one
+	 * below, so a break shows up in the narrow table too rather than only
+	 * in the wide one.
+	 */
 	const clients: Client[] = [
-		{ name: 'Ada Lovelace', status: 'Active' },
-		{ name: 'Grace Hopper', status: 'Prospective' }
+		{ name: 'Persephone Adeyemi-Wollstonecraft', status: 'Stripe onboarding incomplete' },
+		{ name: 'Anne-Marie Ochieng-Whitfield', status: 'Expired -- invite again or revoke' }
 	];
 
 	interface CreditRow {
@@ -33,8 +39,8 @@
 	];
 
 	const credits: CreditRow[] = [
-		{ origin: 'Purchase', quantity: 20 },
-		{ origin: 'Engagement started', quantity: -1 }
+		{ origin: 'Purchase of a twenty-credit block', quantity: 20 },
+		{ origin: 'Engagement started with Anne-Marie Ochieng-Whitfield', quantity: -1 }
 	];
 
 	let hasMore = $state(true);
@@ -76,15 +82,15 @@
 			roles: 'Practice owner, Birth doula, Postpartum doula',
 			employment: 'Independent contractor',
 			worksFrom: 'Highland Midwifery Group, Rochester',
-			joined: '1/1/2026'
+			joined: '14 September 2027'
 		},
 		{
-			name: 'Ada Lovelace',
-			email: 'ada@example.org',
-			roles: 'Birth doula',
+			name: 'Anne-Marie Ochieng-Whitfield',
+			email: 'anne-marie.ochieng-whitfield@highland-midwifery-group.example.org',
+			roles: 'Birth doula, Postpartum doula',
 			employment: 'Employee',
-			worksFrom: 'Rochester',
-			joined: '2/14/2026'
+			worksFrom: 'Highland Midwifery Group, Rochester',
+			joined: '14 September 2027'
 		}
 	];
 </script>
@@ -107,7 +113,7 @@
 			{columns}
 			rows={clients}
 			rowHref={(client) => `#${client.name}`}
-			emptyMessage="No clients yet."
+			emptyMessage="No Clients yet. Add one and it appears here."
 		/>
 	</section>
 
@@ -118,7 +124,11 @@
 
 	<section>
 		<h2>Empty</h2>
-		<DataTable {columns} rows={[]} emptyMessage="No clients yet." />
+		<DataTable
+			{columns}
+			rows={[]}
+			emptyMessage="No Clients yet. Add one and it appears here."
+		/>
 	</section>
 
 	<section>
