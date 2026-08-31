@@ -355,6 +355,19 @@ describe('what the gate judges', () => {
 		expect(report(onItself.unpairedContainer)).toEqual(['x.css:2 -- container-type: inline-size;']);
 	});
 
+	it('is not satisfied by a comment that merely mentions the base size', () => {
+		/* `styleLines` strips comments before it returns a line, so prose
+		   cannot pair a container -- which matters here more than in rules
+		   1 and 2, because this file's own rationale quotes the exact
+		   declaration it looks for. */
+		const inProse = scanSource(
+			'x.css',
+			'/* pair this with font-size: var(--text-body-size) one day */\n.x {\n\tcontainer-type: inline-size;\n}',
+			'css'
+		);
+		expect(report(inProse.unpairedContainer)).toEqual(['x.css:3 -- container-type: inline-size;']);
+	});
+
 	it('leaves a name-only container alone, which establishes no context', () => {
 		const nameOnly = scanSource('x.css', '.x { container-name: bar; }', 'css');
 		expect(report(nameOnly.unpairedContainer)).toEqual([]);

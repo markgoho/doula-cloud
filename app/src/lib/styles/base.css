@@ -59,12 +59,13 @@ body {
  *
  * `body` itself is therefore left with no `font-size` at all, and its own
  * box takes the UA default. Nothing renders there: `app.html` puts a
- * single `display: contents` mount div in `<body>` and every dialog and
- * popover the app opens is also an element child, so all of it is matched
- * by the rule below. A bare text node written straight into `<body>`
- * would not be, and would render at 16px -- the one place this file
- * cannot answer available space, because there is no element to declare
- * on.
+ * single `display: contents` mount div in `<body>` and every element the
+ * app renders is inside it, including a `dialog` or a popover, which
+ * Svelte writes where it is declared rather than at the end of `<body>`.
+ * So the rule below matches the one child there is, and everything
+ * inherits from it. A bare text node written straight into `<body>` would
+ * not be, and would render at 16px -- the one place this file cannot
+ * answer available space, because there is no element to declare on.
  *
  * The same pairing is owed by every other containment context in the app:
  * `container-l` (primitives.css), `DataTable`, both top bars, and the two
