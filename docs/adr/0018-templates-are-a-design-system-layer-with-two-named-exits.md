@@ -183,6 +183,8 @@ The drawing put a 260px rail beside a 1052px column, which is 1360px of content 
 `--page-max` leaves. A second page width for one archetype would be a worse answer than a column 144px
 narrower than a 1440px artboard suggested.
 
+**Superseded on [#541](https://github.com/markgoho/doula-cloud/issues/541).** `--page-max` no longer exists: it froze a page column at 1216px, which would have spent a quarter of the fluid ramp [#531](https://github.com/markgoho/doula-cloud/issues/531) introduced, whatever monitor the page was on. The rail still stays at its drawn 16.25rem; the column now takes whatever the space it is given leaves, and the paragraph above stands only as the reason a second page width was refused.
+
 The same list is rendered twice — a rail and a jump-to strip — with exactly one of them `display: none`
 at any width, which takes the other out of the accessibility tree entirely. One list restyled by a
 container query is not available: the two looks are `Link` variants (`rail` and `chip`), and an atom does

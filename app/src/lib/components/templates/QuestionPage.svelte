@@ -118,7 +118,9 @@
 {/snippet}
 
 <container-l>
-	<center-l max="var(--page-max)" gutters="var(--page-gutter)">
+	<!-- No cap on the frame: it holds the rail beside the column, and the
+	     column carries the readability cap itself (#541). -->
+	<center-l max="none" gutters="var(--page-gutter)">
 		<div class="body">
 			<StepRail {journey} {steps} {allStepsHref} expand="current" />
 
@@ -183,10 +185,10 @@
 		}
 
 		/*
-		 * The question column is capped at --form-max even though the page
-		 * frame is --page-max: the column is all controls, and a 1200px
-		 * input is unreadable however wide the window is (#422). The rail
-		 * takes its own width outside that cap.
+		 * The question column is capped at --form-max while the frame
+		 * around it is not: the column is all controls, and a 1200px input
+		 * is unreadable however wide the window is (#422). The rail takes
+		 * its own width outside that cap.
 		 */
 		.column {
 			max-inline-size: var(--form-max);

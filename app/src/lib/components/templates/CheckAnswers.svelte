@@ -41,7 +41,7 @@
 	 * wider column than a form normally would. The intake summary is
 	 * nineteen rows on a Practice that has added fields, so the wide case is
 	 * real rather than hypothetical -- `isWide` drops the --form-max cap
-	 * and lets the column take what --page-max leaves beside the rail.
+	 * and lets the column take whatever is left beside the rail.
 	 */
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -95,7 +95,9 @@
 <PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} />
 
 <container-l>
-	<center-l max="var(--page-max)" gutters="var(--page-gutter)">
+	<!-- No cap on the frame: it holds the rail beside the column, and the
+	     column carries its own cap -- or drops it, when `isWide` (#541). -->
+	<center-l max="none" gutters="var(--page-gutter)">
 		<div class="body">
 			<!--
 				Every completed step expands, so the rail stops being a

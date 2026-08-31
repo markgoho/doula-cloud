@@ -80,7 +80,7 @@ describe('OverviewHub.svelte', () => {
 	it('owns the page frame and renders no chrome', async () => {
 		const { container } = await setup();
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		expect(container.querySelector('center-l')).toHaveAttribute('gutters', 'var(--page-gutter)');
 		expect(container.querySelector('nav')).toBeNull();
 		expect(container.querySelector('header')).toBeNull();
@@ -101,7 +101,7 @@ describe('OverviewHub.svelte', () => {
 	it('reserves the page frame for a skeleton while loading, instead of rendering the title or content (#480)', async () => {
 		const { container } = await setup({ loading: 'Loading your Practice' });
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByRole('status', { name: 'Loading your Practice' })).toBeVisible();
 		await expect
 			.element(page.getByRole('heading', { level: 1, name: 'Willow Birth Collective' }))
@@ -112,7 +112,7 @@ describe('OverviewHub.svelte', () => {
 	it('reserves the page frame for a Notice on a load failure, instead of rendering the title or content (#480)', async () => {
 		const { container } = await setup({ loadError: 'Failed to load your Practice' });
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByText('Failed to load your Practice')).toBeVisible();
 		await expect
 			.element(page.getByRole('heading', { level: 1, name: 'Willow Birth Collective' }))

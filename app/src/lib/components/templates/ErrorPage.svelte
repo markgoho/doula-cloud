@@ -50,7 +50,9 @@
 <PageTitle page={copy.title} />
 
 <container-l>
-	<center-l max="var(--page-max)" gutters="var(--page-gutter)">
+	<!-- A heading, a sentence and a way out: all prose, so the frame takes
+	     --measure and nothing else (#541). -->
+	<center-l max="var(--measure)" gutters="var(--page-gutter)">
 		<stack-l space="var(--space-4)">
 			<Heading level={1} variant="page" text={copy.title} />
 			<Text text={copy.body} />

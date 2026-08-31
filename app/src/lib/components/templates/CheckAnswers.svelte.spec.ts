@@ -172,7 +172,7 @@ describe('CheckAnswers.svelte', () => {
 	it('renders the page frame and no chrome beyond the journey rail', async () => {
 		const { container } = await setup();
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		expect(container.querySelector('center-l')).toHaveAttribute('gutters', 'var(--page-gutter)');
 		expect(container.querySelector('main')).toBeNull();
 		expect(container.querySelector('header')).toBeNull();

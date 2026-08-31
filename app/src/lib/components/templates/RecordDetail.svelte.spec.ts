@@ -89,7 +89,7 @@ describe('RecordDetail.svelte', () => {
 	it('owns the page frame and renders no chrome', async () => {
 		const { container } = await setup();
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		expect(container.querySelector('center-l')).toHaveAttribute('gutters', 'var(--page-gutter)');
 		expect(container.querySelector('nav')).toBeNull();
 		expect(container.querySelector('header')).toBeNull();
@@ -144,7 +144,7 @@ describe('RecordDetail.svelte', () => {
 	it('reserves the page frame for a skeleton while loading, instead of rendering the record (#480)', async () => {
 		const { container } = await setup({ loading: 'Loading the Engagement' });
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect
 			.element(page.getByRole('status', { name: 'Loading the Engagement' }))
 			.toBeVisible();
@@ -169,7 +169,7 @@ describe('RecordDetail.svelte', () => {
 	it('reserves the page frame for a Notice on a load failure, instead of rendering the record (#480)', async () => {
 		const { container } = await setup({ loadError: 'Failed to load the Engagement' });
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--page-max)');
+		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByText('Failed to load the Engagement')).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).not.toBeInTheDocument();
 	});

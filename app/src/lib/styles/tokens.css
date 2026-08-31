@@ -171,13 +171,23 @@
 	/* The page frame every Template owns (ADR-0018). The brief fixes the
 	   desktop gutter at 40px and leaves the width caps to the Template
 	   layer, so the numbers are chosen here and argued on #422: the gutter
-	   shrinks below desktop rather than crushing the content, --page-max
-	   holds a compact table wide enough for a 14-doula agency's caseload,
-	   and a form is capped far narrower because a 1200px-wide input is
-	   unreadable however wide the window is. Content-box, so a cap is the
-	   content width and the gutters sit outside it. */
+	   shrinks below desktop rather than crushing the content, and a form
+	   is capped because a 1200px-wide input is unreadable however wide the
+	   window is. Content-box, so a cap is the content width and the
+	   gutters sit outside it.
+
+	   There is deliberately no page-wide cap here. --page-max: 76rem was
+	   sized to hold a 14-doula caseload table and did two jobs, and only
+	   one was worth keeping: prose is already capped by --measure, which
+	   is font-relative and widens by itself, and a form by --form-max.
+	   What was left was a cap on tables, and a caseload showing every
+	   column without a sideways scroll is the better table. It also cost
+	   the ramp: a cqi token reads its container, so a column frozen at
+	   1216px would spend a quarter of the ramp and no more, whatever
+	   monitor it is on (#531, removed on #541). A Template now states its
+	   own choice on its center-l -- --measure for prose, --form-max for a
+	   form, or none where more room buys more content. */
 	--page-gutter: clamp(var(--space-4), 5vw, 2.5rem);
-	--page-max: 76rem;
 	--form-max: 44rem;
 	/* The rail beside a page's column -- RecordDetail's contents list
 	   (#424) and the intake step rail (#464) are the same 260px the

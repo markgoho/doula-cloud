@@ -80,7 +80,10 @@
 <PageTitle page={title} {serviceName} />
 
 <container-l>
-	<center-l max="var(--page-max)" gutters="var(--page-gutter)">
+	<!-- No cap: a record is a contents rail beside description lists and
+	     tables, not prose, and past the ramp's plateau more room buys more
+	     content (#531, #541). -->
+	<center-l max="none" gutters="var(--page-gutter)">
 		{#if loadError}
 			<Notice variant="error" message={loadError} />
 		{:else if loading}

@@ -41,10 +41,10 @@
 		}
 
 		/* The canvas drew 17px, which is between two steps of the brief's
-		   scale. The scale wins, the way --page-max won over the drawing's
-		   1360px on #424 -- an off-scale size is fine-tuning, and the point
-		   of a closed type scale is that it does not grow one step per
-		   drawing. */
+		   scale. The scale wins, the way the page frame's token won over
+		   the drawing's 1360px on #424 -- an off-scale size is fine-tuning,
+		   and the point of a closed type scale is that it does not grow one
+		   step per drawing. */
 		.size-sm .wordmark {
 			font-size: var(--text-subheading-size);
 			letter-spacing: var(--text-subheading-tracking);

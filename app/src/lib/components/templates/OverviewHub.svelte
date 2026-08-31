@@ -51,7 +51,10 @@
 <PageTitle page={title} {serviceName} />
 
 <container-l>
-	<center-l max="var(--page-max)" gutters="var(--page-gutter)">
+	<!-- No cap: a hub is cards, tables and a rail rather than prose, and
+	     past the ramp's plateau more room buys more content (#531, #541).
+	     Anything inside that needs a measure asks for one itself. -->
+	<center-l max="none" gutters="var(--page-gutter)">
 		{#if loadError}
 			<Notice variant="error" message={loadError} />
 		{:else if loading}
