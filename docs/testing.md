@@ -1,19 +1,15 @@
 # Testing infrastructure
 
-## Pre-commit hook: `gofmt` and `app/` typecheck/lint (opt-in locally, enforced in CI)
+## Pre-commit hook: `gofmt` and `app/` typecheck/lint (enabled repo-wide, enforced in CI)
 
-To catch formatting, typecheck, or lint issues before they reach CI, enable the repo's pre-commit hook once per clone:
-
-```sh
-git config core.hooksPath scripts/hooks
-```
+`core.hooksPath` is set to an absolute path (`scripts/hooks`) in this repo's shared `.git/config`, so the hook below is already active for the main checkout and every `.claude/worktrees/*` worktree — there is nothing to opt into per clone. Because the path is absolute, every worktree runs the *main* checkout's `scripts/hooks/pre-commit`, not its own branch's copy; a worktree mid-refactor of the hook script itself won't see its own changes take effect until they land on the branch checked out in main. Re-run `git config core.hooksPath scripts/hooks` only if setting up a fresh clone.
 
 `scripts/hooks/pre-commit` runs:
 1. **`api/` (Go)**: blocks any commit that stages an unformatted `.go` file, prompting to run `gofmt -w <file>` on it.
 2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
 3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Roughly 6s on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the BFF and the Auth emulator.
 
-This is opt-in (`core.hooksPath` is local git config, not something a clone picks up automatically) — the CI jobs are the actual enforcement backstop regardless of whether it's enabled locally.
+The CI jobs are the actual enforcement backstop regardless of whether the local hook is enabled — required PR status checks reject a push that would have failed it (see `docs/agents/worktree-flow.md`).
 
 ## Smoothness: gated on causes, not on frame rate
 

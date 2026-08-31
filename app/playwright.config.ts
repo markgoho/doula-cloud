@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './e2e/ports';
+import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVIEW_SERVER_PORT } from './e2e/ports';
 
 export default defineConfig({
 	globalSetup: './e2e/global-setup.ts',
@@ -22,7 +22,7 @@ export default defineConfig({
 	},
 	webServer: {
 		command: 'bun run build && bun run preview',
-		port: 4173,
+		port: PREVIEW_SERVER_PORT,
 		// VITE_* vars are inlined at build time, so the emulator host has to
 		// be set before `bun run build` runs, not just at request time.
 		env: { VITE_FIREBASE_AUTH_EMULATOR_HOST: `${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}` }

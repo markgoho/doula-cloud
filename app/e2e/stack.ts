@@ -4,18 +4,66 @@ import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { fileURLToPath } from 'node:url';
+import {
+	E2E_API_HOST,
+	E2E_API_PORT,
+	E2E_EMULATOR_HOST,
+	E2E_EMULATOR_PORT,
+	DB_HOST,
+	DB_PORT,
+	GCS_HOST,
+	GCS_PORT,
+	PORT_OFFSET
+} from './ports';
 
-const DB_HOST = '127.0.0.1';
-const DB_PORT = 15_432;
 // The fake-gcs-server in compose.e2e.yaml, and the one bucket the BFF is
 // pointed at. Both halves matter to the Go storage SDK: it reads
 // STORAGE_EMULATOR_HOST as a bare host:port (see the SDK's own doc.go
 // example) and builds an http endpoint from it, and it will not create a
 // missing bucket on first write -- seedGCSBucket below does that.
-const GCS_HOST = '127.0.0.1';
-const GCS_PORT = 14_443;
 const GCS_BUCKET = 'doula-cloud-e2e-attachments';
+// Every compose invocation below is scoped to this project name so two
+// worktrees' stacks don't collide on container names -- compose defaults
+// the project name to the compose dir's basename ("app" everywhere), which
+// would otherwise be shared. Suffix only kicks in for a real worktree
+// (PORT_OFFSET > 0); at offset 0 (main checkout, CI) this is exactly
+// today's implicit "app" project name.
+const COMPOSE_PROJECT = `doula-cloud-e2e${PORT_OFFSET ? `-${PORT_OFFSET}` : ''}`;
+const COMPOSE_ARGS = ['compose', '-p', COMPOSE_PROJECT, '-f', 'compose.e2e.yaml'];
+// compose.e2e.yaml reads these for its host port bindings and the gcs
+// service's -external-url; unset (offset 0) falls back to the compose
+// file's own defaults, so CI and the main checkout are unaffected.
+const COMPOSE_ENV = {
+	...process.env,
+	...(PORT_OFFSET && { DB_HOST_PORT: String(DB_PORT), GCS_HOST_PORT: String(GCS_PORT) })
+};
+// Distinguishes this worktree's host-process pidfiles/binary from every
+// other worktree's -- see e2e/ports.ts for why PORT_OFFSET is the stable
+// per-worktree key. Suffix omitted at offset 0 so the main checkout and CI
+// keep today's exact filenames.
+const PIDFILE_SUFFIX = PORT_OFFSET ? `-${PORT_OFFSET}` : '';
+
+// firebase.json has no CLI flag for the auth emulator's port -- only
+// --config <path>. At offset 0 (main checkout, CI) startEmulator passes no
+// --config at all, so firebase-tools resolves the committed firebase.json
+// exactly as it does today. A real worktree gets its own copy, port
+// rewritten, written next to it and gitignored (see .gitignore).
+// import.meta.dir is Bun-only; Playwright's own CLI (node_modules/.bin/playwright)
+// runs under Node, and it's the one that loads this file transitively via
+// global-setup.ts -- import.meta.url -> fileURLToPath is the portable way
+// to get this file's own directory under both runtimes.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const FIREBASE_CONFIG_PATH = path.join(REPO_ROOT, 'firebase.json');
+const WORKTREE_FIREBASE_CONFIG_PATH = path.join(REPO_ROOT, '.firebase.e2e.json');
+
+function emulatorConfigPath(): string | undefined {
+	if (!PORT_OFFSET) return undefined;
+	const config = JSON.parse(readFileSync(FIREBASE_CONFIG_PATH, 'utf8'));
+	config.emulators.auth.port = E2E_EMULATOR_PORT;
+	writeFileSync(WORKTREE_FIREBASE_CONFIG_PATH, JSON.stringify(config, undefined, 2));
+	return WORKTREE_FIREBASE_CONFIG_PATH;
+}
 const READY_TIMEOUT_MS = 60_000;
 // `db` and `gcs` (compose.e2e.yaml) just pull/start pinned
 // postgres:16-alpine and fake-gcs-server images -- no build involved --
@@ -44,9 +92,9 @@ const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE ?? 'podman';
 // pidfile pattern for both, so `bun run dev:full` (scripts/dev-full.ts)
 // gets the same clean-teardown behavior as the Playwright e2e run
 // (global-setup.ts/global-teardown.ts).
-const EMULATOR_PIDFILE = path.join(tmpdir(), 'doula-cloud-e2e-firebase-emulator.pid');
-const API_PIDFILE = path.join(tmpdir(), 'doula-cloud-e2e-api.pid');
-const API_BINARY_PATH = path.join(tmpdir(), 'doula-cloud-e2e-api');
+const EMULATOR_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-firebase-emulator${PIDFILE_SUFFIX}.pid`);
+const API_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-api${PIDFILE_SUFFIX}.pid`);
+const API_BINARY_PATH = path.join(tmpdir(), `doula-cloud-e2e-api${PIDFILE_SUFFIX}`);
 
 // Brings up the whole e2e stack: the Firebase Auth emulator, the db-only
 // compose stack (see compose.e2e.yaml), the goose migrations and the
@@ -76,9 +124,10 @@ export async function startStack(appOrigin: string) {
 // so --wait blocks forever (confirmed on trunk -- see git log for this
 // file). Polling the host-exposed port directly sidesteps that.
 async function startDatabase() {
-	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'up', '-d'], {
+	execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'up', '-d'], {
 		stdio: 'inherit',
-		timeout: DB_UP_TIMEOUT_MS
+		timeout: DB_UP_TIMEOUT_MS,
+		env: COMPOSE_ENV
 	});
 	await waitForPort(DB_HOST, DB_PORT, READY_TIMEOUT_MS);
 	await waitForPort(GCS_HOST, GCS_PORT, READY_TIMEOUT_MS);
@@ -133,8 +182,8 @@ function runMigrations() {
 function execSQL(sql: string) {
 	execFileSync(
 		CONTAINER_ENGINE,
-		['compose', '-f', 'compose.e2e.yaml', 'exec', '-T', 'db', 'psql', '-U', 'app', '-d', 'app', '-v', 'ON_ERROR_STOP=1', '-c', sql],
-		{ stdio: 'inherit', timeout: 30_000 }
+		[...COMPOSE_ARGS, 'exec', '-T', 'db', 'psql', '-U', 'app', '-d', 'app', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+		{ stdio: 'inherit', timeout: 30_000, env: COMPOSE_ENV }
 	);
 }
 
@@ -189,8 +238,8 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 function querySQLValue(sql: string): string {
 	const output = execFileSync(
 		CONTAINER_ENGINE,
-		['compose', '-f', 'compose.e2e.yaml', 'exec', '-T', 'db', 'psql', '-U', 'app', '-d', 'app', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
-		{ timeout: 30_000 }
+		[...COMPOSE_ARGS, 'exec', '-T', 'db', 'psql', '-U', 'app', '-d', 'app', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+		{ timeout: 30_000, env: COMPOSE_ENV }
 	);
 	return output.toString('utf8').trim();
 }
@@ -205,9 +254,10 @@ export function stopStack() {
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });
 	killPidfile(EMULATOR_PIDFILE);
-	execFileSync(CONTAINER_ENGINE, ['compose', '-f', 'compose.e2e.yaml', 'down', '-v'], {
+	execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'down', '-v'], {
 		stdio: 'inherit',
-		timeout: 60_000
+		timeout: 60_000,
+		env: COMPOSE_ENV
 	});
 }
 
@@ -226,11 +276,11 @@ async function startEmulator() {
 	// the BFF is a host process too (startAPI below), that reason is
 	// gone, but the 0.0.0.0 bind is harmless to leave as-is.
 
-	const child = spawn(
-		'bunx',
-		['firebase-tools', 'emulators:start', '--only', 'auth', '--project', 'doula-cloud'],
-		{ stdio: 'ignore', detached: true }
-	);
+	const configPath = emulatorConfigPath();
+	const arguments_ = ['firebase-tools', 'emulators:start', '--only', 'auth', '--project', 'doula-cloud'];
+	if (configPath) arguments_.push('--config', configPath);
+
+	const child = spawn('bunx', arguments_, { stdio: 'ignore', detached: true });
 	child.unref();
 	if (child.pid) {
 		writeFileSync(EMULATOR_PIDFILE, String(child.pid));
