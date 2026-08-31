@@ -184,3 +184,35 @@ _Avoid_: User type, actor, role
 **Journey**:
 The path one Persona takes toward a single goal, from where they arrive to a stated end state, described in two layers: an **experience layer** (what the Persona thinks and feels, and what hurts) and an **interaction layer** (the concrete steps through the product). A Journey is not a task flow — the interaction layer alone is a task flow. Each Persona has exactly one primary Journey. Defined in [docs/journeys/](docs/journeys/).
 _Avoid_: Flow, use case, scenario
+
+**Intrinsic layout**:
+Layout resolved from the content and the space available to it, rather than selected by the author from a set of named widths. The anchor term for every layout entry below: a component is laid out intrinsically when it is correct wherever it is placed — a full page, a narrow column, an embedded surface — without being told which of those it is in. See [ADR-0023](docs/adr/0023-layout-is-intrinsic-and-320px-is-the-floor.md).
+_Avoid_: Responsive design (in the common sense — see **Responsive**), adaptive design, mobile-first, breakpoint-driven
+
+**Available space**:
+The room a component is actually given by its parent. The only measurement an intrinsic layout reacts to, and the reason a component never asks how large the window is: a component in a sidebar has little available space on the widest screen there is.
+_Avoid_: Viewport width, screen size, device width, mobile, desktop
+
+**Content floor**:
+The available space below which a named thing stops fitting — a two-line address, a four-figure amount, a full practice name. **The only layout number an author writes.** It is discovered from the content, never chosen from a set, and it lives where it is used. Everything downstream of it — the points at which a layout changes configuration — is resolved by the browser, is plural, and is deliberately left unnamed: a moment you can name is a moment you can list, and a list of them is a set of widths. A `@container` condition's literal is a content floor too, which is what stops a container query from hiding a device width. **320px is not a content floor.** It is a conformance commitment derived from WCAG 1.4.10 at 400% zoom, and no component may derive its floor from it.
+_Avoid_: Breakpoint (in every form, including "implicit breakpoint" — it names a moment, and an author looking for a moment has stopped looking for a floor), min-width, threshold
+
+**The continuum**:
+The full unbroken range of available space a component must be correct across, as against a set of points within it. The word exists so that "a set of widths" is audibly wrong: the continuum is not 320, 480 and 768.
+_Avoid_: Width matrix, size range, breakpoint set
+
+**Quantum layout**:
+Every Layout's term for the goal state: a layout that exists in several configurations at once, with the browser resolving which one appears from the space available — the author writes none of them as a choice. Its opposite is a component with exactly one configuration at every available space, which is the ordinary failure. Useful because it makes that failure sayable in a sentence.
+_Avoid_: Variant, layout mode, view
+
+**Responsive**:
+Adapting to a **stated user preference** — color scheme, reduced motion, contrast, print — and never to available space. Deliberately narrower than the common industry meaning, which is a layout chosen from named device widths; that is the thing this repo does not do. Permitted when naming someone else's artifact, such as the ONS responsive table.
+_Avoid_: Using it for anything space-related — that is **intrinsic layout**
+
+**The continuum check**:
+The automated pass asserting that nothing needs more room than it is given, at any available space, naming no width. Runs against **the drag surface**: they are one artifact seen two ways, not a check and a page built separately.
+_Avoid_: Width matrix, size sweep, responsive test
+
+**The drag surface**:
+The style-guide surface with a handle a person drags, so a component can be watched passing through its configurations continuously rather than inspected at chosen sizes. The human half of **the continuum check**.
+_Avoid_: Width matrix, size panel, breakpoint preview
