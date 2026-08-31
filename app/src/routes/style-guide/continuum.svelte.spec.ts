@@ -6,7 +6,10 @@
  * artifact a person drags at /style-guide/drag-surface -- the frame
  * markup and the demo registry are copied from that page's own
  * `+page.svelte` rather than reimplemented, because CONTEXT.md defines
- * the drag surface and this check as one artifact seen two ways.
+ * the drag surface and this check as one artifact seen two ways. The
+ * sweep itself lives in `continuum.ts`, shared with the layout exercise
+ * (#534) so that exercise is marked by this instrument rather than by a
+ * private copy of it.
  *
  * The glob has to be its own eager copy rather than an import of
  * `+page.svelte` itself: #527 found that an eager glob of every
@@ -28,6 +31,7 @@ import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages } from './components.js';
+import { overflowReport, sweep } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 
 const pageModules = import.meta.glob<PageModule>('./*/+page.svelte', { eager: true });
@@ -39,16 +43,6 @@ const demos = toDemos(pageModules, [
 	...templatePages
 ]);
 
-// ADR-0024: 320 is a conformance commitment, not a content floor -- the
-// only width this check ever names, and the low end of every sweep.
-const CONFORMANCE_COMMITMENT = 320;
-// A sweep's step size is a resolution, not a design (ADR-0025) -- 4px is
-// fine enough to catch a content floor and coarse enough to keep the
-// suite fast across every component in one run.
-const RESOLUTION = 4;
-// Sub-pixel rounding from the browser's own layout, not a real overflow.
-const TOLERANCE = 1;
-
 /*
  * Known-broken today, tracked on their own tickets rather than suppressed
  * here (ADR-0025's own instruction). `it.fails` turns red, not green, the
@@ -59,30 +53,6 @@ const KNOWN_BROKEN: Readonly<Record<string, string>> = {
 	'description-list': '#530',
 	'data-table': '#508'
 };
-
-interface Break {
-	width: number;
-	needed: number;
-}
-
-/*
- * Sweeps a frame already holding a rendered demo, from 320px up to
- * whatever this environment naturally offers -- the same
- * `Math.max(availableSpace, CONFORMANCE_COMMITMENT)` the drag surface's
- * own page uses for its handle's far end, so the check invents no upper
- * width of its own either.
- */
-function sweep(frame: HTMLElement, availableSpace: number): Break | undefined {
-	const widestSpace = Math.max(availableSpace, CONFORMANCE_COMMITMENT);
-	for (let width = CONFORMANCE_COMMITMENT; width <= widestSpace; width += RESOLUTION) {
-		frame.style.inlineSize = `${width}px`;
-		void frame.offsetWidth;
-		if (frame.scrollWidth - width > TOLERANCE) {
-			return { width, needed: frame.scrollWidth };
-		}
-	}
-	return undefined;
-}
 
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
 
@@ -99,10 +69,14 @@ describe('the continuum check', () => {
 			try {
 				await render(demo.component, {}, { baseElement: frame });
 				const found = sweep(frame, run.clientWidth);
-				// `found` prints its own width/needed pair in the failure diff --
-				// the "space given" and "space needed" the acceptance criteria ask
-				// for -- and the test name already carries the component.
-				expect(found).toBeUndefined();
+				/*
+				 * The failure sentence names the component, the space it was
+				 * given and the space it needed -- and then points at the
+				 * exercise (#534). This is the carrier: a session that only
+				 * chose a component and wrote no CSS still has to read this
+				 * line, because it is the reason its commit will not go in.
+				 */
+				expect(found, found && overflowReport(demo.name, found)).toBeUndefined();
 			} finally {
 				run.remove();
 			}
