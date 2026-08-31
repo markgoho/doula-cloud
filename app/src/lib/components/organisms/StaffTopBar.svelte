@@ -106,7 +106,14 @@
 
 <style>
 	@layer components {
+		/* The bar is a container, so the switch below reads the room the
+		   bar itself has rather than the room the window has. It is named
+		   because `body` is a containment context too (#540): an unnamed
+		   query that failed to find this declaration would silently
+		   resolve against the page and be a viewport query again, and no
+		   test could tell. */
 		header {
+			container: staff-top-bar / inline-size;
 			display: flex;
 			align-items: center;
 			block-size: var(--top-bar-height);
@@ -135,12 +142,14 @@
 			justify-content: space-between;
 		}
 
-		/* layout:ignore -- ADR-0023 rule 3. One breakpoint, and it is where six nav items plus a Practice name
-		   stop fitting rather than a device width. Below it the same items
-		   are in the sheet, which is why both trees are in the document and
-		   one is display:none -- a hidden subtree is out of the accessibility
-		   tree too, so nothing is announced twice. */
-		@media (min-width: 60rem) {
+		/* The content floor: six nav items plus a Practice name and the
+		   account controls stop fitting below this, and it is the bar's own
+		   inline size that is measured, never a device width (ADR-0024).
+		   Below the floor the same items are in the sheet, which is why both
+		   trees are in the document and one is display:none -- a hidden
+		   subtree is out of the accessibility tree too, so nothing is
+		   announced twice. */
+		@container staff-top-bar (min-width: 60rem) {
 			.wide {
 				display: flex;
 			}

@@ -46,7 +46,15 @@
 
 <style>
 	@layer components {
+		/* The bar is a container, so the switch below reads the room the
+		   bar itself has rather than the room the window has -- it is the
+		   element both navs are inside, so it is the one that can be asked.
+		   Named because `body` is a containment context too (#540): an
+		   unnamed query that failed to find this declaration would silently
+		   resolve against the page and be a viewport query again, and no
+		   test could tell. */
 		header {
+			container: portal-top-bar / inline-size;
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 			background-color: var(--color-surface-bright);
 		}
@@ -97,13 +105,13 @@
 			padding-inline: var(--space-2);
 		}
 
-		/* layout:ignore -- ADR-0023 rule 3. The portal top bar's box is the
-		   viewport by construction, so a containment context here would exist
-		   only to be queried. One threshold, and it is where the four portal
-		   nav items stop fitting beside the sign-out control rather than a
-		   device width. Below it the same items are in the narrow row, which
-		   is why both trees are in the document and one is display:none. */
-		@media (min-width: 48rem) {
+		/* The content floor: the four portal nav items stop fitting beside
+		   the Practice's name and the sign-out control below this, and it is
+		   the bar's own inline size that is measured, never a device width
+		   (ADR-0024). Below the floor the same items are in the narrow row,
+		   which is why both trees are in the document and one is
+		   display:none. */
+		@container portal-top-bar (min-width: 48rem) {
 			.wide {
 				display: flex;
 			}

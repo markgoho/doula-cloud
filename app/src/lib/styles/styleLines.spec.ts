@@ -69,4 +69,33 @@ describe('styleLines', () => {
 			'}'
 		]);
 	});
+
+	/*
+	 * The `css` mode, which `layout.usage.spec.ts` needs so the gate can
+	 * reach the token layer (ADR-0025). A plain stylesheet has no `<style>`
+	 * tag to open the block, so the default mode returns nothing at all from
+	 * one -- which is exactly the blind spot #532 fell into.
+	 */
+	describe('a source that is a stylesheet rather than one that contains it', () => {
+		it('returns nothing from a plain stylesheet in the default mode', () => {
+			expect(styleLines('.x {\n\tcolor: red;\n}', MARKER)).toEqual([]);
+		});
+
+		it('reads every line of one in css mode', () => {
+			expect(styleLines('.x {\n\tcolor: red;\n}', MARKER, 'css').map(({ text }) => text.trim())).toEqual([
+				'.x {',
+				'color: red;',
+				'}'
+			]);
+		});
+
+		it('honours the marker there too', () => {
+			const source = `/* ${MARKER} -- a reason */\n.x {\n\tcolor: red;\n}\n.y {\n\tcolor: blue;\n}`;
+			expect(styleLines(source, MARKER, 'css').map(({ text }) => text.trim())).toEqual([
+				'.y {',
+				'color: blue;',
+				'}'
+			]);
+		});
+	});
 });

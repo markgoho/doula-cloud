@@ -16,11 +16,21 @@
  * Only what is inside a `<style>` block. Markup and script carry numbers
  * that are genuinely not design values -- an `Icon` size prop, a viewBox,
  * a debounce -- and the design system's claim is about the stylesheet.
+ *
+ * `kind` says whether the source *contains* a stylesheet or *is* one. A
+ * `.css` file has no `<style>` tag to open the block, so it would return
+ * nothing at all; `'css'` starts inside. `layout.usage.spec.ts` needs it
+ * because ADR-0025 widens that gate to every CSS-bearing file the app
+ * ships, and the token layer is a plain stylesheet.
  */
-export function styleLines(source: string, ignoreMarker: string): { line: number; text: string }[] {
+export function styleLines(
+	source: string,
+	ignoreMarker: string,
+	kind: 'svelte' | 'css' = 'svelte'
+): { line: number; text: string }[] {
 	const lines = source.split('\n');
 	const out: { line: number; text: string }[] = [];
-	let isInStyle = false;
+	let isInStyle = kind === 'css';
 	let isInBlockComment = false;
 	// A pending marker waits for its rule block to open, then stays in force
 	// until that block closes again.

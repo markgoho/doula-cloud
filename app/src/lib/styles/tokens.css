@@ -226,7 +226,22 @@
 	   monitor it is on (#531, removed on #541). A Template now states its
 	   own choice on its center-l -- --measure for prose, --form-max for a
 	   form, or none where more room buys more content. */
-	--page-gutter: clamp(var(--space-4), 5vw, 2.5rem);
+	/* The gutter reads the room its own page column has, not the window:
+	   `cqi` is 1% of the nearest ancestor container's inline size, and the
+	   app shell declares one on `body` (#540). 16px of gutter until the
+	   column reaches 640px, growing from there to 48px at the top of the
+	   ramp, and pinned above it (#531, #533).
+
+	   The two endpoints are literals on purpose, and this is the one place
+	   in the app where that is right. `clamp(var(--space-4), 2.5cqi,
+	   var(--space-12))` is the obvious spelling and it is wrong: those
+	   tokens are themselves clamps, so the gutter would grow twice -- once
+	   through its own cqi term and again through endpoints moving
+	   underneath it -- and its floor would be 16px only at the very bottom
+	   of the ramp. Growth is expressed once, by the container term. The 3x
+	   spread between the two ends is not the scale's 2.5x guard either:
+	   that guard is WCAG 1.4.4, which is about text. */
+	--page-gutter: clamp(1rem, 2.5cqi, 3rem);
 	--form-max: 44rem;
 	/* The rail beside a page's column -- RecordDetail's contents list
 	   (#424) and the intake step rail (#464) are the same 260px the
