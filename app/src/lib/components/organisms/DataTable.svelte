@@ -40,8 +40,8 @@
 		$props();
 </script>
 
-<stack-l>
-	<table>
+<stack-l class="frame">
+	<table class="table-view">
 		<thead>
 			<tr>
 				{#each columns as column (column.label)}
@@ -79,6 +79,44 @@
 			{/if}
 		</tbody>
 	</table>
+
+	<!--
+		The record view (#508, ADR-0024): the same columns/rows, one <dl> per
+		record instead of one row of a shared column grid, for the container
+		widths too narrow to hold the table without scrolling the whole
+		document sideways. Generated from the same Column config as the
+		<table> above, so no route ever hand-authors this second tree.
+	-->
+	<!-- A plain div, not <stack-l>: an unregistered custom element toggled
+	     between display:block and display:none by this same @container
+	     rule (below) never actually hid, in both the browser this was
+	     built against and the test suite -- a real div doesn't have that
+	     failure mode. -->
+	<div class="record-view">
+		{#if rows.length === 0}
+			<p>{emptyMessage}</p>
+		{:else}
+			{#each rows as row, index (index)}
+				<dl>
+					{#each columns as column, columnIndex (column.label)}
+						<dt>{column.label}</dt>
+						<dd class:numeric={column.numeric}>
+							{#if columnIndex === 0 && rowHref}
+								<Link href={rowHref(row)} label={column.accessor(row)} />
+							{:else}
+								{column.accessor(row)}
+							{/if}
+						</dd>
+					{/each}
+					{#if rowActions}
+						<dt>{rowActions.label}</dt>
+						<dd>{@render rowActions.content(row)}</dd>
+					{/if}
+				</dl>
+			{/each}
+		{/if}
+	</div>
+
 	{#if hasMore && onLoadMore}
 		<Button label="Load more" variant="secondary" onClick={onLoadMore} />
 	{/if}
@@ -86,7 +124,17 @@
 
 <style>
 	@layer components {
-		table {
+		/* The frame is a container, so the switch below reads the room
+		   DataTable's own wrapper has rather than the room the window has.
+		   Named for the same reason StaffTopBar names its own (#540): body
+		   is a containment context too, and an unnamed query that lost this
+		   declaration would silently resolve against the page instead. */
+		.frame {
+			container: data-table / inline-size;
+		}
+
+		.table-view {
+			display: none;
 			inline-size: 100%;
 			border-collapse: collapse;
 		}
@@ -114,6 +162,64 @@
 		   drift apart the way two separately-set rules could. */
 		th.numeric,
 		td.numeric {
+			text-align: end;
+			font-variant-numeric: tabular-nums;
+		}
+
+		/* The content floor: Staff's Members table (Name, Email, Roles,
+		   Employment type, Works from, plus its Actions column) is the
+		   widest DataTable built today and needs 680px of natural column
+		   width for its longest realistic values -- measured 2026-08-31 on
+		   /style-guide/data-table's six-column demo. 44rem (704px) covers
+		   that with a small margin against font-metric drift, and it is the
+		   frame's own inline size that is measured, never the viewport
+		   (ADR-0024). A future table wider than this floor moves it. */
+		@container data-table (min-width: 44rem) {
+			.table-view {
+				display: table;
+			}
+
+			.record-view {
+				display: none;
+			}
+		}
+
+		/* One <dl> per record (#508, ADR-0024) rather than a mangled
+		   <table>, which strips table semantics in Safari and Firefox.
+		   margin-block-start: 0 overrides the frame's own stack-l spacing
+		   (primitives.css) -- record-view is the first VISIBLE child
+		   whenever it renders at all, since the hidden .table-view before
+		   it still counts as "a preceding sibling" to that selector. */
+		.record-view {
+			margin-block-start: 0;
+		}
+
+		.record-view dl {
+			display: grid;
+			grid-template-columns: auto 1fr;
+			gap: 0 var(--space-4);
+			margin: 0;
+		}
+
+		.record-view dl + dl {
+			margin-block-start: var(--space-4);
+		}
+
+		.record-view dt {
+			font-weight: var(--font-weight-medium);
+			color: var(--color-on-surface-variant);
+			padding-block: var(--space-2);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+		}
+
+		.record-view dd {
+			margin: 0;
+			color: var(--color-on-surface);
+			padding-block: var(--space-2);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+		}
+
+		.record-view dd.numeric {
 			text-align: end;
 			font-variant-numeric: tabular-nums;
 		}

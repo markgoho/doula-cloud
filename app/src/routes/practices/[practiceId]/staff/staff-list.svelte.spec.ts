@@ -2,6 +2,9 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+// DataTable's frame needs stack-l's display:block default (primitives.css)
+// to work as a container-query context -- see DataTable.svelte.spec.ts.
+import '#lib/styles/app.css';
 import Page from './+page.svelte';
 
 vi.mock('$app/state', () => ({
@@ -159,7 +162,28 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
+/*
+ * Scoped to a specific .table-view, not an unscoped getByText/getByRole:
+ * DataTable renders rowActions.content once per tree (#508, ADR-0024), so
+ * a Badge or Notice living inside a row's actions exists twice -- once in
+ * the <table>, once in the record view's <dl> -- and getByText matches
+ * DOM text regardless of which tree CSS hides. This is the same sanctioned
+ * querySelector exception DataTable.svelte.spec.ts uses for the same
+ * reason. The page renders Members before Pending invitations, so index
+ * order is the same source of truth the DOM itself uses.
+ */
+function membersTable() {
+	return testPage.elementLocator(document.querySelector('.table-view')!);
+}
+
+function invitationsTable() {
+	return testPage.elementLocator(document.querySelectorAll('.table-view')[1]!);
+}
+
 async function setup(options: MockOptions = {}) {
+	// DataTable's own content floor (#508) stacks it into a <dl> below
+	// 44rem, and this file's assertions are about the <table> specifically.
+	await testPage.viewport(1024, 800);
 	mockApi(options);
 	await render(Page, {});
 }
@@ -195,7 +219,7 @@ describe('staff screen', () => {
 	it('flags an invitation whose email could not be delivered', async () => {
 		await setup();
 
-		const flags = testPage.getByText('Email could not be delivered');
+		const flags = invitationsTable().getByText('Email could not be delivered');
 		await expect.element(flags).toBeVisible();
 		expect(flags.elements()).toHaveLength(1);
 	});
@@ -241,7 +265,7 @@ describe('staff screen', () => {
 		await testPage.getByRole('button', { name: 'Save membership' }).click();
 
 		await expect
-			.element(testPage.getByText('a practice must keep at least one Owner'))
+			.element(membersTable().getByText('a practice must keep at least one Owner'))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('group', { name: 'Roles' })).toBeVisible();
 	});
@@ -278,7 +302,7 @@ describe('staff screen', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByText('Expired -- invite again or revoke'))
+			.element(invitationsTable().getByText('Expired -- invite again or revoke'))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com' }))
@@ -308,7 +332,7 @@ describe('staff screen', () => {
 		await dialog.getByRole('button', { name: 'Remove from Practice' }).click();
 
 		await expect
-			.element(testPage.getByText('a practice must keep at least one Owner'))
+			.element(membersTable().getByText('a practice must keep at least one Owner'))
 			.toBeVisible();
 	});
 
@@ -320,7 +344,7 @@ describe('staff screen', () => {
 		await dialog.getByRole('button', { name: 'Revoke invitation' }).click();
 
 		await expect
-			.element(testPage.getByText('no pending invitation found at this practice'))
+			.element(invitationsTable().getByText('no pending invitation found at this practice'))
 			.toBeVisible();
 	});
 
@@ -332,7 +356,7 @@ describe('staff screen', () => {
 		const dialog = testPage.getByRole('dialog', { name: 'End sessions everywhere' });
 		await dialog.getByRole('button', { name: 'End sessions everywhere' }).click();
 
-		const successNotices = testPage.getByText('Sessions ended.');
+		const successNotices = membersTable().getByText('Sessions ended.');
 		await expect.element(successNotices).toBeVisible();
 		expect(successNotices.elements()).toHaveLength(1);
 
@@ -348,17 +372,29 @@ describe('staff screen', () => {
 		const dialog = testPage.getByRole('dialog', { name: 'End sessions everywhere' });
 		await dialog.getByRole('button', { name: 'End sessions everywhere' }).click();
 
-		await expect.element(testPage.getByText('Failed to end sessions')).toBeVisible();
+		await expect.element(membersTable().getByText('Failed to end sessions')).toBeVisible();
 	});
 
 	// #459: the roster column shows the current value and the day it was
 	// asserted, which answers "how did this get set?" only while the value
 	// has never moved. These four hold the four things it had to decide.
+	/*
+	 * DataTable renders rowActions.content once per tree (#508, ADR-0024),
+	 * so "Work state history"'s disclosure exists twice -- once in the
+	 * <table> row, once in the record view's <dl>. A closed <details> is
+	 * still in the DOM (only CSS-hidden), and getByText matches DOM text
+	 * regardless of visibility, so a plain getByText for the disclosure's
+	 * revealed content is ambiguous between the two copies. Scoping to
+	 * .table-view -- the tree setup()'s wide viewport actually shows --
+	 * is the same sanctioned querySelector exception DataTable.svelte.spec.ts
+	 * uses for the same reason.
+	 */
 	describe('work state history', () => {
 		it('is closed until it is opened, and then names both sides of a move', async () => {
 			await setup();
+			const tableView = membersTable();
 
-			const disclosures = testPage.getByText('Work state history');
+			const disclosures = tableView.getByText('Work state history');
 			await expect.element(disclosures.first()).toBeVisible();
 			// Nothing is fetched until she asks for it: the roster read is
 			// the only request so far.
@@ -371,7 +407,7 @@ describe('staff screen', () => {
 			await disclosures.first().click();
 
 			await expect
-				.element(testPage.getByText('Changed from New York to New Jersey'))
+				.element(tableView.getByText('Changed from New York to New Jersey'))
 				.toBeVisible();
 		});
 
@@ -379,10 +415,11 @@ describe('staff screen', () => {
 		// NULL), and printing it as a change would invent one she never made.
 		it('prints a first assertion as a report, not as a change', async () => {
 			await setup();
+			const tableView = membersTable();
 
-			await testPage.getByText('Work state history').first().click();
+			await tableView.getByText('Work state history').first().click();
 
-			await expect.element(testPage.getByText('Reported New York')).toBeVisible();
+			await expect.element(tableView.getByText('Reported New York')).toBeVisible();
 		});
 
 		// A contractor doula who asserted her work state at another Practice
@@ -390,19 +427,21 @@ describe('staff screen', () => {
 		// though she said it here.
 		it('marks an assertion made before she joined this practice', async () => {
 			await setup();
+			const tableView = membersTable();
 
-			await testPage.getByText('Work state history').nth(1).click();
+			await tableView.getByText('Work state history').nth(1).click();
 
-			await expect.element(testPage.getByText('Reported California')).toBeVisible();
-			await expect.element(testPage.getByText('(before joining this practice)')).toBeVisible();
+			await expect.element(tableView.getByText('Reported California')).toBeVisible();
+			await expect.element(tableView.getByText('(before joining this practice)')).toBeVisible();
 		});
 
 		it('shows a per-row error notice when the history fails to load', async () => {
 			await setup({ historyResponse: textResponse('Failed to load work state history') });
+			const tableView = membersTable();
 
-			await testPage.getByText('Work state history').first().click();
+			await tableView.getByText('Work state history').first().click();
 
-			await expect.element(testPage.getByText('Failed to load work state history')).toBeVisible();
+			await expect.element(tableView.getByText('Failed to load work state history')).toBeVisible();
 		});
 	});
 });

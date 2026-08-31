@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PendingRequestItem } from '#lib/engagementRequest.js';
+// DataTable's frame needs stack-l's display:block default (primitives.css)
+// to work as a container-query context -- see DataTable.svelte.spec.ts.
+import '#lib/styles/app.css';
 import Page from './+page.svelte';
 
 vi.mock('$app/state', () => ({ page: { params: { practiceId: 'practice-1' } } }));
@@ -31,8 +34,11 @@ const postpartumRequest: PendingRequestItem = {
 	requestedAt: '2026-08-02T10:00:00Z'
 };
 
-beforeEach(() => {
+beforeEach(async () => {
 	apiFetchWithSession.mockReset();
+	// DataTable's own content floor (#508) stacks it into a <dl> below
+	// 44rem, and this file's assertions are about the <table> specifically.
+	await testPage.viewport(1440, 900);
 });
 
 function mockPages(...pages: { items: PendingRequestItem[]; hasMore: boolean; nextCursor?: string }[]) {
@@ -72,8 +78,10 @@ describe('the pending-Request inbox', () => {
 
 		render(Page);
 
+		// getByRole, not getByText: the record view carries the same
+		// message in a hidden <p>, and only a role query excludes it.
 		await expect
-			.element(testPage.getByText('No requests are waiting for a decision.'))
+			.element(testPage.getByRole('cell', { name: 'No requests are waiting for a decision.' }))
 			.toBeVisible();
 	});
 
@@ -87,8 +95,12 @@ describe('the pending-Request inbox', () => {
 
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
-		await expect.element(testPage.getByText('Rosalind Fairweather')).toBeVisible();
-		await expect.element(testPage.getByText('Marguerite Ashworth-Delacroix')).toBeVisible();
+		// getByRole, not getByText: the record view links the same rows in
+		// a hidden tree, and only a role query excludes it.
+		await expect.element(testPage.getByRole('link', { name: 'Rosalind Fairweather' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Marguerite Ashworth-Delacroix' }))
+			.toBeVisible();
 		expect(apiFetchWithSession).toHaveBeenLastCalledWith(
 			'/api/practices/practice-1/engagement-requests?cursor=cursor-1'
 		);

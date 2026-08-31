@@ -52,7 +52,15 @@
 			border-radius: var(--radius);
 		}
 
-		/* 40px, the row height the brief's Density section fixes for a table. */
+		/* 40px, the row height the brief's Density section fixes for a
+		   table, with no gap between spans -- DataTable's own rows are
+		   border-collapsed and adjacent, not gapped, and a placeholder
+		   that reserves more than the real row costs is exactly the
+		   layout shift this component exists to prevent. */
+		.row {
+			gap: 0;
+		}
+
 		.row span {
 			block-size: 2.5rem;
 		}

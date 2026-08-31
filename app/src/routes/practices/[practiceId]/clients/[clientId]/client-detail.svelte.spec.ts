@@ -3,7 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail, HistoryEntry } from '#lib/clientDetail.js';
+import { registerLayoutPrimitives } from '#lib/primitives/index.js';
+// DataTable's frame needs stack-l's display:block default (primitives.css)
+// to work as a container-query context -- see DataTable.svelte.spec.ts. This
+// route's RecordDetail also needs the primitives registered, not just their
+// CSS: <center-l max="none"> only lifts the default var(--measure) cap via
+// the custom element's own attribute handling, and an unregistered
+// center-l never runs it, leaving every DataTable narrower than its floor.
+import '#lib/styles/app.css';
 import Page from './+page.svelte';
+
+if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 vi.mock('$app/state', () => ({
 	page: { params: { practiceId: 'practice-1', clientId: 'client-1' } }
@@ -60,6 +70,9 @@ async function setup({
 	sessionOk = true,
 	sessionThrows = false
 }: SetupOptions = {}) {
+	// DataTable's own content floor (#508) stacks it into a <dl> below
+	// 44rem, and this file's assertions are about the <table> specifically.
+	await testPage.viewport(1440, 900);
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path === '/api/staff/session') {
 			if (sessionThrows) return Promise.reject(new Error('network down'));

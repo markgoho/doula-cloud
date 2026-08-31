@@ -1,6 +1,9 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { cleanup, render } from 'vitest-browser-svelte';
+// DataTable's frame needs stack-l's display:block default (primitives.css)
+// to work as a container-query context -- see DataTable.svelte.spec.ts.
+import '#lib/styles/app.css';
 import DataTable from '../organisms/DataTable.svelte';
 import Skeleton from './Skeleton.svelte';
 
@@ -42,6 +45,9 @@ function caseload(count: number): Row[] {
  * bounding box: first the placeholder, then the content it stood in for.
  */
 async function setup({ rows = 6 }: { rows?: number } = {}) {
+	// DataTable's own content floor (#508) stacks it into a <dl> below
+	// 44rem, and this measures the <table> layout specifically.
+	await page.viewport(1440, 900);
 	await render(Skeleton, { variant: 'row', lines: rows, label: 'Loading Clients' });
 	const skeleton = await page.getByRole('status').element();
 	const placeholder = skeleton.getBoundingClientRect().height;
@@ -60,9 +66,11 @@ describe('a skeleton reserves the space its content will take', () => {
 		const { placeholder, loaded } = await setup({ rows: 6 });
 		// One row of tolerance, not zero: the table carries a header the
 		// skeleton does not, and a caller composes the two with the same
-		// heading above them. What this rejects is the shape that actually
-		// jumps -- a placeholder sized by guess rather than by row count.
-		expect(Math.abs(loaded - placeholder)).toBeLessThanOrEqual(40);
+		// heading above them. +1 past that for sub-pixel font rounding,
+		// the same margin continuum.ts's own sweep gives itself. What this
+		// rejects is the shape that actually jumps -- a placeholder sized
+		// by guess rather than by row count.
+		expect(Math.abs(loaded - placeholder)).toBeLessThanOrEqual(41);
 	});
 
 	it('grows with the row count rather than staying a fixed block', async () => {

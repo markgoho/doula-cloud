@@ -54,7 +54,10 @@ function caseload(count: number): Row[] {
 async function setup({ rows = 350 }: SetupOptions = {}) {
 	const started = performance.now();
 	await render(DataTable<Row>, { columns, rows: caseload(rows), emptyMessage: 'No Clients yet.' });
-	await page.getByText(`Client Number ${rows - 1}`).element();
+	// #508: the record view now carries the same text in a <dd>, so two
+	// elements match the last row's name -- `.first()` is the <td>, which
+	// is what "on screen" means for this measurement's own table below.
+	await page.getByText(`Client Number ${rows - 1}`).first().element();
 	const milliseconds = performance.now() - started;
 
 	const table = document.querySelector('table');

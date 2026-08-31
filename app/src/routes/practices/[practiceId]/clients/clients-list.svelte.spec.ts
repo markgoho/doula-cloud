@@ -2,6 +2,9 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+// DataTable's frame needs stack-l's display:block default (primitives.css)
+// to work as a container-query context -- see DataTable.svelte.spec.ts.
+import '#lib/styles/app.css';
 import Page from './+page.svelte';
 
 // Mirrors new-client.svelte.spec.ts's pattern: a hoisted, mutable
@@ -54,6 +57,9 @@ async function setup(
 	response: Response = jsonResponse({ items: clients, hasMore: false }),
 	isContractor = false
 ) {
+	// DataTable's own content floor (#508) stacks it into a <dl> below
+	// 44rem, and this file's assertions are about the <table> specifically.
+	await testPage.viewport(1440, 900);
 	apiFetchWithSession.mockResolvedValue(response);
 	await render(Page, { data: { isContractor } });
 }
@@ -132,7 +138,9 @@ describe('clients list screen', () => {
 	it('shows the empty message when there are no Clients', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }));
 
-		await expect.element(testPage.getByText('No Clients yet.')).toBeVisible();
+		// getByRole, not getByText: the record view carries the same
+		// message in a hidden <p>, and only a role query excludes it.
+		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).toBeVisible();
 	});
 
 	it('shows an error notice when the Clients list fails to load', async () => {
@@ -159,8 +167,14 @@ describe('a contractor Doula without the owner or admin role', () => {
 	it('names why her list is empty rather than reusing "No Clients yet."', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), true);
 
+		// getByRole, not getByText: the record view carries the same
+		// message in a hidden <p>, and only a role query excludes it.
 		await expect
-			.element(testPage.getByText('Work reaches you as an Offer, so there are no Clients here yet.'))
+			.element(
+				testPage.getByRole('cell', {
+					name: 'Work reaches you as an Offer, so there are no Clients here yet.'
+				})
+			)
 			.toBeVisible();
 	});
 
@@ -185,7 +199,9 @@ describe('a non-contractor with an empty list', () => {
 	it('shows the plain empty message with no explainer link', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }));
 
-		await expect.element(testPage.getByText('No Clients yet.')).toBeVisible();
+		// getByRole, not getByText: the record view carries the same
+		// message in a hidden <p>, and only a role query excludes it.
+		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
 			.not.toBeInTheDocument();

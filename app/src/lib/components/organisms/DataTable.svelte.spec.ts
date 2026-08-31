@@ -3,6 +3,10 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import DataTable from './DataTable.svelte';
+// The record-view switch depends on the frame (a <stack-l>) actually
+// being display:block -- that default lives in primitives.css, same as
+// RecordDetail.svelte.spec.ts's own <container-l> dependency.
+import '#lib/styles/app.css';
 
 interface Row {
 	name: string;
@@ -48,6 +52,17 @@ interface SetupOptions {
 	emptyMessage?: string;
 }
 
+/*
+ * The frame is a container at 44rem (DataTable.svelte, ADR-0024), so the
+ * viewport is pinned wide here rather than left to the runner's own
+ * default -- a default narrower than that would make every assertion
+ * about the <table> view fail for a reason that has nothing to do with
+ * what the test actually checks. The record-view describe block below
+ * sets it back down on purpose.
+ */
+const WIDE = [1440, 900] as const;
+const NARROW = [390, 844] as const;
+
 async function setup({
 	columns: columnsOption = columns,
 	rows: rowsOption = rows,
@@ -57,6 +72,7 @@ async function setup({
 	onLoadMore,
 	emptyMessage = 'No records yet.'
 }: SetupOptions = {}) {
+	await page.viewport(...WIDE);
 	const { container } = await render(DataTable<Row>, {
 		columns: columnsOption,
 		rows: rowsOption,
@@ -92,7 +108,9 @@ describe('DataTable.svelte', () => {
 	it('renders the empty message spanning all columns when rows is empty', async () => {
 		const { container } = await setup({ rows: [] });
 
-		await expect.element(page.getByText('No records yet.')).toBeVisible();
+		// getByRole, not getByText: the record view carries the same
+		// message in a hidden <p>, and only a role query excludes it.
+		await expect.element(page.getByRole('cell', { name: 'No records yet.' })).toBeVisible();
 		expect(container.querySelector('td[colspan]')).toHaveAttribute('colspan', '2');
 	});
 
@@ -102,14 +120,16 @@ describe('DataTable.svelte', () => {
 		const link = page.getByRole('link', { name: 'Ada Lovelace' });
 		await expect.element(link).toBeVisible();
 		await expect.element(link).toHaveAttribute('href', '/clients/Ada Lovelace');
-		expect(container.querySelectorAll('a')).toHaveLength(rows.length);
+		// Scoped to .table-view: the record view links the same rows, and
+		// counting the whole container would count both trees' anchors.
+		expect(container.querySelector('.table-view')!.querySelectorAll('a')).toHaveLength(rows.length);
 	});
 
 	it('renders plain cells with no links when rowHref is omitted', async () => {
 		const { container } = await setup();
 
-		await expect.element(page.getByText('Ada Lovelace')).toBeVisible();
-		expect(container.querySelectorAll('a')).toHaveLength(0);
+		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		expect(container.querySelector('.table-view')!.querySelectorAll('a')).toHaveLength(0);
 	});
 
 	it('renders a load-more button and calls onLoadMore when clicked', async () => {
@@ -170,5 +190,87 @@ describe('DataTable.svelte', () => {
 
 		const nameHeader = page.getByRole('columnheader', { name: 'Name' });
 		expect(getComputedStyle(nameHeader.element()).textAlign).toBe('start');
+	});
+});
+
+/*
+ * #508, ADR-0024: below the frame's own content floor, DataTable renders
+ * one <dl> per row instead of a <table> that would scroll the whole
+ * document sideways. `.table-view`/`.record-view` are queried with
+ * `querySelector` rather than an accessible query -- the sanctioned
+ * exception in svelte-tests.md's rule 1: both trees carry the same
+ * accessible content, and which one CSS hides is exactly the fact under
+ * test, so a role/text query can't tell them apart on its own.
+ *
+ * setup() always pins WIDE first (see the comment above it), so every
+ * narrow case here sets the viewport back down AFTER setup() rather than
+ * before it -- setting it before would just get overridden.
+ */
+describe('the record view (#508, ADR-0024)', () => {
+	it('shows the record view and hides the table when the container is narrower than the content floor', async () => {
+		const { container } = await setup();
+		await page.viewport(...NARROW);
+
+		expect(getComputedStyle(container.querySelector('.table-view')!).display).toBe('none');
+		expect(getComputedStyle(container.querySelector('.record-view')!).display).not.toBe('none');
+		expect(container.querySelectorAll(':scope .record-view dl')).toHaveLength(rows.length);
+	});
+
+	it('shows the table and hides the record view when the container is wide enough', async () => {
+		const { container } = await setup();
+
+		expect(getComputedStyle(container.querySelector('.table-view')!).display).not.toBe('none');
+		expect(getComputedStyle(container.querySelector('.record-view')!).display).toBe('none');
+	});
+
+	it('is driven by the frame width, not the viewport: it stacks at a wide viewport when its parent is narrow', async () => {
+		await page.viewport(...WIDE);
+		const parent = document.createElement('div');
+		parent.style.inlineSize = '300px';
+		document.body.append(parent);
+		try {
+			const { container } = await render(
+				DataTable<Row>,
+				{ columns, rows, emptyMessage: 'No records yet.' },
+				{ baseElement: parent }
+			);
+
+			expect(getComputedStyle(container.querySelector('.table-view')!).display).toBe('none');
+			expect(getComputedStyle(container.querySelector('.record-view')!).display).not.toBe('none');
+		} finally {
+			parent.remove();
+		}
+	});
+
+	it('keeps each column label next to its value, one dl per row', async () => {
+		const { container } = await setup();
+		await page.viewport(...NARROW);
+
+		const [firstRecord] = container.querySelectorAll(':scope .record-view dl');
+		expect(firstRecord.querySelector('dt')?.textContent).toBe('Name');
+		expect(firstRecord.querySelector('dd')?.textContent).toBe('Ada Lovelace');
+	});
+
+	it('keeps rowHref reachable in the record view', async () => {
+		const { container } = await setup({ rowHref: (row) => `/clients/${row.name}` });
+		await page.viewport(...NARROW);
+
+		const recordView = page.elementLocator(container.querySelector('.record-view')!);
+		const link = recordView.getByRole('link', { name: 'Ada Lovelace' });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', '/clients/Ada Lovelace');
+	});
+
+	it('keeps rowActions present and operable in the record view', async () => {
+		const onRemove = vi.fn();
+		const { container } = await setup({ rowActions: { label: 'Actions', onRemove } });
+		await page.viewport(...NARROW);
+
+		const recordView = page.elementLocator(container.querySelector('.record-view')!);
+		const buttons = recordView.getByRole('button', { name: 'Remove' });
+		await expect.element(buttons.nth(0)).toBeVisible();
+		await buttons.nth(1).click();
+
+		expect(onRemove).toHaveBeenCalledExactlyOnceWith(rows[1]);
 	});
 });

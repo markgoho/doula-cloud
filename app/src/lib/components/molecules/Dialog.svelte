@@ -23,8 +23,27 @@
 		   ever runs; the guard exists only to satisfy $state<HTMLDialogElement>()'s
 		   optional type, not a reachable branch. */
 		if (!dialog) return;
+		/*
+		 * The parent's checkVisibility(), not the dialog's own: a closed
+		 * <dialog> is display:none by the UA stylesheet regardless of its
+		 * ancestors (dialog:not([open])), so checking the dialog itself
+		 * always reads false right here, before showModal() has run.
+		 *
+		 * This guards showModal() because DataTable renders its
+		 * rowActions content once per tree, one hidden via display:none
+		 * (#508, ADR-0024), so a caller whose open state is a shared
+		 * boolean bound outside the row -- confirmEndSessionsFor ===
+		 * member.staffId, the same shape every ConfirmDialog call site
+		 * here uses -- flips both copies' `open` true together. A
+		 * display:none ancestor does not stop showModal() from
+		 * succeeding (verified directly: dialog.open and :modal both
+		 * come back true), so without this the hidden copy's own
+		 * ::backdrop -- a top-layer sibling, unaffected by its own
+		 * ancestor's display:none -- can end up stacked over the real
+		 * one and swallow every click meant for it.
+		 */
 		if (open && !dialog.open) {
-			dialog.showModal();
+			if (dialog.parentElement?.checkVisibility()) dialog.showModal();
 		} else if (!open && dialog.open) {
 			dialog.close();
 		}
