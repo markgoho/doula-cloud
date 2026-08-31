@@ -1,5 +1,8 @@
 # Layout is intrinsic: a component adapts to the space it is given, and 320px is the floor
 
+> **Superseded in full by [ADR-0024](0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md) (the commitment and the mechanism) and [ADR-0025](0025-layout-is-verified-across-the-continuum.md) (verification).**
+> Kept unedited as the record of what was decided before the research on [#518](https://github.com/markgoho/doula-cloud/issues/518) ran. Four of its clauses did not survive: the rendered width matrix, the shell-chrome media query exception, "a component reaching for a container query does not owe anyone a justification", and its citation of Jen Simmons behind container queries. Nothing below is in force.
+
 Every route in Doula Cloud is complete and usable from 320px of inline space upwards, for Staff and Clients alike, and no screen is exempt. A component adapts to **the space it is actually given**, never to a device it assumes it is on — so it behaves correctly on a full page, in a narrow column, and one day embedded in a Practice's own website, without knowing which of those it is in. This extends [ADR-0003](0003-css-layout-primitives-as-native-custom-elements.md), which already chose intrinsic design as the mechanism and named container queries as the default; what was missing was the *expectation*, so nothing reached for it deliberately and nothing checked that it worked.
 
 ## Why this had to be written down

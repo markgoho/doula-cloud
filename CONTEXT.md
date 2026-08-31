@@ -186,7 +186,7 @@ The path one Persona takes toward a single goal, from where they arrive to a sta
 _Avoid_: Flow, use case, scenario
 
 **Intrinsic layout**:
-Layout resolved from the content and the space available to it, rather than selected by the author from a set of named widths. The anchor term for every layout entry below: a component is laid out intrinsically when it is correct wherever it is placed — a full page, a narrow column, an embedded surface — without being told which of those it is in. See [ADR-0023](docs/adr/0023-layout-is-intrinsic-and-320px-is-the-floor.md).
+Layout resolved from the content and the space available to it, rather than selected by the author from a set of named widths. The anchor term for every layout entry below: a component is laid out intrinsically when it is correct wherever it is placed — a full page, a narrow column, an embedded surface — without being told which of those it is in. See [ADR-0024](docs/adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md) and [ADR-0025](docs/adr/0025-layout-is-verified-across-the-continuum.md).
 _Avoid_: Responsive design (in the common sense — see **Responsive**), adaptive design, mobile-first, breakpoint-driven
 
 **Available space**:
