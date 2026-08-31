@@ -44,15 +44,25 @@ interface SetupOptions {
 	/** `/api/staff/session`'s own response, when a test needs it to fail
 	 * rather than to name somebody. */
 	sessionOk?: boolean;
+	/** Makes the session read reject outright -- a network failure rather
+	 * than a refusal, which nothing awaits and so must not escape as an
+	 * unhandled rejection. */
+	sessionThrows?: boolean;
 }
 
 // Two endpoints now share one mocked fetcher (#504's session read joins
 // the existing detail read), so setup() dispatches on the path and hands
 // back a fresh Response per call -- one shared Response object would have
 // its body consumed by the first .json()/.text() and throw on the second.
-async function setup({ overrides = {}, sessionStaffId = 'nobody', sessionOk = true }: SetupOptions = {}) {
+async function setup({
+	overrides = {},
+	sessionStaffId = 'nobody',
+	sessionOk = true,
+	sessionThrows = false
+}: SetupOptions = {}) {
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path === '/api/staff/session') {
+			if (sessionThrows) return Promise.reject(new Error('network down'));
 			return Promise.resolve(sessionOk ? jsonResponse({ staffId: sessionStaffId }) : jsonResponse('signed out', 401));
 		}
 		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
@@ -268,6 +278,19 @@ describe('the pending-request block: Withdraw (#504)', () => {
 			overrides: { history: [requestedByHerself] },
 			sessionStaffId: 'staff-mendoza-riquelme',
 			sessionOk: false
+		});
+
+		await expect.element(testPage.getByText('Postpartum Engagement requested by')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
+	});
+
+	// Nothing awaits the session read, so a rejection here would surface as
+	// an unhandled rejection rather than as a missing button.
+	it('survives the session read failing outright, and still draws the Client', async () => {
+		await setup({
+			overrides: { history: [requestedByHerself] },
+			sessionStaffId: 'staff-mendoza-riquelme',
+			sessionThrows: true
 		});
 
 		await expect.element(testPage.getByText('Postpartum Engagement requested by')).toBeVisible();

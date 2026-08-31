@@ -94,10 +94,16 @@
 	// a lost read here costs one Staff member her own Withdraw button for
 	// one page load, not the Client record she came here to see.
 	async function loadStaffId() {
-		const response = await apiFetchWithSession('/api/staff/session');
-		if (response.ok) {
-			const session: { staffId: string } = await response.json();
-			staffId = session.staffId;
+		try {
+			const response = await apiFetchWithSession('/api/staff/session');
+			if (response.ok) {
+				const session: { staffId: string } = await response.json();
+				staffId = session.staffId;
+			}
+		} catch {
+			// A network failure here must not become an unhandled rejection:
+			// nothing awaits this call, and the cost of losing it is one
+			// missing Withdraw button, not a broken page.
 		}
 	}
 
@@ -129,7 +135,7 @@
 	}
 
 	onMount(async () => {
-		loadStaffId();
+		void loadStaffId();
 		try {
 			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
 		} catch (error_) {
