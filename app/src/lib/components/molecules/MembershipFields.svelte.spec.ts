@@ -60,4 +60,24 @@ describe('MembershipFields', () => {
 
 		await expect.element(page.getByRole('radio', { name: 'Contractor' })).toBeChecked();
 	});
+
+	/*
+	 * #510 non-regression: LabeledField's inline row moved from cluster-l to
+	 * a grid, and these three short-label checkboxes were the other
+	 * inline-orientation consumer that grid had to keep working for. None of
+	 * these labels are long enough to wrap, but the row still has to hold
+	 * together at 320px (ADR-0024) rather than only at whatever width a
+	 * default viewport happens to run tests at.
+	 */
+	it('keeps every role checkbox visible and clickable at 320px', async () => {
+		await page.viewport(320, 600);
+		const { onRolesChange } = await setup({ roles: ['doula'] });
+
+		for (const role of ['Owner', 'Admin', 'Doula']) {
+			await expect.element(page.getByRole('checkbox', { name: role })).toBeVisible();
+		}
+
+		await page.getByRole('checkbox', { name: 'Owner' }).click();
+		expect(onRolesChange).toHaveBeenCalledWith(['owner', 'doula']);
+	});
 });

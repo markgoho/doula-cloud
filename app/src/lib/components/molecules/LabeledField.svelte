@@ -135,9 +135,18 @@
 
 		.inline-row {
 			display: grid;
+			grid-template-areas: 'control label';
 			grid-template-columns: auto minmax(0, 1fr);
 			align-items: start;
 			gap: var(--space-4);
+		}
+
+		.inline-row > :first-child {
+			grid-area: control;
+		}
+
+		.inline-row > label {
+			grid-area: label;
 		}
 	}
 </style>
