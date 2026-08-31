@@ -11,13 +11,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/clientauth"
 )
 
 // Detail is an Engagement's basic detail as seen from the Client portal:
-// the Practice it's at, its status, and when it was created.
+// the Practice it's at, its status, and when it is due.
 type Detail struct {
 	EngagementID string `json:"engagementId"`
 	PracticeName string `json:"practiceName"`
@@ -31,9 +30,14 @@ type Detail struct {
 	// reads her own screen -- it is the whole reason the column exists.
 	// family_name is optional, so the two are joined with concat_ws rather
 	// than `||`, which would null the entire expression.
-	ClientName string    `json:"clientName"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ClientName string `json:"clientName"`
+	Status     string `json:"status"`
+	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
+	// postpartum-only Engagement has none (#505). `created_at` used to sit
+	// here instead -- a fact about the record, not one the Client asked
+	// for -- and is dropped rather than kept alongside, since the portal
+	// page had no other use for it.
+	DueDate *string `json:"dueDate,omitempty"`
 }
 
 // DetailHandler views the caller's Engagement's basic detail. Must be
@@ -50,16 +54,17 @@ func DetailHandler() http.Handler {
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var d Detail
+		var dueDate sql.NullString
 		err := tx.QueryRowContext(r.Context(),
 			`SELECT e.id, p.name,
 			        trim(concat_ws(' ', coalesce(c.preferred_name, c.given_name), c.family_name)),
-			        e.status, e.created_at
+			        e.status, e.due_date::text
 			 FROM engagements e
 			 JOIN practices p ON p.id = e.practice_id
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &d.CreatedAt)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &dueDate)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			http.Error(w, "engagement not found", http.StatusNotFound)
@@ -69,6 +74,9 @@ func DetailHandler() http.Handler {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
+		}
+		if dueDate.Valid {
+			d.DueDate = &dueDate.String
 		}
 
 		w.Header().Set("Content-Type", "application/json")

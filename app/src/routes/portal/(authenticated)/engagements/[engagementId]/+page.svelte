@@ -14,6 +14,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { formatCalendarDay } from '#lib/engagementRequest.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -23,7 +24,7 @@
 		practiceName: string;
 		clientName: string;
 		status: string;
-		createdAt: string;
+		dueDate?: string;
 	};
 
 	let detail = $state<Detail | undefined>();
@@ -40,15 +41,23 @@
 
 		detail = await response.json();
 	});
+
+	/** The summary row's own facts (#505). `dueDate` is left out of the
+	 * array entirely, rather than shown with a placeholder, when null --
+	 * ADR-0017's postpartum-only Engagement genuinely has none, and a
+	 * "Due date" row reading "Not given" would tell a Client something is
+	 * missing from her own record rather than that nothing was ever due. */
+	function summaryItems(d: Detail): { label: string; value: string }[] {
+		const items = [{ label: 'Status', value: d.status }];
+		if (d.dueDate) {
+			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });
+		}
+		return items;
+	}
 </script>
 
 {#snippet summary()}
-	<DescriptionList
-		items={[
-			{ label: 'Status', value: detail!.status },
-			{ label: 'Created', value: new Date(detail!.createdAt).toLocaleDateString() }
-		]}
-	/>
+	<DescriptionList items={summaryItems(detail!)} />
 {/snippet}
 
 {#snippet actions()}
