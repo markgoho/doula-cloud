@@ -39,6 +39,10 @@ function fetcherFor(overrides: Record<string, Response> = {}) {
 		staff: jsonResponse(roster),
 		billing: jsonResponse({ balance: 7, ledger: { items: [], hasMore: false } }),
 		connect: jsonResponse(connectStatus),
+		'engagement-requests': jsonResponse({
+			items: [{ requestId: 'request-1' }, { requestId: 'request-2' }],
+			hasMore: false
+		}),
 		...overrides
 	};
 
@@ -65,7 +69,12 @@ describe('role gates', () => {
 describe('hasSecondary', () => {
 	it('is false when no block is entitled', () => {
 		expect(
-			hasSecondary({ roster: undefined, credit: undefined, connect: undefined } as PracticeLanding)
+			hasSecondary({
+				roster: undefined,
+				credit: undefined,
+				connect: undefined,
+				requests: undefined
+			} as PracticeLanding)
 		).toBe(false);
 	});
 
@@ -74,7 +83,8 @@ describe('hasSecondary', () => {
 			hasSecondary({
 				roster: 'unavailable',
 				credit: undefined,
-				connect: undefined
+				connect: undefined,
+				requests: undefined
 			} as PracticeLanding)
 		).toBe(true);
 	});
@@ -97,6 +107,21 @@ describe('loadPracticeLanding', () => {
 			status: 'onboarding_incomplete',
 			requirementsDue: ['individual.dob']
 		});
+		expect(landing.requests).toEqual({ count: 2, hasMore: false });
+	});
+
+	// The count is one page deep, so a Practice past that page reads as
+	// "30+" rather than as a wrong number -- `hasMore` is what the hub
+	// prints the plus from.
+	it('carries hasMore when more Requests wait than one page holds', async () => {
+		const landing = await loadPracticeLanding(
+			fetcherFor({
+				'engagement-requests': jsonResponse({ items: [{ requestId: 'request-1' }], hasMore: true })
+			}),
+			'practice-1'
+		);
+
+		expect(landing.requests).toEqual({ count: 1, hasMore: true });
 	});
 
 	it('reports a Practice with no Clients as empty', async () => {
@@ -113,7 +138,8 @@ describe('loadPracticeLanding', () => {
 
 		const landing = await loadPracticeLanding(fetcher, 'practice-1');
 
-		expect([landing.roster, landing.credit, landing.connect]).toEqual([
+		expect([landing.roster, landing.credit, landing.connect, landing.requests]).toEqual([
+			undefined,
 			undefined,
 			undefined,
 			undefined
@@ -137,7 +163,7 @@ describe('loadPracticeLanding', () => {
 		expect(landing.credit).not.toBeUndefined();
 	});
 
-	it.each([['staff'], ['billing'], ['connect']])(
+	it.each([['staff'], ['billing'], ['connect'], ['engagement-requests']])(
 		'marks the %s block unavailable rather than failing the page',
 		async (endpoint) => {
 			const landing = await loadPracticeLanding(
@@ -145,7 +171,9 @@ describe('loadPracticeLanding', () => {
 				'practice-1'
 			);
 
-			expect([landing.roster, landing.credit, landing.connect]).toContain('unavailable');
+			expect([landing.roster, landing.credit, landing.connect, landing.requests]).toContain(
+				'unavailable'
+			);
 			expect(landing.practiceName).toBe('Riverside Doula Collective');
 		}
 	);

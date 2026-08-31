@@ -218,3 +218,78 @@ export function forgetApprovalReturn(): void {
 		// Nothing left to clean up if storage was never reachable.
 	}
 }
+
+/** One row of the pending-Request inbox (#503), mirroring the Go BFF's
+ * engagementrequest.ListItem. The Client's name arrives already resolved
+ * -- the inbox names her, it does not print her record -- and `requestId`
+ * is what the row links to, the approval screen being addressed by the
+ * Request id alone. */
+export interface PendingRequestItem {
+	requestId: string;
+	clientId: string;
+	clientName: string;
+	kind: 'birth' | 'postpartum';
+	dueDate?: string;
+	requestedByName: string;
+	requestedAt: string;
+}
+
+/**
+ * One page of the inbox, in docs/api-design.md section 4's envelope.
+ */
+export interface PendingRequestPage {
+	items: PendingRequestItem[];
+	nextCursor?: string;
+	hasMore: boolean;
+}
+
+/** Lists every pending Request at the Practice, oldest first
+ * (engagementrequest.ListHandler) -- one page at a time, `cursor`
+ * resuming where the last page stopped. Throws with the response body
+ * text on a refusal, mirroring loadApprovalDetail. */
+export async function loadPendingRequests(
+	fetcher: Fetcher,
+	practiceId: string,
+	cursor = ''
+): Promise<PendingRequestPage> {
+	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+	const response = await fetcher(`/api/practices/${practiceId}/engagement-requests${query}`);
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
+}
+
+/*
+ * The two screens either side of a Request -- the inbox and the approval
+ * screen -- print the same three values the same way, so the formatting
+ * lives here rather than in whichever of them was written first.
+ */
+
+/** The label a kind reads as, falling back to the raw enum value so an
+ * enum this build has not met yet still prints something. */
+export function kindLabel(kind: string): string {
+	return { birth: 'Birth', postpartum: 'Postpartum' }[kind] ?? kind;
+}
+
+/** A timestamp is an instant, and reads correctly in the reader's own
+ * zone. */
+export function formatInstant(value: string): string {
+	return new Date(value).toLocaleDateString(undefined, {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric'
+	});
+}
+
+/** A due date is a calendar day, not an instant: it must not shift by one
+ * when the reader's zone is behind UTC, so the day is built from its own
+ * parts rather than parsed as UTC midnight. */
+export function formatCalendarDay(value: string): string {
+	const [year, month, day] = value.split('-').map(Number);
+	return new Date(year!, month! - 1, day!).toLocaleDateString(undefined, {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric'
+	});
+}

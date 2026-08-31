@@ -36,6 +36,8 @@ const (
 func newServer(t *testing.T, db *testdb.DB, uid string, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.Handle("GET /practices/{practiceId}/engagement-requests",
+		staffauth.Middleware(db.App)(engagementrequest.ListHandler()))
 	mux.Handle("GET /practices/{practiceId}/engagement-requests/{requestId}",
 		staffauth.Middleware(db.App)(engagementrequest.DetailHandler()))
 	mux.Handle("POST /practices/{practiceId}/clients/{clientId}/engagement-requests",
@@ -293,5 +295,18 @@ func setRequestNote(t *testing.T, db *testdb.DB, requestID, note string) {
 		`UPDATE engagement_requests SET note = $1 WHERE id = $2`, note, requestID,
 	); err != nil {
 		t.Fatalf("set request note: %v", err)
+	}
+}
+
+// clearDueDate removes a Request's due date after it is seeded, so a test
+// can prove a postpartum-only ask travels without one -- ADR-0017's
+// nullable due_date -- without pendingRequest growing a parameter every
+// one of its other callers would have to pass.
+func clearDueDate(t *testing.T, db *testdb.DB, requestID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagement_requests SET due_date = NULL WHERE id = $1`, requestID,
+	); err != nil {
+		t.Fatalf("clear due date: %v", err)
 	}
 }

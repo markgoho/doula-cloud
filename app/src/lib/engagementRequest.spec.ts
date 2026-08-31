@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	approveRequest,
+	formatCalendarDay,
+	formatInstant,
+	kindLabel,
 	loadApprovalDetail,
+	loadPendingRequests,
 	refuseRequest,
 	requestEngagement,
 	type NewEngagementRequest
@@ -159,3 +163,75 @@ describe('refuseRequest', () => {
 	});
 });
 
+
+describe('loadPendingRequests', () => {
+	const pendingPage = {
+		items: [
+			{
+				requestId: 'request-1',
+				clientId: 'client-1',
+				clientName: 'Marguerite Ashworth-Delacroix',
+				kind: 'birth',
+				dueDate: '2027-03-01',
+				requestedByName: 'Tasha Bell',
+				requestedAt: '2026-08-01T10:00:00Z'
+			}
+		],
+		hasMore: false
+	};
+
+	it('reads the Practice inbox with no cursor on the first page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response(pendingPage));
+
+		await expect(loadPendingRequests(fetcher, 'practice-1')).resolves.toEqual(pendingPage);
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagement-requests');
+	});
+
+	it('carries a cursor through, encoded, so its base64 padding survives', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response(pendingPage));
+
+		await loadPendingRequests(fetcher, 'practice-1', 'MjAyNnxhYmM=');
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagement-requests?cursor=MjAyNnxhYmM%3D'
+		);
+	});
+
+	it('throws with the response body text when the reader may not decide Requests', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('forbidden', 403));
+
+		await expect(loadPendingRequests(fetcher, 'practice-1')).rejects.toThrow('forbidden');
+	});
+});
+
+describe('the words and dates both Request screens print', () => {
+	it.each([
+		['birth', 'Birth'],
+		['postpartum', 'Postpartum'],
+		['something-new', 'something-new']
+	])('labels the %s kind as %s', (kind, expected) => {
+		expect(kindLabel(kind)).toBe(expected);
+	});
+
+	// The one that matters: a due date is a calendar day, so it must read
+	// as the day it was typed no matter which zone the reader sits in.
+	it('reads a calendar day as its own parts, not as UTC midnight', () => {
+		expect(formatCalendarDay('2027-03-01')).toBe(
+			new Date(2027, 2, 1).toLocaleDateString(undefined, {
+				year: 'numeric',
+				month: 'short',
+				day: 'numeric'
+			})
+		);
+	});
+
+	it('reads a timestamp as an instant in the reader own zone', () => {
+		expect(formatInstant('2026-08-01T10:00:00Z')).toBe(
+			new Date('2026-08-01T10:00:00Z').toLocaleDateString(undefined, {
+				year: 'numeric',
+				month: 'short',
+				day: 'numeric'
+			})
+		);
+	});
+});

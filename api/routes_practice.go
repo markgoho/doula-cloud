@@ -171,6 +171,10 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	// the requester alone, so it carries no role declaration.
 	ir.Replayable("POST /api/practices/{practiceId}/clients/{clientId}/engagement-requests",
 		staffauth.Middleware(d.DB)(idempotency.Wrap(engagementrequest.RequestHandler(d.DB, d.NudgeEnqueuer))))
+	// Where pending Requests gather (#503) -- the same Owner/Admin seat,
+	// registered before the {requestId} read so the two paths read in the
+	// order a person meets them.
+	g.Get("/api/practices/{practiceId}/engagement-requests", ownerAndAdmin, engagementrequest.ListHandler())
 	g.Get("/api/practices/{practiceId}/engagement-requests/{requestId}", ownerAndAdmin, engagementrequest.DetailHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/approve",
 		"approve() locks the Request FOR UPDATE and checks state = pending inside the same transaction; a retry after the first commit finds it already decided and 409s instead of creating a second Engagement or spending a second Credit",

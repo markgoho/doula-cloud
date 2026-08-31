@@ -66,6 +66,10 @@ async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overri
 			payoutsStatus: 'restricted',
 			requirementsDue: ['individual.dob']
 		}),
+		'engagement-requests': jsonResponse({
+			items: [{ requestId: 'request-1' }, { requestId: 'request-2' }],
+			hasMore: false
+		}),
 		...overrides
 	};
 
@@ -108,6 +112,43 @@ describe('the Practice landing page', () => {
 		await expect
 			.element(testPage.getByText('Stripe is waiting on 1 more detail.'))
 			.toBeVisible();
+	});
+
+	// #503: a pending Request stops a Doula from working, so the hub whose
+	// question is "what needs me today" counts them and hands off to the
+	// inbox, where the decision is actually made.
+	it('counts the Requests waiting on a decision and points at the inbox', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Requests awaiting approval' }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('2 waiting')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Review requests' }))
+			.toHaveAttribute('href', '/practices/practice-1/engagement-requests');
+	});
+
+	it('reads a full page of waiting Requests as a floor, not an exact count', async () => {
+		await setup({
+			overrides: {
+				'engagement-requests': jsonResponse({ items: [{ requestId: 'request-1' }], hasMore: true })
+			}
+		});
+
+		await expect.element(testPage.getByText('1+ waiting')).toBeVisible();
+	});
+
+	it('tells an approver nobody is waiting rather than drawing an empty block', async () => {
+		await setup({ overrides: { 'engagement-requests': jsonResponse({ items: [], hasMore: false }) } });
+
+		await expect.element(testPage.getByText('Nobody is waiting on you.')).toBeVisible();
+	});
+
+	it('says so when the pending Requests cannot be read', async () => {
+		await setup({ overrides: { 'engagement-requests': refusal('nope') } });
+
+		await expect.element(testPage.getByText('Could not load pending requests just now.')).toBeVisible();
 	});
 
 	it('shows an Admin no Stripe block, because that endpoint would refuse her', async () => {

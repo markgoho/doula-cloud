@@ -37,6 +37,9 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
 		approveRequest,
+		formatCalendarDay,
+		formatInstant,
+		kindLabel,
 		loadApprovalDetail,
 		forgetApprovalReturn,
 		refuseRequest,
@@ -75,25 +78,6 @@
 		return [record.givenName, record.familyName].filter(Boolean).join(' ');
 	}
 
-	// A timestamp is an instant and reads correctly in the reader's own
-	// zone; a due date is a calendar day and must not shift by one when
-	// her zone is behind UTC, so the day is built from its own parts
-	// rather than parsed as UTC midnight.
-	function formatInstant(value: string): string {
-		return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-	}
-
-	function formatDay(value: string): string {
-		const [year, month, day] = value.split('-').map(Number);
-		return new Date(year!, month! - 1, day!).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
-
-	const KIND_LABELS: Record<string, string> = { birth: 'Birth', postpartum: 'Postpartum' };
-
 	function facts(request: ApprovalDetail): { label: string; value: string }[] {
 		return [
 			{
@@ -101,8 +85,8 @@
 				value: `${clientName(request.client)} -- ${request.client.isNewToPractice ? 'new to this practice' : 'already known here'}`
 			},
 			{ label: 'Asked by', value: `${request.requestedByName} on ${formatInstant(request.requestedAt)}` },
-			{ label: 'Kind of work', value: KIND_LABELS[request.kind] ?? request.kind },
-			{ label: 'Due date', value: request.dueDate ? formatDay(request.dueDate) : 'Not given' },
+			{ label: 'Kind of work', value: kindLabel(request.kind) },
+			{ label: 'Due date', value: request.dueDate ? formatCalendarDay(request.dueDate) : 'Not given' },
 			{ label: 'Note', value: request.note ?? 'None' },
 			{ label: 'Credit cost', value: `${request.creditCost} credit` },
 			{ label: 'Balance after', value: String(request.balanceAfter) }
@@ -110,7 +94,7 @@
 	}
 
 	function engagementLabel(engagement: ApprovalDetail['engagements'][number]): string {
-		const kind = KIND_LABELS[engagement.kind] ?? engagement.kind;
+		const kind = kindLabel(engagement.kind);
 		return `${kind} work, started ${formatInstant(engagement.createdAt)} -- ${engagement.status}`;
 	}
 

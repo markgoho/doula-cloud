@@ -120,6 +120,41 @@
 	</section>
 {/snippet}
 
+<!--
+	Where a stopped Doula becomes visible (#503). ADR-0017: a pending
+	Request stops her from doing any work at all, so the hub whose question
+	is "what needs me today" has to answer with it. The block counts and
+	hands off -- the decision itself is made on the inbox, one click on.
+-->
+{#snippet requestBlock()}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="card" text="Requests awaiting approval" />
+			{#if landing!.requests === 'unavailable'}
+				<Text text="Could not load pending requests just now." tone="muted" />
+			{:else if landing!.requests}
+				<cluster-l space="var(--space-3)" align="center">
+					{#if landing!.requests.count > 0}
+						<Badge
+							label={`${landing!.requests.count}${landing!.requests.hasMore ? '+' : ''} waiting`}
+							variant="warning"
+						/>
+					{:else}
+						<Text text="Nobody is waiting on you." tone="muted" />
+					{/if}
+					<Link
+						href={resolve('/practices/[practiceId]/engagement-requests', {
+							practiceId: page.params.practiceId!
+						})}
+						label="Review requests"
+						variant="secondary"
+					/>
+				</cluster-l>
+			{/if}
+		</stack-l>
+	</section>
+{/snippet}
+
 {#snippet creditBlock()}
 	<section>
 		<stack-l space="var(--space-3)">
@@ -170,6 +205,7 @@
 {/snippet}
 
 {#snippet secondary()}
+	{#if landing!.requests !== undefined}{@render requestBlock()}{/if}
 	{#if landing!.roster !== undefined}{@render rosterBlock()}{/if}
 	{#if landing!.credit !== undefined}{@render creditBlock()}{/if}
 	{#if landing!.connect !== undefined}{@render connectBlock()}{/if}

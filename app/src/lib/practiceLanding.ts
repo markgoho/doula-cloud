@@ -12,6 +12,7 @@
  * renders, so the page asks only for what the caller may have.
  */
 import { isOpen, loadInbox, type Offer } from './offer.js';
+import { loadPendingRequests } from './engagementRequest.js';
 export type { Fetcher } from './offer.js';
 import { loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
@@ -30,6 +31,18 @@ export interface RosterHealth {
 
 export interface CreditHealth {
 	balance: number;
+}
+
+/*
+ * How many Requests are waiting on a decision. A count, not the rows: the
+ * hub says somebody is stopped and hands off to the inbox (#503), which
+ * is where a decision is actually made. `hasMore` travels because the
+ * count is one page deep -- a Practice with more than a page of waiting
+ * Requests reads as "30+", which is honest rather than wrong.
+ */
+export interface RequestHealth {
+	count: number;
+	hasMore: boolean;
 }
 
 export interface ConnectHealth {
@@ -56,6 +69,7 @@ export interface PracticeLanding {
 	roster: Block<RosterHealth>;
 	credit: Block<CreditHealth>;
 	connect: Block<ConnectHealth>;
+	requests: Block<RequestHealth>;
 }
 
 /*
@@ -75,7 +89,12 @@ export function canReadConnect(roles: string[]): boolean {
  * it. A Doula reaches none of the three blocks, so she gets no rail at
  * all rather than an empty aside beside her Offers. */
 export function hasSecondary(landing: PracticeLanding): boolean {
-	return landing.roster !== undefined || landing.credit !== undefined || landing.connect !== undefined;
+	return (
+		landing.roster !== undefined ||
+		landing.credit !== undefined ||
+		landing.connect !== undefined ||
+		landing.requests !== undefined
+	);
 }
 
 /** Resolves a best-effort block: its value, or `'unavailable'` when the
@@ -161,7 +180,7 @@ export async function loadPracticeLanding(
 	const session = await loadSession(fetcher, practiceId);
 	const { roles } = session;
 
-	const [openOffers, hasClients, roster, credit, connect] = await Promise.all([
+	const [openOffers, hasClients, roster, credit, connect, requests] = await Promise.all([
 		readOpenOffers(fetcher, practiceId),
 		hasAnyClient(fetcher, practiceId),
 		canReadRoster(roles) ? block(() => loadRoster(fetcher, practiceId)) : undefined,
@@ -176,8 +195,25 @@ export async function loadPracticeLanding(
 					const status = await loadConnectStatus(fetcher, practiceId);
 					return { status: status.status, requirementsDue: status.requirementsDue };
 				})
+			: undefined,
+		// Same Owner/Admin gate the inbox endpoint itself holds -- a Doula
+		// cannot decide a Request, so she is not told one is waiting here.
+		canReadRoster(roles)
+			? block(async () => {
+					const page = await loadPendingRequests(fetcher, practiceId);
+					return { count: page.items.length, hasMore: page.hasMore };
+				})
 			: undefined
 	]);
 
-	return { practiceName: session.practiceName, roles, openOffers, hasClients, roster, credit, connect };
+	return {
+		practiceName: session.practiceName,
+		roles,
+		openOffers,
+		hasClients,
+		roster,
+		credit,
+		connect,
+		requests
+	};
 }
