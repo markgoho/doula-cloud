@@ -1,1249 +1,343 @@
-# Every Layout CSS primitives — fact-finding for wayfinder #95
+# Every Layout, read firsthand — the book behind ADR-0003
 
-Research for GitHub issue #95 ("CSS architecture"). Question: what does
-every-layout.dev (Andy Bell / Heydon Pickering) publicly document about its
-layout primitives, what is actually free to read vs. paywalled, and what
-CSS mechanisms/custom properties are documented — so Doula Cloud can decide
-whether/how to build a small page-level layout utility layer inspired by it.
+Research for GitHub issue [#520](https://github.com/markgoho/doula-cloud/issues/520)
+(part of [#518](https://github.com/markgoho/doula-cloud/issues/518)). Source: the
+Every Layout EPUB/PDF itself — Heydon Pickering and Andy Bell, **3rd edition,
+point release 3.1.7.14** (the "Container" pseudo-layout and the "now with
+logic(al) properties" cover badge date this exact release) — read cover to
+cover, all 172 pages, at `/Users/mgoho/Downloads/every-layout.pdf`. Every claim
+below cites the page it came from. Page numbers are PDF page numbers (page 1 is
+the cover).
 
-All content below was fetched directly from every-layout.dev in August 2026.
-No implementation code is proposed here — this is source material only.
+This supersedes the file's previous version, which was compiled from
+every-layout.dev web pages (some free, some fetched through a paid-license
+browser session) rather than the book. That version is not simply "thin" —
+parts of it are accurate reproductions of the same content (the paid web tier
+ships the same text as the book), but its own analysis, at the one point where
+it draws a conclusion the book explicitly addresses, contradicts the book's
+stated position. See "Where the previous version was wrong" below.
 
-## The primitives (full current list)
+## Where the previous version was wrong
 
-Every Layout's index page (`/layouts/`) currently lists **13** primitives.
-Each entry below gives the one-line description shown on the index page
-itself, plus the fuller problem statement where the individual page was
-free to read.
+- **It reversed the book's own verdict on container queries vs. Sidebar's
+  technique.** The old file's self-authored "Assessment" section argued that
+  since container queries have now shipped, "a from-scratch
+  Sidebar/Switcher-equivalent could react to the *component's own* available
+  width via `container-type: inline-size` instead of... the flex-basis
+  arithmetic tricks Every Layout documents" — i.e., that `@container` is the
+  more capable modern replacement for Sidebar's technique. The book's own
+  dedicated **Container** chapter (pp. 165–172), which the old file also had
+  access to and summarized correctly in isolation, argues the *opposite*, with
+  a worked example: a container query only knows the container's own
+  dimensions, not the state of the elements inside it, so reproducing
+  Sidebar's self-adjusting breakpoint with `@container` requires manually
+  re-deriving a breakpoint per sidebar width — shown as a `:has()`-based
+  multi-rule mess that is *more* complex than Sidebar's original CSS (p. 168).
+  The book calls `@container` (and `@media`) "circuit breakers we wire into
+  layouts we know are going to error... I'd sooner not have them anywhere I
+  know they're not needed" (p. 167). The old file's own editorializing
+  contradicted the very source it was citing, in the one place a firsthand
+  read would have caught it.
+- **It omitted composition almost entirely**, despite the book building its
+  whole rationale for having *primitives at all* on it. The Composition
+  chapter (pp. 14–17) isn't a policy note about BEM naming (which is as far as
+  the old file's summary went) — it's three worked diagrams showing a dialog,
+  a registration form, and a conference-slide layout each decomposed into
+  nested Stack/Box/Center/Cluster/Cover/Sidebar instances, plus the book's
+  literal definition of a "layout" as a tree where every node is either an
+  element or another layout (p. 25). See "Composition" below — this is the
+  part the issue asks to be recorded, not just the catalogue.
+- **It missed the book's own vocabulary for exactly the territory it was
+  editorializing about**: Sidebar, Switcher, and the Flexbox grid are each
+  called a **"quantum layout"** — one CSS declaration existing simultaneously
+  in more than one configuration until the browser resolves which one applies,
+  based on available space, with no discrete state chosen ahead of time (pp.
+  85, 94, 96). This is the book's load-bearing alternative to reaching for a
+  query at all, and it isn't in the old file anywhere.
+- **Several specific accessibility callouts are absent** that the book states
+  explicitly next to the primitive the old file did otherwise describe
+  accurately: the warning that horizontally centering content risks moving it
+  out of view for a zoomed-in user, since only the left edge is guaranteed
+  visible (Center, p. 69); and "one `<h1>` per page," with successive
+  `<cover-l>` instances needing an `<h2>` instead (Cover, p. 116).
+- **The primitive catalogue and licensing terms were accurate.** All 13
+  primitives, their custom-property tables, their default values, and the
+  quoted licensing terms in the old file check out against the book. That part
+  did not need fixing so much as re-sourcing.
 
-| # | Primitive | Index-page description | URL |
+## The rudiments: axioms before recipes
+
+Every Layout's "Rudiments" section (pp. 6–45) is the reasoning the 13
+primitives sit on top of. The issue asks for axioms over recipes — this is
+where they live.
+
+### Boxes (pp. 6–13)
+
+"Everything in web design is a box... layout is inevitably, therefore, the
+arrangement of boxes" (p. 6, citing Rachel Andrew). The chapter's real claim
+is about *how* a box should get its dimensions: "the dimensions of our
+elements should be largely *derived* from their inner content and outer
+context. When we try to *prescribe* dimensions, things tend to go amiss... The
+CSS of suggestion is at the heart of algorithmic layout design. Instead of
+telling browsers what to do, we allow browsers to make their own calculations"
+(p. 13). `box-sizing: border-box` is recommended universally via `*` — with
+one named exception, `.center-l { box-sizing: content-box }`, because Center
+needs to measure content itself rather than content-plus-padding (p. 11).
+
+### Composition (pp. 14–17)
+
+Covered in its own section below — this is the chapter the issue is most
+pointed about.
+
+### Units (pp. 18–23)
+
+Argues against `px`: a CSS pixel isn't a stable atomic unit (sub-pixel
+rendering, device pixel ratios, zoom), and `px` font sizing overrides a user's
+browser/OS font-size preference — "there are more users who adjust their
+default font size in browser settings than there are users of the browsers
+Edge or Internet Explorer... disregarding users who adjust their default font
+size is as impactful as disregarding whole browsers" (p. 19, citing Evan
+Minto). Also rejects width-based `@media` breakpoints as arbitrary: "What's so
+special about `960px`? Can we really say the smaller size is acceptable at
+`959px`?" (p. 21). States the load-bearing analogy this repo's ADR-0023 leans
+on without citing: **"The `em` unit is to the `rem` unit what a container
+query is to a `@media` query"** (p. 21) — `em` is context-relative the way a
+container query is, `rem` is document-relative the way a `@media` query is.
+`ch` is singled out as "the only appropriate unit" for measure, since measure
+is inherently a characters-per-line question (p. 23).
+
+### Global and local styling (pp. 24–33)
+
+Sets out a three-tier system, credited to Harry Roberts' ITCSS ("specificity
+is inversely proportional to reach," p. 29): (1) universal/inherited styles,
+(2) layout primitives, (3) utility classes (`property:value` naming,
+`!important`-suffixed, "for final adjustments," p. 27). The chapter states the
+tree structure a layout is, in the book's own words: **"Each layout requires a
+container element which establishes a formatting context for its children.
+Simple elements, without children for which they establish a context, can be
+thought of as 'end nodes' in the layout hierarchy"** (p. 25, caption under a
+diagram literally titled "layout" with three `element or layout` leaves under
+it) — this is the composition mechanism stated as a rule, not just shown by
+example. The chapter's taxonomy of *local* (instance-specific) styling is
+`id` selectors, inline `style` attributes, and Shadow DOM (p. 30) — it does
+not consider build-time component-scoped stylesheets (CSS Modules-, Vue-,
+Svelte-style) as a category at all, which matters for how this repo reads it
+(see "Conflicts" below).
+
+### Modular scale (pp. 34–38)
+
+A single ratio (book's own worked example: 1.5, matching a `line-height` of
+1.5) drives signed, step-indexed custom properties (`--s-1`... `--s0`...
+`--s5`) via repeated multiplication/division, "intended for producing harmony"
+the way a musical scale is (p. 37). Every primitive's default spacing value
+(`var(--s1)`) draws from this scale.
+
+### Axioms (pp. 39–45)
+
+Defines "axiom" as a small, global, unqualified design rule — worked example:
+**"the measure should never exceed 60ch"** — enforced "as pervasively as
+possible" via the lowest-specificity mechanism available (universal
+`*`-plus-exceptions), not applied manually element-by-element (pp. 39–41). The
+chapter argues explicitly for a deny-list over an allow-list: "An exception
+based approach is smarter, since we only have to remember which elements
+should *not* be subject to the rule" (p. 42). Primitives reuse the same
+`--measure` custom property as a prop default with silent fallback on invalid
+input — the Switcher's `threshold` prop is the worked example (p. 45).
+
+## The 13 primitives, in the book's own terms
+
+Every one of these is presented as a single CSS rule (or small rule-set)
+solving one narrow, named problem, with a props table for the custom-element
+implementation. Page ranges cover each chapter in full (problem → solution →
+generator → component → examples).
+
+| Primitive | Problem it names (book's own framing) | Core mechanism | Pages |
 |---|---|---|---|
-| 1 | Stack | "read for free" tag; spacing between flow elements | [/layouts/stack/](https://every-layout.dev/layouts/stack/) |
-| 2 | Box | "A simple rectangle shape" | [/layouts/box/](https://every-layout.dev/layouts/box/) |
-| 3 | Center | "A rectangle shape centered in the horizontal space" | [/layouts/center/](https://every-layout.dev/layouts/center/) |
-| 4 | Cluster | "boxes of different widths, laid out like words in a paragraph" | [/layouts/cluster/](https://every-layout.dev/layouts/cluster/) |
-| 5 | Sidebar | "A narrow and wide element laid out adjacently, transforming into two elements on top of each other" | [/layouts/sidebar/](https://every-layout.dev/layouts/sidebar/) |
-| 6 | Switcher | "horizontally aligned boxes transforming into vertically stacked boxes" | [/layouts/switcher/](https://every-layout.dev/layouts/switcher/) |
-| 7 | Cover | "A box with one large box in its vertical centre and two shorter boxes at its head and foot" | [/layouts/cover/](https://every-layout.dev/layouts/cover/) |
-| 8 | Grid | "A grid of equal sized boxes (three columns and three rows)" | [/layouts/grid/](https://every-layout.dev/layouts/grid/) |
-| 9 | Frame | "A box with decorative corners" | [/layouts/frame/](https://every-layout.dev/layouts/frame/) |
-| 10 | Reel | "A box with a horizontal scrollbar containing a line of box-like elements" | [/layouts/reel/](https://every-layout.dev/layouts/reel/) |
-| 11 | Imposter | "One box superimposed over a grid of other boxes" | [/layouts/imposter/](https://every-layout.dev/layouts/imposter/) |
-| 12 | Icon | "A cross icon" | [/layouts/icon/](https://every-layout.dev/layouts/icon/) |
-| 13 | Container | (no description shown on index page) | [/layouts/container/](https://every-layout.dev/layouts/container/) |
+| Stack | Margin belongs to the *relationship* between two elements, not either element — direct margin styling produces doubled-up or orphaned spacing | Owl selector: `.stack > * + * { margin-block-start: var(--space, 1.5rem); }` | 46–56 |
+| Box | A layout primitive (Stack) should do one job; box shape (padding, visible border/background) is a *different* job that needs its own primitive so Stack's job description stays a nonsense-free single sentence | Symmetrical padding only, forced `color: inherit`, transparent `outline` for high-contrast mode | 57–64 |
+| Center | `text-align: center` only centers text, and `margin: 0 auto` collides with vertical margins a parent Stack may already have applied | `margin-inline: auto` + `max-inline-size`, or Flexbox `align-items: center` for "intrinsic" (content-width) centering | 65–73 |
+| Cluster | Words in a paragraph wrap and space themselves evenly on every wrapped line; a list of same-priority elements (buttons, tags) needs the same behavior but earlier techniques double spacing at edges or drop it on wrap | `display: flex; flex-wrap: wrap; gap: var(--space)` | 74–82 |
+| Sidebar | Two adjacent elements (narrow + wide) need to lay out responsively *to the space they are given*, not the viewport, and wrap to stacked without an awkward in-between state | `flex-grow: 999` on the non-sidebar forces the sidebar to its ideal width until `min-inline-size` forces a wrap | 83–93 |
+| Switcher | A set of equal-priority elements needs to switch directly between a row and a stack at a *container* threshold, without the uneven-row-counts "orphan" problem multi-column wrapping produces | `flex-basis: calc((var(--threshold) - 100%) * 999)` — resolves to a huge positive or invalid-negative value, forcing full-width or side-by-side | 94–104 |
+| Cover | One "principal" element should stay vertically centered with optional header/footer, robust to dynamic content height, with zero CSS change when header/footer are added or removed | `margin-block: auto` on the principal child, `:not()` strips redundant top/bottom margin from the actual first/last child | 105–116 |
+| Grid | A grid-like formation should reconfigure automatically as space changes, without a fixed column count or `@media` breakpoints, and without a hard-coded minimum causing overflow below it | `repeat(auto-fit, minmax(min(x, 100%), 1fr))` — final answer uses the CSS `min()` function, not JavaScript or `@container` | 117–129 |
+| Frame | An arbitrary element needs a fixed aspect ratio and cropped content, without hard-coded width/height, for media of unpredictable dimensions | `aspect-ratio: n / d` (formerly the `padding-bottom` percentage hack) + `object-fit: cover` | 130–139 |
+| Reel | An accessible, JS-optional alternative to a carousel widget — a horizontally scrolling single-file row using native scrolling | `display: flex` without `flex-wrap`, `overflow-x: auto` | 140–152 |
+| Imposter | A general-purpose way to superimpose one element centrally over another, without foreknowledge of the imposed element's own dimensions | `position: absolute; inset-block-start: 50%; inset-inline-start: 50%; transform: translate(-50%, -50%)` | 143–153 |
+| Icon | An inline SVG icon needs to track font size, sit on the text baseline, and space correctly from accompanying text in both LTR and RTL, without bespoke per-instance CSS | `width/height: 0.75em` (`1cap` as an enhancement layer), `margin-inline-end` for LTR/RTL-correct spacing | 154–164 |
+| Container | Not a layout — a "meta-layout utility" that establishes `container-type: inline-size` (named or unnamed) so other CSS can query it | `container: myContainer / inline-size;` | 165–172 |
+
+Custom-property defaults, per-primitive props tables, and generator code are
+unchanged from what the old file already captured accurately from the paid web
+tier (which mirrors the same book text) — not reproduced again here in full;
+see the page ranges above to verify any specific value against the source.
+
+## Composition: how primitives nest and combine
+
+This is the part the issue calls out as "the part a component author gets
+wrong first," and it is the weakest part of the superseded file.
+
+**The book's argument for having primitives at all is a composition
+argument, not a catalogue argument.** The Composition chapter opens by naming
+"composition over inheritance," borrowed from programming and explicitly
+citing React's docs on the same principle (p. 14). Its worked example is a
+dialog box, first built the way most component libraries build it — a
+`.dialog` block with `.dialog__header`, `.dialog__body`, `.dialog__foot`
+children, BEM-namespaced. The book's diagnosis: **"since everything here is
+namespaced under `.dialog`... when we come to make the next component, we'll
+end up duplicating would-be shared styles. This is where most CSS bloat comes
+from"** (p. 15). The fix isn't a different naming convention — it's realizing
+the dialog was never one thing: "The mistake in the last example was to think
+of everything about the dialog's form as isolated and unique when, really,
+it's just a composition of simpler layouts" (p. 15).
+
+**"Primitive" is used in its programming-language sense on purpose.** "A
+primitive is something without its own meaning or purpose as such, but which
+can be used *in composition* to make something meaningful... In JavaScript,
+the Boolean data type is a primitive. Just looking at the value `true`... tells
+you very little about the larger... application. The object data type, on the
+other hand, is *not* primitive... The dialog is meaningful, as a piece of UI,
+but its constituent parts are not" (p. 15). Stack, Center, Cluster, Box and
+the rest are deliberately meaningless alone — the meaning is assembled at the
+call site, by nesting.
+
+**The book then shows the assembly, three times, as diagrams — not
+prose:**
+
+- The dialog box is re-drawn as **Stack** (wrapping the whole thing) ⊃
+  **Center** (the heading) + **Box** (the outer shape) + **Cluster** (the
+  Okay/Cancel button row) (p. 16).
+- A registration form is **Stack** (top level: label/input pairs plus the
+  submit row) ⊃ nested **Stack** instances (each label-above-input pair) +
+  **Cluster** (the submit button, right-aligned) + **Box** (the form's outer
+  shape) (p. 16).
+- A conference-talk slide layout is **Box** (outer shape) ⊃ **Stack** (title
+  above body) + **Cover** (vertically centers the slide content) + **Sidebar**
+  (edit/delete/share controls beside the slide) (p. 17).
+
+The pattern across all three: **one primitive wraps another primitive**, each
+establishing its own formatting context for its own children, and *no
+primitive knows or cares what it contains* — a Stack's children can themselves
+be a Cluster, a Box, or plain content, because the Stack's rule (`.stack > * +
+*`) matches by position, not by type. This is the concrete referent for the
+tree-of-`element-or-layout` rule already stated in "Global and local styling"
+(p. 25, quoted above) — Composition is where that abstract rule is shown
+working on real UI.
+
+**"Quantum layout."** Three primitives are explicitly named this way: Sidebar
+"is a *quantum* layout, existing simultaneously in one of the two
+configurations — horizontal and vertical — illustrated below. Which
+configuration is adopted is not known at the time of conception, and is
+dependent entirely on the space it is afforded when placed within a parent
+container" (p. 85). Switcher and the Flexbox-based Grid get the identical
+framing (pp. 94, 96) — "quantum layouts existing simultaneously in different
+states." This is the book's name for exactly the "responds to its own space,
+not a chosen breakpoint" property ADR-0003 and ADR-0023 both assume, and it is
+absent from the superseded file entirely.
+
+**A composed layout inherits its children's spacing rules, not the other way
+round**, and the book is explicit that this needs deliberate handling, not
+assumption: the Stack chapter's "Nested variants" section shows resetting
+vertical margin at the top and re-declaring it per nesting level
+(`.stack-large > * + *`, `.stack-small > * + *`, p. 49) specifically because a
+plain recursive Stack selector (`.stack * + *`) would also space out elements
+that were never meant to be spaced, like `<li>` items inside a `<ul>` (p. 48).
+Composition is not free of surprises just because the primitives compose.
+
+## Relationship to container queries, named grid areas, and intrinsic sizing keywords
+
+ADR-0023 leans on three mechanisms — container queries, `grid-template-areas`,
+and the intrinsic sizing keywords `min-content`/`max-content`/`fit-content` —
+that the book predates in parts and only partially covers even in this
+current (3.1.7.14) edition. The relationship is not uniform across the three:
+
+- **Container queries: covered directly, and the book's position is a genuine
+  qualification of ADR-0023's stance, not just an old-book gap.** The
+  dedicated Container chapter (pp. 165–172) opens by asking its own question —
+  *"Now we have container queries, is Every Layout obsolete?"* — and answers
+  no, arguing container queries and `@media` queries are "circuit breakers we
+  wire into layouts we know are going to error... manual intervention" (p.
+  167), to be reached for only when an intrinsically-sound query-free layout
+  "genuinely can't be devised" (p. 165 framing, p. 172 "not really a layout"
+  warning). Its worked argument: `@container` can only see the *container's*
+  own size, never the internal state of its children, so replicating
+  Sidebar's self-adjusting behavior (which already reacts correctly to any
+  sidebar width without being told what that width is) with `@container`
+  requires manually re-deriving a breakpoint per sidebar width via a
+  `:has()`-based rule for every case — shown as strictly more code and less
+  robust than Sidebar's original three-line solution (p. 168). ADR-0023's rule
+  2 — "reach for the query-free answer first... when the query-free answer
+  runs out, use a container query" — is consistent with this, but ADR-0023
+  frames container queries as the *default* mechanism for structural
+  rearrangement once the query-free tier is exhausted, with no justification
+  owed. The book goes further than "default when needed": it treats a
+  container query as evidence a layout has *not yet* been made properly
+  intrinsic, and would ask what query-free option was ruled out first. This
+  is a difference in posture worth naming, not a contradiction — both agree
+  container queries are the right tool once genuinely needed.
+- **Named grid areas: not covered at all.** Across the Grid chapter (pp.
+  117–129) and the Imposter chapter, which is the only other place
+  `grid-area` appears (as a numeric line-based placement example, `grid-area:
+  2 / 2 / 5 / 8`, p. 144, explicitly *not* using named areas), the book never
+  discusses `grid-template-areas`. Its Grid primitive solves a different
+  problem — an auto-fit, auto-count responsive tiling of interchangeable
+  cells (`repeat(auto-fit, minmax(min(x, 100%), 1fr))`, p. 127) — not a named,
+  rearrangeable region layout. ADR-0023's rule 2 — "name the regions with
+  `grid-template-areas`... a component whose regions are named can be
+  rearranged wholesale inside `@container`... with no change to the markup" —
+  describes a technique the book simply does not have an opinion on, because
+  the book's Grid primitive is solving for a *list* of same-shaped items, not
+  a component with distinct, nameable regions. This is a real gap between the
+  book and this repo's mechanism, not a disagreement.
+- **Intrinsic sizing keywords (`min-content`, `max-content`, `fit-content`):
+  not named anywhere in the book.** The book's own use of "intrinsic" is
+  narrower and specific: "My use of 'intrinsic' in this section specifically
+  refers to the inevitable width of an element as determined by its contents.
+  A button's width, unless explicitly set, is the width of what's inside it"
+  (Sidebar chapter, p. 89) — i.e. the *absence* of an explicit size, not the
+  named CSS keywords. The book's actual sizing mechanism throughout is
+  `flex-basis` plus `flex-grow`/`flex-shrink` (Sidebar, Switcher, the Flexbox
+  Grid) or `minmax()`/`min()` (the CSS Grid). ADR-0023's "the intrinsic
+  sizing keywords `min-content`, `max-content` and `fit-content`" are a
+  different, later-standardized toolset the book never reaches for. Same
+  category as named grid areas: a gap, not a conflict.
+
+## Conflicts with ADR-0003 and ADR-0023, named plainly
+
+- **ADR-0003's "no Shadow DOM, deliberately" rationale is correct against the
+  book's own stated reasoning**, and this firsthand read confirms rather than
+  revises it: the "Eschewing Shadow DOM" blog post the ADR cites is separate
+  from the book itself (it's a 2019 blog post, not a book chapter), but the
+  book's own "Global and local styling" chapter independently corroborates
+  the same conclusion from a different angle — it lists `id` selectors,
+  inline styles, and Shadow DOM as the *only* three mechanisms it considers
+  for local/instance styling (p. 30), and does not consider a build-time
+  scoped stylesheet (Svelte's mechanism) as a category at all. ADR-0003's
+  claim that this is a genuine gap the book leaves open, which Svelte's
+  scoping addresses without Shadow DOM's specific cascade-blocking drawback,
+  holds up against the book's own text — not just the separate blog post.
+- **ADR-0023's framing of container queries as a no-justification-owed default
+  is a stronger commitment to `@container` than the book itself makes**, per
+  the previous section. This is not a contradiction that breaks anything —
+  both documents want container queries used where genuinely needed and avoid
+  them elsewhere — but a reader implementing ADR-0023's rule 2 should not
+  expect the book to back "reach for `@container` as the default, no
+  justification needed" without qualification; the book's own position is
+  closer to "container queries are evidence of a layout that could not be
+  made intrinsic, and that should be rare."
+- **No conflict was found on Grid or intrinsic sizing keywords** — these are
+  gaps (the book has no opinion), not disagreements, and ADR-0023 does not
+  claim the book as its source for either; ADR-0003 cites the book only for
+  the primitive catalogue and the custom-elements-without-Shadow-DOM decision,
+  not for grid regions or sizing keywords.
+
+## Licensing (carried forward, re-verified)
+
+The book's own front matter (pp. 2–3) confirms the terms the superseded file
+already quoted from the website: purchase is a one-time license to the
+content "authored and owned by Heydon Pickering and Andy Bell," re-publishing
+or re-selling is "strictly forbidden," and the license is revocable "for
+unfair usage or irresponsible sharing." Nothing in this rewrite reproduces
+book prose beyond short quotations for citation purposes, consistent with
+those terms.
 
-Source: [every-layout.dev/layouts/](https://every-layout.dev/layouts/), fetched
-August 2026.
-
-Note: the task background mentions "Grid, Reel, Imposter, Frame, Icon" as if
-provisional — confirmed, all are real, current primitives on the site. There
-is no separate "Row" primitive; the closest ideas (row-of-items,
-horizontal-word-wrap) are covered by **Cluster** and **Reel**.
-
-**Access split at a glance**: all 13 primitives' content has now been read —
-3 freely on the public site (Stack, Sidebar, Switcher), and the other 10
-(Box, Center, Cluster, Cover, Grid, Frame, Reel, Imposter, Icon, Container)
-via the user's own paid Every Layout license, fetched through an
-authenticated browser session on 2026-08-16. Full detail in the
-"Licensing/reuse terms" section below.
-
-## Per-primitive detail
-
-### Stack — FREE, full code visible
-
-**Problem it solves**: flow (block-direction) elements need spacing to
-separate them, but margins applied directly and symmetrically to elements
-create context-insensitive problems — most notably margins doubling up
-against a parent's padding, or orphaned margins at the start/end of a
-container.
-
-**Core mechanism**: the owl/lobotomized-owl selector (universal adjacent-
-sibling combinator) applying a logical margin only *between* siblings, never
-at the start or end of the stack:
-
-> `.stack > * + * { margin-block-start: 1.5rem; }`
-
-The page also documents a *recursive* variant (`.stack * + *`, applying the
-rule at every nesting depth) and a "split after" behavior for pushing a
-later child to the far end of the stack using `margin-block-start: auto`
-inside a flex context.
-
-**Custom properties**: `--space` controls the gap, used as
-`margin-block-start: var(--space, 1.5rem)`; the page's own worked examples
-default it to Every Layout's internal modular-scale token `var(--s1)`.
-
-Source: [/layouts/stack/](https://every-layout.dev/layouts/stack/), fetched
-August 2026.
-
-### Sidebar — FREE, full code visible
-
-**Problem it solves**: placing two adjacent elements (a narrow "sidebar"
-and a wide "content" area) responsively *without media queries* — so the
-layout responds to the actual space available to the component (its
-container), not the viewport, and wraps to stacked when there isn't enough
-room, without an awkward in-between state.
-
-**Core mechanism**: flexbox with an intentionally large `flex-grow`
-disparity so the non-sidebar element "wins" available space until a
-`min-inline-size` threshold forces a wrap:
-
-> ```
-> .with-sidebar { display: flex; flex-wrap: wrap; gap: 1rem; }
-> .sidebar { flex-basis: 20rem; flex-grow: 1; }
-> .not-sidebar { flex-basis: 0; flex-grow: 999; min-inline-size: 50%; }
-> ```
-
-**Custom properties**: the documented component API exposes `space`
-(gap between the two children, default `var(--s1)`) and `contentMin`
-(the minimum width of the non-sidebar element before wrapping, default
-`50%`).
-
-**Modern-CSS note on this page**: the article speculates about a
-better future mechanism: *"Only with a capability like the mooted
-container queries might we teach our component layouts to be fully context
-aware."* Container queries are no longer "mooted" — they shipped in all
-evergreen browsers years after this text was written — but the page's own
-wording has not been updated to reflect that; it still frames container
-queries as a hoped-for future.
-
-Source: [/layouts/sidebar/](https://every-layout.dev/layouts/sidebar/),
-fetched August 2026.
-
-### Switcher — FREE, full code visible
-
-**Problem it solves**: switching a set of same-priority elements directly
-between a horizontal row and a vertical stack at a container-width
-threshold, without an intermediate state where rows end up with uneven
-item counts (the "orphan" problem multi-column wrapping normally produces).
-
-**Core mechanism**: flex-basis abuse — a calculation that yields either a
-huge positive value (forcing full-width, i.e. one item per row) or a
-negative value (invalid, so ignored, letting flexbox lay items out
-side-by-side):
-
-> `.switcher > * { flex-grow: 1; flex-basis: calc((var(--threshold) - 100%) * 999); }`
-
-**Custom properties**: `--threshold` (the container-width breakpoint,
-defaults to the internal token `var(--measure)`), `--space` (gap between
-items, defaults to `var(--s1)`), and `--limit` (maximum number of items
-allowed to lay out horizontally before forcing a stack regardless of width,
-default `4`).
-
-**Modern-CSS notes on this page**: the `gap` property is used directly for
-spacing and the page explicitly says it is "now supported in all major
-browsers" (i.e. the page itself has been updated post-`gap`-adoption,
-unlike the Sidebar page's container-query wording). It also documents a
-"quantity query" technique using `:nth-last-child(n+5)` to react to item
-*count* rather than container size.
-
-Source: [/layouts/switcher/](https://every-layout.dev/layouts/switcher/),
-fetched August 2026.
-
-### Box — unlocked via paid license
-
-**Problem it solves**: separating concerns between a Box and the layout
-primitives that place it. A Box should own only the styles intrinsic to a
-single element — padding, and its visible shape (border/background) —
-while margin, width, and height stay inferred from context (parent
-layouts, content) rather than set on the Box itself.
-
-**Core mechanism**: padding on all sides or none (never asymmetrical,
-which the page argues is really margin's job), plus forced `color`
-inheritance so a Box's light/dark theme can be swapped from one place:
-
-> ```
-> .box {
->   padding: var(--s1);
->   border: var(--border-thin) solid;
->   --color-light: #fff;
->   --color-dark: #000;
->   color: var(--color-dark);
->   background-color: var(--color-light);
-> }
->
-> .box * {
->   color: inherit;
-> }
->
-> .box.invert {
->   color: var(--color-light);
->   background-color: var(--color-dark);
-> }
-> ```
-
-The page separately documents a transparent-outline technique for Windows
-High Contrast Mode, where a background-color alone is insufficient to
-convey the box shape:
-
-> `outline: 0.125rem solid transparent; outline-offset: -0.125rem;`
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `padding` | string | `"var(--s1)"` | A CSS padding value |
-| `borderWidth` | string | `"var(--border-thin)"` | A CSS border-width value |
-| `invert` | boolean | `false` | Whether to apply an inverted theme. Only recommended for greyscale designs. |
-
-**Modern-CSS notes**: the negative `outline-offset` trick to draw a border
-only under `forced-colors`/high-contrast conditions, with zero effect on
-layout otherwise, is the one notable modern-CSS technique on this page. No
-`:has()`, `clamp()`, or container-query usage.
-
-Source: [/layouts/box/](https://every-layout.dev/layouts/box/), fetched
-via authenticated session, 2026-08-16.
-
-### Center — unlocked via paid license
-
-**Problem it solves**: horizontally centering a column of content and
-capping its width to a readable measure, without the readability harm of
-`text-align: center`, and without undoing vertical margins a parent Stack
-may already have applied (ruling out the `margin: 0 auto` shorthand, which
-sets `margin-top`/`margin-bottom` too).
-
-**Core mechanism**: logical-property auto margins on the inline axis only,
-plus a documented "intrinsic centering" variant using Flexbox to center
-children by their own content width rather than stretching them:
-
-> ```
-> .center {
->   box-sizing: content-box;
->   margin-inline: auto;
->   max-inline-size: var(--measure);
-> }
-> ```
->
-> ```
-> .center {
->   box-sizing: content-box;
->   max-inline-size: 60ch;
->   margin-inline: auto;
->   display: flex;
->   flex-direction: column;
->   align-items: center;
-> }
-> ```
-
-`box-sizing: content-box` is set deliberately, overriding a
-border-box-by-default reset, so that any gutter padding grows outward from
-the capped measure instead of shrinking the content area.
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `max` | string | `"var(--measure)"` | A CSS max-width value |
-| `andText` | boolean | `false` | Center align the text too (`text-align: center`) |
-| `gutters` | boolean | `0` | The minimum space on either side of the content |
-| `intrinsic` | boolean | `false` | Center child elements based on their content width |
-
-**Modern-CSS notes**: uses logical properties (`max-inline-size`,
-`margin-inline`) throughout rather than `max-width`/`margin-left`/
-`margin-right`. No `:has()`, `clamp()`, or container-query usage.
-
-Source: [/layouts/center/](https://every-layout.dev/layouts/center/),
-fetched via authenticated session, 2026-08-16.
-
-### Cluster — unlocked via paid license
-
-**Problem it solves**: laying out a group of elements with indeterminate,
-differing widths (buttons, tags, nav items) so they wrap fluidly like
-words in a paragraph, with even spacing on every side — including between
-wrapped lines — which earlier techniques (`inline-block` plus
-`font-size: 0`, or symmetrical margins on Flexbox children) got wrong,
-either doubling spacing at container edges or dropping vertical spacing
-on wrap.
-
-**Core mechanism**: the page documents its pre-`gap` negative-margin
-fallback in full, then supersedes it with `gap`:
-
-> ```
-> .cluster {
->   --space: 1rem;
-> }
-> .cluster > * {
->   display: flex;
->   flex-wrap: wrap;
->   margin: calc(var(--space) / 2 * -1);
-> }
-> .cluster > * > * {
->   margin: calc(var(--space) / 2);
-> }
-> ```
->
-> ```
-> .cluster {
->   display: flex;
->   flex-wrap: wrap;
->   gap: var(--space, 1rem);
-> }
-> ```
-
-The generator's final CSS adds justification/alignment:
-
-> ```
-> .cluster {
->   display: flex;
->   flex-wrap: wrap;
->   gap: var(--space, 1rem);
->   justify-content: flex-start;
->   align-items: center;
-> }
-> ```
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `justify` | string | `"flex-start"` | A CSS justify-content value |
-| `align` | string | `"flex-start"` | A CSS align-items value |
-| `space` | string | `"var(--s1)"` | A CSS gap value. The minimum space between the clustered child elements. |
-
-**Modern-CSS notes**: states flexbox `gap` support landed in "all major
-browsers" by "mid-2021," and the page now recommends using `gap` without
-`@supports` feature-detection outright, "accepting that layouts will
-become flush in older browsers" — the negative-margin technique above is
-kept only "if that's your preference instead." It also flags a
-feature-detection trap: `@supports (gap: 1rem)` can report true because
-`gap` is supported for Grid while still being unsupported for Flexbox in
-the same browser, giving a false positive if used to gate Cluster's CSS.
-
-Source: [/layouts/cluster/](https://every-layout.dev/layouts/cluster/),
-fetched via authenticated session, 2026-08-16.
-
-### Cover — unlocked via paid license
-
-**Problem it solves**: vertically centering one "main" element within a
-container while optionally accommodating a header above and/or a footer
-below it — staying robust to overflow and dynamic content height (no
-fixed heights or `transform` hacks), and requiring no CSS changes when a
-header or footer is added or removed from the markup.
-
-**Core mechanism**: `margin-block: auto` on the centered element pushes it
-to the middle of the flex column; a cascade + `:not()` combination strips
-the redundant top/bottom margin from whichever elements are actually
-first/last:
-
-> ```
-> .cover {
->   display: flex;
->   flex-direction: column;
->   min-block-size: 100vh;
->   padding: 1rem;
-> }
->
-> .cover > * {
->   margin-block: 1rem;
-> }
->
-> .cover > :first-child:not(h1) {
->   margin-block-start: 0;
-> }
->
-> .cover > :last-child:not(h1) {
->   margin-block-end: 0;
-> }
->
-> .cover > h1 {
->   margin-block: auto;
-> }
-> ```
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `centered` | string | `"h1"` | A simple selector such an element or class selector, representing the centered (main) element in the cover |
-| `space` | string | `"var(--s1)"` | The minimum space between and around all of the child elements |
-| `minHeight` | string | `"100vh"` | The minimum height (block-size) for the Cover |
-| `noPad` | boolean | `false` | Whether the spacing is also applied as padding to the container element |
-
-**Modern-CSS notes**: uses logical properties throughout (`margin-block`,
-`margin-block-start`/`-end`, `min-block-size`) instead of `margin-top`/
-`margin-bottom`/`min-height`. No `:has()`, `clamp()`, or container-query
-usage.
-
-Source: [/layouts/cover/](https://every-layout.dev/layouts/cover/),
-fetched via authenticated session, 2026-08-16.
-
-### Grid — unlocked via paid license
-
-**Problem it solves**: producing a responsive grid-like formation (columns
-and rows that grow/shrink/wrap together) that reconfigures automatically
-as available space changes, without prescribing a fixed column count or
-resorting to `@media` breakpoints — and without the overflow risk a
-hard-coded `minmax()` minimum creates in containers narrower than that
-minimum.
-
-**Core mechanism**: the `repeat(auto-fit, minmax(...))` responsive-grid
-pattern (the page credits Jen Simmons' *Layout Land* series as its
-source), with the `minmax()` floor wrapped in `min()` so it caps at 100%
-of the container instead of overflowing:
-
-> ```
-> .grid {
->   display: grid;
->   grid-gap: 1rem;
-> }
->
-> @supports (width: min(250px, 100%)) {
->   .grid {
->     grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
->   }
-> }
-> ```
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `min` | string | `"250px"` | A CSS length value representing x in `minmax(min(x, 100%), 1fr)` |
-| `space` | string | `"var(--s1)"` | The space between grid cells |
-
-**Modern-CSS notes**: this is the richest modern-CSS page in the set. It
-walks through, in order: (1) a plain Flexbox `flex-basis` grid
-(imprecise column alignment on wrap); (2) bare
-`repeat(auto-fit, minmax(250px, 1fr))`, flagged as unsafe past its
-hard-coded minimum; (3) a JavaScript `ResizeObserver`-based enhancement,
-described by the page itself as "the most efficient method yet for
-creating container queries with JavaScript," toggling a class once
-container width crosses a threshold; then (4) explicitly retiring all of
-that in favor of the CSS `min()` function: "it is actually no longer
-needed to solve this particular problem... we have the recently widely
-adopted CSS min() function." The final documented solution uses
-`@supports` feature detection on `min()`, not native `@container` syntax
-— the ResizeObserver-based pseudo-container-query is presented as
-superseded specifically by `min()`, not by `@container`.
-
-Source: [/layouts/grid/](https://every-layout.dev/layouts/grid/), fetched
-via authenticated session, 2026-08-16.
-
-### Frame — unlocked via paid license
-
-**Problem it solves**: giving an arbitrary element — not just `<img>`/
-`<video>` — a fixed aspect ratio and cropping its content to fill that
-ratio, without hard-coding width/height, so media of unpredictable
-dimensions doesn't distort or overflow.
-
-**Core mechanism**:
-
-> ```
-> .frame {
->   --n: 16;
->   --d: 9;
->   aspect-ratio: var(--n) / var(--d);
->   overflow: hidden;
->   display: flex;
->   justify-content: center;
->   align-items: center;
-> }
->
-> .frame > img,
-> .frame > video {
->   inline-size: 100%;
->   block-size: 100%;
->   object-fit: cover;
-> }
-> ```
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `ratio` | string | `"16:9"` | The element's aspect ratio |
-
-**Modern-CSS notes**: explicitly states the `aspect-ratio` property has
-replaced an older `padding-bottom: 56.25%` "intrinsic ratio" hack (traced
-to a 2009 technique): "Since support is now good for the aspect-ratio
-property, we can go ahead and use that instead of this elaborate hack."
-The page also shows an `@media (orientation: portrait)` example for
-swapping the `--n`/`--d` ratio custom properties — the one place among the
-unlocked primitives that still explicitly reaches for a viewport media
-query rather than a container query.
-
-Source: [/layouts/frame/](https://every-layout.dev/layouts/frame/),
-fetched via authenticated session, 2026-08-16.
-
-### Reel — unlocked via paid license
-
-**Problem it solves**: an accessible, JavaScript-optional alternative to
-carousel/slider widgets — a horizontally-scrolling single-file row of
-items using native browser scrolling, including scrollbar affordance and
-spacing, without a scripted carousel plugin.
-
-**Core mechanism**:
-
-> ```
-> .reel {
->   display: flex;
->   block-size: auto;
->   overflow-x: auto;
->   overflow-y: hidden;
->   scrollbar-color: #fff #000;
-> }
->
-> .reel::-webkit-scrollbar {
->   block-size: 1rem;
-> }
->
-> .reel::-webkit-scrollbar-track {
->   background-color: #000;
-> }
->
-> .reel::-webkit-scrollbar-thumb {
->   background-color: #000;
->   background-image: linear-gradient(#000 0, #000 0.25rem, #fff 0.25rem, #fff 0.75rem, #000 0.75rem);
-> }
->
-> .reel > * {
->   flex: 0 0 auto;
-> }
->
-> .reel > img {
->   block-size: 100%;
->   flex-basis: auto;
->   width: auto;
-> }
->
-> .reel > * + * {
->   margin-inline-start: 1rem;
-> }
->
-> .reel.overflowing {
->   padding-block-end: 1rem;
-> }
-> ```
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `itemWidth` | string | `"auto"` | The width of each item (child element) in the Reel |
-| `space` | string | `"var(--s0)"` | The space between Reel items (child elements) |
-| `height` | string | `"auto"` | The height of the Reel itself |
-| `noBar` | boolean | `false` | Whether to display the scrollbar |
-
-**Modern-CSS notes**: this page deliberately does *not* use `gap`, even
-though `.reel` is a flex container, and says so explicitly: "The main
-advantage of gap is ensuring the margins don't appear in the wrong places
-when elements wrap. Since the Reel's content is not designed to wrap, we
-shall use the margin-based solution instead. It's longer and better
-supported." Detecting horizontal overflow (to conditionally add trailing
-padding) still relies on a `ResizeObserver` + `MutationObserver` pair in
-JavaScript; the page notes the ideal native solution would be an
-`:overflowed-content` pseudo-class that "currently exists as little more
-than an idea" and has not shipped. No `:has()`, `clamp()`, or
-container-query usage.
-
-Source: [/layouts/reel/](https://every-layout.dev/layouts/reel/), fetched
-via authenticated session, 2026-08-16.
-
-### Imposter — unlocked via paid license
-
-**Problem it solves**: a general-purpose way to superimpose one element
-centrally over another (the viewport, the document, or a positioned
-ancestor) — dialogs, popups, dropdowns — without hard-coding the imposed
-element's width/height, since those are often unknown ahead of time.
-
-**Core mechanism**: absolute/fixed positioning at the 50%/50% point,
-recentered with a `transform` (rather than negative margins) so no
-foreknowledge of the element's own dimensions is required:
-
-> ```
-> .imposter {
->   position: absolute;
->   inset-block-start: 50%;
->   inset-inline-start: 50%;
->   transform: translate(-50%, -50%);
-> }
->
-> .imposter.contain {
->   --margin: 0px;
->   overflow: auto;
->   max-inline-size: calc(100% - (var(--margin) * 2));
->   max-block-size: calc(100% - (var(--margin) * 2));
-> }
-> ```
-
-The body text also shows the fixed/absolute toggle as a custom property:
-
-> ```
-> .imposter {
->   position: var(--positioning, absolute);
->   inset-block-start: 50%;
->   inset-inline-start: 50%;
->   transform: translate(-50%, -50%);
->   max-inline-size: calc(100% - 2rem);
->   max-block-size: calc(100% - 2rem);
-> }
-> ```
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `breakout` | boolean | `false` | Whether the element is allowed to break out of the container over which it is positioned |
-| `margin` | string | `0` | The minimum space between the element and the inside edges of the positioning container over which it is placed (where breakout is not applied) |
-| `fixed` | boolean | `false` | Whether to position the element relative to the viewport |
-
-**Modern-CSS notes**: uses logical inset/sizing properties throughout
-(`inset-block-start`, `inset-inline-start`, `max-inline-size`,
-`max-block-size`). CSS Grid line-based placement is mentioned only as a
-rejected alternative, for being non-general ("would only work where your
-positioning element is set to display: grid ahead of time"). No `:has()`,
-`clamp()`, or container-query usage.
-
-Source: [/layouts/imposter/](https://every-layout.dev/layouts/imposter/),
-fetched via authenticated session, 2026-08-16.
-
-### Icon — unlocked via paid license
-
-**Problem it solves**: reliably sizing, vertically aligning, and spacing
-an inline SVG icon next to text — so icon height tracks font size, the
-icon sits on the text baseline, and spacing to accompanying text stays
-correct in both LTR and RTL — without bespoke per-instance CSS.
-
-**Core mechanism**:
-
-> ```
-> .icon {
->   width: 0.75em;
->   width: 1cap;
->   height: 0.75em;
->   height: 1cap;
-> }
->
-> .with-icon {
->   display: inline-flex;
->   align-items: baseline;
-> }
->
-> .with-icon .icon {
->   margin-inline-end: 1rem;
-> }
-> ```
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `space` | string | `null` | The space between the text and the icon. If null, natural word spacing is preserved |
-| `label` | string | `null` | Turns the element into an image in assistive technologies and adds an aria-label of the value |
-
-**Modern-CSS notes**: documents the emerging `cap` unit (capital-letter
-height) as the theoretically correct icon-sizing unit, layered as a
-fallback pair with `em` because `cap` "is currently not supported very
-well" — `height: 0.75em; height: 1cap;`, where the later declaration wins
-only in browsers that support it. Uses `margin-inline-end` (logical) so
-icon-to-text spacing flips correctly under `dir="rtl"`. No `:has()`,
-`clamp()`, or container-query usage.
-
-Source: [/layouts/icon/](https://every-layout.dev/layouts/icon/), fetched
-via authenticated session, 2026-08-16.
-
-### Container — unlocked via paid license
-
-**Problem it solves**: this page isn't a layout primitive like the
-others — it's Every Layout's own direct answer to "now we have container
-queries, is Every Layout obsolete?" It documents `container-type`/
-`container` + `@container` as a deliberate escape hatch for cases where an
-intrinsically-sound, query-free layout genuinely can't be devised.
-
-**Core mechanism**:
-
-> ```
-> .container {
->   container-name: myContainer;
->   container-type: inline-size;
-> }
-> ```
-
-The body text also shows the unnamed form (`container-type: inline-size;`)
-and the named shorthand (`container: myContainer / inline-size;`), queried
-with `@container myContainer (width < 360px) { ... }`.
-
-**Custom properties**:
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `name` | string | (none listed) | The name of the container, used as the CSS container-name value (optional) |
-
-**Modern-CSS notes**: this entire page is about modern CSS, and is the
-single most decision-relevant page in the unlocked set for a
-container-queries-first architecture. It argues container queries do not
-make Every Layout obsolete but frames them as a fallback, not a default:
-"manual intervention... They are circuit breakers we wire into layouts we
-know are going to error... I'd sooner not have them anywhere I know
-they're not needed." It gives a worked argument for why Sidebar's own
-intrinsic, query-free approach is *more* capable than `@container` for
-that specific case — a container query only knows the container's own
-size, not the states of the elements inside it, so replicating Sidebar's
-self-adjusting breakpoint with `@container` would require manually
-re-deriving breakpoints per sidebar width, shown via a `:has()`-based
-multi-rule example (`@container (width < 640px) { .with-sidebar:has(.sidebar--large) > * {...} }`)
-as the more complex alternative. It documents `container-type:
-inline-size`, named containers via the `container` shorthand, resolution
-to the nearest ancestor container when containers are nested, and
-mentions container query units in passing.
-
-Source: [/layouts/container/](https://every-layout.dev/layouts/container/),
-fetched via authenticated session, 2026-08-16.
-
-## Rudiments (foundational concepts)
-
-Every Layout's "Rudiments" section (6 pages, distinct from the 13 layout
-primitives above) sets out the conceptual foundations the primitives are
-built on. All 6 pages were fetched via the user's authenticated session.
-
-### Boxes
-
-**Core idea**: everything renderable in CSS is fundamentally a box (per
-Rachel Andrew), and layout is the arrangement of boxes. The page walks
-through the box model (content/padding/border/margin), the `display`
-property's effect on box behavior (`block` vs `inline` vs `inline-block`
-vs `none`), and argues that box dimensions should be *derived* from
-content and context rather than prescribed — hardcoding width/height
-causes overflow and breakage, so authors should offer "suggestions"
-(e.g. `min-height`, `flex-basis`) and let the browser calculate the rest.
-
-**Concrete technique**: recommends `box-sizing: border-box` applied
-universally via the wildcard selector:
-
-> ```
-> * {
->   box-sizing: border-box;
-> }
-> ```
-
-It also demonstrates a common overflow bug: a child at `inline-size: 100%`
-inside a padded `content-box` parent overflows by the padding amount,
-while `inline-size: auto` (the default) does not, regardless of
-`box-sizing`.
-
-**Relevance to #95**: the page explicitly forward-references "Global and
-local styling" as the place where the universal-selector technique (like
-`* { box-sizing: border-box; }`) is justified architecturally — i.e.
-Boxes treats "reach many elements with one low-specificity rule" as the
-foundational efficiency argument for the whole global/local system
-described below.
-
-Source: every-layout.dev/rudiments/boxes/, fetched via authenticated
-session, 2026-08-16.
-
-### Composition
-
-**Core idea**: argues for "composition over inheritance" in CSS
-architecture, borrowing the term from programming and explicitly citing
-React's docs on the same principle. Its worked example is a `.dialog`
-component styled as a BEM-style namespaced block
-(`.dialog`, `.dialog__header`, `.dialog__body`, `.dialog__foot`): the
-page states this namespacing is "where most CSS bloat comes from,"
-because styles that could be shared get re-declared under each new
-component's namespace instead. Layout primitives exist to be the shared,
-meaningless-alone building blocks (like a JS `boolean` primitive) that
-compose into meaningful UI (a dialog, a form, a slide) without
-per-component namespacing.
-
-**Concrete technique/naming convention**: no new CSS mechanism here, but
-it explicitly names the pattern it argues against:
-
-> ```
-> .dialog { /* ... */ }
-> .dialog__header { /* ... */ }
-> .dialog__body { /* ... */ }
-> .dialog__foot { /* ... */ }
-> ```
-
-**Relevance to #95**: this is Every Layout's clearest stated position
-against BEM-style, per-component-namespaced class blocks for layout
-purposes — it is not a stance on component-local styling generally, but
-specifically on using a monolithic namespaced class tree to reproduce
-layout that shared primitives could handle instead. Doula Cloud's plan
-(scoped Svelte `<style>` for component-specific concerns, a separate
-small utility layer for page layout) does not use BEM either, so this
-does not conflict with the plan; it is a data point in favor of *not*
-reaching for BEM-style namespacing for the layout utility layer.
-
-Source: every-layout.dev/rudiments/composition/, fetched via
-authenticated session, 2026-08-16.
-
-### Units
-
-**Core idea**: argues against the `px` unit for sizing, on the grounds
-that a CSS pixel is not a stable, meaningful atomic unit (sub-pixel
-rendering, device pixel ratios, and user zoom all make "1px" fuzzy), and
-that `px`-based font sizing overrides the user's browser/OS font-size
-preference, an accessibility regression. It also argues against
-width-based `@media` breakpoints as "arbitrary" hard-coded
-reconfiguration points insensitive to actual available space —
-consistent with the primitives' avoidance of breakpoints already noted
-elsewhere in this doc (Sidebar, Switcher).
-
-**Concrete technique/opinionated stance**:
-- Prefer `rem` for block-level/document-relative sizing (e.g. `h2 { font-size: 2.5rem; }`), `em` for inline-context-relative sizing (the page's own analogy: "the em unit is to the rem unit what a container query is to a @media query").
-- Prefer `ch`/`ex` specifically for measure/line-length constraints, since `1ch` scales with font-size, unlike `px`.
-- Explicit rejection of viewport-only breakpoints, with a fluid-scaling example instead:
-
-> ```
-> :root {
->   font-size: calc(1rem + 0.5vw);
-> }
-> ```
-
-**General-foundations note**: non-obvious opinionated stance — the
-page frames `em`/`rem` choice by whether the element is block-level
-(`rem`) or inline (`em`), rather than a blanket rem-everywhere rule, and
-singles out `ch` as "the only appropriate unit" for measure specifically
-because measure is defined in characters-per-line.
-
-Source: every-layout.dev/rudiments/units/, fetched via authenticated
-session, 2026-08-16.
-
-### Global and local styling
-
-**Core idea**: proposes three tiers of "global" CSS reach, ordered from
-lowest to highest specificity/narrowest to broadest reach (attributed to
-Harry Roberts' ITCSS — "Inverted Triangle CSS," where "specificity...
-is inversely proportional to reach"): (1) universal/inherited styles
-(`:root`, `*`, plain element selectors), (2) layout primitives
-(reusable, composable, configured via props), and (3) utility classes
-(single-purpose, `!important`-boosted, for final overrides). Separately,
-it surveys the standard mechanisms for *local*/instance-specific
-styling — `id` selectors, inline `style` attributes, and Shadow DOM —
-and calls out a drawback for each (high/uncontrollable specificity for
-`id`, unmaintainability for inline styles, and for Shadow DOM: it blocks
-styles from leaking both out *and* in, "meaning you can no longer
-leverage global styling").
-
-**Concrete technique/naming convention**: utility classes use a
-property-name:value naming convention (not BEM), echoing CSS
-declaration syntax, with the colon escaped for validity:
-
-> ```
-> .font-size\:base {
->   font-size: 1rem;
-> }
-> .font-size\:biggish {
->   font-size: 1.75rem;
-> }
-> .font-size\:big {
->   font-size: 2.25rem;
-> }
-> ```
-
-with each declaration `!important`-suffixed: "Utility classes are for
-final adjustments, and should not be overridden by anything that comes
-before them." Custom properties are shared between elements and
-utilities by placing them on `:root`:
-
-> ```
-> :root {
->   --font-size-base: 1rem;
->   --font-size-biggish: 1.75rem;
->   --font-size-big: 2.25rem;
-> }
-> ```
-
-The page also shows how a layout primitive (Stack) is packaged as a
-custom element with a per-instance generated `<style>` block keyed to
-the resolved prop value (e.g. `<style id="Stack-var(--s3)">`), so
-identically-configured instances share one stylesheet:
-
-> ```
-> stack-l {
->   display: block;
-> }
-> stack-l > * + * {
->   margin-top: var(--s1);
-> }
-> ```
-
-**Relevance to #95 (most decision-relevant page)**: Every Layout's
-"global" tier (universal styles + primitives + utilities) is directly
-analogous in spirit to Doula Cloud's planned small utility layer for
-page-level layout — same idea of low-specificity, reusable, composable,
-class-based rules with a plain naming scheme. That part validates the
-plan. It *complicates* the plan on the "local" side, though: Every
-Layout's own taxonomy of local/instance styling is `id` selectors,
-inline styles, and Shadow DOM — it does not mention or account for
-component-scoped stylesheets (CSS Modules-, Vue-, or Svelte-style
-build-time scoping) as a category at all. The page's closest analog to a
-Svelte scoped `<style>` block is Shadow DOM, which it criticizes
-specifically because Shadow DOM blocks styles from getting *in* as well
-as out ("you can no longer leverage global styling"). Svelte's scoping
-does not have that particular drawback — global custom properties still
-cascade into scoped component styles normally — so Doula Cloud's planned
-split (scoped component styles + a shared custom-property token layer +
-a separate utility layer) can be read as addressing the exact gap Every
-Layout leaves open, rather than conflicting with its model. On naming:
-Every Layout does **not** use BEM anywhere in this page (or in
-Composition, which argues against BEM-style namespacing) — its own
-precedent for a global utility layer is the property:value convention
-above, worth considering (or explicitly rejecting in favor of something
-else) if Doula Cloud's utility layer needs a naming convention.
-
-**Relevance to #97**: the "Primitives and props" subsection is a direct
-precedent for exposing custom-property configuration through a thin
-JS/prop layer: a custom element defines a prop getter that falls back to
-a default custom property —
-
-> ```
-> get space() {
->   return this.getAttribute('space') || 'var(--s1)';
-> }
-> ```
-
-— and the resolved value is interpolated into a generated, per-configuration
-`<style>` block scoped by a `data-i` attribute selector, rather than set
-as an inline custom property per instance. Worth flagging for #97's
-props-vs-custom-property-override discussion; not a resolution.
-
-Source: every-layout.dev/rudiments/global-local-styling/, fetched via
-authenticated session, 2026-08-16.
-
-### Modular scale
-
-**Core idea**: argues for deriving all spacing/type-size values from a
-single ratio, multiplying/dividing a base value repeatedly (analogized
-to a harmonic series in music) rather than choosing dimensions ad hoc.
-This produces a sequence of custom properties, signed by step from a
-`0` base, that both spacing and type size are meant to draw from.
-
-**Concrete technique/naming convention**: signed, index-named custom
-properties driven by a single `--ratio`:
-
-> ```
-> :root {
->   --ratio: 1.5;
->   --s-1: calc(var(--s0) / var(--ratio));
->   --s0: 1rem;
->   --s1: calc(var(--s0) * var(--ratio));
->   --s2: calc(var(--s1) * var(--ratio));
-> }
-> ```
-
-The page notes these root-level custom properties are readable from
-JavaScript (`getComputedStyle(document.documentElement).getPropertyValue('--s3')`)
-and cross Shadow DOM boundaries, and shows a props-based interpolation
-path (`<my-element padding="var(--s3)">`) with an optional regex check to
-restrict a prop to a bare scale-step integer rather than an arbitrary
-value.
-
-**Relevance to #94 (context only, not an open decision)**: this is one
-concrete implementation pattern for a modular type/spacing scale — a
-single ratio driving signed, step-indexed custom properties consumable
-by both CSS and JS. Doula Cloud's type scale is already decided in #94;
-noted here only as background, not as something to reconsider.
-
-**Relevance to #97**: the regex-validated, scale-step-only prop variant
-is a second concrete precedent (alongside Global and local styling's
-plain custom-property fallback) for constraining a component prop to
-specific token values rather than accepting an arbitrary CSS value.
-
-Source: every-layout.dev/rudiments/modular-scale/, fetched via
-authenticated session, 2026-08-16.
-
-### Axioms
-
-**Core idea**: recommends stating a small number of global, unqualified
-design rules ("axioms" — e.g. "the measure should never exceed 60ch")
-and enforcing each one as pervasively as possible via the
-lowest-specificity mechanism available, rather than applying it
-manually per element via utility classes. It favors an exception-based
-(deny-list) selector over an allow-list of specific elements, since a
-deny-list only requires remembering what should be *excluded* from a
-rule, not every element the rule should apply to.
-
-**Concrete technique**: a universal rule with named exceptions, backed
-by a `:root` custom property:
-
-> ```
-> :root {
->   --measure: 60ch;
-> }
-> * {
->   max-inline-size: var(--measure);
-> }
-> html, body, div, header, nav, main, footer {
->   max-inline-size: none;
-> }
-> ```
-
-The same `--measure` custom property is then reused as a primitive
-prop default — the Switcher primitive's `threshold` prop falls back to
-`var(--measure)` when no value is supplied, and silently ignores
-invalid values (falling back to the primitive's own default stylesheet
-rather than erroring):
-
-> ```
-> get threshold() {
->   return this.getAttribute('threshold') || 'var(--measure)';
-> }
-> ```
-
-**Relevance to #95**: reinforces the three-tier universal/primitive/
-utility architecture from "Global and local styling" with a worked
-example, and is another instance of the deny-list-plus-`*`-selector
-pattern rather than any BEM- or component-namespaced approach.
-
-**Relevance to #97**: the `threshold` example is a concrete pattern for
-"prop with a shared-token default and silent fallback on invalid
-input," directly relevant to how a component's custom-property-based
-configuration API could degrade gracefully — flagged for #97, not
-resolved here.
-
-Source: every-layout.dev/rudiments/axioms/, fetched via authenticated
-session, 2026-08-16.
-
-## Blog: "Eschewing Shadow DOM" (Heydon Pickering, 14 June 2019)
-
-Directly answers whether Every Layout's own shipped custom elements
-(`<cluster-l>` etc., seen on the Cluster primitive page) use Shadow DOM —
-they do not, and the post explains why, with specifics:
-
-**Problems encountered with Shadow DOM, quoted/paraphrased from the post**:
-- Universal (`*`) selectors pierce inconsistently — `color` crosses the
-  shadow boundary, `box-sizing` does not, forcing per-component
-  `box-sizing: border-box` repetition.
-- `all: inherit` as a workaround for selective inheritance forces *every*
-  property to inherit, including layout-affecting ones like `display`,
-  which is unusable.
-- `::slotted()` (styling Light DOM content from inside a Shadow root) only
-  reaches direct children, not deeper descendants, and does not support
-  sibling combinators (`::slotted(*) + *` does not work) — ruling out
-  exactly the adjacent-sibling techniques Stack and other primitives rely
-  on.
-- Instance-specific prop-derived styles injected into the Shadow root lose
-  a specificity fight against the component's own default/fallback
-  document-stylesheet rule, forcing `!important` to win — "feels
-  counter-intuitive and hacky" in the post's own words.
-
-**The alternative pattern the post documents (no Shadow DOM)**: a light-DOM
-custom element that, on `connectedCallback`/`attributeChangedCallback`,
-computes an identifier from its prop value, stamps it as a `data-*`
-attribute on itself, and injects a scoped `<style id="...">` block into
-`document.head` (only if an identical one doesn't already exist) targeting
-`[data-i="<id>"]`. A `get`/`set` accessor pair reflects the HTML attribute
-to a JS property with a sane default (e.g. `measure` defaults to `65ch`).
-Critically, the *document stylesheet also carries a plain-CSS default* for
-the component's un-configured state (e.g. `center-l { margin-inline: auto;
-max-inline-size: 65ch; }`), so — in the post's words — "these kinds of
-layout-specific components do not require JavaScript to run on the client
-at all — at least not for initial styling." JS only runs to override the
-default when an instance sets a non-default prop value. The post also notes
-this light-DOM approach is SSR-friendly (tested with JSDOM + Eleventy),
-whereas Shadow DOM content could not be prerendered by the tooling
-available at the time.
-
-**Relevance to #95 (this ticket) and the custom-elements decision**: this
-is the specific, sourced mechanism behind "build custom elements informed
-by Every Layout but maintained ourselves" — light DOM (no Shadow Root),
-default styling expressed as plain CSS with zero required JS, and
-attribute-reflection JS reserved only for non-default instance
-configuration. It also independently confirms the "Global and local
-styling" page's implicit stance (Shadow DOM as the only "local" styling
-option Every Layout's own taxonomy considers, and its cascade-blocking
-drawback) with a concrete first-party account of why the author moved away
-from it in practice.
-
-Source: every-layout.dev/blog/eschewing-shadow-dom/, fetched via
-authenticated session, 2026-08-16.
-
-## Licensing/reuse terms
-
-The homepage frames the offering as a $69 one-time purchase, with three
-layouts and an introductory section given away free as a preview:
-
-> "Buy Every Layout For $69" ... "Read the free rudiments and axioms"
-
-What the $69 purchase includes, quoted directly from the homepage:
-
-> "Access to all the site content, including all the layouts and layout
-> generators. All available offline too!"
-> "Every Layout as a book, in the EPUB format, for reading with your
-> preferred reader."
-> "The full set of layout components, implemented as interoperable custom
-> elements."
-> "Free updates for life. We are always improving, and have lots more
-> content planned"
-
-The site also offers bulk discounts for multi-seat company purchases via
-direct contact (per the homepage).
-
-Source: [every-layout.dev/](https://every-layout.dev/), fetched August 2026.
-
-**What's free right now, precisely:**
-- The introductory "rudiments and axioms" material (e.g.
-  [/rudiments/boxes/](https://every-layout.dev/rudiments/boxes/), confirmed
-  fully accessible, no paywall, with its own small CSS examples — the box
-  model, `display`, logical properties, and formatting contexts — as
-  conceptual background, not a layout primitive itself).
-- Three full primitive pages with complete CSS and custom-property
-  documentation: **Stack**, **Sidebar**, **Switcher**.
-
-**What requires purchase:** the other 10 primitive pages (Box, Center,
-Cluster, Cover, Grid, Frame, Reel, Imposter, Icon, Container), the EPUB
-book, and the packaged custom-element implementations.
-
-**Redistribution/reuse rights**, from the Terms and Conditions:
-
-> "When you purchase a licence for Every Layout, you own a licence to the
-> content that is authored and owned by Heydon Pickering and Andy Bell."
->
-> "Re-publishing and re-selling of Every Layout is strictly forbidden and
-> discovered instances will be pursued, legally, in accordance with United
-> Kingdom copyright law."
-
-The terms also reserve the right to revoke a license (without refund, after
-a warning) for "unfair usage or irresponsible sharing" such as sharing
-login credentials.
-
-Source: [every-layout.dev/terms-and-conditions](https://every-layout.dev/terms-and-conditions),
-fetched August 2026.
-
-**Practical read for this decision**: the three free pages (Stack,
-Sidebar, Switcher) publish real, complete CSS that is safe to read and
-reimplement in our own words/tokens — nothing there is paywalled or marked
-proprietary-only-with-purchase. The terms forbid re-publishing/re-selling
-Every Layout's own content (e.g. don't copy the book's prose or mirror the
-paid pages), but they do not purport to restrict independently
-reimplementing a documented CSS *technique* once understood — CSS
-techniques (adjacent-sibling margin, flex-basis wrapping tricks) are not
-copyrightable expression in the way prose or a packaged product is. For the
-10 paywalled primitives, we simply do not have the source material
-publicly to know their exact documented approach; anything we'd write for
-Box/Center/Cluster/Cover/Grid/Frame/Reel/Imposter/Icon/Container would be
-our own independent design, not "sourced from Every Layout," because
-Every Layout's own text for those isn't public.
-
-## Custom-property configurability
-
-Every Layout's own naming and defaults, as documented across all 13
-primitive pages (3 free, 10 via the paid license), plus how each maps
-conceptually onto our `--space-1`…`--space-12` base-4 scale (`tokens.css`)
-as a default-value source. This is a mapping observation only — no CSS is
-written here.
-
-| Primitive | Every Layout's property name | Every Layout's own default | What it controls | Possible token mapping |
-|---|---|---|---|---|
-| Stack | `--space` | `var(--s1)` (Every Layout's own modular-scale token, roughly their "1 step" spacing unit) | gap between stacked siblings | Would default to one of our `--space-*` steps, e.g. `--space-4` |
-| Sidebar | `space` (component prop) | `var(--s1)` | gap between sidebar and content | Same idea — a `--space-*` step |
-| Sidebar | `contentMin` (component prop) | `50%` | minimum width of the non-sidebar column before wrap | Not a spacing token — a proportion, not on our `--space-*` scale |
-| Switcher | `--threshold` | `var(--measure)` (Every Layout's line-length token, not a spacing token) | container width at which items switch from row to stack | Not a `--space-*` value — a width/measure value |
-| Switcher | `--space` | `var(--s1)` | gap between switched items | A `--space-*` step |
-| Switcher | `--limit` | `4` | max item count before forcing a stacked layout regardless of width | A count, not a token |
-| Box | `padding` | `"var(--s1)"` | padding on all sides of the Box | A `--space-*` step |
-| Box | `borderWidth` | `"var(--border-thin)"` | border width | Not a `--space-*` value — a border-width scale, not spacing |
-| Box | `invert` | `false` | toggles inverted light/dark theme | Not spacing — a boolean |
-| Center | `max` | `"var(--measure)"` | max-width of the centered column | Not a `--space-*` value — a measure/width, not spacing |
-| Center | `andText` | `false` | whether to also `text-align: center` | Not spacing — a boolean |
-| Center | `gutters` | `0` | minimum space on either side of the content | A `--space-*` step, if treated as a length rather than the documented boolean type |
-| Center | `intrinsic` | `false` | centers children by content width instead of stretching | Not spacing — a boolean |
-| Cluster | `justify` | `"flex-start"` | `justify-content` value | Not spacing — an alignment keyword |
-| Cluster | `align` | `"flex-start"` | `align-items` value | Not spacing — an alignment keyword |
-| Cluster | `space` | `"var(--s1)"` | gap between clustered children | A `--space-*` step |
-| Cover | `centered` | `"h1"` | selector for the centered (main) element | Not spacing — a selector |
-| Cover | `space` | `"var(--s1)"` | minimum space between/around all child elements | A `--space-*` step |
-| Cover | `minHeight` | `"100vh"` | minimum block-size of the Cover | Not a `--space-*` value — a height, not spacing |
-| Cover | `noPad` | `false` | whether `space` is also applied as container padding | Not spacing itself — a boolean toggle |
-| Grid | `min` | `"250px"` | minimum column width in `minmax(min(x, 100%), 1fr)` | Not a `--space-*` value — a width, not spacing |
-| Grid | `space` | `"var(--s1)"` | gap between grid cells | A `--space-*` step |
-| Frame | `ratio` | `"16:9"` | aspect ratio | Not a `--space-*` value at all — a ratio |
-| Reel | `itemWidth` | `"auto"` | width of each Reel item | Not a `--space-*` value — a width |
-| Reel | `space` | `"var(--s0)"` | gap between Reel items | A `--space-*` step, likely a smaller one than Cluster/Cover's `--s1`-based default since `--s0` is Every Layout's smaller scale point |
-| Reel | `height` | `"auto"` | height of the Reel | Not a `--space-*` value — a height |
-| Reel | `noBar` | `false` | whether to show the scrollbar | Not spacing — a boolean |
-| Imposter | `breakout` | `false` | whether the element may exceed its positioning container | Not spacing — a boolean |
-| Imposter | `margin` | `0` | minimum space between the element and the positioning container's inside edges | A `--space-*` step |
-| Imposter | `fixed` | `false` | positions relative to the viewport instead of an ancestor | Not spacing — a boolean |
-| Icon | `space` | `null` | space between icon and text (word spacing preserved if null) | Loosely spacing-shaped, but Every Layout's own default is `null` (em-relative word spacing), so mapping to a fixed `--space-*` rem value would be a deliberate override, not a match to their default |
-| Icon | `label` | `null` | accessible label, turns the icon into an ARIA image | Not spacing — a string |
-| Container | `name` | (none listed) | `container-name` value | Not spacing at all — an identifier string |
-
-Note: Every Layout's own default values (`--s1`, `--measure`) come from
-its **own** modular-scale/measure token system documented in the free
-"rudiments" section, not from any spacing scale identical to ours. Mapping
-our `--space-*` scale onto their `--space`/`space` properties is a
-reasonable adaptation (both are "one step of vertical/inline rhythm"), but
-`--threshold`/`contentMin` are container-width and proportion values, not
-spacing, and don't map onto `--space-*` at all. The same reasoning applies
-to the newly-added rows above: `Box`, `Center`, `Cover`, `Grid`, `Reel`,
-and `Imposter` all default their spacing-shaped properties to `--s1` or
-`--s0`, Every Layout's own modular-scale tokens, not to anything numerically
-tied to our `--space-*` scale.
-
-## Modern-CSS notes
-
-**What the free pages already reflect (sourced facts):**
-- Switcher's page uses the `gap` property directly for spacing and states
-  it is "now supported in all major browsers"
-  ([/layouts/switcher/](https://every-layout.dev/layouts/switcher/)) — i.e.
-  this page has been updated past the pre-`gap` negative-margin-hack era
-  that older Every Layout material (and the original book) used.
-- Sidebar's page also uses `gap: 1rem` directly in its `.with-sidebar`
-  flex container example
-  ([/layouts/sidebar/](https://every-layout.dev/layouts/sidebar/)).
-- Sidebar's page, by contrast, still frames container queries as a
-  hoped-for, not-yet-real capability ("the mooted container queries") —
-  this part of the page's text has not been refreshed even though
-  container queries have since shipped in evergreen browsers
-  ([/layouts/sidebar/](https://every-layout.dev/layouts/sidebar/)).
-- Stack and Sidebar both use logical properties (`margin-block-start`,
-  `min-inline-size`) rather than physical `margin-top`/`min-width`.
-
-No `:has()`, `clamp()`, CSS nesting, or `@layer` usage was found on any of
-the three free pages.
-
-**Assessment** (our own view, not sourced from Every Layout, given this
-project's evergreen-only browser target):
-- Sidebar's stated motivation — needing "a capability like the mooted
-  container queries" to make the layout truly context-aware rather than
-  viewport-aware — is exactly the gap container queries close today. Since
-  Firefox is explicitly unsupported and Chrome/Edge/Safari all ship
-  container queries, a from-scratch Sidebar/Switcher-equivalent could react
-  to the *component's own* available width via `container-type: inline-size`
-  instead of (or alongside) the flex-basis arithmetic tricks Every Layout
-  documents, which were designed specifically to work around the absence of
-  container queries.
-- Switcher's `calc((var(--threshold) - 100%) * 999)` flex-basis trick is a
-  workaround for not having a real container-width conditional. A
-  container-query-based `@container` rule would express the same intent
-  (switch layout at a container width) more directly and readably, without
-  relying on integer-overflow-adjacent arithmetic.
-- CSS nesting (native, no preprocessor) could clean up the presentation of
-  these primitives' selectors (e.g. nesting a sibling-combinator rule
-  inside a parent block) but doesn't change the underlying mechanism —
-  it's a readability/authoring convenience, not a new capability, for
-  these particular primitives.
-- Stack's core mechanism (adjacent-sibling margin) has no simpler modern
-  replacement — `gap` doesn't apply here because Stack targets arbitrary
-  flow/block children (not necessarily a flex or grid container), so the
-  selector-based technique remains the correct approach even in an
-  evergreen-only target.
-
-## Open questions / gaps
-
-- **Whether the paid custom elements differ from the documented raw CSS**:
-  the free pages describe hand-written CSS classes/custom properties; the
-  paid tier additionally ships "interoperable custom elements." We could
-  not verify whether the custom-element implementations use the same CSS
-  internally or a different approach, since that content is paywalled.
-- **No FAQ page was found** at a guessed `/faq` path (not linked in main
-  navigation); licensing terms were instead confirmed via the homepage
-  pricing copy and the separate Terms and Conditions page. If a dedicated
-  FAQ exists at a different URL, it wasn't discovered in this pass.
-- **Historical/older book content**: the task background notes Every
-  Layout as a book "predates some current CSS features." We could not
-  directly compare the current site's paywalled-primitive text against the
-  original book's text (both are behind the paywall / not independently
-  fetchable), so we can't confirm whether the paywalled pages have been
-  updated for `gap`/logical properties the way Stack, Sidebar, and
-  Switcher visibly have.
-
-## Note on sourcing
-
-Every factual claim above was pulled directly from every-layout.dev pages
-(fetched August 2026), cited inline at the point each claim is made. No
-secondary/aggregator sources were used. Where the public site does not
-expose information (the 10 paywalled primitive pages), this is stated
-explicitly rather than inferred or guessed at as fact.
