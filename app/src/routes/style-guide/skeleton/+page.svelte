@@ -8,9 +8,9 @@
 	];
 
 	const rows = [
-		{ name: 'Tasha Bell', status: 'Active' },
-		{ name: 'Renata Okonkwo', status: 'Intake' },
-		{ name: 'Priya Raman', status: 'Active' }
+		{ name: 'Anne-Marie Ochieng-Whitfield', status: 'Stripe onboarding incomplete' },
+		{ name: 'Renata Chiamaka Okonkwo-Adeyemi', status: 'Expired -- invite again or revoke' },
+		{ name: 'dee marchetti', status: 'Active' }
 	];
 </script>
 

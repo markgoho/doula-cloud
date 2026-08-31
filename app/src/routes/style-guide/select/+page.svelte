@@ -1,7 +1,17 @@
 <script lang="ts">
 	import Select from '#lib/components/atoms/Select.svelte';
 
-	const options = ['Home', 'Hospital', 'Birth center'];
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): a
+	 * Select's options are an enum, so the longest realistic option is the
+	 * longest member a Practice can actually pick -- a named birth center
+	 * rather than the word "Hospital".
+	 */
+	const options = [
+		'Home',
+		'Rochester General Hospital Birthing Center',
+		'Highland Midwifery & Birth Support Collective'
+	];
 
 	let value = $state('');
 </script>
@@ -11,7 +21,7 @@
 
 	<section>
 		<h2>Default</h2>
-		<Select {options} bind:value placeholder="Choose a location" />
+		<Select {options} bind:value placeholder="Choose where this birth is planned to happen" />
 	</section>
 
 	<section>
@@ -26,6 +36,6 @@
 
 	<section>
 		<h2>Disabled</h2>
-		<Select {options} value="Home" disabled />
+		<Select {options} value="Rochester General Hospital Birthing Center" disabled />
 	</section>
 </stack-l>

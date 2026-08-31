@@ -14,7 +14,19 @@
 
 	<section>
 		<h2>Default</h2>
-		<TextInput value={name} onInput={(value) => (name = value)} placeholder="Full name" />
+		<!--
+			The longest realistic value, not a representative one (ADR-0025): a
+			full legal name with a hyphenated double-barrelled surname, which is
+			what a Client types into this field, and the longest email a Practice
+			hands out. Neither overflows on its own -- a browser breaks on "-"
+			and "@" (#521) -- so what they test is the field's own width, not the
+			row's.
+		-->
+		<TextInput
+			value={name}
+			onInput={(value) => (name = value)}
+			placeholder="Full legal name, as it appears on the Contract"
+		/>
 	</section>
 
 	<section>
@@ -23,7 +35,7 @@
 			type="email"
 			value={email}
 			onInput={(value) => (email = value)}
-			placeholder="you@example.com"
+			placeholder="anne-marie.ochieng-whitfield@highland-midwifery-group.example.org"
 		/>
 	</section>
 
@@ -54,6 +66,6 @@
 
 	<section>
 		<h2>Disabled</h2>
-		<TextInput value="Read-only value" onInput={noop} disabled />
+		<TextInput value="Anne-Marie Ochieng-Whitfield" onInput={noop} disabled />
 	</section>
 </stack-l>

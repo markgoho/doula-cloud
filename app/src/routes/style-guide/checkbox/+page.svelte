@@ -15,7 +15,7 @@
 	<section>
 		<h2>Default</h2>
 		<label><Checkbox checked={isUnchecked} onChange={(value) => (isUnchecked = value)} /> Unchecked</label>
-		<label><Checkbox checked={isChecked} onChange={(value) => (isChecked = value)} /> Checked</label>
+		<label><Checkbox checked={isChecked} onChange={(value) => (isChecked = value)} /> I have read this Contract and I am signing it electronically</label>
 	</section>
 
 	<section>
@@ -25,7 +25,7 @@
 
 	<section>
 		<h2>Invalid</h2>
-		<label><Checkbox checked={false} onChange={noop} invalid /> Invalid</label>
+		<label><Checkbox checked={false} onChange={noop} invalid /> I agree to sign electronically, continue</label>
 	</section>
 
 	<section>

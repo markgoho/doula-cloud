@@ -16,7 +16,7 @@
 	<section>
 		<h2>Default</h2>
 		<p>Four rows to start with. Type past them and the field grows, up to twenty rows.</p>
-		<Textarea value={note} onInput={(value) => (note = value)} placeholder="Anything you want to add" />
+		<Textarea value={note} onInput={(value) => (note = value)} placeholder="Anything you want your Doula to know before the birth" />
 	</section>
 
 	<section>
@@ -38,7 +38,7 @@
 		<h2>Inside a labeled field</h2>
 		<LabeledField
 			label="What your Practice offers"
-			hint="Say what kind of support you provide and where you work."
+			hint="Say what kind of support you provide, where you work, and anything a Client should know before they get in touch."
 			error={labelled.length > 0 ? '' : 'Enter a description of what your Practice offers'}
 		>
 			{#snippet children({ id, describedBy, invalid })}
@@ -59,6 +59,15 @@
 
 	<section>
 		<h2>Disabled</h2>
-		<Textarea value="Read-only value" onInput={noop} disabled />
+		<!--
+			The longest realistic value, not a representative one (ADR-0025): a
+			Practice pastes a referral link into free text, and a URL is the one
+			value with no break opportunity a browser will take (#521).
+		-->
+		<Textarea
+			value="Birth plan on file at https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake"
+			onInput={noop}
+			disabled
+		/>
 	</section>
 </stack-l>

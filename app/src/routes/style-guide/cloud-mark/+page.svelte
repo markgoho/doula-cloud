@@ -31,6 +31,11 @@
 			would make a screen reader say the product's name twice. A caller using the mark on its own
 			passes a label.
 		</p>
+		<!--
+			No hostile value exists for this component (ADR-0025): the mark takes
+			no Practice content at all, and its one string is the product's own
+			name, which never gets longer.
+		-->
 		<CloudMark size="md" label="Doula Cloud" />
 	</section>
 </stack-l>

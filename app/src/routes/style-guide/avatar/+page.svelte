@@ -1,7 +1,18 @@
 <script lang="ts">
 	import Avatar, { initialsOf } from '#lib/components/atoms/Avatar.svelte';
 
-	const names = ['Mark Goho', 'Tasha Bell', 'Renata Okonkwo Adeyemi', 'Prince', 'dee marchetti'];
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): a
+	 * hyphenated double-barrelled surname beside a three-word name, because
+	 * the name renders next to the circle here and it is the name, not the
+	 * circle, that decides how wide this row gets.
+	 */
+	const names = [
+		'Anne-Marie Ochieng-Whitfield',
+		'Renata Chiamaka Okonkwo-Adeyemi',
+		'Prince',
+		'dee marchetti'
+	];
 </script>
 
 <stack-l space="var(--space-6)">

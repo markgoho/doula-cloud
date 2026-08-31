@@ -8,6 +8,12 @@
 
 	<section>
 		<h2>Manifest (default 24px, duotone)</h2>
+		<!--
+			No hostile value exists for this component (ADR-0025): an Icon takes
+			no Practice content, and its label is the manifest name, so the
+			longest value it can hold is already the longest name in the
+			manifest -- every one of which is rendered here.
+		-->
 		<cluster-l space="var(--space-4)">
 			{#each iconManifest as name (name)}
 				<stack-l space="var(--space-1)">

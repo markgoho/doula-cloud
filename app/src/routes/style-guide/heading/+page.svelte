@@ -12,12 +12,12 @@
 			picks the variant a heading at that depth usually wants.
 		</p>
 		<stack-l space="var(--space-4)">
-			<Heading level={1} text="Level 1 — defaults to page" />
-			<Heading level={2} text="Level 2 — defaults to section" />
-			<Heading level={3} text="Level 3 — defaults to card" />
-			<Heading level={4} text="Level 4 — defaults to card" />
-			<Heading level={5} text="Level 5 — defaults to card" />
-			<Heading level={6} text="Level 6 — defaults to card" />
+			<Heading level={1} text="Level 1, page — Anne-Marie Ochieng-Whitfield" />
+			<Heading level={2} text="Level 2, section — Engagement with Highland Midwifery &amp; Birth Support" />
+			<Heading level={3} text="Level 3, card — Contract signed 14 September 2027" />
+			<Heading level={4} text="Level 4, card — Contract signed 14 September 2027" />
+			<Heading level={5} text="Level 5, card — Contract signed 14 September 2027" />
+			<Heading level={6} text="Level 6, card — Contract signed 14 September 2027" />
 		</stack-l>
 	</section>
 
@@ -29,9 +29,9 @@
 			allowed on one page title on a hub, so the OverviewHub Template owns it.
 		</p>
 		<stack-l space="var(--space-4)">
-			<Heading level={2} variant="page" text="Page — a page title" />
-			<Heading level={2} variant="section" text="Section — a section heading" />
-			<Heading level={2} variant="card" text="Card — a card or group title" />
+			<Heading level={2} variant="page" text="Page — Anne-Marie Ochieng-Whitfield" />
+			<Heading level={2} variant="section" text="Section — Engagement with Highland Midwifery &amp; Birth Support" />
+			<Heading level={2} variant="card" text="Card — Contract signed 14 September 2027" />
 		</stack-l>
 	</section>
 </stack-l>

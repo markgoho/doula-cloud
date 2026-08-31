@@ -12,10 +12,10 @@
 			names are the brief's own, and the sizes behind them live only in tokens.css.
 		</p>
 		<stack-l space="var(--space-4)">
-			<Text step="body" text="Body — prose, form values and list rows." />
-			<Text step="body-sm" text="Body small — table cells and dense rows." />
-			<Text step="label" text="Label — field labels, nav items and buttons." />
-			<Text step="meta" text="Meta — timestamps, attribution and help text." />
+			<Text step="body" text="Body — prose, form values and list rows. Anne-Marie Ochieng-Whitfield asked for a home birth supported by Highland Midwifery &amp; Birth Support Collective." />
+			<Text step="body-sm" text="Body small — table cells and dense rows, such as anne-marie.ochieng-whitfield@highland-midwifery-group.example.org." />
+			<Text step="label" text="Label — field labels, nav items and buttons, such as I have read this Contract and I am signing it electronically." />
+			<Text step="meta" text="Meta — timestamps, attribution and help text, such as Sent by Anne-Marie Ochieng-Whitfield on 14 September 2027 at 09:42." />
 		</stack-l>
 	</section>
 
@@ -35,7 +35,7 @@
 	<section>
 		<h2>Combined</h2>
 		<stack-l space="var(--space-4)">
-			<Text step="meta" tone="muted" text="Sent by Priya Raman · 14 March, 09:42" />
+			<Text step="meta" tone="muted" text="Sent by Anne-Marie Ochieng-Whitfield · 14 September 2027, 09:42" />
 		</stack-l>
 	</section>
 </stack-l>
