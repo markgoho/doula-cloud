@@ -286,12 +286,12 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 	}
 });
 
-// Archetype E's contractor branch (#525, ADR-0017): the explainer door
-// #501 built in place of the search screen for a Staff member who holds
-// the `doula` role and a contractor employment type, with neither `owner`
-// nor `admin`. A separate test rather than a third route in the loop
-// above: that loop is scanned under the Owner's own session, and this
-// branch renders only under a session the Owner can never hold.
+// Archetype E's contractor branch (#525, #539, ADR-0017): the explainer
+// door #501 built in place of the search screen for a Staff member who
+// holds the `doula` role and a contractor employment type, with neither
+// `owner` nor `admin`. A separate test rather than a third route in the
+// loop above: that loop is scanned under the Owner's own session, and
+// this branch renders only under a session the Owner can never hold.
 test('Archetype E -- the contractor Doula door onto clients/search', async ({ page, request }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId } = seeded;
@@ -302,6 +302,17 @@ test('Archetype E -- the contractor Doula door onto clients/search', async ({ pa
 	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+
+	// #539: a freshly seeded contractor has no attached Clients yet, so
+	// this is also the only place the empty-state "How to add Clients of
+	// your own" line onto #501's door gets an axe pass -- the Owner's own
+	// Clients scan above always has rows.
+	await scan(page, {
+		key: 'practices/[practiceId]/clients (contractor, empty)',
+		archetype: 'C',
+		url: `/practices/${practiceId}/clients`,
+		h1: 'Clients'
+	});
 
 	await scan(page, {
 		key: 'practices/[practiceId]/clients/search (contractor)',
