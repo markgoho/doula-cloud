@@ -158,7 +158,12 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+	<LabeledField
+		id={passwordId}
+		label="Password"
+		hint="Must be 6 characters or more"
+		error={errorFor(passwordId)}
+	>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}

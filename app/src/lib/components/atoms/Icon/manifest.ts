@@ -20,7 +20,9 @@ export const iconManifest = [
 	'file-text',
 	'credit-card',
 	'caret-down',
-	'list'
+	'list',
+	'eye',
+	'eye-slash'
 ] as const;
 
 export type IconName = (typeof iconManifest)[number];

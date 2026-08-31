@@ -7,6 +7,7 @@
 	let email = $state('');
 	let quantity = $state('1');
 	let dueDate = $state('');
+	let password = $state('correct horse battery staple');
 </script>
 
 <stack-l space="var(--space-6)">
@@ -52,6 +53,17 @@
 	<section>
 		<h2>Date type</h2>
 		<TextInput type="date" value={dueDate} onInput={(value) => (dueDate = value)} />
+	</section>
+
+	<!--
+		The toggle owns a button and a state, which is more than TextInput
+		does for any other type -- it lives here rather than as a new atom,
+		the same call #404 made for type="date" (#470).
+	-->
+	<section>
+		<h2>Password type</h2>
+		<p>Defaults to hidden. The toggle reveals the value; paste still works.</p>
+		<TextInput type="password" value={password} onInput={(value) => (password = value)} />
 	</section>
 
 	<section>

@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'svelte';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import TextInput from './TextInput.svelte';
@@ -182,5 +182,92 @@ describe('TextInput.svelte', () => {
 		await setup();
 
 		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('autocomplete');
+	});
+
+	describe('type=password', () => {
+		it('defaults to hidden (#470)', async () => {
+			await setup({ type: 'password', value: 'hunter2' });
+
+			await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'password');
+		});
+
+		it('renders no reveal toggle for a non-password type', async () => {
+			await setup({ type: 'email' });
+
+			await expect.element(page.getByRole('button')).not.toBeInTheDocument();
+		});
+
+		it('names the toggle "Show password" while hidden', async () => {
+			await setup({ type: 'password' });
+
+			await expect.element(page.getByRole('button', { name: 'Show password' })).toBeVisible();
+		});
+
+		it('reveals the value and renames the toggle when clicked', async () => {
+			await setup({ type: 'password', value: 'hunter2' });
+
+			await page.getByRole('button', { name: 'Show password' }).click();
+
+			await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'text');
+			await expect.element(page.getByRole('button', { name: 'Hide password' })).toBeVisible();
+		});
+
+		it('hides the value again on a second click', async () => {
+			await setup({ type: 'password', value: 'hunter2' });
+
+			await page.getByRole('button', { name: 'Show password' }).click();
+			await page.getByRole('button', { name: 'Hide password' }).click();
+
+			await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'password');
+			await expect.element(page.getByRole('button', { name: 'Show password' })).toBeVisible();
+		});
+
+		it('announces its state with aria-pressed', async () => {
+			await setup({ type: 'password' });
+
+			await expect.element(page.getByRole('button')).toHaveAttribute('aria-pressed', 'false');
+
+			await page.getByRole('button').click();
+
+			await expect.element(page.getByRole('button')).toHaveAttribute('aria-pressed', 'true');
+		});
+
+		it('is operable by keyboard alone', async () => {
+			await setup({ type: 'password' });
+
+			page.getByRole('button', { name: 'Show password' }).element().focus();
+			await userEvent.keyboard('{Enter}');
+
+			await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'text');
+		});
+
+		it("names which password it reveals, where a page holds more than one", async () => {
+			await setup({ type: 'password', passwordLabel: 'new password' });
+
+			await expect.element(page.getByRole('button', { name: 'Show new password' })).toBeVisible();
+		});
+
+		it('never blocks paste', async () => {
+			const { onInput } = await setup({ type: 'password' });
+
+			const source = document.createElement('input');
+			source.value = 'pasted-secret';
+			document.body.append(source);
+			source.focus();
+			source.select();
+			await userEvent.copy();
+			source.remove();
+
+			await page.getByRole('textbox').click();
+			await userEvent.paste();
+
+			expect(onInput).toHaveBeenCalledWith('pasted-secret');
+		});
+
+		it('disables the toggle along with the field', async () => {
+			await setup({ type: 'password', disabled: true });
+
+			await expect.element(page.getByRole('button')).toBeDisabled();
+		});
 	});
 });

@@ -38,6 +38,9 @@
 	// or recalled (#469).
 	const emailAutocomplete = $derived(mode === 'signup' ? 'email' : 'username');
 	const passwordAutocomplete = $derived(mode === 'signup' ? 'new-password' : 'current-password');
+	// Only when she is setting a new password: an existing password does
+	// not retroactively follow a rule stated for the one being created.
+	const passwordHint = $derived(mode === 'signup' ? 'Must be 6 characters or more' : undefined);
 
 	function errorFor(targetId: string): string | undefined {
 		return errors.find((entry) => entry.targetId === targetId)?.message;
@@ -142,7 +145,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+		<LabeledField id={passwordId} label="Password" hint={passwordHint} error={errorFor(passwordId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}

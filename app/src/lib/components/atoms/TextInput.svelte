@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
+	import Icon from './Icon.svelte';
 
 	const generatedId = $props.id();
 
@@ -20,7 +21,8 @@
 		step,
 		inputmode,
 		autocomplete,
-		ariaLabel
+		ariaLabel,
+		passwordLabel = 'password'
 	}: {
 		id?: string;
 		value: string;
@@ -90,29 +92,68 @@
 		 * the default; this is the recorded exception to it.
 		 */
 		ariaLabel?: string;
+		/*
+		 * Names which password the reveal toggle affects, for its own
+		 * accessible name ("Show password" / "Hide password") -- not the
+		 * field's own <label>, which LabeledField already owns. Every
+		 * password field in the app today is the only one on its screen,
+		 * so the generic default reads correctly everywhere; a page that
+		 * ever shows two at once (a new-password field beside a
+		 * current-password one) passes something that tells them apart
+		 * (#470).
+		 */
+		passwordLabel?: string;
 	} = $props();
+
+	// Defaults to hidden (#470): a password field starts masked, and only
+	// this toggle -- never the browser back button, a re-render, or a
+	// prop change -- reveals it.
+	let isRevealed = $state(false);
+	const isPassword = $derived(type === 'password');
+	const effectiveType = $derived(isPassword && isRevealed ? 'text' : type);
 </script>
 
-<input
-	{id}
-	{type}
-	{name}
-	{value}
-	{placeholder}
-	{required}
-	{disabled}
-	{minlength}
-	{maxlength}
-	{min}
-	{step}
-	{inputmode}
-	{autocomplete}
-	aria-label={ariaLabel}
-	class:invalid
-	aria-invalid={invalid}
-	aria-describedby={describedBy}
-	oninput={(event_) => onInput(event_.currentTarget.value)}
-/>
+{#snippet field()}
+	<input
+		{id}
+		type={effectiveType}
+		{name}
+		{value}
+		{placeholder}
+		{required}
+		{disabled}
+		{minlength}
+		{maxlength}
+		{min}
+		{step}
+		{inputmode}
+		{autocomplete}
+		aria-label={ariaLabel}
+		class:invalid
+		class:password-input={isPassword}
+		aria-invalid={invalid}
+		aria-describedby={describedBy}
+		oninput={(event_) => onInput(event_.currentTarget.value)}
+	/>
+{/snippet}
+
+{#if isPassword}
+	<span class="password-field">
+		{@render field()}
+		<button
+			type="button"
+			class="reveal-toggle"
+			{disabled}
+			aria-pressed={isRevealed}
+			onclick={() => (isRevealed = !isRevealed)}
+		>
+			<Icon name={isRevealed ? 'eye-slash' : 'eye'} size={20} weight="light" />
+			<span class="visually-hidden">{isRevealed ? `Hide ${passwordLabel}` : `Show ${passwordLabel}`}</span>
+		</button>
+	</span>
+{:else}
+	{@render field()}
+{/if}
 
 <style>
 	@layer components {
@@ -137,6 +178,47 @@
 		input:focus-visible {
 			outline: var(--focus-ring-width) solid var(--color-primary);
 			outline-offset: var(--focus-ring-offset);
+		}
+
+		.password-field {
+			display: flex;
+			align-items: stretch;
+			inline-size: 100%;
+		}
+
+		input.password-input {
+			flex: 1;
+			min-inline-size: 0;
+			border-start-end-radius: 0;
+			border-end-end-radius: 0;
+		}
+
+		.reveal-toggle {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-inline-size: var(--hit-target-min);
+			padding: var(--space-2) var(--space-3);
+			color: var(--color-on-surface);
+			background-color: var(--color-surface);
+			border: var(--border-thin) solid var(--color-outline);
+			border-inline-start: none;
+			border-start-end-radius: var(--radius);
+			border-end-end-radius: var(--radius);
+		}
+
+		.reveal-toggle:hover {
+			background-color: var(--color-outline-variant);
+		}
+
+		.reveal-toggle:focus-visible {
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
+		}
+
+		.reveal-toggle:disabled {
+			cursor: not-allowed;
+			opacity: 0.6;
 		}
 	}
 </style>
