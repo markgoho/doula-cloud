@@ -22,6 +22,12 @@
             "if": "Bash(gh issue close *)",
             "command": "bash .claude/hooks/gate-issue-close.sh",
             "statusMessage": "Checking AC re-verification before close"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "command": "bash .claude/hooks/gate-shared-index.sh",
+            "statusMessage": "Checking this is safe against a shared index"
           }
         ]
       }
