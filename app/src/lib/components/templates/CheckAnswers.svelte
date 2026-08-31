@@ -254,9 +254,28 @@
 
 		@container (min-width: 60rem) {
 			.body {
-				grid-template-columns: var(--page-rail) minmax(0, 1fr);
+				/*
+				 * A summary of answers has nothing more to put in a wider
+				 * window, so it does not take the room (#543). See
+				 * `QuestionPage` for why the second track had to stop being
+				 * `1fr`: `justify-content` distributes free space, and a
+				 * flexible track leaves none.
+				 */
+				grid-template-columns: var(--page-rail) minmax(0, var(--form-max));
 				column-gap: var(--space-12);
 				align-items: start;
+				justify-content: center;
+			}
+
+			/*
+			 * The wide exit takes the room, because it has something to put
+			 * there. Restoring the flexible track is the whole override:
+			 * `justify-content` above then has no free space to distribute
+			 * and stops centring by itself, which is the same rule read from
+			 * the other end rather than an exception to it.
+			 */
+			.body:has(.column.wide) {
+				grid-template-columns: var(--page-rail) minmax(0, 1fr);
 			}
 		}
 	}
