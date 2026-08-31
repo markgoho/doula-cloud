@@ -146,7 +146,7 @@ describe('clients list screen', () => {
 // #539 (ADR-0017): a contractor Doula originates nothing at a Practice she
 // contracts for -- neither errand behind "Find or add a Client" is hers --
 // and her narrowed list is already her route to a Client she is attached
-// to, so the control is gone rather than merely relabelled for her.
+// to, so the control is gone rather than merely relabeled for her.
 describe('a contractor Doula without the owner or admin role', () => {
 	it('does not see "Find or add a Client" at all', async () => {
 		await setup(jsonResponse({ items: clients, hasMore: false }), true);

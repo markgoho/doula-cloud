@@ -10,7 +10,7 @@
  * A session-read failure falls back to `isContractor: false` rather than
  * throwing: every caller uses this for UX only -- the BFF handler it
  * mirrors is the real boundary -- so the worse case of a hiccup here is
- * the pre-gate behaviour (the control renders, then a readable 403 if
+ * the pre-gate behavior (the control renders, then a readable 403 if
  * she truly is a contractor), never a page that fails to load for
  * anyone else.
  */
