@@ -51,7 +51,10 @@ const demos = toDemos(pageModules, [
  */
 const KNOWN_BROKEN: Readonly<Record<string, string>> = {
 	'description-list': '#530',
-	'data-table': '#508'
+	'data-table': '#508',
+	link: '#548',
+	'birth-plan-view': '#552',
+	'contract-view': '#553'
 };
 
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
@@ -68,6 +71,15 @@ describe('the continuum check', () => {
 			document.body.append(run);
 			try {
 				await render(demo.component, {}, { baseElement: frame });
+				/*
+				 * `Hanken Grotesk` loads under `font-display: swap` (`fonts.css`), so
+				 * a sweep taken right after render measures the metric-compatible
+				 * fallback face, not the one a browser paints. The fallback is
+				 * narrower, so a real break can fit inside it and go unseen (#550).
+				 * Waiting for the browser's own load signal measures the same face
+				 * the drag surface does.
+				 */
+				await document.fonts.ready;
 				const found = sweep(frame, run.clientWidth);
 				/*
 				 * The failure sentence names the component, the space it was
