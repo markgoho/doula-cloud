@@ -19,6 +19,22 @@ This changes how findings are handled:
 - Nothing is in front of a customer, so a broken or absent path is not an
   incident.
 
+## Temporary block: no new components (opened 2026-08-30)
+
+**Do not build a new UI component while this section exists.** How this repo lays out to available space is under active decision in [#518](https://github.com/markgoho/doula-cloud/issues/518), and every component built to the current pattern joins a pile that has to be reworked afterwards. This section is temporary and is deleted when the block lifts — if you are reading it, the block is still on.
+
+**Blocked**: creating a new `.svelte` file under `app/src/lib/components/` (any tier), a new route component that lays out its own contents rather than composing existing ones, and a new Hugo layout or partial under `hugo/layouts/`.
+
+**Exempt**:
+
+- Changing, fixing, or retrofitting a component that already exists — including making one adapt to the space it is given.
+- Tickets belonging to [#518](https://github.com/markgoho/doula-cloud/issues/518) itself, which say so in their body.
+- A route that composes only existing components and writes no layout CSS of its own.
+
+**What lifts it**: [#518](https://github.com/markgoho/doula-cloud/issues/518) closing. Check with `gh issue view 518 --json state`. If that issue is closed and this section is still here, the deletion was missed — delete it and say so.
+
+**If you are blocked and the work cannot wait**: say so to the person you are working with and let them decide, rather than building the component and noting the exception.
+
 ## Cross-cutting expectations
 
 Every feature carries these. They are not separate work items, they are not
