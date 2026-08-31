@@ -8,7 +8,7 @@ The vocabulary this ADR uses — **intrinsic layout**, **available space**, **co
 
 ## 320px, and why it is not a phone number and not a content floor
 
-320 CSS pixels is WCAG 2.2 [1.4.10 Reflow](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html)'s figure, derived from a 1280px window at 400% browser zoom. It is a **low-vision number**, not a small-phone number. That is why it binds a desktop-only screen exactly as hard as a screen someone reads on a train, and why it is not negotiable upward to 360: choosing 360 would silently drop 400% zoom, which is an accessibility regression wearing a scope reduction's clothes.
+320 CSS pixels is WCAG 2.2 [1.4.10 Reflow](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html)'s figure, derived from a 1280px window at 400% browser zoom. It is a **low-vision number**, not a small-phone number. That is why it binds a Staff-only admin screen nobody will ever open on a phone exactly as hard as a screen someone reads on a train, and why it is not negotiable upward to 360: choosing 360 would silently drop 400% zoom, which is an accessibility regression wearing a scope reduction's clothes.
 
 It is a **conformance commitment**, and it is deliberately not a content floor. A content floor is discovered from the content — the space below which a named thing stops fitting. 320 is discovered from a standard. No component may derive its floor from it, and a layout that changes configuration *at* 320px has read this ADR backwards: 320 is where the layout must already be correct, not a size it is built for.
 
