@@ -96,6 +96,46 @@
 			worksFrom: 'Highland Midwifery Group, Rochester'
 		}
 	];
+
+	/*
+	 * The one DataTable column a Practice writes without a length the
+	 * component can predict (#542): a Client's history renders "Birth
+	 * Engagement refused: <reason>", and the reason is free text. Every
+	 * other column built today is a name, an address, an enum, a date or a
+	 * quantity. Shrink-to-fit makes this column decide the whole table's
+	 * width, so the page has to hold it -- with the sentence a Practice
+	 * really writes and with #530's URL, which is the value a browser will
+	 * not break on its own (ADR-0025).
+	 */
+	interface HistoryRow {
+		when: string;
+		who: string;
+		what: string;
+	}
+
+	const historyColumns = [
+		{ label: 'When', accessor: (row: HistoryRow) => row.when },
+		{ label: 'Who', accessor: (row: HistoryRow) => row.who },
+		{ label: 'What', accessor: (row: HistoryRow) => row.what }
+	];
+
+	const history: HistoryRow[] = [
+		{
+			when: '31 August 2026, 09:14',
+			who: 'Persephone Adeyemi-Wollstonecraft',
+			what: 'Birth Engagement refused: we are already carrying two clients due the same fortnight and cannot promise attendance at a third birth without putting the other two at risk'
+		},
+		{
+			when: '30 August 2026, 16:02',
+			who: 'Anne-Marie Ochieng-Whitfield',
+			what: 'Postpartum Engagement refused: https://highland-midwifery-group.example.org/policies/scheduling-and-availability#postpartum-capacity-window'
+		},
+		{
+			when: '28 August 2026, 11:47',
+			who: 'Persephone Adeyemi-Wollstonecraft',
+			what: 'Record updated'
+		}
+	];
 </script>
 
 {#snippet removeAction()}
@@ -153,6 +193,11 @@
 			rowActions={{ label: 'Actions', content: staffActions }}
 			emptyMessage="No staff yet."
 		/>
+	</section>
+
+	<section>
+		<h2>A column a Practice writes, with no length the component can predict</h2>
+		<DataTable columns={historyColumns} rows={history} emptyMessage="No history yet." />
 	</section>
 
 	<section>

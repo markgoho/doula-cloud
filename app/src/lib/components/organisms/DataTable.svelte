@@ -133,9 +133,23 @@
 			container: data-table / inline-size;
 		}
 
+		/* No inline size at all, which is the whole of #542's answer: a
+		   table with an auto width shrink-to-fits by the CSS table
+		   algorithm -- max(min-content, min(max-content, available)) -- so
+		   it grows with its columns and stops when they are satisfied. The
+		   `inline-size: 100%` that used to sit here made every pixel past
+		   that land inside a cell instead: measured on the drag surface,
+		   the six-column demo's Email column reached 998px at 3151px
+		   available for an address that fits in 184px, and reading one row
+		   meant crossing the whole screen. Deleting the declaration writes
+		   no width, so there is nothing here for a person to have picked
+		   off a screen (ADR-0024). The table stays at the inline start
+		   because that is where a table with no alignment CSS goes, and a
+		   table's first column is what the eye scans down; a general rule
+		   for leftover space is #543's, and a table that authors no
+		   alignment inherits whatever that decides. */
 		.table-view {
 			display: none;
-			inline-size: 100%;
 			border-collapse: collapse;
 		}
 
@@ -151,6 +165,21 @@
 			font-size: var(--text-body-sm-size);
 			text-align: start;
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+			/* The companion to shrink-to-fit above (#542): a cell above the
+			   floor never wraps to save room, so max-content is the sum of
+			   the longest unbroken value in each column, and one column
+			   here is unbounded -- a Client's history renders "Birth
+			   Engagement refused: <reason>", and a Practice types that
+			   reason. --measure is this repo's existing answer to how wide
+			   a run of prose may be and is font-relative, so it is not a
+			   width chosen by looking at a screen; it is inert for every
+			   bounded column, which is every other column built today.
+			   `anywhere` because a pasted URL offers no break opportunity
+			   for a ceiling to act on -- the same failure as #530, #548 and
+			   #552 -- and unlike `break-word` it lowers the min-content
+			   size, so the cap can actually take effect. */
+			max-inline-size: var(--measure);
+			overflow-wrap: anywhere;
 		}
 
 		th {
@@ -214,11 +243,18 @@
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
+		/* The same unbounded column, seen at the other end (#542): the
+		   free-text history value put this view 62px past its frame at
+		   320px, because `1fr`'s automatic minimum is the min-content size
+		   and a pasted URL has none. `anywhere` gives the value break
+		   opportunities, which lowers that minimum and lets the track
+		   shrink -- the fix #534's exercise teaches and #552 landed. */
 		.record-view dd {
 			margin: 0;
 			color: var(--color-on-surface);
 			padding-block: var(--space-2);
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+			overflow-wrap: anywhere;
 		}
 
 		.record-view dd.numeric {
