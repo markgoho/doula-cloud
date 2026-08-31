@@ -180,3 +180,132 @@ describe.each(themes)('%s', (_name, palette) => {
 		expect(luminance(card)).not.toBeCloseTo(luminance(ground), 3);
 	});
 });
+
+/*
+ * The fluid scale -- #531, written in #540.
+ *
+ * Every type size and every spacing step is a `clamp()` that climbs the
+ * ramp. The floor is the design decision and the only free number here;
+ * everything else is arithmetic, so this re-derives it. A literal edited by
+ * hand in `tokens.css` -- a ceiling nudged, a slope rounded, a step left
+ * static when the rest moved -- fails here rather than shipping.
+ *
+ * `rem` on both ends of the clamp is deliberate: a person's own font-size
+ * setting still moves the floor and the ceiling (WCAG 1.4.4). The growth
+ * term is the one part that is not font-relative, because it is a share of
+ * available space.
+ */
+
+function rem(value: string): number {
+	const match = /^(-?[\d.]+)rem$/.exec(value);
+	if (!match) throw new Error(`Not a plain rem length: ${value}`);
+	return Number(match[1]);
+}
+
+const rampMin = rem(light.get('--ramp-min')!);
+const rampMax = rem(light.get('--ramp-max')!);
+
+type FluidStep = { floor: number; intercept: number; coefficient: number; ceiling: number };
+
+function parseFluidStep(name: string): FluidStep {
+	const value = light.get(name);
+	if (value === undefined) throw new Error(`No such token: ${name}`);
+	const match = /^clamp\((-?[\d.]+)rem, (-?[\d.]+)rem \+ (-?[\d.]+)cqi, (-?[\d.]+)rem\)$/.exec(
+		value
+	);
+	if (!match) throw new Error(`${name} is not a fluid step on the ramp: ${value}`);
+	const [, floor, intercept, coefficient, ceiling] = match;
+	return {
+		floor: Number(floor),
+		intercept: Number(intercept),
+		coefficient: Number(coefficient),
+		ceiling: Number(ceiling)
+	};
+}
+
+// Every token the scale covers, with the growth factor its scale was given.
+const typeSteps = [
+	'--text-display-size',
+	'--text-heading-lg-size',
+	'--text-heading-size',
+	'--text-subheading-size',
+	'--text-body-size',
+	'--text-body-sm-size',
+	'--text-label-size',
+	'--text-meta-size'
+];
+const spacingSteps = [
+	'--space-1',
+	'--space-2',
+	'--space-3',
+	'--space-4',
+	'--space-5',
+	'--space-6',
+	'--space-7',
+	'--space-8',
+	'--space-10',
+	'--space-12'
+];
+
+const TYPE_GROWTH = 1.2;
+const SPACING_GROWTH = 1.5;
+
+const fluidSteps = [
+	...typeSteps.map((name) => [name, TYPE_GROWTH] as const),
+	...spacingSteps.map((name) => [name, SPACING_GROWTH] as const)
+];
+
+describe('the ramp is declared once', () => {
+	it('runs 320px to 1920px, and both ends are font-relative', () => {
+		expect(rampMin).toBe(20);
+		expect(rampMax).toBe(120);
+	});
+
+	it('writes those two numbers nowhere else -- every step derives from them', () => {
+		/* A step that spelled out 320 or 1920 would be a second copy of the
+		   ramp, and the two copies would drift the first time one moved. */
+		const offenders = fluidSteps
+			.map(([name]) => [name, light.get(name)!] as const)
+			.filter(([, value]) => /\b(320|1920|20rem|120rem)\b/.test(value))
+			.map(([name]) => name);
+		expect(offenders).toStrictEqual([]);
+	});
+});
+
+describe('every size and every space is a fluid step', () => {
+	it('leaves no --text-*-size or --space-* static', () => {
+		const covered = new Set(fluidSteps.map(([name]) => name));
+		const uncovered = [...light]
+			.filter(([name]) => /^--text-[\w-]+-size$/.test(name) || /^--space-\d+$/.test(name))
+			.filter(([name]) => !covered.has(name))
+			.map(([name]) => name);
+		expect(uncovered).toStrictEqual([]);
+	});
+
+	it.each(fluidSteps)('%s climbs the ramp from its floor at the scale growth factor', (name, growth) => {
+		const { floor, intercept, coefficient, ceiling } = parseFluidStep(name);
+
+		// The ceiling is the floor times the growth factor, and nothing else.
+		expect(ceiling, `${name} ceiling`).toBeCloseTo(floor * growth, 6);
+
+		/* 100cqi is the container's inline size, so the preferred term is
+		   `intercept + slope x 100cqi` with slope = (ceiling - floor) / span.
+		   The span is 100rem, which makes the cqi coefficient exactly the
+		   distance the step travels. */
+		const span = rampMax - rampMin;
+		const slope = (ceiling - floor) / span;
+		expect(coefficient, `${name} growth term`).toBeCloseTo(slope * 100, 6);
+		expect(intercept, `${name} intercept`).toBeCloseTo(floor - slope * rampMin, 6);
+	});
+
+	/* WCAG 1.4.4 asks that text reach 200% without loss. Barvian's rule --
+	   the only stated ratio rule anywhere -- is that a fluid step whose
+	   ceiling is more than 2.5x its floor cannot get there, because browser
+	   zoom shrinks the viewport the growth term is measured against. No
+	   source states the rule for `cqi` rather than `vw`, so #540 also zoomed
+	   a real page by hand; this guard is the arithmetic half of that. */
+	it.each(fluidSteps)('%s keeps its ceiling within 2.5x its floor (WCAG 1.4.4)', (name) => {
+		const { floor, ceiling } = parseFluidStep(name);
+		expect(ceiling / floor).toBeLessThanOrEqual(2.5);
+	});
+});

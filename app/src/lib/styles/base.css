@@ -2,7 +2,25 @@
  * Base element styling, sourced from tokens.css. Wayfinder #98.
  */
 
+/*
+ * The root containment context (#540).
+ *
+ * Every type and spacing token is a `clamp()` whose growth term is `cqi`,
+ * and a `cqi` resolves at the point of USE, against the consuming
+ * element's nearest ancestor container -- falling back to the small
+ * viewport when there is none. Only `container-l` declares a container,
+ * and almost every component in the app sits outside one, so without this
+ * declaration a `cqi` token would silently mean "the window" nearly
+ * everywhere and the whole scale would be viewport-derived by accident.
+ *
+ * It is on `body` rather than on the SvelteKit mount point, because that
+ * is a `display: contents` wrapper with no principal box and therefore
+ * cannot be a container. `html` is not used either: `container-type`
+ * makes an element the containing block for fixed-position descendants,
+ * and the root element is one place that is worth not disturbing.
+ */
 body {
+	container-type: inline-size;
 	font-family: var(--font-family-base);
 	font-size: var(--text-body-size);
 	font-weight: var(--text-body-weight);
