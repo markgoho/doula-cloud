@@ -30,9 +30,10 @@
 			-- a URL somebody pasted into a free-text field -- fit at 320px anyway.
 		</p>
 		<p>
-			You are done when the continuum check finds no break in it from 320px up:
-			<code>bun run test -- continuum</code> in <code>app/</code>, or the exercise's own spec next to
-			these files.
+			You are done when the continuum check finds no break in it from 320px up. In
+			<code>app/</code>: <code>./node_modules/.bin/vitest --run --project client layoutExercise</code>
+			for this exercise alone, or <code>... continuum</code> for every component the style guide
+			lists. <code>bun run test</code> runs both, and more besides.
 		</p>
 		<p>
 			<code>ContactCardFinished.svelte</code> is the answer. Diff it against START when you are done,
