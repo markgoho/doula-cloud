@@ -133,6 +133,15 @@
 			container: data-table / inline-size;
 		}
 
+		/* The base size re-resolved against the frame (#544): a `cqi`
+		   resolves against the nearest ANCESTOR container, so `.frame`
+		   cannot answer its own. The cells below declare `body-sm` and are
+		   unaffected; this covers everything in the record view that does
+		   not. */
+		.frame > * {
+			font-size: var(--text-body-size);
+		}
+
 		/* No inline size at all, which is the whole of #542's answer: a
 		   table with an auto width shrink-to-fits by the CSS table
 		   algorithm -- max(min-content, min(max-content, available)) -- so

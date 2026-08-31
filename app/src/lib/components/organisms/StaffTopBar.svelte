@@ -122,6 +122,14 @@
 			background-color: var(--color-surface-bright);
 		}
 
+		/* The base size re-resolved against the bar (#544): a `cqi`
+		   resolves against the nearest ANCESTOR container, so `header`
+		   cannot answer its own, and text inside it would otherwise carry
+		   the size computed for the page. */
+		header > * {
+			font-size: var(--text-body-size);
+		}
+
 		.wide,
 		.narrow {
 			align-items: center;

@@ -22,12 +22,28 @@ import { styleLines } from './styleLines';
  * rather than about outcome -- a source rule holds at every available
  * space precisely because it never measures one.
  *
- * Deliberately only two rules. Fixed pixel widths, bare `1fr` grid tracks
- * and `white-space: nowrap` all have legitimate uses, so a source check on
- * them fires on correct code until somebody suppresses it, and a gate that
- * is routinely suppressed has stopped being a gate. These two are
- * different: a width media query is wrong by ADR-0024 rule 3 every time it
- * appears, and `100vw` is wrong every time it appears.
+ * Deliberately only three rules. Fixed pixel widths, bare `1fr` grid
+ * tracks and `white-space: nowrap` all have legitimate uses, so a source
+ * check on them fires on correct code until somebody suppresses it, and a
+ * gate that is routinely suppressed has stopped being a gate. These three
+ * are different: a width media query is wrong by ADR-0024 rule 3 every
+ * time it appears, `100vw` is wrong every time it appears, and a
+ * containment context that does not re-declare the base size inside
+ * itself is wrong every time it appears (#544).
+ *
+ * ## Why rule 3 is a source check when the defect it catches is visual
+ *
+ * A `cqi` resolves against the nearest ANCESTOR container, so an element
+ * that declares a container never resolves against its own -- and
+ * `font-size` inherits as a computed length rather than as the token, so
+ * text that merely inherits carries whatever size was computed OUTSIDE
+ * the new container. Nothing rendering can see this reliably: the
+ * continuum check's own browser window is ~414px wide, which makes the
+ * outside and the inside nearly the same number there, and the defect
+ * only opens up on a real screen. #544 measured `Description list`
+ * needing 452px inside a 320px frame at a 1440px window against 399px
+ * once the pairing was in place. A gate that only fires in a wide browser
+ * is not a gate, so this one reads the source instead.
  *
  * ## The escape hatch, and the rule that does not have one
  *
@@ -104,23 +120,95 @@ const WIDTH_MEDIA = /@media[^{]*\bwidth\b/;
  */
 const STATIC_VW = /\d[\d.]*vw\b/;
 
+/*
+ * A declaration that makes an element a containment context, in either
+ * spelling: the longhand `container-type`, and the `container` shorthand
+ * that names the context as well. `block-size` containment is not one --
+ * a `cqi` needs an inline axis to resolve against.
+ */
+const CONTAINMENT_CONTEXT = /(container-type:\s*(inline-size|size)\b)|(container:[^;]*\/\s*(inline-size|size)\b)/;
+
+/*
+ * The pairing rule 3 demands: the base size, re-declared so it resolves
+ * against the container the same file just declared. It is deliberately
+ * the literal `var(--text-body-size)` rather than any `--text-*-size`,
+ * because a container whose cells declare `body-sm` has still said
+ * nothing about the text in it that declares nothing -- which is exactly
+ * the text this ticket found answering the window.
+ */
+const BASE_SIZE = /font-size:\s*var\(--text-body-size\)/;
+
 interface FileOffences {
 	widthMedia: Offence[];
 	staticVw: Offence[];
+	unpairedContainer: Offence[];
 }
 
 /*
- * Two passes over the same source. The unfiltered one is what rule 1
- * judges, so no marker can reach it. The filtered one is what an in-force
- * `layout:ignore` has already survived, and it is what rule 2 judges.
+ * Which rule block each style line sits in, by counting braces. Rule 3
+ * needs it because the whole point of the pairing is that the base size
+ * is declared on a DIFFERENT selector from the container -- the
+ * container's children. A file-level check would pass the exact defect
+ * #544 found, since `body { container-type: inline-size; font-size:
+ * var(--text-body-size); }` holds both lines and answers the window with
+ * every one of them.
+ *
+ * Counting rather than parsing is enough here: a declaration that opened
+ * or closed a block would not be a declaration. The unfiltered pass is
+ * what this reads, so a `layout:ignore` elsewhere in the file cannot
+ * remove a brace and shift every block after it.
+ */
+function inBlocks(lines: ReturnType<typeof styleLines>): { line: number; text: string; block: number }[] {
+	let depth = 0;
+	let next = 0;
+	const open: number[] = [];
+	return lines.map(({ line, text }) => {
+		/* The block a one-line rule belongs to is the one it opens, not the
+		   one left standing after its own closing brace. */
+		let block = depth > 0 ? open[depth - 1] : 0;
+		let hasOpened = false;
+		for (const character of text) {
+			if (character === '{') {
+				open[depth] = ++next;
+				depth += 1;
+				if (!hasOpened) {
+					block = open[depth - 1];
+					hasOpened = true;
+				}
+			} else if (character === '}' && depth > 0) {
+				depth -= 1;
+			}
+		}
+		return { line, text, block };
+	});
+}
+
+/*
+ * Two passes over the same source. The unfiltered one is what rules 1 and
+ * 3 judge, so no marker can reach either. The filtered one is what an
+ * in-force `layout:ignore` has already survived, and it is what rule 2
+ * judges.
  */
 function scanSource(file: string, source: string, kind: 'svelte' | 'css'): FileOffences {
+	const lines = styleLines(source, IGNORE, kind);
+	const blocked = inBlocks(styleLines(source, NO_MARKER, kind));
+	const baseSizeBlocks = new Set(
+		blocked.filter(({ text }) => BASE_SIZE.test(text)).map(({ block }) => block)
+	);
 	return {
 		widthMedia: styleLines(source, NO_MARKER, kind)
 			.filter(({ text }) => WIDTH_MEDIA.test(text))
 			.map(({ line, text }) => ({ file, line, found: text.trim() })),
-		staticVw: styleLines(source, IGNORE, kind)
+		staticVw: lines
 			.filter(({ text }) => STATIC_VW.test(text))
+			.map(({ line, text }) => ({ file, line, found: text.trim() })),
+		/* An offence unless some OTHER block in the file declares the base
+		   size: the declaration that pairs with a container sits on the
+		   container's children, so it is never in the block being judged,
+		   and a base size in that same block is the defect itself. */
+		unpairedContainer: blocked
+			.filter(({ text }) => CONTAINMENT_CONTEXT.test(text))
+			.filter(({ block }) => [...baseSizeBlocks].every((paired) => paired === block))
 			.map(({ line, text }) => ({ file, line, found: text.trim() }))
 	};
 }
@@ -136,11 +224,12 @@ function scan(): FileOffences {
 	];
 	return {
 		widthMedia: perFile.flatMap(({ widthMedia }) => widthMedia),
-		staticVw: perFile.flatMap(({ staticVw }) => staticVw)
+		staticVw: perFile.flatMap(({ staticVw }) => staticVw),
+		unpairedContainer: perFile.flatMap(({ unpairedContainer }) => unpairedContainer)
 	};
 }
 
-const { widthMedia, staticVw } = scan();
+const { widthMedia, staticVw, unpairedContainer } = scan();
 
 function report(offences: Offence[]): string[] {
 	return offences.map(({ file, line, found }) => `${file}:${line} -- ${found}`);
@@ -153,6 +242,10 @@ describe('intrinsic layout (ADR-0024, gated per ADR-0025)', () => {
 
 	it('never sizes on the static viewport width unit', () => {
 		expect(report(staticVw)).toEqual([]);
+	});
+
+	it('re-declares the base size inside every containment context', () => {
+		expect(report(unpairedContainer)).toEqual([]);
 	});
 
 	it('scans the token layer, not only the components', () => {
@@ -216,6 +309,68 @@ describe('what the gate judges', () => {
 			'svelte'
 		);
 		expect(report(found)).toEqual([]);
+	});
+
+	it('fails a container that leaves the base size to inheritance', () => {
+		const longhand = scanSource('x.svelte', wrap('.x { container-type: inline-size; }'), 'svelte');
+		expect(report(longhand.unpairedContainer)).toEqual([
+			'x.svelte:3 -- .x { container-type: inline-size; }'
+		]);
+
+		const shorthand = scanSource('x.css', '.x { container: bar / inline-size; }', 'css');
+		expect(report(shorthand.unpairedContainer)).toEqual([
+			'x.css:1 -- .x { container: bar / inline-size; }'
+		]);
+	});
+
+	it('passes a container that declares the base size on its children', () => {
+		const paired = scanSource(
+			'x.css',
+			'.x {\n\tcontainer-type: inline-size;\n}\n.x > * {\n\tfont-size: var(--text-body-size);\n}',
+			'css'
+		);
+		expect(report(paired.unpairedContainer)).toEqual([]);
+	});
+
+	it('is not satisfied by some other step of the type scale', () => {
+		/* A container whose cells declare `body-sm` has still said nothing
+		   about the text inside it that declares nothing at all, which is
+		   the text #544 found answering the window. */
+		const wrongStep = scanSource(
+			'x.css',
+			'.x {\n\tcontainer-type: inline-size;\n}\n.x td {\n\tfont-size: var(--text-body-sm-size);\n}',
+			'css'
+		);
+		expect(report(wrongStep.unpairedContainer)).toEqual(['x.css:2 -- container-type: inline-size;']);
+	});
+
+	it('is not satisfied by the base size declared on the container itself', () => {
+		/* The exact shape of the defect: `body` declared both, and answered
+		   the window with every element that inherited from it. */
+		const onItself = scanSource(
+			'x.css',
+			'.x {\n\tcontainer-type: inline-size;\n\tfont-size: var(--text-body-size);\n}',
+			'css'
+		);
+		expect(report(onItself.unpairedContainer)).toEqual(['x.css:2 -- container-type: inline-size;']);
+	});
+
+	it('is not satisfied by a comment that merely mentions the base size', () => {
+		/* `styleLines` strips comments before it returns a line, so prose
+		   cannot pair a container -- which matters here more than in rules
+		   1 and 2, because this file's own rationale quotes the exact
+		   declaration it looks for. */
+		const inProse = scanSource(
+			'x.css',
+			'/* pair this with font-size: var(--text-body-size) one day */\n.x {\n\tcontainer-type: inline-size;\n}',
+			'css'
+		);
+		expect(report(inProse.unpairedContainer)).toEqual(['x.css:3 -- container-type: inline-size;']);
+	});
+
+	it('leaves a name-only container alone, which establishes no context', () => {
+		const nameOnly = scanSource('x.css', '.x { container-name: bar; }', 'css');
+		expect(report(nameOnly.unpairedContainer)).toEqual([]);
 	});
 
 	it('fails a static vw, and excuses one that says why', () => {

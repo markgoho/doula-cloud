@@ -228,3 +228,11 @@ _Avoid_: Breakpoint range, min/max viewport, screen sizes
 **Growth factor**:
 How much a **fluid step** grows from floor to ceiling, expressed as a multiple: 1.2 for type, 1.5 for spacing. It is chosen once for a whole scale rather than per step, so the relationships inside the scale hold at both ends of **the ramp**. Its ceiling is 2.5, which is what keeps text **able to reach** 200% within the 500% a browser zooms to: at deep zoom every step sits on its `rem` floor, so reaching twice a value that may be as large as the ceiling needs a zoom of 2 × the growth factor, and 2 × 2.5 = 5. WCAG 1.4.4 asks that 200% be reachable, not that the browser's 200% setting render it — a fluid step renders 1.6× to 2.0× there, and the repo commits to reachability plus never shrinking, not to the detent.
 _Avoid_: Scale ratio, modular ratio (those name the relationship between neighboring steps, which is a different number this repo does not use)
+
+**Containment context**:
+An element that declares itself the thing its descendants measure **available space** against, so a container query and a container unit inside it answer that element rather than the page. `body` is one, which is what stops a **fluid step** meaning "the window" in the components that sit outside every other one. It is not a layout of its own and it names no width; it only decides which box the question is asked of.
+_Avoid_: Query root, breakpoint scope, responsive container
+
+**The pairing**:
+The rule that a **containment context** declares the base size on its children, never on itself. A container unit resolves against the nearest _ancestor_ container, so an element that declares a container never resolves against its own; and `font-size` inherits as a computed length rather than as the token, so text that merely inherits carries whatever size was computed _outside_ the container it now sits in. One declaration on the container's children re-resolves the token there, and everything below inherits a length that answers **available space**. Every containment context in the repo owes it, and a source gate holds them to it. Its absence is invisible on a narrow screen, where the outside and the inside are nearly the same number, and opens up on a wide one.
+_Avoid_: Font-size reset, cascade fix, inherit override

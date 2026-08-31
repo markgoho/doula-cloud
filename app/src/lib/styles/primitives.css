@@ -194,6 +194,18 @@ container-l {
 }
 
 /*
+ * The base size, re-resolved against this container (#544). A `cqi`
+ * resolves against the nearest ANCESTOR container, so `container-l`
+ * cannot answer itself; the declaration goes on its children, and
+ * everything below inherits that length. Without it the contents of a
+ * `container-l` keep whatever size was computed outside it -- which is
+ * exactly the thing this primitive exists to stop.
+ */
+container-l > * {
+	font-size: var(--text-body-size);
+}
+
+/*
  * Accessibility utilities, not Every Layout elements, but the same
  * `utilities` layer: a plain class, usable from any component's markup
  * without a scoped copy of its own. Consolidated here after #513 found
