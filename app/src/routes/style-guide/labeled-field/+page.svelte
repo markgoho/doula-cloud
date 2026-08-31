@@ -1,9 +1,11 @@
 <script lang="ts">
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 
 	let name = $state('');
 	let email = $state('');
+	let isAttestation = $state(false);
 </script>
 
 <stack-l space="var(--space-6)">
@@ -47,10 +49,26 @@
 
 	<section>
 		<h2>Inline orientation</h2>
-		<LabeledField label="Full legal name, as it appears on the Contract" orientation="inline">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput {id} {describedBy} {invalid} value={name} onInput={(value) => (name = value)} />
-			{/snippet}
-		</LabeledField>
+		<stack-l space="var(--space-4)">
+			<LabeledField label="Full legal name, as it appears on the Contract" orientation="inline">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput {id} {describedBy} {invalid} value={name} onInput={(value) => (name = value)} />
+				{/snippet}
+			</LabeledField>
+			<!--
+				A checkbox, not only a text input (#510): a checkbox's own fixed
+				width is what exposed the orphaned-label defect, and this is the
+				actual consent wording from SignContract -- the longest label an
+				inline field carries anywhere in the app (ADR-0025).
+			-->
+			<LabeledField
+				label="I have read this Contract and I am signing it electronically"
+				orientation="inline"
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<Checkbox {id} {describedBy} {invalid} checked={isAttestation} onChange={(checked) => (isAttestation = checked)} />
+				{/snippet}
+			</LabeledField>
+		</stack-l>
 	</section>
 </stack-l>

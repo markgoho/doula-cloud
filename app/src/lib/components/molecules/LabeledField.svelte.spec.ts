@@ -133,13 +133,33 @@ describe('LabeledField.svelte', () => {
 		);
 	});
 
-	it('renders the control before the label inside a cluster-l wrapper in inline orientation', async () => {
-		const { container } = await setup({ orientation: 'inline' });
+	it('renders the control before the label in inline orientation', async () => {
+		await setup({ orientation: 'inline' });
 
 		const label = page.getByText('Client name').element();
 		const control = page.getByLabelText('Client name').element();
 
 		expect(control.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-		expect(container.querySelector('cluster-l')).toContainElement(control);
+	});
+
+	/*
+	 * Regression, #510: an inline row that could not hold both items dropped
+	 * the whole label onto its own line below the control -- an unlabelled
+	 * control followed by a stray sentence. Reproduced at 320px (ADR-0024)
+	 * with a label long enough that it cannot share a line with the control,
+	 * the same shape as SignContract's consent checkbox. Asserted on the
+	 * label's own top edge rather than markup, because the label staying
+	 * beside the control -- not merely inside some wrapper -- is the thing
+	 * that was broken.
+	 */
+	it('keeps a long inline label beside its control instead of dropping it to its own line, at 320px', async () => {
+		await page.viewport(320, 400);
+		const longLabel = 'I have read this Contract and I am signing it electronically';
+		const { container } = await setup({ orientation: 'inline', label: longLabel });
+
+		const control = page.getByLabelText(longLabel).element();
+		const label = container.querySelector('label') as HTMLLabelElement;
+
+		expect(label.getBoundingClientRect().top).toBeLessThan(control.getBoundingClientRect().bottom);
 	});
 });

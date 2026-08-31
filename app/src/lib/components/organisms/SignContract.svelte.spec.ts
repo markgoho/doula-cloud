@@ -107,4 +107,26 @@ describe('SignContract.svelte', () => {
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to sign');
 	});
+
+	/*
+	 * Regression, #510: the consent checkbox's label is the longest an
+	 * inline field carries anywhere in the app, and it orphaned onto its own
+	 * line at 320px (ADR-0024). The viewport has to be narrowed after
+	 * `affirmDisclosure`, not before -- the disclosure screen is what a
+	 * static sweep of the style guide's own fixture sees, and it has no
+	 * checkbox in it at all, which is why the earlier defect went unnoticed.
+	 */
+	it('checks the consent checkbox with its label attached, at 320px', async () => {
+		await setup();
+		await affirmDisclosure();
+		await page.viewport(320, 700);
+
+		const labelText = 'I have read this Contract and I am signing it electronically';
+		const control = page.getByLabelText(labelText);
+		await control.click();
+
+		await expect.element(control).toBeChecked();
+		const label = page.getByText(labelText).element();
+		expect(label.getBoundingClientRect().top).toBeLessThan(control.element().getBoundingClientRect().bottom);
+	});
 });

@@ -73,10 +73,27 @@
 <stack-l space="var(--space-1)">
 	{#if orientation === 'inline'}
 		{@render fieldError()}
-		<cluster-l>
+		<!--
+			A two-track grid, not cluster-l (#510): cluster-l is flex-wrap, and
+			a flex row that cannot hold both items drops the whole label to a
+			second line below the control -- an unlabelled control followed by
+			a stray sentence, worst on SignContract's long consent label. Two
+			other shapes were rejected. Keeping the wrap and indenting the
+			label (text-indent/padding hanging-indent) still lets the label
+			leave the control behind on line one, and has to guess a fixed
+			indent that only coincidentally matches whichever control is
+			rendered (a 1.5rem checkbox, a 2.5rem toggle). Falling back to a
+			stacked layout below some width is a breakpoint under another
+			name, which ADR-0024 rules out for a sizing problem. `auto
+			minmax(0, 1fr)` needs no query at all: the control keeps its own
+			intrinsic width and the label wraps in whatever is left, at any
+			width -- ADR-0024's rule 1, and ADR-0025's minimum-size note is why
+			the label's track is `minmax(0, 1fr)` rather than a bare `1fr`.
+		-->
+		<div class="inline-row">
 			{@render control()}
 			{@render fieldLabel()}
-		</cluster-l>
+		</div>
 	{:else}
 		{@render fieldLabel()}
 		{@render fieldHint()}
@@ -114,6 +131,13 @@
 		p[role='alert'] {
 			color: var(--color-error);
 			font-size: var(--text-body-sm-size);
+		}
+
+		.inline-row {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr);
+			align-items: start;
+			gap: var(--space-4);
 		}
 	}
 </style>
