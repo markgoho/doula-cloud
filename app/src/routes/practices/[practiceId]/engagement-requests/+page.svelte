@@ -24,9 +24,8 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import {
-		formatCalendarDay,
-		formatInstant,
 		kindLabel,
 		loadPendingRequests,
 		type PendingRequestItem

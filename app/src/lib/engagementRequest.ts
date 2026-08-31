@@ -278,34 +278,14 @@ export async function loadPendingRequests(
 
 /*
  * The two screens either side of a Request -- the inbox and the approval
- * screen -- print the same three values the same way, so the formatting
- * lives here rather than in whichever of them was written first.
+ * screen -- read a kind the same way, so the word it prints lives here
+ * rather than in whichever of them was written first. The dates they
+ * both print moved to `dates.ts` once the Client portal needed them too
+ * (#505).
  */
 
 /** The label a kind reads as, falling back to the raw enum value so an
  * enum this build has not met yet still prints something. */
 export function kindLabel(kind: string): string {
 	return { birth: 'Birth', postpartum: 'Postpartum' }[kind] ?? kind;
-}
-
-/** A timestamp is an instant, and reads correctly in the reader's own
- * zone. */
-export function formatInstant(value: string): string {
-	return new Date(value).toLocaleDateString(undefined, {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric'
-	});
-}
-
-/** A due date is a calendar day, not an instant: it must not shift by one
- * when the reader's zone is behind UTC, so the day is built from its own
- * parts rather than parsed as UTC midnight. */
-export function formatCalendarDay(value: string): string {
-	const [year, month, day] = value.split('-').map(Number);
-	return new Date(year!, month! - 1, day!).toLocaleDateString(undefined, {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric'
-	});
 }

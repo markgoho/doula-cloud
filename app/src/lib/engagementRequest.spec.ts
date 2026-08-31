@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	approveRequest,
-	formatCalendarDay,
-	formatInstant,
 	kindLabel,
 	loadApprovalDetail,
 	loadPendingRequests,
@@ -225,34 +223,12 @@ describe('loadPendingRequests', () => {
 	});
 });
 
-describe('the words and dates both Request screens print', () => {
+describe('kindLabel', () => {
 	it.each([
 		['birth', 'Birth'],
 		['postpartum', 'Postpartum'],
 		['something-new', 'something-new']
 	])('labels the %s kind as %s', (kind, expected) => {
 		expect(kindLabel(kind)).toBe(expected);
-	});
-
-	// The one that matters: a due date is a calendar day, so it must read
-	// as the day it was typed no matter which zone the reader sits in.
-	it('reads a calendar day as its own parts, not as UTC midnight', () => {
-		expect(formatCalendarDay('2027-03-01')).toBe(
-			new Date(2027, 2, 1).toLocaleDateString(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			})
-		);
-	});
-
-	it('reads a timestamp as an instant in the reader own zone', () => {
-		expect(formatInstant('2026-08-01T10:00:00Z')).toBe(
-			new Date('2026-08-01T10:00:00Z').toLocaleDateString(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			})
-		);
 	});
 });

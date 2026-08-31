@@ -14,7 +14,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { formatCalendarDay } from '#lib/engagementRequest.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
