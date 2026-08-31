@@ -178,6 +178,34 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 	return engagementId;
 }
 
+// Seeds a second Staff member straight into `staff` and
+// `practice_memberships`, with a Membership at an existing Practice
+// holding whatever roles/employmentType the caller states. #525: there is
+// no way to reach this through the API alone -- UpdateMembershipHandler
+// refuses to strip the last Owner role, so the Practice's own signup
+// Owner can never be demoted into a second role set, and the Staff
+// invitation's token is mailed and never returned by the API (see
+// offer.e2e.ts's comment on the same limit). Same footing as
+// seedClientPortalUser and seedEngagement above: it goes around both
+// limits rather than weakening either rule they exist to enforce.
+export function seedStaffMembership(
+	identityUID: string,
+	name: string,
+	email: string,
+	practiceId: string,
+	roles: string[],
+	employmentType: string
+): string {
+	const staffId = randomUUID();
+	execSQL(
+		`INSERT INTO staff (id, identity_uid, name, email, work_state) VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(identityUID)}, ${sqlLiteral(name)}, ${sqlLiteral(email)}, 'NY')`
+	);
+	execSQL(
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ${sqlLiteral(`{${roles.join(',')}}`)}::practice_role[], ${sqlLiteral(employmentType)}::employment_type)`
+	);
+	return staffId;
+}
+
 export function stopStack() {
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });

@@ -1,5 +1,10 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { seedClient, seedPortalClient, PORTAL_CLIENT_PASSWORD } from './portalClient';
+import {
+	seedClient,
+	seedContractorDoula,
+	seedPortalClient,
+	PORTAL_CLIENT_PASSWORD
+} from './portalClient';
 
 /**
  * The half of the accessibility gate axe cannot see (#447): whether a
@@ -239,4 +244,36 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	);
 	await page.keyboard.press('Enter');
 	await expect(page).toHaveURL(new RegExp(`${hubURL}$`));
+});
+
+/*
+ * The third walk (#525, ADR-0017): a contractor Doula's Add a Client
+ * door has exactly one control, the explainer's own "Set up a Practice"
+ * link -- everything else on the screen the earlier walks already prove
+ * reachable belongs to the search form this session never renders.
+ */
+test('A contractor Doula reaches the explainer\'s "Set up a Practice" link, with no pointer', async ({
+	page,
+	request
+}) => {
+	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+	const { practiceId } = seeded;
+	const contractor = await seedContractorDoula(request, practiceId);
+
+	await signInByKeyboard(page, contractor.email, practiceId);
+
+	// Entry point, same as the edit-form walk's own hubURL goto above: the
+	// door itself is reached from Clients -> Add a Client in the real
+	// product, and that link is already walked by the Owner's own coverage
+	// in this file's first test.
+	await page.goto(`/practices/${practiceId}/clients/search`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Add a Client' })).toBeVisible();
+
+	await tabTo(
+		page,
+		page.getByRole('link', { name: 'Set up a Practice' }),
+		'the "Set up a Practice" link on the contractor Doula\'s Add a Client door'
+	);
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(/\/signup$/);
 });

@@ -1,7 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT } from './ports';
-import { seedClient, seedPortalClient, PORTAL_CLIENT_PASSWORD } from './portalClient';
+import {
+	seedClient,
+	seedContractorDoula,
+	seedPortalClient,
+	PORTAL_CLIENT_PASSWORD
+} from './portalClient';
 import { seedEngagement } from './stack';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -273,6 +278,31 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 	for (const route of routes) {
 		await scan(page, route);
 	}
+});
+
+// Archetype E's contractor branch (#525, ADR-0017): the explainer door
+// #501 built in place of the search screen for a Staff member who holds
+// the `doula` role and a contractor employment type, with neither `owner`
+// nor `admin`. A separate test rather than a third route in the loop
+// above: that loop is scanned under the Owner's own session, and this
+// branch renders only under a session the Owner can never hold.
+test('Archetype E -- the contractor Doula door onto clients/search', async ({ page, request }) => {
+	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+	const { practiceId } = seeded;
+	const contractor = await seedContractorDoula(request, practiceId);
+
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(contractor.email);
+	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
+	await page.getByRole('button', { name: 'Log in' }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+
+	await scan(page, {
+		key: 'practices/[practiceId]/clients/search (contractor)',
+		archetype: 'E',
+		url: `/practices/${practiceId}/clients/search`,
+		h1: 'Add a Client'
+	});
 });
 
 // Archetypes D and G, behind a Client-portal session. Both G routes

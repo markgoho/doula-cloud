@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn } from './auth';
-import { seedClientPortalUser, seedEngagement } from './stack';
+import { seedClientPortalUser, seedEngagement, seedStaffMembership } from './stack';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -64,6 +64,45 @@ export async function seedClient(
 	expect(created.ok(), `seedClient failed: ${created.status()} ${body}`).toBe(true);
 	const { id } = JSON.parse(body);
 	return id;
+}
+
+export interface SeededContractorDoula {
+	staffId: string;
+	email: string;
+	headers: { Cookie: string };
+}
+
+/**
+ * Provisions a second Staff member at an existing Practice, holding the
+ * `doula` role and a contractor employment type -- neither `owner` nor
+ * `admin`. #525 found no way to reach that combination for a *second*
+ * account through the API: `seedStaffMembership` (stack.ts) seeds the
+ * Membership directly rather than going through the invitation flow or
+ * `UpdateMembershipHandler`. Reusable by any spec that needs a session
+ * behind ADR-0008's contractor gate, not just the one route #525 was
+ * filed for.
+ */
+export async function seedContractorDoula(
+	request: APIRequestContext,
+	practiceId: string
+): Promise<SeededContractorDoula> {
+	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+	const email = `contractor-${unique}@example.com`;
+
+	const signUp = await request.post(
+		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
+		{ data: { email, password: PORTAL_CLIENT_PASSWORD, returnSecureToken: true } }
+	);
+	expect(
+		signUp.ok(),
+		`contractor doula signUp failed: ${signUp.status()} ${await signUp.text()}`
+	).toBe(true);
+	const { idToken, localId } = await signUp.json();
+
+	const staffId = seedStaffMembership(localId, 'Casey Contractor', email, practiceId, ['doula'], 'contractor');
+	const headers = await signIn(request, API_URL, idToken);
+
+	return { staffId, email, headers };
 }
 
 /**
