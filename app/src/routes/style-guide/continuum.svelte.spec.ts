@@ -52,8 +52,7 @@ const demos = toDemos(pageModules, [
 const KNOWN_BROKEN: Readonly<Record<string, string>> = {
 	'description-list': '#530',
 	link: '#548',
-	'birth-plan-view': '#552',
-	'contract-view': '#553'
+	'birth-plan-view': '#552'
 };
 
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
