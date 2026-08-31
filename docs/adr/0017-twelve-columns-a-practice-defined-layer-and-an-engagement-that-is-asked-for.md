@@ -174,9 +174,11 @@ portal **login** was never `clients.email`, and is already hers (see below) — 
 ## Finding a returning Client
 
 **Search is the first screen of intake, and the only door to it.** There is no top-level *Add a
-Client* action. The route is *Clients → Add a Client → search → her record → Request Engagement
-start*, and the empty state carries whatever was typed into a new record, so searching costs a
-staff member nothing when the woman is genuinely new.
+Client* action. The route is *Clients → Find or add a Client → search → her record → Request
+Engagement start* ([#539](https://github.com/markgoho/doula-cloud/issues/539) relabelled the
+Clients list's link, which had read only *Add a Client* even though it served both errands), and
+the empty state carries whatever was typed into a new record, so searching costs a staff member
+nothing when the woman is genuinely new.
 
 The match query runs on **name, date of birth, email and phone, within `clients.practice_id`**. It
 is a within-Practice lookup and that is the settled rule, not a limitation to work around: a Client
@@ -285,6 +287,16 @@ own. It links to plain `/signup` as a stopgap. The real route — a trial, Strip
 what the Practice she contracts for learns, which Practice she lands in when she signs in — is an
 acquisition decision with its own tree, chartered as
 [#395](https://github.com/markgoho/doula-cloud/issues/395).
+
+**Her route to a Client she is attached to is the Clients list itself, not a search.**
+[#539](https://github.com/markgoho/doula-cloud/issues/539) settled this: `ListHandler` already
+narrows a contractor's Clients list to her own attachments (the read-table row above), so she needs
+neither *Find or add a Client* nor a search to reach one — the list she already sees on landing is
+that route, in full. The Clients list therefore hides *Find or add a Client* from her outright
+rather than relabelling it, mirroring the same load-time gate `clients/search/+page.ts` uses for
+#501's door. Hiding the control removes the explain-only door's only link for her, so an empty
+Clients list gives it back: the empty state names why (work reaches her as an Offer) and links to
+that door.
 
 ### Two corrections to things the repo believed
 

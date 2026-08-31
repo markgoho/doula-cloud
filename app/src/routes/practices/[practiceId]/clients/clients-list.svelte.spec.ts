@@ -50,17 +50,20 @@ beforeEach(() => {
 	searchParameters.delete('all');
 });
 
-async function setup(response: Response = jsonResponse({ items: clients, hasMore: false })) {
+async function setup(
+	response: Response = jsonResponse({ items: clients, hasMore: false }),
+	isContractor = false
+) {
 	apiFetchWithSession.mockResolvedValue(response);
-	await render(Page, {});
+	await render(Page, { data: { isContractor } });
 }
 
 describe('clients list screen', () => {
-	it('sends "Add a Client" to the search that fronts intake, not straight to intake (#498)', async () => {
+	it('sends "Find or add a Client" to the search that fronts intake, not straight to intake (#498, #539)', async () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Add a Client' }))
+			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
 			.toHaveAttribute('href', '/practices/practice-1/clients/search');
 	});
 
@@ -137,6 +140,55 @@ describe('clients list screen', () => {
 
 		await expect.element(testPage.getByText('Server rejected the Clients list request')).toBeVisible();
 		await expect.element(testPage.getByRole('table')).not.toBeInTheDocument();
+	});
+});
+
+// #539 (ADR-0017): a contractor Doula originates nothing at a Practice she
+// contracts for -- neither errand behind "Find or add a Client" is hers --
+// and her narrowed list is already her route to a Client she is attached
+// to, so the control is gone rather than merely relabelled for her.
+describe('a contractor Doula without the owner or admin role', () => {
+	it('does not see "Find or add a Client" at all', async () => {
+		await setup(jsonResponse({ items: clients, hasMore: false }), true);
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('names why her list is empty rather than reusing "No Clients yet."', async () => {
+		await setup(jsonResponse({ items: [], hasMore: false }), true);
+
+		await expect
+			.element(testPage.getByText('Work reaches you as an Offer, so there are no Clients here yet.'))
+			.toBeVisible();
+	});
+
+	it('links her empty list to #501\'s explain-only door', async () => {
+		await setup(jsonResponse({ items: [], hasMore: false }), true);
+
+		await expect
+			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
+			.toHaveAttribute('href', '/practices/practice-1/clients/search');
+	});
+
+	it('does not show the explainer link once she has attached Clients', async () => {
+		await setup(jsonResponse({ items: clients, hasMore: false }), true);
+
+		await expect
+			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
+			.not.toBeInTheDocument();
+	});
+});
+
+describe('a non-contractor with an empty list', () => {
+	it('shows the plain empty message with no explainer link', async () => {
+		await setup(jsonResponse({ items: [], hasMore: false }));
+
+		await expect.element(testPage.getByText('No Clients yet.')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
+			.not.toBeInTheDocument();
 	});
 });
 

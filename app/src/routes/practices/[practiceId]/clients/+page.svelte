@@ -9,6 +9,16 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import type { PageProps as PageProperties } from './$types';
+
+	// #539 (ADR-0017): +page.ts's load already decided, before this
+	// component mounted, whether the caller is a contractor Doula with
+	// neither the owner nor the admin role. `data` is optional only so
+	// this component's own spec (which renders it directly, bypassing
+	// SvelteKit's load cycle) keeps working without a fixture -- every
+	// real navigation always supplies it.
+	let { data }: { data?: PageProperties['data'] } = $props();
+	const isContractor = $derived(data?.isContractor ?? false);
 
 	let clients = $state<ClientListItem[]>([]);
 	let error = $state('');
@@ -141,20 +151,35 @@
 			error = error_ instanceof Error ? error_.message : 'Failed to load more Clients';
 		}
 	}
+
+	function searchHref(): string {
+		return resolve('/practices/[practiceId]/clients/search', {
+			practiceId: page.params.practiceId!
+		});
+	}
+
+	// #539 (ADR-0017): "No Clients yet." is silent about *why* to a
+	// contractor Doula, who never gets to make one -- the same screen
+	// tells her plainly that work reaches her as an Offer instead.
+	const emptyMessage = $derived(
+		isContractor ? 'Work reaches you as an Offer, so there are no Clients here yet.' : 'No Clients yet.'
+	);
 </script>
 
 <PageTitle page="Clients" />
 <h1>Clients</h1>
 
-<!--
-	The search that fronts intake (#498, ADR-0017): there is no top-level
-	"Add a Client" action, so this button lands on the search screen, not
-	on intake directly. A miss there hands the reader on to intake.
--->
-<Link
-	href={resolve('/practices/[practiceId]/clients/search', { practiceId: page.params.practiceId! })}
-	label="Add a Client"
-/>
+{#if !isContractor}
+	<!--
+		The search that fronts intake (#498, #539, ADR-0017): there is no
+		top-level "Add a Client" action, so this link lands on the search
+		screen, not on intake directly. A miss there hands the reader on to
+		intake. Named for both errands it serves -- finding a returning
+		Client is the one a contractor Doula's own attached-Clients list
+		already covers, which is why she does not see this at all (#539).
+	-->
+	<Link href={searchHref()} label="Find or add a Client" />
+{/if}
 
 <!--
 	The default view is "Clients with work" (ADR-0017); this switches to
@@ -175,8 +200,17 @@
 		rowHref={clientHref}
 		hasMore={isMoreAvailable}
 		onLoadMore={handleLoadMore}
-		emptyMessage="No Clients yet."
+		{emptyMessage}
 	/>
+	{#if isContractor && clients.length === 0}
+		<!--
+			#539, #501 (ADR-0017): hiding "Find or add a Client" above took
+			away this door's only link for a contractor Doula. It only
+			needs to come back here -- once she has an attached Client, the
+			narrowed list above is already her route to it.
+		-->
+		<p><Link href={searchHref()} label="How to add Clients of your own" /></p>
+	{/if}
 {:else}
 	<Skeleton variant="row" lines={8} label="Loading Clients" />
 {/if}

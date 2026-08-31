@@ -262,10 +262,11 @@ test('A contractor Doula reaches the explainer\'s "Set up a Practice" link, with
 
 	await signInByKeyboard(page, contractor.email, practiceId);
 
-	// Entry point, same as the edit-form walk's own hubURL goto above: the
-	// door itself is reached from Clients -> Add a Client in the real
-	// product, and that link is already walked by the Owner's own coverage
-	// in this file's first test.
+	// Entry point, same as the edit-form walk's own hubURL goto above: a
+	// contractor Doula does not see "Find or add a Client" on her Clients
+	// list at all (#539, ADR-0017) -- her only link to this door is the
+	// empty-state explainer on that list, one control this walk does not
+	// re-prove.
 	await page.goto(`/practices/${practiceId}/clients/search`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Add a Client' })).toBeVisible();
 

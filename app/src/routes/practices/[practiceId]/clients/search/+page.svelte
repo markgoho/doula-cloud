@@ -1,12 +1,14 @@
 <script lang="ts">
 	/*
-	 * The search that fronts intake (#498, ADR-0017): "Clients -> Add a
-	 * Client -> search -> her record -> Request Engagement start". There
-	 * is no top-level "Add a Client" action anywhere else in the product
-	 * -- the Clients list's own button lands here, not on intake directly
-	 * (`clients/+page.svelte`), so a returning Client is found rather
-	 * than retyped, and searching costs nothing when she genuinely is
-	 * new.
+	 * The search that fronts intake (#498, #539, ADR-0017): "Clients ->
+	 * Find or add a Client -> search -> her record -> Request Engagement
+	 * start". There is no top-level "Add a Client" action anywhere else
+	 * in the product -- the Clients list's own link lands here for
+	 * everyone who has one, not on intake directly (`clients/+page.svelte`),
+	 * so a returning Client is found rather than retyped, and searching
+	 * costs nothing when she genuinely is new. A contractor Doula has no
+	 * such link (#539) -- her own attached-Clients list is already her
+	 * route to a Client, and an empty one links here instead.
 	 *
 	 * A miss carries every key that was typed into intake as query params
 	 * -- `clients/new/+page.svelte` reads all four on mount and shows each
