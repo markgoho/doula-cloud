@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
-import { signIn } from './auth';
-import { seedClientPortalUser, seedEngagement, seedStaffMembership } from './stack';
+import { signIn, sessionCookieFrom } from './auth';
+import { seedClientPortalUser, seedEngagement, readStaffInviteToken } from './stack';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -75,19 +75,39 @@ export interface SeededContractorDoula {
 /**
  * Provisions a second Staff member at an existing Practice, holding the
  * `doula` role and a contractor employment type -- neither `owner` nor
- * `admin`. #525 found no way to reach that combination for a *second*
- * account through the API: `seedStaffMembership` (stack.ts) seeds the
- * Membership directly rather than going through the invitation flow or
- * `UpdateMembershipHandler`. Reusable by any spec that needs a session
- * behind ADR-0008's contractor gate, not just the one route #525 was
- * filed for.
+ * `admin`. Drives the real invitation and acceptance endpoints rather
+ * than seeding a Membership directly, so this Doula's Membership is
+ * exactly what any real accepted invite produces (roles, employment
+ * type, and the `joined` membership event `AcceptInviteHandler` records).
+ * The one piece no API response ever carries is the invitation's
+ * plaintext token (#316) -- `readStaffInviteToken` (stack.ts) reads it
+ * off the pending `staff_invite_outbox` row instead, which is where it
+ * sits, unmailed, for the whole run: nothing in the e2e stack runs the
+ * outbox worker.
+ *
+ * Takes the Owner's own cookie header, the same way `seedClient` takes
+ * one, so a caller that already has an Owner session does not pay for a
+ * second signup. Reusable by any spec that needs a session behind
+ * ADR-0008's contractor gate, not just the one route #525 was filed for.
  */
 export async function seedContractorDoula(
 	request: APIRequestContext,
-	practiceId: string
+	practiceId: string,
+	ownerHeaders: { Cookie: string }
 ): Promise<SeededContractorDoula> {
 	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const email = `contractor-${unique}@example.com`;
+
+	const invite = await request.post(`${API_URL}/api/practices/${practiceId}/staff/invitations`, {
+		headers: ownerHeaders,
+		data: { email, roles: ['doula'], employmentType: 'contractor' }
+	});
+	const inviteBody = await invite.text();
+	expect(invite.ok(), `contractor invite failed: ${invite.status()} ${inviteBody}`).toBe(true);
+	const { invitationId } = JSON.parse(inviteBody);
+
+	const inviteToken = readStaffInviteToken(invitationId);
+	expect(inviteToken, `no pending staff_invite_outbox row for invitation ${invitationId}`).toBeTruthy();
 
 	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
@@ -97,10 +117,20 @@ export async function seedContractorDoula(
 		signUp.ok(),
 		`contractor doula signUp failed: ${signUp.status()} ${await signUp.text()}`
 	).toBe(true);
-	const { idToken, localId } = await signUp.json();
+	const { idToken } = await signUp.json();
 
-	const staffId = seedStaffMembership(localId, 'Casey Contractor', email, practiceId, ['doula'], 'contractor');
-	const headers = await signIn(request, API_URL, idToken);
+	// AcceptInviteHandler runs before any session exists (a bootstrap
+	// Bearer token, not the __session cookie) and mints the session on
+	// its own response -- the same shape staff/signup uses.
+	const accept = await request.post(`${API_URL}/api/staff/accept-invite`, {
+		headers: { Authorization: `Bearer ${idToken}` },
+		data: { inviteToken, name: 'Casey Contractor', workState: 'NY' }
+	});
+	const acceptBody = await accept.text();
+	expect(accept.ok(), `contractor accept-invite failed: ${accept.status()} ${acceptBody}`).toBe(true);
+	const { staffId } = JSON.parse(acceptBody);
+
+	const headers = sessionCookieFrom(accept, 'accept-invite');
 
 	return { staffId, email, headers };
 }

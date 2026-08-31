@@ -178,32 +178,27 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 	return engagementId;
 }
 
-// Seeds a second Staff member straight into `staff` and
-// `practice_memberships`, with a Membership at an existing Practice
-// holding whatever roles/employmentType the caller states. #525: there is
-// no way to reach this through the API alone -- UpdateMembershipHandler
-// refuses to strip the last Owner role, so the Practice's own signup
-// Owner can never be demoted into a second role set, and the Staff
-// invitation's token is mailed and never returned by the API (see
-// offer.e2e.ts's comment on the same limit). Same footing as
-// seedClientPortalUser and seedEngagement above: it goes around both
-// limits rather than weakening either rule they exist to enforce.
-export function seedStaffMembership(
-	identityUID: string,
-	name: string,
-	email: string,
-	practiceId: string,
-	roles: string[],
-	employmentType: string
-): string {
-	const staffId = randomUUID();
-	execSQL(
-		`INSERT INTO staff (id, identity_uid, name, email, work_state) VALUES (${sqlLiteral(staffId)}, ${sqlLiteral(identityUID)}, ${sqlLiteral(name)}, ${sqlLiteral(email)}, 'NY')`
+// Reads the plaintext token off the pending staff_invite_outbox row for
+// invitationId (#525). InviteResponse deliberately never carries it
+// (#316) and no mailer runs in the e2e stack to consume it, so the row
+// sits there, still in the clear, for exactly as long as this run needs
+// it -- staffinvite.Queue's own comment names that as the token's whole
+// exposure window. `-t -A` (tuples-only, unaligned) is what keeps psql's
+// output to just the value, with no header or border for a caller to
+// strip.
+function querySQLValue(sql: string): string {
+	const output = execFileSync(
+		CONTAINER_ENGINE,
+		['compose', '-f', 'compose.e2e.yaml', 'exec', '-T', 'db', 'psql', '-U', 'app', '-d', 'app', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+		{ timeout: 30_000 }
 	);
-	execSQL(
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(staffId)}, ${sqlLiteral(`{${roles.join(',')}}`)}::practice_role[], ${sqlLiteral(employmentType)}::employment_type)`
+	return output.toString('utf8').trim();
+}
+
+export function readStaffInviteToken(invitationId: string): string {
+	return querySQLValue(
+		`SELECT invite_token FROM staff_invite_outbox WHERE invitation_id = ${sqlLiteral(invitationId)} AND status = 'pending'`
 	);
-	return staffId;
 }
 
 export function stopStack() {

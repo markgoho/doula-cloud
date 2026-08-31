@@ -289,7 +289,7 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 test('Archetype E -- the contractor Doula door onto clients/search', async ({ page, request }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId } = seeded;
-	const contractor = await seedContractorDoula(request, practiceId);
+	const contractor = await seedContractorDoula(request, practiceId, seeded.staffHeaders);
 
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(contractor.email);

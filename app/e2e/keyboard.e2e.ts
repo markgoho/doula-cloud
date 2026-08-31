@@ -258,7 +258,7 @@ test('A contractor Doula reaches the explainer\'s "Set up a Practice" link, with
 }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId } = seeded;
-	const contractor = await seedContractorDoula(request, practiceId);
+	const contractor = await seedContractorDoula(request, practiceId, seeded.staffHeaders);
 
 	await signInByKeyboard(page, contractor.email, practiceId);
 

@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext, type APIResponse } from '@playwright/test';
 
 // Since #151 the BFF reads a Bearer ID token on three bootstrap endpoints
 // only -- Staff signup, the two invitation-acceptance endpoints -- plus
@@ -29,11 +29,21 @@ export async function signIn(
 		`create-session failed: ${created.status()} ${await created.text()}`
 	).toBe(true);
 
-	const setCookie = created
+	return sessionCookieFrom(created, 'create-session');
+}
+
+/**
+ * Pulls the `__session` cookie off a response that set one directly --
+ * create-session's own response above, and AcceptInviteHandler's (#525,
+ * #150), which mints the session in the same response as the acceptance
+ * rather than making a caller sign in as a second step.
+ */
+export function sessionCookieFrom(response: APIResponse, context: string): { Cookie: string } {
+	const setCookie = response
 		.headersArray()
 		.find((h) => h.name.toLowerCase() === 'set-cookie')?.value;
 	const value = setCookie?.match(/__session=([^;]*)/)?.[1];
-	expect(value, `create-session set no __session cookie: ${setCookie}`).toBeTruthy();
+	expect(value, `${context} set no __session cookie: ${setCookie}`).toBeTruthy();
 
 	return { Cookie: `__session=${value}` };
 }
