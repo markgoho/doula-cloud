@@ -260,9 +260,30 @@
 
 		@container (min-width: 60rem) {
 			.body {
-				grid-template-columns: var(--page-rail) minmax(0, 1fr);
+				/*
+				 * A page that asks one question has nothing more to put in a
+				 * wider window, so it does not take the room (#543). The
+				 * leftover goes on both sides rather than all of it at the
+				 * inline end. This is not --page-max coming back: nothing
+				 * here names a page width, and both tracks are the sizes the
+				 * rail and the column already had.
+				 *
+				 * The second track had to stop being `1fr` for this to work
+				 * at all -- a flexible track absorbs every spare pixel, so
+				 * `justify-content` would have had nothing left to
+				 * distribute. `--form-max` is the same cap `.column` carries
+				 * for the stacked state below this query, moved onto the
+				 * track so that free space exists.
+				 *
+				 * The column keeps the width it had: measured on the drag
+				 * surface, `fit-content` on the grid centres the pair too but
+				 * sizes the column to its own longest line, which would make
+				 * one journey's steps each a different width.
+				 */
+				grid-template-columns: var(--page-rail) minmax(0, var(--form-max));
 				column-gap: var(--space-12);
 				align-items: start;
+				justify-content: center;
 			}
 		}
 	}
