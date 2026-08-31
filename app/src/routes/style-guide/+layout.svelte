@@ -58,6 +58,7 @@
 		<nav>
 			<cluster-l space="var(--space-4)">
 				<Link href={resolve('/style-guide')} label="Overview" />
+				<Link href={componentHref('drag-surface')} label="Drag surface" />
 				{#each componentPages as componentPage (componentPage.slug)}
 					<Link href={componentHref(componentPage.slug)} label={componentPage.name} />
 				{/each}
