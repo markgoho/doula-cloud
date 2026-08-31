@@ -65,7 +65,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 describe('billing ledger', () => {
 	it('right-aligns the Quantity column, header and body cell alike (#509)', async () => {
 		// DataTable's own content floor (#508) stacks it into a <dl> below
-		// 44rem, and this checks the <table> cells specifically.
+		// 46rem, and this checks the <table> cells specifically.
 		await testPage.viewport(1440, 900);
 		await render(Page, { params: { practiceId: 'practice-1' }, data });
 

@@ -58,7 +58,7 @@ async function setup(
 	isContractor = false
 ) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
-	// 44rem, and this file's assertions are about the <table> specifically.
+	// 46rem, and this file's assertions are about the <table> specifically.
 	await testPage.viewport(1440, 900);
 	apiFetchWithSession.mockResolvedValue(response);
 	await render(Page, { data: { isContractor } });

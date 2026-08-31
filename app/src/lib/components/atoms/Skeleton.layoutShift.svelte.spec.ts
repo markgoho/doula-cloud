@@ -46,7 +46,7 @@ function caseload(count: number): Row[] {
  */
 async function setup({ rows = 6 }: { rows?: number } = {}) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
-	// 44rem, and this measures the <table> layout specifically.
+	// 46rem, and this measures the <table> layout specifically.
 	await page.viewport(1440, 900);
 	await render(Skeleton, { variant: 'row', lines: rows, label: 'Loading Clients' });
 	const skeleton = await page.getByRole('status').element();

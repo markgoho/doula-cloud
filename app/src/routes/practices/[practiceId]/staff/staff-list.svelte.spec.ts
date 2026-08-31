@@ -182,13 +182,26 @@ function invitationsTable() {
 
 async function setup(options: MockOptions = {}) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
-	// 44rem, and this file's assertions are about the <table> specifically.
+	// 46rem, and this file's assertions are about the <table> specifically.
 	await testPage.viewport(1024, 800);
 	mockApi(options);
 	await render(Page, {});
 }
 
 describe('staff screen', () => {
+	// #508: the actual regression this ticket fixes, checked on the real
+	// route rather than only on the style-guide demo that mirrors its
+	// shape -- a document-level sweep would duplicate continuum.ts, so
+	// this asserts the one number ADR-0024's 320px commitment cares
+	// about, directly, the same way the ticket's own AC states it.
+	it('never scrolls the document sideways at 320px (#508)', async () => {
+		await setup();
+		await testPage.viewport(320, 800);
+
+		await expect.element(testPage.getByRole('heading', { name: 'Members' })).toBeVisible();
+		expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
+	});
+
 	it('lists members with their roles and employment type', async () => {
 		await setup();
 

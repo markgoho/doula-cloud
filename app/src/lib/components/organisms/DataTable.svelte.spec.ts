@@ -53,7 +53,7 @@ interface SetupOptions {
 }
 
 /*
- * The frame is a container at 44rem (DataTable.svelte, ADR-0024), so the
+ * The frame is a container at 46rem (DataTable.svelte, ADR-0024), so the
  * viewport is pinned wide here rather than left to the runner's own
  * default -- a default narrower than that would make every assertion
  * about the <table> view fail for a reason that has nothing to do with

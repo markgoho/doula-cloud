@@ -37,7 +37,7 @@ const postpartumRequest: PendingRequestItem = {
 beforeEach(async () => {
 	apiFetchWithSession.mockReset();
 	// DataTable's own content floor (#508) stacks it into a <dl> below
-	// 44rem, and this file's assertions are about the <table> specifically.
+	// 46rem, and this file's assertions are about the <table> specifically.
 	await testPage.viewport(1440, 900);
 });
 

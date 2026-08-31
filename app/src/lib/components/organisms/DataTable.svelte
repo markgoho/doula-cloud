@@ -167,14 +167,16 @@
 		}
 
 		/* The content floor: Staff's Members table (Name, Email, Roles,
-		   Employment type, Works from, plus its Actions column) is the
-		   widest DataTable built today and needs 680px of natural column
-		   width for its longest realistic values -- measured 2026-08-31 on
-		   /style-guide/data-table's six-column demo. 44rem (704px) covers
-		   that with a small margin against font-metric drift, and it is the
-		   frame's own inline size that is measured, never the viewport
-		   (ADR-0024). A future table wider than this floor moves it. */
-		@container data-table (min-width: 44rem) {
+		   Employment type, Works from, plus its Actions column of three
+		   buttons -- Edit membership, End sessions everywhere, Remove from
+		   practice) is the widest DataTable built today and needs 715px of
+		   natural column width for its longest realistic values --
+		   measured 2026-08-31 on /style-guide/data-table's own demo of
+		   that exact shape. 46rem (736px) covers that with a margin
+		   against font-metric drift, and it is the frame's own inline size
+		   that is measured, never the viewport (ADR-0024). A future table
+		   wider than this floor moves it. */
+		@container data-table (min-width: 46rem) {
 			.table-view {
 				display: table;
 			}
