@@ -11,7 +11,13 @@
 
 	<section>
 		<h2>Default</h2>
-		<LabeledField label="Client name">
+		<!--
+			The longest realistic value, not a representative one (ADR-0025): the
+			label is the longest question this field asks, and the error is
+			GOV.UK's own format-error wording, which is the longest message the
+			component ever carries.
+		-->
+		<LabeledField label="Full legal name, as it appears on the Contract">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput {id} {describedBy} {invalid} value={name} onInput={(value) => (name = value)} />
 			{/snippet}
@@ -25,7 +31,7 @@
 
 	<section>
 		<h2>Error</h2>
-		<LabeledField label="Client email" error="Enter an email address in the correct format, like name@example.com">
+		<LabeledField label="Email address we send the portal invite to" error="Enter an email address in the correct format, like name@example.com">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -41,7 +47,7 @@
 
 	<section>
 		<h2>Inline orientation</h2>
-		<LabeledField label="Client name" orientation="inline">
+		<LabeledField label="Full legal name, as it appears on the Contract" orientation="inline">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput {id} {describedBy} {invalid} value={name} onInput={(value) => (name = value)} />
 			{/snippet}

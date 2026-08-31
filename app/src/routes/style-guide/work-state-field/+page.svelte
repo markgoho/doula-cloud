@@ -1,7 +1,12 @@
 <script lang="ts">
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 
-	let value = $state('');
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): the
+	 * options are the fifty states plus DC, so the longest a Doula can pick
+	 * is "District of Columbia" -- what is selected here.
+	 */
+	let value = $state('District of Columbia');
 </script>
 
 <stack-l space="var(--space-6)">

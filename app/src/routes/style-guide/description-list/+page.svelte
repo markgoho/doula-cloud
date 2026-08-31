@@ -9,8 +9,9 @@
 		<h2>Default</h2>
 		<DescriptionList
 			items={[
-				{ label: 'Status', value: 'Active' },
-				{ label: 'Created', value: '1/1/2026' },
+				{ label: 'Status', value: 'Stripe onboarding incomplete' },
+				{ label: 'Contract signed', value: '14 September 2027 at 09:42' },
+				{ label: 'Client', value: 'Anne-Marie Ochieng-Whitfield' },
 				{
 					label: 'Address',
 					value: '128 Meadowbrook Lane, Apartment 4B, Rochester, NY 14620'

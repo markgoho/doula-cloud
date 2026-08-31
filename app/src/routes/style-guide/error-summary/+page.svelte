@@ -22,8 +22,16 @@
 		event.preventDefault();
 		errors = [];
 		const found: FormError[] = [];
-		if (email.trim() === '') found.push({ message: 'Enter your email address', targetId: emailId });
-		if (password === '') found.push({ message: 'Enter your password', targetId: passwordId });
+		if (email.trim() === '')
+			found.push({
+				message: 'Enter an email address in the correct format, like name@example.com',
+				targetId: emailId
+			});
+		if (password === '')
+			found.push({
+				message: 'Enter the password you chose when you created your account',
+				targetId: passwordId
+			});
 		errors = found;
 	}
 </script>
@@ -41,11 +49,32 @@
 
 	<Heading level={3} variant="card" text="One reason, and several" />
 	<stack-l space="var(--space-6)">
-		<ErrorSummary errors={[{ message: 'Enter your email address', targetId: emailId }]} />
+		<!--
+			The longest realistic value, not a representative one (ADR-0025): an
+			error entry is the message the field itself shows, word for word, so
+			the longest realistic entry is GOV.UK's own format-error wording --
+			which carries an example address, and an address is one string.
+		-->
 		<ErrorSummary
 			errors={[
-				{ message: 'Enter the name of your Practice', targetId: emailId },
-				{ message: 'Choose the state you work from', targetId: emailId },
+				{
+					message:
+						'Enter an email address in the correct format, like name@example.com',
+					targetId: emailId
+				}
+			]}
+		/>
+		<ErrorSummary
+			errors={[
+				{
+					message:
+						'Enter the name of your Practice as it is registered with New York State',
+					targetId: emailId
+				},
+				{
+					message: 'Choose the state you work from, so we can show the right Contract terms',
+					targetId: emailId
+				},
 				{ message: 'Password must be 6 characters or more', targetId: passwordId }
 			]}
 		/>
@@ -57,7 +86,12 @@
 		tone="variant"
 	/>
 	<ErrorSummary
-		errors={[{ message: 'There is a problem with the service. Try again in a few minutes.' }]}
+		errors={[
+			{
+				message:
+					'There is a problem with the service, so nothing you entered was saved. Try again in a few minutes.'
+			}
+		]}
 	/>
 
 	<Heading level={3} variant="card" text="On a real form" />
@@ -68,7 +102,11 @@
 	<form onsubmit={handleSubmit} novalidate>
 		<stack-l space="var(--space-5)">
 			<ErrorSummary {errors} />
-			<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+			<LabeledField
+				id={emailId}
+				label="Email address we send the portal invite to"
+				error={errorFor(emailId)}
+			>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -92,7 +130,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Continue" />
+			<Button type="submit" label="Continue to your Practice details" />
 		</stack-l>
 	</form>
 </stack-l>

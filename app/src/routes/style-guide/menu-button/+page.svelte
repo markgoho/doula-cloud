@@ -16,11 +16,24 @@
 			Deliberately not <code>role="menu"</code>. That role promises arrow-key navigation between
 			items, and these panels hold ordinary links and buttons that Tab already reaches.
 		</p>
+		<!--
+			The longest realistic value, not a representative one (ADR-0025): the
+			trigger of a real MenuButton names a Practice, so its label is as long
+			as a Practice's registered name.
+		-->
 		<cluster-l space="var(--space-6)" align="center">
-			<MenuButton label="Aligned to the inline end" icon="caret-down" align="end">
+			<MenuButton
+				label="Highland Midwifery &amp; Birth Support Collective of Western New York"
+				icon="caret-down"
+				align="end"
+			>
 				<p class="item">The panel's inline end lines up with the trigger's.</p>
 			</MenuButton>
-			<MenuButton label="Aligned to the inline start" icon="caret-down" align="start">
+			<MenuButton
+				label="Highland Midwifery &amp; Birth Support Collective of Western New York"
+				icon="caret-down"
+				align="start"
+			>
 				<p class="item">The panel's inline start lines up with the trigger's.</p>
 			</MenuButton>
 		</cluster-l>

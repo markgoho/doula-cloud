@@ -15,6 +15,12 @@
 <stack-l space="var(--space-6)">
 	<h1>Sign out button</h1>
 
+	<!--
+		No hostile value exists for this component (ADR-0025): it takes no
+		Practice content, and the longest string it can show is the sign-out
+		failure message, which is rendered below.
+	-->
+
 	<section>
 		<h2>Default</h2>
 		<SignOutButton signOut={succeeds} />

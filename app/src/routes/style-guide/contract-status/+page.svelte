@@ -5,6 +5,12 @@
 <stack-l space="var(--space-6)">
 	<h1>Contract status</h1>
 
+	<!--
+		No hostile value exists for this component (ADR-0025): it takes a
+		status and nothing else, so its longest realistic value is the longest
+		of the three states -- and all three are rendered below.
+	-->
+
 	<section>
 		<h2>Draft</h2>
 		<ContractStatus status="draft" />

@@ -14,6 +14,11 @@
 			The two halves of a Membership, edited together: what a person does at a Practice, and what
 			she is to the business.
 		</p>
+		<!--
+			No hostile value exists for this component (ADR-0025): both halves are
+			enums the product defines, so the longest realistic value is the
+			longest role and employment type -- and every one is rendered here.
+		-->
 		<MembershipFields
 			{roles}
 			{employmentType}

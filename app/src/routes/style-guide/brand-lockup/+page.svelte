@@ -16,6 +16,11 @@
 			<code>Doula Cloud</code> versus <code>DoulaCloud</code> by editing one string. This page ships
 			the current two-word form and decides nothing about it.
 		</p>
+		<!--
+			No hostile value exists for this component (ADR-0025): the lockup
+			takes no Practice content at all, and its one string is the
+			product's own name, which never gets longer.
+		-->
 		<stack-l space="var(--space-6)">
 			{#each sizes as size (size)}
 				<BrandLockup {size} />

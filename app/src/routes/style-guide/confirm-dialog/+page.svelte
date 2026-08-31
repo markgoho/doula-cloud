@@ -24,15 +24,15 @@
 			"OK".
 		</p>
 		<Button
-			label="Remove from Practice"
+			label="Remove Anne-Marie Ochieng-Whitfield from the Practice"
 			variant="destructive"
 			onClick={() => (isOpenSucceeds = true)}
 		/>
 		<ConfirmDialog
 			bind:open={isOpenSucceeds}
-			title="Remove from Practice"
-			consequence="This removes the Doula from the Practice. This cannot be undone."
-			confirmLabel="Remove from Practice"
+			title="Remove Anne-Marie Ochieng-Whitfield from the Practice"
+			consequence="This removes the Doula from the Practice, and every Engagement she is working on stops with her. This cannot be undone."
+			confirmLabel="Remove Anne-Marie Ochieng-Whitfield from the Practice"
 			onConfirm={succeeds}
 		/>
 	</section>
@@ -48,7 +48,7 @@
 		<ConfirmDialog
 			bind:open={isOpenFails}
 			title="Decline this offer"
-			consequence="This offer cannot be reinstated once declined."
+			consequence="This offer cannot be reinstated once declined, and the Practice that sent it is told straight away."
 			confirmLabel="Decline this offer"
 			onConfirm={fails}
 		/>

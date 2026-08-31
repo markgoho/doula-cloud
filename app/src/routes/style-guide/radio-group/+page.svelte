@@ -2,8 +2,8 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
-		{ value: 'signup', label: "I'm new here -- create an account" },
-		{ value: 'login', label: 'I already have an account -- log in' }
+		{ value: 'signup', label: "I'm new here -- create an account with this email address" },
+		{ value: 'login', label: 'I already have an account -- log in and add this Practice to it' }
 	];
 
 	let mode = $state<'signup' | 'login'>('signup');
@@ -14,7 +14,7 @@
 
 	<section>
 		<h2>Default</h2>
-		<RadioGroup legend="Account mode" options={modeOptions} value={mode} onChange={(value) => (mode = value)} />
+		<RadioGroup legend="Are you creating an account, or adding this Practice to one you already have?" options={modeOptions} value={mode} onChange={(value) => (mode = value)} />
 	</section>
 
 	<section>

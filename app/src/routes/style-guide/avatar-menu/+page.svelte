@@ -20,7 +20,17 @@
 			Practice-scoped settings are a nav item. What lives here is who is signed in, and the two
 			things she can do about that.
 		</p>
-		<AvatarMenu name="Mark Goho" email="markgoho@gmail.com" accountHref="#account" {signOut} />
+		<!--
+			The longest realistic value, not a representative one (ADR-0025): the
+			name and the address are what decide how wide the open panel gets,
+			and a Practice hands out addresses on its own domain.
+		-->
+		<AvatarMenu
+			name="Anne-Marie Ochieng-Whitfield"
+			email="anne-marie.ochieng-whitfield@highland-midwifery-group.example.org"
+			accountHref="#account"
+			{signOut}
+		/>
 	</section>
 
 	<section>
@@ -29,7 +39,7 @@
 			No email and no Account link: the portal has no per-person screen to reach, and the Client's
 			address is not something the portal asks her to check.
 		</p>
-		<AvatarMenu name="Tasha Bell" signOut={refuses} />
+		<AvatarMenu name="Renata Chiamaka Okonkwo-Adeyemi" signOut={refuses} />
 	</section>
 
 	<section>
