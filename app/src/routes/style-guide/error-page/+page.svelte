@@ -10,11 +10,33 @@
 	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 	import type { ErrorKind } from '#lib/errorPage.js';
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): the
+	 * body of each state is the product's own wording and cannot grow, so
+	 * the only field a Practice's data reaches is the way out -- given here
+	 * as the longest label the app puts on one.
+	 */
 	const kinds: { kind: ErrorKind; heading: string; wayOutLabel: string }[] = [
-		{ kind: 'notFound', heading: 'Page not found (404)', wayOutLabel: 'Go to your Practice overview' },
-		{ kind: 'refused', heading: 'Refused by role (403)', wayOutLabel: 'Go to your Practice overview' },
-		{ kind: 'unavailable', heading: 'Service unavailable (503)', wayOutLabel: 'Go to your Practice overview' },
-		{ kind: 'problem', heading: 'There is a problem (500)', wayOutLabel: 'Go to your Practice overview' }
+		{
+			kind: 'notFound',
+			heading: 'Page not found (404)',
+			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
+		},
+		{
+			kind: 'refused',
+			heading: 'Refused by role (403)',
+			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
+		},
+		{
+			kind: 'unavailable',
+			heading: 'Service unavailable (503)',
+			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
+		},
+		{
+			kind: 'problem',
+			heading: 'There is a problem (500)',
+			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
+		}
 	];
 </script>
 

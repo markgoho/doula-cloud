@@ -19,16 +19,30 @@
 		{ label: 'Status', accessor: (offer: Offer) => offer.status }
 	];
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): the
+	 * hub's title is a Practice's registered name, and the two regions carry
+	 * Client names and activity lines in full -- which is what decides
+	 * whether the secondary region still fits beside the primary one.
+	 */
 	const offers: Offer[] = [
-		{ client: 'Ada Lovelace', received: '2 March', status: 'Awaiting reply' },
-		{ client: 'Grace Hopper', received: '28 February', status: 'Awaiting reply' },
-		{ client: 'Katherine Johnson', received: '26 February', status: 'Accepted' }
+		{
+			client: 'Anne-Marie Ochieng-Whitfield',
+			received: '2 March 2027',
+			status: 'Awaiting reply'
+		},
+		{
+			client: 'Persephone Adeyemi-Wollstonecraft',
+			received: '28 February 2027',
+			status: 'Awaiting reply'
+		},
+		{ client: 'Renata Chiamaka Okonkwo-Adeyemi', received: '26 February 2027', status: 'Accepted' }
 	];
 
 	const rosterItems = [
 		{ label: 'Doulas', value: '14' },
-		{ label: 'Taking clients', value: '9' },
-		{ label: 'Invitations open', value: '2' }
+		{ label: 'Taking new Clients', value: '9' },
+		{ label: 'Invitations still open', value: '2' }
 	];
 
 	const noop = () => {};
@@ -48,12 +62,12 @@
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="section" text="Recent activity" />
 			<Text
-				text="Priya Raman sent an invoice to Grace Hopper — 1 March, 9:14am."
+				text="Persephone Adeyemi-Wollstonecraft sent an invoice for $4,250.00 to Anne-Marie Ochieng-Whitfield — 1 March 2027, 9:14am."
 				step="body-sm"
 				tone="variant"
 			/>
 			<Text
-				text="Ada Lovelace accepted an Offer — 28 February, 4:02pm."
+				text="Renata Chiamaka Okonkwo-Adeyemi accepted an Offer — 28 February 2027, 4:02pm."
 				step="body-sm"
 				tone="variant"
 			/>
@@ -72,7 +86,7 @@
 	<section>
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="card" text="Payments" />
-			<Badge label="Payouts enabled" variant="success" />
+			<Badge label="Payouts enabled, next on 15 March 2027" variant="success" />
 			<Text text="42 credits remaining." step="body-sm" tone="variant" />
 		</stack-l>
 	</section>
@@ -80,7 +94,9 @@
 
 {#snippet empty()}
 	<stack-l space="var(--space-4)">
-		<Text text="No clients yet. Invite your first doula, or add a client yourself." />
+		<Text
+			text="No Clients yet. Invite your first Doula, or add a Client yourself and the hub fills in."
+		/>
 		<cluster-l space="var(--space-3)">
 			<Button label="Invite a doula" onClick={noop} />
 			<Button label="Add a client" variant="secondary" onClick={noop} />
@@ -97,7 +113,7 @@
 	/>
 </div>
 
-<OverviewHub title="Willow Birth Collective" {primary} {secondary} {isEmpty} {empty} />
+<OverviewHub title="Highland Midwifery &amp; Birth Support Collective of Western New York" {primary} {secondary} {isEmpty} {empty} />
 
 <style>
 	@layer components {

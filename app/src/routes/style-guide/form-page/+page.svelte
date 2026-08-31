@@ -6,9 +6,14 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 
-	let firstName = $state('Ada');
-	let lastName = $state('Lovelace');
-	let email = $state('ada@example.com');
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): a
+	 * hyphenated double-barrelled family name and an address on the
+	 * Practice's own domain, which is what a real intake form holds.
+	 */
+	let firstName = $state('Anne-Marie');
+	let lastName = $state('Ochieng-Whitfield');
+	let email = $state('anne-marie.ochieng-whitfield@highland-midwifery-group.example.org');
 	let dueDate = $state('');
 	let birthPlace = $state('');
 
@@ -21,29 +26,31 @@
 
 {#snippet intro()}
 	<Text
-		text="Everything here is visible to the doulas on this client's engagement. The client fills in their own birth plan later."
+		text="Everything here is visible to the Doulas on this Client's Engagement, including the ones added to it later. The Client fills in her own birth plan herself."
 		tone="variant"
 	/>
 {/snippet}
 
 {#snippet errorSummary()}
-	<ErrorSummary errors={[{ message: 'Enter a due date', targetId: dueDateId }]} />
+	<ErrorSummary
+		errors={[{ message: 'Enter a due date, like 2 April 2027', targetId: dueDateId }]}
+	/>
 {/snippet}
 
 {#snippet coreFields()}
-	<LabeledField label="First name">
+	<LabeledField label="First name, as it appears on the Contract">
 		{#snippet children({ id })}
 			<TextInput {id} value={firstName} onInput={(value) => (firstName = value)} />
 		{/snippet}
 	</LabeledField>
 
-	<LabeledField label="Last name">
+	<LabeledField label="Last name, as it appears on the Contract">
 		{#snippet children({ id })}
 			<TextInput {id} value={lastName} onInput={(value) => (lastName = value)} />
 		{/snippet}
 	</LabeledField>
 
-	<LabeledField label="Email">
+	<LabeledField label="Email address we send the portal invite to">
 		{#snippet children({ id })}
 			<TextInput {id} type="email" value={email} onInput={(value) => (email = value)} />
 		{/snippet}
@@ -51,13 +58,17 @@
 
 	<!-- Word for word the summary entry above, which is the point of the
 	     pattern: two wordings for one refusal is the defect it prevents. -->
-	<LabeledField id={dueDateId} label="Due date" error={hasError ? 'Enter a due date' : undefined}>
+	<LabeledField
+		id={dueDateId}
+		label="Estimated due date"
+		error={hasError ? 'Enter a due date, like 2 April 2027' : undefined}
+	>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
 				{describedBy}
 				{invalid}
-				placeholder="2 April 2026"
+				placeholder="2 April 2027"
 				value={dueDate}
 				onInput={(value) => (dueDate = value)}
 			/>
@@ -76,7 +87,7 @@
 		{#snippet children({ id })}
 			<TextInput
 				{id}
-				placeholder="Rochester General"
+				placeholder="Rochester General Hospital Birthing Center"
 				value={birthPlace}
 				onInput={(value) => (birthPlace = value)}
 			/>
@@ -85,7 +96,7 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button label="Save client" type="submit" onClick={noop} />
+	<Button label="Save this Client and send the portal invite" type="submit" onClick={noop} />
 	<Button label="Cancel" variant="secondary" onClick={noop} />
 {/snippet}
 
@@ -99,11 +110,11 @@
 </div>
 
 <FormPage
-	title="New client"
+	title="Add a Client to Highland Midwifery"
 	{intro}
 	errorSummary={hasError ? errorSummary : undefined}
 	fieldsets={[
-		{ legend: 'About the client', content: coreFields },
+		{ legend: 'About the Client and how to reach her', content: coreFields },
 		{ legend: 'Birth preferences', content: practiceFields }
 	]}
 	{actions}

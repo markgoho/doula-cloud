@@ -18,16 +18,30 @@
 		{ label: 'Kind', accessor: (visit: Visit) => visit.kind }
 	];
 
+	/*
+	 * The longest realistic value, not a representative one (ADR-0025): the
+	 * title is a Client's full legal name, the doulas are named in full, and
+	 * the summary carries a four-figure package -- what a Practice's own
+	 * record actually holds.
+	 */
 	const visits: Visit[] = [
-		{ date: '18 February', doula: 'Priya Raman', kind: 'Prenatal' },
-		{ date: '4 March', doula: 'Priya Raman', kind: 'Prenatal' },
-		{ date: '21 March', doula: 'Unassigned', kind: 'Postpartum' }
+		{
+			date: '18 February 2027',
+			doula: 'Persephone Adeyemi-Wollstonecraft',
+			kind: 'Prenatal visit at home'
+		},
+		{
+			date: '4 March 2027',
+			doula: 'Renata Chiamaka Okonkwo-Adeyemi',
+			kind: 'Prenatal visit at home'
+		},
+		{ date: '21 March 2027', doula: 'Unassigned', kind: 'Postpartum visit at home' }
 	];
 
 	const summaryItems = [
-		{ label: 'Due date', value: '2 April 2026' },
-		{ label: 'Lead doula', value: 'Priya Raman' },
-		{ label: 'Package', value: 'Full birth support' }
+		{ label: 'Due date', value: '2 April 2027' },
+		{ label: 'Lead doula', value: 'Persephone Adeyemi-Wollstonecraft' },
+		{ label: 'Package', value: 'Full birth support, $4,250.00' }
 	];
 
 	const noop = () => {};
@@ -38,9 +52,9 @@
 {/snippet}
 
 {#snippet actions()}
-	<Badge label="Active" variant="success" />
+	<Badge label="Engagement active since 12 January 2027" variant="success" />
 	<Button label="Message" variant="secondary" size="sm" onClick={noop} />
-	<Button label="Send invoice" size="sm" onClick={noop} />
+	<Button label="Send this invoice to the Client" size="sm" onClick={noop} />
 {/snippet}
 
 {#snippet visitsSection()}
@@ -50,15 +64,22 @@
 {#snippet birthPlanSection()}
 	<DescriptionList
 		items={[
-			{ label: 'Pain relief', value: 'Wants to try without an epidural' },
-			{ label: 'Support people', value: 'Partner and mother' }
+			{
+				label: 'Pain relief',
+				value: 'Wants to try without an epidural, and to be asked rather than offered'
+			},
+			{ label: 'Support people', value: 'Her partner and her mother, for the whole labour' }
 		]}
 	/>
 {/snippet}
 
 {#snippet contractSection()}
 	<stack-l space="var(--space-3)">
-		<Text text="Signed 12 January 2026 by Ada Lovelace." step="body-sm" tone="variant" />
+		<Text
+			text="Signed 12 January 2027 by Anne-Marie Ochieng-Whitfield."
+			step="body-sm"
+			tone="variant"
+		/>
 		<cluster-l space="var(--space-3)">
 			<Button label="View contract" variant="secondary" size="sm" onClick={noop} />
 		</cluster-l>
@@ -66,7 +87,11 @@
 {/snippet}
 
 {#snippet invoicesSection()}
-	<Text text="One invoice outstanding — $450, due 15 March." step="body-sm" tone="variant" />
+	<Text
+		text="One invoice outstanding — $4,250.00, due 15 March 2027."
+		step="body-sm"
+		tone="variant"
+	/>
 {/snippet}
 
 <!--
@@ -75,7 +100,7 @@
 	A second instance would put a second <h1> on one demo page.
 -->
 <RecordDetail
-	title="Ada Lovelace"
+	title="Anne-Marie Ochieng-Whitfield"
 	{summary}
 	{actions}
 	isContentsShown
