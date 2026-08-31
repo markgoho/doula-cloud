@@ -73,5 +73,15 @@
 			outline: var(--border-thin) solid var(--color-outline-variant);
 			overflow-x: auto;
 		}
+
+		/*
+		 * The base size re-resolved against the frame (#544), for the same
+		 * reason the drag surface does it: an exercise whose two cards are
+		 * measured in window-sized letters is not showing the reader the
+		 * 320px they were promised.
+		 */
+		.frame > :global(*) {
+			font-size: var(--text-body-size);
+		}
 	}
 </style>

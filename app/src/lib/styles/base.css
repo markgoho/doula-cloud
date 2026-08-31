@@ -8,10 +8,11 @@
  * Every type and spacing token is a `clamp()` whose growth term is `cqi`,
  * and a `cqi` resolves at the point of USE, against the consuming
  * element's nearest ancestor container -- falling back to the small
- * viewport when there is none. Only `container-l` declares a container,
- * and almost every component in the app sits outside one, so without this
- * declaration a `cqi` token would silently mean "the window" nearly
- * everywhere and the whole scale would be viewport-derived by accident.
+ * viewport when there is none. Only a handful of elements declare a
+ * container, and almost every component in the app sits outside all of
+ * them, so without this declaration a `cqi` token would silently mean
+ * "the window" nearly everywhere and the whole scale would be
+ * viewport-derived by accident.
  *
  * It is on `body` rather than on the SvelteKit mount point, because that
  * is a `display: contents` wrapper with no principal box and therefore
@@ -28,10 +29,47 @@
 body {
 	container-type: inline-size;
 	font-family: var(--font-family-base);
-	font-size: var(--text-body-size);
 	font-weight: var(--text-body-weight);
 	line-height: var(--text-body-leading);
 	letter-spacing: var(--text-body-tracking);
 	color: var(--color-on-surface);
 	background-color: var(--color-surface);
+}
+
+/*
+ * The base size is declared INSIDE the containment context, never on it
+ * (#544).
+ *
+ * A `cqi` resolves against the nearest ANCESTOR container, so an element
+ * that declares a container never resolves against its own. `font-size:
+ * var(--text-body-size)` on `body` therefore answered the window, and
+ * `font-size` inherits as a computed length rather than as the token -- so
+ * every element that merely inherited its size carried the window's answer
+ * into every rail, sheet and 320px frame below it. Measured on the drag
+ * surface at a 1440px window with the frame at 320px, a `<dd>` rendered at
+ * 17.1px, the size for a 1425px container, where the token declared at
+ * that depth gives 15px.
+ *
+ * Declaring on the child fixes it in one place: `body > *` resolves
+ * against `body`, and everything below inherits that -- correct -- length.
+ * `font-size` is the only one of `body`'s type axes that moves, because
+ * `--text-body-weight` and `--text-body-leading` hold no `cqi` and
+ * `--text-body-tracking` is `em`-relative, so it re-resolves against
+ * whatever font size it lands on.
+ *
+ * `body` itself is therefore left with no `font-size` at all, and its own
+ * box takes the UA default. Nothing renders there: `app.html` puts a
+ * single `display: contents` mount div in `<body>` and every dialog and
+ * popover the app opens is also an element child, so all of it is matched
+ * by the rule below. A bare text node written straight into `<body>`
+ * would not be, and would render at 16px -- the one place this file
+ * cannot answer available space, because there is no element to declare
+ * on.
+ *
+ * The same pairing is owed by every other containment context in the app:
+ * `container-l` (primitives.css), `DataTable`, both top bars, and the two
+ * style-guide frames. `layout.usage.spec.ts` rule 3 holds them to it.
+ */
+body > * {
+	font-size: var(--text-body-size);
 }

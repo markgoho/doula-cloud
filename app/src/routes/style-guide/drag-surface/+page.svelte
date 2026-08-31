@@ -139,5 +139,16 @@
 			background-color: var(--color-surface);
 			outline: var(--border-thin) solid var(--color-outline);
 		}
+
+		/*
+		 * The base size re-resolved against the frame (#544). Without it
+		 * the instrument lies in the same direction every time: text that
+		 * nobody sized keeps the size computed outside the frame, so the
+		 * component under test is measured holding letters meant for a
+		 * 1425px container while the readout says 320px.
+		 */
+		.frame > :global(*) {
+			font-size: var(--text-body-size);
+		}
 	}
 </style>

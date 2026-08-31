@@ -28,13 +28,17 @@ Hostile fixtures are also what enforces the rule a source check could not. [CSS 
 
 A rendering test sees how a component *behaves*; it can never see which mechanism the source reached for. That is the half this gate holds, and it is why a source rule is worth having at all: it holds at every available space precisely because it never measures one. It lives in `app/src/lib/styles/layout.usage.spec.ts`, runs from `scripts/hooks/pre-commit`, and blocks a commit rather than warning about one.
 
-**Two rules, and deliberately only two.** Fixed pixel widths, bare `1fr` tracks and `white-space: nowrap` all have legitimate uses, so a check on them fires on correct code until somebody suppresses it, and a gate that is routinely suppressed has stopped being a gate.
+**Three rules, and deliberately only three.** Fixed pixel widths, bare `1fr` tracks and `white-space: nowrap` all have legitimate uses, so a check on them fires on correct code until somebody suppresses it, and a gate that is routinely suppressed has stopped being a gate.
 
 1. **A media query that measures width fails, anywhere, with no exception.** ADR-0024 rule 3 leaves no legitimate one: a media query is for a stated user preference, so `prefers-color-scheme`, `prefers-reduced-motion`, `prefers-contrast` and `print` are untouched and a width condition is wrong every time it appears. ADR-0023's `SHELL_CHROME` allowlist is deleted along with the exception it encoded.
 
    **This rule has no `layout:ignore` escape hatch.** A marker here is a request to do the one thing the mechanism ADR forbids. If a real wall turns up, the answer is a decision recorded on the map, not a marker in a file.
 
 2. **The static `vw` unit fails.** It measures the window including the strip the scrollbar occupies, so an element sized with it is always wider than the space actually available and the page scrolls sideways by exactly the scrollbar's width. `100%`, `100dvw` and `100svw` all mean what the author intended; `100vw` never does. This rule keeps `layout:ignore` with a reason, because a genuine case could exist.
+
+3. **A containment context that does not re-declare the base size inside itself fails** — ADR-0024 rule 4, **the pairing**. Added by [#544](https://github.com/markgoho/doula-cloud/issues/544). This is the one rule here whose defect is visual, and it is a source check anyway: the continuum check's own browser window is about 414px wide, so the size computed outside a frame and the size computed inside it are within a fifth of a pixel of each other there, and the same defect opens up to 53px on a 1440px screen. A gate that only fires in a wide browser is not a gate.
+
+   It is judged per rule block, not per file, because the pairing's whole point is that the declaration sits on a *different* selector — the container's children. A file-level check would have passed the exact defect that prompted it: `body` declared `container-type: inline-size` and `font-size: var(--text-body-size)` in one block, and answered the window with every element that inherited from it. The pairing must also be the base step specifically: a table whose cells declare `body-sm` has still said nothing about the text inside it that declares nothing at all. Like rule 1, it has no `layout:ignore` path, because a container that leaves the base size to inheritance is wrong every time it appears.
 
 **The gate scans every CSS-bearing file the app ships**, not only `src/lib/components` and `src/routes`. The predecessor scanned components alone, which is why the repo's last static `vw` sat unseen in `tokens.css` until it was found by hand ([#532](https://github.com/markgoho/doula-cloud/issues/532)). A gate with a blind spot the size of the token layer reports a clean repo that is not clean.
 
