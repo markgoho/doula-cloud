@@ -37,6 +37,17 @@
             "statusMessage": "Checking this is safe against a shared index"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .claude/hooks/gate-worktree-edit.ts",
+            "statusMessage": "Checking this file isn't tracked in the main checkout",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "WorktreeCreate": [

@@ -16,8 +16,9 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { findMainCheckoutRoot } from './worktree-root.ts';
 
-const SOURCE_ROOT = path.resolve(import.meta.dir, '..', '..');
+const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
 const WORKTREES_ROOT = path.join(SOURCE_ROOT, '.claude', 'worktrees');
 
 type WorktreeInfo = {
