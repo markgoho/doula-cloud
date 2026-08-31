@@ -298,13 +298,29 @@ describe('every size and every space is a fluid step', () => {
 		expect(intercept, `${name} intercept`).toBeCloseTo(floor - slope * rampMin, 6);
 	});
 
-	/* WCAG 1.4.4 asks that text reach 200% without loss. Barvian's rule --
-	   the only stated ratio rule anywhere -- is that a fluid step whose
-	   ceiling is more than 2.5x its floor cannot get there, because browser
-	   zoom shrinks the viewport the growth term is measured against. No
-	   source states the rule for `cqi` rather than `vw`, so #540 also zoomed
-	   a real page by hand; this guard is the arithmetic half of that. */
-	it.each(fluidSteps)('%s keeps its ceiling within 2.5x its floor (WCAG 1.4.4)', (name) => {
+	/* The 2.5x ceiling, and what it does and does not prove -- #545.
+	 *
+	 * WCAG 1.4.4 asks that text be *able* to reach 200%, not that the
+	 * browser's 200% setting render it: "It is not required to achieve 200%
+	 * text enlargement while remaining inside a specific breakpoint ... but
+	 * it should still be possible to get 200% text enlargement in some way"
+	 * (Understanding SC 1.4.4, Intent). Barvian's 2.5x rule is derived from
+	 * the far end of the range: browsers zoom to 500%, deep zoom narrows the
+	 * container below --ramp-min so every step sits on its `rem` floor, and
+	 * reaching twice a value that may be as large as the ceiling therefore
+	 * needs a zoom of 2 x the growth factor. 2 x 2.5 = 5.
+	 *
+	 * So this guard proves 200% is *reachable*. It is not a claim about the
+	 * 200% setting, where a fluid step renders 1.6x to 2.0x -- and no growth
+	 * factor above 1 changes that, because the `cqi` term is an absolute
+	 * share of a container zoom does not widen. `zoom.svelte.spec.ts`
+	 * asserts the reachability itself in a browser; this is its cheap
+	 * arithmetic companion, and the one that catches a hand-edited literal.
+	 *
+	 * The bound covers spacing as well as type, but 1.4.4 is about text:
+	 * spacing is held to the same ratio as this repo's own consistency rule,
+	 * so a step and the room around it stay in proportion under zoom. */
+	it.each(fluidSteps)('%s keeps its ceiling within 2.5x its floor, so 200% stays reachable', (name) => {
 		const { floor, ceiling } = parseFluidStep(name);
 		expect(ceiling / floor).toBeLessThanOrEqual(2.5);
 	});
