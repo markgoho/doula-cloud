@@ -70,3 +70,16 @@
 		</dl>
 	{/if}
 {/each}
+
+<style>
+	@layer components {
+		/*
+		 * A free-text answer can hold a URL, which a browser will not break
+		 * on its own (#552). Scoped to the component that owns the answer
+		 * markup so every caller gets it, not just this one.
+		 */
+		dd {
+			overflow-wrap: anywhere;
+		}
+	}
+</style>
