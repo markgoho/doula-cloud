@@ -63,3 +63,12 @@ hugo/content/p/
 .env
 .env.*
 !.env.example
+
+# Worktrees (docs/agents/worktree-flow.md) — each is its own checkout with
+# its own untracked-file state; nothing under here is ever committed.
+.claude/worktrees/
+# Per-worktree port offset (app/e2e/ports.ts) and generated Firebase Auth
+# emulator config (app/e2e/stack.ts), both worktree-specific and rewritten
+# on every provision.
+.port-offset
+.firebase.e2e.json

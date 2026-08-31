@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: app
       POSTGRES_DB: app
     ports:
-      - '15432:5432'
+      - '${DB_HOST_PORT:-15432}:5432'
 
   # The object store the BFF writes signed Contract PDFs and message
   # attachments to. Containerized for the same reason `db` is: a pinned
@@ -30,6 +30,10 @@ services:
   # that does not exist.
   gcs:
     image: docker.io/fsouza/fake-gcs-server:1.52.2
-    command: ['-scheme', 'http', '-port', '4443', '-backend', 'memory', '-external-url', 'http://127.0.0.1:14443']
+    # -external-url has to track ${GCS_HOST_PORT}, not the fixed 14443 --
+    # it's what fake-gcs-server puts in a resumable upload's Location
+    # header, and a worktree's shifted host port means a mismatch there
+    # would send that redirect nowhere.
+    command: ['-scheme', 'http', '-port', '4443', '-backend', 'memory', '-external-url', 'http://127.0.0.1:${GCS_HOST_PORT:-14443}']
     ports:
-      - '14443:4443'
+      - '${GCS_HOST_PORT:-14443}:4443'

@@ -9,6 +9,13 @@
             "if": "Bash(gh issue edit *)",
             "command": "bash .claude/hooks/mark-ac-verified.sh",
             "statusMessage": "Recording AC re-verification"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git worktree add*)",
+            "command": "bun .claude/hooks/worktree-provision.ts",
+            "statusMessage": "Provisioning a manually created worktree",
+            "timeout": 30
           }
         ]
       }
@@ -28,6 +35,18 @@
             "if": "Bash(git *)",
             "command": "bash .claude/hooks/gate-shared-index.sh",
             "statusMessage": "Checking this is safe against a shared index"
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .claude/hooks/worktree-create.ts",
+            "timeout": 30
           }
         ]
       }
