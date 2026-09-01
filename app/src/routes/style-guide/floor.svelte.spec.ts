@@ -35,13 +35,22 @@ import { atomPages, moleculePages, organismPages, templatePages, toSlug } from '
 import { ensureFontLoaded, RESOLUTION, TOLERANCE } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 import {
+	capFloorReport,
 	findConditions,
 	findConditionsBelowConformance,
 	findMalformedConditions,
 	forceLive,
+	measureCap,
+	measureOverflow,
+	measureWrap,
+	overflowFloorReport,
 	remToPx,
 	scopeClasses,
-	type Condition
+	wrapFloorReport,
+	type CapMeasurement,
+	type Condition,
+	type OverflowMeasurement,
+	type WrapMeasurement
 } from './floor.js';
 
 const sources = import.meta.glob('../../lib/components/**/*.svelte', {
@@ -177,8 +186,8 @@ function atWidth(frame: HTMLElement, px: number) {
 	void frame.offsetWidth;
 }
 
-function isOverflowAcceptable(frame: HTMLElement, px: number): boolean {
-	return frame.scrollWidth - px <= TOLERANCE;
+function isOverflowAcceptable(measurement: OverflowMeasurement): boolean {
+	return measurement.needed - measurement.given <= TOLERANCE;
 }
 
 /*
@@ -196,10 +205,15 @@ function capProbe(frame: HTMLElement, cap: 'form-max' | 'measure'): HTMLElement 
 	return probe;
 }
 
-function isMeasureAcceptable(target: Element, probe: Element): boolean {
-	const targetPx = target.getBoundingClientRect().width;
-	const capPx = probe.getBoundingClientRect().width;
-	return capPx - targetPx <= TOLERANCE;
+function isCapAcceptable(measurement: CapMeasurement): boolean {
+	return measurement.capPx - measurement.reachedPx <= TOLERANCE;
+}
+
+// `--form-max` / `--measure`, not `criterion.cap`'s bare `'form-max'` /
+// `'measure'`: the report should name the actual custom property, not the
+// registry's own internal spelling of it.
+function capCustomProperty(cap: 'form-max' | 'measure'): string {
+	return cap === 'form-max' ? '--form-max' : '--measure';
 }
 
 /*
@@ -220,10 +234,8 @@ function lineCount(element: Element): number {
 	return range.getClientRects().length;
 }
 
-function isNoWrapAcceptable(frame: HTMLElement, selectors: readonly string[]): boolean {
-	return selectors.every((selector) =>
-		[...frame.querySelectorAll(selector)].every((element) => lineCount(element) <= 1)
-	);
+function isWrapAcceptable(measurement: WrapMeasurement): boolean {
+	return measurement.wrapped.length === 0;
 }
 
 describe('the floor check (#564)', () => {
@@ -316,9 +328,11 @@ describe('the floor check (#564)', () => {
 					const wrap = neutralizeWrap();
 					try {
 						atWidth(frame, floorPx);
-						expect(isOverflowAcceptable(frame, floorPx), 'sufficient at the floor').toBe(true);
+						const atFloor = measureOverflow(frame, floorPx);
+						expect(isOverflowAcceptable(atFloor), overflowFloorReport(key, atFloor)).toBe(true);
 						atWidth(frame, belowFloorPx);
-						expect(isOverflowAcceptable(frame, belowFloorPx), 'insufficient below the floor').toBe(
+						const belowFloor = measureOverflow(frame, belowFloorPx);
+						expect(isOverflowAcceptable(belowFloor), overflowFloorReport(key, belowFloor)).toBe(
 							false
 						);
 					} finally {
@@ -326,22 +340,22 @@ describe('the floor check (#564)', () => {
 					}
 				} else if (criterion.kind === 'no-wrap') {
 					atWidth(frame, floorPx);
-					expect(isNoWrapAcceptable(frame, criterion.selectors), 'sufficient at the floor').toBe(
-						true
-					);
+					const atFloor = measureWrap(frame, floorPx, criterion.selectors, lineCount);
+					expect(isWrapAcceptable(atFloor), wrapFloorReport(key, atFloor)).toBe(true);
 					atWidth(frame, belowFloorPx);
-					expect(
-						isNoWrapAcceptable(frame, criterion.selectors),
-						'insufficient below the floor'
-					).toBe(false);
+					const belowFloor = measureWrap(frame, belowFloorPx, criterion.selectors, lineCount);
+					expect(isWrapAcceptable(belowFloor), wrapFloorReport(key, belowFloor)).toBe(false);
 				} else {
 					const probe = capProbe(frame, criterion.cap);
 					const target = frame.querySelector(criterion.target);
 					expect(target, `${criterion.target} not found for ${key}`).not.toBeNull();
+					const capLabel = capCustomProperty(criterion.cap);
 					atWidth(frame, floorPx);
-					expect(isMeasureAcceptable(target!, probe), 'sufficient at the floor').toBe(true);
+					const atFloor = measureCap(floorPx, capLabel, target!, probe);
+					expect(isCapAcceptable(atFloor), capFloorReport(key, atFloor)).toBe(true);
 					atWidth(frame, belowFloorPx);
-					expect(isMeasureAcceptable(target!, probe), 'insufficient below the floor').toBe(false);
+					const belowFloor = measureCap(belowFloorPx, capLabel, target!, probe);
+					expect(isCapAcceptable(belowFloor), capFloorReport(key, belowFloor)).toBe(false);
 				}
 			} finally {
 				run.remove();

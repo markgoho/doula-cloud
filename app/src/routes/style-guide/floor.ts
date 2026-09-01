@@ -293,3 +293,102 @@ export function scopeClasses(root: Element): string[] {
 	}
 	return [...counts].toSorted(([, a], [, b]) => b - a).map(([scope]) => scope);
 }
+
+/*
+ * Measurements and their report strings, one pair per criterion, modelled
+ * on `continuum.ts`'s own `Break`/`overflowReport` pair: a plain data
+ * object carries the numbers a verdict was reached from, and a report
+ * function turns it into a sentence a CI log can be read from directly.
+ * Before this, a failure said only "sufficient at the floor: expected
+ * false to be true" -- true on a laptop and false on CI's Linux runner,
+ * for reasons neither number was ever printed to diagnose. `TOLERANCE`
+ * is deliberately not imported here: these functions report what was
+ * measured, and the tolerance a caller judges it against is the caller's
+ * decision, not this module's.
+ */
+
+export interface OverflowMeasurement {
+	readonly given: number;
+	readonly needed: number;
+}
+
+export function measureOverflow(frame: HTMLElement, given: number): OverflowMeasurement {
+	return { given, needed: frame.scrollWidth };
+}
+
+export function overflowFloorReport(name: string, measurement: OverflowMeasurement): string {
+	return `${name}: given ${measurement.given}px, needed ${measurement.needed}px (overflow criterion).`;
+}
+
+export interface CapMeasurement {
+	readonly given: number;
+	readonly capLabel: string;
+	readonly capPx: number;
+	readonly reachedPx: number;
+}
+
+export function measureCap(
+	given: number,
+	capLabel: string,
+	target: Element,
+	probe: Element
+): CapMeasurement {
+	return {
+		given,
+		capLabel,
+		capPx: probe.getBoundingClientRect().width,
+		reachedPx: target.getBoundingClientRect().width
+	};
+}
+
+export function capFloorReport(name: string, measurement: CapMeasurement): string {
+	return (
+		`${name}: given ${measurement.given}px, ${measurement.capLabel} is ` +
+		`${measurement.capPx.toFixed(1)}px, the column reached ${measurement.reachedPx.toFixed(1)}px ` +
+		'(measure criterion).'
+	);
+}
+
+export interface WrapMeasurement {
+	readonly given: number;
+	readonly wrapped: readonly string[];
+}
+
+/*
+ * Identifies which cell wrapped, by selector and its own text (trimmed to
+ * 40 characters -- long enough to tell a label from an action, short
+ * enough that a pasted URL or a long value never dominates the message).
+ * `lineCount` is `floor.svelte.spec.ts`'s own (`Range#getClientRects`,
+ * immune to a CSS Grid row stretching a cell to match a wrapping
+ * sibling), passed in rather than duplicated here.
+ */
+function wrappedElements(
+	frame: HTMLElement,
+	selector: string,
+	lineCount: (element: Element) => number
+): string[] {
+	const wrapped: string[] = [];
+	for (const element of frame.querySelectorAll(selector)) {
+		const lines = lineCount(element);
+		if (lines <= 1) continue;
+		const text = (element.textContent ?? '').trim().slice(0, 40);
+		wrapped.push(`${selector} "${text}" (${lines} lines)`);
+	}
+	return wrapped;
+}
+
+export function measureWrap(
+	frame: HTMLElement,
+	given: number,
+	selectors: readonly string[],
+	lineCount: (element: Element) => number
+): WrapMeasurement {
+	const wrapped = selectors.flatMap((selector) => wrappedElements(frame, selector, lineCount));
+	return { given, wrapped };
+}
+
+export function wrapFloorReport(name: string, measurement: WrapMeasurement): string {
+	return measurement.wrapped.length === 0
+		? `${name}: given ${measurement.given}px, nothing wrapped (no-wrap criterion).`
+		: `${name}: given ${measurement.given}px, wrapped -- ${measurement.wrapped.join('; ')} (no-wrap criterion).`;
+}
