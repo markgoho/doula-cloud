@@ -7,6 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { syncTrunkToOrigin } from './sync-trunk.ts';
 import { provisionWorktree, WORKTREES_ROOT_PATH, SOURCE_ROOT_PATH } from './worktree-provision.ts';
 
 type JsonObject = Record<string, unknown>;
@@ -90,6 +91,12 @@ function removeWorktree(worktreePathInput: string): void {
 		return;
 	}
 	runGit(['worktree', 'remove', worktreePath]);
+
+	// This is the moment this repo's flow actually produces: a worktree
+	// just landed via its PR and ExitWorktree is putting the session back
+	// on trunk (docs/agents/worktree-flow.md). The commit that PR just
+	// added should already be here, not wait for the next SessionStart.
+	syncTrunkToOrigin(SOURCE_ROOT_PATH);
 }
 
 async function main(): Promise<void> {

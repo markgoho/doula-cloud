@@ -11,15 +11,17 @@
 //   by being deleted; anything else (uncommitted changes, or committed
 //   work not yet merged -- including a local-only branch never pushed) is
 //   left alone and reported. Also fast-forwards the main checkout's own
-//   local `trunk` to `origin/trunk` (see syncTrunkToOrigin) -- nobody
-//   works in the main checkout under this repo's flow, so it otherwise
-//   only moves when a human remembers to `git pull` there.
+//   local `trunk` to `origin/trunk` (see sync-trunk.ts) -- a backstop for
+//   drift from a PR merged outside this session; worktree-create.ts's own
+//   ExitWorktree-removal path is what actually keeps pace with this
+//   session's own landings.
 //
 // Always ends with `git worktree prune` to drop metadata for worktrees
 // whose directory is already gone.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { syncTrunkToOrigin } from './sync-trunk.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
 const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
@@ -226,57 +228,13 @@ function sweepOrphanBranches(remove: boolean): void {
 	}
 }
 
-/*
- * Fast-forwards SOURCE_ROOT's local `trunk` to `origin/trunk`, called
- * right after the fetch above. Nobody commits directly to trunk under
- * this repo's flow (docs/agents/worktree-flow.md) -- every landing
- * arrives squash-merged through a PR -- so a clean fast-forward is the
- * only outcome this expects. Anything else (HEAD not on trunk, a dirty
- * tree, a local trunk carrying commits origin/trunk doesn't have) means
- * the main checkout is in a state this hook did not anticipate, most
- * likely someone working directly on trunk against convention, and it
- * no-ops silently rather than guess or force anything -- the same
- * fail-open choice gate-shared-index.sh makes for the same reason
- * (worktree-flow.md's "A gate fails closed" section, which contrasts
- * the two).
- *
- * `git merge --ff-only` (not `git pull`, the fetch above already ran,
- * and not a bare `update-ref`, which would move the branch tip without
- * updating the checked-out files and index to match) is what keeps this
- * safe to run unconditionally: it is a no-op when already current, and
- * it refuses -- rather than doing anything -- the moment it is not a
- * straight fast-forward.
- */
-function syncTrunkToOrigin(): void {
-	let head: string;
-	try {
-		head = runGit(['symbolic-ref', '--short', 'HEAD']);
-	} catch {
-		return; // detached HEAD, or HEAD unreadable -- leave it alone
-	}
-	if (head !== 'trunk') return; // main checkout isn't on trunk right now
-	if (isDirty(SOURCE_ROOT)) return;
-	const before = tipOf('trunk');
-	try {
-		runGit(['merge', '--ff-only', 'origin/trunk']);
-	} catch {
-		// not a fast-forward -- local trunk has commits origin/trunk lacks,
-		// an unexpected state for this flow; leave it for a human to see
-		return;
-	}
-	const after = tipOf('trunk');
-	if (after !== before) console.log(`main checkout: trunk ${before.slice(0, 7)} -> ${after.slice(0, 7)}`);
-}
-
 function main(): void {
 	const merged = process.argv.includes('--merged');
 	if (merged) {
-		try {
-			runGit(['fetch', '--quiet', 'origin', 'trunk']);
-		} catch {
-			// offline -- the PR state still answers for anything landed by PR
-		}
-		syncTrunkToOrigin();
+		// syncTrunkToOrigin does its own `fetch origin trunk` internally
+		// (see sync-trunk.ts), which is also what the rest of this run
+		// needs fresh for isMergedIntoTrunk/sweepOrphanBranches below.
+		syncTrunkToOrigin(SOURCE_ROOT);
 	}
 	const worktrees = listWorktrees();
 
