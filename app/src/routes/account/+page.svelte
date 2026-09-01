@@ -25,25 +25,21 @@
 	 * and a load function would buy nothing but a second place to look.
 	 */
 	import { onMount } from 'svelte';
-	import { resolve } from '$app/paths';
-	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
-	import type { Membership, SessionInfo } from '#lib/landing.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
-	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/formErrors.js';
+	import { loadAccountSession } from './session.svelte.js';
 
 	const workStateId = 'account-work-state';
 
 	let name = $state('');
-	let memberships = $state<Membership[]>([]);
 	let reportedAt = $state('');
 	// The full state name the <select> speaks; workStateCode() converts it
 	// back to the USPS code the API stores on the way out.
@@ -55,20 +51,18 @@
 	let isSaving = $state(false);
 
 	async function loadAccount() {
-		const response = await apiFetchWithSession('/api/staff/session');
-		if (!response.ok) {
+		const result = await loadAccountSession();
+		if (!result.ok) {
 			// 404 means the verified identity has no staff row behind it --
 			// signed in, but nobody here yet. Say so and render nothing to
 			// edit, rather than offering a form whose save cannot land.
-			loadError = await apiErrorMessage(response);
+			loadError = result.message;
 			return;
 		}
 
-		const session: SessionInfo = await response.json();
-		name = session.name;
-		memberships = session.memberships;
-		reportedAt = session.workStateReportedAt;
-		selectedState = workStateName(session.workState);
+		name = result.session.name;
+		reportedAt = result.session.workStateReportedAt;
+		selectedState = workStateName(result.session.workState);
 		isLoaded = true;
 	}
 
@@ -185,6 +179,22 @@
 
 {#snippet actions()}
 	<Button type="submit" label="Save work state" loading={isSaving} />
+	<!--
+		Confirmation sits where she just was -- immediately under the Save
+		button she pressed, not in a banner at the top of a page she would
+		have to scroll back up to read. Notice's status variant carries
+		role="status", so a screen reader announces it politely wherever it
+		is; a sighted reader is looking at the button. The "Last confirmed"
+		line above the field moves to the new date at the same moment,
+		which is the durable half of the same answer.
+
+		Inside FormPage's actions region, the same placement `invite` (#425)
+		uses -- FormPage owns the frame's width cap and gutters, and a
+		sibling of the <form> below inherited neither (#474).
+	-->
+	{#if savedState}
+		<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
+	{/if}
 {/snippet}
 
 <!--
@@ -207,56 +217,3 @@
 		{loadError}
 	/>
 </form>
-
-<!--
-	Confirmation sits where she just was -- immediately under the Save
-	button she pressed, not in a banner at the top of a page she would
-	have to scroll back up to read. Notice's status variant carries
-	role="status", so a screen reader announces it politely wherever it
-	is; a sighted reader is looking at the button. The "Last confirmed"
-	line above the field moves to the new date at the same moment,
-	which is the durable half of the same answer.
--->
-{#if savedState}
-	<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
-{/if}
-
-{#if isLoaded}
-	<!--
-		A way back. The session response already carries every Practice she
-		belongs to, so this screen can return her to the one she came from
-		without a second read -- and a top-level route outside the Practice
-		layout would otherwise be a place with no exit but the back button.
-		One Practice, one link; several, several.
-	-->
-	<nav aria-label="Your practices">
-		<Heading level={2} variant="section" text="Back to your practices" />
-		<ul>
-			{#each memberships as membership (membership.practiceId)}
-				<li>
-					<Link
-						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-						label={membership.practiceName}
-					/>
-				</li>
-			{/each}
-		</ul>
-	</nav>
-{/if}
-
-<style>
-	@layer components {
-		ul {
-			margin: 0;
-			padding: 0;
-			list-style: none;
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--space-3);
-		}
-
-		nav {
-			padding: var(--space-6) var(--page-gutter);
-		}
-	}
-</style>
