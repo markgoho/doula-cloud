@@ -10,8 +10,11 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
-const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
-const WORKTREES_ROOT = path.join(SOURCE_ROOT, '.claude', 'worktrees');
+// Resolved inside main(), not at module load: a throw out here exits 1,
+// which the runtime treats as a NON-blocking error -- so a gate that
+// crashed would wave through exactly what it exists to refuse (#569).
+let SOURCE_ROOT = '';
+let WORKTREES_ROOT = '';
 
 function readStdin(): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -37,6 +40,9 @@ function isGitIgnored(filePath: string): boolean {
 }
 
 async function main(): Promise<void> {
+	SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
+	WORKTREES_ROOT = path.join(SOURCE_ROOT, '.claude', 'worktrees');
+
 	const raw = await readStdin();
 	let payload: Record<string, unknown> = {};
 
@@ -83,4 +89,18 @@ async function main(): Promise<void> {
 	process.exit(2);
 }
 
-main().catch(() => process.exit(0));
+// Fail CLOSED (#569). Only exit code 2 blocks; every other non-zero code
+// is a non-blocking error and the edit proceeds. A gate that cannot run
+// has not decided the edit is safe, so it refuses rather than permits.
+main().catch((error: unknown) => {
+	process.stdout.write(
+		JSON.stringify({
+			decision: 'block',
+			reason:
+				'The worktree edit gate could not run, so it cannot say this edit is safe: ' +
+				`${error instanceof Error ? error.message : String(error)}\n` +
+				'Fix the gate, or edit inside a worktree via EnterWorktree.'
+		})
+	);
+	process.exit(2);
+});
