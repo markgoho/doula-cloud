@@ -108,16 +108,36 @@
 		 * this column holds cards and tables rather than a cap of its own
 		 * (see the no-cap note above).
 		 *
-		 * Measured 2026-08-31 (#564): this is a "measure criterion" floor,
-		 * not an overflow one -- the primary column is `minmax(0, 1fr)`,
-		 * so it never overflows, but below this width the 20rem rail
-		 * leaves it narrower than --measure, which is not what the wide
-		 * configuration is for. Swept on /style-guide/overview-hub's own
-		 * demo with the query forced live at every width: the primary
-		 * column first reaches --measure at 1004px. 62.75rem is that
-		 * fixed point exactly, no margin added. The previous 60rem
-		 * (960px) was part of the shared 60rem set (#523) rather than
-		 * measured against this column at all.
+		 * This is a "measure criterion" floor, not an overflow one -- the
+		 * primary column is `minmax(0, 1fr)`, so it never overflows, but
+		 * below this width the 20rem rail leaves it narrower than
+		 * --measure, which is not what the wide configuration is for. The
+		 * previous 60rem (960px) was part of the shared 60rem set (#523)
+		 * rather than measured against this column at all.
+		 *
+		 * Re-checked 2026-09-01 against the canonical environment (#564):
+		 * a first sweep on 2026-08-31, on /style-guide/overview-hub's own
+		 * demo with the query forced live, read the primary column as
+		 * first reaching --measure at 1004px (62.75rem) on that machine.
+		 * CI's own Linux/Chromium reaches it 8px SOONER, at 996px -- the
+		 * opposite direction from every overflow floor this ticket also
+		 * re-measured, because the canonical rasterizer renders ordinary
+		 * mixed text wider (what an overflow floor watches) but its `0`
+		 * glyph narrower (`--measure` is `65ch`, and 1ch is the width of
+		 * `0`), so the cap itself is smaller there and the column crosses
+		 * it sooner.
+		 *
+		 * The literal stays 1004px/62.75rem rather than moving to 996px:
+		 * sufficiency now runs in every environment (#564), and 996px
+		 * measurably leaves the column short of --measure on the machine
+		 * that needs the full 1004px -- a real shortfall for a real
+		 * reader there, not only a failing assertion. 1004px is exactly
+		 * 8px above where CI's own runner crosses, though, which is this
+		 * check's own minimality probe depth -- an unresolved tension
+		 * between "sufficient in every environment" and "minimal in the
+		 * canonical one" recorded on #564 rather than silently picked one
+		 * way, since no single number here satisfies both as things
+		 * stand.
 		 */
 		@container (min-width: 62.75rem) {
 			.body.has-secondary {

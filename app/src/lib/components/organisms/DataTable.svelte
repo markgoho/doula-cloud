@@ -204,24 +204,27 @@
 			font-variant-numeric: tabular-nums;
 		}
 
-		/* The content floor, re-measured 2026-08-31 (#564): the previous
-		   46rem (736px) was measured with `overflow-wrap: anywhere` live
-		   on td/th, so the sweep watched the cells rescue themselves by
-		   breaking mid-word instead of watching when the table actually
-		   stopped fitting -- it never found a break, and 736px went in
-		   with a margin nobody could verify. Swept again with wrapping
-		   neutralized: Staff's Members table (Name, Email, Roles,
-		   Employment type, Works from, plus its Actions column of three
-		   buttons) is the widest DataTable built today, and the row of
-		   <table> cells first stops overflowing its frame at 768px on
-		   /style-guide/data-table's own demo of that exact shape. 48rem
-		   is that fixed point exactly, with no margin added: raising it
-		   only raises the width the switch fires at, and #564 found no
-		   width between here and the ramp's plateau where that buys
-		   anything the table does not already have. It is the frame's own
-		   inline size that is measured, never the viewport (ADR-0024). A
-		   future table wider than this floor moves it. */
-		@container data-table (min-width: 48rem) {
+		/* The content floor, re-measured 2026-09-01 in the canonical
+		   environment (#564): the previous 46rem (736px) was measured
+		   with `overflow-wrap: anywhere` live on td/th, so the sweep
+		   watched the cells rescue themselves by breaking mid-word
+		   instead of watching when the table actually stopped fitting --
+		   it never found a break, and 736px went in with a margin nobody
+		   could verify. 48rem (768px), swept with wrapping neutralized on
+		   the machine that measured it, held there but read as
+		   insufficient on CI's own runner: the same font bytes rasterize
+		   wider on CI's Linux/Chromium, so Staff's Members table (Name,
+		   Email, Roles, Employment type, Works from, plus its Actions
+		   column of three buttons) -- the widest DataTable built today --
+		   needs 780px, not 768px, to stop overflowing
+		   /style-guide/data-table's own demo of that exact shape. 48.75rem
+		   is that fixed point, measured in CI's own Linux/Chromium, the
+		   one named environment a floor's minimality is judged against
+		   (CONTEXT.md's Content floor entry), with no margin added beyond
+		   it. It is the frame's own inline size that is measured, never
+		   the viewport (ADR-0024). A future table wider than this floor
+		   moves it. */
+		@container data-table (min-width: 48.75rem) {
 			.table-view {
 				display: table;
 			}

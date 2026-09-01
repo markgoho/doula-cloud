@@ -235,13 +235,32 @@
 		 * the contents rail leaves it narrower than --measure -- the
 		 * comfortable width for the prose and description lists a record
 		 * holds, which carry no cap of their own the way a form column
-		 * does. Swept on /style-guide/record-detail's own demo with the
-		 * query forced live at every width: `.sections` first reaches
-		 * --measure at 956px. 59.75rem is that fixed point exactly, no
-		 * margin added. The previous 60rem (960px) was part of the shared
-		 * 60rem set (#523) rather than measured against this column -- it
-		 * landed 4px past its own real floor by coincidence, not by
+		 * does. The previous 60rem (960px) was part of the shared 60rem
+		 * set (#523) rather than measured against this column -- it landed
+		 * 4px past a first measurement's real floor by coincidence, not by
 		 * derivation.
+		 *
+		 * Re-checked 2026-09-01 against the canonical environment (#564):
+		 * a first sweep on 2026-08-31, on /style-guide/record-detail's own
+		 * demo with the query forced live, read `.sections` as first
+		 * reaching --measure at 956px (59.75rem) on that machine. CI's own
+		 * Linux/Chromium reaches it 4px SOONER, at 952px -- the same
+		 * direction, and the same reason, as OverviewHub's own measure
+		 * floor: the canonical rasterizer renders ordinary mixed text
+		 * wider (what an overflow floor watches) but its `0` glyph
+		 * narrower (`--measure` is `65ch`, and 1ch is the width of `0`),
+		 * so the cap itself is smaller there and the column crosses it
+		 * sooner.
+		 *
+		 * The literal stays 956px/59.75rem: sufficiency now runs in every
+		 * environment (#564), and 952px measurably leaves the column short
+		 * of --measure on the machine that needs the full 956px. Unlike
+		 * OverviewHub's own equivalent floor, this one has no unresolved
+		 * tension with minimality -- the 4px gap between the two
+		 * environments is smaller than the 8px probe depth, so 956 minus
+		 * 8 (948px) still lands below CI's own 952px crossing, and
+		 * minimality holds in the canonical environment at the value
+		 * sufficiency also needs everywhere else.
 		 */
 		@container (min-width: 59.75rem) {
 			.body.has-contents {

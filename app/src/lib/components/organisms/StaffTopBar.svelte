@@ -150,19 +150,26 @@
 			justify-content: space-between;
 		}
 
-		/* The content floor, re-measured 2026-08-31 (#564): six nav items
-		   plus a Practice name and the account controls first stop
-		   overflowing the bar at 784px, swept with `overflow-wrap`
-		   neutralized on /style-guide/staff-top-bar's own demo -- the
-		   previous 60rem (960px) was never measured against that failure
-		   at all, it was part of the shared 60rem set (#523). 49rem is
-		   that fixed point exactly, no margin added. It
-		   is the bar's own inline size that is measured, never a device
-		   width (ADR-0024). Below the floor the same items are in the
-		   sheet, which is why both trees are in the document and one is
+		/* The content floor, re-measured 2026-09-01 in the canonical
+		   environment (#564): the previous 60rem (960px) was never
+		   measured against this failure at all, it was part of the
+		   shared 60rem set (#523). A first measurement on 2026-08-31,
+		   swept with `overflow-wrap` neutralized on
+		   /style-guide/staff-top-bar's own demo, read six nav items plus
+		   a Practice name and the account controls as stopping overflow
+		   at 784px, 49rem. That number held on the machine that measured
+		   it but read as insufficient on CI's own runner: the same font
+		   bytes rasterize wider on CI's Linux/Chromium, so the bar needs
+		   788px, not 784px, to stop overflowing. 49.25rem is that fixed
+		   point, measured in CI's own Linux/Chromium, the one named
+		   environment a floor's minimality is judged against (CONTEXT.md's
+		   Content floor entry), with no margin added beyond it. It is the
+		   bar's own inline size that is measured, never a device width
+		   (ADR-0024). Below the floor the same items are in the sheet,
+		   which is why both trees are in the document and one is
 		   display:none -- a hidden subtree is out of the accessibility
 		   tree too, so nothing is announced twice. */
-		@container staff-top-bar (min-width: 49rem) {
+		@container staff-top-bar (min-width: 49.25rem) {
 			.wide {
 				display: flex;
 			}
