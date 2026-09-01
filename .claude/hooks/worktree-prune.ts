@@ -72,7 +72,7 @@ function isDirty(worktreePath: string): boolean {
  * costs nothing when `gh` is unreachable.
  */
 function isMergedIntoTrunk(branch: string, pr: string): boolean {
-	if (pr.startsWith('MERGED')) return true;
+	if (pr.split(' ')[0] === 'MERGED') return true;
 	try {
 		const merged = runGit(['branch', '--merged', 'origin/trunk', '--format=%(refname:short)']);
 		return merged.split('\n').includes(branch);
@@ -81,14 +81,26 @@ function isMergedIntoTrunk(branch: string, pr: string): boolean {
 	}
 }
 
-function prState(branch: string): string {
+/*
+ * The PR for this branch, reported as "<state> <url>" -- but `MERGED`
+ * only when the PR's head commit is the one this worktree has checked
+ * out. `gh pr view` resolves by branch NAME, and a name outlives the
+ * branch that carried it: reuse `fix/545-...` for new work and the old,
+ * merged PR answers for it, which would delete a live worktree. It also
+ * catches a follow-up commit pushed on top of a merged branch -- that
+ * worktree has not finished either.
+ */
+function prState(branch: string, worktreePath: string): string {
 	try {
-		const raw = execFileSync('gh', ['pr', 'view', branch, '--json', 'state,url'], {
+		const raw = execFileSync('gh', ['pr', 'view', branch, '--json', 'state,url,headRefOid'], {
 			cwd: SOURCE_ROOT,
 			encoding: 'utf8',
 			stdio: ['ignore', 'pipe', 'ignore']
 		});
-		const parsed = JSON.parse(raw) as { state: string; url: string };
+		const parsed = JSON.parse(raw) as { state: string; url: string; headRefOid: string };
+		if (parsed.state === 'MERGED' && runGit(['rev-parse', 'HEAD'], worktreePath) !== parsed.headRefOid) {
+			return `MERGED-ELSEWHERE ${parsed.url}`;
+		}
 		return `${parsed.state} ${parsed.url}`;
 	} catch {
 		return 'no PR';
@@ -158,7 +170,7 @@ function main(): void {
 		const dirty = isDirty(wt.path);
 		const branch = wt.branch ?? '(detached)';
 		const size = dirSize(wt.path);
-		const pr = wt.branch ? prState(wt.branch) : 'no branch';
+		const pr = wt.branch ? prState(wt.branch, wt.path) : 'no branch';
 		const mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
 
 		if (!merged) {
@@ -200,7 +212,7 @@ function main(): void {
 			/* `-d` refuses a squash-merged branch for the same reason
 			   `--merged` never listed it: its commits are not on trunk. The
 			   PR says the work landed, so force it -- and only then. */
-			if (pr.startsWith('MERGED')) {
+			if (pr.split(' ')[0] === 'MERGED') {
 				try {
 					runGit(['branch', '-D', wt.branch]);
 				} catch {

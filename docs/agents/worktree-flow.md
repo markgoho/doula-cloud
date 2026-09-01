@@ -142,6 +142,11 @@ construction:
   directory out from under it fails in a way that is near-unreadable from the inside. So
   `--merged` skips the worktree the running process is standing in, and any worktree touched in
   the last 30 minutes.
+- **A branch name outlives the branch.** `gh pr view <branch>` resolves by name, so reusing
+  `fix/545-…` for new work makes the old, merged PR answer for it — which would delete a live
+  worktree. Both the hook and the pruner require the PR's `headRefOid` to be the commit the
+  worktree has checked out, which also means a follow-up commit pushed on top of a merged
+  branch reads as unfinished rather than landed.
 - **Measuring "touched" has to happen first.** `git status` rewrites the index whose mtime is
   the freshness signal, so asking after the dirty check makes every worktree look freshly
   touched, forever, and the pruner silently stops removing anything. The freshness is captured

@@ -80,18 +80,32 @@ function main(): void {
 	}
 	if (!branch || branch === 'HEAD' || branch === 'trunk') return;
 
-	let state: string;
+	/*
+	 * `gh pr view <branch>` resolves by branch NAME, and a name outlives
+	 * the branch that carried it. Reuse one -- start fresh work on
+	 * `fix/545-...` after that PR merged -- and the old, merged PR answers
+	 * for the new branch. Requiring the PR's head commit to be the one
+	 * checked out here settles it: the same name on a different commit is
+	 * different work, and a follow-up commit pushed on top of a merged
+	 * branch means this worktree has not finished either.
+	 */
+	let merged: { state: string; headRefOid: string };
 	try {
-		const raw = execFileSync('gh', ['pr', 'view', branch, '--json', 'state'], {
+		const raw = execFileSync('gh', ['pr', 'view', branch, '--json', 'state,headRefOid'], {
 			cwd,
 			encoding: 'utf8',
 			stdio: ['ignore', 'pipe', 'ignore']
 		});
-		state = (JSON.parse(raw) as { state: string }).state;
+		merged = JSON.parse(raw) as { state: string; headRefOid: string };
 	} catch {
 		return; // no PR, or gh unreachable -- not this hook's business
 	}
-	if (state !== 'MERGED') return;
+	if (merged.state !== 'MERGED') return;
+	try {
+		if (git(['rev-parse', 'HEAD'], cwd) !== merged.headRefOid) return;
+	} catch {
+		return;
+	}
 	if (alreadyNudged(sessionId, branch)) return;
 
 	console.log(
