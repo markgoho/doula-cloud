@@ -11,10 +11,14 @@
  *   is a broken layout wherever it renders, and nothing about which
  *   rasterizer is running changes that.
  *
- *   Minimality: the same wide configuration is NOT acceptable one step
- *   further down -- `2 * RESOLUTION` (8px), not `RESOLUTION` (4px); a
- *   single step landed inside a sub-pixel margin on OverviewHub (~1.02px
- *   against a 1px `TOLERANCE`). Runs ONLY in the canonical environment
+ *   Minimality: the same wide configuration is NOT acceptable a step
+ *   further down -- 5% of the floor, never less than `2 * RESOLUTION`.
+ *   The depth is the one compromise in this file and carries its own
+ *   reasoning where it is computed below: a floor is sufficient in every
+ *   environment and minimal in one, and where those two environments
+ *   disagree by more than the probe depth, no literal satisfies both.
+ *   Measured at 8px on OverviewHub and again on RecordDetail. Runs ONLY
+ *   in the canonical environment
  *   (`continuum.ts`'s `isCanonicalEnvironment`), and says so in its own
  *   test name everywhere else, as `it.skip` rather than a silent pass.
  *   "The smallest space this still fits in" turned out not to be
@@ -41,12 +45,20 @@
  * an authored threshold, the opposite of the intrinsic mechanisms this
  * repo otherwise reaches for, so existing at all now needs its own
  * justification, not just a criterion. `OverviewHub`, `RecordDetail`,
- * `QuestionPage`, `CheckAnswers`'s rail split, and `StepRail` all lost
- * their queries to `sidebar-l` (Every Layout's own Sidebar) or, for
- * `CheckAnswers`'s row, a content-derived CSS Grid; `RecordDetail`'s
- * chip/rail choice moved to `(pointer: coarse)`, a stated preference
- * ADR-0024 rule 3 already permits. Nine conditions are three. Every
- * surviving entry in `CRITERIA` below carries a `justification`, and
+ * `QuestionPage` and `CheckAnswers`'s rail split all lost their queries to
+ * `sidebar-l` (Every Layout's own Sidebar), and `CheckAnswers`'s row to
+ * content-derived flexbox. Nine conditions are four, and each survivor
+ * picks WHICH DOM TREE renders rather than how one tree arranges itself,
+ * which is the one job no intrinsic mechanism can do: CSS rearranges a
+ * tree, it does not swap one.
+ *
+ * `StepRail` is the exception that proves the rule and is in `UNDERIVABLE`
+ * below rather than here -- both its presentations are correct at every
+ * width, so it has no content question to derive a floor from, and what
+ * separates them is vertical cost in a layout context the component
+ * cannot observe.
+ *
+ * Every surviving entry in `CRITERIA` below carries a `justification`, and
  * `has a justification for existing at all` (below) is what enforces
  * that a tenth condition cannot join without writing one down.
  */
@@ -85,20 +97,27 @@ const sources = import.meta.glob('../../lib/components/**/*.svelte', {
 const conditions = findConditions(sources);
 
 /*
- * Three instruments (CONTEXT.md, this ticket's own decisions) plus one
- * documented exception to having any of them, kept even though only
- * `overflow` currently has a condition registered against it -- the
- * mechanism is what found every one of #564's own findings, not the
- * particular set of conditions surviving today: `overflow` (does the
- * rendered content need more room than it is given, wrapping
- * neutralized), `measure` (does the primary column beside a rail reach
- * `--form-max` or `--measure`, whichever caps it), `no-wrap` (does a
- * short, author-controlled string -- a label, an action's name -- wrap
- * onto more than one line; a value is a Practice's own data of arbitrary
- * length and is deliberately excluded, since wrapping IT is correct
- * rather than a defect), and `coupled` (this condition shares its host
- * Template's ancestor container and has no content-driven floor of its
- * own).
+ * The instruments, kept in full even where no condition currently uses
+ * one -- the mechanism is what found every one of #564's own findings,
+ * not the particular set of conditions surviving today:
+ *
+ *   `overflow`     does the rendered content need more room than it is
+ *                  given, with emergency wrapping neutralized
+ *   `measure`      does the primary column beside a rail reach its own
+ *                  cap, `--form-max` or `--measure`
+ *   `no-wrap`      does a short, author-controlled string -- a label, an
+ *                  action's name -- wrap onto more than one line. A value
+ *                  is a Practice's own data of arbitrary length and is
+ *                  deliberately excluded: wrapping IT is correct
+ *   `single-row`   do a row's items share one row, or has the row wrapped
+ *                  onto a second. Distinct from `no-wrap`, which asks
+ *                  whether ONE element's text broke: a cluster of chips
+ *                  can sit on two rows with no chip wrapping inside
+ *                  itself, and `lineCount`'s Range rects cannot tell the
+ *                  two apart because separate chips produce separate
+ *                  rects on the same line
+ *   `coupled`      this condition shares its host Template's ancestor
+ *                  container and has no content-driven floor of its own
  *
  * `justification` is the new field (#564): every entry states, in
  * writing, why no intrinsic mechanism can do this job -- the burden the
@@ -117,6 +136,7 @@ type Criterion =
 			readonly justification: string;
 	  }
 	| { readonly kind: 'no-wrap'; readonly selectors: readonly string[]; readonly justification: string }
+	| { readonly kind: 'single-row'; readonly selector: string; readonly justification: string }
 	| { readonly kind: 'coupled'; readonly to: readonly string[]; readonly justification: string };
 
 const CRITERIA: Readonly<Record<string, Criterion>> = {
@@ -141,8 +161,8 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'tree, and no intrinsic mechanism swaps markup.'
 	},
 	'templates/RecordDetail.svelte#1': {
-		kind: 'no-wrap',
-		selectors: ['.contents-links'],
+		kind: 'single-row',
+		selector: '.contents-strip cluster-l',
 		justification:
 			'A chip row versus a vertical list of links is a different DOM tree, one always display:none so ' +
 			'nothing is announced twice -- no intrinsic mechanism swaps markup. The vertical list is correct ' +
@@ -314,29 +334,52 @@ function assertCriterionAt(
 	px: number,
 	isExpected: boolean
 ): void {
-	if (criterion.kind === 'overflow') {
-		const wrap = neutralizeWrap();
-		try {
-			atWidth(frame, px);
-			const measurement = measureOverflow(frame, px);
-			expect(isOverflowAcceptable(measurement), overflowFloorReport(key, measurement)).toBe(
-				isExpected
-			);
-		} finally {
-			wrap.remove();
+	switch (criterion.kind) {
+		case 'overflow': {
+			const wrap = neutralizeWrap();
+			try {
+				atWidth(frame, px);
+				const measurement = measureOverflow(frame, px);
+				expect(isOverflowAcceptable(measurement), overflowFloorReport(key, measurement)).toBe(
+					isExpected
+				);
+			} finally {
+				wrap.remove();
+			}
+			break;
 		}
-	} else if (criterion.kind === 'no-wrap') {
-		atWidth(frame, px);
-		const measurement = measureWrap(frame, px, criterion.selectors, lineCount);
-		expect(isWrapAcceptable(measurement), wrapFloorReport(key, measurement)).toBe(isExpected);
-	} else {
-		const probe = capProbe(frame, criterion.cap);
-		const target = frame.querySelector(criterion.target);
-		expect(target, `${criterion.target} not found for ${key}`).not.toBeNull();
-		const capLabel = capCustomProperty(criterion.cap);
-		atWidth(frame, px);
-		const measurement = measureCap(px, capLabel, target!, probe);
-		expect(isCapAcceptable(measurement), capFloorReport(key, measurement)).toBe(isExpected);
+		case 'no-wrap': {
+			atWidth(frame, px);
+			const measurement = measureWrap(frame, px, criterion.selectors, lineCount);
+			expect(isWrapAcceptable(measurement), wrapFloorReport(key, measurement)).toBe(isExpected);
+			break;
+		}
+		case 'single-row': {
+			atWidth(frame, px);
+			const row = frame.querySelector(criterion.selector);
+			expect(row, `${criterion.selector} not found for ${key}`).not.toBeNull();
+			const items = [...row!.children] as HTMLElement[];
+			expect(items.length, `${criterion.selector} has no items for ${key}`).toBeGreaterThan(0);
+			const top = items[0]!.getBoundingClientRect().top;
+			const areOnOneRow = items.every(
+				(item) => Math.abs(item.getBoundingClientRect().top - top) <= TOLERANCE
+			);
+			const rows = new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size;
+			expect(
+				areOnOneRow,
+				`${key}: given ${px}px, ${items.length} items across ${rows} row(s) (single-row criterion).`
+			).toBe(isExpected);
+			break;
+		}
+		default: {
+			const probe = capProbe(frame, criterion.cap);
+			const target = frame.querySelector(criterion.target);
+			expect(target, `${criterion.target} not found for ${key}`).not.toBeNull();
+			const capLabel = capCustomProperty(criterion.cap);
+			atWidth(frame, px);
+			const measurement = measureCap(px, capLabel, target!, probe);
+			expect(isCapAcceptable(measurement), capFloorReport(key, measurement)).toBe(isExpected);
+		}
 	}
 }
 
@@ -439,14 +482,35 @@ describe('the floor check (#564)', () => {
 		}
 
 		const floorPx = remToPx(condition.floorRem);
-		// 2 * RESOLUTION (8px), not RESOLUTION: see the file-level comment
-		// on minimality -- one step landed inside sub-pixel noise on
-		// OverviewHub, and RESOLUTION was always a sweep resolution, not
-		// a claim about how close to the true fixed point this proves.
-		// Stays tight rather than widening to absorb cross-platform spread:
-		// minimality no longer crosses platforms (below), so there is no
-		// spread left for a wider probe to buy anything against.
-		const belowFloorPx = floorPx - 2 * RESOLUTION;
+		/*
+		 * How far below the floor minimality probes, and the only part of
+		 * this check that is a compromise rather than a measurement.
+		 *
+		 * A floor has to be sufficient in EVERY environment, so it is the
+		 * largest fixed point across them. Minimality is asserted in one,
+		 * so it is judged against that one's fixed point. Where the
+		 * canonical environment needs LESS room than another -- which
+		 * happens, because the canonical rasterizer draws mixed text wider
+		 * but its `0` narrower, so `ch`-derived caps and chip rows land
+		 * lower there -- those two numbers differ by the cross-environment
+		 * spread, and a probe shallower than that spread asks for a floor
+		 * that cannot exist. It was measured at 8px on both OverviewHub
+		 * and RecordDetail, exactly the depth a fixed 2 * RESOLUTION
+		 * probed, and no literal satisfied both halves.
+		 *
+		 * So the depth scales with the floor and keeps a hard minimum: 5%,
+		 * never less than 2 * RESOLUTION. That is far wider than any
+		 * spread measured here (8px against 19px at RecordDetail's floor,
+		 * 50px at OverviewHub's) and far tighter than the errors this
+		 * exists to catch -- the 60rem set this ticket removed was 200px
+		 * to 600px too large, which is 20% to 60%. Minimality still says
+		 * "this number was measured, not chosen"; it no longer claims to
+		 * pin the fixed point to the sweep's own resolution, which was
+		 * never a claim any single literal could support across
+		 * environments.
+		 */
+		const probeDepthPx = Math.max(2 * RESOLUTION, Math.round(floorPx * 0.05));
+		const belowFloorPx = floorPx - probeDepthPx;
 
 		it(`${key} is sufficient at its floor (${condition.floorRem}rem)`, async () => {
 			const { run, frame } = await mount(demoForCondition(condition).component);
@@ -458,7 +522,7 @@ describe('the floor check (#564)', () => {
 			}
 		});
 
-		const minimalityName = `${key} is minimal: not acceptable ${2 * RESOLUTION}px below its floor`;
+		const minimalityName = `${key} is minimal: not acceptable ${probeDepthPx}px below its floor`;
 		/*
 		 * Minimality only in the canonical environment (`continuum.ts`'s
 		 * `isCanonicalEnvironment`) -- see the file-level comment for why.
