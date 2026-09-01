@@ -227,6 +227,28 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 	return engagementId;
 }
 
+// Seeds a *pending* Engagement Request directly, the same way
+// seedEngagement seeds an Engagement directly: the real
+// POST .../engagement-requests endpoint collapses into an immediate
+// approval whenever the requester already holds approval authority
+// (RequestHandler, ADR-0017) -- which the Owner/Admin session every e2e
+// spec signs in as always does -- so driving that endpoint can never
+// leave a Request sitting in 'pending'. requestedBy is the requesting
+// Staff member's id (not a session header), matching engagement_requests'
+// own requested_by column.
+export function seedEngagementRequest(
+	clientId: string,
+	practiceId: string,
+	requestedBy: string,
+	kind = 'birth'
+): string {
+	const requestId = randomUUID();
+	execSQL(
+		`INSERT INTO engagement_requests (id, practice_id, client_id, kind, requested_by) VALUES (${sqlLiteral(requestId)}, ${sqlLiteral(practiceId)}, ${sqlLiteral(clientId)}, ${sqlLiteral(kind)}, ${sqlLiteral(requestedBy)})`
+	);
+	return requestId;
+}
+
 // Reads the plaintext token off the pending staff_invite_outbox row for
 // invitationId (#525). InviteResponse deliberately never carries it
 // (#316) and no mailer runs in the e2e stack to consume it, so the row

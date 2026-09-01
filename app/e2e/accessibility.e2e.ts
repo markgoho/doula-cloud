@@ -7,7 +7,7 @@ import {
 	seedPortalClient,
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
-import { seedEngagement } from './stack';
+import { seedEngagement, seedEngagementRequest } from './stack';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -137,7 +137,7 @@ test('Archetype A -- the screens a person meets signed out', async ({ page }) =>
 // having run.
 test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
-	const { practiceId, engagementId } = seeded;
+	const { practiceId, staffId, engagementId } = seeded;
 
 	// A second, plain Client -- no portal account -- for the three
 	// clients/[clientId] screens (#516). Given an Engagement of her own so
@@ -148,6 +148,22 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 		familyName: 'Smith'
 	});
 	seedEngagement(clientId, practiceId);
+
+	// A third Client, held in its own pending-Request state (#535): the
+	// hub's Withdraw block (a Notice describing the pending Request, plus
+	// a Withdraw Button shown only to the Request's own requester) never
+	// gets scanned otherwise, since Jane above carries only a live
+	// Engagement. Seeded directly via seedEngagementRequest rather than
+	// through the real endpoint -- the signed-in Owner already holds
+	// approval authority, so driving POST .../engagement-requests would
+	// collapse straight to 'approved' and never leave a Request pending.
+	// A separate Client, not a second kind on Jane, so this fixture's
+	// blast radius stays off every other route that reuses her clientId.
+	const pendingRequestClientId = await seedClient(request, practiceId, seeded.staffHeaders, {
+		givenName: 'Casey',
+		familyName: 'Pending'
+	});
+	seedEngagementRequest(pendingRequestClientId, practiceId, staffId);
 
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(seeded.staffEmail);
@@ -209,6 +225,16 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 			archetype: 'D',
 			url: `/practices/${practiceId}/clients/${clientId}`,
 			h1: 'Jane Smith'
+		},
+		{
+			// #535: the same hub, scanned a second time for a Client whose
+			// pending Engagement Request was requested by this signed-in
+			// session -- the only state that puts the Withdraw Button and
+			// its surrounding pending-Request Notice in the DOM.
+			key: 'practices/[practiceId]/clients/[clientId] (pending request)',
+			archetype: 'D',
+			url: `/practices/${practiceId}/clients/${pendingRequestClientId}`,
+			h1: 'Casey Pending'
 		},
 		{
 			key: 'practices/[practiceId]/clients/[clientId]/edit',
