@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-// Reusable worktree pruner -- run by hand, not registered as a hook.
+// The worktree pruner. Registered as a `SessionStart` hook (`--merged`),
+// and runnable by hand at any time.
 //
 //   bun .claude/hooks/worktree-prune.ts [--dry-run|--merged]
 //
@@ -59,9 +60,21 @@ function isDirty(worktreePath: string): boolean {
 	}
 }
 
-function isMergedIntoTrunk(branch: string): boolean {
+/*
+ * Has this branch landed on trunk?
+ *
+ * Two ways, and this repo's own flow only ever produces the second. A
+ * squash merge writes a NEW commit, so the branch tip never becomes an
+ * ancestor of trunk and `git branch --merged` never lists it -- which
+ * made this check, and therefore `--merged`, inert for every branch
+ * landed the documented way. A `MERGED` PR is the authority; the
+ * ancestor test still covers a branch merged or rebased by hand, and
+ * costs nothing when `gh` is unreachable.
+ */
+function isMergedIntoTrunk(branch: string, pr: string): boolean {
+	if (pr.startsWith('MERGED')) return true;
 	try {
-		const merged = runGit(['branch', '--merged', 'trunk', '--format=%(refname:short)']);
+		const merged = runGit(['branch', '--merged', 'origin/trunk', '--format=%(refname:short)']);
 		return merged.split('\n').includes(branch);
 	} catch {
 		return false;
@@ -82,6 +95,38 @@ function prState(branch: string): string {
 	}
 }
 
+/*
+ * Has anything touched this worktree recently?
+ *
+ * Several sessions share this repo, so `--merged` at SessionStart runs
+ * over worktrees other live sessions are standing in -- and a session
+ * whose PR has just merged sits in a clean, landed worktree for as long
+ * as it takes to write the summary. Removing that directory out from
+ * under it breaks it in a way that is very hard to read from the inside.
+ * A worktree touched in the last half hour is treated as somebody's, and
+ * the next session's run picks it up once it has actually gone quiet.
+ */
+const QUIET_MS = 30 * 60 * 1000;
+
+function recentlyTouched(worktreePath: string): boolean {
+	const candidates = [worktreePath];
+	try {
+		const gitDir = runGit(['rev-parse', '--absolute-git-dir'], worktreePath);
+		candidates.push(gitDir, path.join(gitDir, 'index'));
+	} catch {
+		return true; // cannot tell -- fail closed and leave it alone
+	}
+	const now = Date.now();
+	for (const candidate of candidates) {
+		try {
+			if (now - fs.statSync(candidate).mtimeMs < QUIET_MS) return true;
+		} catch {
+			// missing path tells us nothing -- keep checking the others
+		}
+	}
+	return false;
+}
+
 function dirSize(worktreePath: string): string {
 	try {
 		return execFileSync('du', ['-sh', worktreePath], { encoding: 'utf8' }).split('\t')[0]?.trim() ?? '?';
@@ -92,6 +137,13 @@ function dirSize(worktreePath: string): string {
 
 function main(): void {
 	const merged = process.argv.includes('--merged');
+	if (merged) {
+		try {
+			runGit(['fetch', '--quiet', 'origin', 'trunk']);
+		} catch {
+			// offline -- the PR state still answers for anything landed by PR
+		}
+	}
 	const worktrees = listWorktrees();
 
 	if (worktrees.length === 0) {
@@ -99,11 +151,15 @@ function main(): void {
 	}
 
 	for (const wt of worktrees) {
+		/* First, before anything else touches this worktree: `git status`
+		   rewrites the index it is being measured by, so asking after the
+		   dirty check makes every worktree look freshly touched forever. */
+		const touched = recentlyTouched(wt.path);
 		const dirty = isDirty(wt.path);
 		const branch = wt.branch ?? '(detached)';
 		const size = dirSize(wt.path);
 		const pr = wt.branch ? prState(wt.branch) : 'no branch';
-		const mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch) : false;
+		const mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
 
 		if (!merged) {
 			console.log(
@@ -124,6 +180,14 @@ function main(): void {
 			console.log(`skip (not merged into trunk): ${wt.path}`);
 			continue;
 		}
+		if (path.resolve(process.cwd()).startsWith(path.resolve(wt.path))) {
+			console.log(`skip (this session is standing in it): ${wt.path}`);
+			continue;
+		}
+		if (touched) {
+			console.log(`skip (touched in the last 30 minutes): ${wt.path}`);
+			continue;
+		}
 
 		try {
 			runGit(['worktree', 'remove', wt.path]);
@@ -133,7 +197,16 @@ function main(): void {
 		try {
 			runGit(['branch', '-d', wt.branch]);
 		} catch {
-			// remote-tracking or already-gone branch -- not fatal
+			/* `-d` refuses a squash-merged branch for the same reason
+			   `--merged` never listed it: its commits are not on trunk. The
+			   PR says the work landed, so force it -- and only then. */
+			if (pr.startsWith('MERGED')) {
+				try {
+					runGit(['branch', '-D', wt.branch]);
+				} catch {
+					// already gone, or checked out elsewhere -- not fatal
+				}
+			}
 		}
 		console.log(`removed: ${wt.path} (branch ${wt.branch})`);
 	}

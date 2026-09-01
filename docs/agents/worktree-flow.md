@@ -106,7 +106,43 @@ bun .claude/hooks/worktree-prune.ts --merged    # remove only a worktree whose b
                                                  # merged into trunk AND whose tree is clean
 ```
 
-`--merged` never touches a dirty worktree, a locked one, or one whose branch isn't merged
-into `trunk` — including a branch with unpushed, unmerged commits. `ExitWorktree` (or `git
-worktree remove`) once a PR shows `MERGED` is the normal path; the pruner is the backstop for
-whatever a dead session left behind.
+`--merged` never touches a dirty worktree, a locked one, or one whose branch hasn't landed —
+including a branch with unpushed, unmerged commits. `ExitWorktree` (or `git worktree remove`)
+once a PR shows `MERGED` is the normal path; the pruner is the backstop for whatever a dead
+session left behind.
+
+**"Landed" means a `MERGED` PR, not `git branch --merged`.** A squash merge writes a new
+commit, so the branch tip never becomes an ancestor of `trunk` and `git branch --merged` never
+lists it. Deciding it that way — which this pruner did until the check was fixed — makes
+`--merged` inert for every branch this flow produces, and `git branch -d` refuse afterwards
+for the same reason, which is why the branch delete falls back to `-D` when, and only when,
+the PR says `MERGED`.
+
+Two hooks make the cleanup happen without anyone remembering it:
+
+- **`SessionStart`** runs `worktree-prune.ts --merged` asynchronously. Every session begins by
+  clearing whatever landed and was left behind, including by sessions that died. This is what
+  keeps the 9-slot pool from filling.
+- **`Stop`** runs `.claude/hooks/gate-worktree-cleanup.ts`, which **blocks** when the session
+  is standing in a worktree that is clean and whose PR reads `MERGED`, telling it to call
+  `ExitWorktree`. A pruner cannot move a live session out of the directory it occupies; only
+  the session can. The hook checks the two local conditions first and asks `gh` only if both
+  pass, so it is silent and off the network on an ordinary turn.
+
+Three things the two hooks are deliberately careful about, because each one bit during
+construction:
+
+- **A blocking `Stop` hook is a loop.** It is re-entered every time the session stops, and the
+  session cannot always comply — `ExitWorktree` only removes a worktree *this* session created,
+  and is a no-op on one entered by path or inherited from a dead session. So the nudge is
+  **once per session per branch**, held by a sentinel in the temp directory. Ignoring it is
+  safe; the pruner collects the worktree later.
+- **The pruner runs while other sessions are live.** A session whose PR has just merged sits in
+  a clean, landed worktree for as long as it takes to write its summary, and deleting that
+  directory out from under it fails in a way that is near-unreadable from the inside. So
+  `--merged` skips the worktree the running process is standing in, and any worktree touched in
+  the last 30 minutes.
+- **Measuring "touched" has to happen first.** `git status` rewrites the index whose mtime is
+  the freshness signal, so asking after the dirty check makes every worktree look freshly
+  touched, forever, and the pruner silently stops removing anything. The freshness is captured
+  before any other git command reaches the worktree.
