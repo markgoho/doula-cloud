@@ -112,7 +112,6 @@
 <CheckAnswers
 	journey="Adding a Client to Highland Midwifery"
 	{steps}
-	allStepsHref={here}
 	backHref={here}
 	title="Check your answers before adding Anne-Marie Ochieng-Whitfield"
 	caption="Adding a Client to Highland Midwifery"

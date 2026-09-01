@@ -216,15 +216,30 @@
 		}
 
 		/* Narrow first: the rail needs a column beside the content, and
-		   below the Templates' 60rem threshold there is not one. The same
-		   threshold OverviewHub and RecordDetail use, so every archetype
-		   changes shape at one width rather than at three a person would
-		   notice. */
+		   below the host Template's own floor there is not one. */
 		.rail {
 			display: none;
 		}
 
-		@container (min-width: 60rem) {
+		/*
+		 * Genuinely coupled to the host Template, not chosen to match it
+		 * (#564). `StepRail` declares no container of its own, so this
+		 * unnamed query resolves against the nearest ANCESTOR container --
+		 * the same one `QuestionPage`'s and `CheckAnswers`'s own 60rem
+		 * query reads, since `StepRail` renders inside their grid with
+		 * nothing of its own in between. That is what makes this a
+		 * mechanism rather than a preference: `.rail` has no content-driven
+		 * floor to derive on its own -- swept on /style-guide/step-rail's
+		 * own demo with the query forced live, the nav never overflows the
+		 * frame down to 144px, well under 320px -- so there is no
+		 * independent number to measure it against, only the width at
+		 * which its host actually opens a --page-rail column for it to
+		 * sit in. 67.5rem is `QuestionPage`'s and `CheckAnswers`'s own
+		 * measured fixed point, carried here rather than re-derived,
+		 * because both read the same container and only one of the two
+		 * has a floor to measure.
+		 */
+		@container (min-width: 67.5rem) {
 			.rail {
 				display: block;
 			}

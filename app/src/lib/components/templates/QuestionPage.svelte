@@ -52,7 +52,6 @@
 		 */
 		serviceName?: string;
 		steps: JourneyStep[];
-		allStepsHref?: string;
 		backHref: string;
 		/**
 		 * GOV.UK's error summary, positioned by this Template and built by
@@ -89,7 +88,6 @@
 		journey,
 		serviceName,
 		steps,
-		allStepsHref,
 		backHref,
 		errorSummary,
 		caption,
@@ -121,8 +119,15 @@
 	<!-- No cap on the frame: it holds the rail beside the column, and the
 	     column carries the readability cap itself (#541). -->
 	<center-l max="none" gutters="var(--page-gutter)">
-		<div class="body">
-			<StepRail {journey} {steps} {allStepsHref} expand="current" />
+		<!--
+			sidebar-l, side="start" (default) (#564): the rail is FIRST
+			in the DOM, matching side="start"'s own convention. Wraps to
+			a stack once the column cannot keep --form-max -- the
+			column's own cap (below) is what makes that the correct
+			trigger, not a measured pixel.
+		-->
+		<sidebar-l basis="var(--page-rail)" space="var(--space-12)" content-min="min(var(--form-max), 100%)">
+			<StepRail {journey} {steps} expand="current" />
 
 			<div class="column">
 				<stack-l space="var(--space-6)">
@@ -169,7 +174,7 @@
 					<cluster-l space="var(--space-4)" align="center">{@render actions()}</cluster-l>
 				</stack-l>
 			</div>
-		</div>
+		</sidebar-l>
 	</center-l>
 </container-l>
 
@@ -179,9 +184,30 @@
 			padding-block: var(--space-8);
 		}
 
-		.body {
-			display: grid;
-			gap: var(--space-6);
+		/*
+		 * sidebar-l wraps at content-min="min(var(--form-max), 100%)"
+		 * (markup above), so it never fits beside the rail without its
+		 * full cap -- the leftover space is centred rather than left at
+		 * the inline end, a page that asks one question has nothing more
+		 * to put in a wider window (#543). `align-items: start` keeps the
+		 * rail and the column top-aligned instead of the flex default
+		 * (stretch), which would otherwise match them to whichever is
+		 * taller.
+		 *
+		 * The `min(…, 100%)` matters and is not decoration: `.column`
+		 * also carries `max-inline-size: var(--form-max)` below, and a
+		 * bare `content-min="var(--form-max)"` sets that SAME length as
+		 * `min-inline-size` too -- min and max pinned to the same value
+		 * makes the column unable to shrink ever again, including once
+		 * wrapped onto its own row, so it overflowed a frame narrower
+		 * than --form-max instead of adapting to it. Caught by rendering
+		 * the wrapped state at 320px and reading `.column`'s own width
+		 * back before this fix (704px, past the 320px it was given) and
+		 * after (320px, matching).
+		 */
+		sidebar-l {
+			justify-content: center;
+			align-items: start;
 		}
 
 		/*
@@ -258,33 +284,5 @@
 			margin-block-start: var(--space-7);
 		}
 
-		@container (min-width: 60rem) {
-			.body {
-				/*
-				 * A page that asks one question has nothing more to put in a
-				 * wider window, so it does not take the room (#543). The
-				 * leftover goes on both sides rather than all of it at the
-				 * inline end. This is not --page-max coming back: nothing
-				 * here names a page width, and both tracks are the sizes the
-				 * rail and the column already had.
-				 *
-				 * The second track had to stop being `1fr` for this to work
-				 * at all -- a flexible track absorbs every spare pixel, so
-				 * `justify-content` would have had nothing left to
-				 * distribute. `--form-max` is the same cap `.column` carries
-				 * for the stacked state below this query, moved onto the
-				 * track so that free space exists.
-				 *
-				 * The column keeps the width it had: measured on the drag
-				 * surface, `fit-content` on the grid centres the pair too but
-				 * sizes the column to its own longest line, which would make
-				 * one journey's steps each a different width.
-				 */
-				grid-template-columns: var(--page-rail) minmax(0, var(--form-max));
-				column-gap: var(--space-12);
-				align-items: start;
-				justify-content: center;
-			}
-		}
 	}
 </style>

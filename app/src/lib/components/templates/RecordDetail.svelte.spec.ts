@@ -130,15 +130,22 @@ describe('RecordDetail.svelte', () => {
 		expect(hrefs).toEqual(['#visits', '#invoices']);
 	});
 
-	it('renders the contents between the title and the first section in source order', async () => {
+	// DOM order deliberately differs from visual order here (#564): the
+	// rail sits visually on the left (`sidebar-l`'s own `flex-direction:
+	// row-reverse`, side="end" in the markup), but the record's own title
+	// and sections stay first in READING order, so a screen reader or
+	// keyboard user meets "Ada Lovelace" and her sections before "Jump
+	// to" -- the opposite of source order matching visual order, and
+	// deliberately so.
+	it('reads the title and every section before the contents nav', async () => {
 		const { container } = await setup({ isContentsShown: true });
 
 		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
+		const lastSection = page.getByRole('heading', { level: 2, name: 'Invoices' }).element();
 		const strip = container.querySelector('.contents-strip')!;
-		const firstSection = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
 
-		expect(title.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-		expect(strip.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(title.compareDocumentPosition(lastSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(lastSection.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
 	it('reserves the page frame for a skeleton while loading, instead of rendering the record (#480)', async () => {

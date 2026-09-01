@@ -65,13 +65,32 @@
 
 				{#if isEmpty}
 					<div class="empty">{@render empty()}</div>
-				{:else}
-					<div class="body" class:has-secondary={secondary}>
+				{:else if secondary}
+					<!--
+						sidebar-l, side="end" (#564): primary is the dominant,
+						content-min-protected side; secondary is the fixed-basis
+						sidebar, kept SECOND in the DOM (side="end" swaps which
+						child gets which role instead of reordering). Wraps to a
+						stack on its own once the primary column cannot keep
+						--measure -- the same intent the removed @container
+						threshold measured, now read off the primitive's own
+						content quantities instead of an authored pixel.
+
+						content-min="min(var(--measure), 100%)", not a bare
+						var(--measure): --measure alone stays this template's
+						min-inline-size even once wrapped onto its own row,
+						which measurably overflowed a frame narrower than
+						--measure (a real, checked failure, not a theoretical
+						one -- primary read 521px inside a 320px frame before
+						this fix). "100%" caps the floor at whatever the row
+						actually has once alone.
+					-->
+					<sidebar-l side="end" space="var(--space-8)" content-min="min(var(--measure), 100%)">
 						<stack-l space="var(--space-6)">{@render primary()}</stack-l>
-						{#if secondary}
-							<aside><stack-l space="var(--space-6)">{@render secondary()}</stack-l></aside>
-						{/if}
-					</div>
+						<aside><stack-l space="var(--space-6)">{@render secondary()}</stack-l></aside>
+					</sidebar-l>
+				{:else}
+					<stack-l space="var(--space-6)">{@render primary()}</stack-l>
 				{/if}
 			</stack-l>
 		{/if}
@@ -94,22 +113,19 @@
 			color: var(--color-on-surface);
 		}
 
-		.body {
-			display: grid;
-			gap: var(--space-8);
-		}
-
 		/*
-		 * Container query, not a media query: ADR-0003 makes container
-		 * queries the default and the rail depends on how wide the page
-		 * frame is, not how wide the window is. The threshold is the
-		 * narrowest width at which a 20rem rail still leaves the primary
-		 * column above its own comfortable measure.
+		 * No @container query, and no .body wrapper (#564): the rail split
+		 * is `sidebar-l`, Every Layout's own Sidebar, wired in the markup
+		 * above. #564's own map found the exact tension a measured
+		 * threshold cannot resolve -- sufficiency (never less room than
+		 * promised) and minimality (the smallest space that still works)
+		 * disagreeing by exactly the check's own probe depth on this
+		 * template's old floor, because the same font rasterizes to a
+		 * different `--measure` on a different platform. `sidebar-l`
+		 * side-steps the whole question: it reads `--measure` itself, on
+		 * whichever machine is rendering, and wraps the moment that
+		 * machine's own column can no longer honour it. No number is
+		 * authored here for any environment to disagree about.
 		 */
-		@container (min-width: 60rem) {
-			.body.has-secondary {
-				grid-template-columns: minmax(0, 1fr) 20rem;
-			}
-		}
 	}
 </style>

@@ -115,7 +115,6 @@
 	<QuestionPage
 		journey="Adding a Client to Highland Midwifery"
 		{steps}
-		allStepsHref="/style-guide/question-page"
 		backHref="/style-guide/question-page"
 		errorSummary={hasError ? errorSummary : undefined}
 		caption="How to reach Anne-Marie Ochieng-Whitfield"
@@ -132,7 +131,6 @@
 	<QuestionPage
 		journey="Adding a Client to Highland Midwifery"
 		{steps}
-		allStepsHref="/style-guide/question-page"
 		backHref="/style-guide/question-page"
 		errorSummary={hasError ? errorSummary : undefined}
 		caption="Who Anne-Marie Ochieng-Whitfield is"

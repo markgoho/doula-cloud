@@ -113,13 +113,30 @@
 			padding-inline: var(--space-2);
 		}
 
-		/* The content floor: the four portal nav items stop fitting beside
-		   the Practice's name and the sign-out control below this, and it is
-		   the bar's own inline size that is measured, never a device width
-		   (ADR-0024). Below the floor the same items are in the narrow row,
-		   which is why both trees are in the document and one is
-		   display:none. */
-		@container portal-top-bar (min-width: 48rem) {
+		/* Unavoidable (#564): the same shape as StaffTopBar's own -- a wide
+		   nav row and a narrow stacked row are two landmarks, one always
+		   display:none, a different DOM tree rather than one tree
+		   rearranged, which is the ordinary case an intrinsic mechanism
+		   would otherwise handle.
+
+		   The content floor, re-measured 2026-09-01 in the canonical
+		   environment (#564): swept with `overflow-wrap` neutralized on
+		   /style-guide/portal-top-bar's own demo -- the previous 48rem
+		   (768px) was never measured against this failure at all, and a
+		   first measurement on 2026-08-31 read the four portal nav items
+		   (beside the Practice's name and the sign-out control) as
+		   stopping overflow at 572px, 35.75rem. That number held on the
+		   machine that measured it but read as insufficient on CI's own
+		   runner: the same font bytes rasterize wider on CI's Linux/
+		   Chromium, so the bar needs 584px, not 572px, to stop
+		   overflowing. 36.5rem is that fixed point, measured in CI's own
+		   Linux/Chromium, the one named environment a floor's minimality
+		   is judged against (CONTEXT.md's Content floor entry), with no
+		   margin added beyond it. It is the bar's own inline size that is
+		   measured, never a device width (ADR-0024). Below the floor the
+		   same items are in the narrow row, which is why both trees are
+		   in the document and one is display:none. */
+		@container portal-top-bar (min-width: 36.5rem) {
 			.wide {
 				display: flex;
 			}
