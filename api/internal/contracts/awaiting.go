@@ -82,11 +82,21 @@ type AwaitingResponse struct {
 // AwaitingSignatureHandler lists every Contract at the Practice that is
 // not yet signed -- the roll-up #426 was opened for, and the thing whose
 // absence made chasing signatures mean opening every Engagement in turn
-// (docs/journeys/non-doula-admin.md, DW-G5). Owner or Admin only, the
-// same seat billing holds: this is the Practice's book of outstanding
-// agreements, and ADR-0008's read table gives a Doula her own
-// Engagements, not the Practice's ledger of them. Must be mounted behind
+// (docs/journeys/non-doula-admin.md, DW-G5). Must be mounted behind
 // staffauth.Middleware.
+//
+// Owner or Admin only, which #426 asked for and which is worth stating
+// against ADR-0008 rather than assumed: the read table's "Contract --
+// scope" row does admit an employee Doula, and nothing returned here is
+// money. But that row is about a Contract she reaches through an
+// Engagement, and the contractor half of the same table narrows even
+// that to the Engagements she is attached to. A Practice-wide roll-up
+// has no Engagement to reach through -- it names every Client with an
+// agreement outstanding anywhere at the Practice, attached or not -- so
+// it follows the Practice-wide readers the table does have: the credit
+// balance and the Practice-wide Invoice list, both Owner and Admin.
+// GetContractHandler is still where a Doula reads the scope of a
+// Contract she is on.
 //
 // Ordered oldest first, which is what makes it a work list rather than a
 // feed: the Contract that has been waiting longest is the one that has
