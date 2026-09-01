@@ -16,6 +16,7 @@ export const PORTAL_CLIENT_PASSWORD = 'password123';
 
 export interface SeededPortalClient {
 	practiceId: string;
+	staffId: string;
 	clientId: string;
 	engagementId: string;
 	staffEmail: string;
@@ -170,7 +171,7 @@ export async function seedPortalClient(
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
+	const { practiceId, staffId } = JSON.parse(signupBody);
 
 	// Everything after signup is cookie-authenticated (#151).
 	const staffHeaders = await signIn(request, API_URL, staffIdToken);
@@ -198,6 +199,7 @@ export async function seedPortalClient(
 
 	return {
 		practiceId,
+		staffId,
 		clientId,
 		engagementId,
 		staffEmail,
