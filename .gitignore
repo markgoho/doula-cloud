@@ -72,3 +72,7 @@ hugo/content/p/
 # on every provision.
 .port-offset
 .firebase.e2e.json
+# golangci-lint's own results cache, scoped per worktree via GOLANGCI_LINT_CACHE
+# (docs/testing.md) so a pruned worktree's stale results can never leak into
+# another worktree's `golangci-lint run` (#587).
+api/.golangci-cache

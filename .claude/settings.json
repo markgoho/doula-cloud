@@ -35,6 +35,12 @@
             "if": "Bash(git *)",
             "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-shared-index.sh\"",
             "statusMessage": "Checking this is safe against a shared index"
+          },
+          {
+            "type": "command",
+            "if": "Bash(*golangci-lint*)",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-golangci-lint-cache.sh\"",
+            "statusMessage": "Checking golangci-lint's cache is scoped to this worktree"
           }
         ]
       },

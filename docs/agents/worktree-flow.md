@@ -62,6 +62,8 @@ checkout's modules for every worktree sharing them at once. The provisioning hoo
 avoids this (it unlinks before installing); don't `bun install` by hand inside a worktree
 without checking `ls -la node_modules` first.
 
+**Never run bare `golangci-lint run` in a worktree.** Its shared results cache can serve findings pointing at a pruned worktree's files, or mask a real issue behind a stale "clean" result — see `docs/testing.md`'s `golangci-lint` section for the `GOLANGCI_LINT_CACHE` invocation that scopes the cache to the current worktree instead; `.claude/hooks/gate-golangci-lint-cache.sh` blocks the bare form in a Claude Code session.
+
 **Only one worktree at a time may hold port offset 0** — that's the main checkout itself, by
 having no `.port-offset` file. A worktree never gets assigned 0.
 
