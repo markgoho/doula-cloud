@@ -19,14 +19,19 @@ import (
 )
 
 // Detail is an Engagement's basic detail: the Client it's for, its
-// status, and when it was created -- the landing point later features
-// (Visits, Plans, Contracts, Messages) attach to.
+// status, when it was created, and when it's due -- the landing point
+// later features (Visits, Plans, Contracts, Messages) attach to.
 type Detail struct {
 	EngagementID string    `json:"engagementId"`
 	ClientID     string    `json:"clientId"`
 	ClientName   string    `json:"clientName"`
 	Status       string    `json:"status"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
+	// postpartum-only Engagement has none. Mirrors portal.Detail's own
+	// field (#505) -- same nullable-column read, same omitted-when-null
+	// shape (#538).
+	DueDate *string `json:"dueDate,omitempty"`
 }
 
 // DetailHandler views one Engagement's basic detail: every Staff role
@@ -66,13 +71,14 @@ func DetailHandler() http.Handler {
 		var d Detail
 		var givenName string
 		var preferredName sql.NullString
+		var dueDate sql.NullString
 		err = tx.QueryRowContext(r.Context(),
-			`SELECT e.id, c.id, c.given_name, c.preferred_name, e.status, e.created_at
+			`SELECT e.id, c.id, c.given_name, c.preferred_name, e.status, e.created_at, e.due_date::text
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,
 			engagementID, practiceID,
-		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt)
+		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt, &dueDate)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "engagement not found", http.StatusNotFound)
 			return
@@ -83,6 +89,9 @@ func DetailHandler() http.Handler {
 			return
 		}
 		d.ClientName = client.PreferredName(givenName, preferredName.String)
+		if dueDate.Valid {
+			d.DueDate = &dueDate.String
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
