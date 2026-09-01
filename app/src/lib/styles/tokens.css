@@ -26,6 +26,12 @@
 	 * Surfaces, from the raised card down to the deepest inset panel. The
 	 * card is the TOP of this ladder, not an exception above it.
 	 * ------------------------------------------------------------------ */
+	/* `color-scheme` is a browser-native property, not a custom property:
+	   it is what the browser itself reads for chrome it paints outside our
+	   own styling -- scrollbars, the canvas outside the document, default
+	   form-control chrome, spellcheck underlines. It tracks the same
+	   three-way resolution as the palette below, #438. */
+	color-scheme: light;
 	--color-surface-bright: oklch(98.5% 0.008 7);
 	--color-surface: oklch(96.7% 0.011 357);
 	--color-surface-container: oklch(94.9% 0.011 357);
@@ -283,12 +289,22 @@
  *
  * The two blocks below are byte-identical on purpose: `prefers-color-scheme`
  * follows the system, `[data-theme]` is a manual override that wins. CSS has
- * no way to share one declaration set across a media query and a plain
- * selector, so `tokens.spec.ts` asserts the two stay in sync rather than
- * trusting whoever edits next.
+ * no way to share one custom-property declaration set across a media query
+ * and a plain selector, so `tokens.spec.ts` asserts the two stay in sync
+ * rather than trusting whoever edits next.
+ *
+ * `light-dark()` was considered as a way to collapse these two blocks into
+ * one, now that #438 gives both an extra property to keep in lockstep.
+ * Declined: with `color-scheme` declared below, both mechanisms already
+ * resolve identically, so `light-dark()` buys no new behavior; the
+ * duplication risk it would remove is already covered by the sync test
+ * above; and it would trade CSS duplication for parser complexity in
+ * `tokens.spec.ts`, which would need to split every value's light and dark
+ * halves out of one composite instead of reading two plain blocks.
  */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
+		color-scheme: dark;
 		--color-surface-bright: oklch(22% 0.01 350);
 		--color-surface: oklch(17.5% 0.01 350);
 		--color-surface-container: oklch(26% 0.011 350);
@@ -312,6 +328,7 @@
 }
 
 :root[data-theme='dark'] {
+	color-scheme: dark;
 	--color-surface-bright: oklch(22% 0.01 350);
 	--color-surface: oklch(17.5% 0.01 350);
 	--color-surface-container: oklch(26% 0.011 350);

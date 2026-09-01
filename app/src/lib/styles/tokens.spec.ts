@@ -33,6 +33,18 @@ function block(selector: string): Map<string, string> {
 	return declarations;
 }
 
+// The `color-scheme` value declared directly inside the block opened by
+// `selector`. Not a custom property, so `block()`'s `--name: value` regex
+// does not see it -- this is why the sync test above cannot catch it.
+function colorScheme(selector: string): string {
+	const start = source.indexOf(`${selector} {`);
+	if (start === -1) throw new Error(`No block for selector: ${selector}`);
+	const body = source.slice(start, source.indexOf('}', start));
+	const match = /\bcolor-scheme\s*:\s*(\w+)\s*;/.exec(body);
+	if (!match) throw new Error(`No color-scheme declared in ${selector}`);
+	return match[1];
+}
+
 function parseOklch(value: string): Oklch {
 	const match = /^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(value);
 	if (!match) throw new Error(`Not a plain oklch() value: ${value}`);
@@ -139,6 +151,28 @@ describe('the two dark blocks stay in sync', () => {
 			.filter((name) => !name.startsWith('--color-'))
 			.toArray();
 		expect(nonColor).toStrictEqual([]);
+	});
+});
+
+/*
+ * `color-scheme` -- #438. Browser-rendered UI (scrollbars, the canvas
+ * outside the document, default form-control chrome, spellcheck underlines)
+ * reads this property, not our custom properties, so it needs its own
+ * assertion: `block()`'s regex only ever sees `--name: value` pairs, and the
+ * "two dark blocks stay in sync" test above cannot see a bare `color-scheme`
+ * declaration at all -- a mismatch there would ship silently without this.
+ */
+describe('color-scheme tracks the resolved theme, not just the system preference', () => {
+	it('is light by default', () => {
+		expect(colorScheme(':root')).toBe('light');
+	});
+
+	it('is dark for the system-preference block', () => {
+		expect(colorScheme(":root:not([data-theme='light'])")).toBe('dark');
+	});
+
+	it('is dark for the manual-override block, matching the system-preference block', () => {
+		expect(colorScheme(":root[data-theme='dark']")).toBe('dark');
 	});
 });
 
