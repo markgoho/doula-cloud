@@ -32,7 +32,12 @@ function runGit(args: string[], cwd = SOURCE_ROOT): string {
 	return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
-function listWorktrees(): WorktreeInfo[] {
+/*
+ * `onlyManaged` false includes the main checkout and any worktree made
+ * outside `.claude/worktrees`, which the orphan sweep needs: a branch
+ * checked out anywhere is somebody's, wherever that anywhere is.
+ */
+function listWorktrees(onlyManaged = true): WorktreeInfo[] {
 	const raw = runGit(['worktree', 'list', '--porcelain']);
 	const entries: WorktreeInfo[] = [];
 	let current: Partial<WorktreeInfo> | null = null;
@@ -49,6 +54,7 @@ function listWorktrees(): WorktreeInfo[] {
 	}
 	if (current?.path) entries.push({ path: current.path, branch: current.branch ?? null, locked: current.locked ?? false });
 
+	if (!onlyManaged) return entries;
 	return entries.filter(entry => path.resolve(entry.path).startsWith(`${WORKTREES_ROOT}${path.sep}`));
 }
 
@@ -72,7 +78,7 @@ function isDirty(worktreePath: string): boolean {
  * costs nothing when `gh` is unreachable.
  */
 function isMergedIntoTrunk(branch: string, pr: string): boolean {
-	if (pr.split(' ')[0] === 'MERGED') return true;
+	if (isLanded(pr)) return true;
 	try {
 		const merged = runGit(['branch', '--merged', 'origin/trunk', '--format=%(refname:short)']);
 		return merged.split('\n').includes(branch);
@@ -90,7 +96,7 @@ function isMergedIntoTrunk(branch: string, pr: string): boolean {
  * catches a follow-up commit pushed on top of a merged branch -- that
  * worktree has not finished either.
  */
-function prState(branch: string, worktreePath: string): string {
+function prState(branch: string, tip: string): string {
 	try {
 		const raw = execFileSync('gh', ['pr', 'view', branch, '--json', 'state,url,headRefOid'], {
 			cwd: SOURCE_ROOT,
@@ -98,13 +104,21 @@ function prState(branch: string, worktreePath: string): string {
 			stdio: ['ignore', 'pipe', 'ignore']
 		});
 		const parsed = JSON.parse(raw) as { state: string; url: string; headRefOid: string };
-		if (parsed.state === 'MERGED' && runGit(['rev-parse', 'HEAD'], worktreePath) !== parsed.headRefOid) {
+		if (parsed.state === 'MERGED' && tip !== parsed.headRefOid) {
 			return `MERGED-ELSEWHERE ${parsed.url}`;
 		}
 		return `${parsed.state} ${parsed.url}`;
 	} catch {
 		return 'no PR';
 	}
+}
+
+function isLanded(pr: string): boolean {
+	return pr.split(' ')[0] === 'MERGED';
+}
+
+function tipOf(ref: string, cwd = SOURCE_ROOT): string {
+	return runGit(['rev-parse', ref], cwd);
 }
 
 /*
@@ -147,6 +161,68 @@ function dirSize(worktreePath: string): string {
 	}
 }
 
+/*
+ * Branches whose worktree is gone but which are still here.
+ *
+ * Removing a worktree does not take its branch with it, and neither
+ * `ExitWorktree` nor `git worktree remove` can: `git branch -d` refuses a
+ * squash-merged branch because its commits are not on trunk, which is the
+ * same blind spot that made `--merged` inert. The worktree loop above only
+ * ever sees branches that still have a worktree, so a branch orphaned by
+ * an earlier removal is never collected by it and accumulates -- this
+ * repo had roughly twenty when the sweep was written.
+ *
+ * A branch goes only on proof that nothing is lost with it:
+ *
+ *   - its tip is already an ancestor of `origin/trunk`, so it holds no
+ *     commit trunk does not have; or
+ *   - its PR is `MERGED` *at this exact tip*, which is the squash case.
+ *
+ * Everything else stays, and that is deliberate rather than incidental:
+ * `research/baseline-521-harness` is kept on purpose by the map it
+ * belongs to, and the `prototype/*` branches hold work that was never
+ * pushed. None has a merged PR and none is an ancestor of trunk, so no
+ * rule here can reach them.
+ */
+function sweepOrphanBranches(remove: boolean): void {
+	const held = new Set(
+		listWorktrees(false)
+			.map(wt => wt.branch)
+			.filter((branch): branch is string => branch !== null)
+	);
+	const ancestors = new Set(
+		runGit(['branch', '--merged', 'origin/trunk', '--format=%(refname:short)']).split('\n')
+	);
+	const branches = runGit(['branch', '--format=%(refname:short)']).split('\n').filter(Boolean);
+
+	for (const branch of branches) {
+		if (branch === 'trunk' || held.has(branch)) continue;
+
+		let why: string;
+		if (ancestors.has(branch)) {
+			why = 'no commits of its own';
+		} else {
+			/* Only branches that are NOT already on trunk need the network,
+			   which keeps this to the squash-merged handful rather than one
+			   `gh` call per local branch. */
+			const pr = prState(branch, tipOf(branch));
+			if (!isLanded(pr)) continue;
+			why = pr;
+		}
+
+		if (!remove) {
+			console.log(`orphan branch (would remove): ${branch}  ${why}`);
+			continue;
+		}
+		try {
+			runGit(['branch', '-D', branch]);
+			console.log(`removed branch: ${branch} (${why})`);
+		} catch {
+			console.log(`skip (could not delete): ${branch}`);
+		}
+	}
+}
+
 function main(): void {
 	const merged = process.argv.includes('--merged');
 	if (merged) {
@@ -170,7 +246,7 @@ function main(): void {
 		const dirty = isDirty(wt.path);
 		const branch = wt.branch ?? '(detached)';
 		const size = dirSize(wt.path);
-		const pr = wt.branch ? prState(wt.branch, wt.path) : 'no branch';
+		const pr = wt.branch ? prState(wt.branch, tipOf('HEAD', wt.path)) : 'no branch';
 		const mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
 
 		if (!merged) {
@@ -212,7 +288,7 @@ function main(): void {
 			/* `-d` refuses a squash-merged branch for the same reason
 			   `--merged` never listed it: its commits are not on trunk. The
 			   PR says the work landed, so force it -- and only then. */
-			if (pr.split(' ')[0] === 'MERGED') {
+			if (isLanded(pr)) {
 				try {
 					runGit(['branch', '-D', wt.branch]);
 				} catch {
@@ -224,6 +300,7 @@ function main(): void {
 	}
 
 	runGit(['worktree', 'prune']);
+	sweepOrphanBranches(merged);
 }
 
 main();
