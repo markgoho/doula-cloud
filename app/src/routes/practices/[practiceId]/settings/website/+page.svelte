@@ -245,10 +245,8 @@
 		]}
 		value={choice}
 		onChange={(value: string) => (choice = value as Choice)}
+		error={fieldErrors.mode}
 	/>
-	{#if fieldErrors.mode}
-		<p class="field-error" role="alert">{fieldErrors.mode}</p>
-	{/if}
 {/snippet}
 
 {#snippet ownWebsite()}
@@ -498,12 +496,6 @@
 	@layer components {
 		container-l {
 			padding-block: var(--space-8);
-		}
-
-		.field-error {
-			margin: 0;
-			color: var(--color-error);
-			font-size: var(--text-body-sm-size);
 		}
 	}
 </style>

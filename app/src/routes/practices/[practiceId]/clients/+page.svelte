@@ -6,7 +6,9 @@
 	import { loadClients, type ClientListItem } from '#lib/client.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import type { PageProps as PageProperties } from './$types';
@@ -174,7 +176,7 @@
 </script>
 
 <PageTitle page="Clients" />
-<h1>Clients</h1>
+<Heading level={1} text="Clients" />
 
 {#if !isContractor}
 	<!--
@@ -199,7 +201,7 @@
 </label>
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice message={error} variant="error" />
 {:else if isLoaded}
 	<DataTable
 		{columns}

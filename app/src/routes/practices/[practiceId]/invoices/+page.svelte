@@ -21,6 +21,7 @@
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import type { PageProps as PageProperties } from './$types';
@@ -111,8 +112,5 @@
 />
 
 {#if loadError}
-	<!-- A raw <p role="alert">, the way the Billing page reports its own
-	     purchase failure: Text is a closed set of type steps and tones and
-	     carries no live-region role. -->
-	<p role="alert">{loadError}</p>
+	<Notice message={loadError} variant="error" />
 {/if}

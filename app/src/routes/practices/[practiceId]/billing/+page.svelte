@@ -11,7 +11,10 @@
 	} from '#lib/billing.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -116,9 +119,9 @@
 </script>
 
 <PageTitle page="Billing" />
-<h1>Billing</h1>
+<Heading level={1} text="Billing" />
 
-<p>Credit balance: {data.balance}</p>
+<Text text={`Credit balance: ${data.balance}`} />
 
 <DataTable
 	{columns}
@@ -135,9 +138,12 @@
 {/if}
 
 {#if checkoutStatus === 'success'}
-	<p role="status">Credit purchase complete. The balance updates once Stripe confirms payment.</p>
+	<Notice
+		message="Credit purchase complete. The balance updates once Stripe confirms payment."
+		variant="status"
+	/>
 {:else if checkoutStatus === 'cancelled'}
-	<p role="status">Credit purchase cancelled.</p>
+	<Notice message="Credit purchase cancelled." variant="status" />
 {/if}
 
 <form onsubmit={handlePurchase}>
@@ -164,6 +170,6 @@
 	</LabeledField>
 	<Button label="Buy credits" type="submit" disabled={!isOwner} loading={isPurchasing} />
 	{#if purchaseError}
-		<p role="alert">{purchaseError}</p>
+		<Notice message={purchaseError} variant="error" />
 	{/if}
 </form>
