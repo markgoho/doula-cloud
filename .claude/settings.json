@@ -50,6 +50,33 @@
         ]
       }
     ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .claude/hooks/worktree-prune.ts --merged",
+            "statusMessage": "Removing worktrees whose work has landed",
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .claude/hooks/gate-worktree-cleanup.ts",
+            "statusMessage": "Checking whether this worktree has landed",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "WorktreeCreate": [
       {
         "matcher": "*",
