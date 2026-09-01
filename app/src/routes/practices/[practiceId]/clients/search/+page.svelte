@@ -24,6 +24,7 @@
 	import { displayName } from '#lib/clientDetail.js';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -172,10 +173,10 @@
 		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 			<stack-l space="var(--space-6)">
 				<Heading level={1} variant="page" text="Add a Client" />
-				<p class="lede">
-					Work at this Practice reaches you as an Offer, so there is no Client to search for or
-					add here. To take on Clients of your own, set up a Practice.
-				</p>
+				<Text
+					tone="variant"
+					text="Work at this Practice reaches you as an Offer, so there is no Client to search for or add here. To take on Clients of your own, set up a Practice."
+				/>
 				<cluster-l space="var(--space-3)" align="center">
 					<Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" />
 				</cluster-l>
@@ -189,10 +190,10 @@
 		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 			<stack-l space="var(--space-7)">
 				<Heading level={1} variant="page" text="Find a Client" />
-				<p class="lede">
-					Search for a Client already on file before adding her as new. Name, date of birth,
-					email and phone all match — use whatever you have, none of them is required on its own.
-				</p>
+				<Text
+					tone="variant"
+					text="Search for a Client already on file before adding her as new. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
+				/>
 
 				{#if pageErrors.length > 0}
 					<ErrorSummary errors={pageErrors} />
@@ -288,7 +289,11 @@
 														{/each}
 													</ul>
 												{:else}
-													<p class="quiet">No Engagements with this Client yet.</p>
+													<Text
+													step="body-sm"
+													tone="muted"
+													text="No Engagements with this Client yet."
+												/>
 												{/if}
 												<Link href={detailHref(match.id)} label="Open {displayName(match)}'s record" />
 											</stack-l>
@@ -297,16 +302,12 @@
 								</stack-l>
 							{:else}
 								<stack-l space="var(--space-4)">
-									<p class="lede">
-										{#if name.trim()}
-											Nothing at this Practice matches what was typed. Add her as a new Client
-											instead — the name typed here carries onto intake's first page, so it
-											does not have to be retyped.
-										{:else}
-											Nothing at this Practice matches what was typed. Add her as a new Client
-											instead.
-										{/if}
-									</p>
+									<Text
+										tone="variant"
+										text={name.trim()
+											? "Nothing at this Practice matches what was typed. Add her as a new Client instead — the name typed here carries onto intake's first page, so it does not have to be retyped."
+											: 'Nothing at this Practice matches what was typed. Add her as a new Client instead.'}
+									/>
 									<cluster-l space="var(--space-3)" align="center">
 										<Link href={startIntakeHref()} label="Add a new Client" />
 									</cluster-l>
@@ -334,18 +335,6 @@
 		[tabindex='-1']:focus {
 			outline: var(--focus-ring-width) solid var(--color-primary);
 			outline-offset: var(--focus-ring-offset);
-		}
-
-		.lede {
-			margin: 0;
-			max-inline-size: 62ch;
-			color: var(--color-on-surface-variant);
-		}
-
-		.quiet {
-			margin: 0;
-			font-size: var(--text-body-sm-size);
-			color: var(--color-on-surface-muted);
 		}
 
 		.match {
