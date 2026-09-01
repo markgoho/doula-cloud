@@ -33,3 +33,19 @@ This does not conflict with [the design brief](../design/brief.md)'s appeal to J
 - Their content rules become ours where they touch what a person reads: no "please", no "valid" or "invalid", no "required" in an error message. This sits alongside [#463](https://github.com/markgoho/doula-cloud/issues/463)'s no-pronoun rule, and neither overrules the other.
 - Their UK-specific patterns are N/A with a reason on the table, so nobody re-derives it.
 - We do not track their releases. The table is checked when we build a screen, not when they ship a version.
+
+## Amendment (2026-09-01): what to do when GOV.UK has no pattern at all
+
+The decision above assumes GOV.UK either has a pattern or is departed from with a recorded reason. It says nothing about the third case: **GOV.UK has no pattern at all.** Raised by the account owner during [#512](https://github.com/markgoho/doula-cloud/issues/512)'s grilling and confirmed on [#514](https://github.com/markgoho/doula-cloud/issues/514). [#508](https://github.com/markgoho/doula-cloud/issues/508) hit this first: GOV.UK publishes nothing about tables at narrow widths beyond a small-text class, their own backlog issue [alphagov/govuk-design-system-backlog#61](https://github.com/alphagov/govuk-design-system-backlog/issues/61) has been open since 2018 with 62 comments, and an HMRC engineer commented in October 2025 that they had to port ONS's and NHS's design-system CSS by hand for exactly this gap.
+
+**A GOV.UK gap is not a licence to invent.** It is a prompt to walk this order until a source has an opinion:
+
+1. **GOV.UK Design System** -- unchanged, this ADR's own default.
+2. **NHS.UK Design System and ONS Design System**, tied -- both built on GOV.UK's own foundations, so they extend it rather than fight it, and both are publicly maintained and user-tested.
+3. **Inclusive Components** (Heydon Pickering) and **Adrian Roselli's** writing, tied -- the accessibility-first component answer, and the primary source most others cite on tables, `display: contents`, and scroll regions.
+4. **Every Layout** -- already licensed by this project and already the basis of [ADR-0003](0003-css-layout-primitives-as-native-custom-elements.md).
+5. **Original work, with a recorded reason**, only once 1-4 are checked and found wanting.
+
+No tie-break rule exists within a tier: two sources rarely disagree, and where they genuinely do, the row says so and picks one, rather than this ADR pre-solving a conflict that has not happened yet.
+
+**Being answered this way is not a Departure.** Departure, above, is reserved for knowingly overriding a GOV.UK decision that exists. This is GOV.UK having no decision to override -- a different finding, and a defect only if the row fails to say where the answer came from. [`docs/design/govuk-alignment.md`](../design/govuk-alignment.md) records it as its own outcome, **Answered -- <source>**, alongside Aligned/Open/N/A/Departed.
