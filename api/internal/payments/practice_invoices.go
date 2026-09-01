@@ -64,6 +64,13 @@ type PracticeInvoicesResponse struct {
 // RA-G7 (#265) found missing, where the only way to answer "who owes us
 // money" was to open every Engagement in turn.
 //
+// ?unpaid=true narrows the list to the Invoices making up
+// OutstandingCents/OutstandingCount (#427) -- status 'open' alone, the
+// same definition practiceInvoiceTotalsQuery already uses. The totals
+// stay whole-book regardless: a Practice landing block that shows "3
+// unpaid, $450 outstanding" needs both numbers to agree with the list
+// underneath it, not with whatever page the reader happens to be on.
+//
 // Who may read it: Owner and Admin only. ADR-0006 put "Contract -- money,
 // and Invoice history" on the Owner/Admin row of its read table, and
 // ADR-0008 (which supersedes that table) keeps it there, adding that a
@@ -78,8 +85,7 @@ type PracticeInvoicesResponse struct {
 // Must be mounted behind staffauth.Middleware.
 func GetPracticeInvoicesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
 		if !ok {
 			return
 		}
@@ -93,8 +99,9 @@ func GetPracticeInvoicesHandler() http.Handler {
 			}
 			after = &c
 		}
+		unpaidOnly := r.URL.Query().Get("unpaid") == "true"
 
-		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after)
+		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, unpaidOnly)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -142,10 +149,22 @@ const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name,
 	JOIN clients cl ON cl.id = e.client_id
 	WHERE i.practice_id = $1`
 
+// practiceInvoiceUnpaidFilter is appended for ?unpaid=true -- 'open' is
+// the same "billed and not yet collected" definition
+// practiceInvoiceTotalsQuery's outstanding totals already use.
+const practiceInvoiceUnpaidFilter = ` AND i.status = 'open'`
+
 const listPracticeInvoicesQuery = practiceInvoiceColumns + `
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
+const listPracticeInvoicesUnpaidQuery = practiceInvoiceColumns + practiceInvoiceUnpaidFilter + `
+	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
+
 const listPracticeInvoicesAfterQuery = practiceInvoiceColumns + `
+	AND (i.created_at, i.id) < ($2, $3)
+	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
+
+const listPracticeInvoicesUnpaidAfterQuery = practiceInvoiceColumns + practiceInvoiceUnpaidFilter + `
 	AND (i.created_at, i.id) < ($2, $3)
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
 
@@ -158,12 +177,17 @@ const listPracticeInvoicesAfterQuery = practiceInvoiceColumns + `
 // (00056_invoices_practice_listing_index.sql), so the page is an index
 // scan of at most invoicePageSize+1 rows rather than a sort of the
 // Practice's whole book.
-func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor) ([]PracticeInvoiceView, bool, error) {
+func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, unpaidOnly bool) ([]PracticeInvoiceView, bool, error) {
 	var rows *sql.Rows
 	var err error
-	if after != nil {
+	switch {
+	case after != nil && unpaidOnly:
+		rows, err = tx.QueryContext(ctx, listPracticeInvoicesUnpaidAfterQuery, practiceID, after.createdAt, after.invoiceID, invoicePageSize+1)
+	case after != nil:
 		rows, err = tx.QueryContext(ctx, listPracticeInvoicesAfterQuery, practiceID, after.createdAt, after.invoiceID, invoicePageSize+1)
-	} else {
+	case unpaidOnly:
+		rows, err = tx.QueryContext(ctx, listPracticeInvoicesUnpaidQuery, practiceID, invoicePageSize+1)
+	default:
 		rows, err = tx.QueryContext(ctx, listPracticeInvoicesQuery, practiceID, invoicePageSize+1)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
