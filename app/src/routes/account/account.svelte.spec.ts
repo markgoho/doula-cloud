@@ -132,30 +132,8 @@ describe('the account screen', () => {
 			.toBeVisible();
 	});
 
-	it('offers a way back to every Practice she belongs to', async () => {
-		mockApi();
-		await render(Page, {});
-
-		const back = testPage.getByRole('navigation', { name: 'Your practices' });
-		await expect.element(back.getByRole('link', { name: 'Rochester Doulas' })).toBeVisible();
-	});
-
-	it('lists one link per Practice when she works at several', async () => {
-		mockApi({
-			sessionResponse: jsonResponse({
-				...session,
-				memberships: [
-					...session.memberships,
-					{ practiceId: 'practice-2', practiceName: 'Finger Lakes Birth', roles: ['doula'] }
-				]
-			})
-		});
-		await render(Page, {});
-
-		const back = testPage.getByRole('navigation', { name: 'Your practices' });
-		await expect.element(back.getByRole('link', { name: 'Finger Lakes Birth' })).toBeVisible();
-		expect(back.getByRole('link').elements()).toHaveLength(2);
-	});
+	// The practices nav is layout chrome, not this page's business -- see
+	// account-layout.svelte.spec.ts (#474).
 });
 
 describe('when the account screen cannot do its job', () => {
