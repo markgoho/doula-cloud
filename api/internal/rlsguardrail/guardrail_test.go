@@ -135,3 +135,67 @@ func TestRLS_GuardrailFailsClosedWithNoSessionVariableSet(t *testing.T) {
 		t.Fatalf("expected 0 rows with no session variables set (fail closed), got %d", count)
 	}
 }
+
+// TestRLS_GuardrailActivityPracticeTierIsolation exercises
+// activity_practice_visibility (00051_activity_log.sql, ADR-0022, #476):
+// a Practice's own app.current_practice_id sees only its own activity
+// row, and a different Practice's session sees none of it -- the same
+// case client_intake_grants_test.go's TestGrant_ActivityIsAppendOnly
+// proves at the grant tier, proved here at the RLS tier.
+func TestRLS_GuardrailActivityPracticeTierIsolation(t *testing.T) {
+	db := testdb.New(t)
+	practiceA, _, engagementA := seedEngagementAt(t, db, "Guardrail Activity Practice A")
+	practiceB, _, engagementB := seedEngagementAt(t, db, "Guardrail Activity Practice B")
+	activityA := seedActivityRow(t, db, practiceA, engagementA)
+	activityB := seedActivityRow(t, db, practiceB, engagementB)
+
+	if !activityVisible(t, db, practiceA, activityA) {
+		t.Fatal("Practice A's own session could not see its own activity row")
+	}
+	if !activityVisible(t, db, practiceB, activityB) {
+		t.Fatal("Practice B's own session could not see its own activity row")
+	}
+	if activityVisible(t, db, practiceB, activityA) {
+		t.Fatal("Practice B's session saw Practice A's activity row")
+	}
+	if activityVisible(t, db, practiceA, activityB) {
+		t.Fatal("Practice A's session saw Practice B's activity row")
+	}
+}
+
+// seedActivityRow inserts one system-actor activity row via the Admin
+// connection, subject_kind 'engagement' (ADR-0022, #476).
+func seedActivityRow(t *testing.T, db *testdb.DB, practiceID, engagementID string) (activityID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind)
+		 VALUES ($1, 'engagement', $2, 'engagement_created', '{}'::jsonb, 'system') RETURNING id`,
+		practiceID, engagementID,
+	).Scan(&activityID); err != nil {
+		t.Fatalf("seed activity row: %v", err)
+	}
+	return activityID
+}
+
+// activityVisible sets app.current_practice_id to practiceID for a
+// single transaction on db.App and reports whether activityID is
+// visible under that session context.
+func activityVisible(t *testing.T, db *testdb.DB, practiceID, activityID string) bool {
+	t.Helper()
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		t.Fatalf("set_config app.current_practice_id: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM activity WHERE id = $1`, activityID).Scan(&count); err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	return count == 1
+}

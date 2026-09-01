@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -110,6 +111,18 @@ func ReassignHandler() http.Handler {
 		}
 		if rows == 0 {
 			http.Error(w, "visit not found", http.StatusNotFound)
+			return
+		}
+		reassignerStaffID, _ := staffauth.StaffID(r.Context())
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionVisitReassigned),
+			Actor:       activity.StaffActor(reassignerStaffID),
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

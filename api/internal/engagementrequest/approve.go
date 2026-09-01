@@ -3,10 +3,12 @@ package engagementrequest
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -149,6 +151,10 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", warning, fmt.Errorf("engagementrequest: insert engagement: %w", err)
 	}
+	if err := recordEngagementCreated(ctx, tx, practiceID, engagementID, kind, approverStaffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", warning, err
+	}
 
 	if err := billing.ConsumeCredit(ctx, tx, practiceID, engagementID); err != nil {
 		return "", warning, err //nolint:wrapcheck // billing.ErrNoCreditsRemaining is the sentinel callers errors.Is against, per this func's own doc comment
@@ -165,4 +171,28 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 	}
 
 	return engagementID, warning, nil
+}
+
+// recordEngagementCreated writes #476's activity row for the one path
+// that creates an Engagement -- ADR-0022's ledger, subject_kind
+// 'engagement' (activity.SubjectEngagement), subject_id the Engagement's
+// own new id.
+func recordEngagementCreated(ctx context.Context, tx *sql.Tx, practiceID, engagementID, kind, approverStaffID string) error {
+	diff, err := json.Marshal(map[string]string{"kind": kind})
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
+		return fmt.Errorf("engagementrequest: marshal engagement created diff: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionEngagementCreated),
+		Diff:        diff,
+		Actor:       activity.StaffActor(approverStaffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("engagementrequest: record engagement created: %w", err)
+	}
+	return nil
 }

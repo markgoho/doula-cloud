@@ -3,9 +3,11 @@ package offer
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -17,7 +19,7 @@ import (
 // staffauth.Middleware.
 func WithdrawHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
 		if !ok {
 			return
 		}
@@ -34,25 +36,32 @@ func WithdrawHandler() http.Handler {
 			return
 		}
 
-		result, err := tx.ExecContext(r.Context(),
+		var engagementID string
+		err := tx.QueryRowContext(r.Context(),
 			`UPDATE engagement_offers
 			    SET state = 'withdrawn', decided_at = now(), decided_by = $1
-			  WHERE id = $2 AND state = 'offered'`,
+			  WHERE id = $2 AND state = 'offered'
+			 RETURNING engagement_id`,
 			actorStaffID, offerID,
-		)
+		).Scan(&engagementID)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "no open offer found at this practice", http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionOfferWithdrawn),
+			Actor:       activity.StaffActor(actorStaffID),
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if rows == 0 {
-			http.Error(w, "no open offer found at this practice", http.StatusNotFound)
 			return
 		}
 

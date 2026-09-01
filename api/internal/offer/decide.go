@@ -3,10 +3,12 @@ package offer
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -93,18 +95,54 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
 	}
+	practiceID, _ := staffauth.PracticeID(ctx)
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionOfferAccepted),
+		Actor:       activity.StaffActor(staffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+	}
 
 	// Every other open Offer on this Engagement loses, named to the
 	// person whose yes closed it -- the supersession has a human cause
 	// and records it, unlike completion's cascade (ADR-0008).
-	if _, err := tx.ExecContext(ctx,
+	superseded, err := tx.QueryContext(ctx,
 		`UPDATE engagement_offers
 		    SET state = 'superseded', decided_at = now(), decided_by = $1
-		  WHERE engagement_id = $2 AND state = 'offered' AND id <> $3`,
+		  WHERE engagement_id = $2 AND state = 'offered' AND id <> $3
+		 RETURNING id`,
 		staffID, engagementID, offerID,
-	); err != nil {
+	)
+	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+	}
+	supersededIDs, err := scanIDs(superseded)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+	}
+	for _, supersededOfferID := range supersededIDs {
+		diff, err := json.Marshal(map[string]string{"supersededOfferId": supersededOfferID, "acceptedOfferId": offerID})
+		if err != nil {
+			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
+			return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		}
+		if err := activity.Record(ctx, tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionOfferSuperseded),
+			Diff:        diff,
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		}
 	}
 
 	// attached_by is the accepter herself: an Offer's attachment is
@@ -117,13 +155,33 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 	return DecisionResponse{OfferID: offerID, State: "accepted"}, http.StatusOK, ""
 }
 
+// scanIDs drains rows of its single "id" column, closing it either way.
+func scanIDs(rows *sql.Rows) ([]string, error) {
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("offer: scan superseded offer id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("offer: iterate superseded offer ids: %w", err)
+	}
+	return ids, nil
+}
+
 // decline turns the Offer down, and says yes a second time to a repeat of
 // the same decline: #229's "durable, repeatable". Anything else -- an
 // Offer already accepted, withdrawn, superseded, or expired -- is a 409,
 // because those are real disagreements about what happened, not a
 // re-sent click.
 func decline(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionResponse, int, string) {
-	if _, status, msg := lockOwnOffer(ctx, tx, offerID, staffID); status != http.StatusOK {
+	engagementID, status, msg := lockOwnOffer(ctx, tx, offerID, staffID)
+	if status != http.StatusOK {
 		return DecisionResponse{}, status, msg
 	}
 
@@ -147,6 +205,17 @@ func decline(ctx context.Context, tx *sql.Tx, offerID, staffID string) (Decision
 			return DecisionResponse{OfferID: offerID, State: stateDeclined}, http.StatusOK, ""
 		}
 		return DecisionResponse{}, http.StatusConflict, closedMessage(ctx, tx, offerID)
+	}
+	practiceID, _ := staffauth.PracticeID(ctx)
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionOfferDeclined),
+		Actor:       activity.StaffActor(staffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
 	}
 	return DecisionResponse{OfferID: offerID, State: stateDeclined}, http.StatusOK, ""
 }

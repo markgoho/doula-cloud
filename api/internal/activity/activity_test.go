@@ -165,3 +165,91 @@ func TestRecord_SystemActor(t *testing.T) {
 		t.Fatalf("diff = %q, want a nil Diff to fall back to an empty object", diffJSON)
 	}
 }
+
+// TestMoneyActions_ContainsExactlyTheADR0008MoneySet pins the money-tier
+// action set #476's read filter builds its SQL exclusion clause from --
+// a drift here silently widens or narrows what an employed Doula or a
+// contractor can read on her Engagement ledger.
+func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
+	got := map[activity.EngagementAction]bool{}
+	for _, a := range activity.MoneyActions() {
+		got[a] = true
+	}
+	want := []activity.EngagementAction{
+		activity.ActionContractCreated,
+		activity.ActionContractSent,
+		activity.ActionContractSigned,
+		activity.ActionContractVoided,
+		activity.ActionInvoiceRaised,
+		activity.ActionInvoicePaid,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("MoneyActions() = %v, want exactly %v", activity.MoneyActions(), want)
+	}
+	for _, a := range want {
+		if !got[a] {
+			t.Errorf("MoneyActions() missing %q", a)
+		}
+	}
+}
+
+// TestMoneyActions_Sorted proves the deterministic ordering
+// engagement.ListActivityHandler's SQL-literal clause relies on.
+func TestMoneyActions_Sorted(t *testing.T) {
+	got := activity.MoneyActions()
+	for i := 1; i < len(got); i++ {
+		if got[i-1] >= got[i] {
+			t.Fatalf("MoneyActions() not sorted at index %d: %v", i, got)
+		}
+	}
+}
+
+// TestScopeToPractice_LetsAWriteOutsideStaffauthMiddlewarePassRLS proves
+// the landmine ADR-0022 names for a write site with no per-request
+// app.current_practice_id (a Client-portal or webhook path): without
+// ScopeToPractice, activity's own RLS policy refuses the INSERT.
+func TestScopeToPractice_LetsAWriteOutsideStaffauthMiddlewarePassRLS(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedPractice(t, db)
+	clientID := seedClient(t, db, practiceID)
+
+	// Proved in its own transaction: a failed statement aborts the rest
+	// of a Postgres transaction (SQLSTATE 25P02), so the RLS failure and
+	// the ScopeToPractice success below cannot share one tx.
+	func() {
+		tx, err := db.App.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatalf("begin: %v", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		if err := activity.Record(t.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   clientID,
+			Action:      "contract_signed",
+			Actor:       activity.ClientActor(clientID),
+		}); err == nil {
+			t.Fatal("expected Record to fail RLS with no app.current_practice_id set, got no error")
+		}
+	}()
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := activity.ScopeToPractice(t.Context(), tx, practiceID); err != nil {
+		t.Fatalf("ScopeToPractice: %v", err)
+	}
+	if err := activity.Record(t.Context(), tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   clientID,
+		Action:      "contract_signed",
+		Actor:       activity.ClientActor(clientID),
+	}); err != nil {
+		t.Fatalf("Record after ScopeToPractice: %v", err)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -126,6 +127,18 @@ func PostContractHandler() http.Handler {
 				http.Error(w, "a contract already exists for this engagement", http.StatusConflict)
 				return
 			}
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		staffID, _ := staffauth.StaffID(r.Context())
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionContractCreated),
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
