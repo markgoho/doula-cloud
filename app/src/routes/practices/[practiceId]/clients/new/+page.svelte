@@ -34,6 +34,7 @@
 	import { displayName } from '#lib/clientDetail.js';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -340,6 +341,12 @@
 					where the end is. Not a full StepRail -- see the module
 					comment on why this route carries no per-step `href` for one
 					to link to.
+
+					Stays raw rather than moving onto `Text` (#599): meta size at
+					weight 500, uppercased, matches no `step`/`tone` pair, and one
+					consumer is under the bar for widening the atom's API -- the
+					same single-consumer call #189 made for `invite`'s <code> and
+					#182 made for DataTable's per-row action.
 				-->
 				<p class="crumb">Adding a Client — step {stepNumber()} of 3</p>
 			{/if}
@@ -397,7 +404,7 @@
 				<div bind:this={pageStart} id="intake-heading" tabindex="-1">
 					<Heading level={1} variant="page" text={questionText()} />
 				</div>
-				<p class="lede">Either one is enough. The other can be added later.</p>
+				<Text tone="variant" text="Either one is enough. The other can be added later." />
 				<form onsubmit={handleContinueFromContact} novalidate>
 					<stack-l space="var(--space-5)">
 						<LabeledField id={phoneId} label="Phone">
@@ -425,10 +432,10 @@
 				<div bind:this={pageStart} id="intake-heading" tabindex="-1">
 					<Heading level={1} variant="page" text={questionText()} />
 				</div>
-				<p class="lede">
-					This is what separates two Clients with the same name, next year and the year after. It is
-					the last thing asked before the record is saved.
-				</p>
+				<Text
+					tone="variant"
+					text="This is what separates two Clients with the same name, next year and the year after. It is the last thing asked before the record is saved."
+				/>
 				<form onsubmit={handleSave} novalidate>
 					<stack-l space="var(--space-5)">
 						<LabeledField id={dateOfBirthId} label="Date of birth">
@@ -452,10 +459,12 @@
 				<div bind:this={pageStart} id="intake-heading" tabindex="-1">
 					<Heading level={1} variant="page" text={questionText()} />
 				</div>
-				<p class="lede">
-					Nothing has been saved. {matches.length === 1 ? 'One record' : `${matches.length} records`} at
-					this Practice matched what you typed.
-				</p>
+				<Text
+					tone="variant"
+					text="Nothing has been saved. {matches.length === 1
+						? 'One record'
+						: `${matches.length} records`} at this Practice matched what you typed."
+				/>
 				<stack-l space="var(--space-6)">
 					{#each matches as match (match.id)}
 						<section class="match">
@@ -475,16 +484,21 @@
 										{/each}
 									</ul>
 								{:else}
-									<p class="quiet">No Engagements with this Client yet.</p>
+									<Text
+										step="body-sm"
+										tone="muted"
+										text="No Engagements with this Client yet."
+									/>
 								{/if}
 								<Button label="This is {displayName(match)}" onClick={() => handleThisIsHer(match)} />
 							</stack-l>
 						</section>
 					{/each}
-					<p class="quiet">
-						If none of these is the person being added, say so. This is the only way to create a
-						second record for the same name.
-					</p>
+					<Text
+						step="body-sm"
+						tone="muted"
+						text="If none of these is the person being added, say so. This is the only way to create a second record for the same name."
+					/>
 					<Button
 						label="No, a different person"
 						variant="secondary"
@@ -497,9 +511,10 @@
 				<div bind:this={pageStart} id="intake-heading" tabindex="-1">
 					<Heading level={1} variant="page" text={questionText()} />
 				</div>
-				<p class="lede">
-					{displayName(reviewMatch)}'s record is kept. What was typed applies as these changes to it.
-				</p>
+				<Text
+					tone="variant"
+					text="{displayName(reviewMatch)}'s record is kept. What was typed applies as these changes to it."
+				/>
 				<DescriptionList
 					items={proposedChanges(reviewMatch).map((change) => ({
 						label: change.label,
@@ -551,18 +566,6 @@
 			letter-spacing: var(--text-meta-tracking);
 			color: var(--color-on-surface-muted);
 			text-transform: uppercase;
-		}
-
-		.lede {
-			margin: 0;
-			max-inline-size: 62ch;
-			color: var(--color-on-surface-variant);
-		}
-
-		.quiet {
-			margin: 0;
-			font-size: var(--text-body-sm-size);
-			color: var(--color-on-surface-muted);
 		}
 
 		.match {
