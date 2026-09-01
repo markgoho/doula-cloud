@@ -52,7 +52,7 @@
 
 	interface Properties {
 		/**
-		 * Names the landmark, and captions the progress summary.
+		 * Names the landmark, and captions the narrow strip.
 		 */
 		journey: string;
 		steps: JourneyStep[];
@@ -64,9 +64,16 @@
 		 * because these are two behaviours and not one thing switched off.
 		 */
 		expand?: 'current' | 'completed';
+		/**
+		 * Where the narrow strip's "Show all steps" goes. Narrow has no room
+		 * for the rail, so the full list becomes a page of its own -- which
+		 * is a route, and therefore #466's to build. Omit it and the strip
+		 * shows no link.
+		 */
+		allStepsHref?: string;
 	}
 
-	let { journey, steps, expand = 'current' }: Properties = $props();
+	let { journey, steps, expand = 'current', allStepsHref }: Properties = $props();
 
 	const railId = $props.id();
 
@@ -103,85 +110,61 @@
 	}
 </script>
 
-<!--
-	One presentation, not two (#564): the rail and the "compact strip"
-	used to be alternatives, picked by whether a Template's own rail
-	column was open beside the form -- a width question that, once
-	`QuestionPage` and `CheckAnswers` stopped authoring a threshold for
-	it at all, this component had no reliable way to ask on its own.
-	Tried and rejected: pinning the rail to exactly --page-rail so it
-	never grows when paired (`nav`'s own `flex-grow: 0`, below) also
-	pins it to exactly --page-rail once wrapped alone, so its own width
-	stops distinguishing the two states -- confirmed by rendering both
-	and reading `nav`'s computed width back, 260px either way. Letting
-	it grow instead (`flex-grow: 1`) does not fix this: this repo does
-	not cap a page's own width (#541), so a paired rail's surplus-driven
-	growth is unbounded and can overlap the wrapped-alone range at any
-	width. Every width-based signal available from the rail's own box
-	collapses, so this is not a floor that was chosen carelessly and
-	could be tightened -- there is no number here to find.
-
-	The summary line and progress track (Goal-Gradient and Parkinson,
-	from the brief) are what the strip existed for, so they render
-	unconditionally instead of only where the rail did not fit; the full
-	step list is what the rail existed for, and CheckAnswers's own
-	completed-step expansion is explicitly "what this page is for" --
-	so it renders unconditionally too. Nothing is lost at any width, and
-	nothing needs to be picked.
--->
 <nav aria-label={journey}>
-	<p class="summary">{summary}</p>
-	<div class="track" aria-hidden="true">
-		<div class="track-fill" style:inline-size={trackWidth}></div>
+	<div class="rail">
+		<ol>
+			<!--
+				Keyed on index rather than on the href, the same call
+				`CheckAnswers` and `DescriptionList` make on this ticket: a
+				journey is an ordered sequence, a step has no identity beyond
+				where it sits, and two entries that happen to share a
+				destination are a duplicate key that throws rather than a
+				collision that hides a row.
+			-->
+			{#each steps as step, index (index)}
+				<li>
+					<Link
+						variant="step"
+						href={step.href}
+						label={step.label}
+						current={step.status === 'current'}
+						describedBy={statusId(index)}
+					/>
+					<p class="status" id={statusId(index)}>{statusLabels[step.status]}</p>
+					{#if step.questions && isExpanded(step)}
+						<ol class="questions">
+							{#each step.questions as question, questionIndex (questionIndex)}
+								<li>
+									<Link variant="rail" href={question.href} label={question.label} />
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</li>
+			{/each}
+		</ol>
 	</div>
-	<ol>
-		<!--
-			Keyed on index rather than on the href, the same call
-			`CheckAnswers` and `DescriptionList` make on this ticket: a
-			journey is an ordered sequence, a step has no identity beyond
-			where it sits, and two entries that happen to share a
-			destination are a duplicate key that throws rather than a
-			collision that hides a row.
-		-->
-		{#each steps as step, index (index)}
-			<li>
-				<Link
-					variant="step"
-					href={step.href}
-					label={step.label}
-					current={step.status === 'current'}
-					describedBy={statusId(index)}
-				/>
-				<p class="status" id={statusId(index)}>{statusLabels[step.status]}</p>
-				{#if step.questions && isExpanded(step)}
-					<ol class="questions">
-						{#each step.questions as question, questionIndex (questionIndex)}
-							<li>
-								<Link variant="rail" href={question.href} label={question.label} />
-							</li>
-						{/each}
-					</ol>
-				{/if}
-			</li>
-		{/each}
-	</ol>
+
+	<!--
+		The same journey where there is no room beside the column. Inside the
+		one <nav> rather than in a second one of its own: two landmarks
+		sharing a label is an axe `landmark-unique` failure, and `display:
+		none` only takes the hidden half out of the accessibility tree -- it
+		does not make two names one.
+	-->
+	<div class="strip">
+		<p class="summary">{summary}</p>
+		<div class="track" aria-hidden="true">
+			<div class="track-fill" style:inline-size={trackWidth}></div>
+		</div>
+		{#if allStepsHref}
+			<Link href={allStepsHref} label="Show all steps" variant="secondary" />
+		{/if}
+	</div>
 </nav>
 
 <style>
 	@layer components {
-		/*
-		 * `flex-grow: 0` (harmless outside a flex parent): `sidebar-l`'s
-		 * sidebar side has its own `flex-grow: 1` for the ordinary case
-		 * where nothing caps its sibling, but `QuestionPage`'s and
-		 * `CheckAnswers`'s own column IS capped (`--form-max`), so
-		 * surplus space beyond both would otherwise be redistributed to
-		 * this rail once the column's cap freezes it -- confirmed by
-		 * rendering both at 1600px and reading `nav`'s own width back:
-		 * 260px with this rule, 320px without it. Purely a visual choice
-		 * now (#564): earlier this also fed a self-contained @container
-		 * condition, which turned out not to work (see the markup
-		 * comment above) and was removed along with it.
-		 */
 		ol {
 			margin: 0;
 			padding: 0;
@@ -192,7 +175,7 @@
 		   column of transparent bars reads as one track down the list and
 		   the active one lights a segment of it. That is the same reason
 		   RecordDetail's contents list carries no gap. */
-		nav > ol {
+		.rail > ol {
 			display: grid;
 		}
 
@@ -232,5 +215,38 @@
 			background-color: var(--color-primary);
 		}
 
+		/* Narrow first: the rail needs a column beside the content, and
+		   below the host Template's own floor there is not one. */
+		.rail {
+			display: none;
+		}
+
+		/*
+		 * Genuinely coupled to the host Template, not chosen to match it
+		 * (#564). `StepRail` declares no container of its own, so this
+		 * unnamed query resolves against the nearest ANCESTOR container --
+		 * the same one `QuestionPage`'s and `CheckAnswers`'s own 60rem
+		 * query reads, since `StepRail` renders inside their grid with
+		 * nothing of its own in between. That is what makes this a
+		 * mechanism rather than a preference: `.rail` has no content-driven
+		 * floor to derive on its own -- swept on /style-guide/step-rail's
+		 * own demo with the query forced live, the nav never overflows the
+		 * frame down to 144px, well under 320px -- so there is no
+		 * independent number to measure it against, only the width at
+		 * which its host actually opens a --page-rail column for it to
+		 * sit in. 67.5rem is `QuestionPage`'s and `CheckAnswers`'s own
+		 * measured fixed point, carried here rather than re-derived,
+		 * because both read the same container and only one of the two
+		 * has a floor to measure.
+		 */
+		@container (min-width: 67.5rem) {
+			.rail {
+				display: block;
+			}
+
+			.strip {
+				display: none;
+			}
+		}
 	}
 </style>

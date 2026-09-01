@@ -285,17 +285,44 @@
 		}
 
 		/*
-		 * The rail's OWN two presentations -- `.contents-strip` (chip row)
-		 * and `.contents-rail` (vertical list) -- switch on `(pointer:
-		 * coarse)` rather than on room, because room was never the actual
-		 * reason the chip row exists: it is "read at arm's length in a
-		 * hospital corridor" (PR-G5), a touch-ergonomics call, and
-		 * `.contents-rail`'s own `a.rail` (Link.svelte) is `inline-size:
-		 * 100%` -- it reads fine at any width, narrow sidebar column or
-		 * full stacked page alike. A stated input preference is exactly
-		 * what ADR-0024 rule 3 reserves a media query for; this is the
-		 * first place that rule's list of preferences (colour scheme,
-		 * motion, contrast, print) needed a fifth member.
+		 * The contents block asks its own question, so it needs its own
+		 * containment context -- named, so that losing this declaration
+		 * cannot silently resolve the query below against the page
+		 * (#533). Nothing above it can answer for it: `sidebar-l` decides
+		 * whether this sits beside the record or above it, and that
+		 * decision is the browser's, with no selector that reports it.
+		 */
+		.contents {
+			container: record-contents / inline-size;
+		}
+
+		/* The base size re-resolved against the context (#544): a `cqi`
+		   resolves against the nearest ANCESTOR container, so `.contents`
+		   cannot answer its own. */
+		.contents > * {
+			font-size: var(--text-body-size);
+		}
+
+		/*
+		 * Structural, and therefore a query: `.contents-strip` is a row of
+		 * chips and `.contents-rail` is a vertical list of links -- two
+		 * DOM trees with one rendered at a time, not one tree rearranged,
+		 * and no intrinsic mechanism swaps markup. `display: none` keeps
+		 * the other out of the accessibility tree so nothing is announced
+		 * twice.
+		 *
+		 * The vertical list is the narrow state and the chip row the wide
+		 * one, which is the inverse of the usual reading: a vertical list
+		 * of full-width links is correct at any width, so it is the chip
+		 * row that has to earn its place, and it earns it by fitting on
+		 * one line. That is the whole content question here, and it is
+		 * answered entirely from this block's own width -- it never has to
+		 * distinguish "beside the record" from "above it", which is what
+		 * makes it derivable at all. Measured 2026-09-01 on
+		 * /style-guide/record-detail's own fixture: the four Jump to chips
+		 * wrap onto a second line below 388px and sit on one line from
+		 * 388px up. 24.25rem is that width. A fifth chip, or a longer
+		 * section name, moves it.
 		 */
 		.contents-rail {
 			display: block;
@@ -305,7 +332,7 @@
 			display: none;
 		}
 
-		@media (pointer: coarse) {
+		@container record-contents (min-width: 24.25rem) {
 			.contents-rail {
 				display: none;
 			}

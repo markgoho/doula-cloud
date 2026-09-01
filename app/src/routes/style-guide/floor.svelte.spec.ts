@@ -139,7 +139,40 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 		justification:
 			'The same shape as StaffTopBar: a wide nav row versus a narrow stacked row is a different DOM ' +
 			'tree, and no intrinsic mechanism swaps markup.'
+	},
+	'templates/RecordDetail.svelte#1': {
+		kind: 'no-wrap',
+		selectors: ['.contents-links'],
+		justification:
+			'A chip row versus a vertical list of links is a different DOM tree, one always display:none so ' +
+			'nothing is announced twice -- no intrinsic mechanism swaps markup. The vertical list is correct ' +
+			'at any width, so it is the chip row that earns its place, and it earns it by fitting on one ' +
+			'line. Answered entirely from this block own containment context, so it never has to know ' +
+			'whether sidebar-l put it beside the record or above it.'
 	}
+};
+
+/*
+ * A condition that has no content question to derive a floor from, and is
+ * therefore not justified but is also not silently accepted -- the same
+ * shape as `continuum.svelte.spec.ts`'s `KNOWN_BROKEN`, and for the same
+ * reason: an exception that names its ticket is visible, and one that
+ * does not is a suppression.
+ *
+ * `StepRail`'s two presentations are both correct at every width -- a
+ * vertical list of steps reads fine anywhere, and its strip is a summary
+ * line, a track and a link stacked vertically, so nothing in either fits
+ * or fails to fit. What separates them is vertical cost in a layout
+ * context the component cannot observe: `sidebar-l` decides whether the
+ * journey sits beside the record or above it, the browser decides that,
+ * and CSS exposes no selector reporting it. Detecting it from the rail's
+ * own width was tried and disproved on #564 -- paired it is exactly its
+ * 20rem basis and wrapped it is the container's width, and at 320px those
+ * are the same number, so any floor separating them would sit on the
+ * conformance commitment, which CONTEXT.md forbids.
+ */
+const UNDERIVABLE: Readonly<Record<string, string>> = {
+	'organisms/StepRail.svelte#1': '#585'
 };
 
 // `../../lib/components/organisms/DataTable.svelte` -> `organisms/DataTable.svelte#1`
@@ -336,8 +369,22 @@ describe('the floor check (#564)', () => {
 	it('has a criterion for every discovered condition', () => {
 		const unregistered = conditions
 			.map((condition) => toRegistryKey(condition))
-			.filter((key) => !Object.hasOwn(CRITERIA, key));
+			.filter((key) => !Object.hasOwn(CRITERIA, key))
+			.filter((key) => !Object.hasOwn(UNDERIVABLE, key));
 		expect(unregistered, unregistered.join(', ')).toEqual([]);
+	});
+
+	/*
+	 * An exception has to stay pointed at its ticket. If the condition is
+	 * gone, or has grown a real criterion, the exception is stale and says
+	 * so here rather than sitting in the file forever.
+	 */
+	it('names no exception the source no longer has', () => {
+		const discoveredKeys = new Set(conditions.map((condition) => toRegistryKey(condition)));
+		const stale = Object.keys(UNDERIVABLE).filter(
+			(key) => !discoveredKeys.has(key) || Object.hasOwn(CRITERIA, key)
+		);
+		expect(stale, stale.join(', ')).toEqual([]);
 	});
 
 	it('names no criterion the source no longer has', () => {

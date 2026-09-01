@@ -44,24 +44,29 @@ describe('StepRail.svelte', () => {
 		await expect.element(page.getByRole('navigation', { name: 'Adding a client' })).toBeVisible();
 	});
 
-	// Unconditionally visible now (#564): the rail no longer has a narrower
-	// alternative it is hidden behind, so every step's link is asserted
-	// visible directly rather than queried out of a DOM that used to hide
-	// it below 60rem.
-	it('renders one visible link per step', async () => {
-		await setup();
+	/*
+	 * Queried out of the DOM rather than asserted visible: the rail is
+	 * `display: none` until its page frame is 60rem wide, and a test
+	 * renders into no container at all, so what is on screen here is the
+	 * narrow strip. That is the component working, not the test working
+	 * around it -- and it is why the strip's own assertions below can use
+	 * `toBeVisible` and these cannot.
+	 */
+	it('renders one link per step', async () => {
+		const { container } = await setup();
 
-		for (const label of ['Who Sarah is', 'How to reach Sarah', 'Where Sarah lives']) {
-			await expect.element(page.getByRole('link', { name: label })).toBeVisible();
-		}
+		expect([...container.querySelectorAll(':scope .rail a')].map((node) => node.textContent?.trim())).toEqual([
+			'Who Sarah is',
+			'How to reach Sarah',
+			'Email address',
+			'Phone number',
+			'Where Sarah lives'
+		]);
 	});
 
 	it('marks the current step as the current page', async () => {
 		const { container } = await setup();
 
-		// `aria-current` has no `getByRole` filter in this locator API, so
-		// this is the wiring exception, not a shortcut past an accessible
-		// query that exists.
 		expect(container.querySelector('a[aria-current="page"]')?.textContent?.trim()).toBe(
 			'How to reach Sarah'
 		);
@@ -89,53 +94,63 @@ describe('StepRail.svelte', () => {
 	it('expands the current step only, on a question page', async () => {
 		const { container } = await setup();
 
-		await expect.element(page.getByRole('link', { name: 'Email address' })).toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Phone number' })).toBeVisible();
-		// The completed step's own questions, which `expand: 'current'`
-		// (the default) leaves closed -- not rendered at all, so there is
-		// no accessible locator to assert absent; this is the exception
-		// querySelector stays for.
-		expect(container.querySelectorAll(':scope .questions')).toHaveLength(1);
-		expect(
-			[...container.querySelectorAll('a')].map((node) => node.textContent?.trim())
-		).not.toContain("Sarah's name");
+		expect([...container.querySelectorAll(':scope .questions a')].map((node) => node.textContent?.trim())).toEqual(
+			['Email address', 'Phone number']
+		);
 	});
 
 	// The summary page: every completed step opens, so the rail becomes
 	// the whole answered journey at a glance (#432).
 	it('expands every completed step, on the summary page', async () => {
-		await setup({ expand: 'completed' });
+		const { container } = await setup({ expand: 'completed' });
 
-		await expect.element(page.getByRole('link', { name: "Sarah's name" })).toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Date of birth' })).toBeVisible();
+		expect([...container.querySelectorAll(':scope .questions a')].map((node) => node.textContent?.trim())).toEqual(
+			["Sarah's name", 'Date of birth']
+		);
 	});
 
-	it('names the step and its number in the progress summary', async () => {
-		await setup();
+	it('names the step and its number in the narrow strip', async () => {
+		const { container } = await setup();
 
-		await expect
-			.element(page.getByText('Step 2 of 3 · How to reach Sarah'))
-			.toBeVisible();
+		expect(container.querySelector('.summary')?.textContent).toBe(
+			'Step 2 of 3 · How to reach Sarah'
+		);
+		expect(container.querySelector<HTMLElement>('.track-fill')?.style.inlineSize).toBe('33%');
 	});
 
 	// The summary page has no current step, so a step number would be a
 	// lie; the count is what is true there.
-	it('counts completed steps in the summary when no step is current', async () => {
-		await setup({
+	it('counts completed steps in the strip when no step is current', async () => {
+		const { container } = await setup({
 			steps: steps.map((step) => ({ ...step, status: 'completed' as const })),
 			expand: 'completed'
 		});
 
-		await expect.element(page.getByText('3 of 3 steps completed')).toBeVisible();
+		expect(container.querySelector('.summary')?.textContent).toBe('3 of 3 steps completed');
+		expect(container.querySelector<HTMLElement>('.track-fill')?.style.inlineSize).toBe('100%');
 	});
 
 	it('shows no progress and no steps when the journey is empty', async () => {
 		const { container } = await setup({ steps: [] });
 
-		await expect.element(page.getByText('0 of 0 steps completed')).toBeVisible();
-		// The progress bar's own fill width, `aria-hidden` on its wrapper
-		// (markup) so it carries no accessible signal at all -- the
-		// deliberately-non-accessible exception, not a shortcut past one.
+		expect(container.querySelector('.summary')?.textContent).toBe('0 of 0 steps completed');
 		expect(container.querySelector<HTMLElement>('.track-fill')?.style.inlineSize).toBe('0%');
+	});
+
+	// Narrow has no room for the rail, so the full list is a page of its
+	// own -- a route, and therefore #466's. Omitting the href omits the link
+	// rather than rendering a dead one.
+	it('links to the whole step list only when given somewhere to send it', async () => {
+		await setup({ allStepsHref: '/clients/new/steps' });
+
+		await expect.element(page.getByRole('link', { name: 'Show all steps' })).toBeVisible();
+	});
+
+	it('renders no "Show all steps" link without an href', async () => {
+		const { container } = await setup();
+
+		expect([...container.querySelectorAll(':scope a')].map((node) => node.textContent?.trim())).not.toContain(
+			'Show all steps'
+		);
 	});
 });
