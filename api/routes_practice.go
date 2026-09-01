@@ -274,6 +274,16 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	// above. A contractor's own-fee narrowing (rather than an outright
 	// no) is #317's to build once the Offer/Attachment flow exists.
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", ownerAndAdmin, payments.GetInvoicesHandler())
+	// The Practice-wide Invoice list (#265): every Invoice the Practice
+	// has billed, with the whole book's outstanding and paid totals, so
+	// "who owes us money" is one screen rather than every Engagement
+	// opened in turn. Same money row of ADR-0006's read table (carried
+	// forward by ADR-0008) as the per-Engagement history above, so the
+	// same Owner/Admin declaration. A contractor's own-fee narrowing has
+	// nothing to narrow here -- an aggregate of the Practice's whole book
+	// is not a view of her own Engagements -- so it stays where the
+	// per-Engagement Contract read already puts it.
+	g.Get("/api/practices/{practiceId}/invoices", ownerAndAdmin, payments.GetPracticeInvoicesHandler())
 	// ADR-0008's Offer flow (#317). The Practice side is Owner/Admin --
 	// making an Offer, taking it back, and reading who has been asked,
 	// which names people and so follows the Staff-roster row of the read

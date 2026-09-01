@@ -42,9 +42,10 @@
 	});
 
 	/*
-	 * The drawing (#431) shows an Owner's bar, with all six sections. A
-	 * Doula's is four: `GET .../billing` and `GET .../staff` are both
-	 * `ownerAndAdmin` on the BFF, so offering her those two would be a
+	 * The drawing (#431) shows an Owner's bar, with all its sections --
+	 * seven since #265 added Invoices. A Doula's is four: `GET
+	 * .../invoices`, `GET .../billing` and `GET .../staff` are all
+	 * `ownerAndAdmin` on the BFF, so offering her those three would be a
 	 * promise the endpoint refuses. Same rule #423 applied to the landing
 	 * page's rail -- ask only for what the caller's role can be served.
 	 */
@@ -59,6 +60,13 @@
 			{ label: 'Clients', href: resolve('/practices/[practiceId]/clients', { practiceId }) },
 			...(isAdmin
 				? [
+						// Invoices is the Practice's money in, Billing its money
+						// out (#265) -- two sections rather than one, because
+						// "what have our Clients not paid us" and "how many
+						// credits do we have left" are not the same question.
+						// Both endpoints are `ownerAndAdmin`, so both sit behind
+						// the same flag.
+						{ label: 'Invoices', href: resolve('/practices/[practiceId]/invoices', { practiceId }) },
 						{ label: 'Billing', href: resolve('/practices/[practiceId]/billing', { practiceId }) },
 						{ label: 'Staff', href: resolve('/practices/[practiceId]/staff', { practiceId }) }
 					]
@@ -109,7 +117,7 @@
 	Rendered before the session lands, not after: the bar is a fixed 60px
 	whatever it holds, so painting it immediately means the page below never
 	moves. The parts that need an answer from the BFF -- the person's
-	avatar, the Practice switcher, and the two admin-only nav items --
+	avatar, the Practice switcher, and the three admin-only nav items --
 	arrive into a bar that is already there.
 -->
 <StaffTopBar

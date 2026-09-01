@@ -11,7 +11,7 @@
 	 * amount the Staff member entered and displays whatever error either
 	 * callback throws.
 	 */
-	import { formatAmount, type Invoice } from '#lib/invoice.js';
+	import { formatAmount, invoiceStatusLabel, type Invoice } from '#lib/invoice.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -33,14 +33,6 @@
 	let createError = $state('');
 	let isConnecting = $state(false);
 	let connectError = $state('');
-
-	const statusLabels: Record<string, string> = {
-		draft: 'Draft',
-		open: 'Open',
-		paid: 'Paid',
-		uncollectible: 'Uncollectible',
-		void: 'Void'
-	};
 
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
@@ -82,8 +74,8 @@
 	<ul>
 		{#each invoices as invoice (invoice.id)}
 			<li>
-				<!-- v8 ignore start: Svelte's compiled null-guard on these text nodes is unreachable -- formatAmount and the statusLabels fallback always return a string -->
-				{formatAmount(invoice.amountCents)} — {statusLabels[invoice.status] ?? invoice.status}
+				<!-- v8 ignore start: Svelte's compiled null-guard on these text nodes is unreachable -- formatAmount and invoiceStatusLabel always return a string -->
+				{formatAmount(invoice.amountCents)} — {invoiceStatusLabel(invoice.status)}
 				<!-- v8 ignore stop -->
 				{#if invoice.paidAt}
 					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- toLocaleDateString always returns a string -->

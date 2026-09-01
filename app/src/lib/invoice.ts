@@ -28,9 +28,59 @@ export interface CreateInvoiceResult {
 	invoice?: Invoice;
 }
 
+/** One row of the Practice-wide Invoice list (#265) -- the same Invoice,
+ * plus who it is for and the Engagement it is a way in to. A separate
+ * type from `Invoice` for the same reason the BFF keeps
+ * PracticeInvoiceView separate from InvoiceView: the per-Engagement list
+ * is read from a screen that already names its Client, and this one is
+ * not. `clientName` is her preferred name, the one every screen uses. */
+export interface PracticeInvoice extends Invoice {
+	engagementId: string;
+	clientName: string;
+}
+
+/** A page of the Practice-wide Invoice list, with the whole book's
+ * totals alongside -- outstanding (billed and not yet collected) and
+ * paid. The totals are of every Invoice at the Practice, never of the
+ * page, so they do not change as the reader pages. Mirrors the Go BFF's
+ * PracticeInvoicesResponse (api/internal/payments/practice_invoices.go). */
+export interface PracticeInvoicePage {
+	items: PracticeInvoice[];
+	nextCursor?: string;
+	hasMore: boolean;
+	outstandingCents: number;
+	outstandingCount: number;
+	paidCents: number;
+}
+
 /** A minimal fetch-shaped function, injected rather than imported -- see
  * contract.ts's Fetcher for why. */
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
+
+/** The Practice-wide Invoice list's path -- exported so the route's
+ * `load` can call `apiFetch` on it directly and handle 401/403 the way
+ * SvelteKit needs (see the billing route's `+page.ts` for why a
+ * role-gated read loads there rather than in `onMount`). */
+export function practiceInvoicesPath(practiceId: string, cursor?: string): string {
+	const path = `/api/practices/${practiceId}/invoices`;
+	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+}
+
+/** Loads one page of every Invoice the Practice has billed, newest
+ * first. Throws with the response body text on a non-2xx response --
+ * the route's `load` maps status codes to SvelteKit errors before
+ * calling this, so a throw here is only ever an unexpected failure. */
+export async function loadPracticeInvoices(
+	fetcher: Fetcher,
+	practiceId: string,
+	cursor?: string
+): Promise<PracticeInvoicePage> {
+	const response = await fetcher(practiceInvoicesPath(practiceId, cursor));
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
+}
 
 function invoicesPath(practiceId: string, engagementId: string): string {
 	return `/api/practices/${practiceId}/engagements/${engagementId}/contract/invoices`;
@@ -81,4 +131,22 @@ export async function createInvoice(
  * lives in InvoiceSection.svelte, next to the input it converts. */
 export function formatAmount(amountCents: number): string {
 	return (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+}
+
+/** The Stripe Invoice statuses the BFF stores verbatim, in the words a
+ * person reads. Lives here rather than in InvoiceSection.svelte, where it
+ * started, now that the Practice-wide list (#265) is a second consumer of
+ * the same five words -- one Invoice must not be "Open" on one screen and
+ * "Outstanding" on the next. An unknown status falls through to itself
+ * rather than to a blank, so a status Stripe adds later still reads. */
+const invoiceStatusLabels: Record<string, string> = {
+	draft: 'Draft',
+	open: 'Open',
+	paid: 'Paid',
+	uncollectible: 'Uncollectible',
+	void: 'Void'
+};
+
+export function invoiceStatusLabel(status: string): string {
+	return invoiceStatusLabels[status] ?? status;
 }
