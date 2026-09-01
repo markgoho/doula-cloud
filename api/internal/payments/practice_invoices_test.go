@@ -18,7 +18,8 @@ import (
 // newPracticeInvoiceServer mounts GetPracticeInvoicesHandler alone, behind
 // the same staffauth.Middleware the real route uses -- the Owner/Admin
 // role gate is GatedRouter's declaration at the mount, not this handler's
-// own, so it is asserted where the route table is.
+// own, so it is asserted where the route table is
+// (api/gate_guardrail_test.go).
 func newPracticeInvoiceServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
