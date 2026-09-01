@@ -97,18 +97,7 @@ cd api
 GOLANGCI_LINT_CACHE="$(git rev-parse --show-toplevel)/api/.golangci-cache" golangci-lint run
 ```
 
-**Always set `GOLANGCI_LINT_CACHE` to a path under `--show-toplevel`, never bare
-`golangci-lint run`.** Without it, golangci-lint's results cache defaults to one shared
-location (`~/.cache/golangci-lint` / `~/Library/Caches/golangci-lint`) across every worktree
-on the machine, keyed in a way that does not account for a worktree's path being reused or
-removed. A session linting after another worktree was pruned can then see findings that
-point at files under a worktree that no longer exists on disk, or -- more dangerous -- a
-stale "clean" entry can mask a real issue in the current worktree's own changed file.
-`--show-toplevel` resolves to the current worktree's own root (see
-`docs/agents/worktree-flow.md`), so the cache lives and dies with that worktree and never
-leaks into another one; `.golangci-cache` is gitignored. If `golangci-lint run` ever reports
-issues in files that don't exist in your working tree, that's this problem -- run
-`golangci-lint cache clean` (with the same `GOLANGCI_LINT_CACHE` set) and rerun.
+**Always set `GOLANGCI_LINT_CACHE` to a path under `--show-toplevel`, never bare `golangci-lint run`.** Without it, golangci-lint's results cache defaults to one location shared by every worktree on the machine (`~/.cache/golangci-lint` / `~/Library/Caches/golangci-lint`), keyed in a way that does not account for a worktree's path being reused or removed -- a session linting after another worktree was pruned can see findings that point at files that no longer exist on disk, or, worse, a stale "clean" entry that masks a real issue in the current worktree's own changed file (#587). `--show-toplevel` resolves to the current worktree's own root, so the cache lives and dies with that worktree and never leaks into another one; `.golangci-cache` is gitignored, and `.claude/hooks/gate-golangci-lint-cache.sh` blocks a bare `golangci-lint run` in a Claude Code session. If you ever see findings in files that don't exist in your working tree, that's this problem: run `golangci-lint cache clean` with the same `GOLANGCI_LINT_CACHE` set, then rerun.
 
 Two linters in this set are package-wide, not per-file, so a change to one
 file can newly flag lines you didn't touch in other files in the same
