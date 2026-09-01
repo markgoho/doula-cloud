@@ -104,9 +104,22 @@
 		 * queries the default and the rail depends on how wide the page
 		 * frame is, not how wide the window is. The threshold is the
 		 * narrowest width at which a 20rem rail still leaves the primary
-		 * column above its own comfortable measure.
+		 * column above its own comfortable measure -- --measure, since
+		 * this column holds cards and tables rather than a cap of its own
+		 * (see the no-cap note above).
+		 *
+		 * Measured 2026-08-31 (#564): this is a "measure criterion" floor,
+		 * not an overflow one -- the primary column is `minmax(0, 1fr)`,
+		 * so it never overflows, but below this width the 20rem rail
+		 * leaves it narrower than --measure, which is not what the wide
+		 * configuration is for. Swept on /style-guide/overview-hub's own
+		 * demo with the query forced live at every width: the primary
+		 * column first reaches --measure at 1004px. 62.75rem is that
+		 * fixed point exactly, no margin added. The previous 60rem
+		 * (960px) was part of the shared 60rem set (#523) rather than
+		 * measured against this column at all.
 		 */
-		@container (min-width: 60rem) {
+		@container (min-width: 62.75rem) {
 			.body.has-secondary {
 				grid-template-columns: minmax(0, 1fr) 20rem;
 			}

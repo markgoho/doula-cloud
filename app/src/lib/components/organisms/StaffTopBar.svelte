@@ -150,14 +150,19 @@
 			justify-content: space-between;
 		}
 
-		/* The content floor: six nav items plus a Practice name and the
-		   account controls stop fitting below this, and it is the bar's own
-		   inline size that is measured, never a device width (ADR-0024).
-		   Below the floor the same items are in the sheet, which is why both
-		   trees are in the document and one is display:none -- a hidden
-		   subtree is out of the accessibility tree too, so nothing is
-		   announced twice. */
-		@container staff-top-bar (min-width: 60rem) {
+		/* The content floor, re-measured 2026-08-31 (#564): six nav items
+		   plus a Practice name and the account controls first stop
+		   overflowing the bar at 784px, swept with `overflow-wrap`
+		   neutralized on /style-guide/staff-top-bar's own demo -- the
+		   previous 60rem (960px) was never measured against that failure
+		   at all, it was part of the shared 60rem set (#523). 49rem is
+		   that fixed point exactly, no margin added. It
+		   is the bar's own inline size that is measured, never a device
+		   width (ADR-0024). Below the floor the same items are in the
+		   sheet, which is why both trees are in the document and one is
+		   display:none -- a hidden subtree is out of the accessibility
+		   tree too, so nothing is announced twice. */
+		@container staff-top-bar (min-width: 49rem) {
 			.wide {
 				display: flex;
 			}

@@ -113,13 +113,18 @@
 			padding-inline: var(--space-2);
 		}
 
-		/* The content floor: the four portal nav items stop fitting beside
-		   the Practice's name and the sign-out control below this, and it is
-		   the bar's own inline size that is measured, never a device width
-		   (ADR-0024). Below the floor the same items are in the narrow row,
-		   which is why both trees are in the document and one is
-		   display:none. */
-		@container portal-top-bar (min-width: 48rem) {
+		/* The content floor, re-measured 2026-08-31 (#564): the four portal
+		   nav items first stop overflowing the bar at 572px, beside the
+		   Practice's name and the sign-out control, swept with
+		   `overflow-wrap` neutralized on /style-guide/portal-top-bar's own
+		   demo -- the previous 48rem (768px) was never measured against
+		   that failure, and it turned out to be 196px later than the bar
+		   actually needs. 35.75rem is that fixed point exactly, no margin
+		   added. It is the bar's own inline size that is measured, never a
+		   device width (ADR-0024). Below the floor the same items are in
+		   the narrow row, which is why both trees are in the document and
+		   one is display:none. */
+		@container portal-top-bar (min-width: 35.75rem) {
 			.wide {
 				display: flex;
 			}

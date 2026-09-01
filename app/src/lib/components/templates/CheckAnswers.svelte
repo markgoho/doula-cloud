@@ -236,12 +236,38 @@
 		}
 
 		/*
-		 * A row stacks before the page frame does, at its own threshold:
-		 * three columns of a label, a value and a Change fit a phone badly
-		 * long before the rail runs out of room. GOV.UK stacks its own
-		 * summary list at about the same width for the same reason.
+		 * A row stacks before the page frame does, at its own threshold.
+		 *
+		 * No-wrap criterion, not overflow (#564): the overflow criterion
+		 * fails here for the same reason it fails on a rail -- the row's
+		 * tracks are flexible (`1fr 1fr auto`), and a wrappable string in
+		 * a flexible track never overflows, it just wraps to one word per
+		 * line. Swept with the query forced live, the row never overflows
+		 * down to 284px, well under the 320px this repo verifies -- a
+		 * threshold that never stops firing is not a floor at all
+		 * (CONTEXT.md's own failure sentence: one configuration at every
+		 * available space).
+		 *
+		 * What actually distinguishes the two configurations is wrapping,
+		 * so that is what is measured: a label and a "Change" action are
+		 * short, author-controlled strings, and if THEY wrap, the row is
+		 * too narrow for the 3-column shape and stacking is the better
+		 * read. A value is a Practice's own data of arbitrary length, and
+		 * wrapping a long value is correct behaviour rather than a
+		 * failure, so the value column is deliberately excluded from the
+		 * criterion -- this is derived from what the content IS, not
+		 * imported from GOV.UK's own number. Swept on
+		 * /style-guide/check-answers's own demo, checking every `<dt>`
+		 * and every `.action` link's line count (Range#getClientRects,
+		 * immune to a grid row stretching a cell's box to match a
+		 * WRAPPING sibling's height): the label is the one that wraps
+		 * here, and it stops at 416px. 26rem is that fixed point exactly,
+		 * no margin added. The action link never wraps at any width
+		 * tested -- "Change" is too short. This does not corroborate the
+		 * 40rem (640px) the previous, GOV.UK-derived comment carried; the
+		 * measured floor is well below it.
 		 */
-		@container (min-width: 40rem) {
+		@container (min-width: 26rem) {
 			.row {
 				grid-template-columns: 1fr 1fr auto;
 				gap: var(--space-4);
@@ -252,7 +278,23 @@
 			}
 		}
 
-		@container (min-width: 60rem) {
+		/*
+		 * The content floor, measured 2026-08-31 (#564): a measure
+		 * criterion, not overflow -- `.column` is `minmax(0, --form-max)`
+		 * in the default (non-wide) state, so it never overflows, but
+		 * below this width the rail leaves it narrower than --form-max.
+		 * Swept on /style-guide/check-answers's own demo with the query
+		 * forced live at every width: `.column` first reaches --form-max
+		 * at 1080px, the same fixed point `QuestionPage` measures
+		 * independently -- both are `var(--page-rail) minmax(0,
+		 * var(--form-max))` with the same `--space-12` gap, so the number
+		 * is a pure function of those three tokens rather than a copy.
+		 * 67.5rem is that fixed point exactly, no margin added. The
+		 * previous 60rem (960px) was part of the shared 60rem set (#523);
+		 * at 960px it left `.column` 110px short of --form-max, the same
+		 * shortfall `QuestionPage` had.
+		 */
+		@container (min-width: 67.5rem) {
 			.body {
 				/*
 				 * A summary of answers has nothing more to put in a wider

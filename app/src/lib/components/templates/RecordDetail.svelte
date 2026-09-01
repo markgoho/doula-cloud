@@ -228,11 +228,22 @@
 
 		/*
 		 * Container query, not a media query, per ADR-0003 -- the rail
-		 * depends on how wide the page frame is, not the window. The same
-		 * 60rem threshold OverviewHub uses, so the two archetypes change
-		 * shape together rather than at two widths a person would notice.
+		 * depends on how wide the page frame is, not the window.
+		 *
+		 * Measure criterion, not overflow (#564): `.sections` is
+		 * `minmax(0, 1fr)`, so it never overflows, but below this width
+		 * the contents rail leaves it narrower than --measure -- the
+		 * comfortable width for the prose and description lists a record
+		 * holds, which carry no cap of their own the way a form column
+		 * does. Swept on /style-guide/record-detail's own demo with the
+		 * query forced live at every width: `.sections` first reaches
+		 * --measure at 956px. 59.75rem is that fixed point exactly, no
+		 * margin added. The previous 60rem (960px) was part of the shared
+		 * 60rem set (#523) rather than measured against this column -- it
+		 * landed 4px past its own real floor by coincidence, not by
+		 * derivation.
 		 */
-		@container (min-width: 60rem) {
+		@container (min-width: 59.75rem) {
 			.body.has-contents {
 				grid-template-columns: var(--page-rail) minmax(0, 1fr);
 				column-gap: var(--space-12);

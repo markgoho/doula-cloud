@@ -258,7 +258,23 @@
 			margin-block-start: var(--space-7);
 		}
 
-		@container (min-width: 60rem) {
+		/*
+		 * The content floor, measured 2026-08-31 (#564): a measure
+		 * criterion, not overflow -- `.column` is `minmax(0, --form-max)`,
+		 * so it never overflows, but below this width the rail leaves it
+		 * narrower than --form-max, which is not the designed width GOV.UK's
+		 * form guidance sizes the controls for. Swept on
+		 * /style-guide/question-page's own demo with the query forced live
+		 * at every width: `.column` first reaches --form-max at 1080px.
+		 * 67.5rem is that fixed point exactly, no margin added -- it is a
+		 * pure function of --page-rail, --space-12 and --form-max, so
+		 * `CheckAnswers`'s own 60rem query below measures to the same
+		 * number independently rather than by being copied here. The
+		 * previous 60rem (960px) was part of the shared 60rem set (#523)
+		 * rather than measured against this column; at 960px it left
+		 * `.column` 110px short of --form-max.
+		 */
+		@container (min-width: 67.5rem) {
 			.body {
 				/*
 				 * A page that asks one question has nothing more to put in a
