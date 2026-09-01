@@ -48,6 +48,67 @@ func TestDetailHandler_Success(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_DueDate proves the Staff side reads the same
+// engagements.due_date column the Client portal's page already reads
+// (#505), so a Doula can see when the Engagement she's working is due
+// without leaving the page (#538).
+func TestDetailHandler_DueDate(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-viewing-due-date"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	_, engagementID := seedClientEngagement(t, db, practiceID, "Due Date Client", "due-date@example.com", "active")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET due_date = '2027-06-15' WHERE id = $1`, engagementID,
+	); err != nil {
+		t.Fatalf("seed due_date: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var d engagement.Detail
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if d.DueDate == nil || *d.DueDate != "2027-06-15" {
+		t.Fatalf("dueDate = %v, want %q", d.DueDate, "2027-06-15")
+	}
+}
+
+// TestDetailHandler_NullDueDate covers ADR-0017's "genuinely none" case: a
+// postpartum-only Engagement has no due date, and the field must be
+// omitted from the JSON entirely -- the page relies on `omitempty` to
+// tell "nothing to show" apart from a fetch that broke.
+func TestDetailHandler_NullDueDate(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-viewing-null-due-date"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	_, engagementID := seedClientEngagement(t, db, practiceID, "No Due Date Client", "no-due-date@example.com", "active")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if _, present := raw["dueDate"]; present {
+		t.Fatalf("dueDate key present in response, want omitted: %v", raw["dueDate"])
+	}
+}
+
 func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-wrong-practice"

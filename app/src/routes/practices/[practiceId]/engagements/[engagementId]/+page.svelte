@@ -2,6 +2,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
 	import {
@@ -45,6 +46,7 @@
 		clientName: string;
 		status: string;
 		createdAt: string;
+		dueDate?: string;
 	};
 
 	type Visit = {
@@ -146,6 +148,25 @@
 	// needed to build the link.
 	function clientDetailHref(): string {
 		return `/practices/${page.params.practiceId}/clients/${detail!.clientId}`;
+	}
+
+	/** The summary row's own facts (#538). `dueDate` is left out of the
+	 * array entirely, rather than shown with a placeholder, when null --
+	 * ADR-0017's postpartum-only Engagement genuinely has none, matching
+	 * the portal's own answer to the same null (#505). `Created` stays: on
+	 * this page it is a fact for the Staff working the Engagement, not one
+	 * the record's own subject didn't ask for -- the same "how did this
+	 * come to be" the repo asks every feature to answer. */
+	function summaryItems(d: Detail): { label: string; value: string }[] {
+		const items = [
+			{ label: 'Client', value: d.clientName },
+			{ label: 'Status', value: d.status },
+			{ label: 'Created', value: new Date(d.createdAt).toLocaleDateString() }
+		];
+		if (d.dueDate) {
+			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });
+		}
+		return items;
 	}
 
 	function visitsURL() {
@@ -551,13 +572,7 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
-		<DescriptionList
-			items={[
-				{ label: 'Client', value: detail!.clientName },
-				{ label: 'Status', value: detail!.status },
-				{ label: 'Created', value: new Date(detail!.createdAt).toLocaleDateString() }
-			]}
-		/>
+		<DescriptionList items={summaryItems(detail!)} />
 
 		<!--
 			#500: the Client block. "View Client" alone doesn't say whose
