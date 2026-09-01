@@ -204,7 +204,17 @@
 			font-variant-numeric: tabular-nums;
 		}
 
-		/* The content floor, re-measured 2026-09-01 in the canonical
+		/* Unavoidable (#564): a <table> and one <dl> per record are
+		   different DOM trees, not the same content laid out differently
+		   -- a <table>'s row-and-column binding is structural, so no
+		   intrinsic CSS mechanism (grid areas, flex-wrap, a fluid track
+		   list) turns one into the other. Every Layout's own case against
+		   container queries ("circuit breakers... I'd sooner not have
+		   them anywhere I know they're not needed", #520) is about
+		   REARRANGING content that stays one tree; this is the
+		   documented exception, picking which of two trees renders.
+
+		   The content floor, re-measured 2026-09-01 in the canonical
 		   environment (#564): the previous 46rem (736px) was measured
 		   with `overflow-wrap: anywhere` live on td/th, so the sweep
 		   watched the cells rescue themselves by breaking mid-word

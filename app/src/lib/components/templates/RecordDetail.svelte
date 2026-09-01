@@ -84,22 +84,7 @@
 	     tables, not prose, and past the ramp's plateau more room buys more
 	     content (#531, #541). -->
 	<center-l max="none" gutters="var(--page-gutter)">
-		{#if loadError}
-			<Notice variant="error" message={loadError} />
-		{:else if loading}
-			<div class="body" class:has-contents={isContentsShown}>
-				{#if isContentsShown}
-					<!-- Reserves the rail's column width; empty rather than
-					     filled with placeholder links, because `sections` --
-					     and so the links -- do not exist yet, and a second
-					     "loading" announcement here would double up on the
-					     Skeleton's own. -->
-					<div class="contents-rail"></div>
-				{/if}
-				<Skeleton variant="text" lines={6} label={loading} />
-			</div>
-		{:else}
-		<div class="body" class:has-contents={isContentsShown}>
+		{#snippet recordContent()}
 			<!--
 				A plain div, not <header>: a <header> outside article/aside/main/
 				nav/section maps to the `banner` landmark, and the banner is the
@@ -116,38 +101,6 @@
 					<div class="summary">{@render summary()}</div>
 				{/if}
 			</div>
-
-			{#if isContentsShown}
-				<!--
-					The same list twice, and exactly one of them rendered at any
-					width -- `display: none` takes the other out of the
-					accessibility tree entirely, so nothing is announced twice.
-					The alternative was one list restyled by a container query,
-					which cannot work: the two looks are `Link` variants, and an
-					atom does not get to know how wide its page frame is.
-				-->
-				<div class="contents-strip">
-					<stack-l space="var(--space-2)">
-						<p class="contents-heading">Jump to</p>
-						<cluster-l space="var(--space-2)">
-							{#each sections as section (section.heading)}
-								<Link href="#{anchorId(section.heading)}" label={section.heading} variant="chip" />
-							{/each}
-						</cluster-l>
-					</stack-l>
-				</div>
-
-				<div class="contents-rail">
-					<stack-l space="var(--space-3)">
-						<p class="contents-heading">On this page</p>
-						<div class="contents-links">
-							{#each sections as section (section.heading)}
-								<Link href="#{anchorId(section.heading)}" label={section.heading} variant="rail" />
-							{/each}
-						</div>
-					</stack-l>
-				</div>
-			{/if}
 
 			<div class="sections">
 				<stack-l space="var(--space-8)">
@@ -166,7 +119,101 @@
 					{/each}
 				</stack-l>
 			</div>
-		</div>
+		{/snippet}
+
+		{#if loadError}
+			<Notice variant="error" message={loadError} />
+		{:else if loading}
+			{#if isContentsShown}
+				<!-- sidebar-l (#564), side="end" (like OverviewHub's own
+				     secondary), same as the loaded state below. The rail
+				     slot holds an empty placeholder rather than
+				     placeholder links, because `sections` -- and so the
+				     links -- do not exist yet, and a second "loading"
+				     announcement here would double up on the Skeleton's
+				     own; it still reserves the column's width so the page
+				     does not reflow once the real rail arrives. -->
+				<sidebar-l
+					side="end"
+					space="var(--space-12)"
+					basis="var(--page-rail)"
+					content-min="min(var(--measure), 100%)"
+				>
+					<Skeleton variant="text" lines={6} label={loading} />
+					<div class="contents-rail"></div>
+				</sidebar-l>
+			{:else}
+				<Skeleton variant="text" lines={6} label={loading} />
+			{/if}
+		{:else if isContentsShown}
+			<!--
+				sidebar-l, side="end" (#564): DOM order keeps the record's
+				own title before its contents nav -- a screen reader or
+				keyboard user meets "Ada Lovelace" before "Jump to" -- so
+				`side="end"` is what OverviewHub's own comment already
+				explains, not the "no reordering needed" this comment used
+				to claim: that claim was wrong, caught by a test asserting
+				DOM order (RecordDetail.svelte.spec.ts), and `side="start"`
+				visually matched DOM order too, putting the rail on the
+				RIGHT where it had always been on the LEFT. `flex-direction:
+				row-reverse` (below) is what restores the left placement
+				without moving the rail back to the front of the DOM --
+				visual order and reading order deliberately differ here,
+				each for its own reason. Wraps to a stack on its own once
+				the record content cannot keep --measure, the same intent
+				the removed @container threshold measured.
+				content-min="min(var(--measure), 100%)", not a bare
+				var(--measure) -- see OverviewHub's own comment for the
+				overflow that plain form measurably caused once wrapped.
+			-->
+			<sidebar-l
+				side="end"
+				space="var(--space-12)"
+				basis="var(--page-rail)"
+				content-min="min(var(--measure), 100%)"
+			>
+				<stack-l space="var(--space-8)">
+					{@render recordContent()}
+				</stack-l>
+
+				<!--
+					The same list twice, and exactly one of them rendered at a
+					time -- `display: none` takes the other out of the
+					accessibility tree entirely, so nothing is announced twice.
+					The switch is `(pointer: coarse)` now, not a width
+					threshold (#564): the chip row exists for "read at arm's
+					length in a hospital corridor" (PR-G5) -- a touch
+					ergonomics decision, not a room one, since the rail variant
+					itself reads fine at any width (`inline-size: 100%`). A
+					stated input preference is exactly what ADR-0024 rule 3
+					reserves a media query for.
+				-->
+				<div class="contents">
+					<div class="contents-strip">
+						<stack-l space="var(--space-2)">
+							<p class="contents-heading">Jump to</p>
+							<cluster-l space="var(--space-2)">
+								{#each sections as section (section.heading)}
+									<Link href="#{anchorId(section.heading)}" label={section.heading} variant="chip" />
+								{/each}
+							</cluster-l>
+						</stack-l>
+					</div>
+
+					<div class="contents-rail">
+						<stack-l space="var(--space-3)">
+							<p class="contents-heading">On this page</p>
+							<div class="contents-links">
+								{#each sections as section (section.heading)}
+									<Link href="#{anchorId(section.heading)}" label={section.heading} variant="rail" />
+								{/each}
+							</div>
+						</stack-l>
+					</div>
+				</div>
+			</sidebar-l>
+		{:else}
+			{@render recordContent()}
 		{/if}
 	</center-l>
 </container-l>
@@ -185,11 +232,6 @@
 		 */
 		.summary {
 			margin-block-start: var(--space-4);
-		}
-
-		.body {
-			display: grid;
-			gap: var(--space-8);
 		}
 
 		.contents-heading {
@@ -214,10 +256,6 @@
 			background-color: var(--color-surface-container);
 		}
 
-		.contents-rail {
-			display: none;
-		}
-
 		/* An in-page anchor lands the heading at the top of the viewport,
 		   where the shell's top bar will be once #452 builds it. The offset
 		   is paid now so the deep link PR-G5 asked for does not arrive
@@ -227,66 +265,53 @@
 		}
 
 		/*
-		 * Container query, not a media query, per ADR-0003 -- the rail
-		 * depends on how wide the page frame is, not the window.
+		 * No @container query, and no .body wrapper (#564): the rail split
+		 * is `sidebar-l` (markup above), which wraps to a stack on its own
+		 * once `.sections` cannot keep --measure -- the same tension
+		 * OverviewHub's own equivalent floor hit (a measured pixel drifting
+		 * by platform) side-stepped the same way, by reading --measure
+		 * itself instead of a number written down for it.
 		 *
-		 * Measure criterion, not overflow (#564): `.sections` is
-		 * `minmax(0, 1fr)`, so it never overflows, but below this width
-		 * the contents rail leaves it narrower than --measure -- the
-		 * comfortable width for the prose and description lists a record
-		 * holds, which carry no cap of their own the way a form column
-		 * does. The previous 60rem (960px) was part of the shared 60rem
-		 * set (#523) rather than measured against this column -- it landed
-		 * 4px past a first measurement's real floor by coincidence, not by
-		 * derivation.
-		 *
-		 * Re-checked 2026-09-01 against the canonical environment (#564):
-		 * a first sweep on 2026-08-31, on /style-guide/record-detail's own
-		 * demo with the query forced live, read `.sections` as first
-		 * reaching --measure at 956px (59.75rem) on that machine. CI's own
-		 * Linux/Chromium reaches it 4px SOONER, at 952px -- the same
-		 * direction, and the same reason, as OverviewHub's own measure
-		 * floor: the canonical rasterizer renders ordinary mixed text
-		 * wider (what an overflow floor watches) but its `0` glyph
-		 * narrower (`--measure` is `65ch`, and 1ch is the width of `0`),
-		 * so the cap itself is smaller there and the column crosses it
-		 * sooner.
-		 *
-		 * The literal stays 956px/59.75rem: sufficiency now runs in every
-		 * environment (#564), and 952px measurably leaves the column short
-		 * of --measure on the machine that needs the full 956px. Unlike
-		 * OverviewHub's own equivalent floor, this one has no unresolved
-		 * tension with minimality -- the 4px gap between the two
-		 * environments is smaller than the 8px probe depth, so 956 minus
-		 * 8 (948px) still lands below CI's own 952px crossing, and
-		 * minimality holds in the canonical environment at the value
-		 * sufficiency also needs everywhere else.
+		 * `flex-direction: row-reverse`, paired with `side="end"` in the
+		 * markup: DOM order is content then rail (reading order), but the
+		 * rail has always been the LEFT-hand column visually, and
+		 * `side="end"` alone only changes which child gets which flex
+		 * role, not where either one sits on the line -- reversing the
+		 * line is what puts the DOM-last rail back on the left without
+		 * moving it in the DOM.
 		 */
-		@container (min-width: 59.75rem) {
-			.body.has-contents {
-				grid-template-columns: var(--page-rail) minmax(0, 1fr);
-				column-gap: var(--space-12);
-			}
+		sidebar-l {
+			flex-direction: row-reverse;
+		}
 
-			.body.has-contents .record-header {
-				grid-column: 2;
-				grid-row: 1;
-			}
+		/*
+		 * The rail's OWN two presentations -- `.contents-strip` (chip row)
+		 * and `.contents-rail` (vertical list) -- switch on `(pointer:
+		 * coarse)` rather than on room, because room was never the actual
+		 * reason the chip row exists: it is "read at arm's length in a
+		 * hospital corridor" (PR-G5), a touch-ergonomics call, and
+		 * `.contents-rail`'s own `a.rail` (Link.svelte) is `inline-size:
+		 * 100%` -- it reads fine at any width, narrow sidebar column or
+		 * full stacked page alike. A stated input preference is exactly
+		 * what ADR-0024 rule 3 reserves a media query for; this is the
+		 * first place that rule's list of preferences (colour scheme,
+		 * motion, contrast, print) needed a fifth member.
+		 */
+		.contents-rail {
+			display: block;
+		}
 
-			.body.has-contents .sections {
-				grid-column: 2;
-				grid-row: 2;
-			}
+		.contents-strip {
+			display: none;
+		}
 
-			.body.has-contents .contents-rail {
-				display: block;
-				grid-column: 1;
-				grid-row: 1 / span 2;
-				align-self: start;
-			}
-
-			.body.has-contents .contents-strip {
+		@media (pointer: coarse) {
+			.contents-rail {
 				display: none;
+			}
+
+			.contents-strip {
+				display: block;
 			}
 		}
 	}

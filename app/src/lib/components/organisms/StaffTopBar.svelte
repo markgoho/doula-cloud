@@ -150,7 +150,15 @@
 			justify-content: space-between;
 		}
 
-		/* The content floor, re-measured 2026-09-01 in the canonical
+		/* Unavoidable (#564): the wide nav row and the menu-button sheet
+		   are two landmarks, one always display:none, because a nav row
+		   collapsing to a hamburger is a genuinely different DOM tree --
+		   the same exception DataTable's own comment names, not the
+		   ordinary case Every Layout's own objection to container
+		   queries (#520) is about (rearranging one tree, which this
+		   never does).
+
+		   The content floor, re-measured 2026-09-01 in the canonical
 		   environment (#564): the previous 60rem (960px) was never
 		   measured against this failure at all, it was part of the
 		   shared 60rem set (#523). A first measurement on 2026-08-31,

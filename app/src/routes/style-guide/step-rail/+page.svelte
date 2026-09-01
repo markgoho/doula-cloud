@@ -43,50 +43,43 @@
 <stack-l space="var(--space-6)">
 	<Heading level={2} variant="section" text="Step rail" />
 	<Text
-		text="The journey rail QuestionPage and CheckAnswers both carry. It is a named nav landmark; below the Templates' 60rem threshold it becomes a one-line strip with a track, because there is no column beside the content to put it in."
+		text="The journey rail QuestionPage and CheckAnswers both carry. It is a named nav landmark: a progress summary and track, then the full step list, both unconditional (#564) -- there is no narrower alternative to switch to, so it reads the same whether it sits in a --page-rail column beside the form or stacks above it at any other width."
 		tone="variant"
 	/>
 
 	<Heading level={3} variant="card" text="On a question page (expand=current)" />
 	<container-l>
 		<div class="frame">
-			<StepRail journey="Adding a Client to Highland Midwifery" {steps} allStepsHref="/style-guide/step-rail" />
+			<StepRail journey="Adding a Client to Highland Midwifery" {steps} />
 		</div>
 	</container-l>
 
 	<Heading level={3} variant="card" text="On the summary page (expand=completed)" />
 	<container-l>
 		<div class="frame">
-			<StepRail
-				journey="Adding a Client to Highland Midwifery"
-				steps={completed}
-				expand="completed"
-				allStepsHref="/style-guide/step-rail"
-			/>
+			<StepRail journey="Adding a Client to Highland Midwifery" steps={completed} expand="completed" />
 		</div>
 	</container-l>
 
-	<Heading level={3} variant="card" text="Narrow, where the rail has no column" />
+	<Heading level={3} variant="card" text="At the width a stacked page gives it" />
 	<div class="narrow">
 		<container-l>
-			<StepRail
-				journey="Adding a Client to Highland Midwifery"
-				{steps}
-				allStepsHref="/style-guide/step-rail"
-			/>
+			<StepRail journey="Adding a Client to Highland Midwifery" {steps} />
 		</container-l>
 	</div>
 </stack-l>
 
 <style>
 	@layer components {
-		/* The rail is a grid column in a Template, so it needs a width to
-		   sit in before it looks like anything. */
+		/* The rail sits in a --page-rail column beside a Template's own
+		   form, so it needs a width to sit in before it looks like
+		   anything. */
 		.frame {
 			max-inline-size: var(--page-rail);
 		}
 
-		/* Under the 60rem container threshold, so the strip shows instead. */
+		/* The width a stacked page's own column gives it instead, once the
+		   Template's sidebar-l cannot keep the form at --form-max. */
 		.narrow {
 			max-inline-size: var(--form-max);
 		}

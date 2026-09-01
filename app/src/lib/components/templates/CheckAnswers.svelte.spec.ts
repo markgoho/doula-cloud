@@ -155,7 +155,20 @@ describe('CheckAnswers.svelte', () => {
 	// GOV.UK's Check answers pattern allows a wider column for a long answer
 	// list; the intake summary is nineteen rows on a Practice that has added
 	// its own fields, so the wide case is real.
-	it('takes the form width by default and the wide column when asked', async () => {
+	//
+	// `.wide` itself, not the grid rule that used to key off it (#564):
+	// that rule -- `.body:has(.column.wide) { grid-template-columns: ... }`
+	// -- is gone, replaced by `sidebar-l`'s own `content-min` reading
+	// `isWide` directly (markup), so there is no CSS mechanism left for
+	// this test to assert against even by class. What is left, and what a
+	// route actually gets, is `.column`'s own `max-inline-size` rule --
+	// `var(--form-max)` normally, `none` under `.wide` -- keyed on this
+	// class; --form-max itself only resolves once real tokens are loaded,
+	// which this isolated component test deliberately does not do, so the
+	// class is the observable result available here. The full rail split
+	// this feeds is exercised end to end with real tokens on
+	// /style-guide/check-answers.
+	it('applies .wide to the column only when isWide is set', async () => {
 		const { container } = await setup();
 		expect(container.querySelector('.column')).not.toHaveClass('wide');
 

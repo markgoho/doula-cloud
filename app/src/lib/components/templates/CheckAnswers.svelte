@@ -53,7 +53,6 @@
 	interface Properties {
 		journey: string;
 		steps: JourneyStep[];
-		allStepsHref?: string;
 		backHref: string;
 		title: string;
 		/**
@@ -78,7 +77,6 @@
 	let {
 		journey,
 		steps,
-		allStepsHref,
 		backHref,
 		title,
 		serviceName,
@@ -98,13 +96,25 @@
 	<!-- No cap on the frame: it holds the rail beside the column, and the
 	     column carries its own cap -- or drops it, when `isWide` (#541). -->
 	<center-l max="none" gutters="var(--page-gutter)">
-		<div class="body">
+		<!--
+			sidebar-l, side="start" (default) (#564): the rail is FIRST in
+			the DOM. `content-min` tracks the column's own cap -- --form-max
+			normally, --measure when `isWide` drops that cap, matching
+			OverviewHub's own uncapped-column pattern -- so the wrap trigger
+			is always the same quantity the column itself is judged against,
+			never an authored pixel.
+		-->
+		<sidebar-l
+			basis="var(--page-rail)"
+			space="var(--space-12)"
+			content-min={isWide ? 'min(var(--measure), 100%)' : 'min(var(--form-max), 100%)'}
+		>
 			<!--
 				Every completed step expands, so the rail stops being a
 				position marker and becomes the whole journey at a glance --
 				which is what this page is for (#432).
 			-->
-			<StepRail {journey} {steps} {allStepsHref} expand="completed" />
+			<StepRail {journey} {steps} expand="completed" />
 
 			<div class="column" class:wide={isWide}>
 				<stack-l space="var(--space-6)">
@@ -177,7 +187,7 @@
 					<cluster-l space="var(--space-4)" align="center">{@render actions()}</cluster-l>
 				</stack-l>
 			</div>
-		</div>
+		</sidebar-l>
 	</center-l>
 </container-l>
 
@@ -187,9 +197,27 @@
 			padding-block: var(--space-8);
 		}
 
-		.body {
-			display: grid;
-			gap: var(--space-6);
+		/*
+		 * sidebar-l wraps at content-min="min(var(--form-max), 100%)" (or
+		 * the --measure equivalent when `isWide` -- markup above), so it
+		 * never fits beside the rail without the column reaching the
+		 * width it is actually judged against (#564). Centred,
+		 * top-aligned, for the same reason `QuestionPage`'s own
+		 * equivalent Sidebar is: a summary of answers has nothing more to
+		 * put in a wider window (#543), and the flex default (stretch)
+		 * would otherwise match the rail and the column to whichever is
+		 * taller.
+		 *
+		 * `min(…, 100%)`, not a bare cap, for the same reason
+		 * `QuestionPage` needs it: `.column` also carries its own
+		 * `max-inline-size` below (--form-max, or none when `isWide`),
+		 * and pinning `min-inline-size` to the SAME length as that cap
+		 * makes the column unable to shrink once wrapped onto its own
+		 * row, overflowing a narrow frame instead of adapting to it.
+		 */
+		sidebar-l {
+			justify-content: center;
+			align-items: start;
 		}
 
 		.column {
@@ -202,18 +230,6 @@
 
 		dl {
 			margin: 0;
-		}
-
-		/*
-		 * A hairline under each row and none around the list: the brief's
-		 * rule that containers are declared by an edge rather than a box,
-		 * and what makes nineteen rows scannable without nineteen borders.
-		 */
-		.row {
-			display: grid;
-			gap: var(--space-1);
-			padding-block: var(--space-3);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
 		dt {
@@ -236,89 +252,53 @@
 		}
 
 		/*
-		 * A row stacks before the page frame does, at its own threshold.
+		 * A hairline under each row and none around the list: the brief's
+		 * rule that containers are declared by an edge rather than a box,
+		 * and what makes nineteen rows scannable without nineteen borders.
 		 *
-		 * No-wrap criterion, not overflow (#564): the overflow criterion
-		 * fails here for the same reason it fails on a rail -- the row's
-		 * tracks are flexible (`1fr 1fr auto`), and a wrappable string in
-		 * a flexible track never overflows, it just wraps to one word per
-		 * line. Swept with the query forced live, the row never overflows
-		 * down to 284px, well under the 320px this repo verifies -- a
-		 * threshold that never stops firing is not a floor at all
-		 * (CONTEXT.md's own failure sentence: one configuration at every
-		 * available space).
+		 * No @container query (#564): flex-wrap reads the row's own
+		 * content instead of an authored width. `grid-template-columns:
+		 * repeat(auto-fit, minmax(min-content, 1fr))` was tried first and
+		 * read as the same idea, but `CSS.supports()` against a real
+		 * Chromium returns false for it -- auto-fit's repetition count has
+		 * to be computable from a fixed track size, and min-content is not
+		 * one, so the whole declaration is dropped and every row silently
+		 * stacked, always, which a class-level test never caught. Flexbox
+		 * does not have that restriction: each cell's automatic minimum is
+		 * its own min-content -- `white-space` is ordinary, so a cell CAN
+		 * still wrap internally, but never below the width its own text
+		 * needs to start a line -- and flex-wrap packs as many cells onto
+		 * a line as fit before starting the next. That is what makes a
+		 * label and a "Change" action -- both short, author-controlled
+		 * strings -- the ones that force a stack when they do not fit:
+		 * their min-content cannot shrink, where the previous no-wrap
+		 * criterion had to measure that same fact against a pixel (416px)
+		 * because nothing could yet be asked directly. A value is a
+		 * Practice's own data of arbitrary length and wraps freely either
+		 * way, which was always true and is unchanged.
 		 *
-		 * What actually distinguishes the two configurations is wrapping,
-		 * so that is what is measured: a label and a "Change" action are
-		 * short, author-controlled strings, and if THEY wrap, the row is
-		 * too narrow for the 3-column shape and stacking is the better
-		 * read. A value is a Practice's own data of arbitrary length, and
-		 * wrapping a long value is correct behaviour rather than a
-		 * failure, so the value column is deliberately excluded from the
-		 * criterion -- this is derived from what the content IS, not
-		 * imported from GOV.UK's own number. Swept on
-		 * /style-guide/check-answers's own demo, checking every `<dt>`
-		 * and every `.action` link's line count (Range#getClientRects,
-		 * immune to a grid row stretching a cell's box to match a
-		 * WRAPPING sibling's height): the label is the one that wraps
-		 * here, and it stops at 416px. 26rem is that fixed point exactly,
-		 * no margin added. The action link never wraps at any width
-		 * tested -- "Change" is too short. This does not corroborate the
-		 * 40rem (640px) the previous, GOV.UK-derived comment carried; the
-		 * measured floor is well below it.
+		 * `flex-grow: 1` on every cell gives each fitting column an EQUAL
+		 * share of the row once three fit, which does cost the previous
+		 * design's one asymmetry -- `.action` no longer stays
+		 * content-sized against two equal columns, all three now match --
+		 * a visible proportion change, and the trade for removing the
+		 * threshold entirely.
 		 */
-		@container (min-width: 26rem) {
-			.row {
-				grid-template-columns: 1fr 1fr auto;
-				gap: var(--space-4);
-			}
-
-			.action {
-				text-align: end;
-			}
+		.row {
+			display: flex;
+			flex-wrap: wrap;
+			column-gap: var(--space-4);
+			row-gap: var(--space-1);
+			padding-block: var(--space-3);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
-		/*
-		 * The content floor, measured 2026-08-31 (#564): a measure
-		 * criterion, not overflow -- `.column` is `minmax(0, --form-max)`
-		 * in the default (non-wide) state, so it never overflows, but
-		 * below this width the rail leaves it narrower than --form-max.
-		 * Swept on /style-guide/check-answers's own demo with the query
-		 * forced live at every width: `.column` first reaches --form-max
-		 * at 1080px, the same fixed point `QuestionPage` measures
-		 * independently -- both are `var(--page-rail) minmax(0,
-		 * var(--form-max))` with the same `--space-12` gap, so the number
-		 * is a pure function of those three tokens rather than a copy.
-		 * 67.5rem is that fixed point exactly, no margin added. The
-		 * previous 60rem (960px) was part of the shared 60rem set (#523);
-		 * at 960px it left `.column` 110px short of --form-max, the same
-		 * shortfall `QuestionPage` had.
-		 */
-		@container (min-width: 67.5rem) {
-			.body {
-				/*
-				 * A summary of answers has nothing more to put in a wider
-				 * window, so it does not take the room (#543). See
-				 * `QuestionPage` for why the second track had to stop being
-				 * `1fr`: `justify-content` distributes free space, and a
-				 * flexible track leaves none.
-				 */
-				grid-template-columns: var(--page-rail) minmax(0, var(--form-max));
-				column-gap: var(--space-12);
-				align-items: start;
-				justify-content: center;
-			}
+		.row > * {
+			flex: 1 1 auto;
+		}
 
-			/*
-			 * The wide exit takes the room, because it has something to put
-			 * there. Restoring the flexible track is the whole override:
-			 * `justify-content` above then has no free space to distribute
-			 * and stops centring by itself, which is the same rule read from
-			 * the other end rather than an exception to it.
-			 */
-			.body:has(.column.wide) {
-				grid-template-columns: var(--page-rail) minmax(0, 1fr);
-			}
+		.action {
+			text-align: end;
 		}
 	}
 </style>

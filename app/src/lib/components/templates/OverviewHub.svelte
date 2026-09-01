@@ -65,13 +65,32 @@
 
 				{#if isEmpty}
 					<div class="empty">{@render empty()}</div>
-				{:else}
-					<div class="body" class:has-secondary={secondary}>
+				{:else if secondary}
+					<!--
+						sidebar-l, side="end" (#564): primary is the dominant,
+						content-min-protected side; secondary is the fixed-basis
+						sidebar, kept SECOND in the DOM (side="end" swaps which
+						child gets which role instead of reordering). Wraps to a
+						stack on its own once the primary column cannot keep
+						--measure -- the same intent the removed @container
+						threshold measured, now read off the primitive's own
+						content quantities instead of an authored pixel.
+
+						content-min="min(var(--measure), 100%)", not a bare
+						var(--measure): --measure alone stays this template's
+						min-inline-size even once wrapped onto its own row,
+						which measurably overflowed a frame narrower than
+						--measure (a real, checked failure, not a theoretical
+						one -- primary read 521px inside a 320px frame before
+						this fix). "100%" caps the floor at whatever the row
+						actually has once alone.
+					-->
+					<sidebar-l side="end" space="var(--space-8)" content-min="min(var(--measure), 100%)">
 						<stack-l space="var(--space-6)">{@render primary()}</stack-l>
-						{#if secondary}
-							<aside><stack-l space="var(--space-6)">{@render secondary()}</stack-l></aside>
-						{/if}
-					</div>
+						<aside><stack-l space="var(--space-6)">{@render secondary()}</stack-l></aside>
+					</sidebar-l>
+				{:else}
+					<stack-l space="var(--space-6)">{@render primary()}</stack-l>
 				{/if}
 			</stack-l>
 		{/if}
@@ -94,55 +113,19 @@
 			color: var(--color-on-surface);
 		}
 
-		.body {
-			display: grid;
-			gap: var(--space-8);
-		}
-
 		/*
-		 * Container query, not a media query: ADR-0003 makes container
-		 * queries the default and the rail depends on how wide the page
-		 * frame is, not how wide the window is. The threshold is the
-		 * narrowest width at which a 20rem rail still leaves the primary
-		 * column above its own comfortable measure -- --measure, since
-		 * this column holds cards and tables rather than a cap of its own
-		 * (see the no-cap note above).
-		 *
-		 * This is a "measure criterion" floor, not an overflow one -- the
-		 * primary column is `minmax(0, 1fr)`, so it never overflows, but
-		 * below this width the 20rem rail leaves it narrower than
-		 * --measure, which is not what the wide configuration is for. The
-		 * previous 60rem (960px) was part of the shared 60rem set (#523)
-		 * rather than measured against this column at all.
-		 *
-		 * Re-checked 2026-09-01 against the canonical environment (#564):
-		 * a first sweep on 2026-08-31, on /style-guide/overview-hub's own
-		 * demo with the query forced live, read the primary column as
-		 * first reaching --measure at 1004px (62.75rem) on that machine.
-		 * CI's own Linux/Chromium reaches it 8px SOONER, at 996px -- the
-		 * opposite direction from every overflow floor this ticket also
-		 * re-measured, because the canonical rasterizer renders ordinary
-		 * mixed text wider (what an overflow floor watches) but its `0`
-		 * glyph narrower (`--measure` is `65ch`, and 1ch is the width of
-		 * `0`), so the cap itself is smaller there and the column crosses
-		 * it sooner.
-		 *
-		 * The literal stays 1004px/62.75rem rather than moving to 996px:
-		 * sufficiency now runs in every environment (#564), and 996px
-		 * measurably leaves the column short of --measure on the machine
-		 * that needs the full 1004px -- a real shortfall for a real
-		 * reader there, not only a failing assertion. 1004px is exactly
-		 * 8px above where CI's own runner crosses, though, which is this
-		 * check's own minimality probe depth -- an unresolved tension
-		 * between "sufficient in every environment" and "minimal in the
-		 * canonical one" recorded on #564 rather than silently picked one
-		 * way, since no single number here satisfies both as things
-		 * stand.
+		 * No @container query, and no .body wrapper (#564): the rail split
+		 * is `sidebar-l`, Every Layout's own Sidebar, wired in the markup
+		 * above. #564's own map found the exact tension a measured
+		 * threshold cannot resolve -- sufficiency (never less room than
+		 * promised) and minimality (the smallest space that still works)
+		 * disagreeing by exactly the check's own probe depth on this
+		 * template's old floor, because the same font rasterizes to a
+		 * different `--measure` on a different platform. `sidebar-l`
+		 * side-steps the whole question: it reads `--measure` itself, on
+		 * whichever machine is rendering, and wraps the moment that
+		 * machine's own column can no longer honour it. No number is
+		 * authored here for any environment to disagree about.
 		 */
-		@container (min-width: 62.75rem) {
-			.body.has-secondary {
-				grid-template-columns: minmax(0, 1fr) 20rem;
-			}
-		}
 	}
 </style>

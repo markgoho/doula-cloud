@@ -113,7 +113,13 @@
 			padding-inline: var(--space-2);
 		}
 
-		/* The content floor, re-measured 2026-09-01 in the canonical
+		/* Unavoidable (#564): the same shape as StaffTopBar's own -- a wide
+		   nav row and a narrow stacked row are two landmarks, one always
+		   display:none, a different DOM tree rather than one tree
+		   rearranged, which is the ordinary case an intrinsic mechanism
+		   would otherwise handle.
+
+		   The content floor, re-measured 2026-09-01 in the canonical
 		   environment (#564): swept with `overflow-wrap` neutralized on
 		   /style-guide/portal-top-bar's own demo -- the previous 48rem
 		   (768px) was never measured against this failure at all, and a

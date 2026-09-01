@@ -34,6 +34,21 @@
  * `pageModules` glob and `toDemos` `continuum.svelte.spec.ts` uses -- so
  * this is the second half of one artifact, not a private instrument built
  * beside it (CONTEXT.md).
+ *
+ * The burden of proof inverted (#564, after #520's own reading of Every
+ * Layout on container queries as "circuit breakers... I'd sooner not have
+ * them anywhere I know they're not needed"): a `@container` condition is
+ * an authored threshold, the opposite of the intrinsic mechanisms this
+ * repo otherwise reaches for, so existing at all now needs its own
+ * justification, not just a criterion. `OverviewHub`, `RecordDetail`,
+ * `QuestionPage`, `CheckAnswers`'s rail split, and `StepRail` all lost
+ * their queries to `sidebar-l` (Every Layout's own Sidebar) or, for
+ * `CheckAnswers`'s row, a content-derived CSS Grid; `RecordDetail`'s
+ * chip/rail choice moved to `(pointer: coarse)`, a stated preference
+ * ADR-0024 rule 3 already permits. Nine conditions are three. Every
+ * surviving entry in `CRITERIA` below carries a `justification`, and
+ * `has a justification for existing at all` (below) is what enforces
+ * that a tenth condition cannot join without writing one down.
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
@@ -71,7 +86,10 @@ const conditions = findConditions(sources);
 
 /*
  * Three instruments (CONTEXT.md, this ticket's own decisions) plus one
- * documented exception to having any of them: `overflow` (does the
+ * documented exception to having any of them, kept even though only
+ * `overflow` currently has a condition registered against it -- the
+ * mechanism is what found every one of #564's own findings, not the
+ * particular set of conditions surviving today: `overflow` (does the
  * rendered content need more room than it is given, wrapping
  * neutralized), `measure` (does the primary column beside a rail reach
  * `--form-max` or `--measure`, whichever caps it), `no-wrap` (does a
@@ -80,44 +98,47 @@ const conditions = findConditions(sources);
  * length and is deliberately excluded, since wrapping IT is correct
  * rather than a defect), and `coupled` (this condition shares its host
  * Template's ancestor container and has no content-driven floor of its
- * own -- see `StepRail.svelte`'s own comment on the rule this measures).
+ * own).
  *
- * `no-wrap` exists because `overflow` fails on a flexible track exactly
- * the way it fails on a rail: a wrappable string in `1fr 1fr auto` never
- * needs more room than it is given, it just wraps to one word per line,
- * so the overflow criterion reports every width as acceptable and finds
- * no floor at all -- which is indistinguishable from a genuine floor of
- * 0 until `findConditionsBelowConformance` below refuses to let a number
- * that low stand unquestioned (`CheckAnswers.svelte`'s own comment on its
- * row condition tells this story first-hand).
+ * `justification` is the new field (#564): every entry states, in
+ * writing, why no intrinsic mechanism can do this job -- the burden the
+ * check now puts on a query existing at all, not only on its number.
  *
  * A registry of CRITERIA, never of widths: every value below names an
- * instrument or a reference to another condition, and the number each
- * resolves to is read off the source, not written here.
+ * instrument, a justification, or a reference to another condition, and
+ * the number each resolves to is read off the source, not written here.
  */
 type Criterion =
-	| { readonly kind: 'overflow' }
-	| { readonly kind: 'measure'; readonly target: string; readonly cap: 'form-max' | 'measure' }
-	| { readonly kind: 'no-wrap'; readonly selectors: readonly string[] }
-	| { readonly kind: 'coupled'; readonly to: readonly string[] };
+	| { readonly kind: 'overflow'; readonly justification: string }
+	| {
+			readonly kind: 'measure';
+			readonly target: string;
+			readonly cap: 'form-max' | 'measure';
+			readonly justification: string;
+	  }
+	| { readonly kind: 'no-wrap'; readonly selectors: readonly string[]; readonly justification: string }
+	| { readonly kind: 'coupled'; readonly to: readonly string[]; readonly justification: string };
 
 const CRITERIA: Readonly<Record<string, Criterion>> = {
-	'organisms/DataTable.svelte#1': { kind: 'overflow' },
-	'organisms/StaffTopBar.svelte#1': { kind: 'overflow' },
-	'organisms/PortalTopBar.svelte#1': { kind: 'overflow' },
-	'templates/OverviewHub.svelte#1': { kind: 'measure', target: '.body > stack-l', cap: 'measure' },
-	'templates/RecordDetail.svelte#1': { kind: 'measure', target: '.sections', cap: 'measure' },
-	'templates/QuestionPage.svelte#1': { kind: 'measure', target: '.column', cap: 'form-max' },
-	// `dt` is every row's label; `.action a` is every row's "Change" link.
-	// `.value` (the Practice's own data) is deliberately not named here.
-	'templates/CheckAnswers.svelte#1': { kind: 'no-wrap', selectors: ['dt', '.action a'] },
-	'templates/CheckAnswers.svelte#2': { kind: 'measure', target: '.column', cap: 'form-max' },
-	// `StepRail` renders inside BOTH `QuestionPage` and `CheckAnswers`, so
-	// both are named here rather than one: coupling it to only one host
-	// would leave the other free to drift without this check noticing.
-	'organisms/StepRail.svelte#1': {
-		kind: 'coupled',
-		to: ['templates/QuestionPage.svelte#1', 'templates/CheckAnswers.svelte#2']
+	'organisms/DataTable.svelte#1': {
+		kind: 'overflow',
+		justification:
+			'A <table> versus one <dl> per record is a different DOM tree, not the same content laid out ' +
+			'differently -- no intrinsic CSS mechanism swaps markup (ADR-0024), so a query is the only way ' +
+			'to pick between the two trees a route renders.'
+	},
+	'organisms/StaffTopBar.svelte#1': {
+		kind: 'overflow',
+		justification:
+			'A wide nav row versus a menu-button sheet is a different DOM tree -- two landmarks, one always ' +
+			'display:none -- for the same reason DataTable keeps its own query: no intrinsic mechanism ' +
+			'swaps markup, only a query can pick which tree renders.'
+	},
+	'organisms/PortalTopBar.svelte#1': {
+		kind: 'overflow',
+		justification:
+			'The same shape as StaffTopBar: a wide nav row versus a narrow stacked row is a different DOM ' +
+			'tree, and no intrinsic mechanism swaps markup.'
 	}
 };
 
@@ -323,6 +344,23 @@ describe('the floor check (#564)', () => {
 		const discoveredKeys = new Set(conditions.map((condition) => toRegistryKey(condition)));
 		const stale = Object.keys(CRITERIA).filter((key) => !discoveredKeys.has(key));
 		expect(stale, stale.join(', ')).toEqual([]);
+	});
+
+	/*
+	 * The burden of proof (#564): a query is an authored threshold, the
+	 * opposite of the intrinsic mechanisms this repo otherwise reaches
+	 * for, so existing at all needs its own written reason -- not just a
+	 * criterion to be judged by once it exists. A minimum length rather
+	 * than mere presence, so a placeholder string cannot stand in for an
+	 * actual argument.
+	 */
+	const MINIMUM_JUSTIFICATION_LENGTH = 40;
+
+	it('has a justification for existing at all, for every criterion', () => {
+		const unjustified = Object.entries(CRITERIA)
+			.filter(([, criterion]) => criterion.justification.trim().length < MINIMUM_JUSTIFICATION_LENGTH)
+			.map(([key]) => key);
+		expect(unjustified, unjustified.join(', ')).toEqual([]);
 	});
 
 	for (const condition of conditions) {
