@@ -14,6 +14,9 @@
  * only ever execute in a browser.
  */
 
+import type { Component } from 'svelte';
+import { render } from 'vitest-browser-svelte';
+
 // ADR-0024: 320 is a conformance commitment, not a content floor -- the
 // only width this repo's verification ever names, and the low end of
 // every sweep.
@@ -126,6 +129,57 @@ export async function ensureFontLoaded(): Promise<void> {
 			`"${FONT_FAMILY}" did not report a loaded face before a measurement. Measuring against the fallback face produces a confidently wrong number rather than an honest failure, so this stops instead.`
 		);
 	}
+}
+
+/*
+ * Puts a subject in front of the sweep: an unconstrained run, a frame that
+ * is a containment context, the pairing re-declared on the frame's own
+ * children (#544), and a wait for the real webfont (#550).
+ *
+ * It lives here, beside `sweep`, because it was already written three
+ * times. `continuum.svelte.spec.ts` had it inline in its own `it`;
+ * `floor.svelte.spec.ts` carries a copy with a comment saying it is a copy
+ * "because it is inline in that file's own `it`"; and #570's route sweep
+ * would have been the third. CONTEXT.md calls the continuum check and the
+ * drag surface one artifact seen two ways, and three private mount
+ * procedures is how that stops being true -- #550 is what it looks like
+ * when two halves of this instrument disagree, and each copy is another
+ * place a fix like `ensureFontLoaded` has to be remembered.
+ *
+ * Importing `vitest-browser-svelte` here is safe: nothing that ships
+ * imports this module. `floor.ts` does, and it is test-only; the drag
+ * surface's own page imports `dragSurface.js` and the component registry,
+ * never this.
+ */
+export interface Mounted {
+	run: HTMLElement;
+	frame: HTMLElement;
+	remove(): void;
+}
+
+export async function mountInFrame(
+	component: Component,
+	properties: Record<string, unknown> = {}
+): Promise<Mounted> {
+	const run = document.createElement('div');
+	const frame = document.createElement('div');
+	frame.style.containerType = 'inline-size';
+	run.append(frame);
+	document.body.append(run);
+	await render(component, properties, { baseElement: frame });
+	/*
+	 * The base size re-resolved against the frame (#544), which is the drag
+	 * surface's `.frame > *` rule expressed in the DOM this builds by hand.
+	 * `font-size` inherits as a computed length and a `cqi` resolves against
+	 * the nearest ANCESTOR container, so without this the subject renders in
+	 * letters sized for the window while the sweep reports 320px -- the
+	 * instrument lying in the same direction every time.
+	 */
+	for (const child of frame.children) {
+		(child as HTMLElement).style.fontSize = 'var(--text-body-size)';
+	}
+	await ensureFontLoaded();
+	return { run, frame, remove: () => run.remove() };
 }
 
 export function overflowReport(name: string, found: Break): string {

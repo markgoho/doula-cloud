@@ -27,11 +27,10 @@
  * requires.
  */
 import { describe, expect, it } from 'vitest';
-import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages } from './components.js';
-import { ensureFontLoaded, overflowReport, sweep } from './continuum.js';
+import { mountInFrame, overflowReport, sweep } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 
 const pageModules = import.meta.glob<PageModule>('./*/+page.svelte', { eager: true });
@@ -59,42 +58,19 @@ if (!customElements.get('stack-l')) registerLayoutPrimitives();
 describe('the continuum check', () => {
 	for (const demo of demos) {
 		async function assertion() {
-			// An unconstrained run, exactly like the drag surface's own `.run`,
-			// reports how much space this environment offers on its own.
-			const run = document.createElement('div');
-			const frame = document.createElement('div');
-			frame.style.containerType = 'inline-size';
-			run.append(frame);
-			document.body.append(run);
+			/*
+			 * `mountInFrame` (`continuum.ts`) is the shared mount procedure:
+			 * an unconstrained run, exactly like the drag surface's own
+			 * `.run`, reporting how much space this environment offers on its
+			 * own; the pairing re-declared inside the frame (#544); and the
+			 * wait for the real webfont without which this measures the
+			 * metric-compatible fallback face instead of the one a browser
+			 * paints (#550). It was inline here, copied in
+			 * `floor.svelte.spec.ts`, and #570's route sweep would have been
+			 * the third copy -- so it moved next to `sweep`.
+			 */
+			const { run, frame, remove } = await mountInFrame(demo.component);
 			try {
-				await render(demo.component, {}, { baseElement: frame });
-				/*
-				 * The base size re-resolved against the frame (#544), which is
-				 * the drag surface's `.frame > *` rule expressed in the DOM
-				 * this check builds by hand. `font-size` inherits as a
-				 * computed length and a `cqi` resolves against the nearest
-				 * ANCESTOR container, so without this the demo renders in
-				 * letters sized for the window while the sweep reports 320px
-				 * -- the instrument lying in the same direction every time.
-				 */
-				for (const child of frame.children) {
-					(child as HTMLElement).style.fontSize = 'var(--text-body-size)';
-				}
-				/*
-				 * `Hanken Grotesk` loads under `font-display: swap` (`fonts.css`), so
-				 * a sweep taken right after render measures the metric-compatible
-				 * fallback face, not the one a browser paints -- and a real break
-				 * can fit inside the fallback and go unseen (#550). `ready` alone
-				 * turned out not to be enough: it resolves once every REQUESTED
-				 * load has settled, not once a load has actually been requested,
-				 * so it can resolve before `swap` has asked for the face at all.
-				 * `ensureFontLoaded` requests it explicitly and refuses to let a
-				 * measurement proceed if the real face never reported loaded,
-				 * which is what actually measures the same face the drag surface
-				 * paints (#564's floor check hit this same bug independently;
-				 * the fix is shared here rather than duplicated).
-				 */
-				await ensureFontLoaded();
 				const found = sweep(frame, run.clientWidth);
 				/*
 				 * The failure sentence names the component, the space it was
@@ -105,7 +81,7 @@ describe('the continuum check', () => {
 				 */
 				expect(found, found && overflowReport(demo.name, found)).toBeUndefined();
 			} finally {
-				run.remove();
+				remove();
 			}
 		}
 

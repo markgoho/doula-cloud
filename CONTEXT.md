@@ -210,12 +210,16 @@ Adapting to a **stated user preference** — color scheme, reduced motion, contr
 _Avoid_: Using it for anything space-related — that is **intrinsic layout**
 
 **The continuum check**:
-The automated pass asserting that nothing needs more room than it is given, at any available space, naming no width. Runs against **the drag surface**: they are one artifact seen two ways, not a check and a page built separately.
+The automated pass asserting that nothing needs more room than it is given, at any available space, naming no width. Covers both a component, through the style guide's own demo registry, and a route, through the route's **fixture**. What makes it one artifact with **the drag surface** is the sweep and the mount procedure they share, not the page: a component demo is watched on the drag surface and swept by the check, while a route today is only swept, because a route needs data a running page cannot supply. That is a narrowing, not the settled end state.
 _Avoid_: Width matrix, size sweep, responsive test
 
 **The drag surface**:
-The style-guide surface with a handle a person drags, so a component can be watched passing through its configurations continuously rather than inspected at chosen sizes. The human half of **the continuum check**.
+The style-guide surface with a handle a person drags, so a component can be watched passing through its configurations continuously rather than inspected at chosen sizes. The human half of **the continuum check**, over the components it covers.
 _Avoid_: Width matrix, size panel, breakpoint preview
+
+**Fixture**:
+The content a surface is measured with. It holds the longest realistic value for every field a Practice types into itself — never a representative one, because a surface measured on polite content is a surface nobody will ever see. A component's fixture is its style-guide page; a route's is the `page.fixture.ts` beside it, which also names the route's parameters and answers its requests, because a route reads more than props.
+_Avoid_: Mock data, sample data, dummy content
 
 **Fluid step**:
 A design token whose value is a `clamp()` between a floor and a ceiling, growing continuously with the space its consumer is given rather than holding one number everywhere. Every type size and every spacing step is one. The growth term is a container unit (`cqi`), never a viewport unit, so a fluid step answers **available space** like everything else here — the same token is smaller in a rail than on a full page, by design. Its floor and ceiling are `rem`, so a person's own font-size setting still moves it (WCAG 1.4.4).

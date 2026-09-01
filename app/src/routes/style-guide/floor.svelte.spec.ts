@@ -63,11 +63,10 @@
  * that a tenth condition cannot join without writing one down.
  */
 import { describe, expect, it } from 'vitest';
-import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages, toSlug } from './components.js';
-import { ensureFontLoaded, isCanonicalEnvironment, RESOLUTION, TOLERANCE } from './continuum.js';
+import { isCanonicalEnvironment, mountInFrame, RESOLUTION, TOLERANCE } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 import {
 	capFloorReport,
@@ -219,35 +218,15 @@ function demoForCondition(condition: Condition) {
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
 
 /*
- * The same mount procedure `continuum.svelte.spec.ts` uses on its own
- * demos -- an unconstrained container-type frame, the base size
- * re-resolved against it (#544), and a wait for the real webfont (#550) --
- * copied rather than imported because it is inline in that file's own
- * `it`, not a function either check can call.
+ * The mount procedure is `continuum.ts`'s `mountInFrame` (#570), no longer
+ * a copy of it: an unconstrained container-type frame, the base size
+ * re-resolved against it (#544), and a wait for the real webfont without
+ * which this check measured the fallback face on CI (#550). It used to be
+ * copied here with a note saying so, because it lived inline in
+ * `continuum.svelte.spec.ts`'s own `it` and no check could call it. One
+ * instrument, not two -- which is what CONTEXT.md's "one artifact seen two
+ * ways" asks of this file and that one.
  */
-async function mount(component: PageModule['default']) {
-	const run = document.createElement('div');
-	const frame = document.createElement('div');
-	frame.style.containerType = 'inline-size';
-	run.append(frame);
-	document.body.append(run);
-	await render(component, {}, { baseElement: frame });
-	for (const child of frame.children) {
-		(child as HTMLElement).style.fontSize = 'var(--text-body-size)';
-	}
-	/*
-	 * `document.fonts.ready` alone let this check measure the fallback
-	 * face on CI: it resolves once every REQUESTED load has settled, not
-	 * once `font-display: swap` (`fonts.css`) has actually requested one,
-	 * so it can resolve with nothing in flight yet. `ensureFontLoaded`
-	 * requests the real face explicitly and refuses to let a measurement
-	 * proceed if it did not report loaded -- shared with
-	 * `continuum.svelte.spec.ts`, which hit the same bug (#550) and is
-	 * meant to be one instrument with this file, not two.
-	 */
-	await ensureFontLoaded();
-	return { run, frame };
-}
 
 /*
  * Decision #1 (#564): a floor is measured with emergency wrapping
@@ -513,7 +492,7 @@ describe('the floor check (#564)', () => {
 		const belowFloorPx = floorPx - probeDepthPx;
 
 		it(`${key} is sufficient at its floor (${condition.floorRem}rem)`, async () => {
-			const { run, frame } = await mount(demoForCondition(condition).component);
+			const { run, frame } = await mountInFrame(demoForCondition(condition).component);
 			try {
 				forceLive(condition, scopeClasses(frame));
 				assertCriterionAt(frame, key, criterion, floorPx, true);
@@ -534,7 +513,7 @@ describe('the floor check (#564)', () => {
 		 */
 		if (isCanonicalEnvironment()) {
 			it(minimalityName, async () => {
-				const { run, frame } = await mount(demoForCondition(condition).component);
+				const { run, frame } = await mountInFrame(demoForCondition(condition).component);
 				try {
 					forceLive(condition, scopeClasses(frame));
 					assertCriterionAt(frame, key, criterion, belowFloorPx, false);
