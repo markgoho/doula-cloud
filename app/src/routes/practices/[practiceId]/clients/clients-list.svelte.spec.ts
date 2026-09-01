@@ -352,6 +352,10 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect.element(testPage.getByText('the practice is gone')).toBeVisible();
+		// #506: a failed "Load more" used to route through the same `error`
+		// state as the initial load, replacing the whole table with a bare
+		// notice -- it must leave the rows already on screen in place.
+		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
 	});
 
 	it('swallows a "Load more" failure whose filter has since moved', async () => {

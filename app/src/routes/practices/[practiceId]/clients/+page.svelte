@@ -25,6 +25,8 @@
 	let isLoaded = $state(false);
 	let cursor = $state('');
 	let isMoreAvailable = $state(false);
+	let isLoadingMore = $state(false);
+	let loadMoreError = $state('');
 
 	// The default filter is "Clients with work" (ADR-0017); `?all=true`
 	// switches to everyone -- including a Client whose only Request was
@@ -122,6 +124,7 @@
 	async function loadFirstPage(isShowingEveryone: boolean) {
 		isLoaded = false;
 		error = '';
+		loadMoreError = '';
 		try {
 			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!, {
 				showAll: isShowingEveryone
@@ -137,6 +140,8 @@
 
 	async function handleLoadMore() {
 		const token = filterToken;
+		loadMoreError = '';
+		isLoadingMore = true;
 		try {
 			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!, {
 				cursor,
@@ -148,7 +153,9 @@
 			isMoreAvailable = loaded.hasMore;
 		} catch (error_) {
 			if (token !== filterToken) return;
-			error = error_ instanceof Error ? error_.message : 'Failed to load more Clients';
+			loadMoreError = error_ instanceof Error ? error_.message : 'Failed to load more Clients';
+		} finally {
+			if (token === filterToken) isLoadingMore = false;
 		}
 	}
 
@@ -200,6 +207,8 @@
 		rowHref={clientHref}
 		hasMore={isMoreAvailable}
 		onLoadMore={handleLoadMore}
+		{isLoadingMore}
+		{loadMoreError}
 		{emptyMessage}
 	/>
 	{#if isContractor && clients.length === 0}

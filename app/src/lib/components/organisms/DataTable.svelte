@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import Button from '../atoms/Button.svelte';
 	import Link from '../atoms/Link.svelte';
+	import Notice from '../atoms/Notice.svelte';
 
 	interface Column<T> {
 		label: string;
@@ -33,11 +34,22 @@
 		rowActions?: RowActions<T>;
 		hasMore?: boolean;
 		onLoadMore?: () => void;
+		isLoadingMore?: boolean;
+		loadMoreError?: string;
 		emptyMessage: string;
 	}
 
-	let { columns, rows, rowHref, rowActions, hasMore = false, onLoadMore, emptyMessage }: Properties<T> =
-		$props();
+	let {
+		columns,
+		rows,
+		rowHref,
+		rowActions,
+		hasMore = false,
+		onLoadMore,
+		isLoadingMore = false,
+		loadMoreError,
+		emptyMessage
+	}: Properties<T> = $props();
 </script>
 
 <stack-l class="frame">
@@ -117,8 +129,12 @@
 		{/if}
 	</div>
 
+	{#if loadMoreError}
+		<Notice variant="error" message={loadMoreError} />
+	{/if}
+
 	{#if hasMore && onLoadMore}
-		<Button label="Load more" variant="secondary" onClick={onLoadMore} />
+		<Button label="Load more" variant="secondary" loading={isLoadingMore} onClick={onLoadMore} />
 	{/if}
 </stack-l>
 
