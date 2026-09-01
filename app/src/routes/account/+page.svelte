@@ -25,9 +25,8 @@
 	 * and a load function would buy nothing but a second place to look.
 	 */
 	import { onMount } from 'svelte';
-	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
-	import type { SessionInfo } from '#lib/landing.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -36,6 +35,7 @@
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/formErrors.js';
+	import { loadAccountSession } from './session.svelte.js';
 
 	const workStateId = 'account-work-state';
 
@@ -51,19 +51,18 @@
 	let isSaving = $state(false);
 
 	async function loadAccount() {
-		const response = await apiFetchWithSession('/api/staff/session');
-		if (!response.ok) {
+		const result = await loadAccountSession();
+		if (!result.ok) {
 			// 404 means the verified identity has no staff row behind it --
 			// signed in, but nobody here yet. Say so and render nothing to
 			// edit, rather than offering a form whose save cannot land.
-			loadError = await apiErrorMessage(response);
+			loadError = result.message;
 			return;
 		}
 
-		const session: SessionInfo = await response.json();
-		name = session.name;
-		reportedAt = session.workStateReportedAt;
-		selectedState = workStateName(session.workState);
+		name = result.session.name;
+		reportedAt = result.session.workStateReportedAt;
+		selectedState = workStateName(result.session.workState);
 		isLoaded = true;
 	}
 

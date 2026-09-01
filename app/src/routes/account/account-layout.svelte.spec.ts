@@ -4,9 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Layout from './+layout.svelte';
+import { resetAccountSession } from './session.svelte.js';
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+vi.mock('#lib/api.js', () => ({
+	apiFetchWithSession,
+	apiErrorMessage: (response: Response) => response.text()
+}));
 
 const session = {
 	staffId: 'staff-1',
@@ -20,6 +24,10 @@ const session = {
 function renderLayout(sessionResponse = jsonResponse(session)) {
 	apiFetchWithSession.mockReset();
 	apiFetchWithSession.mockImplementation(() => Promise.resolve(sessionResponse));
+	// loadAccountSession() memoizes its in-flight request at module scope
+	// (#474), so a fresh test needs a clean slate rather than replaying the
+	// previous test's fetch.
+	resetAccountSession();
 	return render(Layout, {
 		children: createRawSnippet(() => ({ render: () => '<p>account page content</p>' }))
 	});

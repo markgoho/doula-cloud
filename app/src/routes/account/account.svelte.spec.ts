@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
+import { resetAccountSession } from './session.svelte.js';
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -54,6 +55,10 @@ function mockApi({
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	// loadAccountSession() memoizes its in-flight request at module scope
+	// (#474), so a fresh test needs a clean slate rather than replaying the
+	// previous test's fetch.
+	resetAccountSession();
 });
 
 const saveButton = () => testPage.getByRole('button', { name: 'Save work state' });

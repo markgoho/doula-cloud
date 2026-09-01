@@ -7,21 +7,16 @@
 	 * nothing else `StaffTopBar` already carries (no top bar, no sign-out:
 	 * out of scope for #474).
 	 *
-	 * A separate read of the session from the page's own, rather than a
-	 * shared store: the page needs `name`, `workState` and
-	 * `workStateReportedAt` for the form itself, this layout needs only
-	 * `memberships` for the nav, and the two are different questions asked
-	 * of the same endpoint -- `practices/+layout.svelte` and its pages read
-	 * the same endpoint independently for the same reason. Either read
-	 * failing leaves its own half of the screen showing nothing rather than
-	 * guessing at the other's data.
+	 * loadAccountSession() memoizes the fetch this layout and +page.svelte
+	 * both need, so mounting together on every visit to /account costs one
+	 * request, not two.
 	 */
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { apiFetchWithSession } from '#lib/api.js';
-	import type { Membership, SessionInfo } from '#lib/landing.js';
+	import type { Membership } from '#lib/landing.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import { loadAccountSession } from './session.svelte.js';
 
 	let { children } = $props();
 
@@ -29,11 +24,10 @@
 	let isLoaded = $state(false);
 
 	onMount(async () => {
-		const response = await apiFetchWithSession('/api/staff/session');
-		if (!response.ok) return;
+		const result = await loadAccountSession();
+		if (!result.ok) return;
 
-		const session: SessionInfo = await response.json();
-		memberships = session.memberships;
+		memberships = result.session.memberships;
 		isLoaded = true;
 	});
 </script>
