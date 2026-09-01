@@ -32,7 +32,7 @@ import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages, toSlug } from './components.js';
-import { RESOLUTION, TOLERANCE } from './continuum.js';
+import { ensureFontLoaded, RESOLUTION, TOLERANCE } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 import {
 	findConditions,
@@ -144,7 +144,17 @@ async function mount(component: PageModule['default']) {
 	for (const child of frame.children) {
 		(child as HTMLElement).style.fontSize = 'var(--text-body-size)';
 	}
-	await document.fonts.ready;
+	/*
+	 * `document.fonts.ready` alone let this check measure the fallback
+	 * face on CI: it resolves once every REQUESTED load has settled, not
+	 * once `font-display: swap` (`fonts.css`) has actually requested one,
+	 * so it can resolve with nothing in flight yet. `ensureFontLoaded`
+	 * requests the real face explicitly and refuses to let a measurement
+	 * proceed if it did not report loaded -- shared with
+	 * `continuum.svelte.spec.ts`, which hit the same bug (#550) and is
+	 * meant to be one instrument with this file, not two.
+	 */
+	await ensureFontLoaded();
 	return { run, frame };
 }
 

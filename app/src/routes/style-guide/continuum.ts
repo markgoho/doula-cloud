@@ -60,6 +60,54 @@ export function sweep(frame: HTMLElement, availableSpace: number): Break | undef
  */
 export const EXERCISE_ROUTE = '/style-guide/layout-exercise';
 
+// The webfont this repo ships (`fonts.css`), named as a plain constant
+// rather than read out of that file, since this function verifies
+// against `document.fonts`, not against CSS source.
+const FONT_FAMILY = 'Hanken Grotesk';
+
+/*
+ * #550's own fix was `await document.fonts.ready`, and it is not enough
+ * on its own: `ready` resolves once every REQUESTED font load has
+ * settled, but `font-display: swap` (`fonts.css`) means nothing has
+ * necessarily been requested yet the instant a render call returns --
+ * `ready` can resolve with zero faces in flight, and a measurement taken
+ * right after silently reads `Hanken Grotesk Fallback`, the
+ * metric-compatible stand-in, instead of the real face. The fallback is
+ * not uniformly narrower or wider -- it depends on the specific glyphs
+ * and kerning pairs in play -- so this one bug can push one component's
+ * floor too low and another's too high inside the same run, which is
+ * exactly the shape four floor tests failed in CI (never locally, where
+ * the face was already warm from an earlier run).
+ *
+ * The fix requests the face explicitly and does not trust `ready` alone
+ * to prove it arrived. `FontFaceSet#check` was tried first and rejected:
+ * measured directly, it reports `true` for a font family that is not
+ * registered anywhere in the document at all, which makes it useless as
+ * the "did the real face actually load" gate this function exists to be.
+ * `document.fonts` itself is iterable and yields the `FontFace` objects
+ * `fonts.css`'s `@font-face` rules registered, each with its own
+ * `status`, so this reads THAT instead: at least one registered face
+ * named `Hanken Grotesk` (there are two, one per `unicode-range` chunk --
+ * `fonts.css` -- and only the one this repo's Latin-only content actually
+ * needs is expected to load) must report `'loaded'`. `font-weight: 400
+ * 600` on both is a single variable-weight range rather than one face
+ * per weight this repo's tokens set (`--font-weight-normal/medium/
+ * semibold`), so one request at any weight in that range triggers the
+ * same resource fetch every weight would.
+ */
+export async function ensureFontLoaded(): Promise<void> {
+	await document.fonts.load(`1rem "${FONT_FAMILY}"`);
+	await document.fonts.ready;
+	const isLoaded = [...document.fonts].some(
+		(face) => face.family === FONT_FAMILY && face.status === 'loaded'
+	);
+	if (!isLoaded) {
+		throw new Error(
+			`"${FONT_FAMILY}" did not report a loaded face before a measurement. Measuring against the fallback face produces a confidently wrong number rather than an honest failure, so this stops instead.`
+		);
+	}
+}
+
 export function overflowReport(name: string, found: Break): string {
 	return [
 		`${name} needed ${found.needed}px inside the ${found.width}px it was given.`,

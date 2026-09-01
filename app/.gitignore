@@ -27,3 +27,6 @@ playwright-report
 
 # Vitest
 coverage
+# vitest-browser's own screenshot-on-failure output, sibling to whichever
+# .svelte.spec.ts file failed -- never a fixture, always a leftover.
+__screenshots__
