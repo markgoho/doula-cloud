@@ -143,8 +143,21 @@ jobs:
     # e2e/stack.ts and compose.e2e.yaml for what that combination broke
     # back when the stack also built/ran Go images through it). Local dev
     # keeps defaulting to Podman -- see docs/testing.md.
+    #
+    # VITE_FLOOR_CANONICAL names this runner the canonical environment a
+    # content floor's minimality is measured against (#564): the same font
+    # bytes rasterize to different glyph widths on this runner's Linux/
+    # FreeType than on a contributor's own macOS/CoreText machine, so
+    # "the smallest space this still fits in" is not one number across
+    # both -- only sufficiency (never LESS room than a floor promises) can
+    # hold everywhere. `VITE_`-prefixed so Vite exposes it to browser-mode
+    # Vitest as `import.meta.env.VITE_FLOOR_CANONICAL` with no extra
+    # config -- verified directly (not assumed): a shell-set `VITE_*` var
+    # reaches `import.meta.env` in a `.svelte.spec.ts` test unchanged.
+    # Read by `continuum.ts`'s `isCanonicalEnvironment`.
     env:
       CONTAINER_ENGINE: docker
+      VITE_FLOOR_CANONICAL: 'true'
     steps:
       - uses: actions/checkout@v7
 

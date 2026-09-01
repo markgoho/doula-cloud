@@ -25,6 +25,26 @@ export const RESOLUTION = 4;
 // Sub-pixel rounding from the browser's own layout, not a real overflow.
 export const TOLERANCE = 1;
 
+/*
+ * Whether this run is the canonical environment a content floor's
+ * MINIMALITY is measured against (#564). The same font bytes rasterize
+ * to different glyph widths on Linux/FreeType (CI) than on macOS/
+ * CoreText (a contributor's own machine) -- confirmed directly, not
+ * assumed: CI measured DataTable needing 775px where macOS measures
+ * 768px, and OverviewHub's `--measure` cap at 585.0px on CI against
+ * ~592px on macOS. So "the smallest space this still fits in" is not one
+ * number across both, and only sufficiency (never LESS room than a floor
+ * promises) is a property both environments can assert. `.github/
+ * workflows/ci.yml`'s `app` job sets `VITE_FLOOR_CANONICAL` explicitly,
+ * which is what this reads -- never `navigator.userAgent`, which is
+ * guesswork about what a rasterizer does rather than a fact about which
+ * one is running.
+ */
+export function isCanonicalEnvironment(): boolean {
+	const environment = import.meta.env as Record<string, string | undefined>;
+	return environment.VITE_FLOOR_CANONICAL === 'true';
+}
+
 export interface Break {
 	width: number;
 	needed: number;

@@ -6,18 +6,26 @@
  *
  *   Sufficiency: forced permanently live (`floor.ts`'s `forceLive`), the
  *   wide configuration is acceptable, by the condition's own criterion,
- *   at the floor width.
+ *   at the floor width. Runs in EVERY environment -- this is the safety
+ *   property: a floor that hands real content less room than it promised
+ *   is a broken layout wherever it renders, and nothing about which
+ *   rasterizer is running changes that.
  *
  *   Minimality: the same wide configuration is NOT acceptable one step
- *   further down -- `2 * RESOLUTION` (8px), not `RESOLUTION` (4px). A
+ *   further down -- `2 * RESOLUTION` (8px), not `RESOLUTION` (4px); a
  *   single step landed inside a sub-pixel margin on OverviewHub (~1.02px
- *   against a 1px `TOLERANCE`), which is a flake waiting to happen rather
- *   than a genuine assertion; two steps reads several px past the true
- *   crossing on every floor measured so far. The property this proves is
- *   slightly weaker as a result -- the floor is within `2 * RESOLUTION`
- *   of the true fixed point, not within `RESOLUTION` -- but `RESOLUTION`
- *   was already a resolution and not a design (ADR-0025), so widening it
- *   loses nothing the check ever claimed to guarantee.
+ *   against a 1px `TOLERANCE`). Runs ONLY in the canonical environment
+ *   (`continuum.ts`'s `isCanonicalEnvironment`), and says so in its own
+ *   test name everywhere else, as `it.skip` rather than a silent pass.
+ *   "The smallest space this still fits in" turned out not to be
+ *   portable (#564): the same font bytes rasterize to different glyph
+ *   widths on CI's Linux/FreeType than on a contributor's own macOS/
+ *   CoreText, so a floor minimal on one machine can read as short --
+ *   still `overflowReport`'s "one configuration at every available
+ *   space" -- on the other, and no single number satisfies minimality on
+ *   both. Sufficiency has no such problem, because "enough room
+ *   everywhere" only ever gets harder to satisfy as more environments are
+ *   added, never contradictory between two of them.
  *
  * Conditions are discovered from source (`floor.ts`'s `findConditions`),
  * not listed by hand, so a tenth `@container` joining the codebase with no
@@ -32,7 +40,7 @@ import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages, toSlug } from './components.js';
-import { ensureFontLoaded, RESOLUTION, TOLERANCE } from './continuum.js';
+import { ensureFontLoaded, isCanonicalEnvironment, RESOLUTION, TOLERANCE } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 import {
 	capFloorReport,
@@ -238,6 +246,46 @@ function isWrapAcceptable(measurement: WrapMeasurement): boolean {
 	return measurement.wrapped.length === 0;
 }
 
+/*
+ * One criterion-branch, shared by the sufficiency test (every
+ * environment, at the floor) and the minimality test (canonical
+ * environment only, below it) -- each now its own `it()` with its own
+ * mount, so this is what keeps the three criteria' measuring logic
+ * written once rather than twice.
+ */
+function assertCriterionAt(
+	frame: HTMLElement,
+	key: string,
+	criterion: Exclude<Criterion, { readonly kind: 'coupled' }>,
+	px: number,
+	isExpected: boolean
+): void {
+	if (criterion.kind === 'overflow') {
+		const wrap = neutralizeWrap();
+		try {
+			atWidth(frame, px);
+			const measurement = measureOverflow(frame, px);
+			expect(isOverflowAcceptable(measurement), overflowFloorReport(key, measurement)).toBe(
+				isExpected
+			);
+		} finally {
+			wrap.remove();
+		}
+	} else if (criterion.kind === 'no-wrap') {
+		atWidth(frame, px);
+		const measurement = measureWrap(frame, px, criterion.selectors, lineCount);
+		expect(isWrapAcceptable(measurement), wrapFloorReport(key, measurement)).toBe(isExpected);
+	} else {
+		const probe = capProbe(frame, criterion.cap);
+		const target = frame.querySelector(criterion.target);
+		expect(target, `${criterion.target} not found for ${key}`).not.toBeNull();
+		const capLabel = capCustomProperty(criterion.cap);
+		atWidth(frame, px);
+		const measurement = measureCap(px, capLabel, target!, probe);
+		expect(isCapAcceptable(measurement), capFloorReport(key, measurement)).toBe(isExpected);
+	}
+}
+
 describe('the floor check (#564)', () => {
 	it('never lets an @container condition escape discovery in a shape the check does not recognize', () => {
 		// Decision #3: a floor stays a rem literal. A px value, a
@@ -310,56 +358,43 @@ describe('the floor check (#564)', () => {
 		// on minimality -- one step landed inside sub-pixel noise on
 		// OverviewHub, and RESOLUTION was always a sweep resolution, not
 		// a claim about how close to the true fixed point this proves.
+		// Stays tight rather than widening to absorb cross-platform spread:
+		// minimality no longer crosses platforms (below), so there is no
+		// spread left for a wider probe to buy anything against.
 		const belowFloorPx = floorPx - 2 * RESOLUTION;
 
-		/*
-		 * One mount and one `forceLive` call for both assertions, rather
-		 * than a separate mount per width: testing sufficiency and
-		 * minimality against the one forced rule they were both meant to
-		 * observe is the more honest shape, since two separate mounts
-		 * could each force their own copy of the rule and never prove the
-		 * two widths are being read against the same fixed point.
-		 */
-		it(`${key} is a fixed point: acceptable at ${condition.floorRem}rem, not ${2 * RESOLUTION}px below it`, async () => {
+		it(`${key} is sufficient at its floor (${condition.floorRem}rem)`, async () => {
 			const { run, frame } = await mount(demoForCondition(condition).component);
 			try {
 				forceLive(condition, scopeClasses(frame));
-				if (criterion.kind === 'overflow') {
-					const wrap = neutralizeWrap();
-					try {
-						atWidth(frame, floorPx);
-						const atFloor = measureOverflow(frame, floorPx);
-						expect(isOverflowAcceptable(atFloor), overflowFloorReport(key, atFloor)).toBe(true);
-						atWidth(frame, belowFloorPx);
-						const belowFloor = measureOverflow(frame, belowFloorPx);
-						expect(isOverflowAcceptable(belowFloor), overflowFloorReport(key, belowFloor)).toBe(
-							false
-						);
-					} finally {
-						wrap.remove();
-					}
-				} else if (criterion.kind === 'no-wrap') {
-					atWidth(frame, floorPx);
-					const atFloor = measureWrap(frame, floorPx, criterion.selectors, lineCount);
-					expect(isWrapAcceptable(atFloor), wrapFloorReport(key, atFloor)).toBe(true);
-					atWidth(frame, belowFloorPx);
-					const belowFloor = measureWrap(frame, belowFloorPx, criterion.selectors, lineCount);
-					expect(isWrapAcceptable(belowFloor), wrapFloorReport(key, belowFloor)).toBe(false);
-				} else {
-					const probe = capProbe(frame, criterion.cap);
-					const target = frame.querySelector(criterion.target);
-					expect(target, `${criterion.target} not found for ${key}`).not.toBeNull();
-					const capLabel = capCustomProperty(criterion.cap);
-					atWidth(frame, floorPx);
-					const atFloor = measureCap(floorPx, capLabel, target!, probe);
-					expect(isCapAcceptable(atFloor), capFloorReport(key, atFloor)).toBe(true);
-					atWidth(frame, belowFloorPx);
-					const belowFloor = measureCap(belowFloorPx, capLabel, target!, probe);
-					expect(isCapAcceptable(belowFloor), capFloorReport(key, belowFloor)).toBe(false);
-				}
+				assertCriterionAt(frame, key, criterion, floorPx, true);
 			} finally {
 				run.remove();
 			}
 		});
+
+		const minimalityName = `${key} is minimal: not acceptable ${2 * RESOLUTION}px below its floor`;
+		/*
+		 * Minimality only in the canonical environment (`continuum.ts`'s
+		 * `isCanonicalEnvironment`) -- see the file-level comment for why.
+		 * `it.skip` rather than omitting the test entirely, so `bun run
+		 * test:unit` on a contributor's own machine shows this as skipped
+		 * in the output rather than reading as a property nobody thought
+		 * to check; the "(skipped outside...)" suffix says why without
+		 * needing the source open.
+		 */
+		if (isCanonicalEnvironment()) {
+			it(minimalityName, async () => {
+				const { run, frame } = await mount(demoForCondition(condition).component);
+				try {
+					forceLive(condition, scopeClasses(frame));
+					assertCriterionAt(frame, key, criterion, belowFloorPx, false);
+				} finally {
+					run.remove();
+				}
+			});
+		} else {
+			it.skip(`${minimalityName} (skipped outside the canonical environment)`, () => {});
+		}
 	}
 });
