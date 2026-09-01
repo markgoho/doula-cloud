@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,11 +30,18 @@ func newPracticeInvoiceServer(t *testing.T, db *testdb.DB, uid string) (srv *htt
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string) *http.Response {
+func getPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string, unpaidOnly bool) *http.Response {
 	t.Helper()
 	url := srv.URL + "/practices/" + practiceID + "/invoices"
+	params := make([]string, 0, 2)
+	if unpaidOnly {
+		params = append(params, "unpaid=true")
+	}
 	if cursor != "" {
-		url += "?cursor=" + cursor
+		params = append(params, "cursor="+cursor)
+	}
+	if len(params) > 0 {
+		url += "?" + strings.Join(params, "&")
 	}
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	if err != nil {
@@ -52,37 +60,9 @@ func getPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID
 // what bodyclose wants to see and one less thing for every test to
 // remember. The invalid-cursor test, which asserts a status rather than a
 // body, uses getPracticeInvoices directly.
-func readPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string) payments.PracticeInvoicesResponse {
+func readPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string, unpaidOnly bool) payments.PracticeInvoicesResponse {
 	t.Helper()
-	resp := getPracticeInvoices(t, srv, session, practiceID, cursor)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.PracticeInvoicesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	return out
-}
-
-// readPracticeInvoicesUnpaidOnly is readPracticeInvoices with ?unpaid=true
-// added, for #427's filter. cursor may be empty for the first page.
-func readPracticeInvoicesUnpaidOnly(t *testing.T, srv *httptest.Server, session, practiceID, cursor string) payments.PracticeInvoicesResponse {
-	t.Helper()
-	url := srv.URL + "/practices/" + practiceID + "/invoices?unpaid=true"
-	if cursor != "" {
-		url += "&cursor=" + cursor
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
+	resp := getPracticeInvoices(t, srv, session, practiceID, cursor, unpaidOnly)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -113,7 +93,7 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "")
+	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if len(out.Items) != 2 {
 		t.Fatalf("items = %d, want 2", len(out.Items))
 	}
@@ -153,7 +133,7 @@ func TestGetPracticeInvoicesHandler_TotalsCoverTheWholeBook(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "")
+	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if out.OutstandingCents != 20000 {
 		t.Fatalf("outstandingCents = %d, want 20000", out.OutstandingCents)
 	}
@@ -185,7 +165,7 @@ func TestGetPracticeInvoicesHandler_ExcludesOtherPractices(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "")
+	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if len(out.Items) != 1 || out.Items[0].ID != mineInvoice {
 		t.Fatalf("items = %+v, want only %q", out.Items, mineInvoice)
 	}
@@ -204,7 +184,7 @@ func TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "")
+	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if len(out.Items) != 0 {
 		t.Fatalf("items = %d, want 0", len(out.Items))
 	}
@@ -231,7 +211,7 @@ func TestGetPracticeInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "")
+	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if len(out.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(out.Items))
 	}
@@ -261,7 +241,7 @@ func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	first := readPracticeInvoices(t, srv, session, practiceID, "")
+	first := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if !first.HasMore || first.NextCursor == nil || *first.NextCursor == "" {
 		t.Fatalf("first page hasMore = %v, nextCursor = %v; want true and a cursor", first.HasMore, first.NextCursor)
 	}
@@ -272,7 +252,7 @@ func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 		t.Fatalf("first page items[0] = %q, want %q (newest)", first.Items[0].ID, ids[total-1])
 	}
 
-	second := readPracticeInvoices(t, srv, session, practiceID, *first.NextCursor)
+	second := readPracticeInvoices(t, srv, session, practiceID, *first.NextCursor, false)
 	if second.HasMore {
 		t.Fatal("second page hasMore = true, want false")
 	}
@@ -301,7 +281,7 @@ func TestGetPracticeInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 		"valid base64, bad timestamp": base64.URLEncoding.EncodeToString([]byte("not-a-time|some-id")),
 	}
 	for name, cursor := range cases {
-		resp := getPracticeInvoices(t, srv, session, practiceID, cursor)
+		resp := getPracticeInvoices(t, srv, session, practiceID, cursor, false)
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("%s: status = %d, want %d", name, resp.StatusCode, http.StatusBadRequest)
@@ -330,7 +310,7 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterKeepsOnlyOpen(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	out := readPracticeInvoicesUnpaidOnly(t, srv, session, practiceID, "")
+	out := readPracticeInvoices(t, srv, session, practiceID, "", true)
 	if len(out.Items) != 1 || out.Items[0].ID != openID {
 		t.Fatalf("items = %+v, want only %q", out.Items, openID)
 	}
@@ -365,7 +345,7 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	first := readPracticeInvoicesUnpaidOnly(t, srv, session, practiceID, "")
+	first := readPracticeInvoices(t, srv, session, practiceID, "", true)
 	if !first.HasMore || first.NextCursor == nil || *first.NextCursor == "" {
 		t.Fatalf("first page hasMore = %v, nextCursor = %v; want true and a cursor", first.HasMore, first.NextCursor)
 	}
@@ -381,7 +361,7 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 		}
 	}
 
-	second := readPracticeInvoicesUnpaidOnly(t, srv, session, practiceID, *first.NextCursor)
+	second := readPracticeInvoices(t, srv, session, practiceID, *first.NextCursor, true)
 	if second.HasMore {
 		t.Fatal("second page hasMore = true, want false")
 	}
@@ -403,7 +383,7 @@ func TestGetPracticeInvoicesHandler_RefusesADoula(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getPracticeInvoices(t, srv, session, practiceID, "")
+	resp := getPracticeInvoices(t, srv, session, practiceID, "", false)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
