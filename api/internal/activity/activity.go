@@ -60,6 +60,27 @@ type Entry struct {
 	Actor       Actor
 }
 
+// ScopeToPractice sets app.current_practice_id on tx for the rest of the
+// transaction, the way staffauth.Middleware already does per request --
+// for a write site that runs outside it (a Client-portal or webhook
+// path, authenticated by app.current_client_id or by nothing at all) and
+// needs a Record call to pass activity's single RLS policy
+// (activity_practice_visibility, 00051_activity_log.sql), which compares
+// only against app.current_practice_id. ADR-0022's "fourth event table"
+// section names exactly this trap. Call it immediately before the Record
+// call that needs it, never earlier: it widens every practice_id-scoped
+// RLS read or write tx issues afterward to this Practice, so nothing but
+// the activity insert it exists for should run after it. Mirrors
+// payments.resolveInvoiceForEvent's existing set_config call for the
+// same reason on the invoice.paid webhook path.
+func ScopeToPractice(ctx context.Context, tx *sql.Tx, practiceID string) error {
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("activity: scope to practice: %w", err)
+	}
+	return nil
+}
+
 // Record writes one row of e's history, in the caller's own transaction
 // so the record and the change it describes either both land or neither
 // does -- CLAUDE.md's audit-trail expectation, answered where the change

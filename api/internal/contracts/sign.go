@@ -2,13 +2,16 @@ package contracts
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
 )
@@ -100,6 +103,11 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		if err := recordContractSigned(r.Context(), tx, engagementID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		out := ContractResponse{
@@ -114,6 +122,38 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
+}
+
+// recordContractSigned writes #476's activity row for the Client's own
+// signature -- actor_kind 'client' (ADR-0022: "Amara signed the
+// Contract" is her act, never a system event), engagementID as
+// subject_id. This handler runs behind clientauth.Middleware, which sets
+// only app.current_client_id, never app.current_practice_id -- activity's
+// RLS policy needs the latter, so activity.ScopeToPractice sets it here,
+// immediately before the one Record call that needs it.
+func recordContractSigned(ctx context.Context, tx *sql.Tx, engagementID string) error {
+	var practiceID, clientID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT practice_id, client_id FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&practiceID, &clientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("contracts: resolve engagement for contract signed: %w", err)
+	}
+	if err := activity.ScopeToPractice(ctx, tx, practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("contracts: scope to practice for contract signed: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionContractSigned),
+		Actor:       activity.ClientActor(clientID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("contracts: record contract signed: %w", err)
+	}
+	return nil
 }
 
 // clientIP is the ESIGN signer_ip of record. The BFF runs behind Cloud

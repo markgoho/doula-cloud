@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
@@ -143,6 +144,25 @@ func PostInvoiceHandler(client Client) http.Handler {
 		}
 
 		if _, err := tx.ExecContext(r.Context(), `UPDATE invoices SET status = 'open' WHERE id = $1`, invoiceID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		staffID, _ := staffauth.StaffID(r.Context())
+		diff, err := json.Marshal(map[string]int64{"amountCents": req.AmountCents})
+		if err != nil {
+			// coverage:ignore reason: a map of one int64 always marshals cleanly, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionInvoiceRaised),
+			Diff:        diff,
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return

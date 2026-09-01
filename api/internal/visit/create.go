@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -47,6 +48,17 @@ func CreateHandler() http.Handler {
 			`INSERT INTO visits (id, engagement_id, staff_id) VALUES ($1, $2, $3)`,
 			visitID, engagementID, staffID,
 		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionVisitLogged),
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return

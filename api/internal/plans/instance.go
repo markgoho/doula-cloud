@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -198,6 +199,26 @@ func PutInstanceHandler() http.Handler {
 			`UPDATE plan_instances SET answers = $1 WHERE engagement_id = $2 AND plan_type = $3`,
 			answersJSON, engagementID, planType,
 		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		practiceID, _ := staffauth.PracticeID(r.Context())
+		staffID, _ := staffauth.StaffID(r.Context())
+		diff, err := json.Marshal(map[string]string{"planType": planType})
+		if err != nil {
+			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionPlanInstanceEdited),
+			Diff:        diff,
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return

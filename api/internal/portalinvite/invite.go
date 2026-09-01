@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -62,6 +63,18 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		resp, status, code, msg := invite(r.Context(), tx, clientID)
 		if status != http.StatusOK && status != http.StatusCreated {
 			writeAPIError(w, status, code, msg)
+			return
+		}
+		staffID, _ := staffauth.StaffID(r.Context())
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionPortalInviteSent),
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.PortalInvite))

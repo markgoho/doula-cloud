@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
@@ -263,6 +264,16 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		engagementID, target.staffID, target.invitationID, target.employmentType, req.AmountCents, f.terms,
 		f.clientFirstInitial, f.clientArea, f.dueDate, actorStaffID, expiresAt, target.accessCodeDigest,
 	).Scan(&offerID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionOfferSent),
+		Actor:       activity.StaffActor(actorStaffID),
+	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
 	}

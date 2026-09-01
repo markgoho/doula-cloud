@@ -6,10 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -107,9 +109,65 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					return nil, http.StatusInternalServerError, staffauth.MsgInternalError
 				}
+				if err := recordPreAccountDecline(ctx, tx, o.OfferID); err != nil {
+					// coverage:ignore reason: DB query failure, not exercised by unit tests
+					return nil, http.StatusInternalServerError, staffauth.MsgInternalError
+				}
 				return DecisionResponse{OfferID: o.OfferID, State: stateDeclined}, http.StatusOK, ""
 			})
 	})
+}
+
+// recordPreAccountDecline writes #476's activity row for a decline
+// reached through the token door -- no Staff row exists yet to name
+// (ADR-0008 forbids inventing one: "that would misrecord a human action
+// that did not happen"), and this is not a Client acting either, so
+// actor_kind 'system' is the closest of activity's three kinds without
+// misattributing the act to Doula Cloud itself; the row's own decided_at
+// and the Invitation it names remain the fuller audit answer, per this
+// file's existing doc comment. This handler runs on withTokenTx's own
+// db.BeginTx, outside staffauth.Middleware, so app.current_practice_id
+// is never set -- activity.ScopeToPractice sets it here, immediately
+// before the one Record call that needs it.
+func recordPreAccountDecline(ctx context.Context, tx *sql.Tx, offerID string) error {
+	// engagement_offers is read directly (engagement_offers_token_lookup,
+	// 00041), never joined to engagements: engagements carries only the
+	// practice-tier RLS policy, which app.current_practice_id -- not yet
+	// set on this route -- would need to pass. practice_id instead comes
+	// from practice_invitations, which every Offer reaching this
+	// unauthenticated handler carries an invitation_id for (only an
+	// email-target Offer is ever declined by token) and which is
+	// likewise reachable without app.current_practice_id via
+	// practice_invitations' own row this same token already opened.
+	var engagementID, invitationID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT engagement_id, invitation_id FROM engagement_offers WHERE id = $1`, offerID,
+	).Scan(&engagementID, &invitationID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("offer: resolve offer for pre-account decline: %w", err)
+	}
+	var practiceID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT practice_id FROM practice_invitations WHERE id = $1`, invitationID,
+	).Scan(&practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("offer: resolve practice for pre-account decline: %w", err)
+	}
+	if err := activity.ScopeToPractice(ctx, tx, practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("offer: scope to practice for pre-account decline: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionOfferDeclined),
+		Actor:       activity.SystemActor(),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("offer: record pre-account decline: %w", err)
+	}
+	return nil
 }
 
 // withTokenTx opens a transaction on the token-lookup door, resolves the

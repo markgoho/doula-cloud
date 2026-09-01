@@ -1,9 +1,12 @@
 package engagement
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -31,7 +34,7 @@ type CompleteResponse struct {
 // Owner or Admin only; must be mounted behind staffauth.Middleware.
 func CompleteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, _, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
 		if !ok {
 			return
 		}
@@ -39,6 +42,23 @@ func CompleteHandler() http.Handler {
 
 		engagementID := r.PathValue("engagementId")
 		if !staffauth.ParseUUID(w, "engagement", engagementID) {
+			return
+		}
+
+		// Read the status this transition is coming from, so the activity
+		// row below is only written on a real intake/active -> completed
+		// move -- not on every idempotent retry of an already-completed
+		// Engagement, which would otherwise pile up duplicate "completed"
+		// entries on the ledger for one real event.
+		var previousStatus string
+		err := tx.QueryRowContext(r.Context(), `SELECT status FROM engagements WHERE id = $1`, engagementID).Scan(&previousStatus)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "engagement not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -54,15 +74,25 @@ func CompleteHandler() http.Handler {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		rows, err := result.RowsAffected()
-		if err != nil {
+		// coverage:ignore reason: unreachable in this transaction -- the SELECT above already confirmed engagementID exists at this Practice under the same snapshot, so RowsAffected can never be 0 here; kept as a defensive backstop rather than trusted away
+		if _, err := result.RowsAffected(); err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if rows == 0 {
-			http.Error(w, "engagement not found", http.StatusNotFound)
-			return
+
+		if previousStatus != "completed" {
+			if err := activity.Record(r.Context(), tx, activity.Entry{
+				PracticeID:  practiceID,
+				SubjectKind: activity.SubjectEngagement,
+				SubjectID:   engagementID,
+				Action:      string(activity.ActionEngagementCompleted),
+				Actor:       activity.StaffActor(actorStaffID),
+			}); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		if err := offer.CloseOnCompletion(r.Context(), tx, engagementID); err != nil {

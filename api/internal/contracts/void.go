@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -53,6 +54,19 @@ func PostVoidContractHandler() http.Handler {
 			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
 			statusVoided, id,
 		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		practiceID, _ := staffauth.PracticeID(r.Context())
+		staffID, _ := staffauth.StaffID(r.Context())
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionContractVoided),
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return

@@ -186,6 +186,11 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 		"state-guarded UPDATE ... WHERE requested_by = $1 AND state = 'pending'; a retry after the first commit affects zero rows and 409s instead of withdrawing twice",
 		staffauth.Middleware(d.DB)(engagementrequest.WithdrawHandler()))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
+	// AnyStaff mirrors visit.ListHandler just below: the money filter
+	// (Owner/Admin see every entry, everyone else never sees a
+	// Contract-price or Invoice/payment one, per ADR-0008) runs inside
+	// the handler's own query, not at this mount seam.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/activity", staffauth.AnyStaff, engagement.ListActivityHandler())
 	// Completing an Engagement runs ADR-0008's cascade -- open Offers
 	// withdrawn, open attachments ended -- so it is one endpoint, not a
 	// generic status PATCH a caller could half-apply.

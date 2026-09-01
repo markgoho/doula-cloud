@@ -13,6 +13,7 @@ import (
 
 	"github.com/stripe/stripe-go/v86"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -208,6 +209,40 @@ func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, ac
 	return invoiceID, practiceID, nil
 }
 
+// recordInvoicePaid writes #476's activity row for the invoice.paid
+// event -- actor_kind 'client' (ADR-0022: "Amara paid the invoice" is
+// her act), the paying Client's identity threaded through via
+// invoices -> contracts -> engagements rather than invented: only the
+// Engagement's own Client holds the Stripe Hosted Invoice link this
+// payment came from. app.current_practice_id is already set on tx by
+// resolveInvoiceForEvent, called just above this in the caller, so no
+// further scoping is needed here.
+func recordInvoicePaid(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) error {
+	var engagementID, clientID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT e.id, e.client_id
+		 FROM invoices i
+		 JOIN contracts c ON c.id = i.contract_id
+		 JOIN engagements e ON e.id = c.engagement_id
+		 WHERE i.id = $1`,
+		invoiceID,
+	).Scan(&engagementID, &clientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("payments: resolve engagement for invoice paid: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionInvoicePaid),
+		Actor:       activity.ClientActor(clientID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("payments: record invoice paid: %w", err)
+	}
+	return nil
+}
+
 // handleInvoicePaid applies #82's invoice.paid handling: resolves the
 // matching invoices row, creates exactly one payments row recording the
 // amount actually paid and when, and flips the Invoice's status to paid.
@@ -277,6 +312,11 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE invoices SET status = 'paid', paid_at = $1 WHERE id = $2`, paidAt, invoiceID,
 	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if err := recordInvoicePaid(r.Context(), tx, practiceID, invoiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
