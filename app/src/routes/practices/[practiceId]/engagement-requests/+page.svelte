@@ -31,6 +31,8 @@
 		type PendingRequestItem
 	} from '#lib/engagementRequest.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
@@ -92,10 +94,10 @@
 </script>
 
 <PageTitle page="Requests awaiting approval" />
-<h1>Requests awaiting approval</h1>
+<Heading level={1} text="Requests awaiting approval" />
 
 {#if error}
-	<p role="alert">{error}</p>
+	<Notice message={error} variant="error" />
 {:else if isLoaded}
 	<DataTable
 		{columns}

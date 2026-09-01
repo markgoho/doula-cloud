@@ -20,6 +20,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 
 	let detail = $state<ClientDetail | undefined>();
 	let error = $state('');
@@ -233,7 +234,7 @@
 
 {#snippet practiceDefinedFieldsSection()}
 	{#if detail!.resolvedFields.length === 0}
-		<p>No Practice-defined fields yet.</p>
+		<Text text="No Practice-defined fields yet." />
 	{:else}
 		<stack-l space="var(--space-3)">
 			{#each detail!.resolvedFields as field (field.fieldId)}
