@@ -1,0 +1,65 @@
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { jsonResponse } from '#lib/testResponse.js';
+
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
+
+function setup(status: number, body: unknown) {
+	const fetchMock = vi.fn(async () => jsonResponse(body, status));
+	vi.stubGlobal('fetch', fetchMock);
+	return { fetchMock };
+}
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
+
+const emptyBook = {
+	items: [],
+	hasMore: false,
+	outstandingCents: 0,
+	outstandingCount: 0,
+	paidCents: 0
+};
+
+describe('invoices/+page.ts load', () => {
+	it('fetches the Practice-wide invoices path and returns the page', async () => {
+		const { load } = await import('./+page.js');
+		const { fetchMock } = setup(200, emptyBook);
+
+		const result = await load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0]);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/practices/practice-1/invoices',
+			expect.objectContaining({ credentials: 'include' })
+		);
+		expect(result).toEqual(emptyBook);
+	});
+
+	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
+		const { load } = await import('./+page.js');
+		setup(401, 'no session');
+
+		await expect(
+			load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])
+		).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
+	});
+
+	it('throws a 403 SvelteKit error on a role refusal, for practices/+error.svelte to render', async () => {
+		const { load } = await import('./+page.js');
+		setup(403, 'not permitted to read this');
+
+		await expect(
+			load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])
+		).rejects.toMatchObject({ status: 403 });
+	});
+
+	it('throws with the response status on any other failure', async () => {
+		const { load } = await import('./+page.js');
+		setup(500, 'boom');
+
+		await expect(
+			load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])
+		).rejects.toMatchObject({ status: 500 });
+	});
+});

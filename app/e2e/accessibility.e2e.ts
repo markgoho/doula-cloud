@@ -169,6 +169,12 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 			h1: 'Clients'
 		},
 		{
+			key: 'practices/[practiceId]/invoices',
+			archetype: 'C',
+			url: `/practices/${practiceId}/invoices`,
+			h1: 'Invoices'
+		},
+		{
 			key: 'practices/[practiceId]/billing',
 			archetype: 'C',
 			url: `/practices/${practiceId}/billing`,
