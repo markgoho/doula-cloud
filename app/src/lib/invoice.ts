@@ -29,11 +29,12 @@ export interface CreateInvoiceResult {
 }
 
 /** One row of the Practice-wide Invoice list (#265) -- the same Invoice,
- * plus who it is for and the Engagement it is a way in to. A separate
- * type from `Invoice` for the same reason the BFF keeps
- * PracticeInvoiceView separate from InvoiceView: the per-Engagement list
- * is read from a screen that already names its Client, and this one is
- * not. `clientName` is her preferred name, the one every screen uses. */
+ * plus who it is for and the Engagement it is a way in to. It extends
+ * `Invoice` rather than replacing it because the wire shape really is a
+ * superset here; the BFF keeps its own PracticeInvoiceView a separate
+ * struct only because Go has no such extension, and neither list should
+ * be able to quietly grow the other's fields. `clientName` is her
+ * preferred name, the one every screen uses. */
 export interface PracticeInvoice extends Invoice {
 	engagementId: string;
 	clientName: string;
