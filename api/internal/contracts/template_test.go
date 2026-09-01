@@ -158,6 +158,8 @@ func newContractServerWithPusherAndStore(t *testing.T, db *testdb.DB, uid string
 		staffauth.Middleware(db.App)(contracts.GetTemplateHandler()))
 	mux.Handle("PUT /practices/{practiceId}/contract-template",
 		staffauth.Middleware(db.App)(contracts.PutTemplateHandler()))
+	mux.Handle("GET /practices/{practiceId}/contracts/awaiting-signature",
+		staffauth.Middleware(db.App)(contracts.AwaitingSignatureHandler()))
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract",
 		staffauth.Middleware(db.App)(contracts.PostContractHandler()))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract",

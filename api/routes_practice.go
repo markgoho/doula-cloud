@@ -243,6 +243,15 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	ir.Exempt("PUT /api/practices/{practiceId}/contract-template",
 		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
 		staffauth.Middleware(d.DB)(contracts.PutTemplateHandler()))
+	// The Practice-wide "Contracts awaiting signature" roll-up (#426):
+	// every Draft or Sent Contract at the Practice in one read, so
+	// chasing signatures is one screen rather than every Engagement
+	// opened in turn (docs/journeys/non-doula-admin.md, DW-G5). Owner and
+	// Admin, the same declaration the credit balance and the
+	// Practice-wide Invoice list carry: this is the Practice's book of
+	// outstanding agreements, not a Doula's view of her own Engagements,
+	// so a contractor's attachment narrowing has nothing to narrow here.
+	g.Get("/api/practices/{practiceId}/contracts/awaiting-signature", ownerAndAdmin, contracts.AwaitingSignatureHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
 		"guarded by contracts' unique constraint on engagement_id; a retry after the first succeeds hits the constraint and 409s rather than creating a duplicate Contract",
 		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(contracts.PostContractHandler())))
