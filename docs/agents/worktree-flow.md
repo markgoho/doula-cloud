@@ -62,6 +62,13 @@ checkout's modules for every worktree sharing them at once. The provisioning hoo
 avoids this (it unlinks before installing); don't `bun install` by hand inside a worktree
 without checking `ls -la node_modules` first.
 
+**Never run bare `golangci-lint run` in a worktree.** Its results cache defaults to one
+location shared by every worktree on the machine, keyed in a way that does not account for a
+worktree's path being reused or removed — a session can see phantom findings that point at
+files in a worktree pruned earlier, or worse, a stale "clean" result that masks a real issue
+in its own changed file. See `docs/testing.md`'s `golangci-lint` section for the
+`GOLANGCI_LINT_CACHE` invocation that scopes the cache to the current worktree instead.
+
 **Only one worktree at a time may hold port offset 0** — that's the main checkout itself, by
 having no `.port-offset` file. A worktree never gets assigned 0.
 
