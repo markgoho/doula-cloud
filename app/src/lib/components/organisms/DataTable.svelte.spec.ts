@@ -49,6 +49,8 @@ interface SetupOptions {
 	rowActions?: { label: string; onRemove: (row: Row) => void };
 	hasMore?: boolean;
 	onLoadMore?: () => void;
+	isLoadingMore?: boolean;
+	loadMoreError?: string;
 	emptyMessage?: string;
 }
 
@@ -70,6 +72,8 @@ async function setup({
 	rowActions,
 	hasMore = false,
 	onLoadMore,
+	isLoadingMore = false,
+	loadMoreError,
 	emptyMessage = 'No records yet.'
 }: SetupOptions = {}) {
 	await page.viewport(...WIDE);
@@ -83,6 +87,8 @@ async function setup({
 		},
 		hasMore,
 		onLoadMore,
+		isLoadingMore,
+		loadMoreError,
 		emptyMessage
 	});
 	return { container };
@@ -153,6 +159,32 @@ describe('DataTable.svelte', () => {
 		await setup({ hasMore: true });
 
 		await expect.element(page.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+	});
+
+	it('shows the load-more button in a loading state while isLoadingMore is true', async () => {
+		await setup({ hasMore: true, onLoadMore: vi.fn(), isLoadingMore: true });
+
+		const button = page.getByRole('button', { name: 'Load more' });
+		await expect.element(button).toBeDisabled();
+		await expect.element(button).toHaveAttribute('aria-busy', 'true');
+	});
+
+	it('renders loadMoreError next to the load-more button without hiding the existing rows', async () => {
+		await setup({
+			hasMore: true,
+			onLoadMore: vi.fn(),
+			loadMoreError: 'Failed to load more records'
+		});
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to load more records');
+		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Load more' })).toBeVisible();
+	});
+
+	it('renders no loadMoreError notice when it is omitted', async () => {
+		await setup({ hasMore: true, onLoadMore: vi.fn() });
+
+		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 	});
 
 	it('renders no trailing action column when rowActions is omitted', async () => {

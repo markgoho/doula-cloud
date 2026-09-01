@@ -43,6 +43,8 @@
 	let invitations = $state<InvitationSummary[]>([]);
 	let invitationsCursor = $state('');
 	let isMoreInvitationsAvailable = $state(false);
+	let isLoadingMoreInvitations = $state(false);
+	let loadMoreInvitationsError = $state('');
 	let error = $state('');
 	let isLoaded = $state(false);
 
@@ -139,6 +141,7 @@
 		invitations = roster.invitations.items;
 		invitationsCursor = roster.invitations.nextCursor ?? '';
 		isMoreInvitationsAvailable = roster.invitations.hasMore;
+		loadMoreInvitationsError = '';
 		isLoaded = true;
 	}
 
@@ -148,17 +151,26 @@
 	// already on screen -- the Members roster stays whole (#446: it is
 	// bounded, unlike the Invitation history), so only this list grows.
 	async function handleLoadMoreInvitations() {
-		const response = await apiFetchWithSession(
-			`/api/practices/${page.params.practiceId}/staff?cursor=${encodeURIComponent(invitationsCursor)}`
-		);
-		if (!response.ok) {
-			error = await response.text();
-			return;
+		loadMoreInvitationsError = '';
+		isLoadingMoreInvitations = true;
+		try {
+			const response = await apiFetchWithSession(
+				`/api/practices/${page.params.practiceId}/staff?cursor=${encodeURIComponent(invitationsCursor)}`
+			);
+			if (!response.ok) {
+				loadMoreInvitationsError = await response.text();
+				return;
+			}
+			const roster: Roster = await response.json();
+			invitations = [...invitations, ...roster.invitations.items];
+			invitationsCursor = roster.invitations.nextCursor ?? '';
+			isMoreInvitationsAvailable = roster.invitations.hasMore;
+		} catch (error_) {
+			loadMoreInvitationsError =
+				error_ instanceof Error ? error_.message : 'Failed to load more invitations';
+		} finally {
+			isLoadingMoreInvitations = false;
 		}
-		const roster: Roster = await response.json();
-		invitations = [...invitations, ...roster.invitations.items];
-		invitationsCursor = roster.invitations.nextCursor ?? '';
-		isMoreInvitationsAvailable = roster.invitations.hasMore;
 	}
 
 	// One page of a member's work state history, appended to whatever is
@@ -518,6 +530,8 @@
 			rowActions={{ label: 'Actions', content: invitationActions }}
 			hasMore={isMoreInvitationsAvailable}
 			onLoadMore={handleLoadMoreInvitations}
+			isLoadingMore={isLoadingMoreInvitations}
+			loadMoreError={loadMoreInvitationsError}
 			emptyMessage="No pending invitations."
 		/>
 	{/if}

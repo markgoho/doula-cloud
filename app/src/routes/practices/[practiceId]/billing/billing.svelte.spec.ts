@@ -75,4 +75,22 @@ describe('billing ledger', () => {
 		expect(getComputedStyle(header.element()).textAlign).toBe('end');
 		expect(getComputedStyle(cell.element()).textAlign).toBe('end');
 	});
+
+	// #506: handleLoadMoreLedger used to return silently on a failed
+	// response, leaving "Load more" clickable again with no feedback --
+	// it must surface the failure instead, next to the existing rows.
+	it('surfaces a "Load more" failure instead of swallowing it', async () => {
+		const pagedData: Balance = {
+			...data,
+			ledger: { ...data.ledger, hasMore: true, nextCursor: 'cursor-1' }
+		};
+		await render(Page, { params: { practiceId: 'practice-1' }, data: pagedData });
+		await expect.element(testPage.getByRole('cell', { name: '+20' })).toBeVisible();
+
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse('the practice is gone', 403));
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(testPage.getByText('the practice is gone')).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: '+20' })).toBeVisible();
+	});
 });

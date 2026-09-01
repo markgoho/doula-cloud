@@ -64,6 +64,8 @@
 	let isCreatingVisit = $state(false);
 	let visitsCursor = $state('');
 	let isMoreVisitsAvailable = $state(false);
+	let isLoadingMoreVisits = $state(false);
+	let loadMoreVisitsError = $state('');
 
 	let portalInviteLink = $state('');
 	let portalInviteError = $state('');
@@ -189,15 +191,23 @@
 	// what's already on screen rather than reversed, since this is a
 	// table read top-to-bottom, not a chat thread.
 	async function handleLoadMoreVisits() {
-		const response = await apiFetchWithSession(`${visitsURL()}?cursor=${encodeURIComponent(visitsCursor)}`);
-		if (!response.ok) {
-			visitsError = await response.text();
-			return;
+		loadMoreVisitsError = '';
+		isLoadingMoreVisits = true;
+		try {
+			const response = await apiFetchWithSession(`${visitsURL()}?cursor=${encodeURIComponent(visitsCursor)}`);
+			if (!response.ok) {
+				loadMoreVisitsError = await response.text();
+				return;
+			}
+			const loaded = await response.json();
+			visits = [...visits, ...loaded.items];
+			visitsCursor = loaded.nextCursor ?? '';
+			isMoreVisitsAvailable = loaded.hasMore;
+		} catch (error_) {
+			loadMoreVisitsError = error_ instanceof Error ? error_.message : 'Failed to load more Visits';
+		} finally {
+			isLoadingMoreVisits = false;
 		}
-		const loaded = await response.json();
-		visits = [...visits, ...loaded.items];
-		visitsCursor = loaded.nextCursor ?? '';
-		isMoreVisitsAvailable = loaded.hasMore;
 	}
 
 	function messagesURL() {
@@ -652,6 +662,8 @@
 		rowActions={{ label: 'Reassign', content: reassignAction }}
 		hasMore={isMoreVisitsAvailable}
 		onLoadMore={handleLoadMoreVisits}
+		isLoadingMore={isLoadingMoreVisits}
+		loadMoreError={loadMoreVisitsError}
 		emptyMessage="No Visits yet."
 	/>
 {/snippet}

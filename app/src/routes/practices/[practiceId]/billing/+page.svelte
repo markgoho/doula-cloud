@@ -32,6 +32,8 @@
 	let ledgerEntries = $state(data.ledger.items);
 	let ledgerCursor = $state(data.ledger.nextCursor ?? '');
 	let isMoreLedgerAvailable = $state(data.ledger.hasMore);
+	let isLoadingMoreLedger = $state(false);
+	let loadMoreLedgerError = $state('');
 
 	let roles = $state<string[]>([]);
 	let isOwner = $derived(roles.includes('owner'));
@@ -75,15 +77,27 @@
 	});
 
 	async function handleLoadMoreLedger() {
-		const response = await apiFetchWithSession(
-			`${billingPath(page.params.practiceId!)}?cursor=${encodeURIComponent(ledgerCursor)}`
-		);
-		if (!response.ok) return;
-		const loaded: { ledger: { items: LedgerEntry[]; nextCursor?: string; hasMore: boolean } } =
-			await response.json();
-		ledgerEntries = [...ledgerEntries, ...loaded.ledger.items];
-		ledgerCursor = loaded.ledger.nextCursor ?? '';
-		isMoreLedgerAvailable = loaded.ledger.hasMore;
+		loadMoreLedgerError = '';
+		isLoadingMoreLedger = true;
+		try {
+			const response = await apiFetchWithSession(
+				`${billingPath(page.params.practiceId!)}?cursor=${encodeURIComponent(ledgerCursor)}`
+			);
+			if (!response.ok) {
+				loadMoreLedgerError = await response.text();
+				return;
+			}
+			const loaded: { ledger: { items: LedgerEntry[]; nextCursor?: string; hasMore: boolean } } =
+				await response.json();
+			ledgerEntries = [...ledgerEntries, ...loaded.ledger.items];
+			ledgerCursor = loaded.ledger.nextCursor ?? '';
+			isMoreLedgerAvailable = loaded.ledger.hasMore;
+		} catch (error_) {
+			loadMoreLedgerError =
+				error_ instanceof Error ? error_.message : 'Failed to load more ledger entries';
+		} finally {
+			isLoadingMoreLedger = false;
+		}
 	}
 
 	async function handlePurchase(event: SubmitEvent) {
@@ -111,6 +125,8 @@
 	rows={ledgerEntries}
 	hasMore={isMoreLedgerAvailable}
 	onLoadMore={handleLoadMoreLedger}
+	isLoadingMore={isLoadingMoreLedger}
+	loadMoreError={loadMoreLedgerError}
 	emptyMessage="No ledger history yet."
 />
 
