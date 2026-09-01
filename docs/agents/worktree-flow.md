@@ -106,6 +106,16 @@ bun .claude/hooks/worktree-prune.ts --merged    # remove only a worktree whose b
                                                  # merged into trunk AND whose tree is clean
 ```
 
+Both modes end with an **orphan-branch sweep**. Removing a worktree does not take its branch
+with it, and neither `ExitWorktree` nor `git worktree remove` can — `git branch -d` refuses a
+squash-merged branch for the same reason `--merged` used to skip it — so orphaned branches
+accumulate in the main checkout (there were about twenty when the sweep was written). A branch
+goes only on proof that nothing is lost with it: its tip is already an ancestor of
+`origin/trunk`, or its PR is `MERGED` **at that exact tip**. Everything else stays, which is
+what protects `research/baseline-521-harness` and the unpushed `prototype/*` branches — none
+has a merged PR and none is an ancestor of trunk, so no rule can reach them. `--dry-run` lists
+what would go without touching anything.
+
 `--merged` never touches a dirty worktree, a locked one, or one whose branch hasn't landed —
 including a branch with unpushed, unmerged commits. `ExitWorktree` (or `git worktree remove`)
 once a PR shows `MERGED` is the normal path; the pruner is the backstop for whatever a dead
