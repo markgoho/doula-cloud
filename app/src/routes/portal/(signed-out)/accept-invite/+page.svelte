@@ -14,7 +14,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
 		{ value: 'signup', label: "I'm new here -- create an account" },
@@ -120,73 +120,79 @@
 	}
 </script>
 
-<PageTitle page="Accept your portal invite" isError={errors.length > 0} />
+{#snippet errorSummary()}
+	<ErrorSummary {errors} />
+{/snippet}
 
-<ErrorSummary {errors} />
-
-<h1>Accept your portal invite</h1>
-
-{#if !inviteToken}
-	<Notice variant="error" message="Missing invite token" />
-{:else}
-	<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
-	<form onsubmit={handleSubmit} novalidate>
-		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="email"
-					value={email}
-					onInput={(value) => (email = value)}
-					required
-					autocomplete={emailAutocomplete}
-				/>
-			{/snippet}
-		</LabeledField>
-		<LabeledField id={passwordId} label="Password" hint={passwordHint} error={errorFor(passwordId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="password"
-					value={password}
-					onInput={(value) => (password = value)}
-					required
-					minlength={6}
-					autocomplete={passwordAutocomplete}
-				/>
-			{/snippet}
-		</LabeledField>
-		<RadioGroup
-			legend="Account mode"
-			name="mode"
-			options={modeOptions}
-			value={mode}
-			onChange={(value) => (mode = value)}
-		/>
-		<Button type="submit" label="Accept invite" loading={isSubmitting} />
-	</form>
-{/if}
-
-{#if picker}
-	<h2>Choose an Engagement</h2>
-	{#if picker.length === 0}
-		<p>You don't have an Engagement yet. Ask your Practice to set one up.</p>
+{#snippet content()}
+	{#if !inviteToken}
+		<Notice variant="error" message="Missing invite token" />
 	{:else}
-		<ul>
-			{#each picker as engagement (engagement.engagementId)}
-				<li>
-					<Link
-						href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
-							engagementId: engagement.engagementId
-						})}
-						label={engagement.practiceName}
+		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
+		<form onsubmit={handleSubmit} novalidate>
+			<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="email"
+						value={email}
+						onInput={(value) => (email = value)}
+						required
+						autocomplete={emailAutocomplete}
 					/>
-				</li>
-			{/each}
-		</ul>
+				{/snippet}
+			</LabeledField>
+			<LabeledField id={passwordId} label="Password" hint={passwordHint} error={errorFor(passwordId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="password"
+						value={password}
+						onInput={(value) => (password = value)}
+						required
+						minlength={6}
+						autocomplete={passwordAutocomplete}
+					/>
+				{/snippet}
+			</LabeledField>
+			<RadioGroup
+				legend="Account mode"
+				name="mode"
+				options={modeOptions}
+				value={mode}
+				onChange={(value) => (mode = value)}
+			/>
+			<Button type="submit" label="Accept invite" loading={isSubmitting} />
+		</form>
 	{/if}
-{/if}
+
+	{#if picker}
+		<h2>Choose an Engagement</h2>
+		{#if picker.length === 0}
+			<p>You don't have an Engagement yet. Ask your Practice to set one up.</p>
+		{:else}
+			<ul>
+				{#each picker as engagement (engagement.engagementId)}
+					<li>
+						<Link
+							href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
+								engagementId: engagement.engagementId
+							})}
+							label={engagement.practiceName}
+						/>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	{/if}
+{/snippet}
+
+<EntryPage
+	title="Accept your portal invite"
+	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>

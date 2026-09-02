@@ -10,7 +10,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
 
 	const emailId = 'portal-login-email';
@@ -94,62 +94,64 @@
 	}
 </script>
 
-<PageTitle page="Log in" isError={errors.length > 0} />
+{#snippet errorSummary()}
+	<ErrorSummary {errors} />
+{/snippet}
 
-<ErrorSummary {errors} />
+{#snippet content()}
+	<!-- `novalidate`: this page refuses the submit, not the browser. See the
+	     Staff login for the argument. -->
+	<form onsubmit={handleSubmit} novalidate>
+		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+					autocomplete="username"
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					value={password}
+					onInput={(value) => (password = value)}
+					required
+					autocomplete="current-password"
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button type="submit" label="Log in" loading={isSubmitting} />
+	</form>
 
-<h1>Log in</h1>
-
-<!-- `novalidate`: this page refuses the submit, not the browser. See the
-     Staff login for the argument. -->
-<form onsubmit={handleSubmit} novalidate>
-	<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="email"
-				value={email}
-				onInput={(value) => (email = value)}
-				required
-				autocomplete="username"
-			/>
-		{/snippet}
-	</LabeledField>
-	<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="password"
-				value={password}
-				onInput={(value) => (password = value)}
-				required
-				autocomplete="current-password"
-			/>
-		{/snippet}
-	</LabeledField>
-	<Button type="submit" label="Log in" loading={isSubmitting} />
-</form>
-
-{#if picker}
-	<h2>Choose an Engagement</h2>
-	{#if picker.length === 0}
-		<p>You don't have an Engagement yet. Ask your Practice to set one up.</p>
-	{:else}
-		<ul>
-			{#each picker as engagement (engagement.engagementId)}
-				<li>
-					<Link
-						href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
-							engagementId: engagement.engagementId
-						})}
-						label={engagement.practiceName}
-					/>
-				</li>
-			{/each}
-		</ul>
+	{#if picker}
+		<h2>Choose an Engagement</h2>
+		{#if picker.length === 0}
+			<p>You don't have an Engagement yet. Ask your Practice to set one up.</p>
+		{:else}
+			<ul>
+				{#each picker as engagement (engagement.engagementId)}
+					<li>
+						<Link
+							href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
+								engagementId: engagement.engagementId
+							})}
+							label={engagement.practiceName}
+						/>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	{/if}
-{/if}
+{/snippet}
+
+<EntryPage title="Log in" errorSummary={errors.length > 0 ? errorSummary : undefined} {content} />

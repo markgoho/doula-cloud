@@ -10,7 +10,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
 
 	const emailId = 'login-email';
@@ -109,68 +109,70 @@
 	}
 </script>
 
-<PageTitle page="Log in" isError={errors.length > 0} />
+{#snippet errorSummary()}
+	<ErrorSummary {errors} />
+{/snippet}
 
-<ErrorSummary {errors} />
+{#snippet content()}
+	<!--
+		`novalidate`, per GOV.UK's Recover from validation errors pattern: the
+		browser's own bubbles refuse the submit before this page can, they
+		vanish on the next keystroke, and they are worded by the browser
+		rather than by us. `required` stays on the controls, because it is a
+		true statement about the field and assistive technology reads it; what
+		it no longer does is block.
+	-->
+	<form onsubmit={handleSubmit} novalidate>
+		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+					autocomplete="username"
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					value={password}
+					onInput={(value) => (password = value)}
+					required
+					autocomplete="current-password"
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button type="submit" label="Log in" loading={isSubmitting} />
+	</form>
 
-<h1>Log in</h1>
+	<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
 
-<!--
-	`novalidate`, per GOV.UK's Recover from validation errors pattern: the
-	browser's own bubbles refuse the submit before this page can, they
-	vanish on the next keystroke, and they are worded by the browser
-	rather than by us. `required` stays on the controls, because it is a
-	true statement about the field and assistive technology reads it; what
-	it no longer does is block.
--->
-<form onsubmit={handleSubmit} novalidate>
-	<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="email"
-				value={email}
-				onInput={(value) => (email = value)}
-				required
-				autocomplete="username"
-			/>
-		{/snippet}
-	</LabeledField>
-	<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="password"
-				value={password}
-				onInput={(value) => (password = value)}
-				required
-				autocomplete="current-password"
-			/>
-		{/snippet}
-	</LabeledField>
-	<Button type="submit" label="Log in" loading={isSubmitting} />
-</form>
-
-<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
-
-{#if picker}
-	<h2>Choose a Practice</h2>
-	{#if picker.length === 0}
-		<p>You don't belong to any Practice yet. Ask an Owner to invite you.</p>
-	{:else}
-		<ul>
-			{#each picker as membership (membership.practiceId)}
-				<li>
-					<Link
-						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-						label={membership.practiceName}
-					/>
-				</li>
-			{/each}
-		</ul>
+	{#if picker}
+		<h2>Choose a Practice</h2>
+		{#if picker.length === 0}
+			<p>You don't belong to any Practice yet. Ask an Owner to invite you.</p>
+		{:else}
+			<ul>
+				{#each picker as membership (membership.practiceId)}
+					<li>
+						<Link
+							href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
+							label={membership.practiceName}
+						/>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	{/if}
-{/if}
+{/snippet}
+
+<EntryPage title="Log in" errorSummary={errors.length > 0 ? errorSummary : undefined} {content} />
