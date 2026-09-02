@@ -41,6 +41,12 @@
             "if": "Bash(*golangci-lint*)",
             "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-golangci-lint-cache.sh\"",
             "statusMessage": "Checking golangci-lint's cache is scoped to this worktree"
+          },
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-bash-write.ts\"",
+            "statusMessage": "Checking this command doesn't write to a tracked path in the main checkout",
+            "timeout": 10
           }
         ]
       },

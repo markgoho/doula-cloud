@@ -6,8 +6,8 @@
 // Registered LAST, and only with explicit go-ahead -- see
 // docs/agents/worktree-flow.md. Until it is registered, this file has no
 // effect.
-import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
 // Resolved inside main(), not at module load: a throw out here exits 1,
@@ -15,29 +15,6 @@ import { findMainCheckoutRoot } from './worktree-root.ts';
 // crashed would wave through exactly what it exists to refuse (#569).
 let SOURCE_ROOT = '';
 let WORKTREES_ROOT = '';
-
-function readStdin(): Promise<string> {
-	return new Promise((resolve, reject) => {
-		let data = '';
-		process.stdin.setEncoding('utf8');
-		process.stdin.on('data', chunk => {
-			data += chunk;
-		});
-		process.stdin.on('end', () => resolve(data));
-		process.stdin.on('error', reject);
-	});
-}
-
-function isGitIgnored(filePath: string): boolean {
-	try {
-		execFileSync('git', ['-C', SOURCE_ROOT, 'check-ignore', '-q', filePath], {
-			stdio: ['ignore', 'ignore', 'ignore']
-		});
-		return true;
-	} catch {
-		return false;
-	}
-}
 
 async function main(): Promise<void> {
 	SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
@@ -65,15 +42,10 @@ async function main(): Promise<void> {
 
 	const resolvedFile = path.resolve(filePath);
 
-	// Allow if already in a worktree.
-	if (resolvedFile.startsWith(WORKTREES_ROOT + path.sep)) process.exit(0);
-
-	// Only applies to files inside the main checkout.
-	if (!resolvedFile.startsWith(SOURCE_ROOT + path.sep)) process.exit(0);
-
-	// Allow gitignored files -- local/private files (app/.env.local,
+	// Allow if already in a worktree, outside the main checkout, or
+	// gitignored -- local/private files (app/.env.local,
 	// settings.local.json, scratch files) stay editable in main.
-	if (isGitIgnored(resolvedFile)) process.exit(0);
+	if (!isTrackedInMainCheckout(resolvedFile, SOURCE_ROOT, WORKTREES_ROOT)) process.exit(0);
 
 	process.stdout.write(
 		JSON.stringify({

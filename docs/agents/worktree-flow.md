@@ -87,6 +87,15 @@ The `PostToolUse` fallback hook provisions it the same way `EnterWorktree` would
   the main checkout. Anything under `.claude/worktrees/`, anything outside the repo, and
   anything `git check-ignore` reports as ignored (e.g. `app/.env.local`,
   `settings.local.json`) stays editable in main.
+- **Local, Bash path**: `.claude/hooks/gate-bash-write.ts` (#573) applies the same boundary
+  and the same three exceptions to a Bash command that writes to a tracked path in the main
+  checkout — shell redirection (`>`, `>>`), `tee`, `sed -i`, `cp`/`mv`/`install`/`rsync`, and
+  `dd of=`. This is **not** exhaustive by construction: a write performed through an opaque
+  pipeline, a script invoked by name, a scripting-language one-liner (e.g. `python3 -c
+  "open(...).write(...)"`), or a compiled binary that computes its own target path is not
+  recognized and is not blocked. That gap is accepted, not hidden — the GitHub ruleset below
+  is the real, unconditional boundary; this hook and `gate-worktree-edit.ts` are a fast local
+  nudge on top of it, not a substitute for it.
 - **How a hook names its script**: `"$(git rev-parse --show-toplevel)/.claude/hooks/<file>"`,
   always — never a path relative to the working directory. A hook command inherits the
   session's cwd, and `app/` is where most sessions stand, so a relative path resolves against
@@ -97,10 +106,14 @@ The `PostToolUse` fallback hook provisions it the same way `EnterWorktree` would
   checkout, so it would run main's copy against a worktree session, the inversion #555 fixed.
   `--show-toplevel` names the checkout the session is in, whose own committed copy should
   run. `scripts/hook-registration.test.ts` enforces this from `app/`.
-- **A gate fails closed**: `gate-worktree-edit.ts` exits 2 with a reason when it cannot run
-  at all, because a gate that crashed has not decided the edit is safe. `gate-shared-index.sh`
-  deliberately does the opposite and fails open — it fires on every Bash command, so a
-  broken gate there would halt all shell work rather than let one edit through.
+- **A gate fails closed**: `gate-worktree-edit.ts` and `gate-bash-write.ts` both exit 2 with a
+  reason when they cannot run at all (e.g. `git worktree list` fails), because a gate that
+  crashed has not decided the edit or command is safe. `gate-shared-index.sh` deliberately
+  does the opposite and fails open — it fires on every Bash command, so a broken gate there
+  would halt all shell work rather than let one edit through. `gate-bash-write.ts` also fires
+  on every Bash command but keeps `gate-worktree-edit.ts`'s fail-closed rule for a crash; its
+  fail-*open* case is narrower and deliberate — a command it does not recognize as a write at
+  all is let through, which is the coverage gap recorded above, not a malfunction.
 - **GitHub**: a ruleset on `trunk` requires a passing PR (checks: `scripts`, `actionlint`,
   `api`, `app`, `api-image` — the `ci.yml` jobs only; the Firebase preview workflows are
   `paths:`-filtered and would never satisfy a required check that always waits on them),
