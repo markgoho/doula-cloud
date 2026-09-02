@@ -11,14 +11,13 @@
 	} from '#lib/billing.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	const quantityId = 'buy-credits-quantity';
@@ -118,58 +117,61 @@
 	}
 </script>
 
-<PageTitle page="Billing" />
-<Heading level={1} text="Billing" />
+{#snippet intro()}
+	<Text text={`Credit balance: ${data.balance}`} />
+{/snippet}
 
-<Text text={`Credit balance: ${data.balance}`} />
-
-<DataTable
-	{columns}
-	rows={ledgerEntries}
-	hasMore={isMoreLedgerAvailable}
-	onLoadMore={handleLoadMoreLedger}
-	isLoadingMore={isLoadingMoreLedger}
-	loadMoreError={loadMoreLedgerError}
-	emptyMessage="No ledger history yet."
-/>
-
-{#if approvalReturn}
-	<Link href={approvalReturn} label="Back to the engagement request you were deciding" />
-{/if}
-
-{#if checkoutStatus === 'success'}
-	<Notice
-		message="Credit purchase complete. The balance updates once Stripe confirms payment."
-		variant="status"
+{#snippet content()}
+	<DataTable
+		{columns}
+		rows={ledgerEntries}
+		hasMore={isMoreLedgerAvailable}
+		onLoadMore={handleLoadMoreLedger}
+		isLoadingMore={isLoadingMoreLedger}
+		loadMoreError={loadMoreLedgerError}
+		emptyMessage="No ledger history yet."
 	/>
-{:else if checkoutStatus === 'cancelled'}
-	<Notice message="Credit purchase cancelled." variant="status" />
-{/if}
 
-<form onsubmit={handlePurchase}>
-	<!--
-		Through LabeledField and TextInput rather than a raw <label> around a
-		raw <input>: reaching around the atoms put the word "Quantity" on the
-		same line as its box, which is the defect #425 found and #475 walked
-		the pages to catch the rest of.
-	-->
-	<LabeledField id={quantityId} label="Quantity">
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="number"
-				inputmode="numeric"
-				min={1}
-				required
-				value={String(quantity)}
-				onInput={(entered) => (quantity = Number(entered))}
-			/>
-		{/snippet}
-	</LabeledField>
-	<Button label="Buy credits" type="submit" disabled={!isOwner} loading={isPurchasing} />
-	{#if purchaseError}
-		<Notice message={purchaseError} variant="error" />
+	{#if approvalReturn}
+		<Link href={approvalReturn} label="Back to the engagement request you were deciding" />
 	{/if}
-</form>
+
+	{#if checkoutStatus === 'success'}
+		<Notice
+			message="Credit purchase complete. The balance updates once Stripe confirms payment."
+			variant="status"
+		/>
+	{:else if checkoutStatus === 'cancelled'}
+		<Notice message="Credit purchase cancelled." variant="status" />
+	{/if}
+
+	<form onsubmit={handlePurchase}>
+		<!--
+			Through LabeledField and TextInput rather than a raw <label> around a
+			raw <input>: reaching around the atoms put the word "Quantity" on the
+			same line as its box, which is the defect #425 found and #475 walked
+			the pages to catch the rest of.
+		-->
+		<LabeledField id={quantityId} label="Quantity">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="number"
+					inputmode="numeric"
+					min={1}
+					required
+					value={String(quantity)}
+					onInput={(entered) => (quantity = Number(entered))}
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button label="Buy credits" type="submit" disabled={!isOwner} loading={isPurchasing} />
+		{#if purchaseError}
+			<Notice message={purchaseError} variant="error" />
+		{/if}
+	</form>
+{/snippet}
+
+<ListPage title="Billing" {intro} {content} />

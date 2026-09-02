@@ -4,10 +4,9 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import { decideOffer, loadInbox, type Offer } from '#lib/offer.js';
-	import Heading from '#lib/components/atoms/Heading.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
 
 	let offers = $state<Offer[]>([]);
 	let error = $state('');
@@ -35,17 +34,21 @@
 	onMount(refresh);
 </script>
 
-<PageTitle page="Your offers" />
-<Heading level={1} text="Your offers" />
-<Text
-	text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer, and the practice may ask you again."
-	tone="variant"
-/>
+{#snippet intro()}
+	<Text
+		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer, and the practice may ask you again."
+		tone="variant"
+	/>
+{/snippet}
 
-{#if error}
-	<Notice message={error} variant="error" />
-{/if}
+{#snippet content()}
+	{#if error}
+		<Notice message={error} variant="error" />
+	{/if}
 
-{#if isLoaded}
-	<OfferInbox {offers} onDecide={handleDecide} />
-{/if}
+	{#if isLoaded}
+		<OfferInbox {offers} onDecide={handleDecide} />
+	{/if}
+{/snippet}
+
+<ListPage title="Your offers" {intro} {content} />

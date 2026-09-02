@@ -2,10 +2,17 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
-// to work as a container-query context -- see DataTable.svelte.spec.ts.
+// to work as a container-query context -- see DataTable.svelte.spec.ts. This
+// route's ListPage (#491) also needs the primitives registered, not just
+// their CSS: <center-l max="none"> only lifts the default var(--measure) cap
+// via the custom element's own attribute handling, and an unregistered
+// center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
+
+if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 // Mirrors new-client.svelte.spec.ts's pattern: a hoisted, mutable
 // URLSearchParams stands in for `page.url.searchParams`, set per test

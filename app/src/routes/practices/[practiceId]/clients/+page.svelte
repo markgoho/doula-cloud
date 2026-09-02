@@ -6,11 +6,10 @@
 	import { loadClients, type ClientListItem } from '#lib/client.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	// #539 (ADR-0017): +page.ts's load already decided, before this
@@ -175,10 +174,7 @@
 	);
 </script>
 
-<PageTitle page="Clients" />
-<Heading level={1} text="Clients" />
-
-{#if !isContractor}
+{#snippet actions()}
 	<!--
 		The search that fronts intake (#498, #539, ADR-0017): there is no
 		top-level "Add a Client" action, so this link lands on the search
@@ -188,40 +184,44 @@
 		already covers, which is why she does not see this at all (#539).
 	-->
 	<Link href={searchHref()} label="Find or add a Client" />
-{/if}
+{/snippet}
 
-<!--
-	The default view is "Clients with work" (ADR-0017); this switches to
-	everyone, including a Client whose only Request was refused -- nothing
-	new is built for her, she is simply no longer filtered out.
--->
-<label>
-	<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} />
-	See everyone
-</label>
+{#snippet content()}
+	<!--
+		The default view is "Clients with work" (ADR-0017); this switches to
+		everyone, including a Client whose only Request was refused -- nothing
+		new is built for her, she is simply no longer filtered out.
+	-->
+	<label>
+		<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} />
+		See everyone
+	</label>
 
-{#if error}
-	<Notice message={error} variant="error" />
-{:else if isLoaded}
-	<DataTable
-		{columns}
-		rows={clients}
-		rowHref={clientHref}
-		hasMore={isMoreAvailable}
-		onLoadMore={handleLoadMore}
-		{isLoadingMore}
-		{loadMoreError}
-		{emptyMessage}
-	/>
-	{#if isContractor && clients.length === 0}
-		<!--
-			#539, #501 (ADR-0017): hiding "Find or add a Client" above took
-			away this door's only link for a contractor Doula. It only
-			needs to come back here -- once she has an attached Client, the
-			narrowed list above is already her route to it.
-		-->
-		<p><Link href={searchHref()} label="How to add Clients of your own" /></p>
+	{#if error}
+		<Notice message={error} variant="error" />
+	{:else if isLoaded}
+		<DataTable
+			{columns}
+			rows={clients}
+			rowHref={clientHref}
+			hasMore={isMoreAvailable}
+			onLoadMore={handleLoadMore}
+			{isLoadingMore}
+			{loadMoreError}
+			{emptyMessage}
+		/>
+		{#if isContractor && clients.length === 0}
+			<!--
+				#539, #501 (ADR-0017): hiding "Find or add a Client" above took
+				away this door's only link for a contractor Doula. It only
+				needs to come back here -- once she has an attached Client, the
+				narrowed list above is already her route to it.
+			-->
+			<p><Link href={searchHref()} label="How to add Clients of your own" /></p>
+		{/if}
+	{:else}
+		<Skeleton variant="row" lines={8} label="Loading Clients" />
 	{/if}
-{:else}
-	<Skeleton variant="row" lines={8} label="Loading Clients" />
-{/if}
+{/snippet}
+
+<ListPage title="Clients" actions={isContractor ? undefined : actions} {content} />

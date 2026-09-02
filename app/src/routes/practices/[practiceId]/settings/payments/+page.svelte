@@ -27,12 +27,12 @@
 	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import FormPage from '#lib/components/templates/FormPage.svelte';
 
 	let status = $state<ConnectStatusResult | undefined>();
 	let website = $state<PracticeWebsite | undefined>();
@@ -154,6 +154,19 @@
 	   Practice passes through it on the way to `live`. */
 	let isPageFailed = $derived(website?.pageState === 'failed');
 
+	/*
+	 * The Connect button is the third of three mutually exclusive branches
+	 * `body` renders when `canStartOnboarding`: blocked on no website,
+	 * blocked on a failed page, or -- only once neither block applies --
+	 * the checklist with the button under it. `actions` is a separate
+	 * region from `body` now that both are `FormPage` fieldsets/actions
+	 * rather than one `{#if}` chain, so it needs its own name for exactly
+	 * the branch that shows the button, or it would render the button
+	 * during the two blocked states too (caught by
+	 * payments-settings.svelte.spec.ts).
+	 */
+	let canConnect = $derived(canStartOnboarding && hasDeclaredWebsite && !isPageFailed);
+
 	let websiteHref = $derived(
 		resolve('/practices/[practiceId]/settings/website', { practiceId: page.params.practiceId! })
 	);
@@ -200,15 +213,18 @@
 	);
 </script>
 
-<PageTitle page="Payments" />
-<Heading level={1} text="Payments" />
-
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if status}
+{#snippet body()}
+	<!--
+		A non-null assertion, not another `{#if status}`: `body` is one of
+		`FormPage`'s `fieldsets`, which only render once neither `loadError`
+		nor `loading` is active below, and `loading` is exactly `status ===
+		undefined` -- so `status` is always defined by the time this runs.
+		A second guard here would compile to a branch that never takes its
+		false path, which the coverage gate would then refuse.
+	-->
 	<cluster-l>
 		<Text text="Stripe Connect status:" />
-		<Badge label={statusCopy[status.status].label} variant={statusCopy[status.status].variant} />
+		<Badge label={statusCopy[status!.status].label} variant={statusCopy[status!.status].variant} />
 	</cluster-l>
 
 	{#if isBackFromStripeRestricted}
@@ -225,18 +241,18 @@
 		<Notice variant="status" message="Your Stripe onboarding link expired. Start again below." />
 	{/if}
 
-	<Text text={statusCopy[status.status].explanation} />
+	<Text text={statusCopy[status!.status].explanation} />
 
 	<!-- The count, not the list. requirementsDue holds Stripe's own
 	machine-readable field paths ("configuration.merchant.mcc"), which
 	name nothing an Owner recognizes. The place those get asked in words
 	is Stripe's hosted form, which the button below opens; the paths stay
 	in the database for the audit trail. -->
-	{#if status.requirementsDue.length > 0}
+	{#if status!.requirementsDue.length > 0}
 		<Text
-			text={status.requirementsDue.length === 1
+			text={status!.requirementsDue.length === 1
 				? 'Stripe needs 1 more detail from you.'
-				: `Stripe needs ${status.requirementsDue.length} more details from you.`}
+				: `Stripe needs ${status!.requirementsDue.length} more details from you.`}
 		/>
 	{/if}
 
@@ -294,10 +310,14 @@
 				text="Stripe puts a short version of your Practice's name on your Clients' card statements. It shows you that text near the end, and you can change it there."
 			/>
 		</stack-l>
+	{/if}
+{/snippet}
 
+{#snippet actions()}
+	{#if canConnect}
 		{#if isOwner}
 			<Button
-				label={status.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
+				label={status!.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
 				onClick={handleConnect}
 				loading={isConnecting}
 			/>
@@ -308,7 +328,15 @@
 			<Text text="Ask a Practice Owner to connect Stripe." />
 		{/if}
 	{/if}
-{/if}
+{/snippet}
+
+<FormPage
+	title="Payments"
+	fieldsets={[{ content: body }]}
+	{actions}
+	loading={!error && status === undefined ? 'Loading your Stripe Connect status' : undefined}
+	loadError={error || undefined}
+/>
 
 <style>
 	@layer components {

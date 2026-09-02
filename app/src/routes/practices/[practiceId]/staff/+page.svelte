@@ -6,7 +6,6 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -14,6 +13,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	type StaffSummary = {
@@ -490,62 +490,65 @@
 	{/if}
 {/snippet}
 
-<PageTitle page="Staff" />
-<Heading level={1} text="Staff" />
-
-<!--
-	Inviting somebody is an action on this roster, so it belongs on the
-	roster. It used to hang off the temporary header of links the shell
-	replaced (#452), which is the only reason it was ever anywhere else --
-	and with that header gone, nothing else in the app reaches /invite.
--->
-<Link
-	href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
-	label="Invite a Staff member"
-/>
-
-{#if error}
-	<Notice variant="error" message={error} />
-{:else if isLoaded}
-	<!-- Two groups, not one list: a pending invitation is an address that
-	     has been asked, with nobody behind it yet, and #261 found the
-	     single-list shape unable to tell that apart from a member holding
-	     no roles. -->
-	<Heading level={2} text="Members" />
-	<Text
-		text="Work states are self-reported by each person and are not verified. They set how much sales tax your practice pays on credits."
+{#snippet actions()}
+	<!--
+		Inviting somebody is an action on this roster, so it belongs on the
+		roster. It used to hang off the temporary header of links the shell
+		replaced (#452), which is the only reason it was ever anywhere else --
+		and with that header gone, nothing else in the app reaches /invite.
+	-->
+	<Link
+		href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
+		label="Invite a Staff member"
 	/>
-	{#if members.length === 0}
-		<Text text="No Staff yet." />
-	{:else}
-		<!-- hasMore is always false: the roster is a bounded population
-		     (server-capped at maxMembers, #446) and never paginates, unlike
-		     Invitations below. -->
-		<DataTable
-			columns={memberColumns}
-			rows={members}
-			rowActions={{ label: 'Actions', content: memberActions }}
-			hasMore={false}
-			emptyMessage="No Staff yet."
-		/>
-	{/if}
+{/snippet}
 
-	<Heading level={2} text="Pending invitations" />
-	{#if invitations.length === 0}
-		<Text text="No pending invitations." />
-	{:else}
-		<DataTable
-			columns={invitationColumns}
-			rows={invitations}
-			rowActions={{ label: 'Actions', content: invitationActions }}
-			hasMore={isMoreInvitationsAvailable}
-			onLoadMore={handleLoadMoreInvitations}
-			isLoadingMore={isLoadingMoreInvitations}
-			loadMoreError={loadMoreInvitationsError}
-			emptyMessage="No pending invitations."
+{#snippet content()}
+	{#if error}
+		<Notice variant="error" message={error} />
+	{:else if isLoaded}
+		<!-- Two groups, not one list: a pending invitation is an address that
+		     has been asked, with nobody behind it yet, and #261 found the
+		     single-list shape unable to tell that apart from a member holding
+		     no roles. -->
+		<Heading level={2} text="Members" />
+		<Text
+			text="Work states are self-reported by each person and are not verified. They set how much sales tax your practice pays on credits."
 		/>
+		{#if members.length === 0}
+			<Text text="No Staff yet." />
+		{:else}
+			<!-- hasMore is always false: the roster is a bounded population
+			     (server-capped at maxMembers, #446) and never paginates, unlike
+			     Invitations below. -->
+			<DataTable
+				columns={memberColumns}
+				rows={members}
+				rowActions={{ label: 'Actions', content: memberActions }}
+				hasMore={false}
+				emptyMessage="No Staff yet."
+			/>
+		{/if}
+
+		<Heading level={2} text="Pending invitations" />
+		{#if invitations.length === 0}
+			<Text text="No pending invitations." />
+		{:else}
+			<DataTable
+				columns={invitationColumns}
+				rows={invitations}
+				rowActions={{ label: 'Actions', content: invitationActions }}
+				hasMore={isMoreInvitationsAvailable}
+				onLoadMore={handleLoadMoreInvitations}
+				isLoadingMore={isLoadingMoreInvitations}
+				loadMoreError={loadMoreInvitationsError}
+				emptyMessage="No pending invitations."
+			/>
+		{/if}
 	{/if}
-{/if}
+{/snippet}
+
+<ListPage title="Staff" {actions} {content} />
 
 <style>
 	@layer components {
