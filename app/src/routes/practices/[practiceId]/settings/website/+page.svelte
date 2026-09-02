@@ -319,7 +319,7 @@
 	{@render fact(
 		'cancellationPolicy',
 		'Your cancellation or refund policy',
-		'What happens if a Client cancels, and whether any of what she paid comes back. Stripe requires this on your page.',
+		'What happens if a Client cancels, and whether any of what the Client paid comes back. Stripe requires this on your page.',
 		cancellationPolicy,
 		fieldErrors.cancellationPolicy ?? '',
 		(next) => (cancellationPolicy = next)

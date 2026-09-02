@@ -211,7 +211,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<Text text="This would be her first engagement with this practice." />
+		<Text text={`This would be ${clientName(detail!.client)}'s first engagement with this practice.`} />
 	{/if}
 {/snippet}
 
@@ -247,7 +247,7 @@
 	summary={detail ? summary : undefined}
 	sections={detail
 		? [
-				{ heading: 'Her engagements', content: engagementsSection },
+				{ heading: `${clientName(detail.client)}'s engagements`, content: engagementsSection },
 				{ heading: 'Decide', content: decideSection }
 			]
 		: []}

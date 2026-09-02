@@ -192,7 +192,7 @@
 				<Heading level={1} variant="page" text="Find a Client" />
 				<Text
 					tone="variant"
-					text="Search for a Client already on file before adding her as new. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
+					text="Search for a Client already on file before adding a new one. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
 				/>
 
 				{#if pageErrors.length > 0}
@@ -305,8 +305,8 @@
 									<Text
 										tone="variant"
 										text={name.trim()
-											? "Nothing at this Practice matches what was typed. Add her as a new Client instead — the name typed here carries onto intake's first page, so it does not have to be retyped."
-											: 'Nothing at this Practice matches what was typed. Add her as a new Client instead.'}
+											? "Nothing at this Practice matches what was typed. Add a new Client instead — the name typed here carries onto intake's first page, so it does not have to be retyped."
+											: 'Nothing at this Practice matches what was typed. Add a new Client instead.'}
 									/>
 									<cluster-l space="var(--space-3)" align="center">
 										<Link href={startIntakeHref()} label="Add a new Client" />

@@ -170,7 +170,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<p>She joins the practice as a contractor doula, so this offer carries a fee.</p>
+		<p>A doula invited by email joins the practice as a contractor, so this offer carries a fee.</p>
 	{/if}
 
 	{#if isFeeRequired}

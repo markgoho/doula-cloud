@@ -166,13 +166,13 @@ describe('OfferSection.svelte', () => {
 		});
 	});
 
-	it('says what joining by email makes her, so the fee is not a surprise', async () => {
+	it('says that joining by email makes a contractor, so the fee is not a surprise', async () => {
 		await setup();
 
 		await page.getByLabelText('Someone new, by email').click();
 
 		await expect
-			.element(page.getByText('She joins the practice as a contractor doula, so this offer carries a fee.'))
+			.element(page.getByText('A doula invited by email joins the practice as a contractor, so this offer carries a fee.'))
 			.toBeVisible();
 		await expect.element(page.getByLabelText('Fee (USD)')).toBeVisible();
 	});

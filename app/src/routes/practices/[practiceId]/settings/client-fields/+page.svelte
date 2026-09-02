@@ -70,7 +70,7 @@
 <PageTitle page="Client Fields" />
 <Heading level={1} text="Client Fields" />
 <Text
-	text="Extra facts your Practice records about every Client, beyond her name, contact details and address. Every field here is staff-only -- a Client never sees it."
+	text="Extra facts your Practice records about every Client, beyond name, contact details and address. Every field here is staff-only -- a Client never sees it."
 />
 
 {#if error}

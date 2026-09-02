@@ -320,6 +320,14 @@ subject rather than a marker.
 Stitch's generated HTML pulls Material Symbols. That is an artefact of the
 generator and is not adopted.
 
+## Voice
+
+Settled on [#432](https://github.com/markgoho/doula-cloud/issues/432) and written up on [#463](https://github.com/markgoho/doula-cloud/issues/463). GOV.UK has no guidance here at all -- its patterns assume the person filling in a form is the subject of it, and neither the Design System nor the Service Manual addresses a professional entering data about a third party. This is this product's own rule to write, not one to look up.
+
+1. **Product copy never uses a pronoun for a Client, a Staff member or anyone else.** A doula practice serves people who are not all women, so copy that says "her" about a Client the practice has not met is asserting something nobody asked -- and it is a design win besides: naming the mechanism below forces a Client's name to be asked on intake's first question page, so every later page can say "Sarah" rather than reach for the awkward third person a professional gets when entering data about somebody else.
+2. **The naming mechanism.** Before a screen knows who a person is, it names them by the domain noun -- the Client, a doula, an owner. From the moment a screen does know -- a name typed at intake, a name loaded from a record -- it uses that person's own first name instead. A pending Request stops a doula from working, not "stops her"; an empty Client list becomes "the Client's birth plan," not "her birth plan"; once a Client is named Sarah, the same copy says "Sarah's birth plan."
+3. **This governs rendered copy only** -- markup text and the strings passed as props, anything a Client or Staff member actually reads on screen. It does not reach a code comment, a commit message, or this brief's own prose a few sections up ("a doula opening this product on her first morning"): those are the documented voice `CLAUDE.md` already claims, a separate register from what the product says out loud.
+
 ## Where the character comes from
 
 The direction is deliberately conventional in its patterns, so the whole
