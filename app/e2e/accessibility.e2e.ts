@@ -33,9 +33,12 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
  *   no additional archetype coverage. Every component on them is already
  *   scanned in the place a person meets it.
  * - `demo/*` -- SvelteKit's own scaffolding, not a screen in the product.
- * - `/` and `/account` -- both sit outside every route group that carries
- *   chrome, so they render with no shell, no `<main>` and no skip link at
- *   all. Filed as #484; scanning them here would only re-find it.
+ * - `/` -- outside every route group that carries chrome, so it renders
+ *   with no shell, no `<main>` and no skip link at all. #357 decided and
+ *   built what `/` shows; whether it should carry a shell was never
+ *   decided and is tracked separately as #678. `/account` used to share
+ *   this same gap, until #484 gave it the shell every other authenticated
+ *   Staff route already has.
  */
 
 /**
@@ -331,6 +334,16 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 			archetype: 'F',
 			url: `/practices/${practiceId}/settings/client-fields`,
 			h1: 'Client Fields'
+		},
+		{
+			// Scoped to the person, not this Practice (#437), so it sits
+			// outside the practiceId group every other route above is under
+			// -- the one route in this loop not built from `practiceId`. Now
+			// carries the same shell as the rest of them (#484).
+			key: 'account',
+			archetype: 'F',
+			url: '/account',
+			h1: 'Your account'
 		}
 	];
 
