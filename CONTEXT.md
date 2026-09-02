@@ -64,7 +64,7 @@ _Client says_: nothing — she never meets the term or the fields.
 _Avoid_: Custom fields, intake form (the second is a client-filled form, which Doula Cloud does not have)
 
 **Portal Account**:
-One person's login to the client portal. Reaches many Clients, at most one per Practice — it is the only thing in the model that knows two Client records are the same woman, and she is the one who told it, by accepting each Practice's invite. Legible only from a portal session, never from a staff one. See [ADR-0015](docs/adr/0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md).
+One person's login to the client portal. Reaches many Clients, at most one per Practice — it is the only thing in the model that knows two Client records are the same woman, and she is the one who told it, by accepting each Practice's invite. Legible only from a portal session, never from a staff one. It is not a **Staff** identity and never becomes one: the same human may hold both — a doula who is a Client somewhere, including at the Practice she works at — and the two are separate records that nothing in the model joins, so no query can learn they are the same person. See [ADR-0015](docs/adr/0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md). Decided on [#168](https://github.com/markgoho/doula-cloud/issues/168).
 _Client says_: nothing — she meets a login, never the term.
 _Avoid_: User, account, portal user
 
