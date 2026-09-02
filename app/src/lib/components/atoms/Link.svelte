@@ -57,7 +57,7 @@
 	{#if icon}
 		<Icon name={icon} size={16} />
 	{/if}
-	{label}
+	<span class="label">{label}</span>
 	{#if isExternal}
 		<Icon name="arrow-square-out" size={16} />
 		<span class="visually-hidden">(opens in new tab)</span>
@@ -72,6 +72,27 @@
 			gap: var(--space-1);
 			font-family: var(--font-family-base);
 			text-decoration: underline;
+		}
+
+		/*
+		 * A flex item's automatic minimum size is its min-content size
+		 * (the CSS spec's own default), and a URL used as a label has no
+		 * character a browser will break a line on -- so without this the
+		 * label refuses to shrink below the URL's full width and pushes
+		 * the anchor past its frame (#548). `min-inline-size: 0` overrides
+		 * that floor -- the same override `TextInput`, `MembershipFields`,
+		 * `QuestionPage` and `FormPage` already use on their own shrinking
+		 * flex item. `overflow-wrap: anywhere` is what then lets the text
+		 * itself break inside the width flexbox now allows it to take,
+		 * since a URL still has no space or hyphen to wrap at normally.
+		 * The anchor stays a `nowrap` flex row (no `flex-wrap` here), so
+		 * the label is the only thing that wraps -- the leading icon, the
+		 * trailing external-link icon and its hidden text stay pinned
+		 * beside it rather than ever landing on a row of their own.
+		 */
+		.label {
+			min-inline-size: 0;
+			overflow-wrap: anywhere;
 		}
 
 		/* A link carrying its own icon (a nav item, a card) reads as a

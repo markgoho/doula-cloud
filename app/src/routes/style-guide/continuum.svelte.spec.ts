@@ -49,8 +49,7 @@ const demos = toDemos(pageModules, [
  * forces the entry out once the retrofit actually lands.
  */
 const KNOWN_BROKEN: Readonly<Record<string, string>> = {
-	'description-list': '#530',
-	link: '#548'
+	'description-list': '#530'
 };
 
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
