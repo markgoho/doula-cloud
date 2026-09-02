@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/clientip"
 	"doula-cloud/api/internal/objectstore"
 )
 
@@ -97,7 +97,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			 SET status = $1::contract_status, signer_full_name = $2, signer_attestation = $3,
 			     signed_at = now(), signer_ip = $4, signed_pdf_object_path = $5
 			 WHERE id = $6`,
-			statusSigned, req.FullLegalName, req.Attestation, clientIP(r), objectPath, id,
+			statusSigned, req.FullLegalName, req.Attestation, clientip.From(r), objectPath, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
@@ -154,27 +154,4 @@ func recordContractSigned(ctx context.Context, tx *sql.Tx, engagementID string) 
 		return fmt.Errorf("contracts: record contract signed: %w", err)
 	}
 	return nil
-}
-
-// clientIP is the ESIGN signer_ip of record. The BFF runs behind Cloud
-// Run's Google Front End, which terminates the caller's own TLS
-// connection and sets X-Forwarded-For's first entry to that connection's
-// real peer address itself -- a caller can't spoof this the way it could
-// a header GFE merely passed through, since GFE is the one writing it,
-// not relaying client-supplied content. r.RemoteAddr, by contrast, is
-// GFE's own proxy address at that point, not the caller's -- only useful
-// as the local-dev/test fallback when there's no GFE in front of the
-// process and the header is absent.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		return strings.TrimSpace(first)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	// coverage:ignore reason: net/http always sets RemoteAddr in host:port form, not exercised by unit tests
-	if err != nil {
-		// coverage:ignore reason: net/http always sets RemoteAddr in host:port form, not exercised by unit tests
-		return r.RemoteAddr
-	}
-	return host
 }

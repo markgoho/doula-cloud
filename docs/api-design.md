@@ -116,6 +116,56 @@ APIs run at code speed, not human click speed. Protect the backend against unthr
 2. **Stricter Limits on Heavy Endpoints**: Apply tighter rate limits on operations that trigger expensive database queries, PDF generation, or third-party API calls (e.g. Stripe, e-signatures).
 3. **Tenant-Level Isolation & Killswitches**: Provide the ability to rate limit or disable access at the `Practice` or `Staff` level to isolate noisy neighbors.
 
+### What's built (#602)
+
+`api/internal/ratelimit` is the one seam every limited handler wraps in, the same decorator
+shape as `idempotency.Wrap`: `ratelimit.Wrap(db, endpoint, rules)(handler)`. Counters live in
+Postgres (`rate_limit_buckets`, migration `00060`), not process memory — Cloud Run runs more
+than one instance, so an in-process counter would not actually limit anything (ADR-0004 made
+the same call for sessions and idempotency keys). A `Rule` is one dimension: a name, how to
+read its key off the request, a cap, and a window; an endpoint combines more than one so that
+evading any single dimension still runs into another. A refused request gets `429`, the
+headers above, and section 7's structured error body; the refusal is also appended to
+`rate_limit_refusals` (migration `00060`) so repeated refusals against one address can be seen
+after the fact. That table is not an `activity` row (ADR-0022) — every endpoint below runs
+before any Practice exists or is known, and `activity.practice_id` is `NOT NULL` — the same
+shape ADR-0022 itself names for `staff_work_state_events` (00043): where `activity` cannot
+hold the fact, the record lives on the table that owns it.
+
+Every public unauthenticated endpoint that existed when this landed, and its disposition:
+
+| Route | Rules | Reason |
+| :--- | :--- | :--- |
+| `POST /api/session` (login) | Bearer-token digest 30/hr, IP 100/hr | Fires on every sign-in, well above the once-per-person endpoints below; a cached Identity Platform ID token is legitimately reused for close to an hour. |
+| `POST /api/staff/signup` | Bearer-token digest 5/hr, IP 50/hr | Once-per-person bootstrap event (`authn.BeginBootstrap`). Values are generous rather than tight — nothing has ever limited this endpoint before, so any finite cap is a real improvement — and sized above the Playwright e2e suite's own call volume (one shared BFF and IP per run) and a 14-doula pilot agency's onboarding burst from one connection. |
+| `POST /api/staff/accept-invite` | Bearer-token digest 5/hr, IP 50/hr | Same bootstrap shape as signup. |
+| `POST /api/portal/accept-invite` | Bearer-token digest 5/hr, IP 50/hr | Same bootstrap shape again, for the Client population. |
+| `GET /api/offers/{offerId}` | `offerId` 10/hr, IP 50/hr | Pre-account, token+code authenticated (#230); carries no Bearer token or email to key on before its own check runs, so the Offer being probed is the natural "subject" dimension. The per-Offer code-guess cap (`maxAccessCodeAttempts`, `00041`) already bounds one Offer's brute force permanently — this rule set adds an hourly cap on the same thing (10, matching that constant) plus IP volume across many Offers. |
+| `POST /api/offers/{offerId}/decline` | `offerId` 10/hr, IP 50/hr | Same shape as the read above. |
+
+Deliberately not limited:
+
+- `GET /api/hello` — a liveness/readiness probe with no side effect and no cost, curled in a
+  loop by CI's own smoke tests and by Cloud Run's health check. Limiting it would break exactly
+  the callers it exists for.
+- `DELETE /api/session` — only ever clears a cookie the caller already holds (or no-ops if
+  there is none); no credential is checked, so there is nothing for an attacker to gain by
+  repeating it.
+- `GET /api/staff/session`, `GET /api/portal/session`, and every route behind
+  `staffauth.Middleware` / `clientauth.Middleware` — gated by `authn.Begin`'s own `__session`
+  cookie check. A missing or invalid session is a `401` at that gate; there is no
+  bootstrap-style window here for an attacker to spend.
+- `POST /api/internal/**` and `POST /api/stripe/**` / `POST /api/mailgun/webhook` — authenticated
+  by `X-Internal-Secret` or a signature over the request body, not a session, and called only by
+  Cloud Scheduler, Cloud Tasks, or the vendor itself.
+
+Reserved, not yet built: [#166](https://github.com/markgoho/doula-cloud/issues/166) decided a
+Client magic-link request endpoint — 5 per email address per hour, 20 per IP per hour — as part
+of [#164](https://github.com/markgoho/doula-cloud/issues/164)'s auth-methods map. The endpoint
+itself does not exist yet; [#170](https://github.com/markgoho/doula-cloud/issues/170) files its
+implementation ticket, which should key its two rules on the request's own email address field
+(available directly, unlike the Bearer-bootstrap endpoints above) and `ratelimit.IPRule`.
+
 ---
 
 ## 7. Predictable Error Responses
