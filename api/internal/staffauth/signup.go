@@ -10,7 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authtoken"
 )
 
 // MsgInternalError is the response body for any failure the caller can't
@@ -18,6 +20,12 @@ import (
 // the middleware, in this package and in main, share one literal instead
 // of duplicating it per call site.
 const MsgInternalError = "internal error"
+
+// MsgNoMatchingStaffAccount is what a caller whose identity resolves to
+// no staff row gets back -- shared across every route that reads or
+// writes staff by identity_uid, so the sentence stays one spelling
+// rather than drifting per call site.
+const MsgNoMatchingStaffAccount = "no matching staff account"
 
 // SignupRequest is the body of a Practice-signup request: a new Practice,
 // created together with the Staff row for the person creating it.
@@ -146,6 +154,21 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
+	// #613/#169: self-signup sends an email-verification link through
+	// ADR-0010's outbox. Accepting a Staff invitation does not -- holding
+	// the invite token is already proof of mailbox control (accept.go) --
+	// so this is signup's own step, not something shared code does for
+	// both bootstrap paths.
+	verifyToken, err := authtoken.Mint(ctx, tx, identityUID, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+	if err := authmail.QueueTokenMail(ctx, tx, identityUID, authmail.KindEmailVerification, verifyToken); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 

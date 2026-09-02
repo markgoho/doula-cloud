@@ -1,9 +1,11 @@
 package staffauth
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -51,7 +53,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		if err := authn.EndAllSessions(r.Context(), tx, identityUID); err != nil {
+		if err := endAllSessionsAndNotify(r.Context(), tx, identityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
@@ -87,4 +89,24 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		w.WriteHeader(http.StatusNoContent)
 	})
+}
+
+// endAllSessionsAndNotify ends every session identityUID holds and
+// queues #345's session-notice mail -- the part of EndSessionsHandler
+// above that #613's password reset also needs (a successful reset ends
+// every existing session for the identity, same as an Owner's explicit
+// "end sessions everywhere"). It deliberately does not record an
+// activity row: that requires a PracticeID, and reset runs before any
+// Practice is known -- unlike EndSessionsHandler, which is
+// Owner-initiated and does record one.
+func endAllSessionsAndNotify(ctx context.Context, tx *sql.Tx, identityUID string) error {
+	if err := authn.EndAllSessions(ctx, tx, identityUID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: end all sessions: %w", err)
+	}
+	if err := sessionnotice.QueueSessionRevoked(ctx, tx, identityUID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: queue session revoked notice: %w", err)
+	}
+	return nil
 }

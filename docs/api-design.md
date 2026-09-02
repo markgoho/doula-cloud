@@ -142,6 +142,10 @@ Every public unauthenticated endpoint that existed when this landed, and its dis
 | `POST /api/portal/accept-invite` | Bearer-token digest 5/hr, IP 50/hr | Same bootstrap shape again, for the Client population. |
 | `GET /api/offers/{offerId}` | `offerId` 10/hr, IP 50/hr | Pre-account, token+code authenticated (#230); carries no Bearer token or email to key on before its own check runs, so the Offer being probed is the natural "subject" dimension. The per-Offer code-guess cap (`maxAccessCodeAttempts`, `00041`) already bounds one Offer's brute force permanently — this rule set adds an hourly cap on the same thing (10, matching that constant) plus IP volume across many Offers. |
 | `POST /api/offers/{offerId}/decline` | `offerId` 10/hr, IP 50/hr | Same shape as the read above. |
+| `POST /api/staff/verify-email/request` | Session digest 10/hr, IP 50/hr | #613. Signed-in re-request; no Bearer token, only a `__session` cookie to key on (`ratelimit.SessionCookieRule`). |
+| `POST /api/staff/verify-email` | `token` digest 10/hr, IP 50/hr | #613. Pre-account, spends a mailed link; keyed on the link's own token (`ratelimit.HashedJSONFieldRule`) since there is no Bearer token or session yet. |
+| `POST /api/staff/password-reset/request` | `email` 5/hr, IP 20/hr | #613, same sizing #166 reserved below — public, keyed on the posted address (`ratelimit.JSONFieldRule`). |
+| `POST /api/staff/password-reset` | `token` digest 10/hr, IP 50/hr | #613. Same shape as verify-email's spend endpoint. |
 
 Deliberately not limited:
 
@@ -151,10 +155,11 @@ Deliberately not limited:
 - `DELETE /api/session` — only ever clears a cookie the caller already holds (or no-ops if
   there is none); no credential is checked, so there is nothing for an attacker to gain by
   repeating it.
-- `GET /api/staff/session`, `GET /api/portal/session`, and every route behind
-  `staffauth.Middleware` / `clientauth.Middleware` — gated by `authn.Begin`'s own `__session`
-  cookie check. A missing or invalid session is a `401` at that gate; there is no
-  bootstrap-style window here for an attacker to spend.
+- `GET /api/staff/session`, `PUT /api/staff/work-state`, `PUT /api/staff/email`,
+  `GET /api/portal/session`, and every route behind `staffauth.Middleware` /
+  `clientauth.Middleware` — gated by `authn.Begin`'s own `__session` cookie check. A missing or
+  invalid session is a `401` at that gate; there is no bootstrap-style window here for an
+  attacker to spend.
 - `POST /api/internal/**` and `POST /api/stripe/**` / `POST /api/mailgun/webhook` — authenticated
   by `X-Internal-Secret` or a signature over the request body, not a session, and called only by
   Cloud Scheduler, Cloud Tasks, or the vendor itself.
@@ -163,8 +168,8 @@ Reserved, not yet built: [#166](https://github.com/markgoho/doula-cloud/issues/1
 Client magic-link request endpoint — 5 per email address per hour, 20 per IP per hour — as part
 of [#164](https://github.com/markgoho/doula-cloud/issues/164)'s auth-methods map. The endpoint
 itself does not exist yet; [#170](https://github.com/markgoho/doula-cloud/issues/170) files its
-implementation ticket, which should key its two rules on the request's own email address field
-(available directly, unlike the Bearer-bootstrap endpoints above) and `ratelimit.IPRule`.
+implementation ticket, which should reuse `ratelimit.JSONFieldRule` (#613 built it for the same
+shape — password reset's own request endpoint above) plus `ratelimit.IPRule`.
 
 ---
 

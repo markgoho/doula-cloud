@@ -1,9 +1,13 @@
 package ratelimit
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"doula-cloud/api/internal/authn"
@@ -50,6 +54,98 @@ func BearerTokenRule(maxRequests int, window time.Duration) Rule {
 		},
 		Max:    maxRequests,
 		Window: window,
+	}
+}
+
+// SessionCookieRule limits by a SHA-256 digest of the caller's
+// __session cookie -- for a route Wrap fronts that runs behind
+// authn.Begin rather than authn.BeginBootstrap (#613's signed-in
+// "request a fresh verification link"), where there is no Bearer token
+// to key BearerTokenRule on. Skipped when no session cookie is present,
+// the same shape BearerTokenRule uses: the handler behind Wrap rejects
+// that request on its own account.
+func SessionCookieRule(maxRequests int, window time.Duration) Rule {
+	return Rule{
+		Dimension: "session",
+		Key: func(r *http.Request) (string, bool) {
+			cookie, err := r.Cookie(authn.SessionCookieName)
+			if err != nil {
+				return "", false
+			}
+			sum := sha256.Sum256([]byte(cookie.Value))
+			return hex.EncodeToString(sum[:]), true
+		},
+		Max:    maxRequests,
+		Window: window,
+	}
+}
+
+// JSONFieldRule limits by the string value of field in the request's
+// JSON body -- #613's password-reset request, which carries no Bearer
+// token, session, or path parameter to key on before its own lookup
+// runs, only the address the caller typed. Mirrors the plan
+// docs/api-design.md already records for #166's still-unbuilt magic-link
+// request: key the request's own email address field directly, since
+// unlike a Bearer token or a reset token an email address is not itself
+// a usable credential. Reads and restores r.Body, so the handler behind
+// Wrap still sees the full request. Skipped when the body is not JSON,
+// or field is missing, empty, or not a string.
+func JSONFieldRule(field string, maxRequests int, window time.Duration) Rule {
+	return Rule{
+		Dimension: field,
+		Key:       jsonFieldKey(field, false),
+		Max:       maxRequests,
+		Window:    window,
+	}
+}
+
+// HashedJSONFieldRule is JSONFieldRule for a field that is itself a
+// usable credential -- #613's verification and reset tokens, posted in
+// the body rather than a header or path parameter. The digest, not the
+// raw value, is what a refusal logs, the same reason BearerTokenRule
+// hashes a Bearer token instead of storing it.
+func HashedJSONFieldRule(field string, maxRequests int, window time.Duration) Rule {
+	return Rule{
+		Dimension: field,
+		Key:       jsonFieldKey(field, true),
+		Max:       maxRequests,
+		Window:    window,
+	}
+}
+
+// jsonFieldKey builds the Key function JSONFieldRule and
+// HashedJSONFieldRule share: read the body, restore it for the handler
+// behind Wrap, and extract field as a normalized (trimmed, lower-cased)
+// string -- optionally digesting it before it becomes a bucket key or a
+// logged refusal.
+func jsonFieldKey(field string, hash bool) func(*http.Request) (string, bool) {
+	return func(r *http.Request) (string, bool) {
+		if r.Body == nil {
+			return "", false
+		}
+		body, err := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		if err != nil {
+			// coverage:ignore reason: only fails on a body already consumed or closed, unreachable this early in the request lifecycle
+			return "", false
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return "", false
+		}
+		raw, ok := payload[field].(string)
+		value := strings.ToLower(strings.TrimSpace(raw))
+		if !ok || value == "" {
+			return "", false
+		}
+
+		if !hash {
+			return value, true
+		}
+		sum := sha256.Sum256([]byte(value))
+		return hex.EncodeToString(sum[:]), true
 	}
 }
 

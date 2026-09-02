@@ -47,7 +47,14 @@ type AcceptInviteResponse struct {
 // and the Membership is written with the Invitation's own roles and
 // employment type -- no zero-role membership, and no staff row created
 // before someone proves she can sign in as it (#266, #291).
-func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
+//
+// accounts.SetEmailVerified is called on every successful acceptance
+// (#613/#169): holding the invite token already proves control of the
+// invited address -- inv.address must match the caller's verified email,
+// checked below -- so re-proving it with a mailed verification link
+// would be a second round-trip proving something already proven. No
+// verification mail is ever queued on this path.
+func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
 		if !ok {
@@ -88,6 +95,17 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 				committed = true
 			}
 			http.Error(w, msg, status)
+			return
+		}
+
+		// Confirmed above: holding this Invitation's token already proves
+		// mailbox control. Done before MintSession, on the same "external
+		// side effect that fails rolls everything back" reasoning as the
+		// session mint below -- a joined Membership sitting behind an
+		// account Identity Platform still calls unverified would leave
+		// #606's MFA gate with nothing to enroll against.
+		if err := accounts.SetEmailVerified(r.Context(), verified.UID); err != nil {
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

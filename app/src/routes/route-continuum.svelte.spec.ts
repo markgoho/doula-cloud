@@ -177,9 +177,12 @@ const UNSWEPT_ON = '#595';
 const UNSWEPT: readonly string[] = [
 	'',
 	'(signed-out)/accept-invite',
+	'(signed-out)/forgot-password',
 	'(signed-out)/login',
 	'(signed-out)/offers/[offerId]',
+	'(signed-out)/reset-password',
 	'(signed-out)/signup',
+	'(signed-out)/verify-email',
 	'account',
 	'demo',
 	'demo/playwright',

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 
+	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/csrf"
@@ -42,9 +43,13 @@ type Deps struct {
 	// Verifier checks an Identity Platform token. Tests substitute
 	// authntest.Verifier.
 	Verifier authn.Verifier
-	DB       *sql.DB
-	Store    objectstore.ObjectStore
-	Pusher   push.Pusher
+	// AccountManager is the Admin SDK surface #613 widens ADR-0004 into --
+	// reading and writing the account records Identity Platform still
+	// owns as credential store. Tests substitute authntest.FakeAccountManager.
+	AccountManager authn.AccountManager
+	DB             *sql.DB
+	Store          objectstore.ObjectStore
+	Pusher         push.Pusher
 
 	StripeClient        billing.StripeClient
 	StripeWebhookSecret string
@@ -73,6 +78,8 @@ type Deps struct {
 	EngagementRequestWorker engagementrequest.Worker
 	SiteBuildWorker         sitebuild.Worker
 	PageVerifier            sitebuild.Verifier
+	StaffTokenMailWorker    authmail.TokenMailWorker
+	StaffEmailChangeWorker  authmail.EmailChangeWorker
 
 	NudgeEnqueuer   tasknudge.Enqueuer
 	ExpectedOrigins []string

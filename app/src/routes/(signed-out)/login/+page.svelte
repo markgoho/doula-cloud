@@ -155,6 +155,8 @@
 	<Button type="submit" label="Log in" loading={isSubmitting} />
 </form>
 
+<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
+
 {#if picker}
 	<h2>Choose a Practice</h2>
 	{#if picker.length === 0}

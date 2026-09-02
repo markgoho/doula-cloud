@@ -61,7 +61,38 @@ func registerSessionRoutes(mux *http.ServeMux, g *staffauth.GatedRouter, d Deps)
 	// either, which is what makes it self-edit-only by shape (#437).
 	mux.Handle("PUT /api/staff/work-state", staffauth.UpdateWorkStateHandler(d.DB))
 	mux.Handle("POST /api/staff/accept-invite",
-		ratelimit.Wrap(d.DB, "staff_accept_invite", bootstrapRules)(staffauth.AcceptInviteHandler(d.Verifier, d.DB)))
+		ratelimit.Wrap(d.DB, "staff_accept_invite", bootstrapRules)(staffauth.AcceptInviteHandler(d.Verifier, d.AccountManager, d.DB)))
+	// #613: an email address, like a work state, is a fact about the
+	// person -- same "no {practiceId}, no staff id" shape as
+	// UpdateWorkStateHandler above. Not rate limited: gated by
+	// authn.Begin's own __session cookie check, the same reasoning
+	// GET /api/staff/session and PUT /api/staff/work-state give.
+	mux.Handle("PUT /api/staff/email", staffauth.ChangeEmailHandler(d.AccountManager, d.DB))
+	// The signed-in re-request AC #613 added while resolving #169: a
+	// 24-hour verification link and ADR-0010's retry window are roughly
+	// the same length, so this is the only way to recover from a link
+	// that arrived already dead. Keyed on the session cookie
+	// (ratelimit.SessionCookieRule) rather than a Bearer token -- there
+	// is no bootstrap window here, the caller is already signed in.
+	mux.Handle("POST /api/staff/verify-email/request",
+		ratelimit.Wrap(d.DB, "staff_verify_email_request", verifyRequestRules)(staffauth.RequestVerificationHandler(d.DB)))
+	// Public and pre-account: a verification link can be opened signed
+	// out of everything, so this reads no Bearer token and no session --
+	// the link's own token is the whole credential (docs/api-design.md
+	// section 6's table records the disposition).
+	mux.Handle("POST /api/staff/verify-email",
+		ratelimit.Wrap(d.DB, "staff_verify_email", tokenSpendRules)(staffauth.SpendVerificationHandler(d.AccountManager, d.DB)))
+	// Public and unauthenticated -- a forgotten password is, by
+	// definition, no credential to present. Keyed on the request's own
+	// email field (ratelimit.JSONFieldRule) since there is nothing else
+	// to key on this early; answers identically whether or not the
+	// address exists (#168's account-enumeration rule).
+	mux.Handle("POST /api/staff/password-reset/request",
+		ratelimit.Wrap(d.DB, "staff_password_reset_request", resetRequestRules)(staffauth.RequestResetHandler(d.AccountManager, d.DB)))
+	// Public and pre-account, same shape as verify-email above: the reset
+	// token is the whole credential.
+	mux.Handle("POST /api/staff/password-reset",
+		ratelimit.Wrap(d.DB, "staff_password_reset", tokenSpendRules)(staffauth.SpendResetHandler(d.AccountManager, d.DB)))
 	// #230's pre-account Offer read: no session of either population, so
 	// it is mounted on the raw mux and authenticated by the Invitation's
 	// token plus the emailed six-digit code. ADR-0008 requires the
@@ -117,5 +148,37 @@ var loginRules = []ratelimit.Rule{
 // Offers from one caller.
 var offerRules = []ratelimit.Rule{
 	ratelimit.PathValueRule("offerId", 10, time.Hour),
+	ratelimit.IPRule(50, time.Hour),
+}
+
+// verifyRequestRules limits the signed-in "send me a fresh verification
+// link" re-request. Generous, like bootstrapRules: this is a low-risk
+// self-service action gated by a live session already, not a bootstrap
+// credential someone could be minting fresh copies of.
+var verifyRequestRules = []ratelimit.Rule{
+	ratelimit.SessionCookieRule(10, time.Hour),
+	ratelimit.IPRule(50, time.Hour),
+}
+
+// resetRequestRules is #602's own sizing note for the still-unbuilt
+// magic-link request endpoint (docs/api-design.md), reused verbatim:
+// both are a public, pre-account endpoint keyed on the caller's own
+// posted email address, so the same "5 per address, 20 per IP, per
+// hour" reasoning applies unchanged.
+var resetRequestRules = []ratelimit.Rule{
+	ratelimit.JSONFieldRule("email", 5, time.Hour),
+	ratelimit.IPRule(20, time.Hour),
+}
+
+// tokenSpendRules limits both #613 pre-account spend endpoints
+// (verify-email, password-reset): neither carries a Bearer token or a
+// session, only the link's own token, so HashedJSONFieldRule's digest is
+// the "subject" dimension -- repeatedly spending or guessing around one
+// token -- alongside IPRule for volume across many tokens. Brute-forcing
+// the token itself is infeasible regardless (128+ bits of randomness,
+// authtoken.Mint); this bounds a script hammering one captured link, the
+// same shape offerRules bounds one Offer's access code.
+var tokenSpendRules = []ratelimit.Rule{
+	ratelimit.HashedJSONFieldRule("token", 10, time.Hour),
 	ratelimit.IPRule(50, time.Hour),
 }

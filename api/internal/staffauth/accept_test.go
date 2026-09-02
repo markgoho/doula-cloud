@@ -3,6 +3,7 @@ package staffauth_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -57,9 +58,20 @@ func postAcceptRaw(t *testing.T, srv *httptest.Server, payload []byte) *http.Res
 
 func newAcceptServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Server {
 	t.Helper()
+	// The caller's Identity Platform account already exists with this
+	// uid/email -- the same fact authntest.Verifier{UID, Email} asserts
+	// for VerifyIDToken -- so accounts.SetEmailVerified (#613) has
+	// something to flip.
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed(uid, email, false)
+	return newAcceptServerWithAccounts(t, db, uid, email, accounts)
+}
+
+func newAcceptServerWithAccounts(t *testing.T, db *testdb.DB, uid, email string, accounts *authntest.FakeAccountManager) *httptest.Server {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /staff/accept-invite",
-		staffauth.AcceptInviteHandler(authntest.Verifier{UID: uid, Email: email}, db.App))
+		staffauth.AcceptInviteHandler(authntest.Verifier{UID: uid, Email: email}, accounts, db.App))
 	return httptest.NewServer(mux)
 }
 
@@ -452,5 +464,76 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 	}
 	if offerStaffID == nil || *offerStaffID != accepted.StaffID {
 		t.Fatalf("offer staff_id = %v, want the just-accepted %q", offerStaffID, accepted.StaffID)
+	}
+}
+
+// TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail is #613/#169's
+// AC: accepting an Invitation proves mailbox control directly, so it
+// flips emailVerified via the Admin SDK and never queues a verification
+// mail the way self-signup does.
+func TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail(t *testing.T) {
+	db := testdb.New(t)
+	const uid, email = "verified-by-accept-uid", "verified-by-accept@example.com"
+	ownerID, practiceID := seedOwnerMembership(t, db, "owner-for-verified-accept")
+	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, email, "{doula}", contractorType, time.Now().Add(time.Hour))
+
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed(uid, email, false)
+	srv := newAcceptServerWithAccounts(t, db, uid, email, accounts)
+	defer srv.Close()
+
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Verified Person"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	account, err := accounts.GetAccount(t.Context(), uid)
+	if err != nil {
+		t.Fatalf("GetAccount: %v", err)
+	}
+	if !account.EmailVerified {
+		t.Fatal("EmailVerified = false, want true after accepting an invitation")
+	}
+
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`, uid,
+	).Scan(&count); err != nil {
+		t.Fatalf("count token mail rows: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("token mail rows = %d, want 0 -- accepting an invitation must queue no verification mail", count)
+	}
+}
+
+// TestAcceptInviteHandler_SetEmailVerifiedFailureRollsBackTheMembership
+// proves a failed Admin SDK write refuses the acceptance outright, rather
+// than joining the Practice behind an account Identity Platform still
+// calls unverified.
+func TestAcceptInviteHandler_SetEmailVerifiedFailureRollsBackTheMembership(t *testing.T) {
+	db := testdb.New(t)
+	const uid, email = "verify-fail-accept-uid", "verify-fail-accept@example.com"
+	ownerID, practiceID := seedOwnerMembership(t, db, "owner-for-verify-fail-accept")
+	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, email, "{doula}", contractorType, time.Now().Add(time.Hour))
+
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed(uid, email, false)
+	accounts.Err = errors.New("admin sdk unreachable")
+	srv := newAcceptServerWithAccounts(t, db, uid, email, accounts)
+	defer srv.Close()
+
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Verify Fail Person"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE identity_uid = $1`, uid).Scan(&count); err != nil {
+		t.Fatalf("count staff rows: %v", err)
+	}
+	if count != 0 {
+		t.Fatal("expected the whole acceptance to roll back, including the new staff row")
 	}
 }
