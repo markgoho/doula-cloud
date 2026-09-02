@@ -3,11 +3,10 @@
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import DynamicFieldEditor from '#lib/components/organisms/DynamicFieldEditor.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import {
 		loadTemplate,
 		saveTemplate,
@@ -71,31 +70,40 @@
 	});
 </script>
 
-<PageTitle page="Plan Templates" />
-<Heading level={1} text="Plan Templates" />
+{#snippet planTypeSelector()}
+	<nav>
+		{#each planTypes as pt (pt.value)}
+			<Button label={pt.label} onClick={() => selectPlanType(pt.value)} disabled={planType === pt.value} />
+		{/each}
+	</nav>
+{/snippet}
 
-<nav>
-	{#each planTypes as pt (pt.value)}
-		<Button label={pt.label} onClick={() => selectPlanType(pt.value)} disabled={planType === pt.value} />
-	{/each}
-</nav>
+{#snippet editor()}
+	{#if error}
+		<Notice variant="error" message={error} />
+	{/if}
+	{#if isSaved}
+		<Text text="Saved." />
+	{/if}
 
-{#if error}
-	<Notice variant="error" message={error} />
-{/if}
-{#if isSaved}
-	<Text text="Saved." />
-{/if}
+	<DynamicFieldEditor
+		{fields}
+		onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
+		onRemove={(id: string) => (fields = removeField(fields, id))}
+		onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
+		onMoveDown={(id: string) => (fields = moveField(fields, id, 'down'))}
+		onLabelChange={(id: string, label: string) => updateField(id, { label })}
+		onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
+		onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
+	/>
+{/snippet}
 
-<DynamicFieldEditor
-	{fields}
-	onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
-	onRemove={(id: string) => (fields = removeField(fields, id))}
-	onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
-	onMoveDown={(id: string) => (fields = moveField(fields, id, 'down'))}
-	onLabelChange={(id: string, label: string) => updateField(id, { label })}
-	onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
-	onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
+{#snippet actions()}
+	<Button label="Save" onClick={save} />
+{/snippet}
+
+<FormPage
+	title="Plan Templates"
+	fieldsets={[{ content: planTypeSelector }, { content: editor }]}
+	{actions}
 />
-
-<Button label="Save" onClick={save} />

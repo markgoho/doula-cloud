@@ -65,6 +65,7 @@ named Snippet props and the repeatable part is a typed array, `DataTable.rowActi
 |---|---|---|
 | **A** Entry | `templates/EntryPage.svelte` | `title`, `errorSummary?`, `content` — see the 2026-09-02 amendment below |
 | **B** Overview hub | `templates/OverviewHub.svelte` | `title`, `primary`, `secondary?`, and **`isEmpty` + `empty`, both required** |
+| **C** List | `templates/ListPage.svelte` | `title`, `intro?`, `actions?`, `content` — see the 2026-09-02 amendment below |
 | **D** Record detail | `templates/RecordDetail.svelte` | `title`, `summary?`, `actions?`, `sections: { heading, content }[]`, **`contents?`** — see the amendment below |
 | **E** Long form | `templates/FormPage.svelte` | `title`, `intro?`, `fieldsets: { legend, content }[]`, `error?`, `actions` |
 | **E** Question page | `templates/QuestionPage.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `errorSummary?`, `caption?`, `question`, `hint?`, `content`, `actions` — see the second amendment below |
@@ -354,3 +355,56 @@ rebuilds it on `QuestionPage`, which already owns a frame. The five routes fixed
 `(signed-out)/login`, `(signed-out)/signup`, `(signed-out)/accept-invite`, `portal/(signed-out)/login`
 and `portal/(signed-out)/accept-invite` — now import `EntryPage` and pass `title`, `errorSummary` and
 `content`; none renders a bare `<h1>` and `<form>` any more.
+
+## Amendment, 2026-09-02 — archetype C gets a Template, archetype F reuses one
+
+Filed as [#491](https://github.com/markgoho/doula-cloud/issues/491), found the same way [#490](https://github.com/markgoho/doula-cloud/issues/490) found archetype A's gap: eight authenticated Staff
+routes reached no further than `<main>`, which carries no styles of its own, so none of them had gutters,
+a width cap, or the vertical rhythm a Template sets. Four were archetype C (`clients`, `billing`, `staff`,
+`offers`) and four were archetype F (`settings/payments`, `settings/client-fields`,
+`settings/contract-template`, `settings/plan-templates`).
+
+**C gets a new Template, `templates/ListPage.svelte`** — `title`, `intro?`, `actions?`, `content`.
+`OverviewHub` was considered first, since the two archetypes' shapes look close, and rejected:
+`OverviewHub`'s `isEmpty`/`empty` pair is required because a hub's whole body is either the populated
+view or the empty one. A list screen does not divide that way — `clients`' "Find or add a Client" link
+and "See everyone" toggle render whether or not the table has rows, and `DataTable` already carries its
+own `emptyMessage` for the zero-row case. Forcing every route here to split its body into
+`primary`/`empty` would recreate a state that already exists one layer down, so `ListPage` takes a
+single `content` region instead, and no cap on `center-l` — `OverviewHub`'s own reasoning: a list is
+tables, not prose, and past the ramp's plateau more room buys more content (#531, #541).
+
+**F reuses the existing `templates/FormPage.svelte` — no new Template.** `settings/website` is the one F
+route that already had a frame, and reading its route file first (as this ticket's brief directed) found
+it is one Template and three hand-built copies of the same frame: only its `answers` step renders
+`FormPage`; the `review`, `saved` and `loadError` steps each hand-roll
+`<container-l><center-l max="var(--form-max)" gutters="var(--page-gutter)"><stack-l space="var(--space-7)">`
+by hand, because `FormPage` covers only the one step (recorded in the 2026-08-30 amendment above). So
+"the F pattern" was never a distinct frame — it is `FormPage`'s own frame, proven on the same route four
+times over. Building a second Template that spent the same three tokens would be the near-duplicate the
+extraction bar in *Two named exits* above exists to catch, not a new archetype. The four F routes this
+ticket fixed are settings screens with no genuine multi-legend form structure, but `FormPage`'s `legend`
+was already optional for exactly this ("a form can have a group that names nothing"): a single
+un-legended fieldset renders as a plain stack, which is what `client-fields`, `contract-template` and
+`plan-templates` (an editor organism plus a Save button) and `payments` (a status display, a
+conditional checklist, and a Connect button) each needed. None of the four wraps its content in a real
+`<form>`, and none needed to — `FormPage` renders no `<form>` element of its own either.
+
+**Two claims in this ticket's own body were stale, checked against the code rather than trusted.**
+`--page-max` — the "every Template wraps content in `center-l max="var(--page-max)"`" description — was
+removed on [#541](https://github.com/markgoho/doula-cloud/issues/541); no Template uses it today, and
+`ListPage` and `FormPage` spend `none` and `var(--form-max)` respectively, per each archetype's own
+reasoning above. `DataTable`'s `inline-size: 100%` — the mechanism this ticket named for the table
+"running from one edge of the viewport to the other" — was removed on
+[#542](https://github.com/markgoho/doula-cloud/issues/542); a `DataTable` has stopped at its content
+width since. Neither change reduces the actual defect: `practices/+layout.svelte`'s `<main>` carries no
+styles at all, so a route with no Template still opens flush against the viewport edge with no gutter
+and no cap, whatever `DataTable` does with the room it is given.
+
+`payments` gained `loading`/`loadError` wiring it never had (the #480 gap: nothing rendered between mount
+and the first response, not even outside the frame); `clients`, `billing`, `staff` and `offers` keep
+their existing in-place `Notice`/`Skeleton` branching inside `ListPage`'s `content` region rather than
+routing it through `loading`/`loadError` — those four already show controls (a toggle, an "Invite"
+link) that stay on screen through a reload, which `ListPage`'s page-level `loading`/`loadError` would
+hide along with everything else; keeping the branching local preserves that instead of trading it away
+for a frame that was reachable without the trade.

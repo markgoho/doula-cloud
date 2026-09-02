@@ -3,11 +3,10 @@
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import ClientFieldTemplateEditor from '#lib/components/organisms/ClientFieldTemplateEditor.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import {
 		loadTemplate,
 		saveTemplate,
@@ -67,32 +66,38 @@
 	});
 </script>
 
-<PageTitle page="Client Fields" />
-<Heading level={1} text="Client Fields" />
-<Text
-	text="Extra facts your Practice records about every Client, beyond name, contact details and address. Every field here is staff-only -- a Client never sees it."
-/>
+{#snippet intro()}
+	<Text
+		text="Extra facts your Practice records about every Client, beyond name, contact details and address. Every field here is staff-only -- a Client never sees it."
+	/>
+{/snippet}
 
-{#if error}
-	<Notice variant="error" message={error} />
-{/if}
-{#if isSaved}
-	<Text text="Saved." />
-{/if}
+{#snippet editor()}
+	{#if error}
+		<Notice variant="error" message={error} />
+	{/if}
+	{#if isSaved}
+		<Text text="Saved." />
+	{/if}
 
-<ClientFieldTemplateEditor
-	{fields}
-	{existingIds}
-	onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
-	onArchiveToggle={(id: string) => {
-		const field = fields.find((f) => f.id === id);
-		fields = field?.archived ? unarchiveField(fields, id) : archiveField(fields, id);
-	}}
-	onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
-	onMoveDown={(id: string) => (fields = moveField(fields, id, 'down'))}
-	onLabelChange={(id: string, label: string) => updateField(id, { label })}
-	onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
-	onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
-/>
+	<ClientFieldTemplateEditor
+		{fields}
+		{existingIds}
+		onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
+		onArchiveToggle={(id: string) => {
+			const field = fields.find((f) => f.id === id);
+			fields = field?.archived ? unarchiveField(fields, id) : archiveField(fields, id);
+		}}
+		onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
+		onMoveDown={(id: string) => (fields = moveField(fields, id, 'down'))}
+		onLabelChange={(id: string, label: string) => updateField(id, { label })}
+		onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
+		onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
+	/>
+{/snippet}
 
-<Button label="Save" onClick={save} />
+{#snippet actions()}
+	<Button label="Save" onClick={save} />
+{/snippet}
+
+<FormPage title="Client Fields" {intro} fieldsets={[{ content: editor }]} {actions} />
