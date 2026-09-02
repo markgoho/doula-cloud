@@ -33,7 +33,13 @@
 				return;
 			}
 			// #613: the cached ID token still says email_verified: false
-			// until it's force-refreshed.
+			// until it's force-refreshed. Only matters if a live Firebase
+			// user exists here, which is the exception, not the rule -- every
+			// bootstrap flow (login, signup, accept-invite) signs out of the
+			// Firebase SDK right after exchanging for the __session cookie,
+			// so #606's own enrolment flow (not built yet) will need to
+			// re-establish a live Firebase user and refresh again itself
+			// before reading email_verified, rather than relying on this.
 			const user = getFirebaseAuth().currentUser;
 			if (user) {
 				await user.reload();

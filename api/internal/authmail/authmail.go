@@ -12,6 +12,11 @@
 // the address a change moved *away* from, which has to be captured at
 // request time because it is gone from the account by the time the
 // worker runs.
+//
+// Neither table has a tasknudge.OutboxType: #613's AC is explicit that no
+// ADR-0010 exception is carved for this mail -- "delay accepted" -- so
+// Cloud Scheduler's own cadence is the whole delivery guarantee here,
+// unlike the eight kinds ADR-0013's nudge speeds up.
 package authmail
 
 import (

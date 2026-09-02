@@ -160,9 +160,13 @@ func main() {
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
 
-	// ADR-0013: one shared queue nudging all eight outbox process-*
-	// endpoints, reusing NOTIFICATION_WORKER_SECRET rather than a second
-	// credential. NOTIFICATION_TASKS_QUEUE is unset in local dev, CI's
+	// ADR-0013: one shared queue nudging eight of the ten outbox
+	// process-* endpoints (routes_internal.go), reusing
+	// NOTIFICATION_WORKER_SECRET rather than a second credential. #613's
+	// two new outboxes (staff token mail, staff email-change notice) are
+	// not wired to it -- the ticket accepts ADR-0010's plain delay for
+	// them, so Cloud Scheduler's cadence alone is enough; see authmail's
+	// package doc. NOTIFICATION_TASKS_QUEUE is unset in local dev, CI's
 	// boot smoke test, and the e2e stack (see docs/environment.md) --
 	// none of those have GCP credentials for a real *cloudtasks.Client,
 	// so this only constructs one when a queue is actually configured,

@@ -39,15 +39,23 @@ interface MockOptions {
 	sessionResponse?: Response;
 	saveResponse?: Response;
 	saveThrows?: boolean;
+	resendResponse?: Response;
+	resendThrows?: boolean;
 }
 
 function mockApi({
 	sessionResponse = jsonResponse(session),
 	saveResponse = jsonResponse({ workState: 'NJ', workStateReportedAt: SAVED_AT }),
-	saveThrows = false
+	saveThrows = false,
+	resendResponse = new Response(undefined, { status: 202 }),
+	resendThrows = false
 }: MockOptions = {}) {
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path === '/api/staff/session') return Promise.resolve(sessionResponse);
+		if (path === '/api/staff/verify-email/request') {
+			if (resendThrows) return Promise.reject(new Error('The network dropped'));
+			return Promise.resolve(resendResponse);
+		}
 		if (saveThrows) return Promise.reject(new Error('The network dropped'));
 		return Promise.resolve(saveResponse);
 	});
@@ -139,6 +147,45 @@ describe('the account screen', () => {
 
 	// The practices nav is layout chrome, not this page's business -- see
 	// account-layout.svelte.spec.ts (#474).
+
+	// #613's re-request AC: a signed-in Staff member can ask for a fresh
+	// verification link without knowing whether her address is already
+	// verified.
+	it('sends a fresh verification link on request', async () => {
+		mockApi();
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/verify-email/request', {
+			method: 'POST'
+		});
+		await expect
+			.element(testPage.getByRole('status'))
+			.toHaveTextContent("We've sent a new verification link to your email address.");
+	});
+
+	it("shows the server's own words when a resend is refused", async () => {
+		mockApi({ resendResponse: refusal(429, 'too many requests -- try again later') });
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('too many requests -- try again later');
+	});
+
+	it('owns a resend that never reached the server at all', async () => {
+		mockApi({ resendThrows: true });
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
+	});
 });
 
 describe('when the account screen cannot do its job', () => {

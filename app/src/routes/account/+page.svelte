@@ -50,6 +50,32 @@
 	let savedState = $state('');
 	let isSaving = $state(false);
 
+	// #613: no verified-email flag is exposed here, so this is offered
+	// unconditionally rather than only when unverified -- harmless either
+	// way, since the outbox worker skips mailing an already-verified
+	// account.
+	let isResendingVerification = $state(false);
+	let resendNotice = $state('');
+	let resendError = $state('');
+
+	async function handleResendVerification() {
+		resendNotice = '';
+		resendError = '';
+		isResendingVerification = true;
+		try {
+			const response = await apiFetchWithSession('/api/staff/verify-email/request', { method: 'POST' });
+			if (!response.ok) {
+				resendError = await refusalMessage(response);
+				return;
+			}
+			resendNotice = "We've sent a new verification link to your email address.";
+		} catch {
+			resendError = SERVICE_PROBLEM;
+		} finally {
+			isResendingVerification = false;
+		}
+	}
+
 	async function loadAccount() {
 		const result = await loadAccountSession();
 		if (!result.ok) {
@@ -194,6 +220,19 @@
 	-->
 	{#if savedState}
 		<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
+	{/if}
+	<Button
+		type="button"
+		variant="secondary"
+		label="Send a new verification link"
+		loading={isResendingVerification}
+		onClick={handleResendVerification}
+	/>
+	{#if resendNotice}
+		<Notice variant="status" message={resendNotice} />
+	{/if}
+	{#if resendError}
+		<Notice variant="error" message={resendError} />
 	{/if}
 {/snippet}
 

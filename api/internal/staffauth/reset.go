@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -127,7 +128,7 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 			return
 		}
 		if len(req.NewPassword) < minPasswordLength {
-			http.Error(w, "newPassword must be at least 6 characters", http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("newPassword must be at least %d characters", minPasswordLength), http.StatusBadRequest)
 			return
 		}
 

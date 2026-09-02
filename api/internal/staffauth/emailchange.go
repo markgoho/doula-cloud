@@ -41,8 +41,13 @@ type ChangeEmailRequest struct {
 //
 // The Admin SDK write runs before any Postgres write, so a rejected
 // change (a duplicate address, or the Admin SDK being unreachable) rolls
-// back the whole request -- there is nothing here for a later DB failure
-// to leave inconsistent.
+// back the whole request cleanly. The reverse is not true: the Admin SDK
+// write cannot itself be rolled back, so a Postgres failure *after* it
+// succeeds leaves staff.email stale against the account's real address --
+// reproducing #614's drift rather than closing it, for as long as that
+// row goes uncorrected. Outbox recipient resolution is unaffected (it
+// reads the account live, never staff.email); only a stale roster read
+// would show it.
 //
 // Mounted outside the Practice-scoped middleware, like
 // UpdateWorkStateHandler and RequestVerificationHandler: an email
