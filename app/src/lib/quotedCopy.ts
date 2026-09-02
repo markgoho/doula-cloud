@@ -59,7 +59,7 @@ export function withoutComments(source: string): string[] {
 	return out;
 }
 
-const QUOTED = /'([^'\\\n]*)'|"([^"\\\n]*)"|`([^`\\]*)`/g;
+export const QUOTED = /'([^'\\\n]*)'|"([^"\\\n]*)"|`([^`\\]*)`/g;
 
 export interface QuotedLine {
 	line: number;
@@ -94,4 +94,58 @@ export function quotedStringsInSource(source: string): QuotedLine[] {
  */
 export function quotedStrings(file: string, appRoot: string): QuotedLine[] {
 	return quotedStringsInSource(readFileSync(new URL(file, `file://${appRoot}`), 'utf8'));
+}
+
+export type Region = 'script' | 'style' | 'markup';
+
+export interface RegionLine {
+	line: number;
+	text: string;
+	region: Region;
+}
+
+/**
+ * Classifies each already comment-stripped line of a `.svelte` file by which
+ * part it belongs to. Comments are stripped first (`withoutComments`), so a
+ * `<script>` or `<style>` tag mentioned only inside a doc comment can never
+ * flip the tracked region -- the failure mode `styleLines.ts` accepts by
+ * checking the raw line first, which this walk does not need to.
+ *
+ * A `<script>`/`<style>` that opens and closes on the same physical line is
+ * not tracked as closing -- the same simplification `styleLines.ts` already
+ * makes, on the same grounds: every occurrence in this codebase opens a tag
+ * on its own line.
+ */
+export function regionLines(source: string): RegionLine[] {
+	const lines = withoutComments(source);
+	const out: RegionLine[] = [];
+	let region: Region = 'markup';
+
+	for (const [index, raw] of lines.entries()) {
+		if (/<script[^>]*>/.test(raw)) {
+			region = 'script';
+			continue;
+		}
+		if (/<\/script>/.test(raw)) {
+			region = 'markup';
+			continue;
+		}
+		if (/<style[^>]*>/.test(raw)) {
+			region = 'style';
+			continue;
+		}
+		if (/<\/style>/.test(raw)) {
+			region = 'markup';
+			continue;
+		}
+		out.push({ line: index + 1, text: raw, region });
+	}
+	return out;
+}
+
+/**
+ * `regionLines`, reading `file` from disk relative to `appRoot`.
+ */
+export function regionLinesInFile(file: string, appRoot: string): RegionLine[] {
+	return regionLines(readFileSync(new URL(file, `file://${appRoot}`), 'utf8'));
 }
