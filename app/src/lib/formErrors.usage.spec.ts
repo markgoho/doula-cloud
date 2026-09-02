@@ -1,6 +1,7 @@
-import { globSync, readFileSync } from 'node:fs';
+import { globSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { quotedStrings } from './quotedCopy';
 
 /*
  * The wording half of #467.
@@ -23,7 +24,9 @@ import { describe, expect, it } from 'vitest';
  * Every quoted string in every component and route -- which is where
  * user-facing words live. Comments are stripped first, because this
  * repo's rationale is written in prose and prose has to be able to name
- * the words it bans (this file being the extreme case).
+ * the words it bans (this file being the extreme case). The walk itself
+ * lives in `quotedCopy.ts`, shared with `copy.pronoun.usage.spec.ts`
+ * (#463), which asks a different question of the same quoted strings.
  *
  * `formErrors.ts` is *not* read here: it holds Identity Platform's own
  * error codes, and `auth/invalid-credential` is an identifier we do not
@@ -48,69 +51,13 @@ interface Offence {
 	text: string;
 }
 
-/*
- * Strips comments, then returns what is left of each line.
- *
- * Block comments (`<!-- -->` and slash-star) are tracked across lines. A
- * `//` line comment is only recognised where the line *starts* with it,
- * which is how every one in this repo is written, and which is what stops
- * a `https://` inside a string being read as the start of a comment.
- */
-function withoutComments(source: string): string[] {
-	const lines = source.split('\n');
-	const out: string[] = [];
-	let openBlock: '-->' | '*/' | undefined;
-
-	for (const raw of lines) {
-		let text = raw;
-
-		if (openBlock) {
-			const close = text.indexOf(openBlock);
-			if (close === -1) {
-				out.push('');
-				continue;
-			}
-			text = text.slice(close + openBlock.length);
-			openBlock = undefined;
-		}
-
-		if (text.trimStart().startsWith('//')) {
-			out.push('');
-			continue;
-		}
-
-		// Whole comments on one line go first, so the "did one open and stay
-		// open" check below only ever sees a genuinely unterminated marker.
-		text = text.replaceAll(/<!--.*?-->/gs, '').replaceAll(/\/\*.*?\*\//gs, '');
-
-		const htmlOpen = text.lastIndexOf('<!--');
-		const blockOpen = text.lastIndexOf('/*');
-		if (htmlOpen !== -1 && htmlOpen > blockOpen) {
-			openBlock = '-->';
-			text = text.slice(0, htmlOpen);
-		} else if (blockOpen !== -1) {
-			openBlock = '*/';
-			text = text.slice(0, blockOpen);
-		}
-
-		out.push(text);
-	}
-	return out;
-}
-
-const QUOTED = /'([^'\\\n]*)'|"([^"\\\n]*)"|`([^`\\]*)`/g;
-
 function findOffences(file: string): Offence[] {
 	const found: Offence[] = [];
-	const lines = withoutComments(readFileSync(new URL(file, `file://${appRoot}`), 'utf8'));
 
-	for (const [index, line] of lines.entries()) {
-		for (const match of line.matchAll(QUOTED)) {
-			const literal = match[1] ?? match[2] ?? match[3] ?? '';
-			for (const word of BANNED) {
-				if (new RegExp(String.raw`\b` + word + String.raw`\b`, 'i').test(literal)) {
-					found.push({ file, line: index + 1, found: word, text: literal });
-				}
+	for (const { line, text: literal } of quotedStrings(file, appRoot)) {
+		for (const word of BANNED) {
+			if (new RegExp(String.raw`\b` + word + String.raw`\b`, 'i').test(literal)) {
+				found.push({ file, line, found: word, text: literal });
 			}
 		}
 	}

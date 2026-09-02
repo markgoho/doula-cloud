@@ -220,7 +220,7 @@
 	-->
 	<stack-l space="var(--space-4)">
 		<Text
-			text="Nothing is here yet, because no Client is. Add one and this becomes her birth plan, the visits you make to her, and the contract and invoices between you."
+			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you."
 		/>
 		<Link
 			href={resolve('/practices/[practiceId]/clients/new', {

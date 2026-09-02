@@ -217,7 +217,11 @@
 			<TextInput {id} {describedBy} value={familyName} onInput={(v) => (familyName = v)} autocomplete="off" />
 		{/snippet}
 	</LabeledField>
-	<LabeledField id={preferredNameId} label="Preferred name" hint="What she is called day to day, if different">
+	<LabeledField
+		id={preferredNameId}
+		label="Preferred name"
+		hint={`What ${detail!.givenName} is called day to day, if different`}
+	>
 		{#snippet children({ id, describedBy })}
 			<TextInput {id} {describedBy} value={preferredName} onInput={(v) => (preferredName = v)} autocomplete="off" />
 		{/snippet}
@@ -230,7 +234,7 @@
 	{#if hasChangedEmail}
 		<Notice
 			variant="info"
-			message="Saving with this email revokes any pending portal invite sent to her old address."
+			message={`Saving with this email revokes any pending portal invite sent to ${detail!.givenName}'s old address.`}
 		/>
 	{/if}
 	<LabeledField id={phoneId} label="Phone">

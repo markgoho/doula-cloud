@@ -175,7 +175,9 @@ describe('the Practice landing page', () => {
 	it('names doula work and offers one action on a Practice with no Clients', async () => {
 		await setup({ clients: [] });
 
-		await expect.element(testPage.getByText(/her birth plan, the visits you make/)).toBeVisible();
+		await expect
+			.element(testPage.getByText(/the Client's birth plan, your visits to the Client/))
+			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
 			.toBeVisible();
