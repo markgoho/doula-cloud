@@ -639,7 +639,16 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button label="Reassign" type="submit" size="sm" variant="secondary" />
+		<Button
+			label="Reassign"
+			type="submit"
+			size="sm"
+			variant="secondary"
+			describedBy="visit-{visit.visitId}-reassign-name"
+		/>
+		<span class="visually-hidden" id="visit-{visit.visitId}-reassign-name"
+			>{visit.staffName}, {new Date(visit.createdAt).toLocaleDateString()}</span
+		>
 	</form>
 	{#if reassignError[visit.visitId]}
 		<Notice variant="error" message={reassignError[visit.visitId]} />

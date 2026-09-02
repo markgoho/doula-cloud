@@ -118,4 +118,21 @@ describe('Button.svelte', () => {
 		expect(container.querySelector('.spinner')).toBeVisible();
 		expect(icon(container)).not.toBeInTheDocument();
 	});
+
+	// A repeated per-row Button (DataTable's rowActions, DynamicFieldEditor's
+	// "Move up"/"Remove") joins itself to a visually-hidden sibling naming
+	// the row, the same way Link's describedBy does (#515).
+	it('joins itself to qualifying text elsewhere on the page', async () => {
+		await setup({ describedBy: 'row-2-name' });
+
+		await expect
+			.element(page.getByRole('button'))
+			.toHaveAttribute('aria-describedby', 'row-2-name');
+	});
+
+	it('carries no aria-describedby when none is given', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('button')).not.toHaveAttribute('aria-describedby');
+	});
 });

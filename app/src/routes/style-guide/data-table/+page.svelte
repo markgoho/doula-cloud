@@ -138,14 +138,45 @@
 	];
 </script>
 
-{#snippet removeAction()}
-	<Button label="Remove" variant="destructive" size="sm" onClick={noop} />
+{#snippet removeAction(client: Client)}
+	<!-- #515: a bare "Remove" reads the same on every row -- the real Staff
+	     page joins each Button to a visually-hidden sibling naming the row,
+	     which this demo mirrors along with the three button labels below. -->
+	<Button
+		label="Remove"
+		variant="destructive"
+		size="sm"
+		describedBy="remove-{client.name.replaceAll(' ', '-')}"
+		onClick={noop}
+	/>
+	<span class="visually-hidden" id="remove-{client.name.replaceAll(' ', '-')}">{client.name}</span>
 {/snippet}
 
-{#snippet staffActions()}
-	<Button label="Edit membership" variant="secondary" size="sm" onClick={noop} />
-	<Button label="End sessions everywhere" variant="destructive" size="sm" onClick={noop} />
-	<Button label="Remove from practice" variant="destructive" size="sm" onClick={noop} />
+{#snippet staffActions(member: Member)}
+	<Button
+		label="Edit membership"
+		variant="secondary"
+		size="sm"
+		describedBy="{member.email}-edit"
+		onClick={noop}
+	/>
+	<span class="visually-hidden" id="{member.email}-edit">{member.name}</span>
+	<Button
+		label="End sessions everywhere"
+		variant="destructive"
+		size="sm"
+		describedBy="{member.email}-end-sessions"
+		onClick={noop}
+	/>
+	<span class="visually-hidden" id="{member.email}-end-sessions">{member.name}</span>
+	<Button
+		label="Remove from practice"
+		variant="destructive"
+		size="sm"
+		describedBy="{member.email}-remove"
+		onClick={noop}
+	/>
+	<span class="visually-hidden" id="{member.email}-remove">{member.name}</span>
 {/snippet}
 
 <stack-l space="var(--space-6)">

@@ -48,6 +48,16 @@
 			value.split('\n').map((line) => line.trim())
 		);
 	}
+
+	// "Move up", "Move down" and "Archive"/"Unarchive" read as the same bare
+	// word across every row that shares a state (#515) -- a screen-reader
+	// user tabbing through, or scanning a rotor's controls list, hears
+	// "Archive, Archive, Archive" with no row context. This names the row a
+	// visually-hidden sibling joins each Button to, the same fallback the
+	// li's own aria-label already uses for an unnamed field.
+	function rowName(field: Field): string {
+		return field.label || 'Untitled field';
+	}
 </script>
 
 <ul>
@@ -87,16 +97,32 @@
 			{#if field.archived}
 				<span>Archived -- no longer collected</span>
 			{/if}
-			<Button label="Move up" onClick={() => onMoveUp(field.id)} disabled={index === 0} />
+			<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for the
+			     dynamic id/describedBy strings below aren't reachable from
+			     app-level interaction tests (no test renames a field mid-test),
+			     only from Svelte's own reactivity internals -- the same
+			     exception the select/option pair above takes. -->
+			<Button
+				label="Move up"
+				describedBy="{field.id}-move-up-name"
+				onClick={() => onMoveUp(field.id)}
+				disabled={index === 0}
+			/>
+			<span class="visually-hidden" id="{field.id}-move-up-name">{rowName(field)}</span>
 			<Button
 				label="Move down"
+				describedBy="{field.id}-move-down-name"
 				onClick={() => onMoveDown(field.id)}
 				disabled={index === fields.length - 1}
 			/>
+			<span class="visually-hidden" id="{field.id}-move-down-name">{rowName(field)}</span>
 			<Button
 				label={field.archived ? 'Unarchive' : 'Archive'}
+				describedBy="{field.id}-archive-name"
 				onClick={() => onArchiveToggle(field.id)}
 			/>
+			<span class="visually-hidden" id="{field.id}-archive-name">{rowName(field)}</span>
+			<!-- v8 ignore stop -->
 		</li>
 	{/each}
 </ul>

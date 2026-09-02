@@ -37,8 +37,23 @@ async function setup({
 	onCreate = vi.fn().mockResolvedValue(undefined),
 	onWithdraw = vi.fn().mockResolvedValue(undefined)
 }: SetupOptions = {}) {
-	await render(OfferSection, { offers, doulas, clientName, onCreate, onWithdraw });
-	return { onCreate, onWithdraw };
+	const { container } = await render(OfferSection, {
+		offers,
+		doulas,
+		clientName,
+		onCreate,
+		onWithdraw
+	});
+	return { container, onCreate, onWithdraw };
+}
+
+// "Withdraw" alone doesn't say which Offer it withdraws (#515); the
+// distinguishing name is a sibling joined by aria-describedby, the same
+// pattern the Edit link fix (#513) and CheckAnswers' Change links use, so
+// no accessible query names it directly.
+function describedByText(container: HTMLElement, button: ReturnType<typeof page.getByRole>): string {
+	const describedBy = button.element().getAttribute('aria-describedby') ?? '';
+	return container.querySelector(`#${describedBy}`)?.textContent ?? '';
 }
 
 /**
@@ -68,7 +83,9 @@ describe('OfferSection.svelte', () => {
 	it('falls back to the invited address for an Offer nobody has accepted yet', async () => {
 		await setup({ offers: [{ ...openOffer, targetName: '' }], doulas: [] });
 
-		await expect.element(page.getByText('renata@example.test')).toBeVisible();
+		// .first() -- #515's hidden sibling naming the Withdraw button falls
+		// back to the same address and duplicates this text.
+		await expect.element(page.getByText('renata@example.test').first()).toBeVisible();
 	});
 
 	it('withdraws an open Offer', async () => {
@@ -77,6 +94,15 @@ describe('OfferSection.svelte', () => {
 		await page.getByRole('button', { name: 'Withdraw' }).click();
 
 		expect(onWithdraw).toHaveBeenCalledWith('offer-1');
+	});
+
+	it('names the Withdraw button by who was offered the work', async () => {
+		const other: Offer = { ...openOffer, offerId: 'offer-2', targetName: '', targetAddress: 'jo@example.test' };
+		const { container } = await setup({ offers: [openOffer, other] });
+
+		const withdrawButtons = page.getByRole('button', { name: 'Withdraw' });
+		expect(describedByText(container, withdrawButtons.first())).toBe('Renata Alvarez');
+		expect(describedByText(container, withdrawButtons.nth(1))).toBe('jo@example.test');
 	});
 
 	it('offers no withdrawal on an Offer that is already closed', async () => {
