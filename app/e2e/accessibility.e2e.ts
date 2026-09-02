@@ -159,11 +159,19 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 	// collapse straight to 'approved' and never leave a Request pending.
 	// A separate Client, not a second kind on Jane, so this fixture's
 	// blast radius stays off every other route that reuses her clientId.
+	// Its note is left unset (#528): a value holding one long unbreakable
+	// token (e.g. a bare URL) trips a known DescriptionList overflow on
+	// the approval screen below, tracked and fixed separately as #530.
+	//
+	// The returned id also seeds the approval screen route further down --
+	// this is the only pending Request the Staff-session test has, so
+	// both the hub's Withdraw block and the approval screen scan the same
+	// fixture rather than paying for a second Request.
 	const pendingRequestClientId = await seedClient(request, practiceId, seeded.staffHeaders, {
 		givenName: 'Casey',
 		familyName: 'Pending'
 	});
-	seedEngagementRequest(pendingRequestClientId, practiceId, staffId);
+	const pendingRequestId = seedEngagementRequest(pendingRequestClientId, practiceId, staffId);
 
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(seeded.staffEmail);
@@ -235,6 +243,19 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 			archetype: 'D',
 			url: `/practices/${practiceId}/clients/${pendingRequestClientId}`,
 			h1: 'Casey Pending'
+		},
+		{
+			// #528: the approval screen for the same pending Request above.
+			// Unlike the Engagement Request form's anchored row below, no
+			// regex/exact match is needed here even though the h1 changes
+			// once the record loads (from "Approve an engagement request"
+			// to "Approve work with Casey Pending"): neither string is a
+			// substring of the other, so Playwright's default substring
+			// match can never lock onto the earlier, half-loaded heading.
+			key: 'practices/[practiceId]/engagement-requests/[requestId]',
+			archetype: 'D',
+			url: `/practices/${practiceId}/engagement-requests/${pendingRequestId}`,
+			h1: 'Approve work with Casey Pending'
 		},
 		{
 			key: 'practices/[practiceId]/clients/[clientId]/edit',

@@ -5,6 +5,7 @@ import {
 	seedPortalClient,
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
+import { seedEngagementRequest } from './stack';
 
 /**
  * The half of the accessibility gate axe cannot see (#447): whether a
@@ -277,4 +278,78 @@ test('A contractor Doula reaches the explainer\'s "Set up a Practice" link, with
 	);
 	await page.keyboard.press('Enter');
 	await expect(page).toHaveURL(/\/signup$/);
+});
+
+/*
+ * The fourth walk (#528): the Overview hub's door onto a pending
+ * Engagement Request, and both decisions the approval screen offers.
+ * Approve is only reached and held -- pressing it would decide the one
+ * Request this walk seeded, and the walk still has Refuse left to prove.
+ * Refuse is the one actually pressed, so the walk demonstrates a real
+ * write path end to end and lands where the endpoint's own success
+ * behaviour says it should: back on the Client's own record.
+ */
+test('An Owner decides a pending Engagement Request, with no pointer at any step', async ({
+	page,
+	request
+}) => {
+	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+	const { practiceId, staffId, staffHeaders } = seeded;
+
+	// A Client of her own, not the seeded practice's existing one -- a
+	// live Engagement already on that Client renders this screen's "does
+	// not stop this approval" Notice, which is a different, untested-here
+	// path (out of scope for this walk).
+	const clientId = await seedClient(request, practiceId, staffHeaders, {
+		givenName: 'Robin',
+		familyName: 'Waiting'
+	});
+	const requestId = seedEngagementRequest(clientId, practiceId, staffId);
+
+	await signInByKeyboard(page, seeded.staffEmail, practiceId);
+
+	// Stage 2 -- the Overview hub's own "Review requests" link is the
+	// door onto the pending-Requests inbox.
+	await tabTo(
+		page,
+		page.getByRole('main').getByRole('link', { name: 'Review requests' }),
+		'the Review requests link on the Overview hub'
+	);
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagement-requests$`));
+
+	// Stage 3 -- the inbox row's own link is the door onto the decision;
+	// the row links the Client's name, which is her given name alone.
+	await tabTo(
+		page,
+		page.getByRole('main').getByRole('link', { name: 'Robin', exact: true }),
+		"Robin's row link on the pending-Requests inbox"
+	);
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagement-requests/${requestId}$`));
+
+	// Stage 4 -- Approve is reachable, but not pressed: this Request is
+	// decided exactly once, and Refuse is the decision this walk proves.
+	const approveButton = page.getByRole('button', { name: 'Approve and start the work' });
+	await tabTo(page, approveButton, 'the Approve button on the approval screen');
+	await expect(approveButton).toBeFocused();
+
+	await tabTo(
+		page,
+		page.getByLabel('Why are you refusing this?'),
+		'the refusal-reason field on the approval screen'
+	);
+	await page.keyboard.type('Not the right fit for this practice right now.');
+
+	await tabTo(
+		page,
+		page.getByRole('button', { name: 'Refuse this request' }),
+		'the Refuse button on the approval screen'
+	);
+	await page.keyboard.press('Enter');
+
+	// Done looks like: the refusal went through, and the screen is back
+	// on the Client's own record -- the endpoint's documented success
+	// behaviour.
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/${clientId}$`));
 });
