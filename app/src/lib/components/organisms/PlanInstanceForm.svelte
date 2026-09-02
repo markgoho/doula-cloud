@@ -80,8 +80,22 @@
 			{:else if field.type === 'single_select'}
 				<label>
 					{field.label}
+					<!--
+						A Practice writes its own option text, so this control's
+						closed width is capped below at 100% of the space it is
+						given (#549). What happens to an option still too long for
+						that cap at 320px is a deliberate "clip, don't wrap": the
+						closed box is UA-rendered, single-line chrome, so no
+						`white-space`/`text-overflow` rule here would change it --
+						Chromium already ellipsizes the displayed label, Safari and
+						Firefox hard-clip it. Either way the full option text stays
+						reachable to a Client: opening the native picker renders
+						every <option> at its own natural width, unaffected by the
+						closed control's capped width.
+					-->
 					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- the empty option's value ("") differs from its visible label ("--"), which the Select atom cannot represent (it always uses one string for both); also, unlike Select's disabled placeholder option, this one stays selectable so the answer can be cleared -->
 					<select
+						class="single-select"
 						value={textValue(field)}
 						onchange={(event_) => onAnswerChange(field.id, event_.currentTarget.value)}
 					>
@@ -122,3 +136,11 @@
 		</li>
 	{/each}
 </ul>
+
+<style>
+	@layer components {
+		.single-select {
+			max-width: 100%;
+		}
+	}
+</style>
