@@ -16,6 +16,7 @@ import (
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/storage"
 
+	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
@@ -147,6 +148,17 @@ func main() {
 		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
+	// #613: verification/reset mail resolves its recipient live via the
+	// Admin SDK (verifier also satisfies authn.AccountManager) rather
+	// than joining `staff`, per authmail's own package doc.
+	staffTokenMailOutboxWorker := authmail.TokenMailWorker{
+		Sender: mailgunSender, Accounts: verifier, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
+	}
+	staffEmailChangeOutboxWorker := authmail.EmailChangeWorker{
+		Sender: mailgunSender, Now: time.Now,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
+	}
 
 	// ADR-0013: one shared queue nudging all eight outbox process-*
 	// endpoints, reusing NOTIFICATION_WORKER_SECRET rather than a second
@@ -196,10 +208,11 @@ func main() {
 	}
 
 	handler, _, _ := routes(Deps{
-		Verifier: verifier,
-		DB:       db,
-		Store:    store,
-		Pusher:   pusher,
+		Verifier:       verifier,
+		AccountManager: verifier,
+		DB:             db,
+		Store:          store,
+		Pusher:         pusher,
 
 		StripeClient:        stripeClient,
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
@@ -221,6 +234,8 @@ func main() {
 		EngagementRequestWorker: engagementRequestOutboxWorker,
 		SiteBuildWorker:         siteBuildWorker,
 		PageVerifier:            pageVerifier,
+		StaffTokenMailWorker:    staffTokenMailOutboxWorker,
+		StaffEmailChangeWorker:  staffEmailChangeOutboxWorker,
 
 		NudgeEnqueuer:   nudgeEnqueuer,
 		ExpectedOrigins: resolveExpectedOrigins(),

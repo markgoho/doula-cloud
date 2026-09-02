@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/offer"
@@ -46,6 +47,12 @@ func registerInternalRoutes(mux *http.ServeMux, d Deps) {
 	// Same shape again for #398's Engagement Request outbox, whose write
 	// site is engagementrequest.RequestHandler above.
 	mux.Handle("POST /api/internal/notifications/process-engagement-request-outbox", engagementrequest.ProcessOutboxHandler(d.DB, d.EngagementRequestWorker, d.WorkerSecret))
+	// Same shape again for #613's two Staff auth mail outboxes
+	// (verification/reset, and the email-change notice), whose write
+	// sites are staffauth's signup/verify/reset/emailchange handlers
+	// above.
+	mux.Handle("POST /api/internal/notifications/process-staff-token-mail-outbox", authmail.ProcessTokenMailOutboxHandler(d.DB, d.StaffTokenMailWorker, d.WorkerSecret))
+	mux.Handle("POST /api/internal/notifications/process-staff-email-change-outbox", authmail.ProcessEmailChangeOutboxHandler(d.DB, d.StaffEmailChangeWorker, d.WorkerSecret))
 	// #443's two site endpoints, on the same X-Internal-Secret shape and
 	// under /api/internal/site rather than /notifications, because
 	// neither of them notifies anybody. process-build-outbox turns

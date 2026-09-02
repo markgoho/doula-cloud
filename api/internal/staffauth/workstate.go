@@ -208,7 +208,7 @@ func updateWorkState(ctx context.Context, tx *sql.Tx, identityUID, workState str
 		`SELECT id, work_state FROM staff WHERE identity_uid = $1`, identityUID,
 	).Scan(&staffID, &previous)
 	if errors.Is(err, sql.ErrNoRows) {
-		return WorkStateResponse{}, http.StatusNotFound, "no matching staff account"
+		return WorkStateResponse{}, http.StatusNotFound, MsgNoMatchingStaffAccount
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

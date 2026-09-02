@@ -95,7 +95,7 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionRes
 		   FROM staff WHERE identity_uid = $1`, identityUID,
 	).Scan(&staffID, &name, &email, &workState, &workStateReportedAt, &lastPracticeID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return SessionResponse{}, http.StatusNotFound, "no matching staff account"
+		return SessionResponse{}, http.StatusNotFound, MsgNoMatchingStaffAccount
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

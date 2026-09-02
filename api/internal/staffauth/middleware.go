@@ -123,7 +123,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 			if !found {
-				http.Error(w, "no matching staff account", http.StatusForbidden)
+				http.Error(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
 				return
 			}
 
