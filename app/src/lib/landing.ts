@@ -25,6 +25,12 @@ export interface SessionInfo {
 	 */
 	staffId: string;
 	name: string;
+	// The Staff shell's avatar menu shows this beside the name (#452), off
+	// practices/+layout.svelte's own inline session type -- /account's bar
+	// (#484) reads the same `/api/staff/session` fact off this SessionInfo
+	// instead, since that is the type its own `loadAccountSession()` already
+	// holds.
+	email: string;
 	// The USPS two-letter code, e.g. "NY" -- workStateName() in
 	// workStates.ts turns it into something a person recognizes.
 	workState: string;
