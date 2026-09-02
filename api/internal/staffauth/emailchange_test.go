@@ -127,6 +127,16 @@ func TestChangeEmailHandler_Success(t *testing.T) {
 	if oldEmail != "old@example.com" || status != "pending" {
 		t.Fatalf("old_email/status = %q/%q, want old@example.com/pending", oldEmail, status)
 	}
+
+	var pendingVerify int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1 AND kind = 'email_verification' AND status = 'pending'`, uid,
+	).Scan(&pendingVerify); err != nil {
+		t.Fatalf("count pending verification rows: %v", err)
+	}
+	if pendingVerify != 1 {
+		t.Fatalf("pending verification rows = %d, want 1", pendingVerify)
+	}
 }
 
 func TestChangeEmailHandler_GetAccountFailureReturns500(t *testing.T) {

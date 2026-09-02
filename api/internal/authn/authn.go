@@ -1,10 +1,11 @@
 // Package authn owns the browser session: it reads the __session cookie
 // off a request, verifies it against Postgres, renews it, and opens the
 // request-scoped transaction the rest of the BFF runs in (see store.go
-// and ADR-0004). GCP Identity Platform remains the identity provider but
-// is reduced to one method, VerifyIDToken, behind a small Verifier
-// interface so HTTP middleware can be tested against a fake
-// implementation instead of a live Identity Platform project.
+// and ADR-0004). GCP Identity Platform remains the identity provider,
+// behind two small interfaces: Verifier (VerifyIDToken) and, since #613,
+// AccountManager (reading and writing the account records Identity
+// Platform still owns as credential store) -- both fakeable so HTTP
+// handlers can be tested without a live Identity Platform project.
 package authn
 
 import (
@@ -241,10 +242,10 @@ type VerifiedToken struct {
 	Email string
 }
 
-// Verifier checks an Identity Platform ID token. That is the whole of
-// what the identity provider is asked to do since ADR-0004: the session
-// itself is a row in Postgres (store.go), so nothing here mints,
-// verifies, or revokes a session.
+// Verifier checks an Identity Platform ID token. Session minting,
+// verification, and revocation stay Postgres-side (store.go, ADR-0004);
+// AccountManager (account.go) is the other half of what #613 widens
+// Identity Platform's role to.
 type Verifier interface {
 	// VerifyIDToken checks a raw ID token and returns the identity it
 	// carries, or an error if the token is missing, expired, malformed,

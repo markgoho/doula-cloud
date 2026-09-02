@@ -78,8 +78,8 @@ func registerSessionRoutes(mux *http.ServeMux, g *staffauth.GatedRouter, d Deps)
 		ratelimit.Wrap(d.DB, "staff_verify_email_request", verifyRequestRules)(staffauth.RequestVerificationHandler(d.DB)))
 	// Public and pre-account: a verification link can be opened signed
 	// out of everything, so this reads no Bearer token and no session --
-	// the link's own token is the whole credential (docs/api-design.md's
-	// table below records the disposition).
+	// the link's own token is the whole credential (docs/api-design.md
+	// section 6's table records the disposition).
 	mux.Handle("POST /api/staff/verify-email",
 		ratelimit.Wrap(d.DB, "staff_verify_email", tokenSpendRules)(staffauth.SpendVerificationHandler(d.AccountManager, d.DB)))
 	// Public and unauthenticated -- a forgotten password is, by

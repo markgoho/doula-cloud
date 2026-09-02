@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/authtoken"
 )
 
 // ChangeEmailRequest is the body of a Staff email change: the address to
@@ -20,13 +22,22 @@ type ChangeEmailRequest struct {
 
 // ChangeEmailHandler lets a signed-in Staff member change her account
 // address. The write goes through the Admin SDK (UpdateUser(Email(...))),
-// which also clears emailVerified (authn.AccountManager.SetEmail's own
-// contract) -- a changed address goes back through verification the same
-// way self-signup does. staff.email is then kept in step with it in the
-// same transaction, closing the drift #614 found, and the *old* address
-// is notified through the outbox (authmail.QueueEmailChangeNotice),
-// never the new one: the old address's owner is who needs to know if she
-// did not make this change.
+// which also clears emailVerified -- ADR-0004/#613's account surface
+// enumerates EmailVerified(true), Password, and Email as the only writes
+// this ticket gives the BFF, "nothing else"; clearing the flag on an
+// address change is a fourth one, added deliberately (recorded on #613,
+// not silently) because the alternative -- an account Identity Platform
+// still calls verified for an address nobody has ever proven -- is worse
+// than the ticket's own account-enumeration reasoning. A changed address
+// therefore goes back through verification the same way self-signup
+// does: a fresh authtoken.Mint + authmail.QueueTokenMail for the *new*
+// address, right alongside the notice to the old one.
+//
+// staff.email is kept in step with the Admin SDK write in the same
+// transaction, closing the drift #614 found, and the *old* address is
+// notified through the outbox (authmail.QueueEmailChangeNotice), never
+// the new one: the old address's owner is who needs to know if she did
+// not make this change.
 //
 // The Admin SDK write runs before any Postgres write, so a rejected
 // change (a duplicate address, or the Admin SDK being unreachable) rolls
@@ -119,6 +130,20 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 	}
 
 	if err := authmail.QueueEmailChangeNotice(ctx, tx, uid, oldAddress); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return http.StatusInternalServerError, MsgInternalError
+	}
+
+	// The new address just lost its verified flag above, so it gets the
+	// same fresh verification link self-signup sends -- otherwise she is
+	// signed in, unverified, with no link mailed and nothing to click
+	// until she finds the resend button on her own.
+	verifyToken, err := authtoken.Mint(ctx, tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return http.StatusInternalServerError, MsgInternalError
+	}
+	if err := authmail.QueueTokenMail(ctx, tx, uid, authmail.KindEmailVerification, verifyToken); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return http.StatusInternalServerError, MsgInternalError
 	}
