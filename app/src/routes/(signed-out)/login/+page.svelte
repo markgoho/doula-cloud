@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -21,6 +22,29 @@
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Membership[] | undefined>();
+
+	/*
+	 * A visitor who already holds a live Staff session and opens this URL
+	 * directly should land exactly where a fresh sign-in would send her
+	 * (#283), not see the form again. The form above always renders
+	 * immediately regardless -- this probe runs after mount and only ever
+	 * redirects her out from under it, or fills in the same picker a fresh
+	 * sign-in would; it never blocks or delays the form's own render. It
+	 * checks only the Staff session, never the Client-portal one -- see
+	 * `probeSession`'s own doc comment (#lib/api.js) for why a non-OK
+	 * response here reads as "not signed in", not as an expired session.
+	 */
+	onMount(async () => {
+		const session = await probeSession<SessionInfo>('/api/staff/session');
+		if (!session) return;
+
+		const landing = decideLanding(session);
+		if (landing.type === 'redirect') {
+			await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
+		} else {
+			picker = landing.memberships;
+		}
+	});
 
 	/*
 	 * One array is the whole mechanism (#467). The summary lists it and

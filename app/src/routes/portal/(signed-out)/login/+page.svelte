@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -21,6 +22,29 @@
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Engagement[] | undefined>();
+
+	// The Staff login's on-load probe, deliberately identical (#283): a
+	// visitor who already holds a live Client-portal session lands exactly
+	// where a fresh sign-in would send her, without the form ever waiting
+	// on this to render. It checks only the Client-portal session, never
+	// the Staff one -- see `probeSession`'s own doc comment (#lib/api.js)
+	// for why a non-OK response here reads as "not signed in", not an
+	// expired session.
+	onMount(async () => {
+		const session = await probeSession<PortalSessionInfo>('/api/portal/session');
+		if (!session) return;
+
+		const landing = decidePortalLanding(session);
+		if (landing.type === 'redirect') {
+			await goto(
+				resolve('/portal/(authenticated)/engagements/[engagementId]', {
+					engagementId: landing.engagementId
+				})
+			);
+		} else {
+			picker = landing.engagements;
+		}
+	});
 
 	// The Staff login's mechanism, deliberately identical (#467): the two
 	// screens ask the same two questions and must refuse them the same way.
