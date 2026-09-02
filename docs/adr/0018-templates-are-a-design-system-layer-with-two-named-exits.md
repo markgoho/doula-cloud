@@ -63,6 +63,7 @@ named Snippet props and the repeatable part is a typed array, `DataTable.rowActi
 
 | Archetype | Component | Regions |
 |---|---|---|
+| **A** Entry | `templates/EntryPage.svelte` | `title`, `errorSummary?`, `content` — see the 2026-09-02 amendment below |
 | **B** Overview hub | `templates/OverviewHub.svelte` | `title`, `primary`, `secondary?`, and **`isEmpty` + `empty`, both required** |
 | **D** Record detail | `templates/RecordDetail.svelte` | `title`, `summary?`, `actions?`, `sections: { heading, content }[]`, **`contents?`** — see the amendment below |
 | **E** Long form | `templates/FormPage.svelte` | `title`, `intro?`, `fieldsets: { legend, content }[]`, `error?`, `actions` |
@@ -318,3 +319,38 @@ existing hand-built frame rather than routed through `FormPage`, since `FormPage
 
 `QuestionPage` and `CheckAnswers` are not touched: neither is wired into a real route yet, both are
 style-guide-only per the amendment above, so there is no retrofitted `{#if error}` to find on either.
+
+## Amendment, 2026-09-02 — archetype A gets a Template, `EntryPage`
+
+Filed as [#490](https://github.com/markgoho/doula-cloud/issues/490), found on #467 by opening a refused
+`/login` in a real browser at 1440 and 480 — the check `workflow.md` has required since #424, and the
+third time it has caught something no spec could (#425's `LabeledField` and #451 being the others). Five
+archetype-A routes — login and accept-invite on both the Staff and portal sides, and Staff signup —
+rendered with no page frame at all, so the `<h1>`, every field and the submit button sat flush against
+the viewport edge, and #467's error summary ran edge to edge once it shipped. `(signed-out)/+layout.svelte`
+already said why: *"No gutters and no max-width here: those belong to the Template the page instantiates
+(ADR-0018)"* — but archetype A had no Template to instantiate. The *Scope* section above left A, C, F and
+G out deliberately; this is that gap closing for A alone, not a reopening of the other three.
+
+`templates/EntryPage.svelte` holds it: `title`, an optional `errorSummary` positioned above the `<h1>` —
+the same position every other Template in this layer already uses — and one `content` region carrying
+everything under the title. A single region rather than named ones (fieldsets, actions, a picker),
+because the five routes disagree about what that is: the two plain logins are one form plus an optional
+"choose a Practice/Engagement" list; the two accept-invite screens switch between two forms and a
+read-only summary; signup is a longer single form with no picker at all. Giving each a fixed shape would
+have produced a Template that only fits some of its own consumers, so the variety stays where ADR-0018
+already puts region-internal arrangement: on the route.
+
+**Top-aligned in a `--form-max` column, not centred in the viewport.** Every Template in this layer —
+`FormPage`, `QuestionPage`, `CheckAnswers`, `RecordDetail`, `OverviewHub`, `ErrorPage` — renders in normal
+flow under `padding-block: var(--space-8)`, and none owns the viewport's own height. Centring this one
+vertically would be a second layout mechanism kept for a single archetype, sized against a bar
+(`SignedOutTopBar`) whose height a Template has no business knowing — the kind of anonymous escape hatch
+the *Two named exits* section above exists to prevent. `--form-max` is `FormPage`'s own form-column token,
+reused rather than a new width entering the app for one more archetype.
+
+`clients/new` (archetype E) is not this Template and was not touched: [#466](https://github.com/markgoho/doula-cloud/issues/466)
+rebuilds it on `QuestionPage`, which already owns a frame. The five routes fixed —
+`(signed-out)/login`, `(signed-out)/signup`, `(signed-out)/accept-invite`, `portal/(signed-out)/login`
+and `portal/(signed-out)/accept-invite` — now import `EntryPage` and pass `title`, `errorSummary` and
+`content`; none renders a bare `<h1>` and `<form>` any more.

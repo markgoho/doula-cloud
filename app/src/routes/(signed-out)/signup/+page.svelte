@@ -9,7 +9,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
 	import { workStateCode } from '#lib/workStates.js';
 
@@ -107,76 +107,82 @@
 	}
 </script>
 
-<PageTitle page="Sign up your Practice" isError={errors.length > 0} />
+{#snippet errorSummary()}
+	<ErrorSummary {errors} />
+{/snippet}
 
-<ErrorSummary {errors} />
+{#snippet content()}
+	<!-- `novalidate`: this page refuses the submit and says so once, at the
+	     top, rather than letting the browser's own bubble refuse the first
+	     empty field and say nothing about the other four (#467). -->
+	<form onsubmit={handleSubmit} novalidate>
+		<LabeledField id={practiceNameId} label="Practice name" error={errorFor(practiceNameId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					value={practiceName}
+					onInput={(value) => (practiceName = value)}
+					required
+					autocomplete="organization"
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField id={staffNameId} label="Your name" error={errorFor(staffNameId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					value={staffName}
+					onInput={(value) => (staffName = value)}
+					required
+					autocomplete="name"
+				/>
+			{/snippet}
+		</LabeledField>
+		<WorkStateField id={workStateId} bind:value={workStateName} error={errorFor(workStateId)} />
+		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+					autocomplete="email"
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField
+			id={passwordId}
+			label="Password"
+			hint="Must be 6 characters or more"
+			error={errorFor(passwordId)}
+		>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					value={password}
+					onInput={(value) => (password = value)}
+					required
+					minlength={6}
+					autocomplete="new-password"
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button type="submit" label="Create Practice" loading={isSubmitting} />
+	</form>
+{/snippet}
 
-<h1>Sign up your Practice</h1>
-
-<!-- `novalidate`: this page refuses the submit and says so once, at the
-     top, rather than letting the browser's own bubble refuse the first
-     empty field and say nothing about the other four (#467). -->
-<form onsubmit={handleSubmit} novalidate>
-	<LabeledField id={practiceNameId} label="Practice name" error={errorFor(practiceNameId)}>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				value={practiceName}
-				onInput={(value) => (practiceName = value)}
-				required
-				autocomplete="organization"
-			/>
-		{/snippet}
-	</LabeledField>
-	<LabeledField id={staffNameId} label="Your name" error={errorFor(staffNameId)}>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				value={staffName}
-				onInput={(value) => (staffName = value)}
-				required
-				autocomplete="name"
-			/>
-		{/snippet}
-	</LabeledField>
-	<WorkStateField id={workStateId} bind:value={workStateName} error={errorFor(workStateId)} />
-	<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="email"
-				value={email}
-				onInput={(value) => (email = value)}
-				required
-				autocomplete="email"
-			/>
-		{/snippet}
-	</LabeledField>
-	<LabeledField
-		id={passwordId}
-		label="Password"
-		hint="Must be 6 characters or more"
-		error={errorFor(passwordId)}
-	>
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="password"
-				value={password}
-				onInput={(value) => (password = value)}
-				required
-				minlength={6}
-				autocomplete="new-password"
-			/>
-		{/snippet}
-	</LabeledField>
-	<Button type="submit" label="Create Practice" loading={isSubmitting} />
-</form>
+<EntryPage
+	title="Sign up your Practice"
+	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>

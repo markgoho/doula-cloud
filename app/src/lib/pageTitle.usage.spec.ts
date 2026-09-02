@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
  * with no title fails a commit rather than reaching CI.
  *
  * A `+page.svelte` passes if it imports `PageTitle` directly, or imports
- * one of the five Templates that already render `PageTitle` internally
+ * one of the Templates that already render `PageTitle` internally
  * (#487's ownership decision: every Template calls the shared primitive,
  * every bare route calls it directly). Every style-guide demo page is
  * exempt -- covered once, by the static title on `style-guide/
@@ -23,7 +23,8 @@ const TEMPLATES_WITH_PAGE_TITLE = [
 	'RecordDetail',
 	'FormPage',
 	'QuestionPage',
-	'CheckAnswers'
+	'CheckAnswers',
+	'EntryPage'
 ];
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));

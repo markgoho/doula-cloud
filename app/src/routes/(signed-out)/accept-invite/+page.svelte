@@ -41,7 +41,7 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
@@ -273,124 +273,139 @@
 </script>
 
 
-<!--
-	One summary above the <h1>, GOV.UK's position, serving whichever of the
-	two forms is on screen: they never render together, and each handler
-	clears the array before it runs.
--->
-<PageTitle page="Accept your Staff invite" isError={errors.length > 0} />
-
-<ErrorSummary {errors} />
-
-<h1>Accept your Staff invite</h1>
-
-{#if !inviteToken}
-	<Notice variant="error" message="Missing invite token" />
-{:else if step === 'identify'}
+{#snippet errorSummary()}
 	<!--
-		Step one asks only what tells us who she is. Nothing about her name
-		or her work state can be answered honestly yet, because whether we
-		need those answers depends on whether she is Staff already, and
-		signing in is what settles that.
+		One summary above the <h1>, GOV.UK's position, serving whichever of
+		the two forms is on screen: they never render together, and each
+		handler clears the array before it runs.
 	-->
-	<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
-	<form onsubmit={handleIdentify} novalidate>
-		<Text text="First, sign in or create an account with the address your invite was sent to." />
-		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="email"
-					value={email}
-					onInput={(value) => (email = value)}
-					required
-					autocomplete={emailAutocomplete}
-				/>
-			{/snippet}
-		</LabeledField>
-		<LabeledField id={passwordId} label="Password" hint={passwordHint} error={errorFor(passwordId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="password"
-					value={password}
-					onInput={(value) => (password = value)}
-					required
-					minlength={6}
-					autocomplete={passwordAutocomplete}
-				/>
-			{/snippet}
-		</LabeledField>
-		<RadioGroup
-			legend="Account mode"
-			name="mode"
-			options={modeOptions}
-			value={mode}
-			onChange={(value) => (mode = value)}
-		/>
-		<Button type="submit" label="Continue" loading={isSubmitting} />
-	</form>
-{:else}
-	<form onsubmit={handleAccept} novalidate>
-		<h2 tabindex="-1" {@attach focusOnAppearing}>
-			{existing ? 'Check your details' : 'Tell us about yourself'}
-		</h2>
+	<ErrorSummary {errors} />
+{/snippet}
 
-		{#if existing}
-			<!--
-				Read as plain text, not as disabled form controls. A disabled
-				input still looks like a question, and a question she cannot
-				answer reads as a fault in the page rather than as a fact that
-				is already settled. These are hers, already recorded, and the
-				only honest thing to render is the value itself.
-			-->
-			<Text text="These come from the Staff account you already have, so we are not asking again." />
-			<Text text={existing.name} />
-			<Text
-				text={`You work from ${workStateName(existing.workState)}, self-reported ${workStateReportedOn(existing.workStateReportedAt)}.`}
-			/>
-			<!--
-				The correction lives on one screen, because the work state is
-				one fact about one person however many Practices she works at
-				(#437). Pointing at it here rather than reopening the field
-				keeps that true.
-			-->
-			<Link href={resolve('/account')} label="Change where you work" variant="secondary" />
-		{:else}
-			<LabeledField id={nameId} label="Your name" error={errorFor(nameId)}>
+{#snippet content()}
+	{#if !inviteToken}
+		<Notice variant="error" message="Missing invite token" />
+	{:else if step === 'identify'}
+		<!--
+			Step one asks only what tells us who she is. Nothing about her name
+			or her work state can be answered honestly yet, because whether we
+			need those answers depends on whether she is Staff already, and
+			signing in is what settles that.
+		-->
+		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
+		<form onsubmit={handleIdentify} novalidate>
+			<Text text="First, sign in or create an account with the address your invite was sent to." />
+			<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
 						{describedBy}
 						{invalid}
-						value={name}
-						onInput={(value) => (name = value)}
+						type="email"
+						value={email}
+						onInput={(value) => (email = value)}
 						required
-						autocomplete="name"
+						autocomplete={emailAutocomplete}
 					/>
 				{/snippet}
 			</LabeledField>
-			<WorkStateField id={workStateId} bind:value={workStateName_} error={errorFor(workStateId)} />
-		{/if}
+			<LabeledField
+				id={passwordId}
+				label="Password"
+				hint={passwordHint}
+				error={errorFor(passwordId)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="password"
+						value={password}
+						onInput={(value) => (password = value)}
+						required
+						minlength={6}
+						autocomplete={passwordAutocomplete}
+					/>
+				{/snippet}
+			</LabeledField>
+			<RadioGroup
+				legend="Account mode"
+				name="mode"
+				options={modeOptions}
+				value={mode}
+				onChange={(value) => (mode = value)}
+			/>
+			<Button type="submit" label="Continue" loading={isSubmitting} />
+		</form>
+	{:else}
+		<form onsubmit={handleAccept} novalidate>
+			<h2 tabindex="-1" {@attach focusOnAppearing}>
+				{existing ? 'Check your details' : 'Tell us about yourself'}
+			</h2>
 
-		<Button type="submit" label="Accept invite" loading={isSubmitting} />
-	</form>
-{/if}
-
-{#if picker}
-	<Heading level={2} variant="section" text="Choose a Practice" />
-	<ul>
-		{#each picker as membership (membership.practiceId)}
-			<li>
-				<Link
-					href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-					label={membership.practiceName}
+			{#if existing}
+				<!--
+					Read as plain text, not as disabled form controls. A disabled
+					input still looks like a question, and a question she cannot
+					answer reads as a fault in the page rather than as a fact that
+					is already settled. These are hers, already recorded, and the
+					only honest thing to render is the value itself.
+				-->
+				<Text text="These come from the Staff account you already have, so we are not asking again." />
+				<Text text={existing.name} />
+				<Text
+					text={`You work from ${workStateName(existing.workState)}, self-reported ${workStateReportedOn(existing.workStateReportedAt)}.`}
 				/>
-			</li>
-		{/each}
-	</ul>
-{/if}
+				<!--
+					The correction lives on one screen, because the work state is
+					one fact about one person however many Practices she works at
+					(#437). Pointing at it here rather than reopening the field
+					keeps that true.
+				-->
+				<Link href={resolve('/account')} label="Change where you work" variant="secondary" />
+			{:else}
+				<LabeledField id={nameId} label="Your name" error={errorFor(nameId)}>
+					{#snippet children({ id, describedBy, invalid })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							value={name}
+							onInput={(value) => (name = value)}
+							required
+							autocomplete="name"
+						/>
+					{/snippet}
+				</LabeledField>
+				<WorkStateField
+					id={workStateId}
+					bind:value={workStateName_}
+					error={errorFor(workStateId)}
+				/>
+			{/if}
+
+			<Button type="submit" label="Accept invite" loading={isSubmitting} />
+		</form>
+	{/if}
+
+	{#if picker}
+		<Heading level={2} variant="section" text="Choose a Practice" />
+		<ul>
+			{#each picker as membership (membership.practiceId)}
+				<li>
+					<Link
+						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
+						label={membership.practiceName}
+					/>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+{/snippet}
+
+<EntryPage
+	title="Accept your Staff invite"
+	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>
