@@ -127,7 +127,21 @@
 				<Badge label={offerStateLabels[offer.state]} variant={offerStateVariants[offer.state]} />
 				<span>{formatFee(offer.amountCents)}</span>
 				{#if isOpen(offer)}
-					<Button label="Withdraw" variant="secondary" size="sm" onClick={() => handleWithdraw(offer.offerId)} />
+					<!-- v8 ignore start: Svelte-compiled attribute-diffing branch for
+					     the dynamic id/describedBy string below isn't reachable from
+					     app-level interaction tests (no test changes an Offer's own id
+					     mid-test), only from Svelte's own reactivity internals. -->
+					<Button
+						label="Withdraw"
+						variant="secondary"
+						size="sm"
+						describedBy="offer-{offer.offerId}-withdraw-name"
+						onClick={() => handleWithdraw(offer.offerId)}
+					/>
+					<span class="visually-hidden" id="offer-{offer.offerId}-withdraw-name"
+						>{offer.targetName || offer.targetAddress}</span
+					>
+					<!-- v8 ignore stop -->
 				{/if}
 			</li>
 		{/each}

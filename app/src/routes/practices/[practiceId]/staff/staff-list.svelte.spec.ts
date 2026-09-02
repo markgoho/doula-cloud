@@ -188,6 +188,16 @@ async function setup(options: MockOptions = {}) {
 	await render(Page, {});
 }
 
+// "Revoke" (or Edit membership/End sessions everywhere/Remove from
+// practice/Show older changes) alone doesn't say which member or invitation
+// it acts on (#515); the distinguishing name is a sibling joined by
+// aria-describedby, the same pattern the Edit link fix (#513) and
+// CheckAnswers' Change links use, so no accessible query names it directly.
+function describedByText(button: ReturnType<typeof testPage.getByRole>): string {
+	const describedBy = button.element().getAttribute('aria-describedby') ?? '';
+	return document.querySelector(`#${describedBy}`)?.textContent ?? '';
+}
+
 describe('staff screen', () => {
 	// #508: the actual regression this ticket fixes, checked on the real
 	// route rather than only on the style-guide demo that mirrors its
@@ -206,7 +216,11 @@ describe('staff screen', () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('heading', { name: 'Members' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		// exact: true -- the Actions cell's own name now also contains "Ada
+		// Lovelace" (#515's hidden siblings naming its per-row buttons).
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Ada Lovelace', exact: true }))
+			.toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'ada@example.com' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'owner' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'no roles yet' })).toBeVisible();
@@ -221,7 +235,11 @@ describe('staff screen', () => {
 		await expect
 			.element(testPage.getByRole('heading', { name: 'Pending invitations' }))
 			.toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'lena@example.com' })).toBeVisible();
+		// exact: true -- the Actions cell's own name now also contains
+		// "lena@example.com" (#515's hidden sibling naming its Revoke button).
+		await expect
+			.element(testPage.getByRole('cell', { name: 'lena@example.com', exact: true }))
+			.toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'doula' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('button', { name: 'Revoke' }).first())
@@ -304,8 +322,10 @@ describe('staff screen', () => {
 		await expect
 			.element(testPage.getByRole('cell', { name: 'lena@example.com' }))
 			.not.toBeInTheDocument();
+		// exact: true -- the Actions cell's own name now also contains
+		// "undeliverable@example.com" (#515's hidden sibling naming Revoke).
 		await expect
-			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com' }))
+			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com', exact: true }))
 			.toBeVisible();
 	});
 
@@ -318,7 +338,7 @@ describe('staff screen', () => {
 			.element(invitationsTable().getByText('Expired -- invite again or revoke'))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com' }))
+			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com', exact: true }))
 			.toBeVisible();
 	});
 
@@ -334,7 +354,11 @@ describe('staff screen', () => {
 		await expect
 			.element(testPage.getByRole('cell', { name: 'Ada Lovelace' }))
 			.not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('cell', { name: 'Grace Hopper' })).toBeVisible();
+		// exact: true -- the Actions cell's own name now also contains
+		// "Grace Hopper" (#515's hidden siblings naming its per-row buttons).
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Grace Hopper', exact: true }))
+			.toBeVisible();
 	});
 
 	it('shows a per-row error notice when removing a membership fails', async () => {
@@ -456,5 +480,49 @@ describe('staff screen', () => {
 
 			await expect.element(tableView.getByText('Failed to load work state history')).toBeVisible();
 		});
+
+		it('names the Show older changes button by its member when there is more history', async () => {
+			await setup({
+				historyResponse: jsonResponse({
+					memberSince: '2026-08-01T00:00:00Z',
+					items: [{ eventId: 'event-1', workState: 'NY', createdAt: '2026-08-28T12:00:00Z' }],
+					hasMore: true,
+					nextCursor: 'cursor-1'
+				})
+			});
+			const tableView = membersTable();
+
+			await tableView.getByText('Work state history').first().click();
+
+			expect(
+				describedByText(testPage.getByRole('button', { name: 'Show older changes' }))
+			).toBe('Ada Lovelace');
+		});
+	});
+
+	// #515: a screen-reader user tabbing through the roster hears the same
+	// bare word once per member/invitation row without this.
+	it("names each member row's Edit membership, End sessions everywhere and Remove from practice button", async () => {
+		await setup();
+
+		const edit = testPage.getByRole('button', { name: 'Edit membership' });
+		expect(describedByText(edit.first())).toBe('Ada Lovelace');
+		expect(describedByText(edit.nth(1))).toBe('Grace Hopper');
+
+		const endSessions = testPage.getByRole('button', { name: 'End sessions everywhere' });
+		expect(describedByText(endSessions.first())).toBe('Ada Lovelace');
+		expect(describedByText(endSessions.nth(1))).toBe('Grace Hopper');
+
+		const remove = testPage.getByRole('button', { name: 'Remove from practice' });
+		expect(describedByText(remove.first())).toBe('Ada Lovelace');
+		expect(describedByText(remove.nth(1))).toBe('Grace Hopper');
+	});
+
+	it("names each invitation row's Revoke button by its address", async () => {
+		await setup();
+
+		const revoke = testPage.getByRole('button', { name: 'Revoke' });
+		expect(describedByText(revoke.first())).toBe('lena@example.com');
+		expect(describedByText(revoke.nth(1))).toBe('undeliverable@example.com');
 	});
 });

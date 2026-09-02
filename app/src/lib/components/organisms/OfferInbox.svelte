@@ -65,17 +65,27 @@
 					{/if}
 				</dl>
 				{#if isOpen(offer)}
+					<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for
+					     the dynamic id/describedBy strings below aren't reachable from
+					     app-level interaction tests (no test changes an Offer's own id
+					     mid-test), only from Svelte's own reactivity internals. -->
 					<Button
 						label="Accept"
+						describedBy="offer-{offer.offerId}-decide-name"
 						loading={decidingId === offer.offerId}
 						onClick={() => handleDecide(offer.offerId, 'accept')}
 					/>
 					<Button
 						label="Decline"
 						variant="secondary"
+						describedBy="offer-{offer.offerId}-decide-name"
 						loading={decidingId === offer.offerId}
 						onClick={() => handleDecide(offer.offerId, 'decline')}
 					/>
+					<span class="visually-hidden" id="offer-{offer.offerId}-decide-name"
+						>{offer.clientArea}, due {offer.dueDate}</span
+					>
+					<!-- v8 ignore stop -->
 				{/if}
 			</li>
 		{/each}

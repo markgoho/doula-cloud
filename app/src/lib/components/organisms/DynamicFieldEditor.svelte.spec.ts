@@ -22,7 +22,7 @@ async function setup({ fields = defaultFields }: SetupOptions = {}) {
 	const onTypeChange = vi.fn();
 	const onOptionsChange = vi.fn();
 
-	await render(DynamicFieldEditor, {
+	const { container } = await render(DynamicFieldEditor, {
 		fields,
 		onAdd,
 		onRemove,
@@ -33,7 +33,26 @@ async function setup({ fields = defaultFields }: SetupOptions = {}) {
 		onOptionsChange
 	});
 
-	return { onAdd, onRemove, onMoveUp, onMoveDown, onLabelChange, onTypeChange, onOptionsChange };
+	return {
+		container,
+		onAdd,
+		onRemove,
+		onMoveUp,
+		onMoveDown,
+		onLabelChange,
+		onTypeChange,
+		onOptionsChange
+	};
+}
+
+// "Remove" (or Move up/down) alone doesn't say which field it acts on
+// (#515); the distinguishing name is a sibling joined by
+// aria-describedby, the same pattern the Edit link fix (#513) and
+// CheckAnswers' Change links use, so no accessible query names it
+// directly.
+function describedByText(container: HTMLElement, button: ReturnType<typeof page.getByRole>): string {
+	const describedBy = button.element().getAttribute('aria-describedby') ?? '';
+	return container.querySelector(`#${describedBy}`)?.textContent ?? '';
 }
 
 describe('DynamicFieldEditor.svelte', () => {
@@ -120,5 +139,28 @@ describe('DynamicFieldEditor.svelte', () => {
 		await page.getByRole('button', { name: 'Add field' }).click();
 
 		expect(onAdd).toHaveBeenCalledWith('checkbox');
+	});
+
+	it('names each row\'s Move up/Move down/Remove button by the field it acts on', async () => {
+		const { container } = await setup();
+
+		expect(
+			describedByText(container, page.getByRole('button', { name: 'Move up' }).nth(1))
+		).toBe('Pain management');
+		expect(
+			describedByText(container, page.getByRole('button', { name: 'Move down' }).first())
+		).toBe('Support people');
+		expect(describedByText(container, page.getByRole('button', { name: 'Remove' }).nth(1))).toBe(
+			'Pain management'
+		);
+	});
+
+	it('falls back to "Untitled field" when the field has no label yet', async () => {
+		const unlabeled: Field[] = [{ id: 'a', type: 'short_text', label: '', order: 0 }];
+		const { container } = await setup({ fields: unlabeled });
+
+		expect(describedByText(container, page.getByRole('button', { name: 'Remove' }))).toBe(
+			'Untitled field'
+		);
 	});
 });

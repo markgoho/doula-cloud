@@ -370,9 +370,11 @@
 					label="Show older changes"
 					variant="secondary"
 					size="sm"
+					describedBy="{member.staffId}-history-name"
 					loading={historyLoading[member.staffId]}
 					onClick={() => loadWorkStateHistory(member.staffId, history.nextCursor)}
 				/>
+				<span class="visually-hidden" id="{member.staffId}-history-name">{member.name}</span>
 			{/if}
 		{/if}
 	</details>
@@ -400,15 +402,19 @@
 			label="Edit membership"
 			variant="secondary"
 			size="sm"
+			describedBy="{member.staffId}-edit-name"
 			onClick={() => startEditing(member)}
 		/>
+		<span class="visually-hidden" id="{member.staffId}-edit-name">{member.name}</span>
 	{/if}
 	<Button
 		label="End sessions everywhere"
 		variant="destructive"
 		size="sm"
+		describedBy="{member.staffId}-end-sessions-name"
 		onClick={() => (confirmEndSessionsFor = member.staffId)}
 	/>
+	<span class="visually-hidden" id="{member.staffId}-end-sessions-name">{member.name}</span>
 	<ConfirmDialog
 		bind:open={
 			() => confirmEndSessionsFor === member.staffId,
@@ -431,8 +437,10 @@
 		label="Remove from practice"
 		variant="destructive"
 		size="sm"
+		describedBy="{member.staffId}-remove-name"
 		onClick={() => (confirmRemoveStaffId = member.staffId)}
 	/>
+	<span class="visually-hidden" id="{member.staffId}-remove-name">{member.name}</span>
 	<ConfirmDialog
 		bind:open={
 			() => confirmRemoveStaffId === member.staffId,
@@ -461,8 +469,10 @@
 		label="Revoke"
 		variant="destructive"
 		size="sm"
+		describedBy="{invitation.invitationId}-revoke-name"
 		onClick={() => (confirmRevokeInvitationId = invitation.invitationId)}
 	/>
+	<span class="visually-hidden" id="{invitation.invitationId}-revoke-name">{invitation.address}</span>
 	<ConfirmDialog
 		bind:open={
 			() => confirmRevokeInvitationId === invitation.invitationId,

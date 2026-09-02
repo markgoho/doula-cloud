@@ -30,7 +30,7 @@ async function setup({ fields = defaultFields, existingIds = new Set() }: SetupO
 	const onTypeChange = vi.fn();
 	const onOptionsChange = vi.fn();
 
-	await render(ClientFieldTemplateEditor, {
+	const { container } = await render(ClientFieldTemplateEditor, {
 		fields,
 		existingIds,
 		onAdd,
@@ -42,7 +42,25 @@ async function setup({ fields = defaultFields, existingIds = new Set() }: SetupO
 		onOptionsChange
 	});
 
-	return { onAdd, onArchiveToggle, onMoveUp, onMoveDown, onLabelChange, onTypeChange, onOptionsChange };
+	return {
+		container,
+		onAdd,
+		onArchiveToggle,
+		onMoveUp,
+		onMoveDown,
+		onLabelChange,
+		onTypeChange,
+		onOptionsChange
+	};
+}
+
+// "Archive"/"Move up"/"Move down" alone doesn't say which field it acts on
+// (#515); the distinguishing name is a sibling joined by aria-describedby,
+// the same pattern the Edit link fix (#513) and CheckAnswers' Change links
+// use, so no accessible query names it directly.
+function describedByText(container: HTMLElement, button: ReturnType<typeof page.getByRole>): string {
+	const describedBy = button.element().getAttribute('aria-describedby') ?? '';
+	return container.querySelector(`#${describedBy}`)?.textContent ?? '';
 }
 
 describe('ClientFieldTemplateEditor.svelte', () => {
@@ -175,5 +193,28 @@ describe('ClientFieldTemplateEditor.svelte', () => {
 		await page.getByRole('button', { name: 'Add field' }).click();
 
 		expect(onAdd).toHaveBeenCalledWith('checkbox');
+	});
+
+	it('names each row\'s Move up/Move down/Archive button by the field it acts on', async () => {
+		const { container } = await setup();
+
+		expect(
+			describedByText(container, page.getByRole('button', { name: 'Move up' }).nth(1))
+		).toBe('Referral source');
+		expect(
+			describedByText(container, page.getByRole('button', { name: 'Move down' }).first())
+		).toBe('Intake note');
+		expect(
+			describedByText(container, page.getByRole('button', { name: 'Archive', exact: true }).nth(1))
+		).toBe('Referral source');
+	});
+
+	it('falls back to "Untitled field" in the Move/Archive description when the label is blank', async () => {
+		const unlabeled: Field[] = [{ id: 'a', type: 'short_text', label: '', order: 0, archived: false }];
+		const { container } = await setup({ fields: unlabeled });
+
+		expect(
+			describedByText(container, page.getByRole('button', { name: 'Archive', exact: true }))
+		).toBe('Untitled field');
 	});
 });
