@@ -90,8 +90,10 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	// name anywhere on it.
 	await page.goto(`/practices/${practiceId}/offers`);
 	await expect(page.getByRole('heading', { name: 'Your offers' })).toBeVisible();
-	await expect(page.getByText('North side')).toBeVisible();
-	await expect(page.getByText('2027-01-04')).toBeVisible();
+	// exact: true -- #515's hidden "North side, due 2027-01-04" sibling
+	// (naming the Accept/Decline buttons) otherwise substring-matches too.
+	await expect(page.getByText('North side', { exact: true })).toBeVisible();
+	await expect(page.getByText('2027-01-04', { exact: true })).toBeVisible();
 	await expect(page.getByText('Two prenatal visits, on call from 38 weeks.')).toBeVisible();
 	await expect(page.getByText('Rosa Martinez')).toHaveCount(0);
 

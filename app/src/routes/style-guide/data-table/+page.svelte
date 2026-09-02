@@ -146,10 +146,10 @@
 		label="Remove"
 		variant="destructive"
 		size="sm"
-		describedBy="remove-{client.name}"
+		describedBy="remove-{client.name.replaceAll(' ', '-')}"
 		onClick={noop}
 	/>
-	<span class="visually-hidden" id="remove-{client.name}">{client.name}</span>
+	<span class="visually-hidden" id="remove-{client.name.replaceAll(' ', '-')}">{client.name}</span>
 {/snippet}
 
 {#snippet staffActions(member: Member)}
