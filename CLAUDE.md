@@ -67,9 +67,9 @@ something that will refuse a direct trunk push.
 
 Issues live in GitHub Issues for markgoho/doula-cloud, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
-### Triage labels
+### Triage state
 
-Default canonical labels (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+Triage state lives on the Status field of the [Doula Cloud Project](https://github.com/users/markgoho/projects/5), not on a label. See `docs/agents/triage-labels.md` for the role-to-value mapping and `docs/agents/issue-tracker.md` for how to read and write it.
 
 ### Domain docs
 
