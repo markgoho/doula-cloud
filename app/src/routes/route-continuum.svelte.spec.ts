@@ -216,12 +216,12 @@ const UNSWEPT: readonly string[] = [
 /*
  * Known-broken today, named rather than suppressed -- the same shape and
  * the same reason as the component check's own `KNOWN_BROKEN`. `it.fails`
- * turns red, not green, the day #530 closes without this entry going with
- * it.
+ * turns red, not green, the day an entry's own issue closes without this
+ * file changing -- that is what forces the entry out once the retrofit
+ * actually lands. Empty since #530 (this route's own DescriptionList
+ * value column) landed.
  */
-const KNOWN_BROKEN: Readonly<Record<string, string>> = {
-	'practices/[practiceId]/engagement-requests/[requestId]': '#530'
-};
+const KNOWN_BROKEN: Readonly<Record<string, string>> = {};
 
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
 
