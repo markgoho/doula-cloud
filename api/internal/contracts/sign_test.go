@@ -203,7 +203,7 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 }
 
 // TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr proves
-// clientIP falls back to r.RemoteAddr when there's no X-Forwarded-For
+// clientip.From falls back to r.RemoteAddr when there's no X-Forwarded-For
 // header -- the local-dev/test path, with no Cloud Run GFE in front of
 // the process.
 func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) {

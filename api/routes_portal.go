@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/pushsub"
+	"doula-cloud/api/internal/ratelimit"
 )
 
 // The Client's own surface, behind clientauth rather than staffauth.
@@ -19,7 +20,11 @@ import (
 // a Practice, and a Client holds no Membership to check against. Their
 // GETs are declared in exemptGETRoutes in the guardrail test instead.
 func registerPortalRoutes(mux *http.ServeMux, d Deps) {
-	mux.Handle("POST /api/portal/accept-invite", portalinvite.AcceptInviteHandler(d.Verifier, d.DB))
+	mux.Handle("POST /api/portal/accept-invite",
+		ratelimit.Wrap(d.DB, "portal_accept_invite", bootstrapRules)(portalinvite.AcceptInviteHandler(d.Verifier, d.DB)))
+	// Not rate limited: gated by authn.Begin's own __session cookie check,
+	// like staffauth.SessionHandler below -- there is no bootstrap window
+	// here for an attacker to spend.
 	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(d.DB))
 	mux.Handle("GET /api/portal/engagements/{engagementId}",
 		clientauth.Middleware(d.DB)(portal.DetailHandler()))
