@@ -13,6 +13,35 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
+**Triage state lives on the Project, not on a label.** `--add-label`/`--remove-label` above still apply to `journey-gap`, `bug`, `enhancement` and the `wayfinder:*` labels — they say what an issue *is*. What state it's *in* (needs triage, ready for agent, etc.) is the Project's Status field; see the next section.
+
+## The Project: triage state
+
+Every open issue is an item on the **Doula Cloud Project** — https://github.com/users/markgoho/projects/5, project number `5`, owner `markgoho`. Its **Status** field replaced the four triage labels ([#621](https://github.com/markgoho/doula-cloud/issues/621)); the role-to-value mapping is in `docs/agents/triage-labels.md`.
+
+- **Read an item's Status**: `gh project item-list 5 --owner markgoho --format json --limit 400 --jq '.items[] | select(.content.number == <n>) | .status'` — `--limit` defaults to 30, well under the ~171-item project, so pass it explicitly or the query silently returns nothing. Or open the issue and check the Status column in the Table view.
+- **Write an item's Status**: one field per invocation — write by field name, not node id. Real, working example:
+
+  ```sh
+  gh project item-edit 5 --owner markgoho --url https://github.com/markgoho/doula-cloud/issues/632 --field "Status" --value "In progress"
+  ```
+
+  `--value` must be one of the six option strings: `Needs triage`, `Needs info`, `Ready for agent`, `Ready for human`, `In progress`, `Done`. `--url` is the *issue's* URL, not the project's.
+- **Target date**: same command, `--field "Target date" --date "YYYY-MM-DD"` (see `gh project item-edit --help`; date fields take `--date`, not `--value`).
+- **Bulk writes** (many items in one loop): the by-name form above is fine for one-off writes, but for a large loop use the node-id form instead — cheaper per call and avoids tripping GitHub's secondary rate limit, which doesn't show up in `gh api rate_limit`. Resolve ids once with `gh project field-list 5 --owner markgoho` and `gh project item-list 5 --owner markgoho --format json`, then `gh project item-edit --id <item-id> --field-id <status-field-id> --project-id <project-id> --single-select-option-id <option-id>`.
+- **Projects v2 cannot filter or query on issue dependencies** — no `BLOCKED_BY` field, column, or filter qualifier exists. The ready query below reads the Issues API instead.
+
+### The ready query: open, unblocked, unassigned
+
+Projects v2 has no dependency field, so this reads straight from the Issues API rather than the Project. `issue_dependencies_summary.blocked_by` (open blockers only) is present on the `issues` list endpoint, so no per-issue fetch is needed:
+
+```sh
+gh api --paginate "/repos/markgoho/doula-cloud/issues?state=open&per_page=100" \
+  --jq '.[] | select(.pull_request == null) | select((.assignees | length) == 0) | select(.issue_dependencies_summary.blocked_by == 0) | .number'
+```
+
+Drop the trailing `| .number` and pipe to `jq -s length` (or `wc -l` on the number list) for a count — 133 against the open-issue set as of this ticket. `is:blocked` works in the web Issues list but returns 0 against the REST `search/issues` endpoint and the GraphQL `search` field — don't use either for this query.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
