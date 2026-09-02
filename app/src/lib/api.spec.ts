@@ -9,7 +9,8 @@ vi.mock('firebase/auth', () => ({ signOut }));
 const getFirebaseAuth = vi.fn(() => 'the-auth-instance');
 vi.mock('./firebase.js', () => ({ getFirebaseAuth }));
 
-const { apiBaseURL, apiErrorMessage, apiFetch, apiFetchWithSession } = await import('./api');
+const { apiBaseURL, apiErrorMessage, apiFetch, apiFetchWithSession, probeSession } =
+	await import('./api');
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
@@ -99,6 +100,41 @@ describe('apiFetch', () => {
 		expect(goto).not.toHaveBeenCalled();
 		expect(signOut).not.toHaveBeenCalled();
 		vi.unstubAllGlobals();
+	});
+});
+
+describe('probeSession', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('returns the parsed body for a live session', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ memberships: [] }))
+		);
+
+		await expect(probeSession('/api/staff/session')).resolves.toEqual({ memberships: [] });
+	});
+
+	it('reads a non-OK response as no session of this kind, not a failure', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response('no session', { status: 401 }))
+		);
+
+		await expect(probeSession('/api/staff/session')).resolves.toBeUndefined();
+	});
+
+	it('reads a thrown fetch the same way as no session', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				throw new TypeError('Failed to fetch');
+			})
+		);
+
+		await expect(probeSession('/api/staff/session')).resolves.toBeUndefined();
 	});
 });
 

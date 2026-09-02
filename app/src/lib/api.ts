@@ -57,6 +57,28 @@ async function handleExpiredSession(): Promise<void> {
 }
 
 /**
+Reads a session endpoint (`/api/staff/session` or `/api/portal/session`)
+without treating an absent session as a failure. `apiFetchWithSession`
+is the wrong tool for this: it treats every non-OK response as an
+expired session and sends the browser to a login screen. The callers of
+`probeSession` -- `/` and both login screens themselves -- ask this
+question before any sign-in has happened, so "no session of this kind"
+is the ordinary case here, not a failure, and reads as `undefined`
+rather than a redirect. A thrown fetch (offline, the wrong host, a
+non-JSON body from a rewrite miss) reads the same way, so the caller can
+treat every one of these outcomes as "can't tell, proceed as signed out".
+*/
+export async function probeSession<Session>(path: string): Promise<Session | undefined> {
+	try {
+		const response = await apiFetch(path);
+		if (!response.ok) return undefined;
+		return (await response.json()) as Session;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
 Reads a failed response's body as a human-readable error message. Most
 BFF endpoints still write plain text; a growing few (starting with
 portalinvite, docs/api-design.md section 7's first adopter) write
