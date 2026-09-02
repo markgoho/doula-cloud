@@ -39,22 +39,26 @@
 			font-size: var(--text-body-sm-size);
 		}
 
+		/* Mixed in oklab, not oklch -- #434. oklch interpolates hue along the
+		   shorter polar arc, so a 12% mix drags every variant toward
+		   --color-surface's own hue instead of its own. oklab has no hue
+		   angle to spiral on, so each variant's tint stays distinct. */
 		p.error {
 			color: var(--color-error);
 			border-color: var(--color-error);
-			background-color: color-mix(in oklch, var(--color-error) 12%, var(--color-surface));
+			background-color: color-mix(in oklab, var(--color-error) 12%, var(--color-surface));
 		}
 
 		p.status {
 			color: var(--color-status);
 			border-color: var(--color-status);
-			background-color: color-mix(in oklch, var(--color-status) 12%, var(--color-surface));
+			background-color: color-mix(in oklab, var(--color-status) 12%, var(--color-surface));
 		}
 
 		p.info {
 			color: var(--color-info);
 			border-color: var(--color-info);
-			background-color: color-mix(in oklch, var(--color-info) 12%, var(--color-surface));
+			background-color: color-mix(in oklab, var(--color-info) 12%, var(--color-surface));
 		}
 	}
 </style>
