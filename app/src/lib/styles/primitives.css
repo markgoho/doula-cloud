@@ -16,6 +16,19 @@
 stack-l {
 	display: block;
 }
+/*
+ * This rule assumes every child is a block box. A sibling top-margin does
+ * nothing to two boxes that already share a line, so an inline child (a
+ * <label>, by default) or an inline-block child (a text input, by default)
+ * placed next to another such child gets no visible gap at all -- the
+ * children read as sitting beside each other, not stacked. This is exactly
+ * what #451/#425 found: LabeledField's stacked orientation put a <label>
+ * next to its control inside stack-l and the spacing silently did nothing.
+ * The fix was not here -- it was giving the label `display: block` at the
+ * call site (see the `label` rule in LabeledField.svelte's <style>, the
+ * worked example). A caller whose children are inline or inline-block by
+ * default must blockify them itself; stack-l does not do it for them.
+ */
 stack-l > * + * {
 	margin-block-start: var(--space-4);
 }
