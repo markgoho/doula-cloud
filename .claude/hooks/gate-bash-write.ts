@@ -9,40 +9,22 @@
 // scripting-language one-liner, a compiled binary -- is not caught. That
 // gap is accepted on purpose; see docs/agents/worktree-flow.md's
 // Enforcement section.
-import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
-function readStdin(): Promise<string> {
-	return new Promise((resolve, reject) => {
-		let data = '';
-		process.stdin.setEncoding('utf8');
-		process.stdin.on('data', chunk => {
-			data += chunk;
-		});
-		process.stdin.on('end', () => resolve(data));
-		process.stdin.on('error', reject);
-	});
-}
-
-function isGitIgnored(sourceRoot: string, filePath: string): boolean {
-	try {
-		execFileSync('git', ['-C', sourceRoot, 'check-ignore', '-q', filePath], {
-			stdio: ['ignore', 'ignore', 'ignore']
-		});
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 // One list/pipeline stage per entry, so a write in one stage of
-// `A | tee file` or `A && rm x` is examined on its own. Mirrors
-// gate-shared-index.sh's segmentation, minus `&` -- splitting on lone `&`
-// would tear `2>&1` in half, which this hook has to read intact.
+// `A | tee file` or `A && sed -i ... file` is examined on its own --
+// command-name detection (tee/sed/cp/mv/install/rsync) keys off the first
+// token of a segment, so a write verb chained after `&&`/`&` that stayed
+// in the same segment as its predecessor would never be seen as the
+// segment's own command. Splits on every `&`, same as
+// gate-shared-index.sh's `tr '\n;|&'` -- that does tear `2>&1` into two
+// pieces, but the redirection regex below only needs a `>` with a target
+// after it, which survives the split intact either side.
 function segments(command: string): string[] {
 	return command
-		.split(/\r?\n|;|\|\||\|/)
+		.split(/\r?\n|;|\|\||\||&&|&/)
 		.map(segment => segment.replace(/^[\s(){]*/, '').trim())
 		.filter(Boolean);
 }
@@ -139,9 +121,7 @@ async function main(): Promise<void> {
 	for (const candidate of candidates) {
 		const resolvedFile = path.resolve(candidate);
 
-		if (resolvedFile.startsWith(worktreesRoot + path.sep)) continue;
-		if (!resolvedFile.startsWith(sourceRoot + path.sep)) continue;
-		if (isGitIgnored(sourceRoot, resolvedFile)) continue;
+		if (!isTrackedInMainCheckout(resolvedFile, sourceRoot, worktreesRoot)) continue;
 
 		block(
 			`This Bash command would write to ${path.relative(sourceRoot, resolvedFile)}, a tracked path in the main checkout.\n` +

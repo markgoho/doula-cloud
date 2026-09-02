@@ -51,6 +51,16 @@ describe("gate-bash-write", () => {
 		expect(exitCode).toBe(2);
 	});
 
+	test("blocks a write verb chained after `&&`", async () => {
+		const { exitCode } = await invoke(`true && sed -i 's/x/y/' ${TARGET}`);
+		expect(exitCode).toBe(2);
+	});
+
+	test("blocks a write verb chained after `&`", async () => {
+		const { exitCode } = await invoke(`true & cp /tmp/a.txt ${TARGET}`);
+		expect(exitCode).toBe(2);
+	});
+
 	test("allows redirection outside the repo", async () => {
 		const { exitCode } = await invoke("echo hi > /tmp/gate-bash-write-scratch.txt");
 		expect(exitCode).toBe(0);
