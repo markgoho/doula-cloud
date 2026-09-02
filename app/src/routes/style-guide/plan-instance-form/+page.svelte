@@ -32,7 +32,10 @@
 			id: 'pain',
 			type: 'single_select',
 			label: 'What pain relief do you want offered, and when?',
-			options: ['Epidural, as early as it can be given', 'Nothing unless I ask for it'],
+			options: [
+				'Epidural, but only after I have tried the birthing tub and moving around for as long as I can bear it',
+				'Nothing unless I specifically ask a member of the birth team for it'
+			],
 			order: 4
 		},
 		{
