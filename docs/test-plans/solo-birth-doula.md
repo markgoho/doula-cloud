@@ -17,14 +17,14 @@ fixture and is the only practice-side plan that needs no seeded state.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 1.1 | Open `/signup` | The form shows Practice name, Your name, Email, Password | `manual` |
-| 1.2 | Fill all four and press **Create Practice** | `POST /api/staff/signup` succeeds; a Practice, a Staff row, and a membership holding `owner`, `office_manager` and `doula` are created together | `manual` |
-| 1.3 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`, with all seven tiles including the five owner-only ones | `manual` |
+| 1.1 | Open `/signup` | The form shows Practice name, Your name, Email, Password | `automated (signup-form.e2e.ts)` |
+| 1.2 | Fill all four and press **Create Practice** | `POST /api/staff/signup` succeeds; a Practice, a Staff row, and a membership holding `owner`, `office_manager` and `doula` are created together | `automated (signup-form.e2e.ts)` |
+| 1.3 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`, with all seven tiles including the five owner-only ones | `automated (signup-form.e2e.ts)` |
 | 1.3-a | Read the credit balance on **Billing** | `Credit balance: 3`, one `signup_bonus` ledger row of `+3` | `automated (billing.e2e.ts)` |
 
-No spec signs up through the form: every spec provisions its Practice with
-`POST /api/staff/signup` directly, so 1.1–1.3 are the untested seam under the
-whole suite.
+#318 closed the seam this note used to describe: `signup-form.e2e.ts` drives
+the `/signup` screen itself, rather than provisioning through
+`POST /api/staff/signup` directly the way every other spec still does.
 
 ### Stage 2 — Judge the seeded Plan Templates
 
@@ -115,8 +115,8 @@ on 2026-08-22.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 9 |
-| `manual` | 19 |
+| `automated` | 12 |
+| `manual` | 16 |
 | `blocked` | 0 |
 | `missing-feature` | 4 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
 
@@ -147,6 +147,21 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
 That is [#234](https://github.com/markgoho/doula-cloud/issues/234).
+
+### 2026-09-03 — new automated steps ([#318](https://github.com/markgoho/doula-cloud/issues/318))
+
+`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed**
+(29.0s).
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| 1.1 | `signup-form.e2e.ts` | pass |
+| 1.2 | `signup-form.e2e.ts` | pass |
+| 1.3 | `signup-form.e2e.ts` | pass |
+
+**3 newly automated steps: all pass**, bringing the plan's total to 12. The
+2026-08-22 manual walk below is unchanged as a historical record; it walked
+these three steps by hand before `signup-form.e2e.ts` existed.
 
 ### 2026-08-22 — manual walk ([#234](https://github.com/markgoho/doula-cloud/issues/234))
 

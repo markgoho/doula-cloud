@@ -103,7 +103,7 @@ guard, so the page always renders; what differs is whether the API hands over da
 | Step | Route | Expected result | Mark |
 | --- | --- | --- | --- |
 | PR-B1 | `/practices/[practiceId]/staff` | **Holds.** The heading renders, then an error instead of the roster — the `GET` requires Owner | `manual` |
-| PR-B2 | `/practices/[practiceId]/invite` | **Holds on submit.** The form renders; `POST .../invitations` refuses | `manual` |
+| PR-B2 | `/practices/[practiceId]/invite` | **Holds on submit.** The form renders; `POST .../invitations` refuses | `automated (staff-invite-role.e2e.ts)` |
 | PR-B3 | `/practices/[practiceId]/settings/plan-templates` | **Reads through.** `GET` is ungated, `PUT` is Owner. Under ADR-0006 Templates are open to every Staff role, so this is a correct read and a refusal only at **Save** | `manual` |
 | PR-B4 | `/practices/[practiceId]/settings/contract-template` | Same shape, same verdict as PR-B3 | `manual` |
 | PR-B5 | `/practices/[practiceId]/settings/payments` | **Holds, and not at the endpoint.** The screen prints the Practice's Stripe status to her (`Not connected` — [RA-G9](https://github.com/markgoho/doula-cloud/issues/267)), then renders **no Connect button at all**, only `Ask a Practice Owner to connect Stripe.` `POST .../connect` also refuses on a direct call | `manual` |
@@ -117,8 +117,8 @@ ground.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 2 |
-| `manual` | 22 (six of them the permission boundary; 5.2-a added by the walk) |
+| `automated` | 3 |
+| `manual` | 21 (five of them the permission boundary; 5.2-a added by the walk) |
 | `missing-feature` | 6 ([RA-G2](https://github.com/markgoho/doula-cloud/issues/261), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [PR-G6](https://github.com/markgoho/doula-cloud/issues/281), [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251)) |
 
 PR-G1, PR-G2, PR-G3, PR-G4 and PR-G8 are observed inside walkable steps (4.2, 5.2,
@@ -140,6 +140,22 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 8.2-a | `push-notification.e2e.ts` | pass |
 
 **2 automated steps: all pass.**
+
+### 2026-09-03 — new automated step ([#318](https://github.com/markgoho/doula-cloud/issues/318))
+
+`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed**
+(29.0s).
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| PR-B2 | `staff-invite-role.e2e.ts` | pass |
+
+**1 newly automated step: pass**, bringing the plan's total to 3.
+`staff-invite-role.e2e.ts` also drives Stage 1/2's invite-and-accept shape,
+but with the Invitation carrying the `doula` role directly (#316) rather than
+the empty-then-edited-membership shape Stage 1.2 describes, so those two
+steps are left `manual` rather than reconciled here. The 2026-08-23 manual
+walk below is unchanged as a historical record.
 
 ### 2026-08-23 — manual walk ([#237](https://github.com/markgoho/doula-cloud/issues/237))
 

@@ -42,9 +42,9 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 3.1 | Open `/signup` | One screen, four fields, no email confirmation step. This is the strongest leg of her journey | `manual` |
-| 3.2 | Fill Practice name, Your name, Email, Password | "Practice name" asks her to name a business she may not think of as one | `manual` |
-| 3.3 | Press **Create Practice** | `POST /api/staff/signup` creates the Practice, the Staff row, and a membership holding Owner + Admin + Doula in one statement | `manual` |
+| 3.1 | Open `/signup` | One screen, four fields, no email confirmation step. This is the strongest leg of her journey | `automated (signup-form.e2e.ts)` |
+| 3.2 | Fill Practice name, Your name, Email, Password | "Practice name" asks her to name a business she may not think of as one | `automated (signup-form.e2e.ts)` |
+| 3.3 | Press **Create Practice** | `POST /api/staff/signup` creates the Practice, the Staff row, and a membership holding Owner + Admin + Doula in one statement | `automated (signup-form.e2e.ts)` |
 | 3.3-a | Look for anything telling her roles exist, or that she now holds three | Nothing at signup or on the first screen does. The **Staff** screen does, one unprompted click away, and it reads `owner, office_manager, doula` — the schema's word, not **Admin** | `manual` |
 
 **Abandon check**: low risk. Time the whole stage — under a minute is the claim.
@@ -91,8 +91,8 @@ cannot come with her.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 1 |
-| `manual` | 13 |
+| `automated` | 4 |
+| `manual` | 10 |
 | `missing-feature` | 5 steps over 4 gaps ([TB-G1](https://github.com/markgoho/doula-cloud/issues/284), [TB-G2](https://github.com/markgoho/doula-cloud/issues/285), [TB-G5](https://github.com/markgoho/doula-cloud/issues/288), [TB-G6](https://github.com/markgoho/doula-cloud/issues/289)) |
 
 TB-G3 (unexplained credits), TB-G4 (the admin-menu first screen) and TB-G7 (the
@@ -120,6 +120,20 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 5.3 | `birth-plan.e2e.ts` | pass |
 
 **1 automated steps: all pass.**
+
+### 2026-09-03 — new automated steps ([#318](https://github.com/markgoho/doula-cloud/issues/318))
+
+`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed**
+(29.0s).
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| 3.1 | `signup-form.e2e.ts` | pass |
+| 3.2 | `signup-form.e2e.ts` | pass |
+| 3.3 | `signup-form.e2e.ts` | pass |
+
+**3 newly automated steps: all pass**, bringing the plan's total to 4. The
+2026-08-22 manual walk below is unchanged as a historical record.
 
 ### 2026-08-22 — manual walk ([#233](https://github.com/markgoho/doula-cloud/issues/233))
 

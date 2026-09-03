@@ -232,10 +232,12 @@ What the suite covers today, as the marks below were assigned from:
 | `portal-link-landing.e2e.ts` | A signed-in Client following a portal link from another site |
 | `portal-sign-out.e2e.ts` | Client sign-out, including a second tab |
 | `push-notification.e2e.ts` | A push event waking an open thread tab, which refetches the message |
+| `signup-form.e2e.ts` | The `/signup` form itself: fill, submit, land on `/practices/[practiceId]` |
+| `staff-invite-role.e2e.ts` | The Staff invite flow end to end (send through `/invite`, accept through `/accept-invite`) for a Doula who is not the Owner, then a `403` on an Owner-only action from her session |
+| `contract-lifecycle.e2e.ts` | A Contract's full lifecycle: build and send on the Practice side, the Client signing it in the portal, and the Signed PDF coming back |
+| `add-client-visits.e2e.ts` | The Add Client intake form (#497) and an Engagement's Visits section: add a Visit, read it back |
 
-Nothing in the suite exercises: signup through the form, the Add Client form,
-Visits, Contracts per Engagement (build, send, sign), Invoices, the Staff screen,
-the invite flow for Staff, or any refusal by role.
+Nothing in the suite exercises: Invoices, or the Staff roster screen (`/practices/[practiceId]/staff`).
 
 ## Plans
 
@@ -262,18 +264,33 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 
 | Plan | Persona | `automated` | `manual` | `blocked` | `missing-feature` |
 | --- | --- | --- | --- | --- | --- |
-| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 1 | 13 | 0 | 5 |
-| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 9 | 19 | 0 | 4 |
+| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 4 | 10 | 0 | 5 |
+| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 12 | 16 | 0 | 4 |
 | [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 16 | 0 | 7 |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 4 |
-| [employed-doula.md](employed-doula.md) | Priya Raman | 2 | 22 | 0 | 6 |
+| [employed-doula.md](employed-doula.md) | Priya Raman | 3 | 21 | 0 | 6 |
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 17 | 0 | 9 |
 | [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 13 | 0 | 9 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 6 | 18 | 0 | 8 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 1 | 9 | 0 | 9 |
-| **Total** | | **30** | **148** | **0** | **61** |
+| **Total** | | **37** | **141** | **0** | **61** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
+
+**#318 added four specs** (`signup-form.e2e.ts`, `staff-invite-role.e2e.ts`,
+`contract-lifecycle.e2e.ts`, `add-client-visits.e2e.ts`) closing the seams the
+first journey run's [Spec inventory](#spec-inventory) named. The `automated`
+counts above move for evaluator-doula.md, solo-birth-doula.md and
+employed-doula.md, whose Steps tables named an exact step
+(`/signup`'s three steps; PR-B2's role refusal) that a new spec now drives
+identically. `contract-lifecycle.e2e.ts` and `add-client-visits.e2e.ts` cover
+real steps on several other plans too, but this pass did not re-mark them:
+those plans describe the Add Client form and the Contract lifecycle in
+shapes ADR-0017 and #234 have already moved past (a combined
+Client-and-Engagement create with an immediate credit spend; Contract
+signing as untestable), so flipping their marks without rewriting their own
+stale narrative would trade one inaccuracy for another. That reconciliation
+is left for whoever next walks those plans.
 
 ### Gap issues
 
