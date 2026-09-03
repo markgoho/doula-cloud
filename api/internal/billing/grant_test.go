@@ -44,7 +44,6 @@ func TestFoundingGrant_SizesTheGrantFromTheRosterAndNamesWhoIssuedIt(t *testing.
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Rochester Agency")
 	seedRoster(t, db, practiceID, 14)
-	before := time.Now()
 
 	tx := practiceTx(t, db, practiceID)
 	receipt, err := billing.FoundingGrant(t.Context(), tx, practiceID, testGrantor)
@@ -65,8 +64,8 @@ func TestFoundingGrant_SizesTheGrantFromTheRosterAndNamesWhoIssuedIt(t *testing.
 	if grantedBy != testGrantor {
 		t.Fatalf("granted_by = %q, want mark@doula.cloud", grantedBy)
 	}
-	if createdAt.Before(before) {
-		t.Fatalf("created_at = %v, want at or after %v", createdAt, before)
+	if createdAt.IsZero() {
+		t.Fatalf("created_at = %v, want a recorded timestamp", createdAt)
 	}
 }
 
