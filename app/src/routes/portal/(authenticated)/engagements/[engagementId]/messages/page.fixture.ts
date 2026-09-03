@@ -3,11 +3,13 @@
  * (#595).
  *
  * `RecordDetail`'s title ("Messages") is static across load states (see
- * the route's own markup), so this is measured the moment it mounts --
- * same as `messages`'s Staff-side sibling would be. A message body is
- * exactly the free text #530's URL was found in: a Practice paste-able
- * referral link, this time typed by the Client rather than a Staff
- * member.
+ * the route's own markup), so `readyText` does not gate on the fetch the
+ * way the approval screen's own does -- `mountInFrame`'s webfont wait
+ * (`ensureFontLoaded`, `style-guide/continuum.ts`) is what lets the
+ * thread's own `onMount` load resolve before the sweep measures anyway.
+ * A message body is exactly the free text #530's URL was found in: a
+ * Practice paste-able referral link, this time typed by the Client
+ * rather than a Staff member.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Message } from '#lib/components/organisms/MessageThread.svelte';
