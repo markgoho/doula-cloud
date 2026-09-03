@@ -157,6 +157,14 @@
 			min-inline-size: 0;
 		}
 
+		/* Capped at --measure, not --form-max (#609): the column is sized
+		   for a field, but the intro is read as prose, and --form-max
+		   alone would run it to roughly 90ch. No margin-inline: auto --
+		   the intro stays flush left with the heading above it. */
+		.intro {
+			max-inline-size: var(--measure);
+		}
+
 		legend {
 			padding: 0;
 			margin-block-end: var(--space-4);

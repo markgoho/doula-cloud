@@ -45,4 +45,16 @@ describe('Text.svelte', () => {
 
 		expect(container.querySelector('p.step-label.tone-muted')).toBeVisible();
 	});
+
+	it('does not cap the line length unless measure is asked for', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelector('p.measure')).toBeNull();
+	});
+
+	it('caps at --measure when measure is set (#609)', async () => {
+		const { container } = await setup({ measure: true });
+
+		expect(container.querySelector('p.measure')).toBeVisible();
+	});
 });

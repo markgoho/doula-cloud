@@ -175,6 +175,7 @@
 				<Heading level={1} variant="page" text="Add a Client" />
 				<Text
 					tone="variant"
+					measure
 					text="Work at this Practice reaches you as an Offer, so there is no Client to search for or add here. To take on Clients of your own, set up a Practice."
 				/>
 				<cluster-l space="var(--space-3)" align="center">
@@ -192,6 +193,7 @@
 				<Heading level={1} variant="page" text="Find a Client" />
 				<Text
 					tone="variant"
+					measure
 					text="Search for a Client already on file before adding a new one. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
 				/>
 
