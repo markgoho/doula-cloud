@@ -95,3 +95,20 @@
 {#if decideError}
 	<Notice message={decideError} variant="error" />
 {/if}
+
+<style>
+	@layer components {
+		/*
+		 * #595: `terms` is a Practice's own free text about an Offer, and
+		 * #530 already found a bare pasted URL -- no space or hyphen to
+		 * break on -- pushing an unconstrained `dd` past its frame.
+		 * `DescriptionList`'s own value column carries this exact pairing
+		 * for the same reason (its own comment); this `dl` predates that
+		 * molecule and had never been measured with hostile content.
+		 */
+		dd {
+			max-inline-size: var(--measure);
+			overflow-wrap: anywhere;
+		}
+	}
+</style>
