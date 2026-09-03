@@ -272,8 +272,13 @@
 			color: var(--color-on-surface-muted);
 		}
 
+		/* Capped at --measure, not --form-max (#609): the column is sized
+		   for a field, but a hint is read as a sentence, and --form-max
+		   alone would run it to roughly 90ch. No margin-inline: auto --
+		   the hint stays flush left with the question above it. */
 		.hint {
 			margin: var(--space-2) 0 0;
+			max-inline-size: var(--measure);
 			color: var(--color-on-surface-muted);
 			font-size: var(--text-body-sm-size);
 		}

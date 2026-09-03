@@ -404,7 +404,7 @@
 				<div bind:this={pageStart} id="intake-heading" tabindex="-1">
 					<Heading level={1} variant="page" text={questionText()} />
 				</div>
-				<Text tone="variant" text="Either one is enough. The other can be added later." />
+				<Text tone="variant" measure text="Either one is enough. The other can be added later." />
 				<form onsubmit={handleContinueFromContact} novalidate>
 					<stack-l space="var(--space-5)">
 						<LabeledField id={phoneId} label="Phone">
@@ -434,6 +434,7 @@
 				</div>
 				<Text
 					tone="variant"
+					measure
 					text="This is what separates two Clients with the same name, next year and the year after. It is the last thing asked before the record is saved."
 				/>
 				<form onsubmit={handleSave} novalidate>
@@ -461,6 +462,7 @@
 				</div>
 				<Text
 					tone="variant"
+					measure
 					text="Nothing has been saved. {matches.length === 1
 						? 'One record'
 						: `${matches.length} records`} at this Practice matched what you typed."
@@ -513,6 +515,7 @@
 				</div>
 				<Text
 					tone="variant"
+					measure
 					text="{displayName(reviewMatch)}'s record is kept. What was typed applies as these changes to it."
 				/>
 				<DescriptionList

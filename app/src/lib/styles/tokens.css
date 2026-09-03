@@ -231,7 +231,17 @@
 	   1216px would spend a quarter of the ramp and no more, whatever
 	   monitor it is on (#531, removed on #541). A Template now states its
 	   own choice on its center-l -- --measure for prose, --form-max for a
-	   form, or none where more room buys more content. */
+	   form, or none where more room buys more content.
+
+	   A form column can hold both: --form-max sizes the column for its
+	   fields, but a form also carries prose (an intro, a hint) that reads
+	   as a sentence rather than a control, and --form-max alone runs it to
+	   roughly 90ch -- past the 45-75ch band --measure targets. That prose
+	   caps at --measure too, on the element itself rather than on the
+	   column's own center-l: FormPage's .intro, QuestionPage's .hint, and
+	   Text's opt-in `measure` prop all set max-inline-size directly, with
+	   no margin-inline: auto, so the cap narrows without re-centering the
+	   prose away from the heading and fields beside it (#609). */
 	/* The gutter reads the room its own page column has, not the window:
 	   `cqi` is 1% of the nearest ancestor container's inline size, and the
 	   app shell declares one on `body` (#540). 16px of gutter until the

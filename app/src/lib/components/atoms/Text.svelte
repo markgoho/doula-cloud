@@ -12,11 +12,19 @@
 		text: string;
 		step?: 'body' | 'body-sm' | 'label' | 'meta';
 		tone?: 'default' | 'variant' | 'muted';
+		/**
+		 * Caps at --measure, flush left (#609). Opt-in: most callers sit in
+		 * a column already sized for the job (--form-max, --page-max, a
+		 * table cell), and a default cap would narrow those uninvited. Set
+		 * this only where the text is read as continuous prose in a column
+		 * wider than --measure -- a lede, an intro.
+		 */
+		measure?: boolean;
 	}
 
-	let { text, step = 'body', tone = 'default' }: Properties = $props();
+	let { text, step = 'body', tone = 'default', measure = false }: Properties = $props();
 
-	const classes = $derived(`step-${step} tone-${tone}`);
+	const classes = $derived(`step-${step} tone-${tone}${measure ? ' measure' : ''}`);
 </script>
 
 <p class={classes}>{text}</p>
@@ -66,6 +74,10 @@
 
 		.tone-muted {
 			color: var(--color-on-surface-muted);
+		}
+
+		.measure {
+			max-inline-size: var(--measure);
 		}
 	}
 </style>
