@@ -414,7 +414,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: ./.github/actions/gcp-auth
         with:
           project_id: doula-cloud
           workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
@@ -493,7 +493,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: ./.github/actions/gcp-auth
         with:
           project_id: doula-cloud
           workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
@@ -616,7 +616,7 @@ jobs:
           VITE_VAPID_PUBLIC_KEY: BCy44BWTeiwIi5f7-7O5PC7W8NwCssG6pl0_MlLGZYOxcP88qN5qcl4H1bMhRgsOZdssZ8PXc5R1wGhj8sPbaZs
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: ./.github/actions/gcp-auth
         with:
           project_id: doula-cloud
           workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
