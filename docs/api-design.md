@@ -146,6 +146,8 @@ Every public unauthenticated endpoint that existed when this landed, and its dis
 | `POST /api/staff/verify-email` | `token` digest 10/hr, IP 50/hr | #613. Pre-account, spends a mailed link; keyed on the link's own token (`ratelimit.HashedJSONFieldRule`) since there is no Bearer token or session yet. |
 | `POST /api/staff/password-reset/request` | `email` 5/hr, IP 20/hr | #613, same sizing #166 reserved below — public, keyed on the posted address (`ratelimit.JSONFieldRule`). |
 | `POST /api/staff/password-reset` | `token` digest 10/hr, IP 50/hr | #613. Same shape as verify-email's spend endpoint. |
+| `POST /api/staff/mfa-recovery/spend` | `email` digest 10/hr, IP 50/hr | #615. Public, pre-account — a locked-out person cannot sign in first (Identity Platform challenges for the second factor on every sign-in once one exists). Keyed on the posted address rather than the code itself: #615's AC asks explicitly for a per-account limit on failed attempts, not only per IP, because the issued code is 8 decimal digits (`authtoken.MintCode`) read aloud over a phone call — brute-forceable across the full `10^8` keyspace without this, unlike the 128-bit link tokens `token` digest keys elsewhere in this table. |
+| `POST /api/staff/mfa-recovery/saved-codes/rotate` | Session digest 10/hr, IP 50/hr | #615. Signed-in self-service re-request, same shape as `verify-email/request`: revokes and re-mints a sole Owner's whole saved-code set, so it gets the same self-inflicted-spam guard that pure state reads (`PUT /api/staff/work-state`) do not need. |
 
 Deliberately not limited:
 

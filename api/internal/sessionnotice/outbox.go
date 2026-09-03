@@ -52,6 +52,14 @@ func sessionRevokedText() string {
 		"If you didn't expect this, reply to this email.\n"
 }
 
+const mfaRecoveryClearedSubject = "Doula Cloud: your two-factor authentication was reset"
+
+func mfaRecoveryClearedText() string {
+	return "Hello,\n\n" +
+		"The two-factor authenticator on your Doula Cloud account was removed as part of an account-recovery request, and every one of your sessions was signed out.\n\n" +
+		"You'll need to sign in with your password and set up a new authenticator. If you didn't request this, reply to this email right away.\n"
+}
+
 // QueueNewSignInIfDue records identityUID's sign-in at now as a "new
 // sign-in" notice, unless identityUID names no Staff member (a Client
 // Portal sign-in -- this is Platform voice, Staff only) or a notice for
@@ -154,6 +162,24 @@ func QueueSessionRevoked(ctx context.Context, tx *sql.Tx, identityUID string) er
 	return nil
 }
 
+// QueueMFARecoveryCleared records that identityUID's TOTP enrolment was
+// just cleared by one of #615's three recovery paths -- a distinct
+// notice from QueueSessionRevoked's "sessions ended", queued alongside
+// it rather than instead of it, because the two facts (sessions ended,
+// enrolment cleared) are both individually notice-worthy per #615's AC.
+// Same one-pending-row race guard as QueueSessionRevoked.
+func QueueMFARecoveryCleared(ctx context.Context, tx *sql.Tx, identityUID string) error {
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO session_notice_outbox (identity_uid, kind) VALUES ($1, 'mfa_recovery_cleared')
+		 ON CONFLICT (identity_uid) WHERE status = 'pending' AND kind = 'mfa_recovery_cleared' DO NOTHING`,
+		identityUID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("sessionnotice: queue mfa-recovery-cleared notice: %w", err)
+	}
+	return nil
+}
+
 // Worker sends due session_notice_outbox rows -- the Cloud-Scheduler-
 // driven half of ADR-0010's outbox (outbox.ProcessPending owns the claim/
 // retry/dead-letter machinery every mail kind shares). No AppBaseURL:
@@ -223,9 +249,12 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pen
 	}
 
 	var subject, text string
-	if r.kind == "session_revoked" {
+	switch r.kind {
+	case "session_revoked":
 		subject, text = sessionRevokedSubject, sessionRevokedText()
-	} else {
+	case "mfa_recovery_cleared":
+		subject, text = mfaRecoveryClearedSubject, mfaRecoveryClearedText()
+	default:
 		subject, text = newSignInSubject, newSignInText()
 	}
 

@@ -16,7 +16,7 @@ import (
 // should call.
 type OutboxType string
 
-// The nine outbox types a nudge can target, one per process-* endpoint
+// The ten outbox types a nudge can target, one per process-* endpoint
 // main.go mounts (ADR-0010, ADR-0013).
 const (
 	PortalInvite      OutboxType = "portal-invite"
@@ -28,6 +28,7 @@ const (
 	EngagementOffer   OutboxType = "engagement-offer"
 	EngagementRequest OutboxType = "engagement-request"
 	SiteBuild         OutboxType = "site-build"
+	MFARecoveryCode   OutboxType = "mfa-recovery-code"
 )
 
 // delay is how long a nudge waits before it fires, per outbox type.

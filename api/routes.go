@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/payments"
@@ -80,6 +81,7 @@ type Deps struct {
 	PageVerifier            sitebuild.Verifier
 	StaffTokenMailWorker    authmail.TokenMailWorker
 	StaffEmailChangeWorker  authmail.EmailChangeWorker
+	MFARecoveryMailWorker   mfarecoverymail.Worker
 
 	NudgeEnqueuer   tasknudge.Enqueuer
 	ExpectedOrigins []string

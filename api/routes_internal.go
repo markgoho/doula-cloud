@@ -6,11 +6,13 @@ import (
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/sitebuild"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 )
 
@@ -53,6 +55,11 @@ func registerInternalRoutes(mux *http.ServeMux, d Deps) {
 	// above.
 	mux.Handle("POST /api/internal/notifications/process-staff-token-mail-outbox", authmail.ProcessTokenMailOutboxHandler(d.DB, d.StaffTokenMailWorker, d.WorkerSecret))
 	mux.Handle("POST /api/internal/notifications/process-staff-email-change-outbox", authmail.ProcessEmailChangeOutboxHandler(d.DB, d.StaffEmailChangeWorker, d.WorkerSecret))
+	// #615's Owner-vouched recovery code outbox, on the same X-Internal-
+	// Secret guard and Cloud Scheduler cadence, also nudged by Cloud
+	// Tasks (tasknudge.MFARecoveryCode) since a person is waiting on the
+	// phone for this one, unlike #613's two token mails.
+	mux.Handle("POST /api/internal/notifications/process-mfa-recovery-outbox", mfarecoverymail.ProcessOutboxHandler(d.DB, d.MFARecoveryMailWorker, d.WorkerSecret))
 	// #443's two site endpoints, on the same X-Internal-Secret shape and
 	// under /api/internal/site rather than /notifications, because
 	// neither of them notifies anybody. process-build-outbox turns
@@ -75,4 +82,11 @@ func registerInternalRoutes(mux *http.ServeMux, d Deps) {
 	// total -- so this is an operator endpoint that records who issued
 	// them, not a screen and not an ad-hoc INSERT.
 	mux.Handle("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(d.DB, d.WorkerSecret))
+	// #605's support path: an operator clears a sole Owner's enrolment
+	// after a live video call and government-ID match against her
+	// Practice's Stripe Connect identity (ADR-0007), per
+	// docs/runbooks/mfa-recovery-support.md. Same guard, same shape as
+	// founding-grants above -- an operator endpoint, deliberately not a
+	// screen (#615's AC: "no product surface").
+	mux.Handle("POST /api/internal/staffauth/mfa-recovery/support-clear", staffauth.SupportClearHandler(d.AccountManager, d.DB, d.WorkerSecret))
 }

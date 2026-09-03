@@ -203,6 +203,15 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
+	// The founding Owner is, by construction, this brand-new Practice's
+	// only Owner -- #615's AC: saved recovery codes mint on the
+	// Membership event that makes someone a Practice's sole Owner, and a
+	// signup is that event too, not only a later promotion.
+	if err := reconcileSavedCodes(ctx, tx, staffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
 	// The first thing ever known about where this person works (#415).
 	// Written after the Membership rather than beside the staff INSERT
 	// because staff_work_state_events_practice_visibility (00043) admits

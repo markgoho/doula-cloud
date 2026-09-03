@@ -50,6 +50,15 @@ type AccountManager interface {
 	// state was. A Staff member who changes address goes back through
 	// verification the same way self-signup does.
 	SetEmail(ctx context.Context, uid, email string) error
+	// ClearSecondFactors removes every MFA factor uid has enrolled --
+	// #615's mechanism note: MFASettings(MultiFactorSettings{}) is a
+	// whole-list replace, there is no per-factor delete, and a Staff
+	// member is never expected to hold more than the one TOTP enrolment
+	// this exists to clear. Every recovery path's spend calls this, never
+	// accounts.mfaEnrollment:withdraw, which #605 ruled out -- it demands
+	// the end user's own ID token and cannot be driven by this service
+	// account.
+	ClearSecondFactors(ctx context.Context, uid string) error
 }
 
 var _ AccountManager = (*FirebaseVerifier)(nil)
@@ -114,6 +123,22 @@ func (v *FirebaseVerifier) SetEmail(ctx context.Context, uid, email string) erro
 	if _, err := v.client.UpdateUser(ctx, uid, (&auth.UserToUpdate{}).Email(email).EmailVerified(false)); err != nil {
 		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
 		return fmt.Errorf("authn: set email: %w", err)
+	}
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	return nil
+}
+
+// ClearSecondFactors removes every MFA factor uid holds via the Admin
+// SDK. MFASettings is a whole-list replace -- an empty
+// MultiFactorSettings{} is the documented way to clear every enrolled
+// factor at once (#605's mechanism note), and it is the only admin route
+// there is: accounts.mfaEnrollment:withdraw needs the end user's own ID
+// token.
+func (v *FirebaseVerifier) ClearSecondFactors(ctx context.Context, uid string) error {
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	if _, err := v.client.UpdateUser(ctx, uid, (&auth.UserToUpdate{}).MFASettings(auth.MultiFactorSettings{})); err != nil {
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		return fmt.Errorf("authn: clear second factors: %w", err)
 	}
 	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
 	return nil

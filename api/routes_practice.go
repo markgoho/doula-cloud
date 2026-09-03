@@ -118,6 +118,13 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
 		"EndAllSessions ends whatever remains and no-ops once already ended, and QueueSessionRevoked's own ON CONFLICT ... WHERE status = 'pending' DO NOTHING dedupes the notification; a retry can't double-notify",
 		staffauth.Middleware(d.DB)(staffauth.EndSessionsHandler(d.NudgeEnqueuer)))
+	// #615: an Owner vouching for a locked-out colleague. Replayable, not
+	// Exempt -- unlike EndSessions, a bare retry here is not a no-op: it
+	// would invalidate the just-minted code (authtoken.MintCode's own
+	// re-request rule) and queue a second email before the Owner has
+	// necessarily read the first.
+	ir.Replayable("POST /api/practices/{practiceId}/staff/{staffId}/mfa-recovery/vouch",
+		staffauth.Middleware(d.DB)(idempotency.Wrap(staffauth.VouchHandler(d.Verifier, d.NudgeEnqueuer))))
 	// Credit balance and ledger: Owner and Admin only (ADR-0008).
 	g.Get("/api/practices/{practiceId}/billing", ownerAndAdmin, billing.GetBalanceHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/billing/purchases",

@@ -29,6 +29,12 @@ type Verifier struct {
 	// Err, when set, is the error VerifyIDToken returns instead of a
 	// verified identity.
 	Err error
+
+	// AuthTime is the sign-in time VerifyIDToken reports. Zero models a
+	// stale token for #615's step-up re-auth tests (staffauth.
+	// RequireRecentAuth); a test proving the fresh-token case sets it to
+	// time.Now().
+	AuthTime time.Time
 }
 
 // Verifier satisfies authn.Verifier by value, so tests can pass
@@ -41,7 +47,7 @@ func (v Verifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedTok
 	if v.Err != nil {
 		return nil, v.Err
 	}
-	return &authn.VerifiedToken{UID: v.UID, Email: v.Email}, nil
+	return &authn.VerifiedToken{UID: v.UID, Email: v.Email, AuthTime: v.AuthTime}, nil
 }
 
 // SeedSession creates a live session for uid and returns the value its

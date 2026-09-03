@@ -109,6 +109,7 @@ func TestDelay(t *testing.T) {
 		tasknudge.StaffInvite,
 		tasknudge.EngagementOffer,
 		tasknudge.EngagementRequest,
+		tasknudge.MFARecoveryCode,
 	} {
 		if got := tasknudge.Delay(outboxType); got != 0 {
 			t.Fatalf("Delay(%s) = %v, want no wait", outboxType, got)

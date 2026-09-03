@@ -158,4 +158,61 @@ func TestFakeAccountManager_ErrShortCircuitsEveryMethod(t *testing.T) {
 	if err := f.SetEmail(t.Context(), "uid-6", "x@example.com"); !errors.Is(err, wantErr) {
 		t.Fatalf("SetEmail err = %v, want %v", err, wantErr)
 	}
+	if err := f.ClearSecondFactors(t.Context(), "uid-6"); !errors.Is(err, wantErr) {
+		t.Fatalf("ClearSecondFactors err = %v, want %v", err, wantErr)
+	}
+}
+
+func TestFakeAccountManager_EnrollTOTPThenClearSecondFactors(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	f.Seed("uid-8", "person@example.com", true)
+
+	if f.HasSecondFactor("uid-8") {
+		t.Fatal("HasSecondFactor = true before EnrollTOTP, want false")
+	}
+	f.EnrollTOTP("uid-8")
+	if !f.HasSecondFactor("uid-8") {
+		t.Fatal("HasSecondFactor = false after EnrollTOTP, want true")
+	}
+
+	if err := f.ClearSecondFactors(t.Context(), "uid-8"); err != nil {
+		t.Fatalf("ClearSecondFactors: %v", err)
+	}
+	if f.HasSecondFactor("uid-8") {
+		t.Fatal("HasSecondFactor = true after ClearSecondFactors, want false")
+	}
+}
+
+func TestFakeAccountManager_EnrollTOTPAndHasSecondFactor_UnknownUIDNoop(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	f.EnrollTOTP("nobody") // must not panic on a uid with no seeded account
+	if f.HasSecondFactor("nobody") {
+		t.Fatal("HasSecondFactor = true for an unseeded uid, want false")
+	}
+}
+
+func TestFakeAccountManager_ClearSecondFactors_UnknownUIDNotFound(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	if err := f.ClearSecondFactors(t.Context(), "nobody"); !errors.Is(err, authn.ErrAccountNotFound) {
+		t.Fatalf("err = %v, want ErrAccountNotFound", err)
+	}
+}
+
+// TestFakeAccountManager_ClearSecondFactorsErr_TakesPrecedenceOverErr
+// mirrors TestFakeAccountManager_SetEmailErr_TakesPrecedenceOverErr: an
+// isolated failure of ClearSecondFactors specifically, without disturbing
+// GetAccountByEmail -- what #615's spend-handler tests need to prove
+// clearEnrolmentAndRecord's own failure branch.
+func TestFakeAccountManager_ClearSecondFactorsErr_TakesPrecedenceOverErr(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	f.Seed("uid-9", "person@example.com", true)
+	wantErr := errors.New("admin sdk rejected the write")
+	f.ClearSecondFactorsErr = wantErr
+
+	if err := f.ClearSecondFactors(t.Context(), "uid-9"); !errors.Is(err, wantErr) {
+		t.Fatalf("ClearSecondFactors err = %v, want %v", err, wantErr)
+	}
+	if _, err := f.GetAccountByEmail(t.Context(), "person@example.com"); err != nil {
+		t.Fatalf("GetAccountByEmail err = %v, want nil -- ClearSecondFactorsErr must not disturb other methods", err)
+	}
 }

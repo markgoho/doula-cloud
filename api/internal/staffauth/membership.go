@@ -244,6 +244,15 @@ func UpdateMembershipHandler() http.Handler {
 			}
 		}
 
+		// #615's AC: an edit that adds or drops 'owner' can make the
+		// target a sole Owner, or end someone else's sole-Owner status by
+		// giving a Practice a second one.
+		if err := reconcileOwnersAtPractice(r.Context(), tx, practiceID, targetStaffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		updated := UpdateMembershipResponse{StaffID: targetStaffID, Roles: next.roles, EmploymentType: next.employmentType}
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
@@ -350,6 +359,16 @@ func RemoveMembershipHandler() http.Handler {
 			`DELETE FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
 			practiceID, targetStaffID,
 		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// #615's AC: removing an Owner can leave a remaining co-Owner
+		// newly sole, and can leave the removed person (an Owner
+		// elsewhere) needing reconciliation herself -- run after the
+		// DELETE so isSoleOwnerAnywhere no longer sees this Membership.
+		if err := reconcileOwnersAtPractice(r.Context(), tx, practiceID, targetStaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, MsgInternalError, http.StatusInternalServerError)
 			return

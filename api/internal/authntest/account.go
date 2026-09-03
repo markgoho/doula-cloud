@@ -15,6 +15,7 @@ type account struct {
 	email         string
 	emailVerified bool
 	password      string
+	mfaEnrolled   bool
 }
 
 // FakeAccountManager is the test double for authn.AccountManager --
@@ -34,6 +35,12 @@ type FakeAccountManager struct {
 	// ChangeEmailHandler's own SetEmail failure branch, distinct from a
 	// failure of the GetAccount call that precedes it.
 	SetEmailErr error
+
+	// ClearSecondFactorsErr, when set, is returned by ClearSecondFactors
+	// specifically, without disturbing GetAccountByEmail -- how #615's
+	// spend-handler tests prove clearEnrolmentAndRecord's own failure
+	// branch, distinct from the account-lookup failure that precedes it.
+	ClearSecondFactorsErr error
 }
 
 var _ authn.AccountManager = (*FakeAccountManager)(nil)
@@ -60,6 +67,28 @@ func (f *FakeAccountManager) Password(uid string) string {
 		return a.password
 	}
 	return ""
+}
+
+// EnrollTOTP marks uid as holding a TOTP enrolment, as though she had
+// completed Identity Platform's client-side enrolment flow -- #615's
+// tests seed this so a recovery spend has something to clear.
+func (f *FakeAccountManager) EnrollTOTP(uid string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if a, ok := f.accounts[uid]; ok {
+		a.mfaEnrolled = true
+	}
+}
+
+// HasSecondFactor reports whether uid currently holds an enrolled
+// factor, so a test can assert ClearSecondFactors actually cleared it.
+func (f *FakeAccountManager) HasSecondFactor(uid string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if a, ok := f.accounts[uid]; ok {
+		return a.mfaEnrolled
+	}
+	return false
 }
 
 // GetAccount implements authn.AccountManager.
@@ -137,5 +166,23 @@ func (f *FakeAccountManager) SetEmail(_ context.Context, uid, email string) erro
 	}
 	a.email = email
 	a.emailVerified = false
+	return nil
+}
+
+// ClearSecondFactors implements authn.AccountManager.
+func (f *FakeAccountManager) ClearSecondFactors(_ context.Context, uid string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ClearSecondFactorsErr != nil {
+		return f.ClearSecondFactorsErr
+	}
+	if f.Err != nil {
+		return f.Err
+	}
+	a, ok := f.accounts[uid]
+	if !ok {
+		return authn.ErrAccountNotFound
+	}
+	a.mfaEnrolled = false
 	return nil
 }
