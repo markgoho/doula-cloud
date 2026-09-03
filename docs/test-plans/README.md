@@ -232,7 +232,7 @@ What the suite covers today, as the marks below were assigned from:
 | `portal-link-landing.e2e.ts` | A signed-in Client following a portal link from another site |
 | `portal-sign-out.e2e.ts` | Client sign-out, including a second tab |
 | `push-notification.e2e.ts` | A push event waking an open thread tab, which refetches the message |
-| `signup-form.e2e.ts` | The `/signup` form itself: fill, submit, land on `/practices/[practiceId]`, then a fresh `/login` with the same credentials |
+| `signup-form.e2e.ts` | The `/signup` form itself: fill, submit, land on `/practices/[practiceId]` |
 | `staff-invite-role.e2e.ts` | The Staff invite flow end to end (send through `/invite`, accept through `/accept-invite`) for a Doula who is not the Owner, then a `403` on an Owner-only action from her session |
 | `contract-lifecycle.e2e.ts` | A Contract's full lifecycle: build and send on the Practice side, the Client signing it in the portal, and the Signed PDF coming back |
 | `add-client-visits.e2e.ts` | The Add Client intake form (#497) and an Engagement's Visits section: add a Visit, read it back |
