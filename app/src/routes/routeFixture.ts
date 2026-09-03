@@ -56,6 +56,17 @@ export interface RouteFixture {
 	*/
 	readonly respond?: (path: string) => Response;
 	/**
+	`page.data` for the mocked `$app/state` -- what an ancestor
+	`+layout.ts`'s `load` merged in (#595). Distinct from `props`: a
+	route's OWN `+page.ts`/`+page.server.ts` result arrives as a `data`
+	component prop, but `portal/(authenticated)/engagements/
+	[engagementId]/+layout.ts` hands its result down through
+	`page.data` instead, read via `$app/state` rather than a prop. The
+	four routes under that layout are the only ones that need this; every
+	other route omits it.
+	*/
+	readonly pageData?: Readonly<Record<string, unknown>>;
+	/**
 	The screen's own level-1 heading, matched by role. It must be on the page before a measurement is taken. A route
 	that loads in `onMount` renders a Skeleton first, and sweeping that
 	measures the loading state rather than the screen -- an honest wait, not
