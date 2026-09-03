@@ -36,8 +36,10 @@ Four specs carry it, all in the unit suite, all blocking:
   gives their endpoints a cursor; the spec fails if one is left on that list
   after it starts paginating.
 - `app/src/lib/components/organisms/DataTable.performance.svelte.spec.ts` —
-  a row costs at most six elements, and mount cost stays linear in the row
-  count. A ratio, never a millisecond budget.
+  a row costs at most six elements, and reads the row array a fixed, small
+  number of times rather than reading the rest of the list per row. A read
+  count, never a millisecond budget — [#489](https://github.com/markgoho/doula-cloud/issues/489)
+  replaced the last wall-clock assertion in this file after it flaked on CI.
 - `app/src/lib/components/atoms/Skeleton.layoutShift.svelte.spec.ts` — a
   skeleton reserves the space the content it stands in for will occupy.
 
