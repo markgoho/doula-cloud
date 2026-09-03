@@ -82,8 +82,16 @@ func main() {
 		log.Fatalf("init verifier: %v", err)
 	}
 
+	// WithJSONReads: the client's default Reader downloads via the XML API
+	// (a bare GET at the bucket/object path), which fake-gcs-server's e2e
+	// stack never serves -- confirmed by #318's Contract-lifecycle spec,
+	// the suite's first exercise of this read path at all: Put succeeded
+	// and the object was genuinely there (Attrs and List both found it),
+	// but NewReader still 404'd until reads went through the JSON media
+	// endpoint instead. Real GCS serves both, so this only ever mattered
+	// for the emulator.
 	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
-	gcsClient, err := storage.NewClient(context.Background())
+	gcsClient, err := storage.NewClient(context.Background(), storage.WithJSONReads())
 	if err != nil {
 		// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
 		log.Fatalf("init GCS client: %v", err)
