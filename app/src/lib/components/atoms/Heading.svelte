@@ -45,6 +45,28 @@
 			margin: 0;
 			font-family: var(--font-family-base);
 			color: var(--color-on-surface);
+			/*
+			 * #595: a hub's title interpolates a Practice's own name
+			 * (`RecordDetail`/`OverviewHub`'s `Welcome to ${practiceName}`),
+			 * and a Practice's registered name is one this repo has already
+			 * seen typed as a bare URL (#530) -- no space or hyphen for a
+			 * browser to break on. Every other free-text surface this repo
+			 * ships (`Link`, `DataTable`, `DescriptionList`, `ContractView`)
+			 * already carries this same rule; a heading had simply never
+			 * been measured with hostile content before this ticket's sweep
+			 * found it 600px past its 320px frame.
+			 *
+			 * `min-inline-size: 0` travels with it for the same reason
+			 * `Link.svelte`'s own comment gives: `RecordDetail`/`OverviewHub`
+			 * render the level-1 heading as a `cluster-l` flex item beside an
+			 * optional actions region, and a flex item's automatic minimum
+			 * size is its min-content size -- the URL's full width -- which
+			 * `overflow-wrap` alone cannot shrink past. Harmless where a
+			 * heading is not a flex item at all: this only changes a flex
+			 * item's own floor.
+			 */
+			overflow-wrap: anywhere;
+			min-inline-size: 0;
 		}
 
 		.variant-page {

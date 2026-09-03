@@ -89,7 +89,14 @@ import type { RouteFixture } from './routeFixture.js';
  */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
-	url: new URL('https://example.test/')
+	url: new URL('https://example.test/'),
+	// What an ancestor `+layout.ts` merged into `page.data` (#595) -- the
+	// four routes under `portal/(authenticated)/engagements/
+	// [engagementId]/+layout.ts` read `page.data.practiceName` via
+	// `$app/state` rather than through a component `data` prop, so they
+	// need this set alongside `params`/`url`. Every other route's own
+	// `data` arrives through `fixture.props` instead and leaves this `{}`.
+	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
@@ -117,7 +124,20 @@ vi.mock('#lib/api.js', () => ({
 	apiFetch,
 	apiFetchWithSession,
 	apiBaseURL: () => 'https://api.example.test',
-	apiErrorMessage: (response: Response) => Promise.resolve(`HTTP ${response.status}`)
+	apiErrorMessage: (response: Response) => Promise.resolve(`HTTP ${response.status}`),
+	// `/` and both login screens call this directly (#lib/api.js's own
+	// doc comment) rather than through apiFetchWithSession -- mirrored
+	// here rather than re-exported from the real module, since the real
+	// one closes over the real apiFetch, not this file's mock.
+	probeSession: async <Session,>(path: string): Promise<Session | undefined> => {
+		try {
+			const response = await apiFetch(path);
+			if (!response.ok) return undefined;
+			return (await response.json()) as Session;
+		} catch {
+			return undefined;
+		}
+	}
 }));
 
 /*
@@ -161,57 +181,14 @@ const fixtures = new Map(
 );
 
 /*
- * Routes with no fixture yet, every one of them named. This is the debt
- * #570 did not pay and it is deliberately a list rather than a filter: a
- * new route joining the repo with no fixture and no entry here fails
- * `every route is either swept or named` below, so the sweep's coverage
- * cannot quietly stop growing with the app. #595 empties it.
- *
- * The two that are NOT here are the two this map has already measured by
- * hand: the approval screen (#521's baseline, 93px past its edge) and the
- * invoice list (#551's reach trial, holding everywhere). They are the
- * ticket's own test of whether this instrument agrees with the harnesses
- * that measured them.
+ * Routes with no fixture yet, every one of them named. This is
+ * deliberately a list rather than a filter: a new route joining the repo
+ * with no fixture and no entry here fails `every route is either swept
+ * or named` below, so the sweep's coverage cannot quietly stop growing
+ * with the app.
  */
 const UNSWEPT_ON = '#595';
-const UNSWEPT: readonly string[] = [
-	'',
-	'(signed-out)/accept-invite',
-	'(signed-out)/forgot-password',
-	'(signed-out)/login',
-	'(signed-out)/offers/[offerId]',
-	'(signed-out)/reset-password',
-	'(signed-out)/signup',
-	'(signed-out)/verify-email',
-	'account',
-	'demo',
-	'demo/playwright',
-	'portal/(authenticated)/engagements/[engagementId]',
-	'portal/(authenticated)/engagements/[engagementId]/birth-plan',
-	'portal/(authenticated)/engagements/[engagementId]/contract',
-	'portal/(authenticated)/engagements/[engagementId]/messages',
-	'portal/(signed-out)/accept-invite',
-	'portal/(signed-out)/login',
-	'practices/[practiceId]',
-	'practices/[practiceId]/billing',
-	'practices/[practiceId]/clients',
-	'practices/[practiceId]/clients/[clientId]',
-	'practices/[practiceId]/clients/[clientId]/edit',
-	'practices/[practiceId]/clients/[clientId]/engagement-requests/new',
-	'practices/[practiceId]/clients/new',
-	'practices/[practiceId]/clients/search',
-	'practices/[practiceId]/engagement-requests',
-	'practices/[practiceId]/engagements/[engagementId]',
-	'practices/[practiceId]/invite',
-	'practices/[practiceId]/offers',
-	'practices/[practiceId]/settings',
-	'practices/[practiceId]/settings/client-fields',
-	'practices/[practiceId]/settings/contract-template',
-	'practices/[practiceId]/settings/payments',
-	'practices/[practiceId]/settings/plan-templates',
-	'practices/[practiceId]/settings/website',
-	'practices/[practiceId]/staff'
-];
+const UNSWEPT: readonly string[] = [];
 
 /*
  * Known-broken today, named rather than suppressed -- the same shape and
@@ -262,6 +239,7 @@ describe('the continuum check, over routes', () => {
 		async function assertion() {
 			pageState.params = { ...fixture.params };
 			pageState.url = new URL(fixture.url);
+			pageState.data = { ...fixture.pageData };
 			if (fixture.respond) {
 				const respond = fixture.respond;
 				apiFetchWithSession.mockImplementation((path: string) => Promise.resolve(respond(path)));
