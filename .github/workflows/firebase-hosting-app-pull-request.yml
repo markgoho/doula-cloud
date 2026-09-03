@@ -39,7 +39,7 @@ jobs:
         run: bun run build
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: ./.github/actions/gcp-auth
         with:
           project_id: doula-cloud
           workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github

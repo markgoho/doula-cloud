@@ -1,0 +1,82 @@
+name: Authenticate to Google Cloud (with retry)
+description: >-
+  Wraps google-github-actions/auth@v3 with up to 3 attempts and a short
+  backoff, so a transient failure reaching Google's federated-token endpoint
+  does not fail the job on first occurrence. A genuine auth failure (bad
+  service account, misconfigured provider) still fails after 3 attempts
+  rather than retrying indefinitely.
+inputs:
+  project_id:
+    required: true
+  workload_identity_provider:
+    required: true
+  service_account:
+    required: true
+outputs:
+  project_id:
+    value: ${{ steps.attempt1.outputs.project_id || steps.attempt2.outputs.project_id || steps.attempt3.outputs.project_id }}
+  credentials_file_path:
+    value: ${{ steps.attempt1.outputs.credentials_file_path || steps.attempt2.outputs.credentials_file_path || steps.attempt3.outputs.credentials_file_path }}
+  auth_token:
+    value: ${{ steps.attempt1.outputs.auth_token || steps.attempt2.outputs.auth_token || steps.attempt3.outputs.auth_token }}
+  access_token:
+    value: ${{ steps.attempt1.outputs.access_token || steps.attempt2.outputs.access_token || steps.attempt3.outputs.access_token }}
+  id_token:
+    value: ${{ steps.attempt1.outputs.id_token || steps.attempt2.outputs.id_token || steps.attempt3.outputs.id_token }}
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to Google Cloud (attempt 1 of 3)
+      id: attempt1
+      continue-on-error: true
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ inputs.project_id }}
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+
+    - name: Back off before attempt 2
+      if: steps.attempt1.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::Google Cloud auth attempt 1 of 3 failed; retrying in 10s"
+        sleep 10
+
+    - name: Authenticate to Google Cloud (attempt 2 of 3)
+      id: attempt2
+      if: steps.attempt1.outcome == 'failure'
+      continue-on-error: true
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ inputs.project_id }}
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+
+    - name: Back off before attempt 3
+      if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::Google Cloud auth attempt 2 of 3 failed; retrying in 20s"
+        sleep 20
+
+    - name: Authenticate to Google Cloud (attempt 3 of 3)
+      id: attempt3
+      if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+      continue-on-error: true
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ inputs.project_id }}
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+
+    - name: Confirm authentication succeeded
+      if: always()
+      shell: bash
+      run: |
+        if [ "${{ steps.attempt1.outcome }}" = "success" ] || \
+           [ "${{ steps.attempt2.outcome }}" = "success" ] || \
+           [ "${{ steps.attempt3.outcome }}" = "success" ]; then
+          exit 0
+        fi
+        echo "::error::Google Cloud authentication failed after 3 attempts"
+        exit 1
