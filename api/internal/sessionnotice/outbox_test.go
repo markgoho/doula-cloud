@@ -335,3 +335,76 @@ func TestWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
 		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
 	}
 }
+
+func TestQueueMFARecoveryCleared_InsertsPendingRow(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "staff-mfa-cleared"
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+	if err := sessionnotice.QueueMFARecoveryCleared(t.Context(), tx, uid); err != nil {
+		t.Fatalf("QueueMFARecoveryCleared: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if got := countOutboxRows(t, db, uid, "mfa_recovery_cleared"); got != 1 {
+		t.Fatalf("outbox rows = %d, want 1", got)
+	}
+}
+
+// TestQueueMFARecoveryCleared_ConflictOnExistingPendingRowIsNoop mirrors
+// TestQueueSessionRevoked_ConflictOnExistingPendingRowIsNoop: a code
+// spent twice in quick succession before the worker runs (should never
+// happen, single-use codes) must still queue only one notice --
+// session_notice_outbox_mfa_recovery_cleared_one_pending (00063) is the
+// arbiter this exercises.
+func TestQueueMFARecoveryCleared_ConflictOnExistingPendingRowIsNoop(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "staff-mfa-cleared-twice"
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+	if err := sessionnotice.QueueMFARecoveryCleared(t.Context(), tx, uid); err != nil {
+		t.Fatalf("QueueMFARecoveryCleared (first): %v", err)
+	}
+	if err := sessionnotice.QueueMFARecoveryCleared(t.Context(), tx, uid); err != nil {
+		t.Fatalf("QueueMFARecoveryCleared (second): %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if got := countOutboxRows(t, db, uid, "mfa_recovery_cleared"); got != 1 {
+		t.Fatalf("outbox rows after two rapid calls = %d, want 1", got)
+	}
+}
+
+func TestWorker_ProcessPending_MailsMFARecoveryCleared(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "staff-worker-mfa-cleared"
+	seedStaff(t, db, uid)
+	outboxID := seedOutboxRow(t, db, uid, "mfa_recovery_cleared", 0, time.Now().Add(-time.Minute), time.Now())
+
+	sender := &mail.FakeSender{}
+	runWorker(t, db, newTestWorker(sender))
+
+	status, _ := outboxRowState(t, db, outboxID)
+	if status != testStatusSent {
+		t.Fatalf("status = %q, want %s", status, testStatusSent)
+	}
+	sent := sender.Sent()
+	if len(sent) != 1 {
+		t.Fatalf("sent %d messages, want 1", len(sent))
+	}
+	if sent[0].Subject != "Doula Cloud: your two-factor authentication was reset" {
+		t.Fatalf("subject = %q", sent[0].Subject)
+	}
+}

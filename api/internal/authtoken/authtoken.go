@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 )
 
@@ -32,6 +33,12 @@ const (
 	// PurposeStaffPasswordReset authorizes one password change and ends
 	// every session for the identity it names. 1-hour expiry (#613).
 	PurposeStaffPasswordReset Purpose = "staff_password_reset"
+	// PurposeStaffMFARecovery is the Owner-vouched issued recovery code
+	// (#615, #605 §4.2.1.3): spending it clears the named identity's TOTP
+	// enrolment and mints no session. 24-hour expiry, minted by MintCode
+	// rather than Mint -- a short decimal code read aloud over the phone,
+	// not a link.
+	PurposeStaffMFARecovery Purpose = "staff_mfa_recovery"
 )
 
 // ErrInvalid is what Spend returns for a token that never existed, was
@@ -81,6 +88,71 @@ func Mint(ctx context.Context, q Querier, identityUID string, purpose Purpose, t
 	return token, nil
 }
 
+// mfaCodeDigits is #605's §4.2.1.2 floor ("at least six decimal digits")
+// plus a small margin, still short enough to read aloud over a phone
+// call -- the shape #615's Owner-vouch path needs, unlike Mint's
+// rand.Text() link tokens.
+const mfaCodeDigits = 8
+
+// mfaCodeSpace is the exclusive upper bound randomDigits draws from: 10^mfaCodeDigits.
+var mfaCodeSpace = new(big.Int).Exp(big.NewInt(10), big.NewInt(mfaCodeDigits), nil)
+
+// MintCode is Mint for a short, all-decimal code rather than a long
+// link token -- #615's issued recovery code, meant to be read aloud over
+// a phone call. Deletes any unspent code this identity already holds for
+// purpose first, the same re-request rule Mint applies.
+//
+// A decimal code's keyspace (10^8 here) is small enough that
+// token_hash's PRIMARY KEY can collide across two unrelated recoveries
+// minted around the same time -- astronomically unlikely, but Mint's
+// bare INSERT would surface it as an opaque constraint-violation error
+// rather than just trying again, so this retries a fresh draw a few
+// times instead.
+func MintCode(ctx context.Context, q Querier, identityUID string, purpose Purpose, ttl time.Duration, now time.Time) (string, error) {
+	if _, err := q.ExecContext(ctx,
+		`DELETE FROM auth_tokens WHERE identity_uid = $1 AND purpose = $2 AND used_at IS NULL`,
+		identityUID, purpose,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", fmt.Errorf("authtoken: invalidate prior codes: %w", err)
+	}
+
+	const maxAttempts = 5
+	for range maxAttempts {
+		code, err := randomDigits(mfaCodeDigits)
+		if err != nil {
+			// coverage:ignore reason: crypto/rand.Int only errors when its bound is non-positive; mfaCodeSpace is a fixed positive constant, not exercised by unit tests
+			return "", fmt.Errorf("authtoken: generate code: %w", err)
+		}
+
+		res, err := q.ExecContext(ctx,
+			`INSERT INTO auth_tokens (token_hash, purpose, identity_uid, expires_at) VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (token_hash) DO NOTHING`,
+			digest(code), purpose, identityUID, now.Add(ttl),
+		)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return "", fmt.Errorf("authtoken: insert code: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 1 {
+			return code, nil
+		}
+	}
+	// coverage:ignore reason: requires forcing mfaCodeDigits collisions across maxAttempts draws, not exercised by unit tests
+	return "", fmt.Errorf("authtoken: could not mint a unique code after %d attempts", maxAttempts)
+}
+
+// randomDigits draws a cryptographically random n-digit decimal string,
+// zero-padded -- unlike rand.Text(), the result may start with '0'.
+func randomDigits(n int) (string, error) {
+	v, err := rand.Int(rand.Reader, mfaCodeSpace)
+	if err != nil {
+		// coverage:ignore reason: crypto/rand.Int only errors when its bound is non-positive; mfaCodeSpace is a fixed positive constant, not exercised by unit tests
+		return "", fmt.Errorf("authtoken: draw random digits: %w", err)
+	}
+	return fmt.Sprintf("%0*d", n, v), nil
+}
+
 // Spend resolves token under purpose to the identity_uid holding it and
 // marks it used, atomically: the UPDATE's own WHERE clause is the
 // single-use check, so two concurrent spends of the same token can never
@@ -107,4 +179,14 @@ func Spend(ctx context.Context, q Querier, token string, purpose Purpose, now ti
 func digest(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+// Digest exposes token_hash's own digest -- SHA-256 of the plaintext,
+// hex-encoded -- to a caller that needs to key a companion row off the
+// same primary key auth_tokens uses, without storing the plaintext
+// itself. staff_mfa_recovery_vouches (00062) is the one caller: it needs
+// to look a mint back up by its token_hash at spend time, and computing
+// a different digest there would silently never match.
+func Digest(token string) string {
+	return digest(token)
 }

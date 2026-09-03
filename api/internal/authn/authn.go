@@ -240,6 +240,14 @@ func pastHalfLife(expiresAt, now time.Time) bool {
 type VerifiedToken struct {
 	UID   string
 	Email string
+	// AuthTime is when this ID token's underlying sign-in happened, not
+	// when the token was issued or refreshed -- a cached token silently
+	// refreshed an hour into a 12-hour session still reports the
+	// original sign-in time. #615's step-up re-auth (staffauth.
+	// RequireRecentAuth) is the one caller that reads it: it requires a
+	// fresh Bearer token whose AuthTime is within a few minutes of now,
+	// which only a real, just-completed sign-in can produce.
+	AuthTime time.Time
 }
 
 // Verifier checks an Identity Platform ID token. Session minting,
@@ -302,5 +310,6 @@ func (v *FirebaseVerifier) VerifyIDToken(ctx context.Context, idToken string) (*
 	// do belongs to the handler, not here.
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
 	email, _ := token.Claims["email"].(string)
-	return &VerifiedToken{UID: token.UID, Email: email}, nil
+	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
+	return &VerifiedToken{UID: token.UID, Email: email, AuthTime: time.Unix(token.AuthTime, 0)}, nil
 }

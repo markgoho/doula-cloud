@@ -166,3 +166,75 @@ func TestSpend_RollsBackWithItsTransaction(t *testing.T) {
 		t.Fatalf("Spend after rollback: %v", err)
 	}
 }
+
+func TestMintCode_ThenSpend_ResolvesTheMintedIdentity(t *testing.T) {
+	db := testdb.New(t)
+	now := time.Now()
+
+	code, err := authtoken.MintCode(t.Context(), db.App, "uid-8", authtoken.PurposeStaffMFARecovery, 24*time.Hour, now)
+	if err != nil {
+		t.Fatalf("MintCode: %v", err)
+	}
+	if len(code) != 8 {
+		t.Fatalf("code = %q, want 8 digits", code)
+	}
+	for _, r := range code {
+		if r < '0' || r > '9' {
+			t.Fatalf("code = %q, want all-decimal", code)
+		}
+	}
+
+	uid, err := authtoken.Spend(t.Context(), db.App, code, authtoken.PurposeStaffMFARecovery, now)
+	if err != nil {
+		t.Fatalf("Spend: %v", err)
+	}
+	if uid != "uid-8" {
+		t.Fatalf("uid = %q, want uid-8", uid)
+	}
+}
+
+// TestMintCode_ReMintingInvalidatesThePriorCode mirrors Mint's own
+// re-request rule: a second MintCode for the same identity+purpose kills
+// the first code outright.
+func TestMintCode_ReMintingInvalidatesThePriorCode(t *testing.T) {
+	db := testdb.New(t)
+	now := time.Now()
+
+	first, err := authtoken.MintCode(t.Context(), db.App, "uid-9", authtoken.PurposeStaffMFARecovery, 24*time.Hour, now)
+	if err != nil {
+		t.Fatalf("first MintCode: %v", err)
+	}
+	second, err := authtoken.MintCode(t.Context(), db.App, "uid-9", authtoken.PurposeStaffMFARecovery, 24*time.Hour, now)
+	if err != nil {
+		t.Fatalf("second MintCode: %v", err)
+	}
+
+	if _, err := authtoken.Spend(t.Context(), db.App, first, authtoken.PurposeStaffMFARecovery, now); !errors.Is(err, authtoken.ErrInvalid) {
+		t.Fatalf("spending the superseded code err = %v, want ErrInvalid", err)
+	}
+	if _, err := authtoken.Spend(t.Context(), db.App, second, authtoken.PurposeStaffMFARecovery, now); err != nil {
+		t.Fatalf("spending the fresh code: %v", err)
+	}
+}
+
+// TestDigest_MatchesWhatSpendLooksUp proves Digest is the same digest
+// Mint/Spend key auth_tokens.token_hash on -- staff_mfa_recovery_vouches
+// (00062) has to compute this independently to look a mint back up by
+// its token_hash, and a mismatched algorithm would silently never match.
+func TestDigest_MatchesWhatSpendLooksUp(t *testing.T) {
+	db := testdb.New(t)
+	now := time.Now()
+
+	token, err := authtoken.Mint(t.Context(), db.App, "uid-10", authtoken.PurposeStaffMFARecovery, time.Hour, now)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+
+	var storedHash string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT token_hash FROM auth_tokens WHERE identity_uid = $1`, "uid-10").Scan(&storedHash); err != nil {
+		t.Fatalf("query token_hash: %v", err)
+	}
+	if got := authtoken.Digest(token); got != storedHash {
+		t.Fatalf("Digest(token) = %q, want %q (the stored token_hash)", got, storedHash)
+	}
+}

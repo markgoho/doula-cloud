@@ -93,6 +93,19 @@ func registerSessionRoutes(mux *http.ServeMux, g *staffauth.GatedRouter, d Deps)
 	// token is the whole credential.
 	mux.Handle("POST /api/staff/password-reset",
 		ratelimit.Wrap(d.DB, "staff_password_reset", tokenSpendRules)(staffauth.SpendResetHandler(d.AccountManager, d.DB)))
+	// #615: the one unauthenticated endpoint for all three MFA-recovery
+	// paths' spend. Public and pre-account -- a locked-out person cannot
+	// sign in first (#605's sequence) -- keyed on the request's own email
+	// field for #602's per-account throttle (mfaRecoverySpendRules), the
+	// same shape resetRequestRules uses.
+	mux.Handle("POST /api/staff/mfa-recovery/spend",
+		ratelimit.Wrap(d.DB, "staff_mfa_recovery_spend", mfaRecoverySpendRules)(staffauth.SpendMFARecoveryHandler(d.AccountManager, d.DB)))
+	// Self-only, same "no {practiceId}, no staff id" shape as
+	// PUT /api/staff/work-state above -- who is currently a sole Owner is
+	// a fact about the person, not a Membership, and this is the only
+	// path by which she ever sees a saved code's plaintext (#615).
+	mux.Handle("POST /api/staff/mfa-recovery/saved-codes/rotate",
+		ratelimit.Wrap(d.DB, "staff_mfa_recovery_rotate", mfaRecoveryRotateRules)(staffauth.RotateSavedCodesHandler(d.DB)))
 	// #230's pre-account Offer read: no session of either population, so
 	// it is mounted on the raw mux and authenticated by the Invitation's
 	// token plus the emailed six-digit code. ADR-0008 requires the
@@ -180,5 +193,29 @@ var resetRequestRules = []ratelimit.Rule{
 // same shape offerRules bounds one Offer's access code.
 var tokenSpendRules = []ratelimit.Rule{
 	ratelimit.HashedJSONFieldRule("token", 10, time.Hour),
+	ratelimit.IPRule(50, time.Hour),
+}
+
+// mfaRecoverySpendRules is #615's AC read literally: "spend is throttled
+// per account on failed attempts, not only per IP" -- a short issued
+// code (8 decimal digits) read aloud over a phone call, live for 24
+// hours, is brute-forceable without a per-account limit tighter than
+// tokenSpendRules' 128-bit link tokens ever needed. Keyed on the
+// request's own email field (HashedJSONFieldRule, like resetRequestRules)
+// rather than a session or Bearer token -- there is neither this early.
+// 10 per hour comfortably covers a person mistyping a hand-copied code a
+// few times while still bounding a script trying every value in the
+// 10^8 keyspace against one address.
+var mfaRecoverySpendRules = []ratelimit.Rule{
+	ratelimit.HashedJSONFieldRule("email", 10, time.Hour),
+	ratelimit.IPRule(50, time.Hour),
+}
+
+// mfaRecoveryRotateRules limits the signed-in "show me my saved codes
+// again" self-service action. Generous, like verifyRequestRules: a
+// low-risk action gated by a live session already, not a bootstrap
+// credential.
+var mfaRecoveryRotateRules = []ratelimit.Rule{
+	ratelimit.SessionCookieRule(10, time.Hour),
 	ratelimit.IPRule(50, time.Hour),
 }

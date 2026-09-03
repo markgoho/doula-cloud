@@ -21,6 +21,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/payments"
@@ -167,6 +168,13 @@ func main() {
 		Sender: mailgunSender, Now: time.Now,
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
+	// #615: the Owner-vouched recovery code's recipient (the vouching
+	// Owner) resolves live via the Admin SDK, same reasoning as
+	// staffTokenMailOutboxWorker above.
+	mfaRecoveryMailOutboxWorker := mfarecoverymail.Worker{
+		Sender: mailgunSender, Accounts: verifier, Now: time.Now,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
+	}
 
 	// ADR-0013: one shared queue nudging eight of the ten outbox
 	// process-* endpoints (routes_internal.go), reusing
@@ -248,6 +256,7 @@ func main() {
 		PageVerifier:            pageVerifier,
 		StaffTokenMailWorker:    staffTokenMailOutboxWorker,
 		StaffEmailChangeWorker:  staffEmailChangeOutboxWorker,
+		MFARecoveryMailWorker:   mfaRecoveryMailOutboxWorker,
 
 		NudgeEnqueuer:   nudgeEnqueuer,
 		ExpectedOrigins: resolveExpectedOrigins(),

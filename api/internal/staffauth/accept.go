@@ -258,6 +258,15 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
+	// #615's AC: a fresh Membership can make the new Staff member a sole
+	// Owner (an invited co-founder), or can end an existing sole Owner's
+	// status (a second Owner just arrived) -- reconcileOwnersAtPractice
+	// covers both without this handler having to decide which applies.
+	if err := reconcileOwnersAtPractice(ctx, tx, inv.practiceID, staffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
 	// Only a person this acceptance created gets a work-state event: for
 	// anyone else the fact predates this Practice, and re-recording it
 	// here would read as her having asserted it again when she did not
