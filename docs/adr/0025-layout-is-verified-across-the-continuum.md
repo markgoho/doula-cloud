@@ -15,6 +15,18 @@ Two requirements come from the baseline capture on [#521](https://github.com/mar
 
 Sampling was honest about one thing and this document keeps it: no tool tests a continuum exactly, and a sweep is still finite. The difference is where the number comes from — a sweep's step size is a resolution, and a matrix's widths are a design.
 
+## The wide end is a constraint question, not a sweep question
+
+The sweep climbs from 320px to whatever space its environment offers on its own, which under Vitest is 414px. [#600](https://github.com/markgoho/doula-cloud/issues/600) asked what that ceiling costs, assuming it was a limit the environment imposed. It is not: a frame set to 3000px inside that 414px window renders and measures correctly, so the ceiling was always the check's own choice and could have been moved at any time. **It is not moved, and the reason is the one this document exists to record.**
+
+A component that spills past its edge has no constraint on the thing that grows. Space is what an unconstrained component runs *out* of, so it spills at **320px**, where the check already looks — every defect this repo's sweeps have found did ([#530](https://github.com/markgoho/doula-cloud/issues/530), [#548](https://github.com/markgoho/doula-cloud/issues/548), [#549](https://github.com/markgoho/doula-cloud/issues/549), [#552](https://github.com/markgoho/doula-cloud/issues/552), and the two fixed inline on [#595](https://github.com/markgoho/doula-cloud/issues/595)). A component that *has* the constraint cannot spill at any width: measured on #600, all 55 components swept from 320px to 3000px produce zero breaks, and `DataTable`'s switch point moved down to 480px — where its content does not fit — still produces none, because `max-inline-size: var(--measure)` and `overflow-wrap: anywhere` on its cells do their job. Making a widened sweep go red required deleting that constraint first.
+
+So a wider sweep asks a question whose answer is already determined at 320px. One case escapes that: a component rendering a **different DOM tree** above a content floor, where the narrow tree is constrained and the wide tree is not. Below the floor the sweep measures the wrong tree; above it, it does not measure at all. [#542](https://github.com/markgoho/doula-cloud/issues/542) was exactly this. That case is bounded — [#564](https://github.com/markgoho/doula-cloud/issues/564) cut the app's authored conditions to four, and choosing which tree renders is the only job all four do — and it has its own instrument: `floor.svelte.spec.ts` forces each discovered condition live and measures at its own floor, above the sweep's ceiling. **The wide end belongs to the floor check, not to a longer sweep.**
+
+Two things this leaves standing rather than closes. `floor.svelte.spec.ts` measures a *forced* configuration at its floor, not the one a browser resolves across the range above it; strengthening the wide end means strengthening that check, never lengthening the sweep. And the wide-end defects this map found by hand — #542's whitespace inside cells, [#543](https://github.com/markgoho/doula-cloud/issues/543)'s unspent room — are not overflow at all, so no ceiling reaches them at any width: **the drag surface remains their only instrument, and that is a property of the predicate, not of the range.**
+
+`max-content` was measured as a candidate ceiling and rejected: `DataTable`'s is 713px, below its own 780px content floor, so a sweep stopping there would never reach the configuration that floor selects.
+
 ## Fixtures
 
 Both fixture rules were attached to the matrix. Both survive, re-attached to the continuum check.
