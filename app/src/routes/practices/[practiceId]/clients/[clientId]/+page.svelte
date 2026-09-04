@@ -21,6 +21,15 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import type { PageProps as PageProperties } from './$types';
+
+	// ADR-0017: a contractor Doula originates no Engagement Request, even
+	// on a Client she is attached to (`engagementrequest.go`'s 403). `data`
+	// stays optional -- this component's own spec renders it directly,
+	// bypassing SvelteKit's load cycle, the same reason `clients/+page.svelte`
+	// (#539) leaves it optional.
+	let { data }: { data?: PageProperties['data'] } = $props();
+	const isContractor = $derived(data?.isContractor ?? false);
 
 	let detail = $state<ClientDetail | undefined>();
 	let error = $state('');
@@ -35,6 +44,11 @@
 	let withdrawingRequestId = $state('');
 	let withdrawError = $state('');
 	let withdrawnConfirmation = $state('');
+
+	// Safe with detail undefined (loading): read by the sections array
+	// below, which is constructed on every render regardless of which
+	// branch of RecordDetail's template is actually showing.
+	const name = $derived(detail ? displayName(detail) : '');
 
 	function editHref(): string {
 		return `/practices/${page.params.practiceId}/clients/${page.params.clientId}/edit`;
@@ -176,7 +190,7 @@
 		employee Doula, "Start work with" for an Owner or Admin -- because
 		only there is the Credit cost known.
 	-->
-	{#if detail}
+	{#if detail && !isContractor}
 		<Link href={newEngagementRequestHref()} label="Start new work with {displayName(detail)}" />
 	{/if}
 {/snippet}
@@ -205,30 +219,6 @@
 				/>
 			{/if}
 		{/if}
-
-		<DescriptionList
-			items={[
-				{ label: 'Given name', value: detail!.givenName },
-				{ label: 'Family name', value: detail!.familyName || '—' },
-				{ label: 'Preferred name', value: detail!.preferredName || '—' },
-				{ label: 'Email', value: detail!.email || '—' },
-				{ label: 'Phone', value: detail!.phone || '—' },
-				{
-					label: 'Address',
-					value:
-						[
-							detail!.addressLine1,
-							detail!.addressLine2,
-							detail!.addressLocality,
-							detail!.addressRegion,
-							detail!.addressPostalCode
-						]
-							.filter(Boolean)
-							.join(', ') || '—'
-				},
-				{ label: 'Date of birth', value: detail!.dateOfBirth || '—' }
-			]}
-		/>
 
 		{#each pendingRequests(detail!.history) as request (request.requestId)}
 			<!--
@@ -267,6 +257,46 @@
 			<Notice variant="error" message={withdrawError} />
 		{/if}
 	</stack-l>
+{/snippet}
+
+{#snippet whoSection()}
+	<DescriptionList
+		items={[
+			{ label: 'Given name', value: detail!.givenName },
+			{ label: 'Family name', value: detail!.familyName || '—' },
+			{ label: 'Preferred name', value: detail!.preferredName || '—' },
+			{ label: 'Date of birth', value: detail!.dateOfBirth || '—' }
+		]}
+	/>
+{/snippet}
+
+{#snippet contactSection()}
+	<DescriptionList
+		items={[
+			{ label: 'Email', value: detail!.email || '—' },
+			{ label: 'Phone', value: detail!.phone || '—' }
+		]}
+	/>
+{/snippet}
+
+{#snippet addressSection()}
+	<DescriptionList
+		items={[
+			{
+				label: 'Address',
+				value:
+					[
+						detail!.addressLine1,
+						detail!.addressLine2,
+						detail!.addressLocality,
+						detail!.addressRegion,
+						detail!.addressPostalCode
+					]
+						.filter(Boolean)
+						.join(', ') || '—'
+			}
+		]}
+	/>
 {/snippet}
 
 {#snippet practiceDefinedFieldsSection()}
@@ -323,6 +353,9 @@
 	{summary}
 	{actions}
 	sections={[
+		{ heading: `Who ${name} is`, content: whoSection },
+		{ heading: `How to reach ${name}`, content: contactSection },
+		{ heading: `Where ${name} lives`, content: addressSection },
 		{ heading: 'Practice-defined fields', content: practiceDefinedFieldsSection },
 		{ heading: 'Engagements', content: engagementsSection },
 		{ heading: 'History', content: historySection }
