@@ -32,6 +32,7 @@ var exemptEngagementWriteRoutes = map[string]string{
 	"POST /api/portal/engagements/{engagementId}/messages":                          reasonPortalWrite,
 	"POST /api/portal/engagements/{engagementId}/push-subscriptions":                reasonPortalWrite,
 	"DELETE /api/portal/engagements/{engagementId}/push-subscriptions":              reasonPortalWrite,
+	"PUT /api/portal/engagements/{engagementId}/notification-preference":            reasonPortalWrite,
 }
 
 // engagementWriteRegistration finds the start of every registration in

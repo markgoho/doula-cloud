@@ -173,6 +173,44 @@ func TestSetHandler_InvalidJSONBody(t *testing.T) {
 	}
 }
 
+// TestSetHandler_CannotWriteAnotherClientsEngagementPreference proves the
+// enforcement story behind this route's exemption from
+// staffauth.AttachingWrite in ../../write_gate_guardrail_test.go: it is a
+// clientauth.Middleware-scoped Client write, not a Staff write on the
+// Engagement, so the boundary that has to hold is "a Client can never
+// write another Client's preference" rather than ADR-0008's attachment
+// gate. clientauth.Middleware refuses at the URL before SetHandler ever
+// runs -- setClientAndCheckEngagement (clientauth/middleware.go) checks
+// engagement ownership against app.current_client_id -- so this is really
+// a clientauth.Middleware test reached through this route; the RLS policy
+// on notification_preferences (00067) is the layer underneath if that
+// middleware check were ever bypassed.
+func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	const identityA = "client-a-owns-the-engagement"
+	clientA, engagementA := seedClientEngagement(t, db, practiceID)
+	seedPortalUser(t, db, identityA, clientA)
+
+	const identityB = "client-b-attacker"
+	clientB, _ := seedClientEngagement(t, db, practiceID)
+	seedPortalUser(t, db, identityB, clientB)
+
+	srvB, sessionB := newPortalServer(t, db, identityB)
+	defer srvB.Close()
+
+	body, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
+	resp := authedRequest(t, sessionB, http.MethodPut, srvB.URL+"/portal/engagements/"+engagementA+"/notification-preference", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d (Client B does not own Engagement A)", resp.StatusCode, http.StatusForbidden)
+	}
+
+	if _, found := readPreferenceRow(t, db, identityA, engagementA); found {
+		t.Fatalf("notification_preferences row for Client A's Engagement was written by Client B's request")
+	}
+}
+
 // TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected
 // proves #303's own AC: the preference carries an Engagement reference, so
 // muting one of a Client's Engagements never silences another. The AC's
