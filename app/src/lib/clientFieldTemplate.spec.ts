@@ -244,7 +244,7 @@ describe('validateFields', () => {
 		expect(
 			validateFields([{ id: 'a', type: 'short_text', label: '  Date Of Birth  ', order: 0, archived: false }])
 		).toBe(
-			'"  Date Of Birth  " is already on every Client record as the structural date of birth field -- edit that field instead of adding a duplicate.'
+			'"  Date Of Birth  " is already on every Client record as the structural date of birth field -- if date of birth has the wrong shape for what you need, that is a different fix, not a field to add here.'
 		);
 	});
 

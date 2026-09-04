@@ -120,7 +120,7 @@
 		<ul>
 			{#each fields as field (field.id)}
 				<li>
-					<Text text={field.archived ? `${field.label || 'Untitled field'} (archived)` : field.label || 'Untitled field'} />
+					<Text text="{field.label || 'Untitled field'}{field.archived ? ' (archived)' : ''}" />
 				</li>
 			{/each}
 		</ul>

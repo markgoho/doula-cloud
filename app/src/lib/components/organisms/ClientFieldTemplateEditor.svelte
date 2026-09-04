@@ -73,8 +73,10 @@
 	// word across every row that shares a state (#515) -- a screen-reader
 	// user tabbing through, or scanning a rotor's controls list, hears
 	// "Archive, Archive, Archive" with no row context. This names the row a
-	// visually-hidden sibling joins each Button to, the same fallback the
-	// li's own aria-label already uses for an unnamed field.
+	// visually-hidden sibling joins each Button to. Also the one fallback
+	// name for an unlabeled field everywhere else in this component wants
+	// to display one -- the archived row's aria-label/text and the archive
+	// confirmation's title.
 	function rowName(field: Field): string {
 		return field.label || 'Untitled field';
 	}
@@ -148,7 +150,7 @@
 						if (!value) confirmArchiveId = '';
 					}
 				}
-				title={`Archive "${field.label || 'Untitled field'}"?`}
+				title={`Archive "${rowName(field)}"?`}
 				consequence="A Client who already answered this keeps that answer, read-only on the Client's record. New Clients will not be asked this question, and you can restore it later from the Archived fields list."
 				confirmLabel="Archive field"
 				onConfirm={() => onArchiveToggle(field.id)}
@@ -172,8 +174,8 @@
 	<ul>
 		{#each archivedFields as field (field.id)}
 			<!-- v8 ignore start: same attribute-diffing exception as the active list's describedBy strings above -->
-			<li aria-label="{field.label || 'Untitled field'}, archived">
-				<Text text={field.label || 'Untitled field'} />
+			<li aria-label="{rowName(field)}, archived">
+				<Text text={rowName(field)} />
 				<span>Archived -- no longer collected</span>
 				<Button
 					label="Unarchive"

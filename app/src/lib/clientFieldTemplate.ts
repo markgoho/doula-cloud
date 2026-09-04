@@ -26,6 +26,11 @@ export function isSelectType(type: FieldType): boolean {
 	return SELECT_FIELD_TYPES.has(type);
 }
 
+/** A section_header is a heading a Client reads, never a question the
+ * Client answers -- fieldCountWarning excludes it from the
+ * asked-question count on that basis. */
+const SECTION_HEADER_TYPE: FieldType = 'section_header';
+
 export interface Field {
 	id: string;
 	type: FieldType;
@@ -181,7 +186,7 @@ export const FIELD_COUNT_WARNING_THRESHOLD = 20;
 /** Returns a warning message once the template asks more than
  * FIELD_COUNT_WARNING_THRESHOLD questions, or undefined below that. */
 export function fieldCountWarning(fields: Field[]): string | undefined {
-	const askedCount = fields.filter((f) => !f.archived && f.type !== 'section_header').length;
+	const askedCount = fields.filter((f) => !f.archived && f.type !== SECTION_HEADER_TYPE).length;
 	if (askedCount <= FIELD_COUNT_WARNING_THRESHOLD) {
 		return undefined;
 	}
@@ -207,7 +212,7 @@ export function validateFields(fields: Field[]): string | undefined {
 		}
 		const structural = STRUCTURAL_FIELD_NAMES.get(f.label.trim().toLowerCase());
 		if (structural) {
-			return `"${f.label}" is already on every Client record as the structural ${structural} field -- edit that field instead of adding a duplicate.`;
+			return `"${f.label}" is already on every Client record as the structural ${structural} field -- if ${structural} has the wrong shape for what you need, that is a different fix, not a field to add here.`;
 		}
 
 		if (isSelectType(f.type)) {
