@@ -55,17 +55,17 @@
 			color: var(--color-on-surface-variant);
 			padding-block: var(--space-3);
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			/* The same pairing the value already carries, for the same
-			   reason one row down (#725). Every caller but one passes a
-			   short developer-chosen label, but a Client Field Template's
-			   own label is a question a Practice types, so it can be a
-			   pasted URL like any other free text -- and the label track is
-			   `auto`, whose minimum is the item's min-content size, so a run
-			   with no break opportunity pushes the whole page wider. The
-			   cap lives on the track above rather than here, since a
-			   `max-inline-size` on the item leaves the track free to grow
-			   past it; this half is what lets the label shrink to the cap
-			   at all. */
+			/* Half of the pairing the value carries, and only half (#725).
+			   Every caller but one passes a short developer-chosen label,
+			   but a Client Field Template's own label is a question a
+			   Practice types, so it can be a pasted URL like any other free
+			   text -- and a track's minimum is the item's min-content size,
+			   which for a run with no break opportunity is the whole run.
+			   This is what lowers that minimum so the label can reach the
+			   cap. The cap itself is the other half and is on the TRACK
+			   above, not here: a `max-inline-size` on a grid item does not
+			   stop its track growing past what the item needs, which was
+			   measured -- the item cap alone still left the sweep red. */
 			overflow-wrap: anywhere;
 		}
 
