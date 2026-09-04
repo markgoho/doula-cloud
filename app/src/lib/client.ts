@@ -21,6 +21,36 @@ export interface ClientListItem {
 	 * at once (ADR-0017: at most one pending Request per kind, not per
 	 * Client). What the list row (#499) shows to surface a pending ask. */
 	pendingRequestKinds?: string[];
+	/** One line per open (non-`completed`) Engagement this Client holds --
+	 * #264 (RA-G6). Empty/absent for a Client with none. Mirrors the Go
+	 * BFF's client.ListItem.OpenEngagements. */
+	openEngagements?: OpenEngagement[];
+}
+
+/** One rollup line of ClientListItem.openEngagements -- mirrors the Go
+ * BFF's client.OpenEngagement. Which of the money-shaped fields
+ * (invoiceStatus/invoiceAmountCents, feeCents) are present is decided
+ * server-side by the caller's role (ADR-0006/ADR-0008): this type does
+ * not encode that gating itself, it only describes what a role that CAN
+ * see a given field receives. */
+export interface OpenEngagement {
+	engagementId: string;
+	engagementStatus: string;
+	/**
+	 * Absent when no Contract has been created yet for this Engagement.
+	 */
+	contractStatus?: string;
+	/** Absent when no Doula holds an open, granted attachment on this
+	 * Engagement -- rendered as an explicit "no Doula" state, the same
+	 * pattern as `portalInviteStatus`'s own absence ("Never invited"). */
+	doulaName?: string;
+	/** Owner/Admin only (ADR-0006) -- absent for every other role, even
+	 * when a contractor is attached to this Engagement. */
+	invoiceStatus?: string;
+	invoiceAmountCents?: number;
+	/** The reader's own agreed fee (ADR-0008) -- present only when she is
+	 * a contractor Doula attached to this Engagement. */
+	feeCents?: number;
 }
 
 /** One page of the Clients list -- the cursor-pagination envelope from

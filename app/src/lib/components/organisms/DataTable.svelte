@@ -43,6 +43,21 @@
 		 * Optional because most columns are not a timestamp at all.
 		 */
 		datetimeAccessor?: (row: T) => string;
+		/*
+		 * #264: a Client row's Engagement rollup is more than one line per
+		 * row -- Contract status, assigned Doula, Engagement status, each on
+		 * its own line, none of it a single string `accessor` could return.
+		 * `rowActions`'s `content: Snippet<[row: T]>` is this component's
+		 * only other row-level custom-content seam, so this reuses its exact
+		 * shape rather than inventing a second one: a per-COLUMN snippet
+		 * alongside `rowActions`' per-ROW one. Rendered instead of
+		 * `accessor`/`datetimeAccessor` in both the `<table>` and the
+		 * record-view `<dl>`, never alongside them -- `accessor` stays
+		 * required on a `content` column (never called, but non-optional
+		 * so every other column's call site is untouched, with no new
+		 * "what if this is missing" branch to test).
+		 */
+		content?: Snippet<[row: T]>;
 	}
 
 	interface RowActions<T> {
@@ -115,6 +130,8 @@
 							>
 								{#if columnIndex === 0 && rowHref}
 									<Link href={rowHref(row)} label={column.accessor(row)} />
+								{:else if column.content}
+									{@render column.content(row)}
 								{:else if column.datetimeAccessor}
 									<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
 								{:else}
@@ -161,6 +178,8 @@
 						>
 							{#if columnIndex === 0 && rowHref}
 								<Link href={rowHref(row)} label={column.accessor(row)} />
+							{:else if column.content}
+								{@render column.content(row)}
 							{:else if column.datetimeAccessor}
 								<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
 							{:else}
@@ -308,6 +327,34 @@
 
 		td.muted {
 			color: var(--color-on-surface-muted);
+		}
+
+		/* #264: a `content` column's markup comes from the caller's own
+		   snippet (rendered via `{@render column.content(row)}`), so
+		   `.rollup-list` never appears in this file's own template --
+		   `:global()` is what tells Svelte's scoped-CSS analyzer that on
+		   purpose, the same reason PortalTopBar.svelte reaches for it on
+		   its own injected content. `:has()` scopes the height override to
+		   only the cell that actually holds a rollup, so th/td's own fixed
+		   2.5rem (the brief's Density section, and what Skeleton reserves
+		   before rows arrive) stays exactly as it was for every other
+		   column. */
+		td:has(:global(.rollup-list)),
+		dd:has(:global(.rollup-list)) {
+			block-size: auto;
+		}
+
+		:global(.rollup-list) {
+			display: grid;
+			gap: var(--space-1);
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		:global(.rollup-list li + li) {
+			padding-block-start: var(--space-1);
+			border-block-start: var(--border-thin) solid var(--color-outline-variant);
 		}
 
 		/* Unavoidable (#564): a <table> and one <dl> per record are

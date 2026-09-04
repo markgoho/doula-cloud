@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { loadClients, type ClientListItem } from '#lib/client.js';
+	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
+	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
@@ -99,9 +100,65 @@
 		return client.hasWork ? 'Has work' : 'No work yet';
 	}
 
+	// #264 (RA-G6): the Contract lifecycle words a rollup line shows --
+	// mirrors portalInviteStatusLabel's own map above.
+	const contractStatusLabel: Record<string, string> = {
+		draft: 'Draft',
+		sent: 'Sent',
+		signed: 'Signed',
+		voided: 'Voided'
+	};
+
+	// #264: the Engagement's own status value, honestly displayed. MO-G4
+	// (#253, a separate, already-filed gap) is why most Engagements read
+	// "intake" regardless of real-world progress -- this label map does
+	// not work around that; it only renders whatever is actually stored.
+	const engagementStatusLabel: Record<string, string> = {
+		intake: 'Intake',
+		active: 'Active',
+		completed: 'Completed'
+	};
+
+	// #264: one line of a Client's open-Engagement rollup -- Contract
+	// status, assigned Doula (an explicit "no Doula" state, the same
+	// pattern as portalInviteStatusText's own "Never invited"), Engagement
+	// status, and Invoice status/money or her own fee wherever the BFF's
+	// role gate let the field through the wire at all (ADR-0006/ADR-0008).
+	// A field this Reader may not see is absent from `line` entirely, not
+	// blanked, so there is nothing here to hide -- only to append when
+	// present.
+	function engagementLineText(line: OpenEngagement): string {
+		const parts = [
+			`Contract: ${line.contractStatus ? contractStatusLabel[line.contractStatus] : 'No contract yet'}`,
+			`Doula: ${line.doulaName ?? 'No Doula assigned'}`,
+			engagementStatusLabel[line.engagementStatus] ?? line.engagementStatus
+		];
+		if (line.invoiceStatus) {
+			const amount =
+				line.invoiceAmountCents === undefined ? '' : ` (${formatAmount(line.invoiceAmountCents)})`;
+			parts.push(`Invoice: ${invoiceStatusLabel(line.invoiceStatus)}${amount}`);
+		}
+		if (line.feeCents !== undefined) {
+			parts.push(`Your fee: ${formatAmount(line.feeCents)}`);
+		}
+		return parts.join(' · ');
+	}
+
 	const columns = $derived([
 		{ label: 'Name', accessor: (client: ClientListItem) => client.name },
 		{ label: 'Email', accessor: (client: ClientListItem) => client.email },
+		{
+			label: 'Engagements',
+			// Never actually rendered -- DataTable's `content` branch always
+			// wins over `accessor` -- but required by Column<T> regardless
+			// (#264's own reasoning: every other column's call site stays
+			// untouched rather than gaining an "accessor is missing" branch
+			// nothing exercises). Computed for real anyway, as the same
+			// summary `content` renders, so it is never a stray empty value.
+			accessor: (client: ClientListItem) =>
+				(client.openEngagements ?? []).map((line) => engagementLineText(line)).join('; '),
+			content: engagementRollup
+		},
 		{ label: 'Pending request', accessor: pendingRequestText },
 		{ label: 'Portal invite', accessor: portalInviteStatusText },
 		...(isShowingEveryone ? [{ label: 'Work', accessor: workStatusText }] : [])
@@ -167,6 +224,25 @@
 		isContractor ? 'Work reaches you as an Offer, so there are no Clients here yet.' : 'No Clients yet.'
 	);
 </script>
+
+{#snippet engagementRollup(client: ClientListItem)}
+	<!--
+		#264: one <li> per open Engagement -- ADR-0017's "a Client can hold
+		more than one concurrent open Engagement" is why this is a list
+		rather than DataTable's plain per-cell string, so a second (or
+		third) line is never dropped or overwritten. Nothing renders at all
+		for a Client with no open Engagements (the empty-array case) --
+		the existing Pending request column already covers a pending
+		Request with no Engagement yet.
+	-->
+	{#if client.openEngagements && client.openEngagements.length > 0}
+		<ul class="rollup-list">
+			{#each client.openEngagements as line (line.engagementId)}
+				<li>{engagementLineText(line)}</li>
+			{/each}
+		</ul>
+	{/if}
+{/snippet}
 
 {#snippet actions()}
 	<!--

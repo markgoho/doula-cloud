@@ -1110,6 +1110,283 @@ func TestListHandler_ContractorPaginatesNewestFirst(t *testing.T) {
 	}
 }
 
+// TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExcluded
+// proves #264's headline AC directly: a Client with two concurrent open
+// Engagements shows both (ADR-0017), a completed one is excluded, an
+// Engagement with no Contract or Doula yet renders those fields nil
+// rather than erroring, and Owner/Admin see Invoice status/money on a
+// line that has one.
+func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExcluded(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	const ownerUID = "staff-rollup-owner"
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
+	doulaID := seedStaffAtPractice(t, db, practiceID, "doula-for-rollup")
+
+	clientID, birthEngagement := seedClientEngagement(t, db, practiceID, "Rollup Client", "rollup@example.com")
+	seedGrantedAttachment(t, db, birthEngagement, doulaID)
+	contractID := seedContract(t, db, birthEngagement, "sent")
+	seedInvoice(t, db, practiceID, contractID, openInvoiceStatus, 50000)
+
+	postpartumEngagement := seedEngagement(t, db, clientID, practiceID, "intake", "postpartum")
+	// No Contract, no Doula on this one -- proves the nil/absent case.
+
+	seedEngagement(t, db, clientID, practiceID, "completed", "birth")
+
+	srv, session := newServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
+		t.Fatalf("list = %+v, want exactly the rollup Client", listResp.Items)
+	}
+	rollup := listResp.Items[0].OpenEngagements
+	if len(rollup) != 2 {
+		t.Fatalf("OpenEngagements = %+v, want 2 lines (completed Engagement excluded)", rollup)
+	}
+
+	byID := map[string]client.OpenEngagement{}
+	for _, line := range rollup {
+		byID[line.EngagementID] = line
+	}
+
+	birth := byID[birthEngagement]
+	if birth.EngagementStatus != "active" {
+		t.Fatalf("birth line status = %q, want active", birth.EngagementStatus)
+	}
+	if birth.ContractStatus == nil || *birth.ContractStatus != "sent" {
+		t.Fatalf("birth line contract status = %v, want \"sent\"", birth.ContractStatus)
+	}
+	if birth.DoulaName == nil || *birth.DoulaName != "Test Staff doula-for-rollup" {
+		t.Fatalf("birth line doula name = %v, want the seeded Doula's name", birth.DoulaName)
+	}
+	if birth.InvoiceStatus == nil || *birth.InvoiceStatus != openInvoiceStatus {
+		t.Fatalf("birth line invoice status = %v, want \"open\" (Owner reads it)", birth.InvoiceStatus)
+	}
+	if birth.InvoiceAmountCents == nil || *birth.InvoiceAmountCents != 50000 {
+		t.Fatalf("birth line invoice amount = %v, want 50000", birth.InvoiceAmountCents)
+	}
+	if birth.FeeCents != nil {
+		t.Fatalf("birth line fee = %v, want nil -- Owner is not a contractor", birth.FeeCents)
+	}
+
+	postpartum, ok := byID[postpartumEngagement]
+	if !ok {
+		t.Fatalf("postpartum Engagement missing from rollup: %+v", rollup)
+	}
+	if postpartum.EngagementStatus != "intake" {
+		t.Fatalf("postpartum line status = %q, want intake", postpartum.EngagementStatus)
+	}
+	if postpartum.ContractStatus != nil {
+		t.Fatalf("postpartum line contract status = %v, want nil (no Contract created)", postpartum.ContractStatus)
+	}
+	if postpartum.DoulaName != nil {
+		t.Fatalf("postpartum line doula name = %v, want nil (no attachment)", postpartum.DoulaName)
+	}
+	if postpartum.InvoiceStatus != nil || postpartum.InvoiceAmountCents != nil {
+		t.Fatalf("postpartum line invoice = %v/%v, want nil/nil (no Invoice)", postpartum.InvoiceStatus, postpartum.InvoiceAmountCents)
+	}
+}
+
+// TestListHandler_OpenEngagementsRollup_AdminSeesInvoiceAndMoney proves the
+// other half of "Owner and Admin views include Invoice status and money"
+// (#264's AC): `reader.Has("owner") || reader.Has("admin")` short-circuits
+// on Owner alone in every other test here, so this is the one place the
+// Admin branch is actually exercised.
+func TestListHandler_OpenEngagementsRollup_AdminSeesInvoiceAndMoney(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	const adminUID = "staff-rollup-admin"
+	testdb.SeedStaffAtPractice(t, db, practiceID, adminUID, []string{adminRole}, "employee")
+
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Admin View Client", "admin-view@example.com")
+	contractID := seedContract(t, db, engagementID, "sent")
+	seedInvoice(t, db, practiceID, contractID, openInvoiceStatus, 30000)
+
+	srv, session := newServer(t, db, adminUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]client.ListItem{}
+	for _, item := range listResp.Items {
+		byID[item.ClientID] = item
+	}
+	rollup := byID[clientID].OpenEngagements
+	if len(rollup) != 1 {
+		t.Fatalf("OpenEngagements = %+v, want exactly one line", rollup)
+	}
+	line := rollup[0]
+	if line.InvoiceStatus == nil || *line.InvoiceStatus != openInvoiceStatus {
+		t.Fatalf("invoice status = %v, want \"open\" -- an Admin reads it", line.InvoiceStatus)
+	}
+	if line.InvoiceAmountCents == nil || *line.InvoiceAmountCents != 30000 {
+		t.Fatalf("invoice amount = %v, want 30000", line.InvoiceAmountCents)
+	}
+}
+
+// TestListHandler_OpenEngagementsRollup_NoClientsSkipsTheRollupQuery proves
+// attachOpenEngagements' empty-list short circuit: a Practice with no
+// Clients at all returns an empty page rather than erroring.
+func TestListHandler_OpenEngagementsRollup_NoClientsSkipsTheRollupQuery(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "staff-rollup-no-clients"
+	practiceID := seedStaffWithMembership(t, db, ownerUID)
+
+	srv, session := newServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 0 {
+		t.Fatalf("items = %+v, want none", listResp.Items)
+	}
+}
+
+// TestListHandler_OpenEngagementsRollup_ZeroOpenEngagementsShowsNoLines
+// proves the third headline AC: a Client whose only Engagement is
+// completed shows an empty rollup and the screen does not error.
+func TestListHandler_OpenEngagementsRollup_ZeroOpenEngagementsShowsNoLines(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "staff-rollup-zero-open"
+	practiceID := seedStaffWithMembership(t, db, ownerUID)
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Done Client", "done@example.com")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET status = 'completed' WHERE id = $1`, engagementID,
+	); err != nil {
+		t.Fatalf("complete engagement: %v", err)
+	}
+
+	srv, session := newServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]client.ListItem{}
+	for _, item := range listResp.Items {
+		byID[item.ClientID] = item
+	}
+	if got := byID[clientID].OpenEngagements; len(got) != 0 {
+		t.Fatalf("OpenEngagements = %+v, want none", got)
+	}
+}
+
+// TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney
+// proves ADR-0006/ADR-0008: an employee Doula reads Contract status,
+// Doula name, and Engagement status, but Invoice status/money is omitted
+// entirely from the wire, not merely blanked.
+func TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	const employeeUID = "employee-doula-rollup"
+	staffID := seedStaffAtPractice(t, db, practiceID, employeeUID)
+
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Employee View Client", "employee-view@example.com")
+	seedGrantedAttachment(t, db, engagementID, staffID)
+	contractID := seedContract(t, db, engagementID, "signed")
+	seedInvoice(t, db, practiceID, contractID, "paid", 75000)
+
+	srv, session := newServer(t, db, employeeUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]client.ListItem{}
+	for _, item := range listResp.Items {
+		byID[item.ClientID] = item
+	}
+	rollup := byID[clientID].OpenEngagements
+	if len(rollup) != 1 {
+		t.Fatalf("OpenEngagements = %+v, want exactly one line", rollup)
+	}
+	line := rollup[0]
+	if line.ContractStatus == nil || *line.ContractStatus != "signed" {
+		t.Fatalf("contract status = %v, want \"signed\"", line.ContractStatus)
+	}
+	if line.DoulaName == nil {
+		t.Fatalf("doula name = nil, want the attached Doula's name")
+	}
+	if line.InvoiceStatus != nil || line.InvoiceAmountCents != nil {
+		t.Fatalf("invoice = %v/%v, want both nil -- an employee Doula never reads Invoice money", line.InvoiceStatus, line.InvoiceAmountCents)
+	}
+	if line.FeeCents != nil {
+		t.Fatalf("fee = %v, want nil -- an employee Doula has no fee", line.FeeCents)
+	}
+}
+
+// TestListHandler_OpenEngagementsRollup_ContractorSeesOwnFeeOnlyOnAttachedEngagement
+// proves ADR-0008's sharpest edge: a contractor Doula's rollup shows her
+// own fee, only on the Engagement she actually holds an open, granted
+// attachment on -- a second open Engagement under the same Client that
+// she is not attached to never appears in her rollup at all, matching
+// staffauth.Reader.CanAccessEngagement's per-Engagement (not per-Client)
+// gate.
+func TestListHandler_OpenEngagementsRollup_ContractorSeesOwnFeeOnlyOnAttachedEngagement(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-contractor-rollup")
+	const contractorUID = "contractor-rollup"
+	contractorID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+
+	clientID, attachedEngagement := seedClientEngagement(t, db, practiceID, "Contractor Rollup Client", "contractor-rollup@example.com")
+	seedGrantedAttachmentWithFee(t, db, attachedEngagement, contractorID, 120000)
+	contractID := seedContract(t, db, attachedEngagement, "signed")
+	// An Invoice exists, but a contractor never reads Invoice money.
+	seedInvoice(t, db, practiceID, contractID, openInvoiceStatus, 120000)
+
+	// A second open Engagement on the same Client she holds no
+	// attachment on at all.
+	unattachedEngagement := seedEngagement(t, db, clientID, practiceID, "active", "postpartum")
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
+		t.Fatalf("list = %+v, want exactly the attached Client", listResp.Items)
+	}
+	rollup := listResp.Items[0].OpenEngagements
+	if len(rollup) != 1 || rollup[0].EngagementID != attachedEngagement {
+		t.Fatalf("rollup = %+v, want exactly the attached Engagement %q (unattached %q must not appear)",
+			rollup, attachedEngagement, unattachedEngagement)
+	}
+	line := rollup[0]
+	if line.FeeCents == nil || *line.FeeCents != 120000 {
+		t.Fatalf("fee = %v, want 120000", line.FeeCents)
+	}
+	if line.InvoiceStatus != nil || line.InvoiceAmountCents != nil {
+		t.Fatalf("invoice = %v/%v, want both nil -- a contractor never reads Invoice money", line.InvoiceStatus, line.InvoiceAmountCents)
+	}
+	if line.ContractStatus == nil || *line.ContractStatus != "signed" {
+		t.Fatalf("contract status = %v, want \"signed\" -- ungated scope field", line.ContractStatus)
+	}
+}
+
 func readBody(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	buf := new(bytes.Buffer)

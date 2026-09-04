@@ -43,7 +43,51 @@ type ListItem struct {
 	// round trip to her detail history.
 	PendingRequestKinds []string `json:"pendingRequestKinds,omitempty"`
 
+	// OpenEngagements is one line per open (non-`completed`) Engagement
+	// this Client holds -- #264 (RA-G6): "what needs me today" without
+	// opening each Engagement in turn. A Client can hold more than one
+	// concurrent open Engagement (ADR-0017), so this is a list, never a
+	// single flattened value. Empty/absent for a Client with none (every
+	// Engagement completed, or only a pending Request -- already covered
+	// by PendingRequestKinds above).
+	OpenEngagements []OpenEngagement `json:"openEngagements,omitempty"`
+
 	createdAt time.Time
+}
+
+// OpenEngagement is one rollup line of ListItem.OpenEngagements.
+// ContractStatus and DoulaName are nil when no Contract has been created
+// yet, or no Doula holds an open, granted attachment on this Engagement,
+// respectively -- the frontend renders DoulaName's absence explicitly
+// (matching how it already renders "Never invited" for
+// ListItem.PortalInviteStatus's own nil), per the ticket's ask that an
+// unset Doula never read as a blank cell.
+//
+// InvoiceStatus/InvoiceAmountCents and FeeCents are populated in SQL
+// regardless of who is asking, then shaped away entirely (never merely
+// blanked) by shapeOpenEngagement for a Reader ADR-0006/ADR-0008 bar from
+// them -- the same "fetch full, shape by role" split
+// contracts.ReadContract already uses for the same reason: Go, not SQL,
+// is where the role check is easiest to see and to test.
+type OpenEngagement struct {
+	EngagementID     string  `json:"engagementId"`
+	EngagementStatus string  `json:"engagementStatus"`
+	ContractStatus   *string `json:"contractStatus,omitempty"`
+	DoulaName        *string `json:"doulaName,omitempty"`
+
+	// InvoiceStatus/InvoiceAmountCents: Owner and Admin only (ADR-0006).
+	// Never set for an employee or contractor Doula, even when a
+	// contractor is attached to this exact Engagement -- ADR-0008 gives
+	// her only her own fee, never the Practice's Invoice.
+	InvoiceStatus      *string `json:"invoiceStatus,omitempty"`
+	InvoiceAmountCents *int64  `json:"invoiceAmountCents,omitempty"`
+
+	// FeeCents is the Reader's own agreed fee (ADR-0008's
+	// engagement_attachments.fee_amount_cents), set only when the Reader
+	// is a contractor Doula holding an open, granted attachment on this
+	// Engagement -- never another Doula's fee, and never set at all for
+	// an employee Doula.
+	FeeCents *int64 `json:"feeCents,omitempty"`
 }
 
 // ListResponse is the standard cursor-pagination envelope from
@@ -111,6 +155,13 @@ func ListHandler() http.Handler {
 		if hasMore {
 			list = list[:pageSize]
 		}
+
+		if err := attachOpenEngagements(r.Context(), tx, list, reader, staffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		resp := ListResponse{Items: list, HasMore: hasMore}
 		if hasMore {
 			last := list[len(list)-1]
@@ -221,6 +272,169 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 	}
 	defer func() { _ = rows.Close() }()
 	return scanListItems(rows)
+}
+
+// rawOpenEngagement is one row of fetchOpenEngagements' unshaped read --
+// every field SQL can produce, before shapeOpenEngagement decides which
+// of them reader may actually see.
+type rawOpenEngagement struct {
+	clientID           string
+	engagementID       string
+	engagementStatus   string
+	contractStatus     sql.NullString
+	doulaName          sql.NullString
+	invoiceStatus      sql.NullString
+	invoiceAmountCents sql.NullInt64
+	feeCents           sql.NullInt64
+}
+
+// attachOpenEngagements fills ListItem.OpenEngagements for every row of
+// list, in one extra query keyed on the whole page's Client ids -- not
+// one query per Engagement per Client -- so the rollup stays a bounded
+// number of round trips against a 14-doula Practice's book, per #264's
+// AC. A no-op when list is empty (the "See everyone" first page, or a
+// Practice with no Clients yet).
+func attachOpenEngagements(ctx context.Context, tx *sql.Tx, list []ListItem, reader staffauth.Reader, staffID string) error {
+	if len(list) == 0 {
+		return nil
+	}
+	clientIDs := make([]string, len(list))
+	for i, item := range list {
+		clientIDs[i] = item.ClientID
+	}
+	raws, err := fetchOpenEngagements(ctx, tx, clientIDs, staffID, reader.IsContractor())
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+	byClient := map[string][]rawOpenEngagement{}
+	for _, raw := range raws {
+		byClient[raw.clientID] = append(byClient[raw.clientID], raw)
+	}
+	for i := range list {
+		for _, raw := range byClient[list[i].ClientID] {
+			list[i].OpenEngagements = append(list[i].OpenEngagements, shapeOpenEngagement(reader, raw))
+		}
+	}
+	return nil
+}
+
+// openEngagementRollupQueryTemplate is fetchOpenEngagements' query, with
+// two %-verbs standing in for placeholder indices that shift depending on
+// how many clientIDs the caller passes -- staffIdx and attachedOnlyIdx
+// below always come after every clientID placeholder, never before.
+const openEngagementRollupQueryTemplate = `
+	SELECT e.client_id, e.id, e.status, ct.status,
+	       (SELECT string_agg(s.name, ', ' ORDER BY s.name)
+	        FROM engagement_attachments ea
+	        JOIN staff s ON s.id = ea.staff_id
+	        WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL),
+	       inv.status, inv.amount_cents, att.fee_amount_cents
+	FROM engagements e
+	LEFT JOIN contracts ct ON ct.engagement_id = e.id
+	LEFT JOIN LATERAL (
+	    SELECT i.status, i.amount_cents FROM invoices i
+	    WHERE i.contract_id = ct.id ORDER BY i.created_at DESC LIMIT 1
+	) inv ON true
+	LEFT JOIN engagement_attachments att
+	    ON att.engagement_id = e.id AND att.staff_id = $%d
+	   AND att.origin = 'granted' AND att.ended_at IS NULL
+	WHERE e.client_id IN (%s) AND e.status <> 'completed'
+	  AND (NOT $%d OR att.id IS NOT NULL)
+	ORDER BY e.client_id, e.created_at`
+
+// fetchOpenEngagements reads every open (non-`completed`) Engagement
+// belonging to any of clientIDs, with its Contract's status, its
+// attached Doula(s)' names, its latest Invoice's status/amount, and
+// staffID's own fee on it if she is attached -- one query regardless of
+// how many Clients or Engagements the page holds.
+//
+// staffID is always the caller's own id, whatever her role: passing it
+// unconditionally (rather than only when she is a contractor) is what
+// lets an owner-contractor's (ADR-0017's "solo Practice") own fee join
+// through the same LEFT JOIN an actual contractor's does, with no second
+// code path to keep in sync. attachedOnly narrows the result set itself
+// to Engagements staffID is attached to (true for a contractor's own
+// list, per staffauth.Reader.CanAccessEngagement's "only what she is
+// attached to") -- false lets every open Engagement on the Client
+// through regardless of attachment, for every other role. Which of the
+// fetched fields actually reach the caller is shapeOpenEngagement's job,
+// not this query's: fetching InvoiceStatus/FeeCents unconditionally
+// mirrors contracts.ReadContract's own "fetch full, shape by role" split.
+func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, staffID string, attachedOnly bool) ([]rawOpenEngagement, error) {
+	placeholders := make([]string, len(clientIDs))
+	args := make([]any, 0, len(clientIDs)+2)
+	for i, id := range clientIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args = append(args, id)
+	}
+	staffIdx := len(args) + 1
+	attachedOnlyIdx := len(args) + 2
+	args = append(args, staffID, attachedOnly)
+
+	query := fmt.Sprintf(openEngagementRollupQueryTemplate, staffIdx, strings.Join(placeholders, ", "), attachedOnlyIdx) //nolint:gosec // every interpolated value is a numeric placeholder index this function computed itself, never request input -- the actual clientIDs/staffID/attachedOnly values ride the args slice as bind parameters below
+
+	rows, err := tx.QueryContext(ctx, query, args...) //nolint:gosec // query is built from placeholder indices only (see the nolint above); every real value is bound through args
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("client: fetch open engagements: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []rawOpenEngagement
+	for rows.Next() {
+		var raw rawOpenEngagement
+		if err := rows.Scan(
+			&raw.clientID, &raw.engagementID, &raw.engagementStatus, &raw.contractStatus,
+			&raw.doulaName, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.feeCents,
+		); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("client: scan open engagement: %w", err)
+		}
+		out = append(out, raw)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("client: iterate open engagements: %w", err)
+	}
+	return out, nil
+}
+
+// shapeOpenEngagement is the one place raw's Invoice and fee fields turn
+// into what reader is actually entitled to see, per ADR-0006/ADR-0008:
+// Invoice status/money reaches an Owner or Admin only; a contractor's own
+// fee reaches a contractor only (raw.feeCents is already staffID's own
+// row, never another Doula's, by construction of fetchOpenEngagements'
+// join). Contract status, Doula name, and Engagement status carry no
+// gate -- every role on ADR-0006's table may read them.
+func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEngagement {
+	oe := OpenEngagement{
+		EngagementID:     raw.engagementID,
+		EngagementStatus: raw.engagementStatus,
+	}
+	if raw.contractStatus.Valid {
+		status := raw.contractStatus.String
+		oe.ContractStatus = &status
+	}
+	if raw.doulaName.Valid {
+		name := raw.doulaName.String
+		oe.DoulaName = &name
+	}
+	if reader.Has("owner") || reader.Has("admin") {
+		if raw.invoiceStatus.Valid {
+			status := raw.invoiceStatus.String
+			oe.InvoiceStatus = &status
+		}
+		if raw.invoiceAmountCents.Valid {
+			amount := raw.invoiceAmountCents.Int64
+			oe.InvoiceAmountCents = &amount
+		}
+	}
+	if reader.IsContractor() && raw.feeCents.Valid {
+		fee := raw.feeCents.Int64
+		oe.FeeCents = &fee
+	}
+	return oe
 }
 
 func scanListItems(rows *sql.Rows) ([]ListItem, error) {

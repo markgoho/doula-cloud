@@ -19,7 +19,29 @@ export const clients: ClientListItem[] = [
 		email: 'anne-marie.ochieng-whitfield@example.test',
 		hasWork: true,
 		portalInviteStatus: 'sent',
-		pendingRequestKinds: ['birth']
+		pendingRequestKinds: ['birth'],
+		/*
+		 * #264: both ends of the rollup on one Client -- ADR-0017's "two
+		 * concurrent open Engagements, neither dropped" (the second row's
+		 * own two extremes above already sits at "zero"), one line
+		 * carrying every field populated (Contract, Doula, Invoice/money),
+		 * the other carrying every optional field absent (no Contract yet,
+		 * no Doula attached, no Invoice).
+		 */
+		openEngagements: [
+			{
+				engagementId: 'engagement-1',
+				engagementStatus: 'active',
+				contractStatus: 'sent',
+				doulaName: 'Yolanda Okonkwo-Fitzgerald',
+				invoiceStatus: 'open',
+				invoiceAmountCents: 450_000
+			},
+			{
+				engagementId: 'engagement-2',
+				engagementStatus: 'intake'
+			}
+		]
 	},
 	/*
 	 * A second Client, because a list of one is a list whose every column
