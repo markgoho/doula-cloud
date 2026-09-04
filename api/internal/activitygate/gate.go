@@ -44,11 +44,6 @@ func bypassesRestriction(reader staffauth.Reader) bool {
 	return reader.Has("owner") || reader.Has("admin")
 }
 
-// subjectClient is the subject_kind literal client/events.go's
-// recordEvent writes -- that package has no exported constant for it the
-// way activity.SubjectEngagement is one.
-const subjectClient = "client"
-
 // registry is the one place a subject kind's Rule is stated -- AC6's
 // "adding a new subject kind requires registering its rule in one place."
 // A subject kind absent here is refused by CanAccessSubject/CanSeeAction,
@@ -66,7 +61,7 @@ var registry = map[string]Rule{
 		},
 		RestrictedActions: engagementRestrictedActions(),
 	},
-	subjectClient: {
+	activity.SubjectClient: {
 		// client.DetailHandler already gates its whole page -- record,
 		// resolved fields, Engagements and this same merged history --
 		// behind reader.CanAccessClient before it reads a row

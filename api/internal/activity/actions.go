@@ -14,6 +14,14 @@ import "slices"
 // still lives in Diff, for a reader that needs it.
 const SubjectEngagement = "engagement"
 
+// SubjectClient is the subject_kind client/events.go's recordEvent writes
+// every create/update/erase event against (subject_id = client_id).
+// Exported for the same reason SubjectEngagement is: a caller building a
+// read-side query or gate rule (activitygate's client Rule) imports this
+// rather than repeating the literal, so the write side and any read side
+// can't drift apart.
+const SubjectClient = "client"
+
 // SystemActorName is what ActorSystem renders as -- ADR-0022: "Doula
 // Cloud", never "System". Every reader that resolves an activity row's
 // actor to a display name falls back to this constant for actor_kind =

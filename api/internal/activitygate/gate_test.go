@@ -251,7 +251,7 @@ func TestCanAccessSubject_Client(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			reader, tx := resolveReader(t, db, practiceID, tc.staffID)
-			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, "client", clientID)
+			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectClient, clientID)
 			if err != nil {
 				t.Fatalf("CanAccessSubject: %v", err)
 			}
