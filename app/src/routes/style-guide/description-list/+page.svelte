@@ -28,6 +28,20 @@
 					label: 'Referral',
 					value:
 						'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'
+				},
+				/*
+				 * The label is free text too (#725), and this component is the
+				 * one place that was polite about it: a Client Field Template's
+				 * own field label is a question the Practice types, so the same
+				 * URL belongs on both sides of a row rather than only on the
+				 * value. #720's shape rule -- a row set realizes every state a
+				 * field renders differently -- is why this is a fourth row and
+				 * not a rewrite of the one above.
+				 */
+				{
+					label:
+						'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+					value: 'Epidural, as early as it can be given'
 				}
 			]}
 		/>
