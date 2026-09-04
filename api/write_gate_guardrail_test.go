@@ -6,14 +6,19 @@ import (
 	"testing"
 )
 
-// exemptEngagementWriteRoutes are mutating {engagementId} routes mux
-// registers directly, without going through staffauth.AttachingWrite --
-// #350's write-side mirror of exemptGETRoutes above. Each is a route
-// outside ADR-0008's write table (Visits, Messages, Plan Instances,
-// Contract actions) or outside the Staff population that table governs,
-// named here with a reason for the same purpose exemptGETRoutes exists:
-// so TestRoutes_NoEngagementWriteBypassesTheAttachingWriteGate sees a
+// exemptEngagementWriteRoutes are mutating {engagementId} routes
+// registered without staffauth.AttachingWrite -- #350's write-side gate.
+// Each is a route outside ADR-0008's write table (Visits, Messages, Plan
+// Instances, Contract actions) or outside the Staff population that table
+// governs, named here with a reason so
+// TestRoutes_NoEngagementWriteBypassesTheAttachingWriteGate sees a
 // deliberate declaration instead of an absence.
+//
+// This map stays test-local, unlike the GET exemptions, which moved to
+// the mount as OpenGet's reason. The difference is what the reason is
+// about: an ungated GET's reason describes the route, so it belongs
+// beside it; these describe a route's relationship to one middleware it
+// does not use, which is the guardrail's own question, not the route's.
 // reasonPortalWrite is shared by every /api/portal/... exemption below --
 // goconst's threshold for one literal repeated across the map.
 const reasonPortalWrite = "clientauth.Middleware-scoped portal write, not a Staff population write ADR-0008's write table governs"
@@ -29,15 +34,23 @@ var exemptEngagementWriteRoutes = map[string]string{
 	"DELETE /api/portal/engagements/{engagementId}/push-subscriptions":              reasonPortalWrite,
 }
 
-// muxHandleEngagementWrite finds the start of every mux.Handle
-// registration in this package's own source for a mutating verb whose
-// route pattern carries {engagementId} -- the route files' own text, not
-// a running server, mirroring muxGetPattern's approach above.
-var muxHandleEngagementWrite = regexp.MustCompile(`mux\.Handle\(\s*"(POST|PUT|PATCH|DELETE) ([^"]*\{engagementId\}[^"]*)"`)
+// engagementWriteRegistration finds the start of every registration in
+// this package's own source for a mutating verb whose route pattern
+// carries {engagementId}, through any of the three verbs that mount one:
+// GatedRouter.Write directly, or idempotency.Router's Replayable and
+// Exempt, which mount through it.
+//
+// Still a source scan, and this is the one guardrail that has to stay
+// one. Closing the mux door made "was this route registered through the
+// seam?" a compile-time fact, but this test asks a different question --
+// "is staffauth.AttachingWrite somewhere in that handler's chain?" -- and
+// an http.Handler value carries no way to answer it at runtime. The
+// registry can say a route exists; it cannot say what it was built from.
+var engagementWriteRegistration = regexp.MustCompile(`(?:g\.Write|ir\.Replayable|ir\.Exempt)\(\s*"(POST|PUT|PATCH|DELETE) ([^"]*\{engagementId\}[^"]*)"`)
 
 // balancedParenStatement returns the text of the parenthesized call
 // starting at the "(" found at or after openFrom in text, e.g. the full
-// `mux.Handle("POST ...", staffauth.Middleware(db)(staffauth.AttachingWrite(...)))`
+// `ir.Replayable("POST ...", staffauth.Middleware(db)(staffauth.AttachingWrite(...)))`
 // statement -- so a search for "staffauth.AttachingWrite(" only matches
 // within the one registration it actually wires, not into whatever
 // registration or comment happens to follow it in the source.
@@ -59,8 +72,8 @@ func balancedParenStatement(text string, openFrom int) string {
 }
 
 // TestRoutes_NoEngagementWriteBypassesTheAttachingWriteGate is #350's
-// write-side mirror of TestRoutes_NoGETBypassesTheGate: every mutating
-// {engagementId} route mux.Handle registers must be wrapped in
+// write-side gate: every mutating {engagementId} route this package
+// registers must be wrapped in
 // staffauth.AttachingWrite -- the seam that, since #350, refuses an
 // unattached contractor's write before the wrapped handler ever runs --
 // or be declared exempt above, by name, with a reason. This is what
@@ -69,9 +82,9 @@ func balancedParenStatement(text string, openFrom int) string {
 func TestRoutes_NoEngagementWriteBypassesTheAttachingWriteGate(t *testing.T) {
 	text := packageSource(t)
 
-	matches := muxHandleEngagementWrite.FindAllStringSubmatchIndex(text, -1)
+	matches := engagementWriteRegistration.FindAllStringSubmatchIndex(text, -1)
 	if len(matches) == 0 {
-		t.Fatal("found zero mutating {engagementId} mux registrations in this package -- did the regex stop matching the source?")
+		t.Fatal("found zero mutating {engagementId} registrations in this package -- did the regex stop matching the source?")
 	}
 	for _, m := range matches {
 		pattern := text[m[2]:m[3]] + " " + text[m[4]:m[5]]

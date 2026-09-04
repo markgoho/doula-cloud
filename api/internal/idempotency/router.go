@@ -32,13 +32,24 @@ type Route struct {
 // justify is not a declaration" argument staffauth.GatedRouter.Exempt
 // makes for a GET mounted outside Middleware.
 type Router struct {
-	mux    *http.ServeMux
-	routes []Route
+	mounter Mounter
+	routes  []Route
 }
 
-// NewRouter wraps mux for mutating-route registration.
-func NewRouter(mux *http.ServeMux) *Router {
-	return &Router{mux: mux}
+// Mounter is the one method this package needs from whatever actually
+// holds the mux -- staffauth.GatedRouter, in the BFF. An interface rather
+// than an *http.ServeMux because a mutating route has two declarations to
+// make, not one: its idempotency stance here, and the fact of being
+// registered at all in the router that owns every route. Taking the raw
+// mux would let this package mount behind that router's back, which is
+// the same hole this type exists to close on its own side.
+type Mounter interface {
+	Write(pattern string, h http.Handler)
+}
+
+// NewRouter mounts its routes through mounter.
+func NewRouter(mounter Mounter) *Router {
+	return &Router{mounter: mounter}
 }
 
 // Replayable declares pattern replayable and mounts h. h must already
@@ -48,7 +59,7 @@ func NewRouter(mux *http.ServeMux) *Router {
 // to ask "were you built with Wrap?" at runtime.
 func (rt *Router) Replayable(pattern string, h http.Handler) {
 	rt.routes = append(rt.routes, Route{Pattern: pattern, Replayable: true})
-	rt.mux.Handle(pattern, h)
+	rt.mounter.Write(pattern, h)
 }
 
 // Exempt declares pattern deliberately unwrapped, for reason, and mounts
@@ -62,7 +73,7 @@ func (rt *Router) Exempt(pattern, reason string, h http.Handler) {
 		panic(fmt.Sprintf("idempotency: Router.Exempt(%q): no reason given -- a mutating route left unwrapped must say why", pattern))
 	}
 	rt.routes = append(rt.routes, Route{Pattern: pattern, Reason: reason})
-	rt.mux.Handle(pattern, h)
+	rt.mounter.Write(pattern, h)
 }
 
 // Routes returns the registry of every mutating route this router knows

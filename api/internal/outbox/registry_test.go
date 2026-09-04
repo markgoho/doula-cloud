@@ -25,9 +25,17 @@ type recordingMux struct {
 	patterns []string
 }
 
-func (m *recordingMux) Handle(pattern string, _ http.Handler) {
+func (m *recordingMux) Write(pattern string, _ http.Handler) {
 	m.patterns = append(m.patterns, pattern)
 }
+
+// muxWriter adapts a real *http.ServeMux to outbox.Mux, for the tests
+// below that need actual routing rather than a record of what was
+// mounted. In the BFF this role belongs to staffauth.GatedRouter, which
+// is the only thing holding the mux there.
+type muxWriter struct{ mux *http.ServeMux }
+
+func (m muxWriter) Write(pattern string, h http.Handler) { m.mux.Handle(pattern, h) }
 
 func TestRegister_MountsEveryRegistrationAsAPOST(t *testing.T) {
 	db := testdb.New(t)
@@ -65,7 +73,7 @@ func TestRegister_MountsHandlersThatRunTheirOwnWorker(t *testing.T) {
 	first, second := &stubProcessor{}, &stubProcessor{}
 
 	mux := http.NewServeMux()
-	outbox.Register(mux, db.App, "correct-secret", []outbox.Registration{
+	outbox.Register(muxWriter{mux}, db.App, "correct-secret", []outbox.Registration{
 		{Path: "/first", Door: outbox.NotificationDoor, Worker: first},
 		{Path: "/second", Door: outbox.NotificationDoor, Worker: second},
 	})
@@ -93,7 +101,7 @@ func TestRegister_CarriesTheSecretToEveryHandler(t *testing.T) {
 	worker := &stubProcessor{}
 
 	mux := http.NewServeMux()
-	outbox.Register(mux, db.App, "correct-secret", []outbox.Registration{
+	outbox.Register(muxWriter{mux}, db.App, "correct-secret", []outbox.Registration{
 		{Path: "/only", Door: outbox.NotificationDoor, Worker: worker},
 	})
 	srv := httptest.NewServer(mux)

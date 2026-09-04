@@ -130,24 +130,30 @@ func routes(d Deps) (http.Handler, []staffauth.GatedRoute, []idempotency.Route) 
 	// silently opening to every Staff member (#231, #315). AnyStaff
 	// declares an endpoint open to every role on purpose; a bare role
 	// list names exactly who ADR-0008's read table admits.
+	// The mux is handed to g here and named nowhere else. That is what
+	// makes the gate the only door: a route file has no mux to reach for,
+	// so bypassing the registry is a compile error rather than something a
+	// test has to find by regexing this package's own source.
 	g := staffauth.NewGatedRouter(mux, d.DB)
 	// idempotency.Router is registerPracticeRoutes' mirror of g for its
 	// mutating routes: Replayable or Exempt is the only way to register
 	// one, and Exempt refuses to register without a reason.
-	ir := idempotency.NewRouter(mux)
+	ir := idempotency.NewRouter(g)
 
-	// Only the first two take g. The other three mount outside
-	// staffauth.Middleware entirely -- a Client session, a scheduler, a
-	// webhook signature -- so there is no Membership for a role
-	// declaration to be about, and the signature says so. Only
+	// Every file takes g and nothing takes the mux. The last three mount
+	// outside staffauth.Middleware entirely -- a Client session, a
+	// scheduler, a webhook signature -- so there is no Membership for a
+	// role declaration to be about; their reads say so at the mount
+	// through g.OpenGet, and their writes go through g.Write, which asks
+	// for no declaration but does put them in the registry. Only
 	// registerPracticeRoutes takes ir: the review that added it (2026)
 	// scoped the idempotency-stance requirement to that file's mutating
 	// routes.
-	registerSessionRoutes(mux, g, d)
+	registerSessionRoutes(g, d)
 	registerPracticeRoutes(g, ir, d)
-	registerPortalRoutes(mux, d)
-	registerInternalRoutes(mux, d)
-	registerWebhookRoutes(mux, d)
+	registerPortalRoutes(g, d)
+	registerInternalRoutes(g, d)
+	registerWebhookRoutes(g, d)
 
 	return csrf.Wrap(d.ExpectedOrigins, mux), g.Routes(), ir.Routes()
 }

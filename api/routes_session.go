@@ -32,90 +32,93 @@ func helloHandler(w http.ResponseWriter, _ *http.Request) {
 // Practice, because at the moment they are called there may not be one
 // yet -- or, for the work-state write, because where a person works is a
 // fact about her rather than about a Membership (00043).
-func registerSessionRoutes(mux *http.ServeMux, g *staffauth.GatedRouter, d Deps) {
+func registerSessionRoutes(g *staffauth.GatedRouter, d Deps) {
 	// Under /api like every other route: Firebase Hosting rewrites /api/** to
 	// this service with the path unchanged, so a bare /hello would be
 	// unreachable from the browser. CI's two smoke tests curl this same path
 	// against the container and against the raw Cloud Run URL.
-	mux.HandleFunc("GET /api/hello", helloHandler)
+	g.OpenGet("/api/hello", "no auth at all -- a health probe", http.HandlerFunc(helloHandler))
 	// Not rate limited: a liveness/readiness probe with no side effect and
 	// no cost, curled in a loop by CI's own smoke tests and by whatever
 	// polls Cloud Run's health check -- limiting it would break exactly
 	// the callers it exists for (#602's docs/api-design.md entry records
 	// this).
-	mux.Handle("POST /api/session",
+	g.Write("POST /api/session",
 		ratelimit.Wrap(d.DB, "staff_login", loginRules)(session.CreateHandler(d.Verifier, d.DB, d.NudgeEnqueuer)))
-	mux.Handle("DELETE /api/session", session.EndHandler(d.DB))
+	g.Write("DELETE /api/session", session.EndHandler(d.DB))
 	// Not rate limited: it only ever clears a cookie the caller already
 	// holds (or does nothing if there is none) -- no credential is
 	// checked, so there is nothing here for an attacker to gain by
 	// calling it repeatedly.
-	mux.Handle("POST /api/staff/signup",
+	g.Write("POST /api/staff/signup",
 		ratelimit.Wrap(d.DB, "staff_signup", bootstrapRules)(staffauth.SignupHandler(d.Verifier, d.DB)))
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.
-	mux.Handle("GET /api/staff/session", staffauth.SessionHandler(d.DB))
+	g.OpenGet("/api/staff/session",
+		"lists a person's own memberships before any {practiceId} is chosen -- there is no Membership yet for a role declaration to be about",
+		staffauth.SessionHandler(d.DB))
 	// Where she works is a fact about the person, not about a Membership
 	// (00043), so its write sits beside the session probe rather than
 	// under a Practice -- no {practiceId} in the path, and no staff id
 	// either, which is what makes it self-edit-only by shape (#437).
-	mux.Handle("PUT /api/staff/work-state", staffauth.UpdateWorkStateHandler(d.DB))
-	mux.Handle("POST /api/staff/accept-invite",
+	g.Write("PUT /api/staff/work-state", staffauth.UpdateWorkStateHandler(d.DB))
+	g.Write("POST /api/staff/accept-invite",
 		ratelimit.Wrap(d.DB, "staff_accept_invite", bootstrapRules)(staffauth.AcceptInviteHandler(d.Verifier, d.AccountManager, d.DB)))
 	// #613: an email address, like a work state, is a fact about the
 	// person -- same "no {practiceId}, no staff id" shape as
 	// UpdateWorkStateHandler above. Not rate limited: gated by
 	// authn.Begin's own __session cookie check, the same reasoning
 	// GET /api/staff/session and PUT /api/staff/work-state give.
-	mux.Handle("PUT /api/staff/email", staffauth.ChangeEmailHandler(d.AccountManager, d.DB))
+	g.Write("PUT /api/staff/email", staffauth.ChangeEmailHandler(d.AccountManager, d.DB))
 	// The signed-in re-request AC #613 added while resolving #169: a
 	// 24-hour verification link and ADR-0010's retry window are roughly
 	// the same length, so this is the only way to recover from a link
 	// that arrived already dead. Keyed on the session cookie
 	// (ratelimit.SessionCookieRule) rather than a Bearer token -- there
 	// is no bootstrap window here, the caller is already signed in.
-	mux.Handle("POST /api/staff/verify-email/request",
+	g.Write("POST /api/staff/verify-email/request",
 		ratelimit.Wrap(d.DB, "staff_verify_email_request", verifyRequestRules)(staffauth.RequestVerificationHandler(d.DB)))
 	// Public and pre-account: a verification link can be opened signed
 	// out of everything, so this reads no Bearer token and no session --
 	// the link's own token is the whole credential (docs/api-design.md
 	// section 6's table records the disposition).
-	mux.Handle("POST /api/staff/verify-email",
+	g.Write("POST /api/staff/verify-email",
 		ratelimit.Wrap(d.DB, "staff_verify_email", tokenSpendRules)(staffauth.SpendVerificationHandler(d.AccountManager, d.DB)))
 	// Public and unauthenticated -- a forgotten password is, by
 	// definition, no credential to present. Keyed on the request's own
 	// email field (ratelimit.JSONFieldRule) since there is nothing else
 	// to key on this early; answers identically whether or not the
 	// address exists (#168's account-enumeration rule).
-	mux.Handle("POST /api/staff/password-reset/request",
+	g.Write("POST /api/staff/password-reset/request",
 		ratelimit.Wrap(d.DB, "staff_password_reset_request", resetRequestRules)(staffauth.RequestResetHandler(d.AccountManager, d.DB)))
 	// Public and pre-account, same shape as verify-email above: the reset
 	// token is the whole credential.
-	mux.Handle("POST /api/staff/password-reset",
+	g.Write("POST /api/staff/password-reset",
 		ratelimit.Wrap(d.DB, "staff_password_reset", tokenSpendRules)(staffauth.SpendResetHandler(d.AccountManager, d.DB)))
 	// #615: the one unauthenticated endpoint for all three MFA-recovery
 	// paths' spend. Public and pre-account -- a locked-out person cannot
 	// sign in first (#605's sequence) -- keyed on the request's own email
 	// field for #602's per-account throttle (mfaRecoverySpendRules), the
 	// same shape resetRequestRules uses.
-	mux.Handle("POST /api/staff/mfa-recovery/spend",
+	g.Write("POST /api/staff/mfa-recovery/spend",
 		ratelimit.Wrap(d.DB, "staff_mfa_recovery_spend", mfaRecoverySpendRules)(staffauth.SpendMFARecoveryHandler(d.AccountManager, d.DB)))
 	// Self-only, same "no {practiceId}, no staff id" shape as
 	// PUT /api/staff/work-state above -- who is currently a sole Owner is
 	// a fact about the person, not a Membership, and this is the only
 	// path by which she ever sees a saved code's plaintext (#615).
-	mux.Handle("POST /api/staff/mfa-recovery/saved-codes/rotate",
+	g.Write("POST /api/staff/mfa-recovery/saved-codes/rotate",
 		ratelimit.Wrap(d.DB, "staff_mfa_recovery_rotate", mfaRecoveryRotateRules)(staffauth.RotateSavedCodesHandler(d.DB)))
 	// #230's pre-account Offer read: no session of either population, so
-	// it is mounted on the raw mux and authenticated by the Invitation's
-	// token plus the emailed six-digit code. ADR-0008 requires the
-	// exemption declared by name in GatedRouter's own registry, in the
-	// same change that mounts the route -- g.Exempt is that declaration,
-	// and the guardrail test walks it.
-	g.Exempt("/api/offers/{offerId}", "pre-account Offer read (ADR-0008, #230): no session exists yet -- authenticated by the Invitation token and the emailed access code")
-	mux.Handle("GET /api/offers/{offerId}",
+	// it sits outside both middlewares and is authenticated by the
+	// Invitation's token plus the emailed six-digit code. ADR-0008
+	// requires the exemption declared by name in GatedRouter's own
+	// registry, in the same change that mounts the route -- which used to
+	// be a g.Exempt call beside a mux.Handle call, two statements that had
+	// to agree with each other. OpenGet is both at once.
+	g.OpenGet("/api/offers/{offerId}",
+		"pre-account Offer read (ADR-0008, #230): no session exists yet -- authenticated by the Invitation token and the emailed access code",
 		ratelimit.Wrap(d.DB, "offer_read", offerRules)(offer.ReadHandler(d.DB)))
-	mux.Handle("POST /api/offers/{offerId}/decline",
+	g.Write("POST /api/offers/{offerId}/decline",
 		ratelimit.Wrap(d.DB, "offer_decline", offerRules)(offer.DeclineByTokenHandler(d.DB)))
 }
 

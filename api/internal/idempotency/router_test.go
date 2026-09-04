@@ -7,6 +7,13 @@ import (
 	"doula-cloud/api/internal/idempotency"
 )
 
+// discardMounter stands in for staffauth.GatedRouter, which is what
+// actually holds the mux in the BFF. These tests are about the registry,
+// not about routing, so it keeps nothing.
+type discardMounter struct{}
+
+func (discardMounter) Write(string, http.Handler) {}
+
 // TestRouter_ExemptPanicsWithoutAReason mirrors
 // staffauth.TestGatedRouter_ExemptPanicsWithoutAReason: an exemption
 // nobody had to justify is not a declaration, so Exempt refuses one.
@@ -16,7 +23,7 @@ func TestRouter_ExemptPanicsWithoutAReason(t *testing.T) {
 			t.Fatal("expected Exempt to panic on an empty reason, it did not")
 		}
 	}()
-	rt := idempotency.NewRouter(http.NewServeMux())
+	rt := idempotency.NewRouter(discardMounter{})
 	rt.Exempt("/api/practices/{practiceId}/website", "", http.NotFoundHandler())
 }
 
@@ -25,7 +32,7 @@ func TestRouter_ExemptPanicsWithoutAReason(t *testing.T) {
 // Reason -- the table a guardrail-shaped test walks against the real route
 // table routes() builds.
 func TestRouter_RegistryIsWalkable(t *testing.T) {
-	rt := idempotency.NewRouter(http.NewServeMux())
+	rt := idempotency.NewRouter(discardMounter{})
 	rt.Replayable("POST /api/practices/{practiceId}/clients", http.NotFoundHandler())
 	rt.Exempt("PUT /api/practices/{practiceId}/website", "PUT replaces the declaration wholesale", http.NotFoundHandler())
 
@@ -48,7 +55,7 @@ func TestRouter_RegistryIsWalkable(t *testing.T) {
 // inspecting Reason -- the same shape staffauth.GatedRoute's Exempt field
 // gives GatedRoute.
 func TestRouter_ExemptWithoutReplayableAreDistinguishable(t *testing.T) {
-	rt := idempotency.NewRouter(http.NewServeMux())
+	rt := idempotency.NewRouter(discardMounter{})
 	rt.Exempt("DELETE /api/practices/{practiceId}/push-subscriptions", "delete; a retry deletes nothing further", http.NotFoundHandler())
 
 	routes := rt.Routes()
