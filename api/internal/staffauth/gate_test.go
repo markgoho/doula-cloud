@@ -55,15 +55,16 @@ func TestGatedRouter_RegistryIsWalkable(t *testing.T) {
 	}
 }
 
-// TestGatedRouter_ExemptIsDeclaredInTheSameRegistry is ADR-0008's
+// TestGatedRouter_OpenGetIsDeclaredInTheSameRegistry is ADR-0008's
 // requirement for the pre-account Offer read (#317): a GET mounted
 // outside staffauth.Middleware cannot be caught by the startup panic --
-// GatedRouter never sees it -- so it has to appear in the same table the
-// guardrail test walks, carrying a reason instead of a role list.
-func TestGatedRouter_ExemptIsDeclaredInTheSameRegistry(t *testing.T) {
+// there is no membership to check -- so it has to appear in the same
+// table the guardrail test walks, carrying a reason instead of a role
+// list.
+func TestGatedRouter_OpenGetIsDeclaredInTheSameRegistry(t *testing.T) {
 	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
 	g.Get("/api/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler())
-	g.Exempt("/api/offers/{offerId}", "token-authenticated pre-account read")
+	g.OpenGet("/api/offers/{offerId}", "token-authenticated pre-account read", http.NotFoundHandler())
 
 	routes := g.Routes()
 	if len(routes) != 2 {
@@ -75,16 +76,85 @@ func TestGatedRouter_ExemptIsDeclaredInTheSameRegistry(t *testing.T) {
 	}
 }
 
-// An exemption nobody had to justify is not a declaration, so Exempt
+// OpenGet mounts as well as declares, which is the point of it: the pair
+// it replaced -- a record-only Exempt call beside a mux.Handle call --
+// could disagree, leaving a route declared and unmounted or mounted and
+// undeclared.
+func TestGatedRouter_OpenGetMountsTheRouteItDeclares(t *testing.T) {
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, nil)
+	g.OpenGet("/api/hello", "a health probe", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/hello", nil))
+
+	if recorder.Code != http.StatusTeapot {
+		t.Errorf("status = %d, want %d -- OpenGet declared the route without mounting it", recorder.Code, http.StatusTeapot)
+	}
+}
+
+// An exemption nobody had to justify is not a declaration, so OpenGet
 // refuses one -- the same argument AnyStaff makes about a role list.
-func TestGatedRouter_ExemptPanicsWithoutAReason(t *testing.T) {
+func TestGatedRouter_OpenGetPanicsWithoutAReason(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatal("expected Exempt to panic on an empty reason, it did not")
+			t.Fatal("expected OpenGet to panic on an empty reason, it did not")
 		}
 	}()
 	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
-	g.Exempt("/api/offers/{offerId}", "")
+	g.OpenGet("/api/offers/{offerId}", "", http.NotFoundHandler())
+}
+
+// Write is the verb for everything that is not a GET. It asks for no
+// declaration -- ADR-0008's read table is about reads -- but it does put
+// the route in the registry, which is what lets a test enumerate the
+// write surface instead of grepping for it.
+func TestGatedRouter_WriteRecordsAndMounts(t *testing.T) {
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, nil)
+	g.Write("POST /api/session", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+
+	routes := g.Routes()
+	if len(routes) != 1 {
+		t.Fatalf("Routes() = %d entries, want 1", len(routes))
+	}
+	if !routes[0].Write || routes[0].Method != http.MethodPost || routes[0].Pattern != "/api/session" {
+		t.Errorf("route = %+v, want a POST write on /api/session", routes[0])
+	}
+
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/session", nil))
+	if recorder.Code != http.StatusTeapot {
+		t.Errorf("status = %d, want %d -- Write recorded the route without mounting it", recorder.Code, http.StatusTeapot)
+	}
+}
+
+// A GET routed through Write would be a read that ADR-0008's table never
+// sees, which is the whole failure this router exists to prevent.
+func TestGatedRouter_WriteRefusesAGET(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected Write to panic on a GET, it did not")
+		}
+	}()
+	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
+	g.Write("GET /api/hello", http.NotFoundHandler())
+}
+
+// A pattern with no method would mount under every verb, silently taking
+// GETs with it.
+func TestGatedRouter_WriteRefusesAPatternWithNoMethod(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected Write to panic on a pattern with no method, it did not")
+		}
+	}()
+	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
+	g.Write("/api/session", http.NotFoundHandler())
 }
 
 // TestGatedRouter_BillingBalance_DoulaForbidden runs the real

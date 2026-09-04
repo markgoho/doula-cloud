@@ -7,29 +7,31 @@ import (
 	"testing"
 )
 
-// muxHandleMutating finds every mutating (POST/PUT/PATCH/DELETE) route
-// registered directly on the raw mux (mux.Handle) in this package's own
-// source -- mirrors muxGetPattern's approach in gate_guardrail_test.go.
-// routes_practice.go registers every one of its mutating routes through
-// idempotency.Router instead (ir.Replayable / ir.Exempt), so this should
-// match zero routes in that file; a hit means a mutating route slipped
-// back onto the raw mux, bypassing the idempotency-stance requirement
-// entirely.
-var muxHandleMutating = regexp.MustCompile(`mux\.Handle\(\s*"(POST|PUT|PATCH|DELETE) ([^"]+)"`)
+// gateWriteMutating finds every mutating (POST/PUT/PATCH/DELETE) route
+// registered straight through GatedRouter.Write, skipping
+// idempotency.Router.
+//
+// This regex used to look for mux.Handle, which routes_practice.go never
+// had access to in the first place -- that file has always taken
+// (g, ir, d) and no mux, so the check could not fail however wrong the
+// file got. Now that every other route file goes through the same router,
+// g.Write is the way a mutating route here would actually bypass its
+// idempotency stance, and the test has something real to catch.
+var gateWriteMutating = regexp.MustCompile(`g\.Write\(\s*"(POST|PUT|PATCH|DELETE) ([^"]+)"`)
 
-// TestRoutes_NoMutatingRouteInPracticeRoutesBypassesIdempotencyRouter is
-// the idempotency-stance mirror of TestRoutes_NoGETBypassesTheGate: every
-// mutating route routes_practice.go registers must go through
-// idempotency.Router (ir.Replayable or ir.Exempt), not straight onto mux.
-// idempotency.Router itself cannot forbid a raw mux.Handle call -- the
-// same structural gap staffauth.GatedRouter has -- so this closes it the
-// same way: by scanning the file's own source.
+// TestRoutes_NoMutatingRouteInPracticeRoutesBypassesIdempotencyRouter:
+// every mutating route routes_practice.go registers must go through
+// idempotency.Router (ir.Replayable or ir.Exempt), which is what forces a
+// stance to be declared. GatedRouter.Write would mount it just as well
+// and ask for nothing, so a mutating route reaching for that verb in this
+// file is the bypass -- everywhere else in the package it is the ordinary
+// way to mount a write.
 func TestRoutes_NoMutatingRouteInPracticeRoutesBypassesIdempotencyRouter(t *testing.T) {
 	src := readSourceFile(t, "routes_practice.go")
 
-	if matches := muxHandleMutating.FindAllStringSubmatch(src, -1); len(matches) > 0 {
+	if matches := gateWriteMutating.FindAllStringSubmatch(src, -1); len(matches) > 0 {
 		for _, m := range matches {
-			t.Errorf("route %q %q is registered directly on mux in routes_practice.go, bypassing idempotency.Router -- register it through ir.Replayable or ir.Exempt instead", m[1], m[2])
+			t.Errorf("route %q %q is registered through g.Write in routes_practice.go, bypassing idempotency.Router -- register it through ir.Replayable or ir.Exempt instead", m[1], m[2])
 		}
 	}
 }

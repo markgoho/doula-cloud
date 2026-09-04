@@ -1,8 +1,6 @@
 package main
 
 import (
-	"net/http"
-
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/message"
@@ -11,39 +9,45 @@ import (
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/pushsub"
 	"doula-cloud/api/internal/ratelimit"
+	"doula-cloud/api/internal/staffauth"
 )
 
 // The Client's own surface, behind clientauth rather than staffauth.
 //
+// portalPopulation is why every read here is an OpenGet rather than a
+// Get: ADR-0008's role table describes Staff at a Practice, and a Client
+// holds no Membership to check against, so there is nothing for a role
+// declaration to be about. These used to be listed in the guardrail
+// test's own exemptGETRoutes map; the reason now sits at the mount.
+const portalPopulation = "clientauth.Middleware, not staffauth -- a Client holds no Membership, so ADR-0008's read table has nothing to say about this route"
+
 // A different population with a different session, which is why none of
-// these go through GatedRouter: ADR-0008's role table describes Staff at
-// a Practice, and a Client holds no Membership to check against. Their
-// GETs are declared in exemptGETRoutes in the guardrail test instead.
-func registerPortalRoutes(mux *http.ServeMux, d Deps) {
-	mux.Handle("POST /api/portal/accept-invite",
+// these reads go through GatedRouter.Get.
+func registerPortalRoutes(g *staffauth.GatedRouter, d Deps) {
+	g.Write("POST /api/portal/accept-invite",
 		ratelimit.Wrap(d.DB, "portal_accept_invite", bootstrapRules)(portalinvite.AcceptInviteHandler(d.Verifier, d.DB)))
 	// Not rate limited: gated by authn.Begin's own __session cookie check,
 	// like staffauth.SessionHandler below -- there is no bootstrap window
 	// here for an attacker to spend.
-	mux.Handle("GET /api/portal/session", clientauth.SessionHandler(d.DB))
-	mux.Handle("GET /api/portal/engagements/{engagementId}",
+	g.OpenGet("/api/portal/session", portalPopulation, clientauth.SessionHandler(d.DB))
+	g.OpenGet("/api/portal/engagements/{engagementId}", portalPopulation,
 		clientauth.Middleware(d.DB)(portal.DetailHandler()))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/birth-plan",
+	g.OpenGet("/api/portal/engagements/{engagementId}/birth-plan", portalPopulation,
 		clientauth.Middleware(d.DB)(plans.ClientGetBirthPlanHandler()))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/contract",
+	g.OpenGet("/api/portal/engagements/{engagementId}/contract", portalPopulation,
 		clientauth.Middleware(d.DB)(contracts.ClientGetContractHandler()))
-	mux.Handle("POST /api/portal/engagements/{engagementId}/contract/sign",
+	g.Write("POST /api/portal/engagements/{engagementId}/contract/sign",
 		clientauth.Middleware(d.DB)(contracts.ClientPostSignContractHandler(d.Store)))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/contract/pdf",
+	g.OpenGet("/api/portal/engagements/{engagementId}/contract/pdf", portalPopulation,
 		clientauth.Middleware(d.DB)(contracts.ClientGetSignedContractPDFHandler(d.Store)))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/messages",
+	g.OpenGet("/api/portal/engagements/{engagementId}/messages", portalPopulation,
 		clientauth.Middleware(d.DB)(message.ClientListHandler()))
-	mux.Handle("POST /api/portal/engagements/{engagementId}/messages",
+	g.Write("POST /api/portal/engagements/{engagementId}/messages",
 		clientauth.Middleware(d.DB)(message.ClientCreateHandler(d.Store, d.Pusher)))
-	mux.Handle("GET /api/portal/engagements/{engagementId}/messages/{messageId}/attachment",
+	g.OpenGet("/api/portal/engagements/{engagementId}/messages/{messageId}/attachment", portalPopulation,
 		clientauth.Middleware(d.DB)(message.ClientAttachmentHandler(d.Store)))
-	mux.Handle("POST /api/portal/engagements/{engagementId}/push-subscriptions",
+	g.Write("POST /api/portal/engagements/{engagementId}/push-subscriptions",
 		clientauth.Middleware(d.DB)(pushsub.ClientRegisterHandler()))
-	mux.Handle("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
+	g.Write("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
 		clientauth.Middleware(d.DB)(pushsub.ClientUnregisterHandler()))
 }

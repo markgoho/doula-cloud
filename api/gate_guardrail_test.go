@@ -1,46 +1,12 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
 )
-
-// exemptGETRoutes are the GET routes routes() registers directly on the
-// mux rather than through GatedRouter -- every one of them sits outside
-// staffauth.Middleware entirely (a bootstrap route with no session yet,
-// or a clientauth.Middleware-scoped portal route), so ADR-0008's read
-// table, which is about a Staff member's reach, has nothing to say about
-// them. #315's ACs are scoped to "every GET behind staffauth.Middleware";
-// this list is the explicit, reviewable boundary of that scope. Adding a
-// new entry here should always come with a reason, the same way
-// staffauth.AnyStaff must be named rather than defaulted into.
-//
-// This map is the pre-#317 half of that boundary. ADR-0008 requires the
-// pre-account Offer read declared exempt *in GatedRouter's own registry*
-// rather than in a test-local list, so a route may now be accounted for
-// by either this map or a GatedRouter.Exempt entry -- see
-// TestRoutes_NoGETBypassesTheGate. New exemptions should prefer
-// g.Exempt, which lives beside the mount it describes.
-var exemptGETRoutes = map[string]bool{
-	"GET /api/hello":                                                             true, // no auth at all -- a health probe
-	"GET /api/staff/session":                                                     true, // lists a person's own memberships before any :practiceId is chosen
-	"GET /api/portal/session":                                                    true, // clientauth.Middleware, not staffauth -- a different population
-	"GET /api/portal/engagements/{engagementId}":                                 true,
-	"GET /api/portal/engagements/{engagementId}/birth-plan":                      true,
-	"GET /api/portal/engagements/{engagementId}/contract":                        true,
-	"GET /api/portal/engagements/{engagementId}/contract/pdf":                    true,
-	"GET /api/portal/engagements/{engagementId}/messages":                        true,
-	"GET /api/portal/engagements/{engagementId}/messages/{messageId}/attachment": true,
-	"GET /api/internal/billing/dormant-practices":                                true, // X-Internal-Secret, not a session -- the operator's escheatment mailing list (#420), the same position every /api/internal worker endpoint holds
-}
-
-// muxGetPattern finds every GET route registered directly on the raw mux
-// (mux.Handle or mux.HandleFunc) in this package's own source, not on a
-// running server: Go's http.ServeMux has no public API to enumerate its
-// registered patterns.
-var muxGetPattern = regexp.MustCompile(`mux\.(?:Handle|HandleFunc)\(\s*"(GET [^"]+)"`)
 
 // TestRoutes_EveryDeclaredGETHasRoleDeclaration is the rlsguardrail-shaped
 // assertion #315's AC asks for, run against the real registry routes()
@@ -52,14 +18,20 @@ var muxGetPattern = regexp.MustCompile(`mux\.(?:Handle|HandleFunc)\(\s*"(GET [^"
 func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
 	_, registry, _ := routes(testDeps())
 	if len(registry) == 0 {
-		t.Fatal("routes() registered zero GETs through GatedRouter -- did routes() stop wiring g.Get calls?")
+		t.Fatal("routes() registered zero routes through GatedRouter -- did routes() stop wiring g.Get calls?")
 	}
 	for _, route := range registry {
+		if route.Write {
+			// A write carries no role declaration by design: ADR-0008's
+			// read table is about reads. What it must do is be here at all,
+			// which TestRoutes_EveryRouteIsRegisteredThroughTheGate checks.
+			continue
+		}
 		if route.Exempt {
 			// An exempt route has no roles by definition -- it is outside
 			// staffauth.Middleware, so there is no membership to check
 			// against. What it must carry instead is a reason, which
-			// GatedRouter.Exempt refuses to register without.
+			// GatedRouter.OpenGet refuses to register without.
 			if route.Reason == "" {
 				t.Errorf("exempt route %q carries no reason", route.Pattern)
 			}
@@ -71,55 +43,98 @@ func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
 	}
 }
 
-// TestRoutes_NoGETBypassesTheGate is #231's other finding made concrete:
-// GatedRouter's startup panic only fires for a route someone actually
-// declares through it. Nothing stops a future change from registering a
-// GET straight on mux, skipping the gate (and the panic) entirely. This
-// test closes that hole by scanning this package's own source for every
-// direct mux GET registration and failing if one isn't accounted for by
-// either the GatedRouter registry or exemptGETRoutes above.
-func TestRoutes_NoGETBypassesTheGate(t *testing.T) {
-	src := packageSource(t)
+// muxRegistration finds a route mounted straight onto an http.ServeMux in
+// this package's own source.
+//
+// This regex used to be the load-bearing part of this file: the raw mux
+// travelled into every route file beside GatedRouter, so a route could
+// skip the gate entirely and the only thing that would notice was a scan
+// of the source text. routes() now hands the mux to GatedRouter and names
+// it nowhere else, so a bypass does not compile -- and what remains here
+// is a check that the arrangement itself has not been undone.
+var muxRegistration = regexp.MustCompile(`\bmux\.(?:Handle|HandleFunc)\(`)
 
-	_, registry, _ := routes(testDeps())
-	// One map for both kinds of registry entry: a GET GatedRouter mounted
-	// with a role declaration, and a GET declared exempt by name because
-	// it is mounted outside staffauth.Middleware entirely (ADR-0008's
-	// pre-account Offer read). Either is a deliberate, reviewable
-	// declaration; an absence from both is the hole this test closes.
-	gated := make(map[string]bool, len(registry))
-	for _, route := range registry {
-		gated["GET "+route.Pattern] = true
-	}
-
-	matches := muxGetPattern.FindAllStringSubmatch(src, -1)
-	if len(matches) == 0 {
-		t.Fatal("found zero direct mux GET registrations in this package -- did the regex stop matching the source?")
-	}
-	for _, match := range matches {
-		pattern := match[1]
-		if gated[pattern] || exemptGETRoutes[pattern] {
+// TestRoutes_EveryRouteIsRegisteredThroughTheGate is the structural half
+// of #231's finding, and it is now a statement about the shape of the
+// package rather than about any one route: nothing in this package
+// registers on a mux directly, because nothing but routes() can name one.
+//
+// It stays a source scan on purpose. The compiler already refuses a
+// bypass -- a route file has no mux parameter to reach for -- so this
+// does not catch a route sneaking past. What it catches is somebody
+// handing the mux back out, which is the change that would quietly make
+// every other guardrail here optional again.
+func TestRoutes_EveryRouteIsRegisteredThroughTheGate(t *testing.T) {
+	for name, src := range packageSources(t) {
+		if name == "routes.go" {
+			// routes.go constructs the mux and hands it to GatedRouter.
+			// That one call is the arrangement, not a violation of it.
 			continue
 		}
-		t.Errorf("route %q is registered directly on mux, bypassing GatedRouter and undeclared in exemptGETRoutes -- mount it through g.Get with a role declaration, or add it to exemptGETRoutes with a reason", pattern)
+		if muxRegistration.MatchString(src) {
+			t.Errorf("%s registers a route directly on a mux -- register it through GatedRouter (Get, OpenGet or Write) so it lands in the registry", name)
+		}
 	}
 }
 
-// packageSource is every non-test .go file in this package, concatenated.
+// TestRoutes_NoGETIsMountedAsAWrite guards the other direction: a GET
+// registered through Write would serve reads that ADR-0008's read table
+// never sees. GatedRouter.Write panics on one, so this is that panic's
+// belt-and-braces mirror over the real table.
+func TestRoutes_NoGETIsMountedAsAWrite(t *testing.T) {
+	_, registry, _ := routes(testDeps())
+	for _, route := range registry {
+		if route.Write && route.Method == http.MethodGet {
+			t.Errorf("route %q is mounted through Write -- a GET belongs at Get or OpenGet", route.Pattern)
+		}
+	}
+}
+
+// TestRoutes_RegistryCoversEveryArea is the sanity check that keeps the
+// two tests above honest: a registry that lost a whole route file would
+// still pass them by having nothing to complain about. The BFF serves
+// reads and writes in both populations, so all four shapes must be
+// present.
+func TestRoutes_RegistryCoversEveryArea(t *testing.T) {
+	_, registry, _ := routes(testDeps())
+
+	var gated, exempt, writes int
+	for _, route := range registry {
+		switch {
+		case route.Write:
+			writes++
+		case route.Exempt:
+			exempt++
+		default:
+			gated++
+		}
+	}
+	if gated == 0 {
+		t.Error("no role-gated GETs in the registry")
+	}
+	if exempt == 0 {
+		t.Error("no ungated GETs in the registry -- the portal reads and the health probe are both OpenGet")
+	}
+	if writes == 0 {
+		t.Error("no writes in the registry")
+	}
+}
+
+// packageSources is every non-test .go file in this package, by filename.
 //
 // Read by directory rather than from a list of filenames, and that is the
 // point of it: #482 split the route table into one file per area, and a
 // hardcoded list would mean the next area added is a set of routes this
 // guardrail quietly stops looking at. A file that appears beside these is
 // scanned because it is there.
-func packageSource(t *testing.T) string {
+func packageSources(t *testing.T) map[string]string {
 	t.Helper()
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		// coverage:ignore reason: the package's own directory is always readable while its tests run
 		t.Fatalf("read package directory: %v", err)
 	}
-	var all strings.Builder
+	sources := map[string]string{}
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -132,7 +147,20 @@ func packageSource(t *testing.T) string {
 			// coverage:ignore reason: a file ReadDir listed a moment ago
 			t.Fatalf("read %s: %v", name, err)
 		}
-		all.Write(src)
+		sources[name] = string(src)
+	}
+	return sources
+}
+
+// packageSource is every non-test .go file concatenated, for the two
+// guardrails that still have to ask "is this middleware in that handler's
+// chain?" -- a question an http.Handler value cannot answer at runtime,
+// and the one thing closing the mux door did not make structural.
+func packageSource(t *testing.T) string {
+	t.Helper()
+	var all strings.Builder
+	for _, src := range packageSources(t) {
+		all.WriteString(src)
 		all.WriteString("\n")
 	}
 	return all.String()

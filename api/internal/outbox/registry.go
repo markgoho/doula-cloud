@@ -58,12 +58,12 @@ type Registration struct {
 	Worker Processor
 }
 
-// Mux is the part of *http.ServeMux Register uses. An interface rather
-// than the concrete type so a router that wants to see every route
-// registered through it -- rather than trusting that nothing reached
-// around it -- can be handed here unchanged.
+// Mux is the part of the BFF's router Register uses. An interface rather
+// than *http.ServeMux so the router that owns every route -- and wants to
+// see this package's thirteen among them rather than trusting that
+// nothing reached around it -- can be handed here unchanged.
 type Mux interface {
-	Handle(pattern string, handler http.Handler)
+	Write(pattern string, h http.Handler)
 }
 
 // Register mounts every registration's process endpoint on mux, each
@@ -73,7 +73,7 @@ type Mux interface {
 func Register(mux Mux, db *sql.DB, secret string, registrations []Registration) []string {
 	paths := make([]string, 0, len(registrations))
 	for _, reg := range registrations {
-		mux.Handle("POST "+reg.Path, ProcessHandler(db, reg.Worker, secret, reg.Door))
+		mux.Write("POST "+reg.Path, ProcessHandler(db, reg.Worker, secret, reg.Door))
 		paths = append(paths, reg.Path)
 	}
 	sort.Strings(paths)
