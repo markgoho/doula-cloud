@@ -35,7 +35,17 @@
 			   minimum is its content's min-content size, so one unbreakable
 			   value (a pasted URL, #530) refuses to shrink below that run's
 			   width and pushes every ancestor, up to the page, wider with it. */
-			grid-template-columns: auto minmax(0, 1fr);
+			/* The label track is `fit-content(40%)`, not `auto` (#725). A
+			   Practice types its own field labels, so a label is free text
+			   like the value beside it -- and a bare `auto` track sizes to
+			   its max-content and is grown to that limit before the `1fr`
+			   beside it sees any space at all, so one pasted URL as a label
+			   takes the whole row and leaves the value nothing. 40% is a
+			   share of whatever space this list is given rather than a
+			   width: it names no space, it says how much of a row a key may
+			   take from its own value, and it is inert for every ordinary
+			   label, which sizes to its own text well under the cap. */
+			grid-template-columns: fit-content(40%) minmax(0, 1fr);
 			gap: 0 var(--space-4);
 			margin: 0;
 		}
@@ -45,6 +55,18 @@
 			color: var(--color-on-surface-variant);
 			padding-block: var(--space-3);
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+			/* The same pairing the value already carries, for the same
+			   reason one row down (#725). Every caller but one passes a
+			   short developer-chosen label, but a Client Field Template's
+			   own label is a question a Practice types, so it can be a
+			   pasted URL like any other free text -- and the label track is
+			   `auto`, whose minimum is the item's min-content size, so a run
+			   with no break opportunity pushes the whole page wider. The
+			   cap lives on the track above rather than here, since a
+			   `max-inline-size` on the item leaves the track free to grow
+			   past it; this half is what lets the label shrink to the cap
+			   at all. */
+			overflow-wrap: anywhere;
 		}
 
 		dd {
