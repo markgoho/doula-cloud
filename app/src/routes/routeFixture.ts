@@ -23,6 +23,33 @@
  */
 import type { Component } from 'svelte';
 
+/**
+The route a module path belongs to, for both halves of the check
+(CONTEXT.md): `./practices/[practiceId]/invoices/+page.svelte` and
+`../../practices/[practiceId]/invoices/page.fixture.ts` alike read as
+`practices/[practiceId]/invoices`, so a break found by dragging and a
+break found by the sweep name the same screen.
+
+It lives here rather than in either caller because it was about to be
+written twice, and the second copy had already drifted before anyone
+compared them -- the drag surface's version required a separator the
+check's version made optional, which loses the root route, whose fixture
+is `page.fixture.ts` with no directory in front of it. That is the same
+finding [#570](https://github.com/markgoho/doula-cloud/issues/570)
+recorded when it moved `mountInFrame` into `continuum.ts`: one artifact
+is enforced by there being one function, not by two files agreeing.
+
+The relative prefix differs because the two callers glob from different
+directories, and the fixture is `page.fixture.ts` rather than
+`+page.fixture.ts` because a leading `+` is reserved by SvelteKit's own
+routing.
+*/
+export function toRoutePath(modulePath: string): string {
+	return modulePath
+		.replace(/^(\.\.?\/)+/, '')
+		.replace(/\/?(\+page\.svelte|page\.fixture\.ts)$/, '');
+}
+
 export interface RouteFixture {
 	/**
 	How the route is named in a failure sentence -- what a person calls the screen.

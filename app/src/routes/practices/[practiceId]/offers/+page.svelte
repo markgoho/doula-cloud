@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import { decideOffer, loadInbox, type Offer } from '#lib/offer.js';

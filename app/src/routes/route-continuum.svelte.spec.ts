@@ -30,16 +30,21 @@
  * `floor.svelte.spec.ts`; this would have been the third copy, and a third
  * copy is where "one artifact" stops being true.
  *
- * ## What `CONTEXT.md` had to give up
+ * ## A route reaches the drag surface too
  *
- * A route cannot join the drag surface, so `CONTEXT.md`'s "the continuum
- * check runs against the drag surface" is now narrower than it reads: the
- * one artifact is the sweep and mount procedure here, and the drag surface
- * is its human view of the component tier. A style-guide page is a Svelte
- * component with no props; a route reads `page.params`, takes `data` from
- * its own `load`, and fetches -- and `vi.mock` does not exist in a running
- * dev page. That narrowing is recorded in `CONTEXT.md` and is
- * [#597](https://github.com/markgoho/doula-cloud/issues/597) to undo.
+ * This file once recorded a narrowing: a route could be swept here and
+ * could not be dragged, because a style-guide page is a Svelte component
+ * with no props while a route reads `page.params`, takes `data` from its
+ * own `load`, and fetches -- and `vi.mock` does not exist in a running dev
+ * page. [#597](https://github.com/markgoho/doula-cloud/issues/597) undid
+ * it, and the fixture below is what both halves now read.
+ *
+ * The dev page needs no `vi.mock`. It reads `page` through
+ * `#lib/appState.svelte.js`, which every route imports instead of
+ * `$app/state` -- and which reads `$app/state` rather than replacing it,
+ * so the mock right below still works here unchanged. For fetches it
+ * answers `fetch` itself, since every API call this app makes funnels
+ * through one line in `#lib/api.js`.
  *
  * ## How a route joins: discovery, never opt-in
  *
@@ -78,7 +83,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { mountInFrame, overflowReport, sweep } from './style-guide/continuum.js';
-import type { RouteFixture } from './routeFixture.js';
+import { toRoutePath, type RouteFixture } from './routeFixture.js';
 
 /*
  * One mock of `$app/state` for every route, because `vi.mock` is hoisted
@@ -148,18 +153,6 @@ const routePages = import.meta.glob('./**/+page.svelte');
 const fixtureModules = import.meta.glob<{ fixture: RouteFixture }>('./**/page.fixture.ts', {
 	eager: true
 });
-
-/*
- * `./practices/[practiceId]/invoices/+page.svelte` and its
- * `page.fixture.ts` sibling both name `practices/[practiceId]/invoices`.
- *
- * The fixture is `page.fixture.ts` rather than `+page.fixture.ts`: a
- * leading `+` is reserved by SvelteKit's own routing, and it warns on any
- * file it does not recognize under that prefix.
- */
-function toRoutePath(modulePath: string): string {
-	return modulePath.replace(/^\.\//, '').replace(/\/?(\+page\.svelte|page\.fixture\.ts)$/, '');
-}
 
 /*
  * The style guide is the component check's own territory: every page under

@@ -215,11 +215,11 @@ Adapting to a **stated user preference** — color scheme, reduced motion, contr
 _Avoid_: Using it for anything space-related — that is **intrinsic layout**
 
 **The continuum check**:
-The automated pass asserting that nothing needs more room than it is given, at any available space, naming no width. Covers both a component, through the style guide's own demo registry, and a route, through the route's **fixture**. What makes it one artifact with **the drag surface** is the sweep and the mount procedure they share, not the page: a component demo is watched on the drag surface and swept by the check, while a route today is only swept, because a route needs data a running page cannot supply. That is a narrowing, not the settled end state.
+The automated pass asserting that nothing needs more room than it is given, at any available space, naming no width. Covers both a component, through the style guide's own demo registry, and a route, through the route's **fixture**. It is one artifact with **the drag surface**: every subject the check sweeps can be watched on the surface, and both read the same **fixture**, so a screen is described once and reported under one name.
 _Avoid_: Width matrix, size sweep, responsive test
 
 **The drag surface**:
-The style-guide surface with a handle a person drags, so a component can be watched passing through its configurations continuously rather than inspected at chosen sizes. The human half of **the continuum check**, over the components it covers.
+The style-guide surface with a handle a person drags, so a subject can be watched passing through its configurations continuously rather than inspected at chosen sizes. The human half of **the continuum check**, over everything it covers — a component through its style-guide page, a route through the `page.fixture.ts` beside it. A route reads more than props, so the surface hands it the fixture's own parameters and answers its requests from the fixture too; what a person drags is what the check sweeps.
 _Avoid_: Width matrix, size panel, breakpoint preview
 
 **Fixture**:

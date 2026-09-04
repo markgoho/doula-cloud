@@ -27,7 +27,7 @@
 	 * under our domain that Stripe reviews and Clients read.
 	 */
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
 		loadWebsite,

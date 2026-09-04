@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';

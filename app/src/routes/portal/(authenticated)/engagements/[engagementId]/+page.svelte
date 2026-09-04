@@ -11,7 +11,7 @@
 	 * still registered for #61's alerts.
 	 */
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';

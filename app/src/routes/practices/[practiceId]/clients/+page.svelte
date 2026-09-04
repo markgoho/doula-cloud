@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';

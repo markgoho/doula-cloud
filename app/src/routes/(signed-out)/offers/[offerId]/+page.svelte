@@ -11,7 +11,7 @@
 	 * joining the practice first, through the same token this page already
 	 * holds.
 	 */
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetch } from '#lib/api.js';
 	import {

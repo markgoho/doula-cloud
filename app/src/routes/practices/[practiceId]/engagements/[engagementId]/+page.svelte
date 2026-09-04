@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import {

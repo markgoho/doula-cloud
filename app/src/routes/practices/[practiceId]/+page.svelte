@@ -11,7 +11,7 @@
 	 * page is free to answer "what needs me today" instead.
 	 */
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import {
