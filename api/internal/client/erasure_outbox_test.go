@@ -579,7 +579,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 	worker := client.ErasureWorker{Stripe: stripe, Identity: authntest.NewFakeAccountManager(), Now: time.Now}
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/clients/process-erasure-outbox",
-		client.ProcessErasureOutboxHandler(db.App, worker, "correct-secret"))
+		outbox.ProcessHandler(db.App, worker, "correct-secret", outbox.NotificationDoor))
 	workerSrv := httptest.NewServer(mux)
 	defer workerSrv.Close()
 

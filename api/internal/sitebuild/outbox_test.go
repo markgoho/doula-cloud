@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/testdb"
 )
@@ -15,7 +16,7 @@ import (
 func fixedNow() time.Time { return time.Now() }
 
 func buildHandler(db *testdb.DB, d sitebuild.Dispatcher) http.Handler {
-	return sitebuild.ProcessOutboxHandler(db.App, sitebuild.Worker{Dispatcher: d, Now: fixedNow}, workerSecret)
+	return outbox.ProcessHandler(db.App, sitebuild.Worker{Dispatcher: d, Now: fixedNow}, workerSecret, "")
 }
 
 func TestProcessOutbox_RefusesWithoutTheSecret(t *testing.T) {
@@ -37,7 +38,7 @@ func TestProcessOutbox_RefusesWithoutTheSecret(t *testing.T) {
 // anything: a misconfigured deploy should be closed, not open.
 func TestProcessOutbox_EmptyConfiguredSecretRefusesEveryone(t *testing.T) {
 	db := testdb.New(t)
-	h := sitebuild.ProcessOutboxHandler(db.App, sitebuild.Worker{Dispatcher: &fakeDispatcher{}, Now: fixedNow}, "")
+	h := outbox.ProcessHandler(db.App, sitebuild.Worker{Dispatcher: &fakeDispatcher{}, Now: fixedNow}, "", "")
 
 	if rec := post(t, h, ""); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("got %d, want 401", rec.Code)

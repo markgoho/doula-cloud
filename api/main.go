@@ -25,6 +25,7 @@ import (
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
@@ -177,30 +178,6 @@ func main() {
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
 
-	// ADR-0013: one shared queue nudging eight of the ten outbox
-	// process-* endpoints (routes_internal.go), reusing
-	// NOTIFICATION_WORKER_SECRET rather than a second credential. #613's
-	// two new outboxes (staff token mail, staff email-change notice) are
-	// not wired to it -- the ticket accepts ADR-0010's plain delay for
-	// them, so Cloud Scheduler's cadence alone is enough; see authmail's
-	// package doc. NOTIFICATION_TASKS_QUEUE is unset in local dev, CI's
-	// boot smoke test, and the e2e stack (see docs/environment.md) --
-	// none of those have GCP credentials for a real *cloudtasks.Client,
-	// so this only constructs one when a queue is actually configured,
-	// falling back to NoOpEnqueuer otherwise. Every outbox still gets
-	// Cloud Scheduler's cadence regardless of which Enqueuer is wired up.
-	var nudgeEnqueuer tasknudge.Enqueuer = tasknudge.NoOpEnqueuer{}
-	if queue := os.Getenv("NOTIFICATION_TASKS_QUEUE"); queue != "" {
-		// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
-		cloudTasksClient, err := cloudtasks.NewClient(context.Background())
-		if err != nil {
-			// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
-			log.Fatalf("init Cloud Tasks client: %v", err)
-		}
-		// coverage:ignore reason: constructs the real Cloud-Tasks-backed enqueuer, not exercised by unit tests
-		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"))
-	}
-
 	// #443. The HTTP client is shared by both and is deliberately
 	// short-timeout: a probe is a CDN fetch of a static file, and a
 	// dispatch is one small POST -- neither has any business waiting
@@ -228,7 +205,10 @@ func main() {
 		Now:    time.Now,
 	}
 
-	handler, _, _ := routes(Deps{
+	// Built before the nudge enqueuer, because the enqueuer is told where
+	// every nudged outbox is served and that comes from this value's own
+	// registrations. NudgeEnqueuer is the one field filled in afterwards.
+	deps := Deps{
 		Verifier:       verifier,
 		AccountManager: verifier,
 		DB:             db,
@@ -269,9 +249,40 @@ func main() {
 			Now:      time.Now,
 		},
 
-		NudgeEnqueuer:   nudgeEnqueuer,
 		ExpectedOrigins: resolveExpectedOrigins(),
-	})
+	}
+
+	// ADR-0013: one shared queue nudging eleven of the thirteen outboxes
+	// (outboxes.go), reusing NOTIFICATION_WORKER_SECRET rather than a
+	// second credential. #613's two Staff auth mail outboxes are the two
+	// left out -- that ticket accepts ADR-0010's plain delay for them, so
+	// Cloud Scheduler's cadence alone is enough; see authmail's package
+	// doc, and the registrations that carry no Nudge.
+	//
+	// NOTIFICATION_TASKS_QUEUE is unset in local dev, CI's boot smoke
+	// test, and the e2e stack (see docs/environment.md) -- none of those
+	// have GCP credentials for a real *cloudtasks.Client, so this only
+	// constructs one when a queue is actually configured, falling back to
+	// NoOpEnqueuer otherwise. Every outbox still gets Cloud Scheduler's
+	// cadence regardless of which Enqueuer is wired up.
+	var nudgeEnqueuer tasknudge.Enqueuer = tasknudge.NoOpEnqueuer{}
+	if queue := os.Getenv("NOTIFICATION_TASKS_QUEUE"); queue != "" {
+		// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+		cloudTasksClient, err := cloudtasks.NewClient(context.Background())
+		if err != nil {
+			// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
+			log.Fatalf("init Cloud Tasks client: %v", err)
+		}
+		// The paths come from the same list the route table mounts, so a
+		// nudge cannot target an endpoint the mux does not serve.
+		// tasknudge used to keep its own second copy of every one.
+		//
+		// coverage:ignore reason: constructs the real Cloud-Tasks-backed enqueuer, not exercised by unit tests
+		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"), outbox.NudgePaths(outboxRegistrations(deps)))
+	}
+	deps.NudgeEnqueuer = nudgeEnqueuer
+
+	handler, _, _ := routes(deps)
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

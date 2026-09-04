@@ -16,8 +16,12 @@ import (
 // should call.
 type OutboxType string
 
-// The eleven outbox types a nudge can target, one per process-* endpoint
-// main.go mounts (ADR-0010, ADR-0013).
+// The eleven outbox types a nudge can target (ADR-0010, ADR-0013). Where
+// each one is served is not held here: the BFF's own outbox list names
+// both the type and the path, and hands this package the map at
+// construction (outbox.NudgePaths). A constant here with no registration
+// naming it is a nudge that would fail at runtime, which is what
+// TestNudgePaths_CoversEveryNudgeTypeTasknudgeDeclares checks.
 const (
 	PortalInvite      OutboxType = "portal-invite"
 	LowCredit         OutboxType = "low-credit"

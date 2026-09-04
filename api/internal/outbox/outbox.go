@@ -11,6 +11,15 @@
 // cap, the claim-scan-close-then-send loop, marking a row sent/failed/
 // dead-lettered, and the Cloud-Scheduler-facing HTTP handler -- lives
 // here once.
+//
+// registry.go carries the second half of that consolidation. An outbox
+// used to restate its own identity in seven places, only one of which
+// held any behavior; a Registration is now the one value that names its
+// path, its Postgres door, its ADR-0013 nudge target and its worker, and
+// Register mounts the lot. The two non-mail outboxes ride the same
+// machinery because the shape is the same: #394's Client erasure, which
+// calls Stripe and Identity Platform, and #443's site rebuild, which is
+// also the one outbox that needs no door.
 package outbox
 
 import (
