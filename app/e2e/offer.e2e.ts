@@ -107,7 +107,10 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	await expect(page.getByText('2027-01-04')).toHaveCount(0);
 	await expect(page.getByText('$450.00')).toBeVisible();
 
-	// And the Practice side reads the same answer back.
+	// And the Practice side reads the same answer back. { exact: true }
+	// because the page now also carries #486's own Activity ledger, whose
+	// "Offer accepted" row is a substring match for a bare 'Accepted'
+	// query too.
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
-	await expect(page.getByText('Accepted')).toBeVisible();
+	await expect(page.getByText('Accepted', { exact: true })).toBeVisible();
 });
