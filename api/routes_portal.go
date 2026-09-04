@@ -32,6 +32,11 @@ func registerPortalRoutes(g *staffauth.GatedRouter, d Deps) {
 	g.OpenGet("/api/portal/session", portalPopulation, clientauth.SessionHandler(d.DB))
 	g.OpenGet("/api/portal/engagements/{engagementId}", portalPopulation,
 		clientauth.Middleware(d.DB)(portal.DetailHandler()))
+	// #486 AC4/AC5: the same record-scoped ledger the staff Engagement page
+	// gets, behind a closed disclosure on this side (the design brief's own
+	// placement decision).
+	g.OpenGet("/api/portal/engagements/{engagementId}/activity", portalPopulation,
+		clientauth.Middleware(d.DB)(portal.ActivityHandler()))
 	g.OpenGet("/api/portal/engagements/{engagementId}/birth-plan", portalPopulation,
 		clientauth.Middleware(d.DB)(plans.ClientGetBirthPlanHandler()))
 	g.OpenGet("/api/portal/engagements/{engagementId}/contract", portalPopulation,

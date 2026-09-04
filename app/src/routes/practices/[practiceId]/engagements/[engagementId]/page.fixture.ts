@@ -51,6 +51,22 @@ export const fixture: RouteFixture = {
 		if (path.endsWith('/contract')) return jsonResponse('not found', 404);
 		if (path.endsWith('/offers')) return jsonResponse({ items: [] });
 		if (path.endsWith('/staff')) return jsonResponse({ members: [], invitations: { items: [] } });
+		// #486: the same ledger treatment, last in this page's own sections.
+		if (path.includes('/activity')) {
+			return jsonResponse({
+				items: [
+					{
+						subjectKind: 'engagement',
+						subjectId: 'engagement-1',
+						action: 'visit_logged',
+						actorKind: 'staff',
+						actorName: clientName,
+						createdAt: '2026-08-05T00:00:00Z'
+					}
+				],
+				hasMore: false
+			});
+		}
 		throw new Error(`engagements/[engagementId] fixture: unmatched fetch path ${path}`);
 	},
 	readyText: clientName

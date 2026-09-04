@@ -36,3 +36,59 @@ export function formatCalendarDay(value: string): string {
 		day: 'numeric'
 	});
 }
+
+/**
+ * The activity ledger's own clock (ADR-0022): relative under seven days,
+ * absolute beyond it, always on a 12-hour clock with a lowercase am/pm
+ * and no periods -- "this product is used in the United States by people
+ * who say 'she came at two in the morning'". The exact instant is never
+ * lost: it lives in `value` itself, which a caller keeps as the
+ * rendered element's machine-readable value (a `<time datetime>`) so a
+ * screen reader, a hover or a copy-paste still gets it -- this function
+ * only ever answers the display string.
+ *
+ * `now` defaults to the real clock and is a parameter only so a test can
+ * pin it; every threshold below is elapsed real time, not a calendar-day
+ * boundary, which is what makes "Yesterday" and the weekday name follow
+ * the ADR's own worked examples ("12 minutes ago", "2 hours ago",
+ * "Yesterday, 9:31am", "Tuesday, 4:40pm") in the order given rather than
+ * flipping at local midnight regardless of how recent the event was.
+ */
+export function formatActivityTimestamp(value: string, now: Date = new Date()): string {
+	const date = new Date(value);
+	const diffMs = now.getTime() - date.getTime();
+	if (diffMs < MINUTE_MS) return 'just now';
+	if (diffMs < HOUR_MS) {
+		const minutes = Math.floor(diffMs / MINUTE_MS);
+		return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+	}
+	if (diffMs < DAY_MS) {
+		const hours = Math.floor(diffMs / HOUR_MS);
+		return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+	}
+	if (diffMs < 2 * DAY_MS) return `Yesterday, ${formatClock(date)}`;
+	if (diffMs < WEEK_MS) {
+		const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+		return `${weekday}, ${formatClock(date)}`;
+	}
+	const day = date.getDate();
+	const month = date.toLocaleDateString('en-US', { month: 'short' });
+	const year = date.getFullYear();
+	return `${day} ${month} ${year}, ${formatClock(date)}`;
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const WEEK_MS = 7 * DAY_MS;
+
+/** "9:31am" / "12:00pm" -- 12-hour, lowercase am/pm, no periods, minutes
+ * always two digits, hour never zero-padded and never 0 (noon and
+ * midnight are both 12, per the 12-hour clock's own convention). */
+function formatClock(date: Date): string {
+	const hours24 = date.getHours();
+	const suffix = hours24 < 12 ? 'am' : 'pm';
+	const hours = hours24 % 12 === 0 ? 12 : hours24 % 12;
+	const minutes = date.getMinutes().toString().padStart(2, '0');
+	return `${hours}:${minutes}${suffix}`;
+}

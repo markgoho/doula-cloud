@@ -52,6 +52,7 @@ interface SetupOptions {
 	isLoadingMore?: boolean;
 	loadMoreError?: string;
 	emptyMessage?: string;
+	disclosure?: string;
 }
 
 /*
@@ -74,7 +75,8 @@ async function setup({
 	onLoadMore,
 	isLoadingMore = false,
 	loadMoreError,
-	emptyMessage = 'No records yet.'
+	emptyMessage = 'No records yet.',
+	disclosure
 }: SetupOptions = {}) {
 	await page.viewport(...WIDE);
 	const { container } = await render(DataTable<Row>, {
@@ -89,7 +91,8 @@ async function setup({
 		onLoadMore,
 		isLoadingMore,
 		loadMoreError,
-		emptyMessage
+		emptyMessage,
+		disclosure
 	});
 	return { container };
 }
@@ -222,6 +225,99 @@ describe('DataTable.svelte', () => {
 
 		const nameHeader = page.getByRole('columnheader', { name: 'Name' });
 		expect(getComputedStyle(nameHeader.element()).textAlign).toBe('start');
+	});
+});
+
+/*
+ * The activity ledger's own signature treatment (brief.md's #433
+ * amendment): a meta date column at tabular figures, the event in body
+ * text, the actor muted -- and, on the Client portal only, the whole
+ * table behind a closed disclosure. Class presence is what's asserted,
+ * the same way Text.svelte.spec.ts checks its own type-step/tone classes
+ * rather than a resolved CSS custom property -- the class is the
+ * component's own contract; the token behind it is tokens.spec.ts's job.
+ */
+describe('the activity ledger treatment (#486)', () => {
+	const ledgerColumns = [
+		{ label: 'When', accessor: (row: Row) => row.name, variant: 'meta' as const },
+		{ label: 'What', accessor: (row: Row) => row.status, variant: 'body' as const },
+		{ label: 'Who', accessor: (row: Row) => row.name, variant: 'muted' as const }
+	];
+
+	it('marks the meta column body cells, header excluded', async () => {
+		const { container } = await setup({ columns: ledgerColumns });
+
+		expect(container.querySelectorAll(':scope .table-view td.meta')).toHaveLength(rows.length);
+		expect(container.querySelector(':scope .table-view th.meta')).toBeNull();
+	});
+
+	it('marks the body-variant column body cells', async () => {
+		const { container } = await setup({ columns: ledgerColumns });
+
+		expect(container.querySelectorAll(':scope .table-view td.variant-body')).toHaveLength(rows.length);
+	});
+
+	it('marks the muted column body cells', async () => {
+		const { container } = await setup({ columns: ledgerColumns });
+
+		expect(container.querySelectorAll(':scope .table-view td.muted')).toHaveLength(rows.length);
+	});
+
+	it('applies no variant class when a column asks for none', async () => {
+		const { container } = await setup();
+
+		expect(
+			container.querySelector(':scope .table-view td.meta, :scope .table-view td.muted, :scope .table-view td.variant-body')
+		).toBeNull();
+	});
+
+	// ADR-0022: "the exact instant is carried underneath and never
+	// replaced -- the rendered element keeps the full timestamp as its
+	// machine-readable value". `<time datetime>` is that carrier.
+	it('wraps a datetimeAccessor column in a <time> element carrying the raw instant', async () => {
+		const datetimeColumns = [
+			{ label: 'Name', accessor: (row: Row) => row.name },
+			{
+				label: 'When',
+				accessor: () => '2 hours ago',
+				datetimeAccessor: () => '2027-01-01T10:00:00Z'
+			}
+		];
+		const { container } = await setup({ columns: datetimeColumns });
+
+		const time = container.querySelector(':scope .table-view time')!;
+		expect(time).toHaveTextContent('2 hours ago');
+		expect(time).toHaveAttribute('datetime', '2027-01-01T10:00:00Z');
+	});
+
+	it('renders plain text with no <time> element when datetimeAccessor is omitted', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelector(':scope .table-view time')).toBeNull();
+	});
+
+	it('renders open with no disclosure wrapper when disclosure is omitted', async () => {
+		const { container } = await setup();
+
+		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		expect(container.querySelector('details')).toBeNull();
+	});
+
+	// A closed <details> removes its hidden content from the accessibility
+	// tree entirely (not merely `not visible`), so `getByRole` -- which
+	// queries that tree -- can never resolve a cell inside it; this is the
+	// same "no accessible signal for a visual fact" case svelte-tests.md's
+	// rule 1 already carves out for the table-view/record-view switch
+	// above, checked here by computed style instead.
+	it('wraps the table in a closed disclosure named by the disclosure string, when given', async () => {
+		const { container } = await setup({ disclosure: 'Everything that has happened' });
+
+		await expect.element(page.getByText('Everything that has happened')).toBeVisible();
+		expect(getComputedStyle(container.querySelector('.frame')!).display).toBe('none');
+
+		await page.getByText('Everything that has happened').click();
+		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		expect(getComputedStyle(container.querySelector('.frame')!).display).not.toBe('none');
 	});
 });
 

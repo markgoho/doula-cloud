@@ -28,6 +28,17 @@
 		serviceName?: string;
 		primary: Snippet;
 		secondary?: Snippet;
+		/**
+		 * #486's Recent-activity feed: low-prominence and low on the page,
+		 * per the design brief's own #433 amendment ("it sits low on every
+		 * page it appears on"). Rendered below the primary/secondary split
+		 * at the container's own width, not squeezed into either column --
+		 * a table reads better full-width than in the narrow sidebar, and
+		 * the brief is explicit this is not what a person comes here for.
+		 * Absent while `isEmpty`, the same as `secondary`: a Practice with
+		 * no Client yet has no activity to show either.
+		 */
+		feed?: Snippet;
 		isEmpty: boolean;
 		empty: Snippet;
 		/**
@@ -44,7 +55,7 @@
 		loadError?: string;
 	}
 
-	let { title, serviceName, primary, secondary, isEmpty, empty, loading, loadError }: Properties =
+	let { title, serviceName, primary, secondary, feed, isEmpty, empty, loading, loadError }: Properties =
 		$props();
 </script>
 
@@ -91,6 +102,10 @@
 					</sidebar-l>
 				{:else}
 					<stack-l space="var(--space-6)">{@render primary()}</stack-l>
+				{/if}
+
+				{#if !isEmpty && feed}
+					{@render feed()}
 				{/if}
 			</stack-l>
 		{/if}

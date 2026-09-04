@@ -77,6 +77,33 @@ describe('OverviewHub.svelte', () => {
 		expect(container.querySelector('aside')).toBeNull();
 	});
 
+	it('renders no feed region when no feed snippet is given', async () => {
+		await setup();
+
+		await expect.element(page.getByText('Six open Offers')).toBeVisible();
+	});
+
+	// #486: the Recent-activity feed sits low on the page, below the
+	// primary/secondary split -- not inside `secondary`'s own narrow rail,
+	// which is why this gets its own prop rather than becoming one more
+	// block a route appends to `secondary`.
+	it('renders the feed region when given, alongside primary and secondary', async () => {
+		await setup({
+			secondary: textSnippet('Two doulas unassigned'),
+			feed: textSnippet('Mark Goho sent the invoice')
+		});
+
+		await expect.element(page.getByText('Six open Offers')).toBeVisible();
+		await expect.element(page.getByText('Two doulas unassigned')).toBeVisible();
+		await expect.element(page.getByText('Mark Goho sent the invoice')).toBeVisible();
+	});
+
+	it('renders no feed region when empty, whatever was passed', async () => {
+		await setup({ isEmpty: true, feed: textSnippet('Mark Goho sent the invoice') });
+
+		await expect.element(page.getByText('Mark Goho sent the invoice')).not.toBeInTheDocument();
+	});
+
 	it('owns the page frame and renders no chrome', async () => {
 		const { container } = await setup();
 
