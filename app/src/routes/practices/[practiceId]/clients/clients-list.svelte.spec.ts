@@ -309,6 +309,31 @@ describe('a pending Request on the row', () => {
 	});
 });
 
+// #458: "See everyone" mixes Clients who have work with Clients who
+// don't, and nothing on the row said which was which. The default view
+// never mixes the two (ADR-0017: every row has work already), so the
+// column would add nothing there -- it only earns its place once
+// "See everyone" is on.
+describe('the Work column (#458)', () => {
+	it('is absent from the default "Clients with work" view', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('columnheader', { name: 'Work' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('shows which Clients have work and which do not once "See everyone" is on', async () => {
+		searchParameters.set('all', 'true');
+
+		await setup();
+
+		await expect.element(testPage.getByRole('columnheader', { name: 'Work' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Has work' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'No work yet' })).toBeVisible();
+	});
+});
+
 describe('a "Load more" already in flight when the filter changes', () => {
 	/*
 	 * "Load more" is the only fetch that merges into what is on screen, so
