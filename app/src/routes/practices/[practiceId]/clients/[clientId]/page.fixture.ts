@@ -8,6 +8,20 @@
  * `isContractor: false` from `+page.ts`'s own load (#465) keeps "Start
  * new work with <name>" on screen, same rationale as the Clients list
  * fixture's own `data`.
+ *
+ * `resolvedFields` and `history` are each a row set the route's own
+ * markup branches on, neither delegated to a component swept elsewhere
+ * (#720): a `section_header` Field renders only a Heading while every
+ * other type renders a DescriptionList row, so one of each is here, the
+ * value row carrying an archived field's `note` too and #530's own URL
+ * as the Practice's own question label. `history` merges two shapes at
+ * once (`client_event`/`engagement_request`, see the route's own
+ * `historyWho`/`historyWhat`) and ADR-0017 lets both kinds of Request be
+ * pending together, so this holds one of each history type plus both
+ * kinds of pending Request -- one requested by the signed-in Staff
+ * member (`staff-1`, matching `respond`'s own session answer below, so
+ * the Withdraw button this page conditions on `requestedBy === staffId`
+ * actually renders) and one requested by somebody else.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
@@ -27,7 +41,16 @@ export const detail: ClientDetail = {
 	addressRegion: 'NY',
 	addressPostalCode: '14620',
 	dateOfBirth: '1994-03-01',
-	resolvedFields: [],
+	resolvedFields: [
+		{ fieldId: 'field-1', type: 'section_header', label: 'Birth history' },
+		{
+			fieldId: 'field-2',
+			type: 'single_select',
+			label: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+			value: 'Epidural, as early as it can be given',
+			note: 'No longer collected'
+		}
+	],
 	engagements: [{ engagementId: 'engagement-1', kind: 'birth', status: 'active', createdAt: '2026-08-01T00:00:00Z' }],
 	history: [
 		{
@@ -37,10 +60,27 @@ export const detail: ClientDetail = {
 				requestId: 'request-1',
 				kind: 'birth',
 				state: 'pending',
-				requestedBy: 'staff-2',
+				requestedBy: 'staff-1',
 				requestedByName: 'Anne-Marie Ochieng-Whitfield',
 				requestedAt: '2026-08-01T00:00:00Z'
 			}
+		},
+		{
+			type: 'engagement_request',
+			at: '2026-08-01T00:00:00Z',
+			engagementRequest: {
+				requestId: 'request-2',
+				kind: 'postpartum',
+				state: 'pending',
+				requestedBy: 'staff-2',
+				requestedByName: 'Persephone Ochieng-Whitfield',
+				requestedAt: '2026-08-01T00:00:00Z'
+			}
+		},
+		{
+			type: 'client_event',
+			at: '2026-07-01T00:00:00Z',
+			clientEvent: { eventType: 'created', diff: undefined, actorKind: 'system', createdAt: '2026-07-01T00:00:00Z' }
 		}
 	]
 };

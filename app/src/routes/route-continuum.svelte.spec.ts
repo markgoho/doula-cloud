@@ -191,10 +191,15 @@ const UNSWEPT: readonly string[] = [];
  * the same reason as the component check's own `KNOWN_BROKEN`. `it.fails`
  * turns red, not green, the day an entry's own issue closes without this
  * file changing -- that is what forces the entry out once the retrofit
- * actually lands. Empty since #530 (this route's own DescriptionList
- * value column) landed.
+ * actually lands. Was empty from #530 (this route's own DescriptionList
+ * value column) until #722's fixture-shape sweep widened the Client
+ * detail hub's `resolvedFields` row set and found `DescriptionList`'s
+ * `dt` has no overflow protection for a Practice's own free text (#725,
+ * DescriptionList's `dd` counterpart, unaffected here).
  */
-const KNOWN_BROKEN: Readonly<Record<string, string>> = {};
+const KNOWN_BROKEN: Readonly<Record<string, string>> = {
+	'practices/[practiceId]/clients/[clientId]': '#725'
+};
 
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
 
