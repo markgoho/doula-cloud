@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/activitygate"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
@@ -39,33 +40,35 @@ type ActivityListResponse struct {
 	HasMore    bool            `json:"hasMore"`
 }
 
-// moneyActionsNotIn is the SQL-literal form of activity.MoneyActions(),
-// built once from that single source of truth rather than hand-copied,
-// so the write side's action names and this read filter can't drift
-// apart. Every value is a compile-time constant this package itself
-// wrote (never request input), so building it into the query text
-// carries no injection risk.
+// moneyActionsNotIn is the SQL-literal form of
+// activitygate.RestrictedActions(activity.SubjectEngagement), built once
+// from that single source of truth rather than hand-copied, so the write
+// side's action names and this read filter can't drift apart. Every
+// value is a compile-time constant this package itself wrote (never
+// request input), so building it into the query text carries no
+// injection risk.
 var moneyActionsNotIn = buildMoneyActionsNotIn()
 
 func buildMoneyActionsNotIn() string {
-	actions := activity.MoneyActions()
+	actions := activitygate.RestrictedActions(activity.SubjectEngagement)
 	quoted := make([]string, len(actions))
 	for i, a := range actions {
-		quoted[i] = "'" + string(a) + "'"
+		quoted[i] = "'" + a + "'"
 	}
 	return strings.Join(quoted, ", ")
 }
 
 // ListActivityHandler lists an Engagement's activity entries, most recent
-// first, cursor-paginated -- ADR-0022's ledger, read through the same
-// gate as the Engagement itself (reader.CanAccessEngagement, matching
-// visit.ListHandler and DetailHandler: 404s a contractor with no open
-// attachment exactly as they do). The money filter beneath that gate is
-// ADR-0008's read table: Owner and Admin see every entry; anyone else --
-// an employed Doula or a contractor alike -- never sees a Contract-price
-// or Invoice/payment entry, applied as a SQL predicate so no row it
-// excludes ever leaves the database. Must be mounted behind
-// staffauth.Middleware.
+// first, cursor-paginated -- ADR-0022's ledger, read through the shared
+// activitygate.CanAccessSubject gate (#485), which reuses the same
+// reader.CanAccessEngagement check visit.ListHandler and DetailHandler
+// apply: 404s a contractor with no open, granted attachment exactly as
+// they do. The money filter beneath that gate is ADR-0008's read table,
+// via activitygate.Bypasses/RestrictedActions: Owner and Admin see every
+// entry; anyone else -- an employed Doula or a contractor alike -- never
+// sees a Contract-price or Invoice/payment entry, applied as a SQL
+// predicate so no row it excludes ever leaves the database. Must be
+// mounted behind staffauth.Middleware.
 func ListActivityHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
@@ -86,7 +89,7 @@ func ListActivityHandler() http.Handler {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+		canAccess, err := activitygate.CanAccessSubject(r.Context(), tx, reader, activity.SubjectEngagement, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
@@ -96,7 +99,7 @@ func ListActivityHandler() http.Handler {
 			http.Error(w, "engagement not found", http.StatusNotFound)
 			return
 		}
-		moneyGate := reader.Has("owner") || reader.Has("admin")
+		moneyGate := activitygate.Bypasses(reader)
 
 		var after *pagecursor.Cursor
 		if raw := r.URL.Query().Get("cursor"); raw != "" {

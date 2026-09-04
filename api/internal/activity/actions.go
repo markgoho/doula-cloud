@@ -78,10 +78,12 @@ var moneyActions = map[EngagementAction]bool{
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,
-// sorted for a deterministic query string. engagement.ListActivityHandler
-// builds its SQL exclusion clause from this rather than a hand-copied
-// literal list, so the write side (which names these actions) and the
-// read side (which filters them) can never drift apart.
+// sorted for a deterministic query string. activitygate's engagement Rule
+// (api/internal/activitygate) adapts this into its RestrictedActions,
+// which engagement.ListActivityHandler builds its SQL exclusion clause
+// from -- never a hand-copied literal list, so the write side (which
+// names these actions) and the read side (which filters them) can never
+// drift apart.
 func MoneyActions() []EngagementAction {
 	out := make([]EngagementAction, 0, len(moneyActions))
 	for a := range moneyActions {
