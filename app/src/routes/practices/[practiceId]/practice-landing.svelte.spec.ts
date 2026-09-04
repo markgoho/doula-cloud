@@ -77,6 +77,7 @@ async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overri
 			items: [{ requestId: 'request-1' }, { requestId: 'request-2' }],
 			hasMore: false
 		}),
+		'awaiting-reply': jsonResponse({ items: [], hasMore: false }),
 		activity: jsonResponse({ items: [], hasMore: false }),
 		...overrides
 	};
@@ -107,6 +108,41 @@ describe('the Practice landing page', () => {
 			.toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Accept' })).toBeVisible();
 		expect(testPage.getByText('Declined').elements()).toHaveLength(0);
+	});
+
+	// #455: the roll-up of Engagements whose thread's latest Message came
+	// from the Client, in the primary column alongside Offers -- "who is
+	// waiting on me" is the same question, for any Staff role.
+	it('shows the Engagements waiting on a reply, linking through to each one', async () => {
+		await setup({
+			overrides: {
+				'awaiting-reply': jsonResponse({
+					items: [{ engagementId: 'engagement-9', clientName: 'Priya', lastMessageAt: new Date().toISOString() }],
+					hasMore: false
+				})
+			}
+		});
+
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Clients waiting on a reply' }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Priya' }))
+			.toHaveAttribute('href', '/practices/practice-1/engagements/engagement-9');
+	});
+
+	it('tells a doula nobody is waiting on a reply, rather than drawing an empty block', async () => {
+		// DataTable's table view needs a frame wider than its content floor
+		// (48.75rem) to render, same reason the activity-feed empty-state
+		// test below sets this -- otherwise the narrow record view's own
+		// <p>{emptyMessage}</p> and the table's <td> both match a bare text
+		// query.
+		await testPage.viewport(1440, 900);
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Nobody is waiting on a reply.' }))
+			.toBeVisible();
 	});
 
 	it('shows the roster, the credit balance and the Stripe state to an Owner', async () => {

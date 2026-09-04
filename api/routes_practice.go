@@ -236,6 +236,14 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 		"plain UPDATE staff_id = $1 WHERE id = $2; sets the assignment to the given value, so re-sending the same body is a no-op",
 		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(visit.ReassignHandler())))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages", staffauth.AnyStaff, message.ListHandler())
+	// The Practice-wide "waiting on a reply" roll-up (#455): every
+	// Engagement whose thread's latest Message came from the Client, so a
+	// doula sees who is waiting without opening every Engagement in turn.
+	// AnyStaff, the same as the thread read above -- the contractor's
+	// attachment narrowing is enforced inside the handler's own query, not
+	// at this mount, mirroring message.ListHandler's own CanAccessEngagement
+	// narrowing rather than a role declaration.
+	g.Get("/api/practices/{practiceId}/messages/awaiting-reply", staffauth.AnyStaff, message.AwaitingReplyHandler())
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
 		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(idempotency.Wrap(message.CreateHandler(d.Store, d.Pusher)))))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment", staffauth.AnyStaff, message.AttachmentHandler(d.Store))

@@ -4,6 +4,7 @@ import {
 	canReadRoster,
 	hasSecondary,
 	loadPracticeLanding,
+	loadWaitingOnReplyPage,
 	type PracticeLanding
 } from './practiceLanding.js';
 import { jsonResponse } from './testResponse.js';
@@ -186,4 +187,32 @@ describe('loadPracticeLanding', () => {
 			await expect(loadPracticeLanding(fetcher, 'practice-1')).rejects.toThrow('nope');
 		}
 	);
+});
+
+// #455's roll-up, cursor-paginated on its own -- mirrors
+// activityLedger.spec.ts's loadPracticeActivityPage tests.
+describe('loadWaitingOnReplyPage', () => {
+	it('reads the first page without a cursor parameter', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+
+		await loadWaitingOnReplyPage(fetcher, 'practice-1', '');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/messages/awaiting-reply');
+	});
+
+	it('encodes a cursor onto the next page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+
+		await loadWaitingOnReplyPage(fetcher, 'practice-1', 'a b/c');
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/messages/awaiting-reply?cursor=a%20b%2Fc'
+		);
+	});
+
+	it('throws a refusal, so PaginatedList can catch it', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(loadWaitingOnReplyPage(fetcher, 'practice-1', '')).rejects.toThrow('nope');
+	});
 });
