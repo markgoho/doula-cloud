@@ -183,6 +183,29 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
+		<!--
+			An erased Client's record is a row of dashes and a placeholder
+			name, which without this reads as a half-typed intake rather than
+			an erasure (ADR-0027). The second notice is #394's "recorded
+			somewhere a Practice can see it": while Stripe still holds
+			transactions, the erasure is not finished, and saying so is the
+			whole point of surfacing the date.
+		-->
+		{#if detail!.erasedAt}
+			<Notice
+				variant="info"
+				message="This client's data was erased on request on {formattedDate(detail!.erasedAt)}."
+			/>
+			{#if detail!.stripeRedactionEligibleAt}
+				<Notice
+					variant="info"
+					message="Payment records at Stripe are redactable from {formattedDate(
+						detail!.stripeRedactionEligibleAt
+					)} and have not been redacted yet."
+				/>
+			{/if}
+		{/if}
+
 		<DescriptionList
 			items={[
 				{ label: 'Given name', value: detail!.givenName },

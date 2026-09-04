@@ -79,11 +79,13 @@ type DetailResponse struct {
 	// of a name, and why editing her is refused.
 	ErasedAt *time.Time `json:"erasedAt,omitempty"`
 	// StripeRedactionEligibleAt is the date Stripe will first allow her
-	// transactions to be redacted -- 90 days past her newest invoice.
+	// transactions to be redacted -- 90 days past the newest invoice on
+	// whichever of her Stripe Customers is furthest from eligible.
 	// #394's acceptance criterion asks for this state to be visible to
-	// the Practice rather than implied: until this date passes, the
-	// Stripe half of her erasure is scheduled, not finished. Absent when
-	// she is not erased, or when the redaction has already run.
+	// the Practice rather than implied, so it is present for as long as
+	// the redaction has not succeeded -- including after it has failed,
+	// where the date may already be in the past. Absent means done: it
+	// ran, or she had no Stripe presence to redact.
 	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
 }
 
@@ -264,18 +266,34 @@ func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event
 }
 
 // readErasureState reads the two dates the detail screen needs to
-// explain an erased Client: when she was erased, and -- while a Stripe
-// redaction is still waiting on Stripe's own 90-day floor -- when that
-// redaction becomes possible. The second comes off the outbox row that
-// carries the act, so the date shown is the date the worker will
-// actually act on, not a second calculation of it that could drift.
+// explain an erased Client: when she was erased, and -- while any part
+// of the Stripe redaction has not succeeded -- when Stripe will first
+// allow it.
+//
+// Three things about that second date, each of which was got wrong once:
+//
+//   - It reads redactable_after, not next_attempt_at. next_attempt_at is
+//     scheduling and a retry rewrites it (outbox.MarkFailed), so showing
+//     it turns "redactable after March" into a five-minute retry stamp.
+//     redactable_after is written once at enqueue time and never moves.
+//   - It includes dead-lettered rows, not only pending ones. A redaction
+//     that failed is precisely what a Practice must still be able to
+//     see; filtering it out makes a failure look like a completion.
+//     Stripe's Redaction Jobs API is not enabled on this account
+//     (ADR-0027), so today that is the normal path, not the rare one.
+//   - It takes the maximum across her Customers, because each has its
+//     own eligibility date and the Stripe half is done when the last of
+//     them is.
+//
+// Absent means done: every redaction row succeeded, or she has no Stripe
+// presence at all.
 func readErasureState(ctx context.Context, tx *sql.Tx, clientID string) (erasedAt, redactionEligibleAt *time.Time, err error) {
 	var erased, eligible sql.NullTime
 	err = tx.QueryRowContext(ctx,
 		`SELECT c.erased_at,
-		        (SELECT max(o.next_attempt_at) FROM client_erasure_outbox o
-		          WHERE o.client_id = c.id AND o.act = 'stripe_redaction_job'
-		            AND o.status = 'pending' AND o.next_attempt_at > now())
+		        (SELECT max(o.redactable_after) FROM client_erasure_outbox o
+		          WHERE o.client_id = c.id AND o.redactable_after IS NOT NULL
+		            AND o.status <> 'sent')
 		 FROM clients c WHERE c.id = $1`,
 		clientID,
 	).Scan(&erased, &eligible)

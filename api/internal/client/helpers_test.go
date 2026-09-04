@@ -42,6 +42,9 @@ const (
 	// on from two unrelated places -- a portal invite that has not been
 	// accepted, and an erasure act that has not run.
 	pendingStatus = "pending"
+	// deadLetteredStatus is the shared terminal-failure status, asserted
+	// on by both the portal-invite outbox tests and #394's erasure ones.
+	deadLetteredStatus = "dead_lettered"
 )
 
 // seedStaffAtPractice seeds an employee Doula at practiceID.
