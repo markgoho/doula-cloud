@@ -19,8 +19,6 @@ vi.mock('#lib/api.js', () => ({
 // with a no-op unsubscribe.
 vi.mock('#lib/pushRefresh.js', () => ({ subscribeToThreadPushMessages: vi.fn(() => vi.fn()) }));
 
-const DETAIL_URL = '/api/practices/practice-1/engagements/engagement-1';
-
 interface Detail {
 	engagementId: string;
 	clientId: string;
@@ -30,17 +28,20 @@ interface Detail {
 	dueDate?: string;
 }
 
-// onMount chains through Visits, Messages, both Plan types, Contract,
-// Invoices and Offers after the Engagement read itself -- every other
-// endpoint is answered with a refusal, which each section's own loader
-// already treats as "nothing to show" rather than throwing.
+// The Engagement is handed in as `data` rather than stubbed out of a
+// fetch: it comes from +page.ts's load now (#695), and that load has its
+// own spec. What remains mocked is the six sections that still fill in
+// after mount, every one answered with a refusal -- each section's own
+// loader already treats that as "nothing to show" rather than throwing.
 async function setup(detail: Detail) {
 	await testPage.viewport(1440, 900);
-	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path === DETAIL_URL) return Promise.resolve(jsonResponse(detail));
-		return Promise.resolve(jsonResponse('not available', 403));
+	apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+	// `params` rides along because PageProps carries it; the page itself
+	// reads `page.params`, which the $app/state mock above supplies.
+	await render(Page, {
+		data: detail,
+		params: { practiceId: 'practice-1', engagementId: 'engagement-1' }
 	});
-	await render(Page);
 }
 
 describe('Staff Engagement detail summary', () => {

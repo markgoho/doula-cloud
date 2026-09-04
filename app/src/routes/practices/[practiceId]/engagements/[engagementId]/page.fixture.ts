@@ -32,6 +32,11 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1', engagementId: 'engagement-1' },
 	url: 'https://example.test/practices/practice-1/engagements/engagement-1',
+	// The Engagement arrives as a prop now, from +page.ts's load (#695),
+	// rather than through the cascade below. The route's `respond` still
+	// answers it, harmlessly, for the same reason the URL builders stayed
+	// exported: nothing else has to change if it ever moves back.
+	props: { data: detail },
 	respond: (path) => {
 		if (/\/engagements\/engagement-1$/.test(path)) return jsonResponse(detail);
 		if (path.includes('/visits')) {
