@@ -1,17 +1,20 @@
 <script lang="ts">
 	import Select from '#lib/components/atoms/Select.svelte';
+	import { apiBaseURL } from '#lib/api.js';
+	import { clearPageOverride, overridePage } from '#lib/appState.svelte.js';
+	import { toPageState, type RouteFixture } from '../../routeFixture.js';
 	import {
 		atomPages,
 		moleculePages,
 		organismPages,
 		templatePages
 	} from '../components.js';
-	import { toDemos, type PageModule } from './dragSurface.js';
+	import { respondWith, toDemos, toRouteDemos, type PageModule } from './dragSurface.js';
 
 	/*
-	 * The glob lives here rather than in `dragSurface.ts` so that no test
-	 * imports it: it is eager, so importing it drags every component in the
-	 * app into whichever coverage report is running, at nearly zero
+	 * The globs live here rather than in `dragSurface.ts` so that no test
+	 * imports them: they are eager, so importing them drags every component
+	 * in the app into whichever coverage report is running, at nearly zero
 	 * execution. Excluding this route's own page keeps the cycle out.
 	 */
 	const pageModules = import.meta.glob<PageModule>(
@@ -19,12 +22,24 @@
 		{ eager: true }
 	);
 
-	const demos = toDemos(pageModules, [
+	/*
+	 * Every route that describes itself (#597). The same `page.fixture.ts`
+	 * glob `route-continuum.svelte.spec.ts` reads, so a route joins the
+	 * human view by the same discovery that puts it in the automated one --
+	 * there is no second list to remember to add a route to.
+	 */
+	const routeFixtures = import.meta.glob<{ fixture: RouteFixture }>('../../**/page.fixture.ts', {
+		eager: true
+	});
+
+	const componentDemos = toDemos(pageModules, [
 		...atomPages,
 		...moleculePages,
 		...organismPages,
 		...templatePages
 	]);
+	const routeDemos = toRouteDemos(routeFixtures);
+	const demos = [...componentDemos, ...routeDemos];
 
 	/*
 	 * The drag surface (CONTEXT.md, ADR-0025): a component watched passing
@@ -59,6 +74,45 @@
 
 	const widestSpace = $derived(Math.max(availableSpace, CONFORMANCE_COMMITMENT));
 	const frameWidth = $derived(Math.min(draggedTo ?? widestSpace, widestSpace));
+
+	/*
+	 * A route's environment, installed for as long as that route is the
+	 * one on the surface (#597). Both halves are torn down by the effect's
+	 * own cleanup rather than on the next selection, so leaving this page
+	 * -- not only picking a different subject -- puts `page` and `fetch`
+	 * back. A component demo needs neither and clears both.
+	 */
+	/*
+	 * `$effect.pre` rather than `$effect`, and the difference was measured
+	 * rather than reasoned about. A route fetches in `onMount`, and an
+	 * ordinary effect runs after its children have mounted, so the route
+	 * fires its first fetch before the answer exists. What that looks like
+	 * is not a wrong number on the surface: selecting the Staff roster with
+	 * a plain `$effect` sends the real fetch to a BFF that answers 401,
+	 * `apiFetchWithSession` treats that as an expired session, and the
+	 * whole drag surface is replaced by "Sorry, there is a problem". A
+	 * pre-effect runs before the DOM update that mounts the route, which is
+	 * the only ordering that makes the fixture total.
+	 */
+	$effect.pre(() => {
+		const fixture = selected?.fixture;
+		if (!fixture) return;
+		overridePage(toPageState(fixture));
+		/*
+		 * Assigning the global is the mechanism, not an oversight: a route
+		 * reaches the network through `#lib/api.js`, which closes over the
+		 * real `fetch`, so there is nothing else to hand it a fixture
+		 * through. It is installed for one subject and torn down with it.
+		 */
+		const realFetch = fetch;
+		// eslint-disable-next-line unicorn/no-global-object-property-assignment
+		globalThis.fetch = respondWith(fixture.respond, apiBaseURL(), fixture.name);
+		return () => {
+			// eslint-disable-next-line unicorn/no-global-object-property-assignment
+			globalThis.fetch = realFetch;
+			clearPageOverride();
+		};
+	});
 </script>
 
 <stack-l space="var(--space-6)">
@@ -92,9 +146,14 @@
 
 	<div class="run" bind:clientWidth={availableSpace}>
 		<div class="frame" style:inline-size="{frameWidth}px" bind:clientWidth={frameSpace}>
-			{#if selected}
-				<selected.component />
-			{/if}
+			<!-- Keyed on the subject so a route remounts when the reader picks
+			     another one: a route loads in `onMount`, and a subject swapped
+			     in place would keep the first one's data on screen. -->
+			{#key selectedName}
+				{#if selected}
+					<selected.component {...selected.fixture?.props ?? {}} />
+				{/if}
+			{/key}
 		</div>
 	</div>
 </stack-l>

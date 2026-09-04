@@ -10,7 +10,7 @@
 	 * what keeps it inside CLAUDE.md's no-new-components block.
 	 */
 	import { untrack } from 'svelte';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {

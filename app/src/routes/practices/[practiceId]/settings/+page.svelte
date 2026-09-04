@@ -12,7 +12,7 @@
 	 * ordered belongs to whoever builds archetype F.
 	 */
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';

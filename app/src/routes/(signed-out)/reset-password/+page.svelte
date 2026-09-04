@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL } from '#lib/api.js';
 	import { refusalMessage, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';

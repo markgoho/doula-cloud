@@ -23,6 +23,58 @@
  */
 import type { Component } from 'svelte';
 
+/**
+The route a module path belongs to, for both halves of the check
+(CONTEXT.md): `./practices/[practiceId]/invoices/+page.svelte` and
+`../../practices/[practiceId]/invoices/page.fixture.ts` alike read as
+`practices/[practiceId]/invoices`, so a break found by dragging and a
+break found by the sweep name the same screen.
+
+It lives here rather than in either caller because it was about to be
+written twice, and the second copy had already drifted before anyone
+compared them -- the drag surface's version required a separator the
+check's version made optional, which loses the root route, whose fixture
+is `page.fixture.ts` with no directory in front of it. That is the same
+finding [#570](https://github.com/markgoho/doula-cloud/issues/570)
+recorded when it moved `mountInFrame` into `continuum.ts`: one artifact
+is enforced by there being one function, not by two files agreeing.
+
+The relative prefix differs because the two callers glob from different
+directories, and the fixture is `page.fixture.ts` rather than
+`+page.fixture.ts` because a leading `+` is reserved by SvelteKit's own
+routing.
+*/
+export function toRoutePath(modulePath: string): string {
+	return modulePath
+		.replace(/^(\.\.?\/)+/, '')
+		.replace(/\/?(\+page\.svelte|page\.fixture\.ts)$/, '');
+}
+
+/**
+The `page` a route reads, built from its fixture.
+
+Both halves of the check install this, and they install it differently
+because they have to: `route-continuum.svelte.spec.ts` writes it onto a
+hoisted object behind `vi.mock('$app/state')`, while the drag surface
+hands it to `overridePage` on a page where no module can be mocked. What
+they must not differ about is WHICH fields a fixture contributes -- a
+fifth field added to `RouteFixture` would otherwise reach whichever half
+someone remembered, and the two would then be measuring and showing
+different screens. Reading the fixture is one function; installing the
+result is each half's own business.
+*/
+export function toPageState(fixture: RouteFixture): {
+	params: Record<string, string>;
+	url: URL;
+	data: Record<string, unknown>;
+} {
+	return {
+		params: { ...fixture.params },
+		url: new URL(fixture.url),
+		data: { ...fixture.pageData }
+	};
+}
+
 export interface RouteFixture {
 	/**
 	How the route is named in a failure sentence -- what a person calls the screen.

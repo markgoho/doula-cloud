@@ -21,7 +21,7 @@
 	 * DataTable and Skeleton, each of which owns how it behaves in the
 	 * space it is given.
 	 */
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay, formatInstant } from '#lib/dates.js';

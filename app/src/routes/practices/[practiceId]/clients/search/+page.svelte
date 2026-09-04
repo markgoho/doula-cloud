@@ -17,7 +17,7 @@
 	 * name, because a staff member holding nothing but a phone number
 	 * would otherwise lose the one thing she had.
 	 */
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
