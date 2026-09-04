@@ -223,7 +223,7 @@ The style-guide surface with a handle a person drags, so a subject can be watche
 _Avoid_: Width matrix, size panel, breakpoint preview
 
 **Fixture**:
-The content a surface is measured with. It holds the longest realistic value for every field a Practice types into itself — never a representative one, because a surface measured on polite content is a surface nobody will ever see. A component's fixture is its style-guide page; a route's is the `page.fixture.ts` beside it, which also names the route's parameters and answers its requests, because a route reads more than props.
+The content a surface is measured with. It holds the longest realistic value for every field a Practice types into itself — never a representative one, because a surface measured on polite content is a surface nobody will ever see. A component's fixture is its style-guide page; a route's is the `page.fixture.ts` beside it, which also names the route's parameters and answers its requests, because a route reads more than props. Its row set must also realize every state a field renders differently, not only its longest value — one row at every field's busiest state, one at every field's emptiest, a third only where a field's own render branches a third way (`.claude/rules/svelte-tests.md`, ADR-0025).
 _Avoid_: Mock data, sample data, dummy content
 
 **Fluid step**:
