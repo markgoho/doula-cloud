@@ -113,6 +113,25 @@ describe('ClientFieldTemplateEditor.svelte', () => {
 		await expect.element(page.getByText('Archived -- no longer collected')).toBeVisible();
 	});
 
+	it('renders no "Archived fields" heading when nothing is archived', async () => {
+		await setup();
+		expect(page.getByRole('heading', { name: 'Archived fields' }).elements()).toHaveLength(0);
+	});
+
+	it('lists an archived field under a separate "Archived fields" heading, with no Move buttons', async () => {
+		await setup({
+			fields: [
+				{ id: 'a', type: 'short_text', label: 'Active note', order: 0, archived: false },
+				{ id: 'b', type: 'short_text', label: 'Old note', order: 1, archived: true }
+			]
+		});
+
+		await expect.element(page.getByRole('heading', { name: 'Archived fields' })).toBeVisible();
+		await expect.element(page.getByRole('listitem', { name: 'Old note, archived' })).toBeVisible();
+		expect(page.getByRole('button', { name: 'Move up' }).elements()).toHaveLength(1);
+		expect(page.getByRole('button', { name: 'Move down' }).elements()).toHaveLength(1);
+	});
+
 	it('falls back to "Untitled field" in the archived row aria-label when the label is blank', async () => {
 		await setup({
 			fields: [{ id: 'a', type: 'short_text', label: '', order: 0, archived: true }]
@@ -132,10 +151,35 @@ describe('ClientFieldTemplateEditor.svelte', () => {
 		await expect.element(page.getByRole('button', { name: 'Unarchive' })).toBeVisible();
 	});
 
-	it('calls onArchiveToggle with the field id when the toggle button is clicked', async () => {
+	it('calls onArchiveToggle with the field id once the archive confirmation is confirmed', async () => {
 		const { onArchiveToggle } = await setup();
 
-		await page.getByRole('button', { name: 'Archive' }).first().click();
+		await page.getByRole('button', { name: 'Archive', exact: true }).first().click();
+		expect(onArchiveToggle).not.toHaveBeenCalled();
+
+		const dialog = page.getByRole('dialog', { name: 'Archive "Intake note"?' });
+		await expect.element(dialog.getByText(/read-only/)).toBeVisible();
+		await dialog.getByRole('button', { name: 'Archive field' }).click();
+
+		expect(onArchiveToggle).toHaveBeenCalledWith('a');
+	});
+
+	it('does not call onArchiveToggle when the archive confirmation is cancelled', async () => {
+		const { onArchiveToggle } = await setup();
+
+		await page.getByRole('button', { name: 'Archive', exact: true }).first().click();
+		const dialog = page.getByRole('dialog', { name: 'Archive "Intake note"?' });
+		await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+		expect(onArchiveToggle).not.toHaveBeenCalled();
+	});
+
+	it('calls onArchiveToggle with the field id when Unarchive is clicked, with no confirmation', async () => {
+		const { onArchiveToggle } = await setup({
+			fields: [{ id: 'a', type: 'short_text', label: 'Old note', order: 0, archived: true }]
+		});
+
+		await page.getByRole('button', { name: 'Unarchive' }).click();
 
 		expect(onArchiveToggle).toHaveBeenCalledWith('a');
 	});

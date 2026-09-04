@@ -15,6 +15,7 @@
 		unarchiveField,
 		moveField,
 		validateFields,
+		fieldCountWarning,
 		type Field,
 		type FieldType
 	} from '#lib/clientFieldTemplate.js';
@@ -27,6 +28,16 @@
 	let error = $state('');
 	let isSaved = $state(false);
 
+	/* Read is every Staff member (ADR-0017), write is Owner or Admin
+	 * (#460's RequireOwnerOrAdmin) -- the same "load for everyone, gate the
+	 * write controls" split settings/payments/+page.svelte uses. Server-side
+	 * enforcement (RequireOwnerOrAdmin) is what actually holds the line;
+	 * this is UX only. */
+	let roles = $state<string[]>([]);
+	let isOwnerOrAdmin = $derived(roles.includes('owner') || roles.includes('admin'));
+
+	let countWarning = $derived(fieldCountWarning(fields));
+
 	async function load() {
 		error = '';
 		isSaved = false;
@@ -36,6 +47,13 @@
 			existingIds = new Set(template.fields.map((f) => f.id));
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Client Field Template';
+			return;
+		}
+
+		const sessionResponse = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
+		if (sessionResponse.ok) {
+			const body: { roles: string[] } = await sessionResponse.json();
+			roles = body.roles;
 		}
 	}
 
@@ -79,25 +97,41 @@
 	{#if isSaved}
 		<Text text="Saved." />
 	{/if}
+	{#if countWarning}
+		<Notice variant="info" message={countWarning} />
+	{/if}
 
-	<ClientFieldTemplateEditor
-		{fields}
-		{existingIds}
-		onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
-		onArchiveToggle={(id: string) => {
-			const field = fields.find((f) => f.id === id);
-			fields = field?.archived ? unarchiveField(fields, id) : archiveField(fields, id);
-		}}
-		onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
-		onMoveDown={(id: string) => (fields = moveField(fields, id, 'down'))}
-		onLabelChange={(id: string, label: string) => updateField(id, { label })}
-		onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
-		onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
-	/>
+	{#if isOwnerOrAdmin}
+		<ClientFieldTemplateEditor
+			{fields}
+			{existingIds}
+			onAdd={(type: FieldType) => (fields = addField(fields, crypto.randomUUID(), type))}
+			onArchiveToggle={(id: string) => {
+				const field = fields.find((f) => f.id === id);
+				fields = field?.archived ? unarchiveField(fields, id) : archiveField(fields, id);
+			}}
+			onMoveUp={(id: string) => (fields = moveField(fields, id, 'up'))}
+			onMoveDown={(id: string) => (fields = moveField(fields, id, 'down'))}
+			onLabelChange={(id: string, label: string) => updateField(id, { label })}
+			onTypeChange={(id: string, type: FieldType) => updateField(id, { type })}
+			onOptionsChange={(id: string, options: string[]) => updateField(id, { options })}
+		/>
+	{:else}
+		<ul>
+			{#each fields as field (field.id)}
+				<li>
+					<Text text={field.archived ? `${field.label || 'Untitled field'} (archived)` : field.label || 'Untitled field'} />
+				</li>
+			{/each}
+		</ul>
+		<Text text="Ask a Practice Owner or Admin to edit Client fields." />
+	{/if}
 {/snippet}
 
 {#snippet actions()}
-	<Button label="Save" onClick={save} />
+	{#if isOwnerOrAdmin}
+		<Button label="Save" onClick={save} />
+	{/if}
 {/snippet}
 
 <FormPage title="Client Fields" {intro} fieldsets={[{ content: editor }]} {actions} />

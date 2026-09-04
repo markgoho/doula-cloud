@@ -102,13 +102,25 @@ export function unarchiveField(fields: Field[], id: string): Field[] {
 }
 
 /** Moves the field with id one position toward the front ('up') or back
- * ('down') of the array -- archived fields reorder the same as active
- * ones, since Order is one array for both. A move past either end is a
- * no-op. */
+ * ('down') of the array, skipping past any field whose archived state
+ * differs from the moved field's. An active field reorders only among
+ * active fields -- which is how it crosses from one Practice-named
+ * section into another, since a section is just the run of active fields
+ * between two section_header entries -- and an archived field reorders
+ * only among the "Archived fields" list. A move past either end, or past
+ * the last field sharing its state, is a no-op. */
 export function moveField(fields: Field[], id: string, direction: 'up' | 'down'): Field[] {
 	const index = fields.findIndex((f) => f.id === id);
-	const target = direction === 'up' ? index - 1 : index + 1;
-	if (index === -1 || target < 0 || target >= fields.length) {
+	if (index === -1) {
+		return fields;
+	}
+	const archived = fields[index].archived;
+	const step = direction === 'up' ? -1 : 1;
+	let target = index + step;
+	while (target >= 0 && target < fields.length && fields[target].archived !== archived) {
+		target += step;
+	}
+	if (target < 0 || target >= fields.length) {
 		return fields;
 	}
 	const reordered = [...fields];
@@ -123,38 +135,58 @@ function normalizeOrder(fields: Field[]): Field[] {
 }
 
 /** The trimmed, lowercased labels validateFields blocks as restating one
- * of ADR-0017's twelve structural columns -- mirrors the Go BFF's
- * structuralFieldNames (api/internal/clientfieldtemplate/validate.go)
- * for early UX feedback; the server remains the authority. */
-const STRUCTURAL_FIELD_NAMES: ReadonlySet<string> = new Set([
-	'given name',
-	'first name',
-	'family name',
-	'last name',
-	'surname',
-	'preferred name',
-	'name',
-	'email',
-	'email address',
-	'phone',
-	'phone number',
-	'telephone',
-	'address',
-	'street address',
-	'address line 1',
-	'address line 2',
-	'city',
-	'locality',
-	'state',
-	'region',
-	'zip',
-	'zip code',
-	'postal code',
-	'date of birth',
-	'dob',
-	'birth date',
-	'birthday'
+ * of ADR-0017's twelve structural columns, mapped to the structural fact's
+ * own name -- mirrors the Go BFF's structuralFieldNames
+ * (api/internal/clientfieldtemplate/validate.go) for early UX feedback and
+ * for the same wording ("a Practice asking for a middle name is not
+ * asking for a custom field; it is telling us the structural name has the
+ * wrong shape"); the server remains the authority. */
+const STRUCTURAL_FIELD_NAMES: ReadonlyMap<string, string> = new Map([
+	['given name', 'given name'],
+	['first name', 'given name'],
+	['family name', 'family name'],
+	['last name', 'family name'],
+	['surname', 'family name'],
+	['preferred name', 'preferred name'],
+	['name', 'name'],
+	['email', 'email'],
+	['email address', 'email'],
+	['phone', 'phone'],
+	['phone number', 'phone'],
+	['telephone', 'phone'],
+	['address', 'address'],
+	['street address', 'address'],
+	['address line 1', 'address'],
+	['address line 2', 'address'],
+	['city', 'address'],
+	['locality', 'address'],
+	['state', 'address'],
+	['region', 'address'],
+	['zip', 'address'],
+	['zip code', 'address'],
+	['postal code', 'address'],
+	['date of birth', 'date of birth'],
+	['dob', 'date of birth'],
+	['birth date', 'date of birth'],
+	['birthday', 'date of birth']
 ]);
+
+/** ADR-0017 puts no cap on the field list, and the intake form's Tesler
+ * ruling (#432) means no field is ever deleted just to shorten it -- so
+ * past this point an Owner is told the cost instead of being blocked.
+ * Counts only what a Client is actually asked: archived fields are no
+ * longer collected, and a section_header is a heading, not a question. */
+export const FIELD_COUNT_WARNING_THRESHOLD = 20;
+
+/** Returns a warning message once the template asks more than
+ * FIELD_COUNT_WARNING_THRESHOLD questions, or undefined below that. */
+export function fieldCountWarning(fields: Field[]): string | undefined {
+	const askedCount = fields.filter((f) => !f.archived && f.type !== 'section_header').length;
+	if (askedCount <= FIELD_COUNT_WARNING_THRESHOLD) {
+		return undefined;
+	}
+	return `This template asks a Client ${askedCount} questions beyond the standard ones. Every field here adds to how long intake takes -- consider archiving any that are no longer worth asking before adding more.`;
+}
 
 /** Validates fields against the same rules the Go BFF enforces
  * server-side, mirrored here purely for early feedback before a round
@@ -173,8 +205,9 @@ export function validateFields(fields: Field[]): string | undefined {
 		if (f.label === '') {
 			return 'field label is required';
 		}
-		if (STRUCTURAL_FIELD_NAMES.has(f.label.trim().toLowerCase())) {
-			return `"${f.label}" is already on every Client record`;
+		const structural = STRUCTURAL_FIELD_NAMES.get(f.label.trim().toLowerCase());
+		if (structural) {
+			return `"${f.label}" is already on every Client record as the structural ${structural} field -- edit that field instead of adding a duplicate.`;
 		}
 
 		if (isSelectType(f.type)) {

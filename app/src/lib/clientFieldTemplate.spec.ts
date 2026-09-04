@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	addField,
 	archiveField,
+	fieldCountWarning,
 	isSelectType,
 	loadTemplate,
 	moveField,
@@ -147,6 +148,66 @@ describe('moveField', () => {
 		const result = moveField(fields, 'nope', 'up');
 		expect(result).toBe(fields);
 	});
+
+	it('skips over an archived field when moving an active field up', () => {
+		const mixed: Field[] = [
+			{ id: 'a', type: 'short_text', label: 'A', order: 0, archived: false },
+			{ id: 'x', type: 'short_text', label: 'X', order: 1, archived: true },
+			{ id: 'b', type: 'short_text', label: 'B', order: 2, archived: false }
+		];
+		const result = moveField(mixed, 'b', 'up');
+		expect(result.map((f) => f.id)).toEqual(['b', 'x', 'a']);
+	});
+
+	it('is a no-op moving an active field up when only archived fields precede it', () => {
+		const mixed: Field[] = [
+			{ id: 'x', type: 'short_text', label: 'X', order: 0, archived: true },
+			{ id: 'a', type: 'short_text', label: 'A', order: 1, archived: false }
+		];
+		const result = moveField(mixed, 'a', 'up');
+		expect(result).toBe(mixed);
+	});
+
+	it('reorders an archived field only among other archived fields', () => {
+		const mixed: Field[] = [
+			{ id: 'x', type: 'short_text', label: 'X', order: 0, archived: true },
+			{ id: 'a', type: 'short_text', label: 'A', order: 1, archived: false },
+			{ id: 'y', type: 'short_text', label: 'Y', order: 2, archived: true }
+		];
+		const result = moveField(mixed, 'y', 'up');
+		expect(result.map((f) => f.id)).toEqual(['y', 'a', 'x']);
+	});
+});
+
+function makeFields(count: number, overrides: Partial<Field> = {}): Field[] {
+	return Array.from({ length: count }, (_, index) => ({
+		id: `f${index}`,
+		type: 'short_text',
+		label: `Field ${index}`,
+		order: index,
+		archived: false,
+		...overrides
+	}));
+}
+
+describe('fieldCountWarning', () => {
+	it('is undefined at exactly the threshold', () => {
+		expect(fieldCountWarning(makeFields(20))).toBeUndefined();
+	});
+
+	it('warns once past the threshold, naming the count', () => {
+		expect(fieldCountWarning(makeFields(21))).toContain('21 questions');
+	});
+
+	it('does not count archived fields toward the threshold', () => {
+		const fields = [...makeFields(20), ...makeFields(5, { archived: true })];
+		expect(fieldCountWarning(fields)).toBeUndefined();
+	});
+
+	it('does not count section_header fields toward the threshold', () => {
+		const fields = [...makeFields(20), ...makeFields(5, { type: 'section_header' })];
+		expect(fieldCountWarning(fields)).toBeUndefined();
+	});
 });
 
 describe('validateFields', () => {
@@ -179,10 +240,12 @@ describe('validateFields', () => {
 		);
 	});
 
-	it('rejects a label that restates a structural field, case/whitespace-insensitively', () => {
+	it('rejects a label that restates a structural field, case/whitespace-insensitively, naming the structural field', () => {
 		expect(
 			validateFields([{ id: 'a', type: 'short_text', label: '  Date Of Birth  ', order: 0, archived: false }])
-		).toBe('"  Date Of Birth  " is already on every Client record');
+		).toBe(
+			'"  Date Of Birth  " is already on every Client record as the structural date of birth field -- edit that field instead of adding a duplicate.'
+		);
 	});
 
 	it('accepts a label that only contains a structural word as a substring', () => {
