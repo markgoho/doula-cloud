@@ -22,10 +22,13 @@
 	import {
 		hasSecondary,
 		loadPracticeLanding,
-		type PracticeLanding
+		loadWaitingOnReplyPage,
+		type PracticeLanding,
+		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import { formatActivityTimestamp } from '#lib/dates.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -50,6 +53,16 @@
 	});
 	let activityError = $state('');
 
+	// #455's roll-up: cursor-paginated on its own, unlike the one-shot
+	// blocks loadPracticeLanding already merges into `landing` -- the same
+	// reasoning as `activity` above.
+	const waitingOnReply = new PaginatedList<WaitingOnReply>({
+		first: { items: [], hasMore: false },
+		loadPage: (cursor) => loadWaitingOnReplyPage(apiFetchWithSession, page.params.practiceId!, cursor),
+		failureMessage: 'Failed to load more Engagements waiting on a reply'
+	});
+	let waitingOnReplyError = $state('');
+
 	async function load() {
 		try {
 			landing = await loadPracticeLanding(apiFetchWithSession, page.params.practiceId!);
@@ -66,9 +79,19 @@
 		}
 	}
 
+	async function loadWaitingOnReply() {
+		try {
+			waitingOnReply.reset(await loadWaitingOnReplyPage(apiFetchWithSession, page.params.practiceId!, ''));
+		} catch (error_) {
+			waitingOnReplyError =
+				error_ instanceof Error ? error_.message : 'Failed to load Engagements waiting on a reply';
+		}
+	}
+
 	onMount(async () => {
 		await load();
 		await loadActivity();
+		await loadWaitingOnReply();
 
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
@@ -91,6 +114,28 @@
 		await load();
 	}
 
+	// #455: the roll-up of Engagements whose thread's latest Message came
+	// from the Client. rowHref makes the Client's own name (accessor's
+	// first column) the link through to that Engagement's detail page,
+	// where the thread already renders -- DataTable's own treatment,
+	// matching invoices/+page.svelte's engagementHref.
+	function waitingOnReplyEngagementHref(item: WaitingOnReply): string {
+		return resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			practiceId: page.params.practiceId!,
+			engagementId: item.engagementId
+		});
+	}
+
+	const waitingOnReplyColumns = [
+		{ label: 'Client', accessor: (item: WaitingOnReply) => item.clientName },
+		{
+			label: 'Last message',
+			accessor: (item: WaitingOnReply) => formatActivityTimestamp(item.lastMessageAt),
+			variant: 'meta' as const,
+			datetimeAccessor: (item: WaitingOnReply) => item.lastMessageAt
+		}
+	];
+
 	const connectLabels: Record<string, { label: string; variant: 'neutral' | 'warning' | 'success' }> = {
 		not_connected: { label: 'Not connected', variant: 'neutral' },
 		onboarding_incomplete: { label: 'Onboarding incomplete', variant: 'warning' },
@@ -107,6 +152,29 @@
 		tone="variant"
 	/>
 	<OfferInbox offers={landing!.openOffers} onDecide={handleDecide} />
+
+	<!--
+		#455: computed from thread authorship (the latest Message on the
+		thread came from the Client), not read state -- ADR-0028 (#454)
+		settled that there is no notification bell, and read state is
+		inherently per-person while this roll-up is Practice-scoped. "Who is
+		waiting on me" belongs beside Offers: both answer "what needs me
+		today", for any Staff role.
+	-->
+	<Heading level={2} variant="section" text="Clients waiting on a reply" />
+	{#if waitingOnReplyError}
+		<Notice variant="error" message={waitingOnReplyError} />
+	{/if}
+	<DataTable
+		columns={waitingOnReplyColumns}
+		rows={waitingOnReply.items}
+		rowHref={waitingOnReplyEngagementHref}
+		hasMore={waitingOnReply.hasMore}
+		onLoadMore={() => waitingOnReply.loadMore()}
+		isLoadingMore={waitingOnReply.isLoadingMore}
+		loadMoreError={waitingOnReply.loadMoreError}
+		emptyMessage="Nobody is waiting on a reply."
+	/>
 {/snippet}
 
 {#snippet rosterBlock()}

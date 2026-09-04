@@ -45,6 +45,22 @@ export const fixture: RouteFixture = {
 		if (path.includes('/offers')) {
 			return jsonResponse({ items: offers });
 		}
+		// #455: the roll-up of Engagements whose thread's latest Message
+		// came from the Client. One row long enough (the same double-barrelled
+		// name #537 already fixtures elsewhere) to exercise the block's own
+		// overflow handling down to 320px (ADR-0024/0025).
+		if (path.includes('/messages/awaiting-reply')) {
+			return jsonResponse({
+				items: [
+					{
+						engagementId: 'engagement-1',
+						clientName: 'Anne-Marie Ochieng-Whitfield',
+						lastMessageAt: '2026-08-01T00:00:00Z'
+					}
+				],
+				hasMore: false
+			});
+		}
 		if (path.includes('/clients')) {
 			return jsonResponse({ items: [{ clientId: 'client-1' }] });
 		}

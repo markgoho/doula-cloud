@@ -17,6 +17,7 @@ export type { Fetcher } from './offer.js';
 import { loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
 import type { Fetcher } from './offer.js';
+import type { CursorPage } from './paginatedList.svelte.js';
 
 /*
  * How the roster is doing: people in, and addresses still waiting.
@@ -48,6 +49,37 @@ export interface RequestHealth {
 export interface ConnectHealth {
 	status: ConnectStatus;
 	requirementsDue: string[];
+}
+
+/**
+ * One Engagement whose thread's latest Message came from the Client --
+ * awaiting a staff reply (#455). Computed server-side from thread
+ * authorship, not read state: ADR-0028 (#454) settled that there is no
+ * notification bell, and read state is inherently per-person while this
+ * roll-up is Practice-scoped.
+ */
+export interface WaitingOnReply {
+	engagementId: string;
+	clientName: string;
+	lastMessageAt: string;
+}
+
+/** One page of #455's roll-up, cursor-paginated on its own -- like
+ * `loadPracticeActivityPage` in `activityLedger.ts`, unlike the one-shot
+ * blocks `loadPracticeLanding` merges below. A Practice with more
+ * Engagements waiting than one page holds needs "Load more", not a
+ * silently truncated list, so it is not folded into `PracticeLanding`. */
+export async function loadWaitingOnReplyPage(
+	fetcher: Fetcher,
+	practiceId: string,
+	cursor: string
+): Promise<CursorPage<WaitingOnReply>> {
+	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+	const response = await fetcher(`/api/practices/${practiceId}/messages/awaiting-reply${query}`);
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	return response.json();
 }
 
 /**

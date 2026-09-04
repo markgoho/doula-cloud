@@ -53,6 +53,8 @@ func newServerWithStoreAndPusher(t *testing.T, db *testdb.DB, uid string, store 
 		staffauth.Middleware(db.App)(message.CreateHandler(store, pusher)))
 	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment",
 		staffauth.Middleware(db.App)(message.AttachmentHandler(store)))
+	mux.Handle("GET /practices/{practiceId}/messages/awaiting-reply",
+		staffauth.Middleware(db.App)(message.AwaitingReplyHandler()))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
