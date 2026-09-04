@@ -50,6 +50,31 @@ export function toRoutePath(modulePath: string): string {
 		.replace(/\/?(\+page\.svelte|page\.fixture\.ts)$/, '');
 }
 
+/**
+The `page` a route reads, built from its fixture.
+
+Both halves of the check install this, and they install it differently
+because they have to: `route-continuum.svelte.spec.ts` writes it onto a
+hoisted object behind `vi.mock('$app/state')`, while the drag surface
+hands it to `overridePage` on a page where no module can be mocked. What
+they must not differ about is WHICH fields a fixture contributes -- a
+fifth field added to `RouteFixture` would otherwise reach whichever half
+someone remembered, and the two would then be measuring and showing
+different screens. Reading the fixture is one function; installing the
+result is each half's own business.
+*/
+export function toPageState(fixture: RouteFixture): {
+	params: Record<string, string>;
+	url: URL;
+	data: Record<string, unknown>;
+} {
+	return {
+		params: { ...fixture.params },
+		url: new URL(fixture.url),
+		data: { ...fixture.pageData }
+	};
+}
+
 export interface RouteFixture {
 	/**
 	How the route is named in a failure sentence -- what a person calls the screen.

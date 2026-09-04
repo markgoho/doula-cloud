@@ -83,7 +83,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { mountInFrame, overflowReport, sweep } from './style-guide/continuum.js';
-import { toRoutePath, type RouteFixture } from './routeFixture.js';
+import { toPageState, toRoutePath, type RouteFixture } from './routeFixture.js';
 
 /*
  * One mock of `$app/state` for every route, because `vi.mock` is hoisted
@@ -230,9 +230,11 @@ describe('the continuum check, over routes', () => {
 
 	for (const [routePath, fixture] of swept) {
 		async function assertion() {
-			pageState.params = { ...fixture.params };
-			pageState.url = new URL(fixture.url);
-			pageState.data = { ...fixture.pageData };
+			// Which fields a fixture contributes is `toPageState`'s to say, so
+			// the drag surface installs the same `page` this does (#597); how
+			// it gets installed is each half's own business, since only this
+			// half has a module to mock.
+			Object.assign(pageState, toPageState(fixture));
 			if (fixture.respond) {
 				const respond = fixture.respond;
 				apiFetchWithSession.mockImplementation((path: string) => Promise.resolve(respond(path)));

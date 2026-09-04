@@ -2,7 +2,7 @@
 	import Select from '#lib/components/atoms/Select.svelte';
 	import { apiBaseURL } from '#lib/api.js';
 	import { clearPageOverride, overridePage } from '#lib/appState.svelte.js';
-	import type { RouteFixture } from '../../routeFixture.js';
+	import { toPageState, type RouteFixture } from '../../routeFixture.js';
 	import {
 		atomPages,
 		moleculePages,
@@ -97,11 +97,7 @@
 	$effect.pre(() => {
 		const fixture = selected?.fixture;
 		if (!fixture) return;
-		overridePage({
-			params: { ...fixture.params },
-			url: new URL(fixture.url),
-			data: { ...fixture.pageData }
-		});
+		overridePage(toPageState(fixture));
 		/*
 		 * Assigning the global is the mechanism, not an oversight: a route
 		 * reaches the network through `#lib/api.js`, which closes over the
