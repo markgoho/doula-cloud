@@ -113,9 +113,13 @@ describe('client detail hub', () => {
 	it("groups the structural columns per #432's decision: identity, contact, address", async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Who Ada is' })).toBeVisible();
-		await expect.element(testPage.getByRole('heading', { level: 2, name: 'How to reach Ada' })).toBeVisible();
-		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Where Ada lives' })).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 2, name: `Who ${fixture.readyText} is` })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: `How to reach ${fixture.readyText}` }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: `Where ${fixture.readyText} lives` }))
+			.toBeVisible();
 	});
 
 	it('shows every active Practice-defined field, blank or not, and labels an archived one held', async () => {
@@ -325,7 +329,7 @@ describe('client detail hub', () => {
 		await setup({ isContractor: true });
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Start new work with Ada' }))
+			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
 			.not.toBeInTheDocument();
 		// Edit follows read, not the originate rule -- a contractor keeps it.
 		await expect.element(testPage.getByRole('link', { name: 'Edit' })).toBeVisible();
