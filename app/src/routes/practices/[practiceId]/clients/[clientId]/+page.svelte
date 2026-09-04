@@ -45,9 +45,10 @@
 	let withdrawError = $state('');
 	let withdrawnConfirmation = $state('');
 
-	// Safe with detail undefined (loading): read by the sections array
-	// below, which is constructed on every render regardless of which
-	// branch of RecordDetail's template is actually showing.
+	// Safe with detail undefined (loading): read by the title, the
+	// actions snippet and the sections array below, all of which are
+	// constructed on every render regardless of which branch of
+	// RecordDetail's template is actually showing.
 	const name = $derived(detail ? displayName(detail) : '');
 
 	function editHref(): string {
@@ -181,7 +182,7 @@
 		name becomes "Edit, Jane Smith" without a second visible word.
 	-->
 	<Link href={editHref()} label="Edit" describedBy="edit-client-name" />
-	<span class="visually-hidden" id="edit-client-name">{detail ? displayName(detail) : ''}</span>
+	<span class="visually-hidden" id="edit-client-name">{name}</span>
 	<!--
 		The hub is the only door to an Engagement Request (#496). The label
 		names her rather than saying "her", so it reads on its own out of
@@ -191,7 +192,7 @@
 		only there is the Credit cost known.
 	-->
 	{#if detail && !isContractor}
-		<Link href={newEngagementRequestHref()} label="Start new work with {displayName(detail)}" />
+		<Link href={newEngagementRequestHref()} label="Start new work with {name}" />
 	{/if}
 {/snippet}
 
@@ -349,7 +350,7 @@
 {/snippet}
 
 <RecordDetail
-	title={detail ? displayName(detail) : ''}
+	title={name}
 	{summary}
 	{actions}
 	sections={[
