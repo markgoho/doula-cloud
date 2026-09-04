@@ -20,6 +20,21 @@ export const clients: ClientListItem[] = [
 		hasWork: true,
 		portalInviteStatus: 'sent',
 		pendingRequestKinds: ['birth']
+	},
+	/*
+	 * A second Client, because a list of one is a list whose every column
+	 * holds the same answer (#596). This one is the other end of all three
+	 * of them -- no work yet, never invited, no pending Request -- so the
+	 * Work column, the invite column and the empty Requests cell are all
+	 * on screen for the sweep to measure and for a spec to assert on
+	 * without inventing a row of its own.
+	 */
+	{
+		clientId: 'client-2',
+		name: 'Anne-Marie Ochieng-Whitfield',
+		email: 'persephone@example.test',
+		hasWork: false,
+		pendingRequestKinds: []
 	}
 ];
 

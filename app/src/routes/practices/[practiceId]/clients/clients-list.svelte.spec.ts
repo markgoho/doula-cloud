@@ -88,15 +88,9 @@ describe('clients list screen', () => {
 	});
 
 	it('renders a Portal invite column showing the label for each status', async () => {
-		// The fixture's one Client only ever holds `portalInviteStatus:
-		// 'sent'`, so a second row with the field absent is this test's own
-		// -- the fixture has no way to hold "never invited" (#596).
-		await setup(
-			jsonResponse({
-				items: [clients[0], { ...clients[0], clientId: 'client-2', portalInviteStatus: undefined }],
-				hasMore: false
-			})
-		);
+		// Both rows are the fixture's own: its second Client carries no
+		// `portalInviteStatus` at all, which is what "never invited" is.
+		await setup();
 
 		await expect.element(testPage.getByRole('columnheader', { name: 'Portal invite' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Invite sent' })).toBeVisible();
@@ -269,10 +263,10 @@ describe('a pending Request on the row', () => {
 	});
 
 	it('leaves the cell blank for a Client with no pending Request', async () => {
-		// The fixture's Client always carries a pending Request, so a
-		// Client with none is this test's own -- the fixture has no way to
-		// hold the absence (#596).
-		await setup(jsonResponse({ items: [{ ...clients[0], pendingRequestKinds: undefined }], hasMore: false }));
+		// The fixture's second Client has no pending Request. Only she is
+		// listed, because this asserts the absence of the text anywhere on
+		// the page and her neighbour has one.
+		await setup(jsonResponse({ items: [clients[1]], hasMore: false }));
 
 		await expect
 			.element(testPage.getByRole('columnheader', { name: 'Pending request' }))
@@ -296,7 +290,7 @@ describe('the Work column (#458)', () => {
 	});
 
 	it('shows which Clients have work and which do not once "See everyone" is on', async () => {
-		searchParameters.set('all', 'true');
+		pageState.url.searchParams.set('all', 'true');
 
 		await setup();
 

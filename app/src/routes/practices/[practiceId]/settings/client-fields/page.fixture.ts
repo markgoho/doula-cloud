@@ -12,7 +12,7 @@ import type { Template } from '#lib/clientFieldTemplate.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const template: Template = {
+export const template: Template = {
 	fields: [
 		{
 			id: 'field-1',
