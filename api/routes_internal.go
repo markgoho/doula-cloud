@@ -5,6 +5,7 @@ import (
 
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/offer"
@@ -60,6 +61,14 @@ func registerInternalRoutes(mux *http.ServeMux, d Deps) {
 	// Tasks (tasknudge.MFARecoveryCode) since a person is waiting on the
 	// phone for this one, unlike #613's two token mails.
 	mux.Handle("POST /api/internal/notifications/process-mfa-recovery-outbox", mfarecoverymail.ProcessOutboxHandler(d.DB, d.MFARecoveryMailWorker, d.WorkerSecret))
+	// #394's Client-erasure outbox. Same X-Internal-Secret guard and
+	// Cloud Scheduler cadence, under /api/internal/clients rather than
+	// /notifications because it notifies nobody -- it deletes a Stripe
+	// Customer, runs its Redaction Job once Stripe's 90-day floor has
+	// passed, and deletes an Identity Platform account (ADR-0027). Also
+	// nudged by Cloud Tasks (tasknudge.ClientErasure), so the two
+	// immediate acts happen while the Owner is still on the screen.
+	mux.Handle("POST /api/internal/clients/process-erasure-outbox", client.ProcessErasureOutboxHandler(d.DB, d.ClientErasureWorker, d.WorkerSecret))
 	// #443's two site endpoints, on the same X-Internal-Secret shape and
 	// under /api/internal/site rather than /notifications, because
 	// neither of them notifies anybody. process-build-outbox turns

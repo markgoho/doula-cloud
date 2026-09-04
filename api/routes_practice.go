@@ -168,6 +168,16 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	ir.Exempt("PUT /api/practices/{practiceId}/clients/{clientId}",
 		"PUT replaces the Client record wholesale; re-sending the same body is a no-op",
 		staffauth.Middleware(d.DB)(client.EditHandler()))
+	// #394's erasure, ADR-0027: the one act in the product that destroys
+	// a fact, so Owner-only (enforced inside the handler by
+	// staffauth.RequireOwner, the same seat as the MFA switch), and the
+	// one route here whose repeat is a mistake worth naming -- it locks
+	// the row FOR UPDATE and 409s on an erased_at that is already set,
+	// so a retry after the first commit refuses rather than erasing
+	// twice or double-calling Stripe.
+	ir.Exempt("POST /api/practices/{practiceId}/clients/{clientId}/erasure",
+		"erase() locks the clients row FOR UPDATE and refuses a row whose erased_at is already set; a retry after the first commit 409s instead of enqueuing a second set of Stripe and Identity Platform acts",
+		staffauth.Middleware(d.DB)(client.EraseHandler(d.NudgeEnqueuer)))
 	// ADR-0017's Engagement Request (#398): the ask for paid work with a
 	// Client, and the act that creates an Engagement. Request is any
 	// Staff member but a contractor Doula (enforced here and,

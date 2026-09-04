@@ -144,7 +144,24 @@ type Client interface {
 	// as description (always InvoiceLineItemDescription in production) --
 	// no clinical content is ever included, per #78's no-PHI-to-Stripe
 	// rule. Returns the created Invoice's id.
-	CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (invoiceID string, err error)
+	// It returns the Stripe Customer it created alongside the Invoice.
+	// #394 (Client erasure) needs that id later, to delete the Customer
+	// and to root a Redaction Job at it; nothing persisted it before, so
+	// there was nothing for erasure to reach.
+	CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (invoiceID, customerID string, err error)
+	// DeleteCustomer deletes customerID on accountID's connected account.
+	// #394's erasure calls it first, before any redaction: Stripe's own
+	// recommendation, because a deleted Customer cannot take on new
+	// transactions that would push the redaction eligibility date out
+	// again. A Customer Stripe does not know is success, not an error --
+	// a retried erasure must be a no-op.
+	DeleteCustomer(ctx context.Context, accountID, customerID string) error
+	// CreateRedactionJob asks Stripe to redact customerID and every
+	// transaction under it, on accountID's connected account. Stripe
+	// will not redact most transactions until 90 days after they are
+	// taken, so the caller must not reach this before that date --
+	// erasure schedules it rather than attempting it (ADR-0027).
+	CreateRedactionJob(ctx context.Context, accountID, customerID string) (jobID string, err error)
 	// FinalizeInvoice finalizes invoiceID on accountID's connected
 	// account, making it payable, and returns its hosted payment page URL.
 	FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (hostedInvoiceURL string, err error)

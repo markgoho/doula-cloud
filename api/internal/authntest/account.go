@@ -41,6 +41,12 @@ type FakeAccountManager struct {
 	// spend-handler tests prove clearEnrolmentAndRecord's own failure
 	// branch, distinct from the account-lookup failure that precedes it.
 	ClearSecondFactorsErr error
+
+	// DeleteAccountErr, when set, is returned by DeleteAccount
+	// specifically -- how #394's erasure-outbox tests prove the
+	// retry/dead-letter path when Identity Platform refuses, without
+	// disturbing the reads around it.
+	DeleteAccountErr error
 }
 
 var _ authn.AccountManager = (*FakeAccountManager)(nil)
@@ -166,6 +172,32 @@ func (f *FakeAccountManager) SetEmail(_ context.Context, uid, email string) erro
 	}
 	a.email = email
 	a.emailVerified = false
+	return nil
+}
+
+// Exists reports whether uid still has an account, so an erasure test
+// can assert DeleteAccount actually removed it.
+func (f *FakeAccountManager) Exists(uid string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.accounts[uid]
+	return ok
+}
+
+// DeleteAccount implements authn.AccountManager. A uid with no account
+// is success, not ErrAccountNotFound -- matching FirebaseVerifier, which
+// swallows Identity Platform's own user-not-found so a retried erasure
+// is a no-op.
+func (f *FakeAccountManager) DeleteAccount(_ context.Context, uid string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.DeleteAccountErr != nil {
+		return f.DeleteAccountErr
+	}
+	if f.Err != nil {
+		return f.Err
+	}
+	delete(f.accounts, uid)
 	return nil
 }
 

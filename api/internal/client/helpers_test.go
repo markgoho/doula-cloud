@@ -31,7 +31,18 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-const doulaRole = "doula"
+const (
+	doulaRole = "doula"
+	// ownerRole is named once for the same reason doulaRole is:
+	// golangci-lint's goconst check counts the literal across this
+	// package's whole test surface, and #394's erasure tests seed a
+	// third Owner.
+	ownerRole = "owner"
+	// pendingStatus is the one status string this package's tests assert
+	// on from two unrelated places -- a portal invite that has not been
+	// accepted, and an erasure act that has not run.
+	pendingStatus = "pending"
+)
 
 // seedStaffAtPractice seeds an employee Doula at practiceID.
 func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
@@ -52,7 +63,7 @@ func seedContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityU
 // billed as a contractor.
 func seedOwnerContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
-	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner", doulaRole}, "contractor")
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole, doulaRole}, "contractor")
 }
 
 // seedStaffWithMembership inserts a new Practice plus a Staff member at

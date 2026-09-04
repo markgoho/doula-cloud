@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/clientkey"
 )
 
 type eventType string
@@ -14,6 +15,23 @@ type eventType string
 const (
 	eventCreated eventType = "created"
 	eventUpdated eventType = "updated"
+	// eventErased is the one client-subject action whose diff is NOT
+	// sealed (ADR-0027). It describes the erasure, not the data erased,
+	// and it has to stay readable after her key is destroyed -- so it
+	// goes through activity.Record directly (see erase.go), never
+	// recordEvent.
+	eventErased eventType = "erased"
+)
+
+// erasureAct names one act client_erasure_outbox carries -- the Go side
+// of the client_erasure_act enum. Each is somebody else's API, which is
+// why none of them happens inside the erasure transaction.
+type erasureAct string
+
+const (
+	actStripeCustomerDelete  erasureAct = "stripe_customer_delete"
+	actStripeRedactionJob    erasureAct = "stripe_redaction_job"
+	actIdentityAccountDelete erasureAct = "identity_account_delete"
 )
 
 // change is one changed fact's activity diff entry: both sides, so
@@ -65,18 +83,40 @@ func createdDiff(rec Record) map[string]change {
 // eventType, the diff, and the acting Staff member. Every create and
 // every edit writes exactly one row, even a no-op edit whose diff is
 // empty -- "one row per act" (ADR-0017), not one row per changed fact.
+//
+// The diff is sealed under the Client's own key before it is written
+// (ADR-0027). This is the one activity write site in the product that
+// puts a person's name, address, phone and date of birth into a jsonb
+// column, and activity can never be UPDATEd or DELETEd, so erasure has
+// no way to reach these rows afterwards -- it destroys the key instead.
+// The plaintext columns around the diff (what happened, when, who did
+// it) are untouched and stay readable forever.
 func recordEvent(ctx context.Context, tx *sql.Tx, practiceID, clientID string, et eventType, diff map[string]change, actorStaffID string) error {
 	diffJSON, err := json.Marshal(diff)
 	if err != nil {
 		// coverage:ignore reason: a map of strings/RawMessage always marshals cleanly, not exercised by unit tests
 		return fmt.Errorf("client: marshal event diff: %w", err)
 	}
+	// Ensure before Seal, not only at create time: a Client who predates
+	// #394 has no key, and the first thing written about her makes one.
+	// It refuses to remake a key for an erased Client, so Seal below
+	// still reports ErrNoKey there -- an erased Client's history does not
+	// start again.
+	if err := clientkey.Ensure(ctx, tx, practiceID, clientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("client: ensure client key: %w", err)
+	}
+	sealed, err := clientkey.Seal(ctx, tx, clientID, diffJSON)
+	if err != nil {
+		// coverage:ignore reason: Ensure above has just made the key, so the only way here is an erased Client -- and EditHandler refuses one before it reaches this. The branch stays as the backstop for a future write site that does not.
+		return fmt.Errorf("client: seal event diff: %w", err)
+	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: "client",
 		SubjectID:   clientID,
 		Action:      string(et),
-		Diff:        diffJSON,
+		Diff:        sealed,
 		Actor:       activity.StaffActor(actorStaffID),
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

@@ -157,6 +157,42 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Sam Admin' })).toBeVisible();
 	});
 
+	it('names an erasure as its own act, not another edit (ADR-0027)', async () => {
+		await setup({
+			overrides: {
+				history: [
+					{
+						type: 'client_event',
+						at: '2026-03-01T00:00:00Z',
+						clientEvent: {
+							eventType: 'erased',
+							diff: { contracts: 1, stripeCustomers: 1, portalAccount: true },
+							actorKind: 'staff',
+							actorName: 'Sam Owner',
+							createdAt: '2026-03-01T00:00:00Z'
+						}
+					},
+					{
+						type: 'client_event',
+						at: '2026-01-01T00:00:00Z',
+						clientEvent: {
+							eventType: 'updated',
+							diff: { erased: true },
+							actorKind: 'staff',
+							actorName: 'Sam Owner',
+							createdAt: '2026-01-01T00:00:00Z'
+						}
+					}
+				]
+			}
+		});
+
+		await expect.element(testPage.getByRole('cell', { name: 'Data erased on request' })).toBeVisible();
+		// The shredded entry that precedes it still reads as the edit it
+		// was -- crypto-shredding takes the detail, not the entry.
+		await expect.element(testPage.getByRole('cell', { name: 'Record updated' })).toBeVisible();
+	});
+
 	it('names a system-authored event "Doula Cloud", never "System" (ADR-0022)', async () => {
 		await setup({
 			overrides: {

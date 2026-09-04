@@ -1,0 +1,448 @@
+package client
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/clientkey"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
+)
+
+// ErasedGivenName is what a Client's given_name becomes on erasure.
+// The column is NOT NULL and always has been -- a Client with no name at
+// all is not a shape this schema allows -- so erasure replaces it rather
+// than nulling it, and the replacement says plainly what happened rather
+// than inventing a person. Every other identifying column goes to NULL,
+// which is a state they already have for a Client whose intake was
+// half-typed on a phone.
+const ErasedGivenName = "Erased Client"
+
+// StripeRedactionFloor is how long Stripe makes a platform wait before
+// most transactions can be redacted (ADR-0027). It is Stripe's number,
+// not a Doula Cloud policy, and erasure schedules the redaction job for
+// this far past the Client's newest invoice rather than issuing one it
+// already knows will fail validation.
+const StripeRedactionFloor = 90 * 24 * time.Hour
+
+// ErasureResponse is what the Owner gets back: when the erasure ran, and
+// -- if any of her Stripe transactions is still inside Stripe's 90-day
+// floor -- the date the Stripe half finishes. It is the same pair the
+// detail read carries afterwards, answered here so the screen that ran
+// the act does not have to re-fetch to say what happened.
+type ErasureResponse struct {
+	ErasedAt                  time.Time  `json:"erasedAt"`
+	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
+	StripeCustomersQueued     int        `json:"stripeCustomersQueued"`
+	PortalAccountQueued       bool       `json:"portalAccountQueued"`
+}
+
+// erasureScope is the plaintext diff on the 'erased' activity row: what
+// the act actually covered, in a form that stays readable forever. It
+// deliberately names counts and dates, never a value that was erased --
+// this row survives the shredding of her history precisely because it
+// describes the act rather than her.
+type erasureScope struct {
+	Contracts                 int        `json:"contracts"`
+	StripeCustomers           int        `json:"stripeCustomers"`
+	PortalAccount             bool       `json:"portalAccount"`
+	SessionsEnded             int        `json:"sessionsEnded"`
+	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
+}
+
+// EraseHandler erases one Client's personal data at the Owner's
+// instruction -- ADR-0027, the whole act, in one transaction plus an
+// outbox for the three parts that are somebody else's API.
+//
+// Owner-only: not Owner-or-Admin, which gates most things that reshape a
+// Practice. Erasure is the one act in the product that destroys a fact,
+// so it sits in the same seat as the MFA switch and the vouch.
+//
+// Refused, with 409 and the invoice ids named, while any of her invoices
+// is still draft or open: a non-terminal transaction cannot be redacted
+// by Stripe, and deleting her Customer underneath an unpaid invoice
+// would leave the Practice unable to collect on work it did. Refused,
+// also with 409, if she is already erased -- the act is irreversible and
+// running it twice is a mistake worth naming rather than absorbing.
+//
+// Must be mounted behind staffauth.Middleware.
+func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, practiceID, ok := staffauth.RequireOwner(w, r)
+		if !ok {
+			return
+		}
+		clientID := r.PathValue("clientId")
+		if !staffauth.ParseUUID(w, "client", clientID) {
+			return
+		}
+
+		var erasedAt sql.NullTime
+		err := tx.QueryRowContext(r.Context(),
+			`SELECT erased_at FROM clients WHERE id = $1 AND practice_id = $2 FOR UPDATE`,
+			clientID, practiceID,
+		).Scan(&erasedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "client not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if erasedAt.Valid {
+			http.Error(w, "this client's data has already been erased", http.StatusConflict)
+			return
+		}
+
+		unsettled, err := unsettledInvoices(r.Context(), tx, clientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if len(unsettled) > 0 {
+			http.Error(w,
+				"cannot erase a client with unsettled invoices: settle or void "+strings.Join(unsettled, ", ")+" first",
+				http.StatusConflict)
+			return
+		}
+
+		staffID, _ := staffauth.StaffID(r.Context())
+		out, err := erase(r.Context(), tx, practiceID, clientID, staffID, time.Now().UTC())
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.ClientErasure))
+
+		w.Header().Set("Content-Type", "application/json")
+		// coverage:ignore reason: response encoding failure, not exercised by unit tests
+		if err := json.NewEncoder(w).Encode(out); err != nil {
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		}
+	})
+}
+
+// erase is the act itself, in the order the pieces depend on each other:
+// the record is redacted, the outside-world work is enqueued, the
+// erasure is recorded in plaintext, and only then is her key destroyed.
+// The key goes last because recordErasure's own row is written through
+// activity.Record directly rather than recordEvent -- but the ordering
+// still matters for any future write site that seals, and reads more
+// honestly: everything that needed her key has already happened.
+func erase(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffID string, now time.Time) (ErasureResponse, error) {
+	if err := redactRecord(ctx, tx, clientID, now); err != nil {
+		// coverage:ignore reason: every step below fails only on a DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
+	contracts, err := redactContractMergeFields(ctx, tx, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
+
+	customers, eligibleAt, err := enqueueStripeErasure(ctx, tx, practiceID, clientID, now)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
+	portalQueued, sessionsEnded, err := enqueuePortalErasure(ctx, tx, practiceID, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
+
+	scope := erasureScope{
+		Contracts:                 contracts,
+		StripeCustomers:           len(customers),
+		PortalAccount:             portalQueued,
+		SessionsEnded:             sessionsEnded,
+		StripeRedactionEligibleAt: eligibleAt,
+	}
+	if err := recordErasure(ctx, tx, practiceID, clientID, staffID, scope); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
+
+	// The shredding. Every diff sealed under this key becomes permanently
+	// unreadable here, and not one row of activity was touched to do it.
+	if err := clientkey.Destroy(ctx, tx, clientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, fmt.Errorf("client: destroy client key: %w", err)
+	}
+
+	return ErasureResponse{
+		ErasedAt:                  now,
+		StripeRedactionEligibleAt: eligibleAt,
+		StripeCustomersQueued:     len(customers),
+		PortalAccountQueued:       portalQueued,
+	}, nil
+}
+
+// isErased reports whether clientID has already been erased -- the gate
+// every other write on a Client reads.
+func isErased(ctx context.Context, tx *sql.Tx, clientID string) (bool, error) {
+	var erasedAt sql.NullTime
+	if err := tx.QueryRowContext(ctx, `SELECT erased_at FROM clients WHERE id = $1`, clientID).Scan(&erasedAt); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the row was already read by the caller
+		return false, fmt.Errorf("client: read erased_at: %w", err)
+	}
+	return erasedAt.Valid, nil
+}
+
+// redactRecord empties every identifying column on her clients row and
+// stamps erased_at. The row and its id survive untouched, so every
+// record that names her by client_id keeps resolving -- the whole point
+// of redacting in place rather than deleting (ADR-0027).
+func redactRecord(ctx context.Context, tx *sql.Tx, clientID string, now time.Time) error {
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE clients SET
+			given_name = $2, family_name = NULL, preferred_name = NULL, email = NULL, phone = NULL,
+			address_line1 = NULL, address_line2 = NULL, address_locality = NULL,
+			address_region = NULL, address_postal_code = NULL, date_of_birth = NULL,
+			field_values = '{}'::jsonb, erased_at = $3
+		 WHERE id = $1`,
+		clientID, ErasedGivenName, now,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("client: redact record: %w", err)
+	}
+	return nil
+}
+
+// redactContractMergeFields empties the structured values a Contract
+// captured about her at render time -- the same shape as her own record,
+// captured a second time, and so covered by the same in-place-redaction
+// rule. The Contract's prose is deliberately left exactly as signed:
+// ADR-0027's free-text limitation.
+func redactContractMergeFields(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE contracts SET merge_field_values = '{}'::jsonb
+		 WHERE engagement_id IN (SELECT id FROM engagements WHERE client_id = $1)
+		   AND merge_field_values <> '{}'::jsonb`,
+		clientID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("client: redact contract merge fields: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
+		return 0, fmt.Errorf("client: count redacted contracts: %w", err)
+	}
+	return int(n), nil
+}
+
+// unsettledInvoices names every invoice of hers that is neither paid,
+// void nor uncollectible. Stripe cannot redact a transaction that is not
+// in a terminal state, and the Practice cannot collect on one whose
+// Customer has been deleted -- so an unsettled invoice refuses the whole
+// act rather than being quietly skipped.
+func unsettledInvoices(ctx context.Context, tx *sql.Tx, clientID string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT i.stripe_invoice_id FROM invoices i
+		  JOIN contracts ct ON ct.id = i.contract_id
+		  JOIN engagements e ON e.id = ct.engagement_id
+		 WHERE e.client_id = $1 AND i.status IN ('draft', 'open')
+		 ORDER BY i.created_at`,
+		clientID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("client: list unsettled invoices: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("client: scan unsettled invoice: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("client: iterate unsettled invoices: %w", err)
+	}
+	return ids, nil
+}
+
+// enqueueStripeErasure writes one outbox row per Stripe Customer she has
+// ever had -- there is one per invoice, since payments.CreateInvoice
+// makes a fresh Customer each time -- for the immediate delete, and one
+// more per Customer for the redaction job, deferred to Stripe's 90-day
+// floor past her newest invoice. It reports that date so the Practice
+// can see the Stripe half is scheduled rather than finished.
+//
+// A Client with no invoices has no Stripe presence at all: no rows, no
+// eligibility date, nothing to wait for.
+func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string, now time.Time) ([]string, *time.Time, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT DISTINCT i.stripe_customer_id, max(i.created_at) OVER ()
+		   FROM invoices i
+		   JOIN contracts ct ON ct.id = i.contract_id
+		   JOIN engagements e ON e.id = ct.engagement_id
+		  WHERE e.client_id = $1 AND i.stripe_customer_id IS NOT NULL`,
+		clientID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, nil, fmt.Errorf("client: list stripe customers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var customers []string
+	var newest time.Time
+	for rows.Next() {
+		var id string
+		var latest time.Time
+		if err := rows.Scan(&id, &latest); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, nil, fmt.Errorf("client: scan stripe customer: %w", err)
+		}
+		customers = append(customers, id)
+		newest = latest
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, nil, fmt.Errorf("client: iterate stripe customers: %w", err)
+	}
+	if len(customers) == 0 {
+		return nil, nil, nil
+	}
+
+	eligibleAt := newest.Add(StripeRedactionFloor)
+	// A Practice erasing a Client whose last invoice is already older
+	// than the floor waits for nothing: the job is due immediately, and
+	// there is no future date to show her.
+	var reportedEligibleAt *time.Time
+	if eligibleAt.After(now) {
+		reportedEligibleAt = &eligibleAt
+	} else {
+		eligibleAt = now
+	}
+
+	for _, customerID := range customers {
+		if err := enqueue(ctx, tx, practiceID, clientID, actStripeCustomerDelete, customerID, now); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return nil, nil, err
+		}
+		if err := enqueue(ctx, tx, practiceID, clientID, actStripeRedactionJob, customerID, eligibleAt); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return nil, nil, err
+		}
+	}
+	return customers, reportedEligibleAt, nil
+}
+
+// enqueuePortalErasure queues the deletion of her Identity Platform
+// account and ends every session she currently holds. The sessions are
+// deleted here, inside the erasure transaction, rather than left to the
+// outbox: deleting the Identity Platform account does not invalidate a
+// __session cookie, which is verified against Postgres, so she would
+// otherwise stay signed in to the portal until it expired on its own.
+//
+// identity_uid is cleared on the row so nothing in this database points
+// at an account that is about to stop existing. The row itself stays --
+// it is how her portal history resolves.
+func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string) (queued bool, sessionsEnded int, err error) {
+	var identityUID sql.NullString
+	err = tx.QueryRowContext(ctx,
+		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID,
+	).Scan(&identityUID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, 0, nil
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, 0, fmt.Errorf("client: read portal account: %w", err)
+	}
+	if !identityUID.Valid {
+		// An invitation that was never accepted: there is no Identity
+		// Platform account behind it, and revoking the pending invite is
+		// enough.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE client_portal_users SET invite_token = NULL WHERE client_id = $1`, clientID,
+		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return false, 0, fmt.Errorf("client: revoke pending portal invite: %w", err)
+		}
+		return false, 0, nil
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE identity_uid = $1`, identityUID.String)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, 0, fmt.Errorf("client: end portal sessions: %w", err)
+	}
+	ended, err := res.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
+		return false, 0, fmt.Errorf("client: count ended portal sessions: %w", err)
+	}
+
+	if err := enqueue(ctx, tx, practiceID, clientID, actIdentityAccountDelete, identityUID.String, time.Now().UTC()); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, 0, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE client_portal_users SET identity_uid = NULL, invite_token = NULL WHERE client_id = $1`, clientID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, 0, fmt.Errorf("client: clear portal identity: %w", err)
+	}
+	return true, int(ended), nil
+}
+
+// recordErasure writes the one activity row that outlives the shredding:
+// plaintext, describing the act and its scope, never a value that was
+// erased. Without it, a Practice looking at an erased Client's history
+// would see only unreadable entries and no explanation of why.
+func recordErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffID string, scope erasureScope) error {
+	diff, err := json.Marshal(scope)
+	if err != nil {
+		// coverage:ignore reason: a struct of ints, a bool and a time always marshals cleanly, not exercised by unit tests
+		return fmt.Errorf("client: marshal erasure scope: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: "client",
+		SubjectID:   clientID,
+		Action:      string(eventErased),
+		Diff:        diff,
+		Actor:       activity.StaffActor(staffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("client: record erasure: %w", err)
+	}
+	return nil
+}
+
+// enqueue writes one client_erasure_outbox row, due at dueAt. The
+// partial unique index makes a repeat enqueue of an act still pending a
+// no-op rather than a duplicate call to somebody else's API.
+func enqueue(ctx context.Context, tx *sql.Tx, practiceID, clientID string, act erasureAct, target string, dueAt time.Time) error {
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO client_erasure_outbox (client_id, practice_id, act, target, next_attempt_at)
+		 VALUES ($1, $2, $3::client_erasure_act, $4, $5)
+		 ON CONFLICT (client_id, act, target) WHERE status = 'pending' DO NOTHING`,
+		clientID, practiceID, string(act), target, dueAt,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("client: enqueue erasure act: %w", err)
+	}
+	return nil
+}

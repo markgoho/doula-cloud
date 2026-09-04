@@ -64,7 +64,21 @@
 
 	function historyWhat(entry: HistoryEntry): string {
 		if (entry.type === 'client_event') {
-			return entry.clientEvent.eventType === 'created' ? 'Record created' : 'Record updated';
+			switch (entry.clientEvent.eventType) {
+				case 'created': {
+					return 'Record created';
+				}
+				// ADR-0027. The one entry that outlives the rest: every
+				// earlier entry's detail is unreadable after this, and
+				// without a label of its own this would read as another
+				// ordinary edit.
+				case 'erased': {
+					return 'Data erased on request';
+				}
+				default: {
+					return 'Record updated';
+				}
+			}
 		}
 		const request = entry.engagementRequest;
 		const label = kindLabel(request.kind);
