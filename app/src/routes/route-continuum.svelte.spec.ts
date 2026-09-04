@@ -62,13 +62,16 @@
  * The window Vitest gives this file is 414px wide -- measured here, not
  * assumed -- so a route is swept from 320px to 414px and no further. The
  * reach trial's own throwaway harness swept from 1400px down to 280px, so
- * the check that replaced it makes a weaker statement than the harness
- * did. That is stated rather than left to be rediscovered, and it is
- * [#600](https://github.com/markgoho/doula-cloud/issues/600). The narrow
- * window is already load-bearing elsewhere -- #544 records it as the
- * reason `layout.usage.spec.ts` rule 3 reads source rather than rendering
- * -- so widening it is a decision about both checks at once, not a line to
- * add here.
+ * the check that replaced it makes a narrower statement than the harness
+ * did. [#600](https://github.com/markgoho/doula-cloud/issues/600) took
+ * that up and decided the ceiling STAYS, for a reason that belongs to both
+ * checks at once and is written out beside `sweep` in `continuum.ts` and
+ * in ADR-0025: an unconstrained component runs out of space at 320px,
+ * where this already looks, and a constrained one runs out nowhere. The
+ * one case a wider sweep would reach -- a different DOM tree above a
+ * content floor -- is `floor.svelte.spec.ts`'s. The narrow window is
+ * load-bearing elsewhere too: #544 records it as the reason
+ * `layout.usage.spec.ts` rule 3 reads source rather than rendering.
  *
  * The `+page.svelte` glob is deliberately LAZY. #527 lost six points of
  * coverage to an eager glob that dragged every component into a report at

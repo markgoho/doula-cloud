@@ -59,6 +59,25 @@ export interface Break {
  * `Math.max(availableSpace, CONFORMANCE_COMMITMENT)` the drag surface's
  * own page uses for its handle's far end, so the sweep invents no upper
  * width of its own either.
+ *
+ * That ceiling is 414px under Vitest, and #600 settled that it stays
+ * there rather than being widened -- decided, not merely inherited, and
+ * recorded in ADR-0025. The window is not what holds it: a frame set to
+ * 3000px inside that 414px window renders and measures correctly, so this
+ * could have climbed further at any time. It does not, because space is
+ * what an UNCONSTRAINED component runs out of, so it spills at 320px
+ * where this already looks -- every defect these sweeps have found did --
+ * and a constrained one spills nowhere. Measured: all 55 components swept
+ * to 3000px break nowhere, and `DataTable` with its switch point dropped
+ * to 480px, below what its content needs, still breaks nowhere, because
+ * its cells carry `max-inline-size` and `overflow-wrap: anywhere`.
+ * Deleting that constraint is what it took to make a widened sweep red.
+ *
+ * The one case a wider sweep would reach is a component rendering a
+ * different DOM TREE above a content floor whose wide tree is
+ * unconstrained (#542). `floor.svelte.spec.ts` owns that case: it forces
+ * each discovered condition live and measures at its own floor, above
+ * this ceiling.
  */
 export function sweep(frame: HTMLElement, availableSpace: number): Break | undefined {
 	const widestSpace = Math.max(availableSpace, CONFORMANCE_COMMITMENT);
