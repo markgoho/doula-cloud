@@ -91,12 +91,21 @@
 		return `${labels.join(' & ')} request pending`;
 	}
 
-	const columns = [
+	// #458: the default view is always "Clients with work" (ADR-0017), so
+	// every row there already has it -- the column would say the same
+	// thing on every row. It only carries information once "See everyone"
+	// mixes the two together.
+	function workStatusText(client: ClientListItem): string {
+		return client.hasWork ? 'Has work' : 'No work yet';
+	}
+
+	const columns = $derived([
 		{ label: 'Name', accessor: (client: ClientListItem) => client.name },
 		{ label: 'Email', accessor: (client: ClientListItem) => client.email },
 		{ label: 'Pending request', accessor: pendingRequestText },
-		{ label: 'Portal invite', accessor: portalInviteStatusText }
-	];
+		{ label: 'Portal invite', accessor: portalInviteStatusText },
+		...(isShowingEveryone ? [{ label: 'Work', accessor: workStatusText }] : [])
+	]);
 
 	// The Client detail hub (#494) -- DataTable links only its first
 	// column, per rowHref's own contract.
