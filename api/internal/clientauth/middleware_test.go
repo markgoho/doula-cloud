@@ -159,4 +159,9 @@ func TestMiddleware_Success(t *testing.T) {
 	if got := resp.Header.Get("X-Engagement-Id"); got != engagementID {
 		t.Fatalf("X-Engagement-Id = %q, want %q", got, engagementID)
 	}
+	// #303: IdentityUID is the Portal Account itself, distinct from
+	// ClientID -- notificationpref keys its preference store on this.
+	if got := resp.Header.Get("X-Identity-Uid"); got != identityUID {
+		t.Fatalf("X-Identity-Uid = %q, want %q", got, identityUID)
+	}
 }

@@ -5,8 +5,9 @@
 	import { page } from '$app/state';
 	import { apiFetch } from '#lib/api.js';
 	import {
+		portalNotificationPreferencePath,
 		portalPushSubscriptionsPath,
-		registerPushSubscription,
+		registerPushSubscriptionIfEnabled,
 		unregisterPushSubscription
 	} from '#lib/pushRegistration.js';
 	import { apiBaseURL } from '#lib/api.js';
@@ -16,6 +17,14 @@
 	import type { NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
 
 	let { children } = $props();
+
+	// Plain credentialed fetch rather than apiFetchWithSession: that
+	// helper's own 401 handling would sign the person out on a failure the
+	// best-effort push-registration call below is supposed to swallow
+	// silently.
+	function credentialedFetch(path: string, init?: RequestInit) {
+		return fetch(apiBaseURL() + path, { ...init, credentials: 'include' });
+	}
 
 	/*
 	 * The Practice's name is the portal's identity (#431), so the bar used
@@ -34,11 +43,17 @@
 		// Messages became its own route -- a person who lands straight on
 		// her Contract should still be registered.
 		//
-		// Fire-and-forget, and a plain credentialed fetch rather than
-		// apiFetchWithSession: that helper's own 401 handling would sign the
-		// person out on a failure this call is supposed to swallow silently.
-		void registerPushSubscription(portalPushSubscriptionsPath(engagementId), (path, init) =>
-			fetch(apiBaseURL() + path, { ...init, credentials: 'include' })
+		// registerPushSubscriptionIfEnabled (#303) consults the durable
+		// preference first: a Client who has never visited the notification
+		// settings screen, or who has turned push off there, must never see
+		// the browser's own permission prompt fire on a bare page load --
+		// only that screen's explicit "Turn on" action does that.
+		//
+		// Fire-and-forget -- see credentialedFetch's own doc comment above.
+		void registerPushSubscriptionIfEnabled(
+			portalNotificationPreferencePath(engagementId),
+			portalPushSubscriptionsPath(engagementId),
+			credentialedFetch
 		);
 	});
 
@@ -62,6 +77,12 @@
 			{
 				label: 'Contract',
 				href: resolve('/portal/(authenticated)/engagements/[engagementId]/contract', {
+					engagementId
+				})
+			},
+			{
+				label: 'Notifications',
+				href: resolve('/portal/(authenticated)/engagements/[engagementId]/notifications', {
 					engagementId
 				})
 			}

@@ -69,6 +69,15 @@ const (
 	ActionInvoicePaid   EngagementAction = "invoice_paid"
 
 	ActionPortalInviteSent EngagementAction = "portal_invite_sent"
+
+	// #303: a Client's own push-notification preference change, recorded
+	// against her Engagement (notificationpref's PUT handler). Neither
+	// action belongs in moneyActions or staffingActions below -- it is
+	// neither the Practice's price nor its roster -- so it surfaces on both
+	// the Client's own portal ledger and the Staff-side Engagement feed
+	// unfiltered.
+	ActionPushNotificationsEnabled  EngagementAction = "push_notifications_enabled"
+	ActionPushNotificationsDisabled EngagementAction = "push_notifications_disabled"
 )
 
 // moneyActions is what ADR-0008's read table keeps off an employed

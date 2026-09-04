@@ -24,6 +24,7 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientID, _ := clientauth.ClientID(r.Context())
 			engagementID, _ := clientauth.EngagementID(r.Context())
+			identityUID, _ := clientauth.IdentityUID(r.Context())
 			tx, ok := clientauth.Tx(r.Context())
 			if !ok || tx == nil {
 				http.Error(w, "no tx on context", http.StatusInternalServerError)
@@ -31,6 +32,7 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 			}
 			w.Header().Set("X-Client-Id", clientID)
 			w.Header().Set("X-Engagement-Id", engagementID)
+			w.Header().Set("X-Identity-Uid", identityUID)
 			w.WriteHeader(http.StatusOK)
 		}),
 	))

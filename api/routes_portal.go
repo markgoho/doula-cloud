@@ -4,6 +4,7 @@ import (
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/message"
+	"doula-cloud/api/internal/notificationpref"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/portalinvite"
@@ -55,4 +56,12 @@ func registerPortalRoutes(g *staffauth.GatedRouter, d Deps) {
 		clientauth.Middleware(d.DB)(pushsub.ClientRegisterHandler()))
 	g.Write("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
 		clientauth.Middleware(d.DB)(pushsub.ClientUnregisterHandler()))
+	// #303: a durable, reviewable push preference -- GET reads current
+	// status, PUT turns it on or off. PUT is naturally idempotent (repeating
+	// the same {enabled} body re-asserts the same state), so no
+	// Idempotency-Key handling applies here per docs/api-design.md section 3.
+	g.OpenGet("/api/portal/engagements/{engagementId}/notification-preference", portalPopulation,
+		clientauth.Middleware(d.DB)(notificationpref.GetHandler()))
+	g.Write("PUT /api/portal/engagements/{engagementId}/notification-preference",
+		clientauth.Middleware(d.DB)(notificationpref.SetHandler()))
 }

@@ -24,6 +24,7 @@ type contextKey string
 const (
 	clientIDKey     contextKey = "clientauth.clientID"
 	engagementIDKey contextKey = "clientauth.engagementID"
+	identityUIDKey  contextKey = "clientauth.identityUID"
 	txKey           contextKey = "clientauth.tx"
 )
 
@@ -46,6 +47,17 @@ func ClientID(ctx context.Context) (string, bool) {
 func EngagementID(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(engagementIDKey).(string)
 	return id, ok
+}
+
+// IdentityUID returns the caller's verified Identity Platform uid -- the
+// Portal Account itself (ADR-0015: "the person lives in the login"),
+// distinct from ClientID, which is this one Practice's record of her.
+// notificationpref keys #303's preference store on this rather than
+// ClientID so the row names the login, not the Practice-scoped Client
+// record it happens to be read through.
+func IdentityUID(ctx context.Context) (string, bool) {
+	uid, ok := ctx.Value(identityUIDKey).(string)
+	return uid, ok
 }
 
 // Tx returns the request-scoped database transaction, with
@@ -106,6 +118,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), clientIDKey, clientID)
 			ctx = context.WithValue(ctx, engagementIDKey, engagementID)
+			ctx = context.WithValue(ctx, identityUIDKey, uid)
 			ctx = context.WithValue(ctx, txKey, tx)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
