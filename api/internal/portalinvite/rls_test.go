@@ -328,7 +328,7 @@ func TestRLS_ClientPortalUsersAcceptUpdateRejectsMismatchedIdentity(t *testing.T
 
 // TestRLS_NotificationWorkerCannotReadClientPortalUsersWithoutTrustedFlag
 // proves the outbox worker's own policies (00032) stay closed by default:
-// with no session context at all -- the shape ProcessOutboxHandler runs
+// with no session context at all -- the shape outbox.ProcessHandler runs
 // under before it sets app.notification_worker_trusted -- neither this
 // policy nor any pre-existing one admits a row.
 func TestRLS_NotificationWorkerCannotReadClientPortalUsersWithoutTrustedFlag(t *testing.T) {
@@ -351,7 +351,7 @@ func TestRLS_NotificationWorkerCannotReadClientPortalUsersWithoutTrustedFlag(t *
 }
 
 // TestRLS_NotificationWorkerTrustedFlagOpensClientPortalUsersAndClients
-// proves the door ProcessOutboxHandler relies on actually opens: with
+// proves the door outbox.ProcessHandler relies on actually opens: with
 // app.notification_worker_trusted set, every row of both tables is
 // visible, regardless of Practice.
 func TestRLS_NotificationWorkerTrustedFlagOpensClientPortalUsersAndClients(t *testing.T) {

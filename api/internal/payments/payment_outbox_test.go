@@ -61,7 +61,7 @@ func seedPaymentOutboxRow(t *testing.T, db *testdb.DB, practiceID, suffix string
 }
 
 // runPaymentWorker begins a tx on db.App, sets the trusted session var
-// payments.ProcessPaymentOutboxHandler would otherwise set after its own
+// outbox.ProcessHandler would otherwise set after its own
 // secret check, runs ProcessPending, and commits.
 func runPaymentWorker(t *testing.T, db *testdb.DB, w payments.PaymentReceivedWorker) {
 	t.Helper()

@@ -3,6 +3,7 @@ package outbox_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,6 +13,11 @@ import (
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
+
+// portalInvitePath is a stand-in address, not the real one -- these
+// tests are about the registry's own behavior, and the endpoints the BFF
+// actually serves are pinned in api/outboxes_test.go.
+const portalInvitePath = "/portal-invite"
 
 // recordingMux stands in for *http.ServeMux so a test can see exactly
 // which patterns Register mounted, without going through routing.
@@ -147,12 +153,12 @@ func TestProcessHandler_DoorIsOpenForTheWorker(t *testing.T) {
 
 func TestNudgePaths_MapsEveryNudgedRegistration(t *testing.T) {
 	got := outbox.NudgePaths([]outbox.Registration{
-		{Path: "/portal-invite", Nudge: tasknudge.PortalInvite, Worker: &stubProcessor{}},
+		{Path: portalInvitePath, Nudge: tasknudge.PortalInvite, Worker: &stubProcessor{}},
 		{Path: "/site-build", Nudge: tasknudge.SiteBuild, Worker: &stubProcessor{}},
 	})
 
 	want := map[tasknudge.OutboxType]string{
-		tasknudge.PortalInvite: "/portal-invite",
+		tasknudge.PortalInvite: portalInvitePath,
 		tasknudge.SiteBuild:    "/site-build",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -168,10 +174,10 @@ func TestNudgePaths_OmitsARegistrationWithNoNudge(t *testing.T) {
 	got := outbox.NudgePaths([]outbox.Registration{
 		{Path: "/staff-token-mail", Worker: &stubProcessor{}},
 		{Path: "/staff-email-change", Worker: &stubProcessor{}},
-		{Path: "/portal-invite", Nudge: tasknudge.PortalInvite, Worker: &stubProcessor{}},
+		{Path: portalInvitePath, Nudge: tasknudge.PortalInvite, Worker: &stubProcessor{}},
 	})
 
-	want := map[tasknudge.OutboxType]string{tasknudge.PortalInvite: "/portal-invite"}
+	want := map[tasknudge.OutboxType]string{tasknudge.PortalInvite: portalInvitePath}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("NudgePaths = %v, want %v", got, want)
 	}
@@ -187,9 +193,12 @@ type doorReadingProcessor struct {
 func (p *doorReadingProcessor) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 	// COALESCE because current_setting's missing_ok form answers NULL for
 	// a variable that was never set, which is exactly the no-door case.
-	return tx.QueryRowContext(ctx,
+	if err := tx.QueryRowContext(ctx,
 		`SELECT COALESCE(current_setting('app.notification_worker_trusted', true), '')`,
-	).Scan(&p.door)
+	).Scan(&p.door); err != nil {
+		return fmt.Errorf("read the door: %w", err)
+	}
+	return nil
 }
 
 func postTo(t *testing.T, srv *httptest.Server, path, headerSecret string) *http.Response {

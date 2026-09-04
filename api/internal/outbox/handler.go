@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"fmt"
 	"net/http"
 )
 
@@ -65,7 +66,7 @@ func ProcessHandler(db *sql.DB, worker Processor, secret, door string) http.Hand
 		// request data, so building it into SQL carries no injection risk
 		// -- the same reasoning Worker.Table already rests on.
 		if door != "" {
-			if _, err := tx.ExecContext(r.Context(), `SELECT set_config('`+door+`', 'true', true)`); err != nil {
+			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`SELECT set_config('%s', 'true', true)`, door)); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return

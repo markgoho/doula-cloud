@@ -5,6 +5,18 @@ import (
 	"doula-cloud/api/internal/tasknudge"
 )
 
+// The three paths named more than once in this package: #613's two
+// un-nudged Staff auth mail outboxes and #443's doorless site rebuild.
+// Constants only because each is a fact two tests assert about, not
+// because a path is more special than the other eleven -- those stay
+// written out at their registration, where they read as the address they
+// are.
+const (
+	staffTokenMailOutboxPath   = "/api/internal/notifications/process-staff-token-mail-outbox"
+	staffEmailChangeOutboxPath = "/api/internal/notifications/process-staff-email-change-outbox"
+	siteBuildOutboxPath        = "/api/internal/site/process-build-outbox"
+)
+
 // outboxRegistrations is every outbox the BFF serves (ADR-0010), in one
 // list.
 //
@@ -84,14 +96,14 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			// whose write sites are staffauth's signup/verify/reset
 			// handlers. No Nudge on purpose: that ticket accepted ADR-0010's
 			// plain delay, so Cloud Scheduler's cadence alone carries it.
-			Path:   "/api/internal/notifications/process-staff-token-mail-outbox",
+			Path:   staffTokenMailOutboxPath,
 			Door:   outbox.NotificationDoor,
 			Worker: d.StaffTokenMailWorker,
 		},
 		{
 			// #613's second outbox, the email-change notice. Not nudged, for
 			// the same reason as the one above.
-			Path:   "/api/internal/notifications/process-staff-email-change-outbox",
+			Path:   staffEmailChangeOutboxPath,
 			Door:   outbox.NotificationDoor,
 			Worker: d.StaffEmailChangeWorker,
 		},
@@ -125,7 +137,7 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			// worker should not be handed a door it has no use for. This is
 			// the second door shape, and the reason Door is a field rather
 			// than a constant inside ProcessHandler.
-			Path:   "/api/internal/site/process-build-outbox",
+			Path:   siteBuildOutboxPath,
 			Nudge:  tasknudge.SiteBuild,
 			Worker: d.SiteBuildWorker,
 		},

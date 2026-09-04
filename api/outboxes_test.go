@@ -24,10 +24,10 @@ var wantOutboxPaths = []string{
 	"/api/internal/notifications/process-payment-outbox",
 	"/api/internal/notifications/process-payout-outbox",
 	"/api/internal/notifications/process-session-notice-outbox",
-	"/api/internal/notifications/process-staff-email-change-outbox",
+	staffEmailChangeOutboxPath,
 	"/api/internal/notifications/process-staff-invite-outbox",
-	"/api/internal/notifications/process-staff-token-mail-outbox",
-	"/api/internal/site/process-build-outbox",
+	staffTokenMailOutboxPath,
+	siteBuildOutboxPath,
 }
 
 func TestOutboxRegistrations_ServeTheProvisionedPaths(t *testing.T) {
@@ -59,13 +59,11 @@ func TestOutboxRegistrations_EveryOneCarriesAWorker(t *testing.T) {
 // door that licenses its recipient SELECT policies, and #443's site
 // rebuild is the only one whose table is not under RLS at all.
 func TestOutboxRegistrations_MailingOutboxesOpenTheNotificationDoor(t *testing.T) {
-	const siteBuild = "/api/internal/site/process-build-outbox"
-
 	for _, reg := range outboxRegistrations(testDeps()) {
 		switch {
-		case reg.Path == siteBuild && reg.Door != "":
+		case reg.Path == siteBuildOutboxPath && reg.Door != "":
 			t.Errorf("%s opens door %q, want none -- its table is not under RLS", reg.Path, reg.Door)
-		case reg.Path != siteBuild && reg.Door != outbox.NotificationDoor:
+		case reg.Path != siteBuildOutboxPath && reg.Door != outbox.NotificationDoor:
 			t.Errorf("%s opens door %q, want %q", reg.Path, reg.Door, outbox.NotificationDoor)
 		}
 	}
@@ -101,10 +99,7 @@ func TestOutboxRegistrations_OnlyTheStaffAuthMailOutboxesAreUnnudged(t *testing.
 	}
 	sort.Strings(unnudged)
 
-	want := []string{
-		"/api/internal/notifications/process-staff-email-change-outbox",
-		"/api/internal/notifications/process-staff-token-mail-outbox",
-	}
+	want := []string{staffEmailChangeOutboxPath, staffTokenMailOutboxPath}
 	if !reflect.DeepEqual(unnudged, want) {
 		t.Errorf("un-nudged outboxes = %v, want %v", unnudged, want)
 	}
