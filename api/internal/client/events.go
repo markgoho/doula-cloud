@@ -102,7 +102,7 @@ func recordEvent(ctx context.Context, tx *sql.Tx, practiceID, clientID string, e
 	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
-		SubjectKind: "client",
+		SubjectKind: activity.SubjectClient,
 		SubjectID:   clientID,
 		Action:      string(et),
 		Diff:        sealed,

@@ -14,6 +14,14 @@ import "slices"
 // still lives in Diff, for a reader that needs it.
 const SubjectEngagement = "engagement"
 
+// SubjectClient is the subject_kind client/events.go's recordEvent writes
+// every create/update/erase event against (subject_id = client_id).
+// Exported for the same reason SubjectEngagement is: a caller building a
+// read-side query or gate rule (activitygate's client Rule) imports this
+// rather than repeating the literal, so the write side and any read side
+// can't drift apart.
+const SubjectClient = "client"
+
 // SystemActorName is what ActorSystem renders as -- ADR-0022: "Doula
 // Cloud", never "System". Every reader that resolves an activity row's
 // actor to a display name falls back to this constant for actor_kind =
@@ -78,10 +86,12 @@ var moneyActions = map[EngagementAction]bool{
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,
-// sorted for a deterministic query string. engagement.ListActivityHandler
-// builds its SQL exclusion clause from this rather than a hand-copied
-// literal list, so the write side (which names these actions) and the
-// read side (which filters them) can never drift apart.
+// sorted for a deterministic query string. activitygate's engagement Rule
+// (api/internal/activitygate) adapts this into its RestrictedActions,
+// which engagement.ListActivityHandler builds its SQL exclusion clause
+// from -- never a hand-copied literal list, so the write side (which
+// names these actions) and the read side (which filters them) can never
+// drift apart.
 func MoneyActions() []EngagementAction {
 	out := make([]EngagementAction, 0, len(moneyActions))
 	for a := range moneyActions {
