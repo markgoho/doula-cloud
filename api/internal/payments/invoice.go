@@ -115,7 +115,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
-		stripeInvoiceID, err := client.CreateInvoice(r.Context(), accountID, clientEmail, clientName, InvoiceLineItemDescription, req.AmountCents)
+		stripeInvoiceID, stripeCustomerID, err := client.CreateInvoice(r.Context(), accountID, clientEmail, clientName, InvoiceLineItemDescription, req.AmountCents)
 		if err != nil {
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -124,9 +124,9 @@ func PostInvoiceHandler(client Client) http.Handler {
 		var invoiceID string
 		var createdAt time.Time
 		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency)
-			 VALUES ($1, $2, $3, 'draft', $4, 'usd') RETURNING id, created_at`,
-			practiceID, contractID, stripeInvoiceID, req.AmountCents,
+			`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, stripe_customer_id, status, amount_cents, currency)
+			 VALUES ($1, $2, $3, $4, 'draft', $5, 'usd') RETURNING id, created_at`,
+			practiceID, contractID, stripeInvoiceID, stripeCustomerID, req.AmountCents,
 		).Scan(&invoiceID, &createdAt); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)

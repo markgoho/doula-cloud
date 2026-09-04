@@ -59,6 +59,21 @@ type AccountManager interface {
 	// the end user's own ID token and cannot be driven by this service
 	// account.
 	ClearSecondFactors(ctx context.Context, uid string) error
+	// DeleteAccount removes uid's Identity Platform account outright --
+	// the credential and the address it holds, gone. #394's Client
+	// erasure is the only caller and the first account deletion in this
+	// codebase: everything else in this interface changes an account,
+	// none of it ends one. It is deliberately not offered for Staff --
+	// a Staff member's Membership ends, which is a different act
+	// entirely (ADR-0027: ending is not erasure).
+	//
+	// Deleting the account does not invalidate a session she already
+	// holds: sessions are rows in Postgres, verified against Postgres.
+	// The caller deletes those itself, in the same transaction.
+	//
+	// Reports no error for a uid Identity Platform does not know, so a
+	// retried erasure is a no-op rather than a failure.
+	DeleteAccount(ctx context.Context, uid string) error
 }
 
 var _ AccountManager = (*FirebaseVerifier)(nil)
@@ -123,6 +138,21 @@ func (v *FirebaseVerifier) SetEmail(ctx context.Context, uid, email string) erro
 	if _, err := v.client.UpdateUser(ctx, uid, (&auth.UserToUpdate{}).Email(email).EmailVerified(false)); err != nil {
 		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
 		return fmt.Errorf("authn: set email: %w", err)
+	}
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	return nil
+}
+
+// DeleteAccount deletes uid's account via the Admin SDK, treating "no
+// such user" as success -- a retried erasure must not fail on work it
+// already did.
+func (v *FirebaseVerifier) DeleteAccount(ctx context.Context, uid string) error {
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	err := v.client.DeleteUser(ctx, uid)
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	if err != nil && !auth.IsUserNotFound(err) {
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		return fmt.Errorf("authn: delete account: %w", err)
 	}
 	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
 	return nil

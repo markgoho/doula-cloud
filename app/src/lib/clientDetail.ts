@@ -96,6 +96,16 @@ export interface ClientDetail extends ClientRecord {
 	resolvedFields: ResolvedField[];
 	engagements: EngagementSummary[];
 	history: HistoryEntry[];
+	/** When this Client's data was erased on her own request (ADR-0027),
+	 * absent for every Client who has not asked. A screen reads it to
+	 * explain why her record shows a placeholder instead of a name, and
+	 * why editing her is refused. */
+	erasedAt?: string;
+	/** The date Stripe will first allow her transactions to be redacted
+	 * -- 90 days past her newest invoice. Present only while that is
+	 * still in the future: until it passes, the Stripe half of her
+	 * erasure is scheduled, not finished. */
+	stripeRedactionEligibleAt?: string;
 }
 
 /** A minimal fetch-shaped function, injected rather than imported --

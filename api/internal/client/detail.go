@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -72,6 +73,18 @@ type DetailResponse struct {
 	ResolvedFields []ResolvedField     `json:"resolvedFields"`
 	Engagements    []EngagementSummary `json:"engagements"`
 	History        []HistoryEntry      `json:"history"`
+	// ErasedAt is when this Client's data was erased on her own request
+	// (ADR-0027), absent for every Client who has not asked. It is what a
+	// screen reads to explain why her record shows a placeholder instead
+	// of a name, and why editing her is refused.
+	ErasedAt *time.Time `json:"erasedAt,omitempty"`
+	// StripeRedactionEligibleAt is the date Stripe will first allow her
+	// transactions to be redacted -- 90 days past her newest invoice.
+	// #394's acceptance criterion asks for this state to be visible to
+	// the Practice rather than implied: until this date passes, the
+	// Stripe half of her erasure is scheduled, not finished. Absent when
+	// she is not erased, or when the redaction has already run.
+	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
 }
 
 // DetailHandler views one Client's full record. Access follows
@@ -141,7 +154,21 @@ func DetailHandler() http.Handler {
 			return
 		}
 
-		out := DetailResponse{Record: rec, ResolvedFields: resolvedFields, Engagements: engagements, History: history}
+		erasedAt, redactionEligibleAt, err := readErasureState(r.Context(), tx, clientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		out := DetailResponse{
+			Record:                    rec,
+			ResolvedFields:            resolvedFields,
+			Engagements:               engagements,
+			History:                   history,
+			ErasedAt:                  erasedAt,
+			StripeRedactionEligibleAt: redactionEligibleAt,
+		}
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
@@ -221,7 +248,79 @@ func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
 		return nil, fmt.Errorf("client: iterate client events: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		// coverage:ignore reason: row close failure, not exercised by unit tests
+		return nil, fmt.Errorf("client: close client events: %w", err)
+	}
+
+	// Unsealing runs after the rows are closed, never inside the loop:
+	// opening a diff reads her key, and a second query on the same
+	// transaction while a result set is still open deadlocks on the
+	// connection.
+	for i := range events {
+		events[i].Diff = openDiff(ctx, tx, clientID, events[i].Diff)
+	}
 	return events, nil
+}
+
+// readErasureState reads the two dates the detail screen needs to
+// explain an erased Client: when she was erased, and -- while a Stripe
+// redaction is still waiting on Stripe's own 90-day floor -- when that
+// redaction becomes possible. The second comes off the outbox row that
+// carries the act, so the date shown is the date the worker will
+// actually act on, not a second calculation of it that could drift.
+func readErasureState(ctx context.Context, tx *sql.Tx, clientID string) (erasedAt, redactionEligibleAt *time.Time, err error) {
+	var erased, eligible sql.NullTime
+	err = tx.QueryRowContext(ctx,
+		`SELECT c.erased_at,
+		        (SELECT max(o.next_attempt_at) FROM client_erasure_outbox o
+		          WHERE o.client_id = c.id AND o.act = 'stripe_redaction_job'
+		            AND o.status = 'pending' AND o.next_attempt_at > now())
+		 FROM clients c WHERE c.id = $1`,
+		clientID,
+	).Scan(&erased, &eligible)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the row was already read by fetchRecord above
+		return nil, nil, fmt.Errorf("client: read erasure state: %w", err)
+	}
+	if erased.Valid {
+		erasedAt = &erased.Time
+	}
+	if eligible.Valid {
+		redactionEligibleAt = &eligible.Time
+	}
+	return erasedAt, redactionEligibleAt, nil
+}
+
+// unreadableDiff is what a sealed diff renders as once the Client's key
+// has been destroyed -- ADR-0027's crypto-shredding, seen from the read
+// side. It is deliberately a value the screen can render rather than an
+// error the request fails on: the entry is still a true record that
+// something happened, on that date, by that person, and only *what*
+// changed is gone.
+const unreadableDiff = `{"erased":true}`
+
+// openDiff turns whatever is stored in activity.diff into what a reader
+// should see. Three cases, in the order they are met:
+//
+//   - a plaintext diff, written before #394 -- activity is append-only,
+//     so those rows were never converted and are returned as they are;
+//   - a sealed diff whose key still exists -- opened;
+//   - a sealed diff whose key is gone -- unreadableDiff.
+//
+// Any other failure to open (a corrupted envelope, a truncated
+// ciphertext) lands in the same place rather than failing the read: the
+// screen's honest answer to "what changed here?" in that case is the
+// same as after erasure -- it cannot be read.
+func openDiff(ctx context.Context, tx *sql.Tx, clientID string, stored []byte) json.RawMessage {
+	if !clientkey.IsSealed(stored) {
+		return stored
+	}
+	opened, err := clientkey.Open(ctx, tx, clientID, stored)
+	if err != nil {
+		return json.RawMessage(unreadableDiff)
+	}
+	return opened
 }
 
 func listRequestsForClient(ctx context.Context, tx *sql.Tx, clientID string) ([]RequestSummary, error) {

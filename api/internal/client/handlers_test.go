@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
@@ -388,15 +389,42 @@ func TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent(t *testing.T) {
 	}
 
 	var count int
-	var diffJSON string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*), max(diff::text) FROM activity WHERE subject_kind = 'client' AND subject_id = $1`, clientID,
-	).Scan(&count, &diffJSON); err != nil {
+		`SELECT count(*) FROM activity WHERE subject_kind = 'client' AND subject_id = $1`, clientID,
+	).Scan(&count); err != nil {
 		t.Fatalf("count activity: %v", err)
 	}
-	if count != 1 || diffJSON != "{}" {
-		t.Fatalf("activity count = %d diff = %q, want 1 row with an empty diff", count, diffJSON)
+	if count != 1 {
+		t.Fatalf("activity count = %d, want 1", count)
 	}
+	// The stored diff is sealed under her key (ADR-0027), so the empty
+	// diff is asserted through the read path that unseals it rather than
+	// against the column.
+	if diff := readClientEventDiff(t, db, session, srv, practiceID, clientID, "updated"); string(diff) != "{}" {
+		t.Fatalf("diff = %s, want an empty diff", diff)
+	}
+}
+
+// readClientEventDiff reads one client-subject activity entry's diff
+// back through the detail endpoint -- the only reader that unseals it.
+// Asserting against the activity column directly stopped being possible
+// with #394: what is stored there is ciphertext.
+func readClientEventDiff(t *testing.T, db *testdb.DB, session string, srv *httptest.Server, practiceID, clientID, action string) json.RawMessage {
+	t.Helper()
+	_ = db
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	defer resp.Body.Close()
+	var out client.DetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	for _, entry := range out.History {
+		if entry.ClientEvent != nil && entry.ClientEvent.EventType == action {
+			return entry.ClientEvent.Diff
+		}
+	}
+	t.Fatalf("no %q client event in history %+v", action, out.History)
+	return nil
 }
 
 // TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob proves
@@ -417,12 +445,7 @@ func TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	var diffJSON []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'updated'`, clientID,
-	).Scan(&diffJSON); err != nil {
-		t.Fatalf("read diff: %v", err)
-	}
+	diffJSON := readClientEventDiff(t, db, session, srv, practiceID, clientID, "updated")
 	var diff map[string]json.RawMessage
 	if err := json.Unmarshal(diffJSON, &diff); err != nil {
 		t.Fatalf("unmarshal diff: %v", err)
@@ -710,7 +733,7 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	if byID[neverInvited].PortalInviteStatus != nil {
 		t.Fatalf("never-invited status = %v, want nil", byID[neverInvited].PortalInviteStatus)
 	}
-	if got := byID[invited].PortalInviteStatus; got == nil || *got != "pending" {
+	if got := byID[invited].PortalInviteStatus; got == nil || *got != pendingStatus {
 		t.Fatalf("invited status = %v, want \"pending\"", got)
 	}
 	if got := byID[accepted].PortalInviteStatus; got == nil || *got != "accepted" {

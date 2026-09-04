@@ -11,7 +11,7 @@ import (
 )
 
 // endpointPath maps each OutboxType to the process-* endpoint main.go
-// mounts it at (ADR-0010). Every nudge task hits one of these ten paths.
+// mounts it at (ADR-0010). Every nudge task hits one of these eleven paths.
 var endpointPath = map[OutboxType]string{
 	SiteBuild:         "/api/internal/site/process-build-outbox",
 	EngagementOffer:   "/api/internal/notifications/process-offer-outbox",
@@ -23,6 +23,7 @@ var endpointPath = map[OutboxType]string{
 	SessionNotice:     "/api/internal/notifications/process-session-notice-outbox",
 	StaffInvite:       "/api/internal/notifications/process-staff-invite-outbox",
 	MFARecoveryCode:   "/api/internal/notifications/process-mfa-recovery-outbox",
+	ClientErasure:     "/api/internal/clients/process-erasure-outbox",
 }
 
 // CloudTasksEnqueuer is the production Enqueuer, backed by one Cloud

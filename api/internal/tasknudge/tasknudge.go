@@ -16,7 +16,7 @@ import (
 // should call.
 type OutboxType string
 
-// The ten outbox types a nudge can target, one per process-* endpoint
+// The eleven outbox types a nudge can target, one per process-* endpoint
 // main.go mounts (ADR-0010, ADR-0013).
 const (
 	PortalInvite      OutboxType = "portal-invite"
@@ -29,6 +29,12 @@ const (
 	EngagementRequest OutboxType = "engagement-request"
 	SiteBuild         OutboxType = "site-build"
 	MFARecoveryCode   OutboxType = "mfa-recovery-code"
+	// ClientErasure is the only nudge target that carries no mail at
+	// all -- its worker calls Stripe and Identity Platform (#394,
+	// ADR-0027). It rides the same machinery because the shape is the
+	// same: durable rows, retried with backoff, dead-lettered when they
+	// stop being worth retrying.
+	ClientErasure OutboxType = "client-erasure"
 )
 
 // delay is how long a nudge waits before it fires, per outbox type.

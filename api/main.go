@@ -19,6 +19,7 @@ import (
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mfarecoverymail"
@@ -257,6 +258,16 @@ func main() {
 		StaffTokenMailWorker:    staffTokenMailOutboxWorker,
 		StaffEmailChangeWorker:  staffEmailChangeOutboxWorker,
 		MFARecoveryMailWorker:   mfaRecoveryMailOutboxWorker,
+		// The real payments.Client and the real Identity Platform
+		// verifier, passed in structurally: client declares its own
+		// narrow StripeEraser/IdentityEraser rather than importing
+		// payments (which already imports client), so this assignment is
+		// where the two shapes are actually checked against each other.
+		ClientErasureWorker: client.ErasureWorker{
+			Stripe:   paymentsClient,
+			Identity: verifier,
+			Now:      time.Now,
+		},
 
 		NudgeEnqueuer:   nudgeEnqueuer,
 		ExpectedOrigins: resolveExpectedOrigins(),

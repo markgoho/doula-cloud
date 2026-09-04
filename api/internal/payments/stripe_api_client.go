@@ -3,7 +3,10 @@ package payments
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 
 	"github.com/stripe/stripe-go/v86"
 )
@@ -13,6 +16,7 @@ import (
 // billing.StripeAPIClient.
 type StripeAPIClient struct {
 	client     *stripe.Client
+	apiKey     string // kept for CreateRedactionJob, which goes through RawRequest and takes the key per call
 	appBaseURL string // used to build the Account Link's return/refresh redirect targets
 }
 
@@ -22,7 +26,7 @@ type StripeAPIClient struct {
 // computation needing no real API key), even though every other method on
 // the returned client needs a real Stripe account and network access.
 func NewStripeAPIClient(apiKey, appBaseURL string) *StripeAPIClient {
-	return &StripeAPIClient{client: stripe.NewClient(apiKey), appBaseURL: appBaseURL}
+	return &StripeAPIClient{client: stripe.NewClient(apiKey), apiKey: apiKey, appBaseURL: appBaseURL}
 }
 
 // connectAccountCountry is the ISO country every Connect account is
@@ -253,8 +257,12 @@ func accountStatusFrom(acct *stripe.V2CoreAccount) AccountStatus {
 // call is made with the Params.StripeAccount on-behalf-of header set to
 // accountID, per #78's ticket body ("using the Stripe-Account association,
 // not a separate OAuth token per Practice"), rather than a platform-level
-// call. Returns the draft Invoice's id; FinalizeInvoice makes it payable.
-func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, error) {
+// call. Returns the draft Invoice's id -- FinalizeInvoice makes it
+// payable -- and the Customer's, the latter so the invoices row can
+// persist it: #394's erasure has to be able to find and delete every
+// Stripe Customer that was ever made for a Client, and before that
+// ticket nothing kept the id at all.
+func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, string, error) {
 	onBehalfOf := stripe.Params{StripeAccount: stripe.String(accountID)}
 
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
@@ -265,7 +273,7 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return "", fmt.Errorf("payments: create stripe customer for invoice: %w", err)
+		return "", "", fmt.Errorf("payments: create stripe customer for invoice: %w", err)
 	}
 
 	// DaysUntilDue is not a Doula Cloud payment-terms policy -- Stripe's
@@ -284,7 +292,7 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return "", fmt.Errorf("payments: create stripe invoice: %w", err)
+		return "", "", fmt.Errorf("payments: create stripe invoice: %w", err)
 	}
 
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
@@ -298,11 +306,11 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return "", fmt.Errorf("payments: create stripe invoice item: %w", err)
+		return "", "", fmt.Errorf("payments: create stripe invoice item: %w", err)
 	}
 
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return inv.ID, nil
+	return inv.ID, cust.ID, nil
 }
 
 // FinalizeInvoice finalizes invoiceID on accountID's connected account --
@@ -344,6 +352,98 @@ func (c *StripeAPIClient) RetrieveInvoicePaymentReference(ctx context.Context, a
 	// stores an empty reference rather than rejecting the webhook.
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	return "", nil
+}
+
+// DeleteCustomer deletes customerID on accountID's connected account.
+// Verified against the Sandbox on #394: DELETE /v1/customers/:id with the
+// Stripe-Account header works on a connected account, and answers with
+// the deleted object. A Customer Stripe no longer knows is treated as
+// success -- a retried erasure must not fail on work it already did.
+func (c *StripeAPIClient) DeleteCustomer(ctx context.Context, accountID, customerID string) error {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	_, err := c.client.V1Customers.Delete(ctx, customerID, &stripe.CustomerDeleteParams{
+		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	var serr *stripe.Error
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if errors.As(err, &serr) && serr.HTTPStatusCode == http.StatusNotFound {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return nil
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return fmt.Errorf("payments: delete stripe customer: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return nil
+}
+
+// redactionJobPath is Stripe's Privacy Redaction Jobs endpoint. It is
+// reached through RawRequest rather than a typed service because
+// stripe-go v86 carries no binding for it -- Redaction Jobs is in public
+// preview, and preview surfaces are exactly what RawRequest exists for.
+const redactionJobPath = "/v1/privacy/redaction_jobs"
+
+// redactionJobAPIVersion is the preview API version the Redaction Jobs
+// endpoint is published under. It is pinned here rather than following
+// the SDK's default, because a preview endpoint is not addressable from
+// a GA version.
+const redactionJobAPIVersion = "2026-06-24.preview"
+
+// CreateRedactionJob asks Stripe to redact customerID and every object
+// underneath it on accountID's connected account, and returns the job's
+// id. Creating a job does not redact anything by itself -- Stripe first
+// validates every related object, then the job has to be run -- so this
+// is the first half of the act, and the job's own webhook reports the
+// rest.
+//
+// Known state on #394: this endpoint answers "Unrecognized request URL"
+// on the Doula Cloud Stripe account today, under both /v1 and /v2 and
+// under every preview Stripe-Version tried. Redaction Jobs is in public
+// preview and is not enabled on the account; enabling it is a request to
+// Stripe, not a code change. The call is written against the documented
+// shape so that the day it is enabled nothing here changes, and until
+// then it fails loudly through the outbox's dead-letter path rather than
+// quietly reporting an erasure finished that is not.
+func (c *StripeAPIClient) CreateRedactionJob(ctx context.Context, accountID, customerID string) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	backend, err := stripe.GetRawRequestBackend(stripe.APIBackend)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return "", fmt.Errorf("payments: raw request backend: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	// The preview API version rides as an explicit header rather than a
+	// param: a preview endpoint is not addressable from the SDK's pinned
+	// GA version, and stripe.Params has no version override field.
+	params := &stripe.RawParams{Params: stripe.Params{
+		StripeAccount: stripe.String(accountID),
+		Context:       ctx,
+		Headers:       http.Header{"Stripe-Version": []string{redactionJobAPIVersion}},
+	}}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	body := "objects[customers][]=" + url.QueryEscape(customerID)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	resp, err := backend.RawRequest(http.MethodPost, redactionJobPath, c.apiKey, body, params)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return "", fmt.Errorf("payments: create stripe redaction job: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	var job struct {
+		ID string `json:"id"`
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err := json.Unmarshal(resp.RawJSON, &job); err != nil {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return "", fmt.Errorf("payments: decode stripe redaction job: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return job.ID, nil
 }
 
 // VerifyWebhookSignature verifies payload against Stripe's HMAC-SHA256

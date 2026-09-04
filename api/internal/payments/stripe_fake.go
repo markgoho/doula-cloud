@@ -26,6 +26,14 @@ type FakeCreateInvoiceCall struct {
 	AmountCents   int64
 }
 
+// FakeCustomerCall records one Customer-scoped call -- which connected
+// account, and which Customer on it. Shared by DeleteCustomer and
+// CreateRedactionJob, whose arguments are the same pair.
+type FakeCustomerCall struct {
+	AccountID  string
+	CustomerID string
+}
+
 // FakeClient is an in-memory Client double, injected into handler tests
 // instead of a real Stripe account -- mirrors billing.FakeStripeClient.
 // The *Err fields, when set, are returned by the corresponding method
@@ -46,6 +54,13 @@ type FakeClient struct {
 	RetrieveCalls      []string
 	CreateInvoiceCalls []FakeCreateInvoiceCall
 	FinalizeInvoiceIDs []string
+	// DeleteCustomerCalls and RedactionJobCalls are #394's two erasure
+	// acts, recorded as (connected account, Customer) pairs so a test can
+	// prove erasure reached the right Customer on the right Practice's
+	// account -- and, for the redaction, that it was not reached before
+	// Stripe's 90-day floor.
+	DeleteCustomerCalls []FakeCustomerCall
+	RedactionJobCalls   []FakeCustomerCall
 
 	// Statuses, keyed by account id, is what RetrieveAccount returns --
 	// tests set this to control the "not connected / onboarding
@@ -60,6 +75,8 @@ type FakeClient struct {
 	CreateAccountLinkErr error
 	RetrieveAccountErr   error
 	CreateInvoiceErr     error
+	DeleteCustomerErr    error
+	RedactionJobErr      error
 	FinalizeInvoiceErr   error
 	PaymentReferenceErr  error
 }
@@ -113,11 +130,11 @@ func (f *FakeClient) RetrieveAccount(_ context.Context, accountID string) (Accou
 // customerName, description, amountCents, exactly as PostInvoiceHandler
 // passed them -- and returns a deterministic fake invoice id, or
 // CreateInvoiceErr if a test set one.
-func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, error) {
+func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.CreateInvoiceErr != nil {
-		return "", f.CreateInvoiceErr
+		return "", "", f.CreateInvoiceErr
 	}
 	f.CreateInvoiceCalls = append(f.CreateInvoiceCalls, FakeCreateInvoiceCall{
 		AccountID:     accountID,
@@ -127,7 +144,32 @@ func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerEmail, 
 		AmountCents:   amountCents,
 	})
 	f.nextID++
-	return fmt.Sprintf("in_fake_%d", f.nextID), nil
+	return fmt.Sprintf("in_fake_%d", f.nextID), fmt.Sprintf("cus_fake_%d", f.nextID), nil
+}
+
+// DeleteCustomer records the call, or returns DeleteCustomerErr if a test
+// set one -- #394's erasure outbox asserts on the pairs recorded here.
+func (f *FakeClient) DeleteCustomer(_ context.Context, accountID, customerID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.DeleteCustomerErr != nil {
+		return f.DeleteCustomerErr
+	}
+	f.DeleteCustomerCalls = append(f.DeleteCustomerCalls, FakeCustomerCall{AccountID: accountID, CustomerID: customerID})
+	return nil
+}
+
+// CreateRedactionJob records the call and returns a deterministic fake
+// job id, or RedactionJobErr if a test set one.
+func (f *FakeClient) CreateRedactionJob(_ context.Context, accountID, customerID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.RedactionJobErr != nil {
+		return "", f.RedactionJobErr
+	}
+	f.RedactionJobCalls = append(f.RedactionJobCalls, FakeCustomerCall{AccountID: accountID, CustomerID: customerID})
+	f.nextID++
+	return fmt.Sprintf("rdj_fake_%d", f.nextID), nil
 }
 
 // FinalizeInvoice records the call and returns a deterministic fake

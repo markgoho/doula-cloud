@@ -69,6 +69,21 @@ func EditHandler() http.Handler {
 			return
 		}
 
+		// An erased Client is not editable (ADR-0027). Her key is gone,
+		// so recordEvent could not seal the edit's diff anyway -- but the
+		// refusal is here, at the top and in words, rather than being
+		// left to surface as a sealing failure further down.
+		erased, err := isErased(r.Context(), tx, clientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if erased {
+			http.Error(w, "this client's data has been erased and cannot be edited", http.StatusConflict)
+			return
+		}
+
 		var req EditRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)

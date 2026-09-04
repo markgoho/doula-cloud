@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -85,6 +86,15 @@ func CreateHandler() http.Handler {
 
 		req.ID = uuid.NewString()
 		if err := insertClient(r.Context(), tx, practiceID, req.Record); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		// Her key is made in the same transaction that makes her, so a
+		// Client and the key sealing her history either both exist or
+		// neither does -- ADR-0027. It has to precede recordEvent, which
+		// seals the created diff under it.
+		if err := clientkey.Ensure(r.Context(), tx, practiceID, req.ID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
