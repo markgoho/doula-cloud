@@ -39,6 +39,18 @@ The three alternatives were weighed and rejected:
   is ambient. Promoting it into a badge contradicts both the Motion rule and the brief's own placement
   of that feed.
 
+## What stays unchanged, stated so no later ticket has to guess
+
+- **"Content-free" is absolute, not channel-dependent.** A Notification names no Client, no Engagement
+  and no Practice, on every channel, with no exception. ADR-0009 and ADR-0002 stand as written and are
+  neither amended nor superseded here.
+- **CONTEXT.md's Notification entry is correct as it stands**, including its `_Avoid_` line. No new
+  domain term is introduced, because no new in-app noun is being created.
+- **There is no feed to read**, so this decision opens no RLS question. Nothing durable and
+  per-recipient is created, so there is no read scope to define.
+- **The brief's rule against a badge that follows a person around is upheld**, not amended and not
+  quietly departed from. This ADR is an application of that rule, not an exception to it.
+
 ## What this means
 
 Unfinished work is found where the work lives. A Client waiting on a reply appears in a roll-up block on
