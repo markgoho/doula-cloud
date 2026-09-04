@@ -35,8 +35,8 @@
 				 * own field label is a question the Practice types, so the same
 				 * URL belongs on both sides of a row rather than only on the
 				 * value. #720's shape rule -- a row set realizes every state a
-				 * field renders differently -- is why this is a fourth row and
-				 * not a rewrite of the one above.
+				 * field renders differently -- is why this is a row of its own
+				 * and not a rewrite of the one above.
 				 */
 				{
 					label:

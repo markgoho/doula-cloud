@@ -191,8 +191,9 @@ const UNSWEPT: readonly string[] = [];
  * the same reason as the component check's own `KNOWN_BROKEN`. `it.fails`
  * turns red, not green, the day an entry's own issue closes without this
  * file changing -- that is what forces the entry out once the retrofit
- * actually lands. Empty again since #725 gave `DescriptionList`'s `dt`
- * the cap and the wrapping rule its `dd` already had.
+ * actually lands. Empty again since #725 capped `DescriptionList`'s
+ * label TRACK at `fit-content(40%)` and gave the `dt` the wrapping rule
+ * that lets a pasted label reach that cap.
  */
 const KNOWN_BROKEN: Readonly<Record<string, string>> = {};
 
