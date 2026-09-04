@@ -83,7 +83,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { mountInFrame, overflowReport, sweep } from './style-guide/continuum.js';
-import { toPageState, toRoutePath, type RouteFixture } from './routeFixture.js';
+import { toApiResponder, toPageState, toRoutePath, type RouteFixture } from './routeFixture.js';
 
 /*
  * One mock of `$app/state` for every route, because `vi.mock` is hoisted
@@ -235,10 +235,14 @@ describe('the continuum check, over routes', () => {
 			// it gets installed is each half's own business, since only this
 			// half has a module to mock.
 			Object.assign(pageState, toPageState(fixture));
+			// And how a fixture's fetches get answered is `toApiResponder`'s
+			// to say, for the same reason: since #596 every route spec that
+			// fetches installs the same implementation, so unwrapping
+			// `respond` here as well would be the third copy.
 			if (fixture.respond) {
-				const respond = fixture.respond;
-				apiFetchWithSession.mockImplementation((path: string) => Promise.resolve(respond(path)));
-				apiFetch.mockImplementation((path: string) => Promise.resolve(respond(path)));
+				const respond = toApiResponder(fixture);
+				apiFetchWithSession.mockImplementation(respond);
+				apiFetch.mockImplementation(respond);
 			}
 
 			/*

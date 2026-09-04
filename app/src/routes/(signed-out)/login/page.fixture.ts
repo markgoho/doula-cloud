@@ -13,7 +13,7 @@ import type { SessionInfo } from '#lib/landing.js';
 import type { RouteFixture } from '../../routeFixture.js';
 import Page from './+page.svelte';
 
-const session: SessionInfo = {
+export const session: SessionInfo = {
 	memberships: [
 		{
 			practiceId: 'practice-1',

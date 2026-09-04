@@ -15,6 +15,7 @@
  */
 import type { PracticeInvoicePage } from '#lib/invoice.js';
 import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
 /*
@@ -22,7 +23,7 @@ import Page from './+page.svelte';
  * it carries #537's vocabulary: the hyphenated double-barrelled name, and
  * the URL that has no break opportunity a browser will take.
  */
-const data: PracticeInvoicePage = {
+export const data: PracticeInvoicePage = {
 	items: [
 		{
 			id: 'inv-1',
@@ -53,7 +54,7 @@ const data: PracticeInvoicePage = {
 	paidCents: 250_000
 };
 
-export const fixture: RouteFixture = {
+export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
 	component: Page,
 	params: { practiceId: 'practice-1' },

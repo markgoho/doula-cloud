@@ -7,43 +7,33 @@ import type { PracticeInvoicePage } from '#lib/invoice.js';
 // to work as a container-query context -- see DataTable.svelte.spec.ts.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
+import { toPageState } from '../../../routeFixture.js';
+import { data, fixture } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' }, url: new URL('https://example.test/invoices') }
+/*
+ * The screen's content and the `page` it reads both come from the route's
+ * own fixture (#596), so what this spec asserts on and what the continuum
+ * sweep measures are one description. `vi.mock` is hoisted above every
+ * import, so the object is declared empty here and filled from the
+ * fixture once the imports have run -- the route reads `page` inside its
+ * own functions rather than destructuring it at module scope, so the
+ * later write is seen. This is the same installation
+ * `route-continuum.svelte.spec.ts` performs, through the same
+ * `toPageState`.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const data: PracticeInvoicePage = {
-	items: [
-		{
-			id: 'inv-1',
-			engagementId: 'eng-1',
-			contractId: 'contract-1',
-			clientName: 'Ada',
-			status: 'open',
-			amountCents: 150_000,
-			currency: 'usd',
-			createdAt: '2026-08-01T00:00:00Z'
-		},
-		{
-			id: 'inv-2',
-			engagementId: 'eng-2',
-			contractId: 'contract-2',
-			clientName: 'Bea',
-			status: 'paid',
-			amountCents: 250_000,
-			currency: 'usd',
-			createdAt: '2026-07-01T00:00:00Z',
-			paidAt: '2026-07-04T00:00:00Z'
-		}
-	],
-	hasMore: false,
-	outstandingCents: 150_000,
-	outstandingCount: 1,
-	paidCents: 250_000
-};
+const [openInvoice, paidInvoice] = data.items;
+const { practiceId } = fixture.params;
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
@@ -56,17 +46,23 @@ async function setup(page: PracticeInvoicePage = data) {
 	// is asserted here; that it says the same thing in a narrow container
 	// is DataTable's own spec's job.
 	await testPage.viewport(1440, 900);
-	await render(Page, { params: { practiceId: 'practice-1' }, data: page });
+	await render(Page, { params: fixture.params, data: page });
 }
 
 describe('the Practice-wide invoice list (#265)', () => {
 	it('answers "who owes us money" with the whole book, not one Engagement', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('heading', { name: 'Invoices' })).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Ada' })).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Bea' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: '$1,500.00' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('heading', { name: fixture.readyText }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: paidInvoice.clientName }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: '$4,500.00' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Open' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Paid', exact: true })).toBeVisible();
 	});
@@ -75,8 +71,8 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Ada' }))
-			.toHaveAttribute('href', '/practices/practice-1/engagements/eng-1');
+			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
+			.toHaveAttribute('href', `/practices/${practiceId}/engagements/${openInvoice.engagementId}`);
 	});
 
 	it('shows what is outstanding across the Practice', async () => {
@@ -87,13 +83,16 @@ describe('the Practice-wide invoice list (#265)', () => {
 		// which is exactly why an unscoped getByText would not say which is
 		// the whole book's.
 		const totals = testPage.getByRole('definition');
-		await expect.element(totals.nth(0)).toHaveTextContent('$1,500.00');
+		await expect.element(totals.nth(0)).toHaveTextContent('$4,500.00');
 		await expect.element(totals.nth(1)).toHaveTextContent('1');
 		await expect.element(totals.nth(2)).toHaveTextContent('$2,500.00');
 	});
 
 	it('says so plainly when nothing has been billed yet', async () => {
-		await setup({ items: [], hasMore: false, outstandingCents: 0, outstandingCount: 0, paidCents: 0 });
+		// Not the happy path, so it is this spec's own to declare -- but it
+		// is declared as a departure from the fixture rather than as a
+		// second description of the same screen.
+		await setup({ ...data, items: [], outstandingCents: 0, outstandingCount: 0, paidCents: 0 });
 
 		await expect
 			.element(
@@ -105,6 +104,9 @@ describe('the Practice-wide invoice list (#265)', () => {
 	});
 
 	it('appends the next page rather than replacing the one already read', async () => {
+		// A second page is content the fixture does not hold: the screen the
+		// sweep measures is the first page, and this is what arrives after an
+		// interaction.
 		apiFetchWithSession.mockResolvedValue(
 			jsonResponse({
 				items: [
@@ -120,7 +122,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 					}
 				],
 				hasMore: false,
-				outstandingCents: 150_100,
+				outstandingCents: 450_100,
 				outstandingCount: 2,
 				paidCents: 250_000
 			})
@@ -130,8 +132,12 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Ada' })).toBeVisible();
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/invoices?cursor=cursor-1');
+		await expect
+			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
+			.toBeVisible();
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			`/api/practices/${practiceId}/invoices?cursor=cursor-1`
+		);
 	});
 
 	it('reports a failed next page in place rather than losing the list', async () => {
@@ -141,6 +147,8 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('invalid cursor');
-		await expect.element(testPage.getByRole('link', { name: 'Ada' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
+			.toBeVisible();
 	});
 });

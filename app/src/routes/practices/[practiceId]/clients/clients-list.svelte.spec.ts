@@ -11,24 +11,41 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
+import { toApiResponder, toPageState } from '../../../routeFixture.js';
+import { clients, fixture } from './page.fixture.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-// Mirrors new-client.svelte.spec.ts's pattern: a hoisted, mutable
-// URLSearchParams stands in for `page.url.searchParams`, set per test
-// before render() rather than mutated mid-test -- the mock is a plain
-// object, not Svelte-reactive, so a change after mount would never
-// re-trigger the component's own `$derived`/`$effect`.
-const searchParameters = vi.hoisted(() => new URLSearchParams());
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' }, url: { searchParams: searchParameters } }
+/*
+ * The Clients list's content and the `page` it reads both come from the
+ * route's own fixture (#596), so what this spec asserts on and what the
+ * continuum sweep measures are one description. `vi.mock` is hoisted
+ * above every import, so the object is declared empty here and filled
+ * from the fixture once the imports have run -- the route reads `page`
+ * inside its own functions rather than destructuring it at module scope,
+ * so the later write is seen. Same installation, through the same
+ * `toPageState`, as `route-continuum.svelte.spec.ts`.
+ *
+ * `pageState.url` ends up a real `URL`, whose `searchParams` getter
+ * returns the same `URLSearchParams` instance every read (WHATWG), so a
+ * test can set `all` on it directly before `render()` -- mutated before
+ * render, not mid-test, since the mock is not Svelte-reactive.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+
+const { practiceId } = fixture.params;
 
 function textResponse(body: string): Response {
 	return jsonResponse(body, 403);
@@ -38,36 +55,26 @@ function requestUrl(callIndex = 0): string {
 	return apiFetchWithSession.mock.calls[callIndex][0] as string;
 }
 
-const clients = [
-	{
-		clientId: 'client-1',
-		name: 'Ada Lovelace',
-		email: 'ada@example.com',
-		hasWork: true,
-		portalInviteStatus: 'sent'
-	},
-	{
-		clientId: 'client-2',
-		name: 'Grace Hopper',
-		email: 'grace@example.com',
-		hasWork: false
-	}
-];
-
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
-	searchParameters.delete('all');
+	pageState.url.searchParams.delete('all');
 });
 
-async function setup(
-	response: Response = jsonResponse({ items: clients, hasMore: false }),
-	isContractor = false
-) {
+// A `response` left undefined answers every fetch from the fixture's own
+// `respond()`, per request rather than once -- the same reason
+// `toApiResponder` exists. A test that needs different content passes its
+// own `Response` and gets it on every call, which is what every "Load
+// more"/failure case below still wants.
+async function setup(response?: Response, isContractor = false) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
 	// 46rem, and this file's assertions are about the <table> specifically.
 	await testPage.viewport(1440, 900);
-	apiFetchWithSession.mockResolvedValue(response);
+	if (response) {
+		apiFetchWithSession.mockResolvedValue(response);
+	} else {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+	}
 	await render(Page, { data: { isContractor } });
 }
 
@@ -77,11 +84,19 @@ describe('clients list screen', () => {
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/search');
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/search`);
 	});
 
 	it('renders a Portal invite column showing the label for each status', async () => {
-		await setup();
+		// The fixture's one Client only ever holds `portalInviteStatus:
+		// 'sent'`, so a second row with the field absent is this test's own
+		// -- the fixture has no way to hold "never invited" (#596).
+		await setup(
+			jsonResponse({
+				items: [clients[0], { ...clients[0], clientId: 'client-2', portalInviteStatus: undefined }],
+				hasMore: false
+			})
+		);
 
 		await expect.element(testPage.getByRole('columnheader', { name: 'Portal invite' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Invite sent' })).toBeVisible();
@@ -95,20 +110,7 @@ describe('clients list screen', () => {
 		['complained', 'Marked as spam (no action needed)'],
 		['accepted', 'Accepted']
 	])('shows %s as %s', async (portalInviteStatus, label) => {
-		await setup(
-			jsonResponse({
-				items: [
-					{
-						clientId: 'client-1',
-						name: 'Ada Lovelace',
-						email: 'ada@example.com',
-						hasWork: true,
-						portalInviteStatus
-					}
-				],
-				hasMore: false
-			})
-		);
+		await setup(jsonResponse({ items: [{ ...clients[0], portalInviteStatus }], hasMore: false }));
 
 		await expect.element(testPage.getByRole('cell', { name: label })).toBeVisible();
 	});
@@ -117,20 +119,8 @@ describe('clients list screen', () => {
 		await setup(
 			jsonResponse({
 				items: [
-					{
-						clientId: 'client-1',
-						name: 'Complained Client',
-						email: 'complained@example.com',
-						hasWork: true,
-						portalInviteStatus: 'complained'
-					},
-					{
-						clientId: 'client-2',
-						name: 'Bounced Client',
-						email: 'bounced@example.com',
-						hasWork: true,
-						portalInviteStatus: 'bounced'
-					}
+					{ ...clients[0], portalInviteStatus: 'complained' },
+					{ ...clients[0], clientId: 'client-2', portalInviteStatus: 'bounced' }
 				],
 				hasMore: false
 			})
@@ -164,7 +154,7 @@ describe('clients list screen', () => {
 // to, so the control is gone rather than merely relabeled for her.
 describe('a contractor Doula without the owner or admin role', () => {
 	it('does not see "Find or add a Client" at all', async () => {
-		await setup(jsonResponse({ items: clients, hasMore: false }), true);
+		await setup(undefined, true);
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
@@ -190,11 +180,11 @@ describe('a contractor Doula without the owner or admin role', () => {
 
 		await expect
 			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/search');
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/search`);
 	});
 
 	it('does not show the explainer link once she has attached Clients', async () => {
-		await setup(jsonResponse({ items: clients, hasMore: false }), true);
+		await setup(undefined, true);
 
 		await expect
 			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
@@ -225,16 +215,16 @@ describe('the "see everyone" toggle', () => {
 		await expect
 			.element(testPage.getByRole('switch', { name: 'See everyone' }))
 			.not.toBeChecked();
-		expect(requestUrl()).toBe('/api/practices/practice-1/clients');
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
 	});
 
 	it('reflects `?all=true` from the URL: checked, and threaded through to the fetch', async () => {
-		searchParameters.set('all', 'true');
+		pageState.url.searchParams.set('all', 'true');
 
 		await setup();
 
 		await expect.element(testPage.getByRole('switch', { name: 'See everyone' })).toBeChecked();
-		expect(requestUrl()).toBe('/api/practices/practice-1/clients?all=true');
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients?all=true`);
 	});
 
 	it('navigates to `?all=true` when switched on from the default view', async () => {
@@ -242,36 +232,26 @@ describe('the "see everyone" toggle', () => {
 
 		await testPage.getByRole('switch', { name: 'See everyone' }).click();
 
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients?all=true');
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?all=true`);
 	});
 
 	it('navigates back to the default view when switched off', async () => {
-		searchParameters.set('all', 'true');
+		pageState.url.searchParams.set('all', 'true');
 		await setup();
 
 		await testPage.getByRole('switch', { name: 'See everyone' }).click();
 
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients');
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients`);
 	});
 });
 
 // #499: a pending Engagement Request shows on its Client's row.
 describe('a pending Request on the row', () => {
 	it('shows the kind and "request pending" for a Client with one pending Request', async () => {
-		await setup(
-			jsonResponse({
-				items: [
-					{
-						clientId: 'client-1',
-						name: 'Pending Client',
-						email: 'pending@example.com',
-						hasWork: true,
-						pendingRequestKinds: ['birth']
-					}
-				],
-				hasMore: false
-			})
-		);
+		// The fixture's own Client already carries `pendingRequestKinds:
+		// ['birth']` (#596), so the default fixture response is the whole
+		// case here.
+		await setup();
 
 		await expect
 			.element(testPage.getByRole('cell', { name: 'Birth request pending' }))
@@ -280,18 +260,7 @@ describe('a pending Request on the row', () => {
 
 	it('joins both kinds when a Client holds a pending Request of each', async () => {
 		await setup(
-			jsonResponse({
-				items: [
-					{
-						clientId: 'client-1',
-						name: 'Both Kinds Client',
-						email: 'both@example.com',
-						hasWork: true,
-						pendingRequestKinds: ['birth', 'postpartum']
-					}
-				],
-				hasMore: false
-			})
+			jsonResponse({ items: [{ ...clients[0], pendingRequestKinds: ['birth', 'postpartum'] }], hasMore: false })
 		);
 
 		await expect
@@ -300,7 +269,10 @@ describe('a pending Request on the row', () => {
 	});
 
 	it('leaves the cell blank for a Client with no pending Request', async () => {
-		await setup();
+		// The fixture's Client always carries a pending Request, so a
+		// Client with none is this test's own -- the fixture has no way to
+		// hold the absence (#596).
+		await setup(jsonResponse({ items: [{ ...clients[0], pendingRequestKinds: undefined }], hasMore: false }));
 
 		await expect
 			.element(testPage.getByRole('columnheader', { name: 'Pending request' }))
@@ -343,10 +315,10 @@ describe('a "Load more" already in flight when the filter changes', () => {
 	 */
 	it('drops its response rather than appending the old filter\'s Clients', async () => {
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ items: clients, hasMore: true, nextCursor: 'cursor-1' })
+			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' })
 		);
 		await render(Page, {});
-		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: clients[0].name })).toBeVisible();
 
 		// Page two never settles until the test says so.
 		const pageTwo = Promise.withResolvers<Response>();
@@ -375,10 +347,10 @@ describe('a "Load more" already in flight when the filter changes', () => {
 
 	it('surfaces a "Load more" failure only while the filter has not moved', async () => {
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ items: clients, hasMore: true, nextCursor: 'cursor-1' })
+			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' })
 		);
 		await render(Page, {});
-		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: clients[0].name })).toBeVisible();
 
 		apiFetchWithSession.mockResolvedValueOnce(textResponse('the practice is gone'));
 		await testPage.getByRole('button', { name: 'Load more' }).click();
@@ -387,15 +359,15 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		// #506: a failed "Load more" used to route through the same `error`
 		// state as the initial load, replacing the whole table with a bare
 		// notice -- it must leave the rows already on screen in place.
-		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: clients[0].name })).toBeVisible();
 	});
 
 	it('swallows a "Load more" failure whose filter has since moved', async () => {
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ items: clients, hasMore: true, nextCursor: 'cursor-1' })
+			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' })
 		);
 		await render(Page, {});
-		await expect.element(testPage.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: clients[0].name })).toBeVisible();
 
 		const pageTwo = Promise.withResolvers<Response>();
 		apiFetchWithSession.mockReturnValueOnce(pageTwo.promise);

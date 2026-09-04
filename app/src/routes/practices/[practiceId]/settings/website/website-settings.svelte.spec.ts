@@ -2,14 +2,25 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import type { PracticeWebsite } from '#lib/website.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../routeFixture.js';
+import { fixture, website as fixtureWebsite } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: {
-		params: { practiceId: 'practice-1' },
-		url: new URL('https://test.local/practices/practice-1/settings/website')
-	}
+/*
+ * The `page` this route reads comes from its own fixture (#596), so the
+ * params this spec installs and the params the continuum sweep installs
+ * are one description. `vi.mock` is hoisted above every import, so the
+ * object is declared empty here and filled from the fixture once the
+ * imports have run.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -31,7 +42,11 @@ const undeclared = {
 };
 
 interface SetupOptions {
-	website?: Record<string, unknown>;
+	// `PracticeWebsite` alongside the bare `Record` so the fixture's own
+	// export (#596) can be handed in directly -- most tests still pass a
+	// partial/malformed body to exercise a degraded response, which is
+	// exactly what the `Record` arm is for.
+	website?: PracticeWebsite | Record<string, unknown>;
 	roles?: string[];
 	websiteOk?: boolean;
 	put?: () => Response;
@@ -250,20 +265,33 @@ describe('website settings screen', () => {
 		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();
 	});
 
+	// The already-answered/hosted/live state this test needs is exactly
+	// what the fixture describes (#596), so the "saved" screen it renders
+	// on is the fixture's own -- including the referral-link content #530
+	// put there, not a friendlier restatement of the same fact.
 	it('shows a Practice that has already answered what it says, and lets her change her mind', async () => {
-		await setup({
-			website: {
-				mode: 'hosted',
-				ownUrl: '',
-				serviceDescription: 'Birth support in Monroe County.',
-				cancellationPolicy: 'Two weeks notice.',
-				updatedBy: 'Maya Chen',
-				updatedAt: '2026-08-29T14:30:00Z'
-			}
-		});
+		await setup({ website: fixtureWebsite });
 
-		await expect.element(testPage.getByText('Birth support in Monroe County.')).toBeVisible();
-		await expect.element(testPage.getByText('Last changed by Maya Chen on August 29, 2026')).toBeVisible();
+		// The fixture's Practice pasted the same referral URL into both
+		// free-text fields (#530), so the description and the
+		// cancellation policy read identically -- DOM order is the only
+		// thing that says which `<dd>` is which, service description
+		// first, same as the screen's own field order.
+		await expect.element(testPage.getByText(fixtureWebsite.serviceDescription).first()).toBeVisible();
+		// Computed rather than a hardcoded "August 1, 2026": the fixture's
+		// `updatedAt` is UTC midnight, and the screen's own
+		// `toLocaleDateString` renders it in the runner's local timezone,
+		// which can read back a day earlier -- this is still a rendered
+		// form of the fixture's value (#596), just derived the same way
+		// the component derives it rather than guessed.
+		const updatedOn = new Date(fixtureWebsite.updatedAt).toLocaleDateString('en-US', {
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric'
+		});
+		await expect
+			.element(testPage.getByText(`Last changed by ${fixtureWebsite.updatedBy} on ${updatedOn}`))
+			.toBeVisible();
 
 		await testPage.getByRole('button', { name: 'Change' }).click();
 		await expect.element(testPage.getByLabelText('What your Practice offers')).toBeVisible();

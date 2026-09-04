@@ -12,7 +12,7 @@ import type { ClientListItem } from '#lib/client.js';
 import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const clients: ClientListItem[] = [
+export const clients: ClientListItem[] = [
 	{
 		clientId: 'client-1',
 		name: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',

@@ -12,33 +12,43 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../routeFixture.js';
+import { detail as baseDetail, fixture } from './page.fixture.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1', clientId: 'client-1' } }
+/*
+ * The Client this hub shows, and the `page` it reads, both come from the
+ * route's own fixture (#596) -- so what this spec asserts on and what the
+ * continuum sweep measures are one description. `vi.mock` is hoisted
+ * above every import, so `pageState` is declared empty and filled from
+ * the fixture once the imports have run. Same installation, through the
+ * same `toPageState`, as `route-continuum.svelte.spec.ts`.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const baseDetail: ClientDetail = {
-	id: 'client-1',
-	givenName: 'Ada',
-	familyName: 'Lovelace',
-	preferredName: 'Ada',
-	email: 'ada@example.com',
-	phone: '555-0100',
-	addressLine1: '1 Analytical Engine Way',
-	addressLine2: '',
-	addressLocality: 'London',
-	addressRegion: 'LDN',
-	addressPostalCode: 'SW1A 1AA',
-	dateOfBirth: '1815-12-10',
-	resolvedFields: [],
-	engagements: [],
-	history: []
-};
+const { practiceId, clientId } = fixture.params;
+// The Address DescriptionList row joins the same fields the same way the
+// route does -- an empty addressLine2 is filtered out rather than shown
+// as a bare comma.
+const address = [
+	baseDetail.addressLine1,
+	baseDetail.addressLine2,
+	baseDetail.addressLocality,
+	baseDetail.addressRegion,
+	baseDetail.addressPostalCode
+]
+	.filter(Boolean)
+	.join(', ');
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
@@ -87,12 +97,12 @@ describe('client detail hub', () => {
 	it('renders the twelve structural columns fetched by id', async () => {
 		await setup();
 
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/clients/client-1');
-		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Ada' })).toBeVisible();
-		await expect.element(testPage.getByText('ada@example.com')).toBeVisible();
-		await expect.element(testPage.getByText('555-0100')).toBeVisible();
-		await expect.element(testPage.getByText('1 Analytical Engine Way, London, LDN, SW1A 1AA')).toBeVisible();
-		await expect.element(testPage.getByText('1815-12-10')).toBeVisible();
+		expect(apiFetchWithSession).toHaveBeenCalledWith(`/api/practices/${practiceId}/clients/${clientId}`);
+		await expect.element(testPage.getByRole('heading', { level: 1, name: fixture.readyText })).toBeVisible();
+		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
+		await expect.element(testPage.getByText(baseDetail.phone)).toBeVisible();
+		await expect.element(testPage.getByText(address)).toBeVisible();
+		await expect.element(testPage.getByText(baseDetail.dateOfBirth)).toBeVisible();
 	});
 
 	it('shows every active Practice-defined field, blank or not, and labels an archived one held', async () => {
@@ -113,7 +123,14 @@ describe('client detail hub', () => {
 
 	it("renders her Engagements identifying each one's kind and status", async () => {
 		await setup({
-			overrides: { engagements: [{ engagementId: 'e1', kind: 'birth', status: 'active', createdAt: '2026-01-01T00:00:00Z' }] }
+			// The fixture's own history carries a pending birth request, whose
+			// row would otherwise also read "Birth" and make the query
+			// ambiguous -- cleared here because this test is about the
+			// Engagements section, not the History one.
+			overrides: {
+				engagements: [{ engagementId: 'e1', kind: 'birth', status: 'active', createdAt: '2026-01-01T00:00:00Z' }],
+				history: []
+			}
 		});
 
 		await expect.element(testPage.getByRole('cell', { name: 'Birth' })).toBeVisible();
@@ -273,22 +290,22 @@ describe('client detail hub', () => {
 		const { container } = await setup();
 
 		const link = testPage.getByRole('link', { name: 'Edit' });
-		await expect.element(link).toHaveAttribute('href', '/practices/practice-1/clients/client-1/edit');
+		await expect.element(link).toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/edit`);
 
 		// "Edit" alone doesn't say whose record it edits (#513); the
 		// distinguishing name is a sibling joined by aria-describedby, the
 		// same pattern CheckAnswers' Change links use, so no accessible
 		// query names it directly.
 		const describedBy = link.element().getAttribute('aria-describedby') ?? '';
-		expect(container.querySelector(`#${describedBy}`)?.textContent).toBe('Ada');
+		expect(container.querySelector(`#${describedBy}`)?.textContent).toBe(fixture.readyText);
 	});
 
 	it('offers the Engagement Request as an action naming her', async () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Start new work with Ada' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/client-1/engagement-requests/new');
+			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`);
 	});
 
 	it('shows an error notice when the Client fails to load', async () => {
@@ -389,7 +406,7 @@ describe('the pending-request block: Withdraw (#504)', () => {
 		await testPage.getByRole('button', { name: 'Withdraw Postpartum request' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(
-			'/api/practices/practice-1/engagement-requests/request-mendoza-riquelme-postpartum/withdraw',
+			`/api/practices/${practiceId}/engagement-requests/request-mendoza-riquelme-postpartum/withdraw`,
 			{ method: 'POST' }
 		);
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Postpartum Engagement request withdrawn');

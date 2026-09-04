@@ -2,12 +2,26 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { ClientDetail, EngagementSummary } from '#lib/clientDetail.js';
+import { displayName, type ClientDetail, type EngagementSummary } from '#lib/clientDetail.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../../../routeFixture.js';
+import { detail as baseDetail, fixture } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1', clientId: 'client-1' } }
+/*
+ * The Client this Request is about, and the `page` it reads, both come
+ * from the route's own fixture (#596) -- so what this spec asserts on
+ * and what the continuum sweep measures are one description. `vi.mock`
+ * is hoisted above every import, so `pageState` is declared empty and
+ * filled from the fixture once the imports have run. Same installation,
+ * through the same `toPageState`, as `route-continuum.svelte.spec.ts`.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -15,23 +29,9 @@ vi.mock('$app/navigation', () => ({ goto }));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const baseDetail: ClientDetail = {
-	id: 'client-1',
-	givenName: 'Ada',
-	familyName: 'Lovelace',
-	preferredName: '',
-	email: 'ada@example.com',
-	phone: '',
-	addressLine1: '',
-	addressLine2: '',
-	addressLocality: '',
-	addressRegion: '',
-	addressPostalCode: '',
-	dateOfBirth: '',
-	resolvedFields: [],
-	engagements: [],
-	history: []
-};
+const { practiceId, clientId } = fixture.params;
+const clientDetailHref = `/practices/${practiceId}/clients/${clientId}`;
+const clientName = displayName(baseDetail);
 
 const liveEngagement: EngagementSummary = {
 	engagementId: 'engagement-0',
@@ -40,7 +40,7 @@ const liveEngagement: EngagementSummary = {
 	createdAt: '2026-01-01T00:00:00Z'
 };
 
-const draftKey = 'engagement-request-draft:client-1';
+const draftKey = `engagement-request-draft:${clientId}`;
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
@@ -84,14 +84,14 @@ describe('the Engagement Request screen', () => {
 	it('shows a Doula the "Ask to" phrasing and no Credit preview', async () => {
 		await setup({ roles: ['doula'] });
 
-		await expect.element(testPage.getByRole('button', { name: 'Ask to start work with Ada' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: `Ask to start work with ${clientName}` })).toBeVisible();
 		await expect.element(testPage.getByText('Credit cost')).not.toBeInTheDocument();
 	});
 
 	it('shows an Owner the "Start work with" phrasing and the Credit cost and balance after', async () => {
 		await setup({ roles: ['owner'], balance: 3 });
 
-		await expect.element(testPage.getByRole('button', { name: 'Start work with Ada' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: `Start work with ${clientName}` })).toBeVisible();
 		await expect.element(testPage.getByText('Credit cost')).toBeVisible();
 		await expect.element(testPage.getByText('1 credit')).toBeVisible();
 		await expect.element(testPage.getByText('2', { exact: true })).toBeVisible();
@@ -100,13 +100,13 @@ describe('the Engagement Request screen', () => {
 	it('shows an Admin the same "Start work with" phrasing', async () => {
 		await setup({ roles: ['admin'], balance: 5 });
 
-		await expect.element(testPage.getByRole('button', { name: 'Start work with Ada' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: `Start work with ${clientName}` })).toBeVisible();
 	});
 
 	it('refuses a submit with no kind chosen, client-side, before any request', async () => {
 		await setup();
 
-		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Select whether this is birth or postpartum work' }))
@@ -130,7 +130,7 @@ describe('the Engagement Request screen', () => {
 		await setup();
 
 		await testPage.getByLabelText('Birth').click();
-		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect.element(testPage.getByRole('link', { name: 'Enter the due date' })).toBeVisible();
 		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
@@ -144,7 +144,7 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Postpartum').click();
 		await expect.element(testPage.getByText('Optional for postpartum work')).toBeVisible();
-		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
 		const body: { kind: string; dueDate: string } = JSON.parse(
@@ -161,7 +161,7 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
-		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
 	});
@@ -172,10 +172,10 @@ describe('the Engagement Request screen', () => {
 		await testPage.getByLabelText('Postpartum').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
 		await testPage.getByLabelText('Note').fill('Referred by the hospital');
-		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-1');
+		expect(goto).toHaveBeenCalledWith(clientDetailHref);
 
 		const body: { kind: string; dueDate: string; note: string } = JSON.parse(
 			(apiFetchWithSession.mock.calls.find(([path]) => (path as string).endsWith('/engagement-requests'))![1] as RequestInit)
@@ -189,7 +189,7 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
-		await testPage.getByRole('button', { name: 'Start work with Ada' }).click();
+		await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
 
 		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toBeVisible();
 		// Nothing was lost: the same mounted form still holds what she typed.
@@ -214,7 +214,7 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
-		await testPage.getByRole('button', { name: 'Ask to start work with Ada' }).click();
+		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect
 			.element(testPage.getByText('a pending request for this client and kind already exists'))
@@ -229,9 +229,9 @@ describe('the Engagement Request screen', () => {
 		await expect.element(testPage.getByLabelText('Postpartum')).toBeVisible();
 		await expect.element(testPage.getByLabelText('Due date')).toBeVisible();
 		await expect.element(testPage.getByLabelText('Note')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Ask to start work with Ada' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: `Ask to start work with ${clientName}` })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Cancel' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/client-1');
+			.toHaveAttribute('href', clientDetailHref);
 	});
 });

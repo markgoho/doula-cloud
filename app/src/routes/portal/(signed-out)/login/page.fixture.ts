@@ -11,7 +11,7 @@ import type { PortalSessionInfo } from '#lib/portalLanding.js';
 import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const session: PortalSessionInfo = {
+export const session: PortalSessionInfo = {
 	engagements: [
 		{
 			engagementId: 'engagement-1',
