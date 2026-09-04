@@ -11,11 +11,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"doula-cloud/api/internal/staffauth"
 )
@@ -68,13 +65,6 @@ func hasLiveEngagement(ctx context.Context, tx *sql.Tx, clientID string) (bool, 
 		return false, fmt.Errorf("engagementrequest: check live engagement: %w", err)
 	}
 	return has, nil
-}
-
-// isUniqueViolation reports whether err is a Postgres unique-constraint
-// violation (SQLSTATE 23505), mirroring staffauth.isUniqueViolation.
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // writeJSON encodes v as the response body under status. The header must

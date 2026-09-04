@@ -377,3 +377,43 @@ func RemoveMembershipHandler() http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
+
+// isSoleOwnerAnywhere reports whether staffID currently holds the
+// 'owner' role at some Practice with no other Owner.
+//
+// A question about Membership and nothing else: it reads
+// practice_memberships, it knows about roles, and it has no idea what
+// its answer is used for. It lived in mfarecovery_savedcodes.go for a
+// while because #605 was the first thing to need it -- "Nobody with an
+// Owner above her is ever issued these" -- which left a reader chasing
+// "who is the last Owner?" starting in a file named for a recovery-code
+// feature, and left the three Membership write sites above reaching
+// sideways into it.
+//
+// Computed across every Practice she belongs to, not just one: a person
+// who is sole Owner at Practice A and co-Owner at Practice B is still
+// the last Owner of A, however B's roster changes. The cross-Practice
+// case #605 settled for Owner-vouching applies the same way here, just
+// never spelled out by name in the AC because the ticket's examples only
+// ever show one Practice.
+func isSoleOwnerAnywhere(ctx context.Context, tx *sql.Tx, staffID string) (bool, error) {
+	var sole bool
+	err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM practice_memberships pm
+			WHERE pm.staff_id = $1 AND 'owner' = ANY(pm.roles)
+			  AND NOT EXISTS (
+				  SELECT 1 FROM practice_memberships other
+				  WHERE other.practice_id = pm.practice_id
+				    AND other.staff_id <> pm.staff_id
+				    AND 'owner' = ANY(other.roles)
+			  )
+		)`,
+		staffID,
+	).Scan(&sole)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("staffauth: check sole ownership: %w", err)
+	}
+	return sole, nil
+}

@@ -3,14 +3,12 @@ package portalinvite
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/pgerr"
 )
 
 // AcceptInviteRequest is the body of an accept-invite request: the
@@ -105,7 +103,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, identityUID, inviteToken string) 
 		`UPDATE client_portal_users SET identity_uid = $1, invite_token = NULL WHERE invite_token = $2`,
 		identityUID, inviteToken,
 	)
-	if isUniqueViolation(err) {
+	if pgerr.IsUniqueViolation(err) {
 		return AcceptInviteResponse{}, http.StatusConflict, "CONFLICT", "a portal account already exists for this identity"
 	}
 	if err != nil {
@@ -128,11 +126,4 @@ func acceptInvite(r *http.Request, tx *sql.Tx, identityUID, inviteToken string) 
 	}
 
 	return AcceptInviteResponse{ClientID: clientID}, http.StatusOK, "", ""
-}
-
-// isUniqueViolation reports whether err is a Postgres unique-constraint
-// violation (SQLSTATE 23505), mirroring staffauth.isUniqueViolation.
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

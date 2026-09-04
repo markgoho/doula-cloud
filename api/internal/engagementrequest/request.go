@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -85,7 +86,7 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			 VALUES ($1, $2, $3::engagement_kind, $4, $5, $6) RETURNING id`,
 			practiceID, clientID, kind, dueDate, note, staffID,
 		).Scan(&requestID); err != nil {
-			if isUniqueViolation(err) {
+			if pgerr.IsUniqueViolation(err) {
 				http.Error(w, "a pending request for this client and kind already exists", http.StatusConflict)
 				return
 			}
