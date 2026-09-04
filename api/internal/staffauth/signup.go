@@ -3,16 +3,14 @@ package staffauth
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/pgerr"
 )
 
 // MsgInternalError is the response body for any failure the caller can't
@@ -144,7 +142,7 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, $4) RETURNING id`,
 		identityUID, req.StaffName, req.StaffEmail, req.WorkState,
 	).Scan(&staffID)
-	if isUniqueViolation(err) {
+	if pgerr.IsUniqueViolation(err) {
 		return SignupResponse{}, http.StatusConflict, "a staff account already exists for this identity"
 	}
 	if err != nil {
@@ -280,8 +278,3 @@ Engagement dates: {{engagement_start_date}} through {{engagement_end_date}}
 Price: {{price}}
 
 By signing below, both parties agree to the terms described above.`
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
-}

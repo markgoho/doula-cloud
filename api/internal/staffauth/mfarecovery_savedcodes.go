@@ -20,38 +20,6 @@ import (
 // asks for a different number.
 const savedCodeSetSize = 10
 
-// isSoleOwnerAnywhere reports whether staffID currently holds the
-// 'owner' role at some Practice with no other Owner -- the one fact
-// that decides whether she should hold saved codes at all (#605: "Nobody
-// with an Owner above her is ever issued these"). Computed across every
-// Practice she belongs to, not just one: a person who is sole Owner at
-// Practice A and co-Owner at Practice B still needs codes for A, however
-// B's roster changes -- the cross-Practice case #605 settled for
-// Owner-vouching applies the same way here, just never spelled out by
-// name in the AC because the ticket's examples only ever show one
-// Practice.
-func isSoleOwnerAnywhere(ctx context.Context, tx *sql.Tx, staffID string) (bool, error) {
-	var sole bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS (
-			SELECT 1 FROM practice_memberships pm
-			WHERE pm.staff_id = $1 AND 'owner' = ANY(pm.roles)
-			  AND NOT EXISTS (
-				  SELECT 1 FROM practice_memberships other
-				  WHERE other.practice_id = pm.practice_id
-				    AND other.staff_id <> pm.staff_id
-				    AND 'owner' = ANY(other.roles)
-			  )
-		)`,
-		staffID,
-	).Scan(&sole)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("staffauth: check sole ownership: %w", err)
-	}
-	return sole, nil
-}
-
 // hasLiveSavedCodes reports whether staffID holds any unspent,
 // unrevoked saved code right now.
 func hasLiveSavedCodes(ctx context.Context, tx *sql.Tx, staffID string) (bool, error) {

@@ -9,8 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-
+	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -348,12 +347,9 @@ func upsert(ctx context.Context, tx *sql.Tx, practiceID, name, currentSlug strin
 }
 
 // isSlugCollision reports whether err is another Practice already
-// holding this slug (SQLSTATE 23505 on the slug index), mirroring
-// plans.isUniqueViolation but naming the constraint: a conflict on
-// practice_id is the upsert working, not a collision to retry.
+// holding this slug. It names the constraint rather than taking any
+// unique violation, which is the whole distinction: a conflict on
+// practice_id is the upsert doing its job, not a collision to retry.
 func isSlugCollision(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) &&
-		pgErr.Code == "23505" &&
-		pgErr.ConstraintName == "practice_websites_slug_key"
+	return pgerr.IsUniqueViolationOn(err, "practice_websites_slug_key")
 }

@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -85,7 +86,7 @@ func PostInstanceHandler() http.Handler {
 			`INSERT INTO plan_instances (engagement_id, plan_type, fields) VALUES ($1, $2, $3)`,
 			engagementID, planType, fieldsJSON,
 		); err != nil {
-			if isUniqueViolation(err) {
+			if pgerr.IsUniqueViolation(err) {
 				http.Error(w, "a plan instance already exists for this engagement and plan type", http.StatusConflict)
 				return
 			}

@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -123,7 +124,7 @@ func PostContractHandler() http.Handler {
 			`INSERT INTO contracts (engagement_id, prose, merge_field_values) VALUES ($1, $2, $3)`,
 			engagementID, prose, valuesJSON,
 		); err != nil {
-			if isUniqueViolation(err) {
+			if pgerr.IsUniqueViolation(err) {
 				http.Error(w, "a contract already exists for this engagement", http.StatusConflict)
 				return
 			}

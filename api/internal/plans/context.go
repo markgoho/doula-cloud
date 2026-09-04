@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/jackc/pgx/v5/pgconn"
-
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -63,11 +61,4 @@ func requireEngagementAtPractice(ctx context.Context, tx *sql.Tx, engagementID, 
 		return sql.ErrNoRows
 	}
 	return nil
-}
-
-// isUniqueViolation reports whether err is a Postgres unique-constraint
-// violation (SQLSTATE 23505), mirroring staffauth.isUniqueViolation.
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
