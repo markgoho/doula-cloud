@@ -4,11 +4,26 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientMatch } from '#lib/client.js';
 import Page from './+page.svelte';
+import { fixture } from './page.fixture.js';
 
+/*
+ * This wizard's fixture (#596) declares no content object of its own --
+ * its `url` carries the search-handoff query the continuum sweep
+ * exercises step one with, which every test here except the prefill ones
+ * deliberately starts empty instead, so `searchParams` stays this spec's
+ * own mutable object rather than one installed from `toPageState`.
+ * `practiceId` is the one field every test shares with the fixture, so
+ * `pageParameters` is filled from `fixture.params` once the import has run,
+ * the same hoisting `vi.mock` forces on every other converted route spec.
+ */
+const pageParameters = vi.hoisted(() => ({}) as Record<string, string>);
 const searchParameters = vi.hoisted(() => new URLSearchParams());
 vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' }, url: { searchParams: searchParameters } }
+	page: { params: pageParameters, url: { searchParams: searchParameters } }
 }));
+Object.assign(pageParameters, fixture.params);
+
+const { practiceId } = fixture.params;
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -81,7 +96,7 @@ describe('client intake (#497)', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('heading', { level: 1, name: "What is the Client's name?" }))
+			.element(testPage.getByRole('heading', { level: 1, name: fixture.readyText }))
 			.toBeVisible();
 		expect(document.activeElement?.id).toBe('intake-heading');
 
@@ -177,7 +192,7 @@ describe('client intake (#497)', () => {
 		expect(body.override).toBe(false);
 		expect(body.givenName).toBe('Ada');
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-1');
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-1`);
 	});
 
 	it('shows the save-time match prompt before writing anything, naming the match', async () => {
@@ -206,7 +221,7 @@ describe('client intake (#497)', () => {
 
 		expect(requestBody(1).override).toBe(true);
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-1');
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-1`);
 	});
 
 	it('"This is <name>" lists the proposed edit before applying it, then edits the existing record', async () => {
@@ -230,7 +245,7 @@ describe('client intake (#497)', () => {
 		await testPage.getByRole('button', { name: "Save changes to Ada Byron's record" }).click();
 
 		const editCall = apiFetchWithSession.mock.calls[1];
-		expect(editCall[0]).toBe('/api/practices/practice-1/clients/client-2');
+		expect(editCall[0]).toBe(`/api/practices/${practiceId}/clients/client-2`);
 		const body = JSON.parse((editCall[1] as RequestInit).body as string) as {
 			email: string;
 			addressLine1: string;
@@ -244,7 +259,7 @@ describe('client intake (#497)', () => {
 		expect(body.fieldValues).toEqual({ pronouns: 'she/her' });
 		expect(body.override).toBe(false);
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-2');
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-2`);
 	});
 
 	it('"This is <name>" goes straight to her record when nothing typed differs from what is on file', async () => {
@@ -262,7 +277,7 @@ describe('client intake (#497)', () => {
 		// No edit call -- there was nothing to propose.
 		expect(apiFetchWithSession).toHaveBeenCalledTimes(1);
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-2');
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-2`);
 	});
 
 	it("reuses #495's override dialog when the reviewed edit itself matches a third Client", async () => {
@@ -286,7 +301,7 @@ describe('client intake (#497)', () => {
 
 		expect(JSON.parse((apiFetchWithSession.mock.calls[2][1] as RequestInit).body as string).override).toBe(true);
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-2');
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-2`);
 	});
 
 	it('surfaces a refused save as an error rather than a silent failure, without moving on', async () => {

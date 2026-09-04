@@ -12,10 +12,10 @@ import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const practiceName =
+export const practiceName =
 	'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake';
 
-const detail = {
+export const detail = {
 	engagementId: 'engagement-1',
 	practiceName,
 	clientName: 'Anne-Marie Ochieng-Whitfield',

@@ -5,6 +5,7 @@ import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { resetAccountSession } from './session.svelte.js';
+import { session } from './page.fixture.js';
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -15,7 +16,6 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
-const REPORTED_AT = '2026-08-28T14:02:11Z';
 const SAVED_AT = '2027-03-14T10:00:00Z';
 
 function jsonResponse(body: unknown): Response {
@@ -25,15 +25,6 @@ function jsonResponse(body: unknown): Response {
 function refusal(status: number, message: string): Response {
 	return buildResponse(message, status);
 }
-
-const session = {
-	staffId: 'staff-1',
-	name: 'Priya Sharma',
-	workState: 'NY',
-	workStateReportedAt: REPORTED_AT,
-	lastPracticeId: 'practice-1',
-	memberships: [{ practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles: ['doula'] }]
-};
 
 interface MockOptions {
 	sessionResponse?: Response;
@@ -80,7 +71,7 @@ describe('the account screen', () => {
 		await expect.element(testPage.getByRole('heading', { name: 'Your account' })).toBeVisible();
 		await expect.element(stateSelect()).toHaveValue('New York');
 		await expect
-			.element(testPage.getByText(`Last confirmed ${workStateReportedOn(REPORTED_AT)}.`))
+			.element(testPage.getByText(`Last confirmed ${workStateReportedOn(session.workStateReportedAt)}.`))
 			.toBeVisible();
 	});
 

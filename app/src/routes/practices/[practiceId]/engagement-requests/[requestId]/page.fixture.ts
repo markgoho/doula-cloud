@@ -23,7 +23,7 @@ import Page from './+page.svelte';
  * page carries, so the sweep is measuring one Practice's content rather
  * than 34 fixtures each guessing at what "long" means.
  */
-const detail: ApprovalDetail = {
+export const detail: ApprovalDetail = {
 	requestId: 'request-1',
 	state: 'pending',
 	kind: 'birth',

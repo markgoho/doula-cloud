@@ -3,10 +3,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../routeFixture.js';
+import { fixture } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' } }
+/*
+ * The `page` this route reads comes from its own fixture (#596), so what
+ * this spec renders and what the continuum sweep measures are one
+ * description. `vi.mock` is hoisted above every import, so `pageState` is
+ * declared empty and filled from the fixture once the imports have run --
+ * the route reads `page.params.practiceId` inside its own functions
+ * rather than at module scope, so the later write is seen. Same
+ * installation, through the same `toPageState`, as
+ * `route-continuum.svelte.spec.ts`. The fixture holds no `data`/`props`/
+ * `respond`: a blank invite form fetches nothing on mount, so there is no
+ * happy-path content beyond `params` for this spec to share with it.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));

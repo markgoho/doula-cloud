@@ -14,11 +14,12 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
+import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
 const clientName = 'Anne-Marie Ochieng-Whitfield';
 
-const detail = {
+export const detail = {
 	engagementId: 'engagement-1',
 	clientId: 'client-1',
 	clientName,
@@ -27,7 +28,7 @@ const detail = {
 	dueDate: '2027-03-01'
 };
 
-export const fixture: RouteFixture = {
+export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Staff-side Engagement detail hub',
 	component: Page,
 	params: { practiceId: 'practice-1', engagementId: 'engagement-1' },

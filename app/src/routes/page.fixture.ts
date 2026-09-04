@@ -12,7 +12,11 @@ import type { RootLanding } from './+page.js';
 import type { RouteFixture } from './routeFixture.js';
 import Page from './+page.svelte';
 
-const data: RootLanding = {
+// Narrowed to the one shape this fixture describes, rather than the full
+// `RootLanding` union -- the spec spreads this object to build its own
+// "several Practices" variant, and a union type would let that spread
+// merge in a shape (`portal-picker`) that has no `memberships` at all.
+export const data: Extract<RootLanding, { type: 'staff-picker' }> = {
 	type: 'staff-picker',
 	memberships: [
 		{

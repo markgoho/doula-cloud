@@ -12,8 +12,14 @@
  * So a route declares the four things instead of the check guessing them.
  * The declaration lives beside the route as `page.fixture.ts`, not in a
  * central registry, so the content the sweep measures and the content the
- * route's own spec asserts on can become one object rather than two that
- * drift.
+ * route's own spec asserts on are one object rather than two that drift.
+ *
+ * That last clause read "can become one object" until
+ * [#596](https://github.com/markgoho/doula-cloud/issues/596), which is
+ * the ticket that made it true: every route spec now imports its
+ * happy-path content from the fixture beside it rather than declaring its
+ * own. The rule, and what a spec still owns, is in
+ * `.claude/rules/svelte-tests.md`.
  *
  * The content itself is hostile, never polite (ADR-0025, #537): a route's
  * values come from a Practice's own typing rather than from a file, so a
@@ -75,7 +81,38 @@ export function toPageState(fixture: RouteFixture): {
 	};
 }
 
-export interface RouteFixture {
+/**
+The mock implementation installed on `apiFetchWithSession` / `apiFetch`
+by a route's own spec and by the check alike.
+
+`fixture.respond` is unwrapped here rather than in each of the route
+specs that fetch plus both halves of the check, which is #570's
+`mountInFrame` rule again: one artifact is enforced by there being one
+function. A `Response` body reads once, so the fixture is called per
+request rather than resolved once into a `mockResolvedValue` -- a spec
+that renders its route twice would otherwise get a consumed body the
+second time.
+*/
+export function toApiResponder(fixture: RouteFixture): (path: string) => Promise<Response> {
+	const respond = fixture.respond;
+	if (!respond) {
+		throw new Error(`${fixture.name} declares no respond(), so nothing can answer a fetch for it.`);
+	}
+	return (path: string) => Promise.resolve(respond(path));
+}
+
+/*
+ * `RouteParameters` exists because a fixture's `params` is handed to two different
+ * consumers with two different demands. The check installs it on a mocked
+ * `$app/state`, which wants any string map; a route's own spec passes it
+ * to `render` as a `PageProps`, whose `params` is the route's generated
+ * `RouteParams` and names each id. Erasing it to `Record<string, string>`
+ * for both left the spec with a cast asserting what the fixture already
+ * knows, so a fixture whose spec passes it through says its own shape --
+ * `RouteFixture<RouteParams>` -- and every other fixture takes the
+ * default and is unchanged (#596).
+ */
+export interface RouteFixture<RouteParameters extends Record<string, string> = Record<string, string>> {
 	/**
 	How the route is named in a failure sentence -- what a person calls the screen.
 	*/
@@ -93,7 +130,7 @@ export interface RouteFixture {
 	/**
 	`page.params` for the mocked `$app/state`.
 	*/
-	readonly params: Readonly<Record<string, string>>;
+	readonly params: Readonly<RouteParameters>;
 	/**
 	`page.url` for the mocked `$app/state`.
 	*/

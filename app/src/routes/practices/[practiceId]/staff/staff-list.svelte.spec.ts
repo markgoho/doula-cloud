@@ -11,12 +11,33 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
+import { toPageState } from '../../../routeFixture.js';
+import { fixture, roster } from './page.fixture.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' } }
+/*
+ * The `page` this route reads comes from its own fixture (#596), so the
+ * params this spec installs and the params the continuum sweep installs
+ * are one description. `vi.mock` is hoisted above every import, so the
+ * object is declared empty here and filled from the fixture once the
+ * imports have run.
+ *
+ * The roster itself comes from the fixture too (#596). It holds two
+ * Members and two pending Invitations because that is the roster a real
+ * Practice has, which is also what this file needs: nearly every test
+ * here targets a specific row among two-or-more (comparing
+ * roles/employment side by side, revoking one Invitation while
+ * asserting the other survives, `describedByText` against a second
+ * row).
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 // apiErrorMessage is the real one's behavior for a plain-text body, which
@@ -31,48 +52,17 @@ function textResponse(body: string): Response {
 	return jsonResponse(body, 403);
 }
 
-const members = [
-	{
-		staffId: 'staff-1',
-		name: 'Ada Lovelace',
-		email: 'ada@example.com',
-		roles: ['owner'],
-		employmentType: 'employee'
-	},
-	{
-		staffId: 'staff-2',
-		name: 'Grace Hopper',
-		email: 'grace@example.com',
-		roles: [],
-		employmentType: 'contractor'
-	}
-];
+const { members } = roster;
+const invitations = roster.invitations.items;
+const [ownerMember, contractorMember] = members;
+const [liveInvitation, lapsedInvitation] = invitations;
 
-const invitations = [
-	{
-		invitationId: 'invitation-1',
-		address: 'lena@example.com',
-		roles: ['doula'],
-		employmentType: 'contractor',
-		expiresAt: '2026-09-01T00:00:00Z',
-		expired: false,
-		deliveryFailed: false
-	},
-	{
-		invitationId: 'invitation-2',
-		address: 'undeliverable@example.com',
-		roles: ['admin'],
-		employmentType: 'employee',
-		expiresAt: '2026-09-02T00:00:00Z',
-		expired: true,
-		deliveryFailed: true
-	}
-];
-
-// One page of #459's work state history, keyed by staff id. memberSince
-// dates the Membership, which is what lets the screen mark an assertion
-// made before she joined -- a contractor doula carries her earlier
-// Practice's rows in with her.
+// One page of #459's work state history, keyed by staff id. It stays
+// this spec's own (#596): the roster fixture's `respond` never answers
+// it, because a disclosure fetches it only once somebody opens the
+// disclosure. memberSince dates the Membership, which is what lets the
+// screen mark an assertion made before she joined -- a contractor doula
+// carries her earlier Practice's rows in with her.
 const workStateHistories: Record<string, unknown> = {
 	'staff-1': {
 		memberSince: '2026-08-01T00:00:00Z',
@@ -238,13 +228,13 @@ describe('staff screen', () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('heading', { name: 'Members' })).toBeVisible();
-		// exact: true -- the Actions cell's own name now also contains "Ada
-		// Lovelace" (#515's hidden siblings naming its per-row buttons).
+		// exact: true -- the Actions cell's own name now also contains the
+		// member's name (#515's hidden siblings naming its per-row buttons).
 		await expect
-			.element(testPage.getByRole('cell', { name: 'Ada Lovelace', exact: true }))
+			.element(testPage.getByRole('cell', { name: ownerMember.name, exact: true }))
 			.toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'ada@example.com' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'owner' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: ownerMember.email })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'owner, admin' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'no roles yet' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'contractor' }).first()).toBeVisible();
 	});
@@ -257,10 +247,10 @@ describe('staff screen', () => {
 		await expect
 			.element(testPage.getByRole('heading', { name: 'Pending invitations' }))
 			.toBeVisible();
-		// exact: true -- the Actions cell's own name now also contains
-		// "lena@example.com" (#515's hidden sibling naming its Revoke button).
+		// exact: true -- the Actions cell's own name now also contains the
+		// address (#515's hidden sibling naming its Revoke button).
 		await expect
-			.element(testPage.getByRole('cell', { name: 'lena@example.com', exact: true }))
+			.element(testPage.getByRole('cell', { name: liveInvitation.address, exact: true }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'doula' })).toBeVisible();
 		await expect
@@ -302,10 +292,12 @@ describe('staff screen', () => {
 		await testPage.getByRole('radio', { name: 'Contractor' }).click();
 		await testPage.getByRole('button', { name: 'Save membership' }).click();
 
-		// The form closes and Ada's row now reads the edited Membership --
-		// both halves, from one save.
+		// The form closes and the first member's row now reads the edited
+		// Membership -- both halves, from one save.
 		await expect.element(testPage.getByRole('group', { name: 'Roles' })).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('cell', { name: 'owner, doula' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('cell', { name: 'owner, admin, doula' }))
+			.toBeVisible();
 		const contractorCells = testPage.getByRole('cell', { name: 'contractor' });
 		await expect.element(contractorCells.first()).toBeVisible();
 		expect(contractorCells.elements()).toHaveLength(3);
@@ -331,7 +323,7 @@ describe('staff screen', () => {
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
 		await expect.element(testPage.getByRole('group', { name: 'Roles' })).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('cell', { name: 'owner' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'owner, admin' })).toBeVisible();
 	});
 
 	it('removes a revoked invitation from the pending group', async () => {
@@ -342,12 +334,12 @@ describe('staff screen', () => {
 		await dialog.getByRole('button', { name: 'Revoke invitation' }).click();
 
 		await expect
-			.element(testPage.getByRole('cell', { name: 'lena@example.com' }))
+			.element(testPage.getByRole('cell', { name: liveInvitation.address }))
 			.not.toBeInTheDocument();
-		// exact: true -- the Actions cell's own name now also contains
-		// "undeliverable@example.com" (#515's hidden sibling naming Revoke).
+		// exact: true -- the Actions cell's own name now also contains the
+		// address (#515's hidden sibling naming Revoke).
 		await expect
-			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com', exact: true }))
+			.element(testPage.getByRole('cell', { name: lapsedInvitation.address, exact: true }))
 			.toBeVisible();
 	});
 
@@ -360,7 +352,7 @@ describe('staff screen', () => {
 			.element(invitationsTable().getByText('Expired -- invite again or revoke'))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByRole('cell', { name: 'undeliverable@example.com', exact: true }))
+			.element(testPage.getByRole('cell', { name: lapsedInvitation.address, exact: true }))
 			.toBeVisible();
 	});
 
@@ -374,12 +366,12 @@ describe('staff screen', () => {
 		await dialog.getByRole('button', { name: 'Remove from Practice' }).click();
 
 		await expect
-			.element(testPage.getByRole('cell', { name: 'Ada Lovelace' }))
+			.element(testPage.getByRole('cell', { name: ownerMember.name }))
 			.not.toBeInTheDocument();
-		// exact: true -- the Actions cell's own name now also contains
-		// "Grace Hopper" (#515's hidden siblings naming its per-row buttons).
+		// exact: true -- the Actions cell's own name now also contains the
+		// member's name (#515's hidden siblings naming its per-row buttons).
 		await expect
-			.element(testPage.getByRole('cell', { name: 'Grace Hopper', exact: true }))
+			.element(testPage.getByRole('cell', { name: contractorMember.name, exact: true }))
 			.toBeVisible();
 	});
 
@@ -518,7 +510,7 @@ describe('staff screen', () => {
 
 			expect(
 				describedByText(testPage.getByRole('button', { name: 'Show older changes' }))
-			).toBe('Ada Lovelace');
+			).toBe(ownerMember.name);
 		});
 	});
 
@@ -528,23 +520,23 @@ describe('staff screen', () => {
 		await setup();
 
 		const edit = testPage.getByRole('button', { name: 'Edit membership' });
-		expect(describedByText(edit.first())).toBe('Ada Lovelace');
-		expect(describedByText(edit.nth(1))).toBe('Grace Hopper');
+		expect(describedByText(edit.first())).toBe(ownerMember.name);
+		expect(describedByText(edit.nth(1))).toBe(contractorMember.name);
 
 		const endSessions = testPage.getByRole('button', { name: 'End sessions everywhere' });
-		expect(describedByText(endSessions.first())).toBe('Ada Lovelace');
-		expect(describedByText(endSessions.nth(1))).toBe('Grace Hopper');
+		expect(describedByText(endSessions.first())).toBe(ownerMember.name);
+		expect(describedByText(endSessions.nth(1))).toBe(contractorMember.name);
 
 		const remove = testPage.getByRole('button', { name: 'Remove from practice' });
-		expect(describedByText(remove.first())).toBe('Ada Lovelace');
-		expect(describedByText(remove.nth(1))).toBe('Grace Hopper');
+		expect(describedByText(remove.first())).toBe(ownerMember.name);
+		expect(describedByText(remove.nth(1))).toBe(contractorMember.name);
 	});
 
 	it("names each invitation row's Revoke button by its address", async () => {
 		await setup();
 
 		const revoke = testPage.getByRole('button', { name: 'Revoke' });
-		expect(describedByText(revoke.first())).toBe('lena@example.com');
-		expect(describedByText(revoke.nth(1))).toBe('undeliverable@example.com');
+		expect(describedByText(revoke.first())).toBe(liveInvitation.address);
+		expect(describedByText(revoke.nth(1))).toBe(lapsedInvitation.address);
 	});
 });

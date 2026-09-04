@@ -118,3 +118,73 @@ component's declared public output. Asserting
 `expect(onAnswerChange).toHaveBeenCalledWith('names', 'Alex')` after a user
 interaction *is* the behavioral, user-facing assertion for that
 interaction — it stays.
+
+## A route's content is declared once, in its own `page.fixture.ts`
+
+A route that the continuum sweep measures has a `page.fixture.ts` beside
+it (`app/src/routes/routeFixture.ts`, #570). That file is the **only**
+place the route's happy-path content is written. A route spec that
+declared its own `data`/`detail`/`baseX` object was a second description
+of one screen, and the two drift in a known direction: a spec's own
+content is polite because it is chosen to make an assertion readable,
+and a fixture's is hostile because #537 established that a polite
+fixture measures a screen nobody will ever see. The number the sweep
+reports and the content the spec asserts on then describe two different
+screens (#596).
+
+**The fixture exports its content by name**, beside `fixture` itself:
+
+```typescript
+// page.fixture.ts
+export const data: PracticeInvoicePage = { … };
+export const fixture: RouteFixture = { name: …, component: Page, props: { data }, … };
+```
+
+**The spec imports it** and installs the same `page` the check installs,
+through the same `toPageState`:
+
+```typescript
+import { toPageState } from '../../../routeFixture.js';
+import { data, fixture } from './page.fixture.js';
+
+const pageState = vi.hoisted(() => ({
+  params: {} as Record<string, string>,
+  url: new URL('https://example.test/'),
+  data: {} as Record<string, unknown>
+}));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
+```
+
+`vi.mock` is hoisted above every import, so the object is declared empty
+and filled once the imports have run — the route reads `page` inside its
+own functions rather than destructuring it at module scope, so the later
+write is seen. Installing the fixture's `params` here rather than
+retyping them is not cosmetic: a `practiceId` that drifts from the
+fixture's makes every `respond(path)` match silently miss.
+
+For a route that fetches, `toApiResponder(fixture)` is the mock
+implementation — the fixture is called per request, because a `Response`
+body reads once.
+
+**What a spec still owns:**
+
+- **A rendered form of a fixture value.** `'$4,500.00'` for
+  `amountCents: 450_000`, `'Mar 1, 2027'` for a due date — the rendering
+  *is* the assertion. Naming a value the fixture holds verbatim (a
+  Client's name, a note, an id) is the thing to replace.
+- **Content that is not the happy path**: an error body, an empty list, a
+  second page arriving after an interaction, a variant the screen
+  reaches only under a different state.
+- **How that content departs from the fixture.** A variant is written as
+  a spread — `{ ...data, hasMore: true }` — never as a fresh object that
+  re-states the fields it shares.
+
+**A spec never edits a fixture to suit an assertion.** If a spec needs
+content the fixture does not hold, that is the fixture's screen changing,
+and the sweep measures it too — decide it deliberately rather than
+widening the fixture in passing.
+
+A `+layout.svelte` or `+error.svelte` spec sitting in a directory that
+happens to hold a `page.fixture.ts` is not covered by this rule: its
+subject is not the route the fixture describes.

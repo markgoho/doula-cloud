@@ -10,17 +10,29 @@ import Hub from './+page.svelte';
 // same line). #486's own DataTable assertions below need the real
 // table-view/record-view switch.
 import '#lib/styles/app.css';
+import { toApiResponder, toPageState } from '../../../../routeFixture.js';
+import { detail, fixture } from './page.fixture.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-// The hub reads `page.params.engagementId` for the fetch and its two Link
-// hrefs, and `page.data.practiceName` for the bar -- `engagements/
-// [engagementId]/+layout.ts`'s load result, mirrored the same way the
-// authenticated layout's own spec stands it in.
+/*
+ * The Engagement this screen shows, and the `page` it reads, both come
+ * from the route's own fixture (#596) -- so the screen this spec asserts
+ * on and the screen the continuum sweep measures are one description.
+ * `vi.mock` is hoisted above every import, so `pageState` is declared
+ * empty and filled from the fixture once the imports have run; the hub
+ * reads `page.params.engagementId` for the fetch and its two Link hrefs,
+ * and `page.data.practiceName` for the bar, inside its own functions
+ * rather than at module scope, so the later write is seen. Same
+ * installation, through the same `toPageState`, as
+ * `route-continuum.svelte.spec.ts`.
+ */
 const pageState = vi.hoisted(() => ({
-	params: { engagementId: 'engagement-1' },
-	data: { practiceName: 'Riverside Doula Collective' }
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -35,54 +47,40 @@ function jsonResponse(body: unknown) {
 // Both the Engagement detail read and #486's own /activity read share this
 // one mock, branched by path -- a blanket single response would hand the
 // activity loader the detail body instead of a { items, hasMore } page.
-function mockFetch(detail: unknown, activityItems: unknown[] = []) {
+function mockFetch(body: unknown, activityItems: unknown[] = []) {
 	apiFetchWithSession.mockImplementation((path: string) =>
-		Promise.resolve(jsonResponse(path.includes('/activity') ? { items: activityItems, hasMore: false } : detail))
+		Promise.resolve(jsonResponse(path.includes('/activity') ? { items: activityItems, hasMore: false } : body))
 	);
 }
 
 describe('Client portal Engagement hub', () => {
+	// The happy path: the fixture's own detail already carries a due date
+	// (2027-03-01), so this is the fixture's content unmodified.
 	it("shows the due date under its own label, not 'Created' (#505)", async () => {
-		mockFetch({
-			engagementId: 'engagement-1',
-			practiceName: 'Riverside Doula Collective',
-			clientName: 'Tasha Bell',
-			status: 'active',
-			dueDate: '2027-06-15'
-		});
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 
 		await render(Hub);
 
 		await expect.element(page.getByText('Due date')).toBeVisible();
-		await expect.element(page.getByText('Jun 15, 2027')).toBeVisible();
+		await expect.element(page.getByText('Mar 1, 2027')).toBeVisible();
 		await expect.element(page.getByText('Created')).not.toBeInTheDocument();
 	});
 
 	// ADR-0017: a postpartum-only Engagement has no due date. #505 asks for
 	// nothing to show, not a blank row and not a placeholder -- the row is
 	// left out of the DescriptionList's own items entirely, so there is no
-	// "Due date" label sitting over an empty value.
+	// "Due date" label sitting over an empty value. Not the happy path --
+	// the fixture's own detail has a due date (see the previous test) --
+	// so this is a departure from it, spread rather than restated.
 	it('shows nothing for a null due date -- no blank label, no placeholder', async () => {
-		mockFetch({
-			engagementId: 'engagement-1',
-			practiceName: 'Riverside Doula Collective',
-			clientName: 'Tasha Bell',
-			status: 'active'
-		});
+		mockFetch({ ...detail, dueDate: undefined });
 
 		await render(Hub);
 
-		await expect.element(page.getByText('active')).toBeVisible();
+		await expect.element(page.getByText(detail.status)).toBeVisible();
 		await expect.element(page.getByText(/due date/i)).not.toBeInTheDocument();
 	});
 });
-
-const engagement1Detail = {
-	engagementId: 'engagement-1',
-	practiceName: 'Riverside Doula Collective',
-	clientName: 'Tasha Bell',
-	status: 'active'
-};
 
 // #486 AC5: CONTEXT.md's own vocabulary for this to a Client -- "Everything
 // that has happened" -- behind a closed disclosure, per the design brief's
@@ -100,10 +98,10 @@ describe('the Activity disclosure (#486)', () => {
 	// resolve anything inside it to assert against.
 	it('renders closed under its own heading, with a descriptive toggle', async () => {
 		await page.viewport(1440, 900);
-		mockFetch(engagement1Detail, [
+		mockFetch(detail, [
 			{
 				subjectKind: 'engagement',
-				subjectId: 'engagement-1',
+				subjectId: detail.engagementId,
 				action: 'contract_sent',
 				actorKind: 'staff',
 				// A generic name, not a person's -- portal.ActivityHandler
@@ -141,10 +139,10 @@ describe('the Activity disclosure (#486)', () => {
 	// 320px up") is checked for the ledger's own open-state layout rather
 	// than only asserted in a doc comment.
 	it('is free of horizontal overflow from 320px up once opened (ADR-0024/0025)', async () => {
-		mockFetch(engagement1Detail, [
+		mockFetch(detail, [
 			{
 				subjectKind: 'engagement',
-				subjectId: 'engagement-1',
+				subjectId: detail.engagementId,
 				action: 'contract_sent',
 				actorKind: 'staff',
 				actorName: 'Your practice',
@@ -179,7 +177,7 @@ describe('the Activity disclosure (#486)', () => {
 			Promise.resolve(
 				path.includes('/activity')
 					? ({ ok: false, text: () => Promise.resolve('nope') } as Response)
-					: jsonResponse(engagement1Detail)
+					: jsonResponse(detail)
 			)
 		);
 

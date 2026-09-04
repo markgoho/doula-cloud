@@ -4,10 +4,29 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientMatch } from '#lib/client.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../routeFixture.js';
+import { fixture } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' } }
+/*
+ * The `page` this screen reads comes from the route's own fixture
+ * (#596), the same installation, through the same `toPageState`, as
+ * `route-continuum.svelte.spec.ts`. `vi.mock` is hoisted above every
+ * import, so `pageState` is declared empty and filled once the imports
+ * have run.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
+
+const { practiceId } = fixture.params;
+// The load's own `data.isContractor` -- what `+page.ts` hands the route
+// as a prop, not `page.data` -- so it is not part of `toPageState` and is
+// installed by `setup()` below instead, per test.
+const fixtureData = fixture.props?.data as { isContractor: boolean };
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
@@ -32,7 +51,7 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
-async function setup(isContractor = false) {
+async function setup(isContractor = fixtureData.isContractor) {
 	await render(Page, { data: { isContractor } });
 }
 
@@ -64,7 +83,7 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
 		expect(requestUrl()).toBe(
-			'/api/practices/practice-1/clients/search?name=Ada&dateOfBirth=1815-12-10&email=ada%40example.com&phone=555-0100'
+			`/api/practices/${practiceId}/clients/search?name=Ada&dateOfBirth=1815-12-10&email=ada%40example.com&phone=555-0100`
 		);
 	});
 
@@ -81,7 +100,7 @@ describe('the search that fronts intake (#498)', () => {
 		await expect.element(testPage.getByText('Birth · active')).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: "Open Ada Byron's record" }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/client-2');
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/client-2`);
 		// A client-side result set moves no focus on its own -- the results
 		// heading takes it, so a screen reader announces the count.
 		expect(document.activeElement?.id).toBe('client-search-results');
@@ -97,7 +116,7 @@ describe('the search that fronts intake (#498)', () => {
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'No matches' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/new?name=Nadia%20Haddad');
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?name=Nadia%20Haddad`);
 	});
 
 	/*
@@ -114,7 +133,7 @@ describe('the search that fronts intake (#498)', () => {
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/new?phone=555-0100');
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?phone=555-0100`);
 	});
 
 	it('carries every key that was typed, not only the name', async () => {
@@ -131,7 +150,7 @@ describe('the search that fronts intake (#498)', () => {
 			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
 			.toHaveAttribute(
 				'href',
-				'/practices/practice-1/clients/new?name=Nadia&dateOfBirth=1994-02-11&email=nadia%40example.com&phone=555-0100'
+				`/practices/${practiceId}/clients/new?name=Nadia&dateOfBirth=1994-02-11&email=nadia%40example.com&phone=555-0100`
 			);
 	});
 
@@ -176,7 +195,7 @@ describe("the contractor's Add a Client door (#501, ADR-0017)", () => {
 	it('leaves the search screen (#498) unchanged for an Owner, Admin or employee Doula', async () => {
 		await setup(false);
 
-		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Find a Client' })).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 1, name: fixture.readyText })).toBeVisible();
 		await expect.element(testPage.getByLabelText('Name')).toBeVisible();
 	});
 });

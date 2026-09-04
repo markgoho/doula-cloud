@@ -5,10 +5,24 @@ import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
 import type { ClientMatch } from '#lib/client.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../../routeFixture.js';
+import { detail as baseDetail, fixture } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1', clientId: 'client-1' } }
+/*
+ * The Client this form edits, and the `page` it reads, both come from the
+ * route's own fixture (#596) -- so what this spec asserts on and what the
+ * continuum sweep measures are one description. `vi.mock` is hoisted
+ * above every import, so `pageState` is declared empty and filled from
+ * the fixture once the imports have run. Same installation, through the
+ * same `toPageState`, as `route-continuum.svelte.spec.ts`.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -16,24 +30,8 @@ vi.mock('$app/navigation', () => ({ goto }));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const baseDetail: ClientDetail = {
-	id: 'client-1',
-	givenName: 'Ada',
-	familyName: 'Lovelace',
-	preferredName: 'Ada',
-	email: 'ada@example.com',
-	phone: '555-0100',
-	addressLine1: '1 Analytical Engine Way',
-	addressLine2: '',
-	addressLocality: 'London',
-	addressRegion: 'LDN',
-	addressPostalCode: 'SW1A 1AA',
-	dateOfBirth: '1815-12-10',
-	fieldValues: { pronouns: 'she/her' },
-	resolvedFields: [],
-	engagements: [],
-	history: []
-};
+const { practiceId, clientId } = fixture.params;
+const detailHref = `/practices/${practiceId}/clients/${clientId}`;
 
 const anotherClientMatch: ClientMatch = {
 	id: 'client-2',
@@ -73,16 +71,20 @@ describe('client edit', () => {
 	it('pre-fills the twelve structural columns from her current record', async () => {
 		await setup();
 
-		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('Ada');
-		await expect.element(testPage.getByLabelText('Family name')).toHaveValue('Lovelace');
-		await expect.element(testPage.getByLabelText('Preferred name')).toHaveValue('Ada');
-		await expect.element(testPage.getByLabelText('Email')).toHaveValue('ada@example.com');
-		await expect.element(testPage.getByLabelText('Phone')).toHaveValue('555-0100');
-		await expect.element(testPage.getByLabelText('Address line 1')).toHaveValue('1 Analytical Engine Way');
-		await expect.element(testPage.getByLabelText('Town or city')).toHaveValue('London');
-		await expect.element(testPage.getByLabelText('State')).toHaveValue('LDN');
-		await expect.element(testPage.getByLabelText('Postal code')).toHaveValue('SW1A 1AA');
-		await expect.element(testPage.getByLabelText('Date of birth')).toHaveValue('1815-12-10');
+		await expect.element(testPage.getByLabelText('Given name')).toHaveValue(baseDetail.givenName);
+		await expect.element(testPage.getByLabelText('Family name')).toHaveValue(baseDetail.familyName);
+		// The fixture's Client carries no preferred name (#537's vocabulary
+		// keeps the free-text fields hostile, not every field non-blank), so
+		// this asserts the honest blank rather than a value invented for a
+		// tidier assertion.
+		await expect.element(testPage.getByLabelText('Preferred name')).toHaveValue(baseDetail.preferredName);
+		await expect.element(testPage.getByLabelText('Email')).toHaveValue(baseDetail.email);
+		await expect.element(testPage.getByLabelText('Phone')).toHaveValue(baseDetail.phone);
+		await expect.element(testPage.getByLabelText('Address line 1')).toHaveValue(baseDetail.addressLine1);
+		await expect.element(testPage.getByLabelText('Town or city')).toHaveValue(baseDetail.addressLocality);
+		await expect.element(testPage.getByLabelText('State')).toHaveValue(baseDetail.addressRegion);
+		await expect.element(testPage.getByLabelText('Postal code')).toHaveValue(baseDetail.addressPostalCode);
+		await expect.element(testPage.getByLabelText('Date of birth')).toHaveValue(baseDetail.dateOfBirth);
 	});
 
 	it('shows an error notice when the Client fails to load', async () => {
@@ -131,7 +133,7 @@ describe('client edit', () => {
 
 		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
 		expect(requestBody(2).override).toBe(true);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-1');
+		expect(goto).toHaveBeenCalledWith(detailHref);
 	});
 
 	it('surfaces the endpoint refusal as an error rather than a silent failure', async () => {
@@ -151,7 +153,7 @@ describe('client edit', () => {
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-1');
+		expect(goto).toHaveBeenCalledWith(detailHref);
 	});
 
 	it('shows that a changed email revokes any pending portal invite', async () => {
@@ -174,6 +176,6 @@ describe('client edit', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Cancel' }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/client-1');
+			.toHaveAttribute('href', detailHref);
 	});
 });
