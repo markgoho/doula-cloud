@@ -5,6 +5,9 @@
  * approval-screen fixture's is. Address and history rows carry #537's
  * vocabulary again -- a Client's own address line and a fellow Staff
  * member's name are exactly the free-text shapes this map keeps finding.
+ * `isContractor: false` from `+page.ts`'s own load (#465) keeps "Start
+ * new work with <name>" on screen, same rationale as the Clients list
+ * fixture's own `data`.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
@@ -47,6 +50,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1', clientId: 'client-1' },
 	url: 'https://example.test/practices/practice-1/clients/client-1',
+	props: { data: { isContractor: false } },
 	respond: (path) => {
 		if (path.endsWith('/api/staff/session')) return jsonResponse({ staffId: 'staff-1' });
 		return jsonResponse(detail);

@@ -68,6 +68,10 @@ interface SetupOptions {
 	 * than a refusal, which nothing awaits and so must not escape as an
 	 * unhandled rejection. */
 	sessionThrows?: boolean;
+	/** `+page.ts`'s own load result (#465) -- defaults to a non-contractor
+	 * so existing tests, which render the route directly without going
+	 * through SvelteKit's load cycle, keep seeing "Start new work with". */
+	isContractor?: boolean;
 }
 
 // Two endpoints now share one mocked fetcher (#504's session read joins
@@ -78,7 +82,8 @@ async function setup({
 	overrides = {},
 	sessionStaffId = 'nobody',
 	sessionOk = true,
-	sessionThrows = false
+	sessionThrows = false,
+	isContractor = false
 }: SetupOptions = {}) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
 	// 46rem, and this file's assertions are about the <table> specifically.
@@ -90,7 +95,7 @@ async function setup({
 		}
 		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
 	});
-	return render(Page, {});
+	return render(Page, { data: { isContractor } });
 }
 
 describe('client detail hub', () => {
@@ -103,6 +108,18 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByText(baseDetail.phone)).toBeVisible();
 		await expect.element(testPage.getByText(address)).toBeVisible();
 		await expect.element(testPage.getByText(baseDetail.dateOfBirth)).toBeVisible();
+	});
+
+	it("groups the structural columns per #432's decision: identity, contact, address", async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { level: 2, name: `Who ${fixture.readyText} is` })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: `How to reach ${fixture.readyText}` }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: `Where ${fixture.readyText} lives` }))
+			.toBeVisible();
 	});
 
 	it('shows every active Practice-defined field, blank or not, and labels an archived one held', async () => {
@@ -306,6 +323,16 @@ describe('client detail hub', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`);
+	});
+
+	it('withholds Start new work from a contractor Doula (ADR-0017: she originates nothing)', async () => {
+		await setup({ isContractor: true });
+
+		await expect
+			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
+			.not.toBeInTheDocument();
+		// Edit follows read, not the originate rule -- a contractor keeps it.
+		await expect.element(testPage.getByRole('link', { name: 'Edit' })).toBeVisible();
 	});
 
 	it('shows an error notice when the Client fails to load', async () => {
