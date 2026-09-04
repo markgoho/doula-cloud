@@ -166,6 +166,36 @@ func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 	}
 }
 
+// TestCreateHandler_MutedEngagementReceivesNoClientPush proves #303's own
+// AC: once a Client has durably muted push for this Engagement, a new
+// Staff-authored Message produces no push delivery attempt against her
+// registered subscription -- checked at the send path itself, not only as
+// UI state.
+func TestCreateHandler_MutedEngagementReceivesNoClientPush(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-notifies-muted-client"
+	practiceID := seedPractice(t, db, "Practice")
+	seedStaffAtPractice(t, db, practiceID, identityUID)
+	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/muted-client")
+	seedPortalUser(t, db, "client-muted-portal-account", clientID)
+	seedMutedPushPreference(t, db, "client-muted-portal-account", engagementID)
+
+	pusher := push.NewFakePusher()
+	srv, session := newServerWithPusher(t, db, identityUID, pusher)
+	defer srv.Close()
+
+	body, _ := json.Marshal(message.CreateRequest{Body: "should not push"})
+	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	if calls := pusher.Calls(); len(calls) != 0 {
+		t.Fatalf("Pusher.Send call count = %d, want 0 (muted): %+v", len(calls), calls)
+	}
+}
+
 // TestCreateHandler_DoesNotNotifyStaffSubscriptionsForClientRecipient
 // proves push_subscriptions_for_message_recipient's population filter: a
 // Staff-authored Message must notify only the Client's subscription, even

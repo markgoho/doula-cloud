@@ -47,6 +47,15 @@ export function portalPushSubscriptionsPath(engagementId: string): string {
 }
 
 /**
+ * Where an Engagement's durable push preference lives (#303) -- read with
+ * GET, written with PUT, both behind clientauth.Middleware the same as
+ * portalPushSubscriptionsPath.
+ */
+export function portalNotificationPreferencePath(engagementId: string): string {
+	return `/api/portal/engagements/${engagementId}/notification-preference`;
+}
+
+/**
  * Registers this device's push subscription with subscribeURL, via the
  * already-registered service worker's PushManager -- "once per device
  * after login" per #61's AC; safe to call on every landing-page mount
@@ -89,6 +98,43 @@ export async function registerPushSubscription(subscribeURL: string, fetcher: Fe
 	}
 }
 /* v8 ignore stop */
+
+/**
+ * Consults preferenceURL before ever registering for push (#303 AC1/AC4):
+ * a Client who has never turned notifications on, or who has turned them
+ * off, must never see the browser's permission prompt fire on a mere page
+ * load -- only the notification-settings screen's own explicit action does
+ * that. `register` is registerPushSubscription by default, injected so
+ * this gate is provable without the Service Worker/PushManager browser
+ * APIs that function itself needs (the same injection shape
+ * signOutOfSession's `unregisterPush` parameter already uses).
+ *
+ * A failed or malformed preference read is treated the same as
+ * "disabled": this call sits on every authenticated portal mount, and a
+ * transient failure here must never turn into a silent, unexplained
+ * permission prompt.
+ */
+export async function registerPushSubscriptionIfEnabled(
+	preferenceURL: string,
+	subscribeURL: string,
+	fetcher: Fetcher,
+	register: (subscribeURL: string, fetcher: Fetcher) => Promise<void> = registerPushSubscription
+): Promise<void> {
+	let isEnabled = false;
+	try {
+		const response = await fetcher(preferenceURL);
+		if (response.ok) {
+			const data: unknown = await response.json();
+			isEnabled = typeof data === 'object' && data !== null && (data as { enabled?: unknown }).enabled === true;
+		}
+	} catch {
+		// Treated as disabled -- see the doc comment above.
+	}
+
+	if (isEnabled) {
+		await register(subscribeURL, fetcher);
+	}
+}
 
 /**
  * Takes this device off push for unsubscribeURL's owner, by deleting the

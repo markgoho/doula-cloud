@@ -441,6 +441,14 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 			archetype: 'D',
 			url: `/portal/engagements/${engagementId}/messages`,
 			h1: 'Messages'
+		},
+		// #303: the notification-preference settings screen, a FormPage
+		// (archetype G) like Birth Plan and Contract above.
+		{
+			key: 'portal/engagements/[engagementId]/notifications',
+			archetype: 'G',
+			url: `/portal/engagements/${engagementId}/notifications`,
+			h1: 'Notifications'
 		}
 	];
 

@@ -128,3 +128,19 @@ func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpo
 	}
 	return id
 }
+
+// seedMutedPushPreference inserts a notification_preferences row muting
+// push for identityUID/engagementID, using the superuser Admin connection
+// -- #303's own filter inside push_subscriptions_for_message_recipient
+// (00067_notification_preferences.sql).
+func seedMutedPushPreference(t *testing.T, db *testdb.DB, identityUID, engagementID string) {
+	t.Helper()
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO notification_preferences (identity_uid, engagement_id, channel, muted)
+		 VALUES ($1, $2, 'push', true)`,
+		identityUID, engagementID,
+	); err != nil {
+		t.Fatalf("seed muted notification_preferences: %v", err)
+	}
+}

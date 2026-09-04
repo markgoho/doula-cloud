@@ -32,13 +32,16 @@ vi.mock('#lib/api.js', () => ({ apiFetch, apiBaseURL }));
 
 // Push registration moved up here from the hub page, so a Client who lands
 // straight on her Contract is registered too. Mocked rather than exercised:
-// it is fire-and-forget by design (#61).
-const registerPushSubscription = vi.hoisted(() => vi.fn());
+// it is fire-and-forget by design (#61), and #303 gates it on the stored
+// preference through registerPushSubscriptionIfEnabled.
+const registerPushSubscriptionIfEnabled = vi.hoisted(() => vi.fn());
 vi.mock('#lib/pushRegistration.js', () => ({
-	registerPushSubscription,
+	registerPushSubscriptionIfEnabled,
 	unregisterPushSubscription: vi.fn(),
 	portalPushSubscriptionsPath: (engagementId: string) =>
-		`/api/portal/engagements/${engagementId}/push-subscriptions`
+		`/api/portal/engagements/${engagementId}/push-subscriptions`,
+	portalNotificationPreferencePath: (engagementId: string) =>
+		`/api/portal/engagements/${engagementId}/notification-preference`
 }));
 
 interface SetupOptions {
@@ -63,7 +66,7 @@ async function setup({
 		: { practiceName: 'Riverside Doula Collective', clientName: 'Tasha Bell' };
 	goto.mockReset();
 	invalidateAll.mockReset();
-	registerPushSubscription.mockReset();
+	registerPushSubscriptionIfEnabled.mockReset();
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
 	await render(Layout, {
@@ -103,16 +106,17 @@ describe('Client portal authenticated layout', () => {
 	 * inside the hub, and a nav item pointing at a section of another page
 	 * is a nav item that lies about where it goes.
 	 */
-	it.each(['Your care', 'Messages', 'Birth plan', 'Contract'])('offers %s', async (label) => {
+	it.each(['Your care', 'Messages', 'Birth plan', 'Contract', 'Notifications'])('offers %s', async (label) => {
 		await setup();
 
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeVisible();
 	});
 
-	it('registers for push once, wherever the Client happens to land', async () => {
+	it('consults the stored push preference once, wherever the Client happens to land', async () => {
 		await setup({ pathname: '/portal/engagements/engagement-1/contract' });
 
-		expect(registerPushSubscription).toHaveBeenCalledWith(
+		expect(registerPushSubscriptionIfEnabled).toHaveBeenCalledWith(
+			'/api/portal/engagements/engagement-1/notification-preference',
 			'/api/portal/engagements/engagement-1/push-subscriptions',
 			expect.any(Function)
 		);

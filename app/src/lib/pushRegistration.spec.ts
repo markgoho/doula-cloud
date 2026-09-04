@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+	portalNotificationPreferencePath,
 	portalPushSubscriptionsPath,
 	practicePushSubscriptionsPath,
+	registerPushSubscriptionIfEnabled,
 	urlBase64ToUint8Array,
 	vapidPublicKey
 } from './pushRegistration.js';
@@ -39,5 +41,51 @@ describe('push-subscriptions paths', () => {
 		expect(portalPushSubscriptionsPath('engagement-1')).toBe(
 			'/api/portal/engagements/engagement-1/push-subscriptions'
 		);
+	});
+
+	it('scopes the notification-preference endpoint by Engagement', () => {
+		expect(portalNotificationPreferencePath('engagement-1')).toBe(
+			'/api/portal/engagements/engagement-1/notification-preference'
+		);
+	});
+});
+
+describe('registerPushSubscriptionIfEnabled', () => {
+	it('does not register when the stored preference is off', async () => {
+		const register = vi.fn();
+		const fetcher = vi.fn(async () => Response.json({ enabled: false }));
+
+		await registerPushSubscriptionIfEnabled('/preference', '/subscribe', fetcher, register);
+
+		expect(register).not.toHaveBeenCalled();
+	});
+
+	it('registers when the stored preference is on', async () => {
+		const register = vi.fn();
+		const fetcher = vi.fn(async () => Response.json({ enabled: true }));
+
+		await registerPushSubscriptionIfEnabled('/preference', '/subscribe', fetcher, register);
+
+		expect(register).toHaveBeenCalledWith('/subscribe', fetcher);
+	});
+
+	it('treats a failed preference read as off, never registering', async () => {
+		const register = vi.fn();
+		const fetcher = vi.fn(async () => {
+			throw new Error('network down');
+		});
+
+		await registerPushSubscriptionIfEnabled('/preference', '/subscribe', fetcher, register);
+
+		expect(register).not.toHaveBeenCalled();
+	});
+
+	it('treats a non-OK response as off, never registering', async () => {
+		const register = vi.fn();
+		const fetcher = vi.fn(async () => new Response('', { status: 401 }));
+
+		await registerPushSubscriptionIfEnabled('/preference', '/subscribe', fetcher, register);
+
+		expect(register).not.toHaveBeenCalled();
 	});
 });
