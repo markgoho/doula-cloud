@@ -3,18 +3,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../routeFixture.js';
+import { fixture } from './page.fixture.js';
 
-/* The screen reads the `connect` query parameter Stripe redirects back
-   with, so the mocked URL has to be settable per test rather than fixed
-   at module scope. */
-const mockPage = vi.hoisted(() => ({
-	params: { practiceId: 'practice-1' },
-	url: new URL('https://test.local/practices/practice-1/settings/payments')
+/*
+ * The `page` this route reads comes from its own fixture (#596), so the
+ * params installed here and the params the continuum sweep installs are
+ * one description. The screen also reads the `connect` query parameter
+ * Stripe redirects back with, so `url` has to stay settable per test
+ * rather than fixed at module scope -- `pageState.url` is reassigned
+ * outright, same as the old `mockPage.url` was, rather than mutated
+ * through `searchParams` the way clients-list.svelte.spec.ts does it.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
-vi.mock('$app/state', () => ({ page: mockPage }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 function returnedFromStripe(parameter: 'return' | 'refresh') {
-	mockPage.url = new URL(`https://test.local/practices/practice-1/settings/payments?connect=${parameter}`);
+	pageState.url = new URL(`${fixture.url}?connect=${parameter}`);
 }
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
@@ -82,7 +92,7 @@ function mockApi({
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
-	mockPage.url = new URL('https://test.local/practices/practice-1/settings/payments');
+	pageState.url = new URL(fixture.url);
 });
 
 describe('payments settings screen', () => {

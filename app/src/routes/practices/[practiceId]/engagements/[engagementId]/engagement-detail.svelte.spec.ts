@@ -10,11 +10,24 @@ import Page from './+page.svelte';
 // clients-list.svelte.spec.ts's own reason for the same line). #486's own
 // DataTable assertions below need the real table-view/record-view switch.
 import '#lib/styles/app.css';
+import { toPageState } from '../../../../routeFixture.js';
+import { detail as fixtureDetail, fixture } from './page.fixture.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1', engagementId: 'engagement-1' } }
+/*
+ * The `page` this route reads comes from its own fixture (#596), so the
+ * params this spec installs and the params the continuum sweep installs
+ * are one description. `vi.mock` is hoisted above every import, so the
+ * object is declared empty here and filled from the fixture once the
+ * imports have run.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -53,12 +66,12 @@ async function setup(detail: Detail, activityResponse?: Response) {
 	} else {
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 	}
-	// `params` rides along because PageProps carries it; the page itself
-	// reads `page.params`, which the $app/state mock above supplies.
-	await render(Page, {
-		data: detail,
-		params: { practiceId: 'practice-1', engagementId: 'engagement-1' }
-	});
+	// No `params` prop: the page reads `page.params`, which the $app/state
+	// `params` rides along because PageProps requires it; the page itself
+	// reads `page.params`, which the $app/state mock above supplies. Both
+	// come from the fixture, so the two cannot disagree about which
+	// Engagement this is (#596).
+	await render(Page, { data: detail, params: fixture.params });
 }
 
 describe('Staff Engagement detail summary', () => {
@@ -67,44 +80,26 @@ describe('Staff Engagement detail summary', () => {
 	});
 
 	it('shows the due date under its own label, alongside Created (#538)', async () => {
-		await setup({
-			engagementId: 'engagement-1',
-			clientId: 'client-1',
-			clientName: 'Tasha Bell',
-			status: 'active',
-			createdAt: '2027-05-01T00:00:00Z',
-			dueDate: '2027-06-15'
-		});
+		// The fixture's own Engagement (#596) already carries a due date.
+		await setup(fixtureDetail);
 
 		await expect.element(testPage.getByText('Due date')).toBeVisible();
-		await expect.element(testPage.getByText('Jun 15, 2027')).toBeVisible();
+		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
 		await expect.element(testPage.getByText('Created')).toBeVisible();
 	});
 
 	// ADR-0017: a postpartum-only Engagement has no due date. #538 asks for
 	// nothing to show, not a blank row and not a placeholder -- the row is
-	// left out of the DescriptionList's own items entirely.
+	// left out of the DescriptionList's own items entirely. The fixture's
+	// Engagement always carries a due date, so a Detail with none is this
+	// test's own -- the fixture has no way to hold the absence (#596).
 	it('shows nothing for a null due date -- no blank label, no placeholder', async () => {
-		await setup({
-			engagementId: 'engagement-1',
-			clientId: 'client-1',
-			clientName: 'Tasha Bell',
-			status: 'active',
-			createdAt: '2027-05-01T00:00:00Z'
-		});
+		await setup({ ...fixtureDetail, dueDate: undefined });
 
 		await expect.element(testPage.getByText('active')).toBeVisible();
 		await expect.element(testPage.getByText(/due date/i)).not.toBeInTheDocument();
 	});
 });
-
-const engagement1Detail: Detail = {
-	engagementId: 'engagement-1',
-	clientId: 'client-1',
-	clientName: 'Tasha Bell',
-	status: 'active',
-	createdAt: '2027-05-01T00:00:00Z'
-};
 
 // #486 AC4: the same ledger treatment reused on the staff Engagement page,
 // through the record-scoped read engagement.ListActivityHandler already
@@ -116,12 +111,12 @@ describe('the Activity ledger section (#486)', () => {
 
 	it('renders the ledger under an Activity heading, low on the page', async () => {
 		await setup(
-			engagement1Detail,
+			fixtureDetail,
 			jsonResponse({
 				items: [
 					{
 						subjectKind: 'engagement',
-						subjectId: 'engagement-1',
+						subjectId: fixtureDetail.engagementId,
 						action: 'visit_logged',
 						actorKind: 'staff',
 						actorName: 'Maya Torres',
@@ -138,13 +133,13 @@ describe('the Activity ledger section (#486)', () => {
 	});
 
 	it('shows the empty-ledger message when the Engagement has no activity yet', async () => {
-		await setup(engagement1Detail, jsonResponse({ items: [], hasMore: false }));
+		await setup(fixtureDetail, jsonResponse({ items: [], hasMore: false }));
 
 		await expect.element(testPage.getByRole('cell', { name: 'Nothing has happened yet.' })).toBeVisible();
 	});
 
 	it('says so when the ledger cannot be read', async () => {
-		await setup(engagement1Detail, jsonResponse('nope', 403));
+		await setup(fixtureDetail, jsonResponse('nope', 403));
 
 		await expect.element(testPage.getByText('nope')).toBeVisible();
 	});

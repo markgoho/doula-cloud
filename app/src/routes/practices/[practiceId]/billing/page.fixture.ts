@@ -12,9 +12,10 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Balance } from '#lib/billing.js';
 import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
-const data: Balance = {
+export const data: Balance = {
 	balance: 42,
 	ledger: {
 		items: [
@@ -26,7 +27,7 @@ const data: Balance = {
 	}
 };
 
-export const fixture: RouteFixture = {
+export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide Billing screen',
 	component: Page,
 	params: { practiceId: 'practice-1' },

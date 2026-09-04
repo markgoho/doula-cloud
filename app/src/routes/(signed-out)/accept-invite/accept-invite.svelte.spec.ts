@@ -4,14 +4,40 @@ import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../routeFixture.js';
+import { fixture } from './page.fixture.js';
 
-// Mutable rather than a fixed literal: the screen refuses outright when
-// the URL carries no invite token, and that branch needs a test that can
-// take the token away.
+/*
+ * The `page` this screen reads comes from the route's own fixture (#596),
+ * through the same `toPageState` the continuum sweep installs. `vi.mock`
+ * is hoisted above every import, so the object is declared empty here and
+ * filled once the imports have run.
+ *
+ * `pageState.url` stays mutable after that: the screen refuses outright
+ * when the URL carries no invite token, and that branch -- plus every
+ * other test -- needs to pick its own token without a second, drifting
+ * URL literal. `urlWithToken` builds every one of those from the
+ * fixture's own URL rather than a fresh one.
+ */
 const pageState = vi.hoisted(() => ({
-	url: new URL('https://test.local/accept-invite?token=invite-1')
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
+
+// The token the fixture's own URL carries -- reused so a test that
+// asserts the outgoing request body names the same token the mocked page
+// was given, not a second value invented here.
+const inviteToken = new URL(fixture.url).searchParams.get('token') ?? '';
+
+function urlWithToken(token: string): URL {
+	const url = new URL(fixture.url);
+	if (token === '') url.search = '';
+	else url.searchParams.set('token', token);
+	return url;
+}
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -87,16 +113,14 @@ const globalFetch = vi.fn();
 vi.stubGlobal('fetch', globalFetch);
 
 async function setup({
-	token = 'invite-1',
+	token = inviteToken,
 	probe = refusal(404, 'no matching staff account'),
 	exchangeOk = true,
 	accept = jsonResponse({}),
 	afterAccept = jsonResponse(landing),
 	signInThrows = false
 }: SetupOptions = {}) {
-	pageState.url = new URL(
-		token === '' ? 'https://test.local/accept-invite' : `https://test.local/accept-invite?token=${token}`
-	);
+	pageState.url = urlWithToken(token);
 
 	const credential = { user: { getIdToken: () => Promise.resolve('id-token') } };
 	if (signInThrows) {
@@ -311,7 +335,7 @@ describe('step two -- a person who is new here', () => {
 		expect(globalFetch).toHaveBeenCalledWith('/api/staff/accept-invite', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
-			body: JSON.stringify({ inviteToken: 'invite-1', name: 'Priya Sharma', workState: 'NJ' })
+			body: JSON.stringify({ inviteToken, name: 'Priya Sharma', workState: 'NJ' })
 		});
 	});
 });
@@ -371,7 +395,7 @@ describe('step two -- a person who is Staff somewhere already', () => {
 		expect(globalFetch).toHaveBeenCalledWith(
 			'/api/staff/accept-invite',
 			expect.objectContaining({
-				body: JSON.stringify({ inviteToken: 'invite-1', name: '', workState: '' })
+				body: JSON.stringify({ inviteToken, name: '', workState: '' })
 			})
 		);
 	});

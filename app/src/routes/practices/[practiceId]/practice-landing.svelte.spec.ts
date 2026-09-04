@@ -9,6 +9,8 @@ import Page from './+page.svelte';
 // the very thing ADR-0020 asks it to do. The real app loads these in the
 // root layout.
 import '#lib/styles/app.css';
+import { toApiResponder, toPageState } from '../../routeFixture.js';
+import { fixture, offers, practiceName } from './page.fixture.js';
 
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
 // only place that calls this in the real app -- without it every layout
@@ -16,7 +18,28 @@ import '#lib/styles/app.css';
 // inert, matching clients-list.svelte.spec.ts's own reason for the same line.
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-vi.mock('$app/state', () => ({ page: { params: { practiceId: 'practice-1' } } }));
+/*
+ * The `page` this route reads comes from its own fixture (#596), so what
+ * this spec renders and what the continuum sweep measures are one
+ * description. `vi.mock` is hoisted above every import, so `pageState` is
+ * declared empty and filled from the fixture once the imports have run --
+ * the route reads `page.params.practiceId` inside its own functions
+ * rather than at module scope, so the later write is seen. Same
+ * installation, through the same `toPageState`, as
+ * `route-continuum.svelte.spec.ts`. The fixture's own `respond` only
+ * answers what a Doula role ever fetches (session/offers/clients/
+ * awaiting-reply/activity/push-subscriptions) -- most of this file's own
+ * tests default to `roles: ['owner']`, which reaches `staff`/`billing`/
+ * `payments/connect`/`engagement-requests` the fixture holds no content
+ * for, so `setup()`'s own answers stay this spec's for those cases (#596).
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
+}));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetch = vi.hoisted(() => vi.fn());
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
@@ -39,17 +62,7 @@ function refusal(body: string): Response {
 	return jsonResponse(body, 403);
 }
 
-const offer = {
-	offerId: 'offer-1',
-	state: 'offered',
-	clientFirstInitial: 'T',
-	clientArea: 'Rochester',
-	dueDate: '2027-03-04',
-	amountCents: 45_000,
-	employmentType: 'contractor',
-	offeredAt: '2026-08-01T00:00:00Z',
-	expiresAt: '2026-08-08T00:00:00Z'
-};
+const { practiceId } = fixture.params;
 
 interface SetupOptions {
 	roles?: string[];
@@ -59,8 +72,12 @@ interface SetupOptions {
 
 async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overrides = {} }: SetupOptions = {}) {
 	const answers: Record<string, Response> = {
-		session: jsonResponse({ practiceName: 'Riverside Doula Collective', roles }),
-		offers: jsonResponse({ items: [offer, { offerId: 'offer-2', state: 'declined' }] }),
+		session: jsonResponse({ practiceName, roles }),
+		// The declined Offer has no counterpart in the fixture, which
+		// answers `/offers` with only the still-open one -- so it is
+		// written as a spread onto that same Offer rather than a second
+		// object restating its fields (#596).
+		offers: jsonResponse({ items: [...offers, { ...offers[0], offerId: 'offer-2', state: 'declined' }] }),
 		clients: jsonResponse({ items: clients, hasMore: false }),
 		staff: jsonResponse({
 			members: [{ staffId: 's1' }, { staffId: 's2' }],
@@ -128,7 +145,7 @@ describe('the Practice landing page', () => {
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Priya' }))
-			.toHaveAttribute('href', '/practices/practice-1/engagements/engagement-9');
+			.toHaveAttribute('href', `/practices/${practiceId}/engagements/engagement-9`);
 	});
 
 	it('tells a doula nobody is waiting on a reply, rather than drawing an empty block', async () => {
@@ -170,7 +187,7 @@ describe('the Practice landing page', () => {
 		await expect.element(testPage.getByText('2 waiting')).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Review requests' }))
-			.toHaveAttribute('href', '/practices/practice-1/engagement-requests');
+			.toHaveAttribute('href', `/practices/${practiceId}/engagement-requests`);
 	});
 
 	it('reads a full page of waiting Requests as a floor, not an exact count', async () => {
@@ -203,7 +220,11 @@ describe('the Practice landing page', () => {
 	});
 
 	it('shows a Doula her Offers and no rail at all', async () => {
-		await setup({ roles: ['doula'] });
+		// A Doula is exactly the fixture's own happy path (see the comment
+		// above `pageState`), so this is the one test in the file that reads
+		// its content straight from the fixture instead of `setup()`'s own.
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+		await render(Page, {});
 
 		await expect.element(testPage.getByRole('button', { name: 'Accept' })).toBeVisible();
 		expect(testPage.getByRole('heading', { name: 'Your people' }).elements()).toHaveLength(0);
@@ -294,7 +315,7 @@ describe('the Practice landing page', () => {
 
 		await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
 		expect(registerPushSubscription).toHaveBeenCalledWith(
-			'/api/practices/practice-1/push-subscriptions',
+			`/api/practices/${practiceId}/push-subscriptions`,
 			apiFetch
 		);
 	});

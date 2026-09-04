@@ -1,7 +1,10 @@
 import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
+import { toApiResponder } from '../../routeFixture.js';
+import { fixture, session } from './page.fixture.js';
 
 // #283: on load, this screen probes for a live Staff session of its own
 // and, if one exists, sends the visitor on exactly the way a fresh
@@ -18,53 +21,72 @@ vi.mock('firebase/auth', () => ({
 }));
 vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({}) }));
 
-const probeSession = vi.hoisted(() => vi.fn());
+/*
+ * This screen calls `probeSession` directly rather than
+ * `apiFetchWithSession` (#lib/api.js's own doc comment on why), so the
+ * mock is one level lower, on `apiFetch`, with `probeSession` mirrored
+ * here to close over it -- the same mirroring `route-continuum.svelte.
+ * spec.ts` does for this route. That is what lets `toApiResponder(fixture)`
+ * answer this route's fetch the same way it answers every other route's.
+ */
+const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiBaseURL: () => '',
 	apiFetchWithSession: vi.fn(),
-	probeSession
+	probeSession: async <Session,>(path: string): Promise<Session | undefined> => {
+		try {
+			const response = await apiFetch(path);
+			if (!response.ok) return undefined;
+			return (await response.json()) as Session;
+		} catch {
+			return undefined;
+		}
+	}
 }));
 
 beforeEach(() => {
 	goto.mockReset();
-	probeSession.mockReset();
+	apiFetch.mockReset();
 });
 
 afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
+const [firstMembership, secondMembership] = session.memberships;
+
 describe('Staff login -- on-load session probe (#283)', () => {
 	it('redirects a signed-in visitor to her only Practice, without showing the form', async () => {
-		probeSession.mockResolvedValue({
-			memberships: [{ practiceId: 'practice-1', practiceName: 'Riverside Doulas', roles: ['owner'] }],
-			lastPracticeId: undefined
-		});
+		// One Membership rather than the fixture's two, so this is a
+		// departure from it -- written as a spread rather than a fresh
+		// object that re-states the Membership fields it shares.
+		apiFetch.mockResolvedValue(jsonResponse({ ...session, memberships: [firstMembership] }));
 
 		await render(Page, {});
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1'));
-		expect(probeSession).toHaveBeenCalledWith('/api/staff/session');
+		await vi.waitFor(() =>
+			expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`)
+		);
+		expect(apiFetch).toHaveBeenCalledWith('/api/staff/session');
 	});
 
 	it('shows the Practice picker for a signed-in visitor with several memberships and no last-used one', async () => {
-		probeSession.mockResolvedValue({
-			memberships: [
-				{ practiceId: 'practice-1', practiceName: 'Riverside Doulas', roles: ['owner'] },
-				{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'] }
-			],
-			lastPracticeId: undefined
-		});
+		// The fixture's own session already has two Memberships and no
+		// last-used one -- it is this test's happy path, not a reason to
+		// invent a second one.
+		apiFetch.mockImplementation(toApiResponder(fixture));
 
 		await render(Page, {});
 
 		await expect.element(testPage.getByRole('heading', { name: 'Choose a Practice' })).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Hilltop Doulas' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: secondMembership.practiceName }))
+			.toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
 	});
 
 	it('renders the ordinary login form for a signed-out visitor, with no session-ended messaging', async () => {
-		probeSession.mockResolvedValue(undefined);
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 
 		await render(Page, {});
 
@@ -77,7 +99,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		// probeSession itself swallows a thrown fetch and every non-OK
 		// response (see its own tests in api.spec.ts); from this screen's
 		// side, that failure is indistinguishable from "not signed in".
-		probeSession.mockResolvedValue(undefined);
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 
 		await render(Page, {});
 
@@ -85,11 +107,11 @@ describe('Staff login -- on-load session probe (#283)', () => {
 	});
 
 	it('never probes the Client-portal session', async () => {
-		probeSession.mockResolvedValue(undefined);
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 
 		await render(Page, {});
 
-		await vi.waitFor(() => expect(probeSession).toHaveBeenCalledTimes(1));
-		expect(probeSession).not.toHaveBeenCalledWith('/api/portal/session');
+		await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+		expect(apiFetch).not.toHaveBeenCalledWith('/api/portal/session');
 	});
 });

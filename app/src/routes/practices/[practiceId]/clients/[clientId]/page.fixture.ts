@@ -14,7 +14,7 @@ import type { ClientDetail } from '#lib/clientDetail.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const detail: ClientDetail = {
+export const detail: ClientDetail = {
 	id: 'client-1',
 	givenName: 'Persephone',
 	familyName: 'Ochieng-Whitfield',

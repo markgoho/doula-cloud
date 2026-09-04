@@ -12,12 +12,27 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
+import { toPageState } from '../../../routeFixture.js';
+import { data, fixture } from './page.fixture.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1' }, url: new URL('https://example.test/billing') }
+/*
+ * The `page` this route reads comes from its own fixture (#596), so what
+ * this spec renders and what the continuum sweep measures are one
+ * description. `vi.mock` is hoisted above every import, so `pageState` is
+ * declared empty and filled from the fixture once the imports have run --
+ * the route reads `page.url` inside a `$derived`, not at module scope, so
+ * the later write is seen. Same installation, through the same
+ * `toPageState`, as `route-continuum.svelte.spec.ts`.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 // apiErrorMessage is the real one's behavior for a plain-text body, which
@@ -28,29 +43,30 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
-const data: Balance = {
-	balance: 19,
-	ledger: {
-		items: [{ origin: 'purchase', quantity: 20, createdAt: '2026-08-01T00:00:00Z' }],
-		hasMore: false
-	}
-};
-
+// None of this file's tests are about what an owner alone sees, so the
+// session read stays this spec's own -- the fixture's own `respond`
+// answers `/session` with `roles: ['owner']`, a variant these tests don't
+// need and must not invent by widening the fixture (#596).
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	apiFetchWithSession.mockResolvedValue(jsonResponse({ roles: [] }));
 	sessionStorage.clear();
 });
 
+const { practiceId } = fixture.params;
+// request-1 names no Request this fixture describes -- the approval
+// screen's own return path is a plain string this route only echoes back.
+const approvalReturnPath = `/practices/${practiceId}/engagement-requests/request-1`;
+
 describe('the way back to an approval an empty balance interrupted (#502)', () => {
 	it('offers the remembered approval screen', async () => {
-		sessionStorage.setItem('engagement-request-approval-return', '/practices/practice-1/engagement-requests/request-1');
+		sessionStorage.setItem('engagement-request-approval-return', approvalReturnPath);
 
-		await render(Page, { params: { practiceId: 'practice-1' }, data });
+		await render(Page, { params: fixture.params, data });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
-			.toHaveAttribute('href', '/practices/practice-1/engagement-requests/request-1');
+			.toHaveAttribute('href', approvalReturnPath);
 	});
 
 	it('offers nothing when storage itself is unreachable, rather than failing the page', async () => {
@@ -58,7 +74,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 			throw new Error('site data blocked');
 		});
 
-		await render(Page, { params: { practiceId: 'practice-1' }, data });
+		await render(Page, { params: fixture.params, data });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -67,7 +83,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 	});
 
 	it('offers nothing to somebody who came here on her own', async () => {
-		await render(Page, { params: { practiceId: 'practice-1' }, data });
+		await render(Page, { params: fixture.params, data });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -80,7 +96,7 @@ describe('billing ledger', () => {
 		// DataTable's own content floor (#508) stacks it into a <dl> below
 		// 46rem, and this checks the <table> cells specifically.
 		await testPage.viewport(1440, 900);
-		await render(Page, { params: { practiceId: 'practice-1' }, data });
+		await render(Page, { params: fixture.params, data });
 
 		const header = testPage.getByRole('columnheader', { name: 'Quantity' });
 		const cell = testPage.getByRole('cell', { name: '+20' });
@@ -97,7 +113,7 @@ describe('billing ledger', () => {
 			...data,
 			ledger: { ...data.ledger, hasMore: true, nextCursor: 'cursor-1' }
 		};
-		await render(Page, { params: { practiceId: 'practice-1' }, data: pagedData });
+		await render(Page, { params: fixture.params, data: pagedData });
 		await expect.element(testPage.getByRole('cell', { name: '+20' })).toBeVisible();
 
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse('the practice is gone', 403));

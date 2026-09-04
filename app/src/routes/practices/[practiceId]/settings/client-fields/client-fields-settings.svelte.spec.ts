@@ -4,13 +4,23 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Field } from '#lib/clientFieldTemplate.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../routeFixture.js';
+import { fixture, template } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: {
-		params: { practiceId: 'practice-1' },
-		url: new URL('https://test.local/practices/practice-1/settings/client-fields')
-	}
+/*
+ * The Template this screen edits, and the `page` it reads, both come from
+ * the route's own fixture (#596) -- so the screen this spec asserts on
+ * and the screen the continuum sweep measures are one description.
+ * `vi.mock` is hoisted above every import, so `pageState` is declared
+ * empty and filled from the fixture once the imports have run.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -18,9 +28,8 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
-const defaultFields: Field[] = [
-	{ id: 'a', type: 'short_text', label: 'Intake note', order: 0, archived: false }
-];
+const defaultFields: Field[] = template.fields;
+const [firstField] = defaultFields;
 
 interface MockOptions {
 	fields?: Field[];
@@ -52,7 +61,7 @@ describe('client fields settings screen', () => {
 		mockApi({ roles: ['owner'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByLabelText('Field label')).toHaveValue('Intake note');
+		await expect.element(testPage.getByLabelText('Field label')).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
@@ -60,7 +69,7 @@ describe('client fields settings screen', () => {
 		mockApi({ roles: ['admin'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByLabelText('Field label')).toHaveValue('Intake note');
+		await expect.element(testPage.getByLabelText('Field label')).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
@@ -68,7 +77,7 @@ describe('client fields settings screen', () => {
 		mockApi({ roles: ['doula'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Intake note')).toBeVisible();
+		await expect.element(testPage.getByText(firstField.label)).toBeVisible();
 		await expect.element(testPage.getByLabelText('Field label')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		await expect

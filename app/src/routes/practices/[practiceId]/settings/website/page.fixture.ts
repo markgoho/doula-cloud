@@ -12,7 +12,7 @@ import type { PracticeWebsite } from '#lib/website.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const website: PracticeWebsite = {
+export const website: PracticeWebsite = {
 	mode: 'hosted',
 	ownUrl: '',
 	serviceDescription: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',

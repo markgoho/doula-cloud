@@ -12,7 +12,7 @@ import type { SessionInfo } from '#lib/landing.js';
 import type { RouteFixture } from '../routeFixture.js';
 import Page from './+page.svelte';
 
-const session: SessionInfo = {
+export const session: SessionInfo = {
 	memberships: [{ practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles: ['owner'] }],
 	lastPracticeId: 'practice-1',
 	staffId: 'staff-1',

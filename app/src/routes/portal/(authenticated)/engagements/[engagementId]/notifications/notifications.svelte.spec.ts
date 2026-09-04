@@ -2,13 +2,26 @@ import { page } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
+import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
+import { fixture } from './page.fixture.js';
 
-// The route reads page.params.engagementId to build both URLs it calls.
+/*
+ * The `page` this route reads comes from its own fixture (#596), so what
+ * this spec renders and what the continuum sweep measures are one
+ * description. `vi.mock` is hoisted above every import, so `pageState` is
+ * declared empty and filled from the fixture once the imports have run --
+ * the route reads `page.params.engagementId` inside its own functions
+ * rather than at module scope, so the later write is seen. Same
+ * installation, through the same `toPageState`, as
+ * `route-continuum.svelte.spec.ts`.
+ */
 const pageState = vi.hoisted(() => ({
-	params: { engagementId: 'engagement-1' },
-	data: { practiceName: 'Riverside Doula Collective' }
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
@@ -51,6 +64,8 @@ function mockApi({ loadResponse = jsonResponse({ enabled: false }), putResponse 
 
 const toggleButton = (label: string) => page.getByRole('button', { name: label });
 
+const { engagementId } = fixture.params;
+
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	registerPushSubscription.mockClear();
@@ -59,7 +74,9 @@ beforeEach(() => {
 
 describe('the Client portal Notifications settings screen', () => {
 	it('explains what a notification is and is not, before any action', async () => {
-		mockApi();
+		// This screen's happy path (GET only, no toggle clicked) is exactly
+		// the fixture's own response.
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 		await render(Page, {});
 
 		await expect
@@ -69,7 +86,7 @@ describe('the Client portal Notifications settings screen', () => {
 	});
 
 	it('reports notifications as off when the Client has never decided', async () => {
-		mockApi({ loadResponse: jsonResponse({ enabled: false }) });
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 		await render(Page, {});
 
 		await expect.element(page.getByText('Notifications are currently off.')).toBeVisible();
@@ -95,13 +112,13 @@ describe('the Client portal Notifications settings screen', () => {
 
 		await toggleButton('Turn on notifications').click();
 
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/engagements/engagement-1/notification-preference', {
+		expect(apiFetchWithSession).toHaveBeenCalledWith(`/api/portal/engagements/${engagementId}/notification-preference`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ enabled: true })
 		});
 		expect(registerPushSubscription).toHaveBeenCalledWith(
-			'/api/portal/engagements/engagement-1/push-subscriptions',
+			`/api/portal/engagements/${engagementId}/push-subscriptions`,
 			apiFetchWithSession
 		);
 		expect(unregisterPushSubscription).not.toHaveBeenCalled();
@@ -119,13 +136,13 @@ describe('the Client portal Notifications settings screen', () => {
 
 		await toggleButton('Turn off notifications').click();
 
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/engagements/engagement-1/notification-preference', {
+		expect(apiFetchWithSession).toHaveBeenCalledWith(`/api/portal/engagements/${engagementId}/notification-preference`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ enabled: false })
 		});
 		expect(unregisterPushSubscription).toHaveBeenCalledWith(
-			'/api/portal/engagements/engagement-1/push-subscriptions',
+			`/api/portal/engagements/${engagementId}/push-subscriptions`,
 			apiFetchWithSession
 		);
 		expect(registerPushSubscription).not.toHaveBeenCalled();

@@ -4,10 +4,26 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ApprovalDetail } from '#lib/engagementRequest.js';
 import Page from './+page.svelte';
+import { toPageState } from '../../../../routeFixture.js';
+import { detail as baseDetail, fixture } from './page.fixture.js';
 
-vi.mock('$app/state', () => ({
-	page: { params: { practiceId: 'practice-1', requestId: 'request-1' } }
+/*
+ * The Request this screen decides on, and the `page` it reads, both come
+ * from the route's own fixture (#596) -- so the screen this spec asserts
+ * on and the screen the continuum sweep measures are one description.
+ * `vi.mock` is hoisted above every import, so `pageState` is declared
+ * empty and filled from the fixture once the imports have run; the route
+ * reads `page` inside its own functions rather than destructuring it at
+ * module scope, so the later write is seen. Same installation, through
+ * the same `toPageState`, as `route-continuum.svelte.spec.ts`.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
 }));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
@@ -15,27 +31,20 @@ vi.mock('$app/navigation', () => ({ goto }));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const baseDetail: ApprovalDetail = {
-	requestId: 'request-1',
-	state: 'pending',
-	kind: 'birth',
-	dueDate: '2027-03-01',
-	note: 'Referred by the hospital',
-	requestedBy: 'staff-1',
-	requestedByName: 'Ada Doula',
-	requestedAt: '2026-08-01T10:00:00Z',
-	client: {
-		clientId: 'client-1',
-		givenName: 'Mara',
-		familyName: 'Quinn',
-		preferredName: '',
-		isNewToPractice: true
-	},
-	creditCost: 1,
-	balance: 3,
-	balanceAfter: 2,
-	engagements: []
-};
+const { practiceId, requestId } = fixture.params;
+const clientName = `${baseDetail.client.givenName} ${baseDetail.client.familyName}`;
+/*
+ * A Note is optional on `ApprovalDetail` and the fixture always carries
+ * one -- it is the URL #530 measured, and the whole reason the sweep
+ * finds this screen at 320px. Narrowed once, loudly: a fixture that lost
+ * its Note would otherwise turn an assertion about the screen into an
+ * assertion about `undefined`.
+ */
+const { note } = baseDetail;
+if (note === undefined) {
+	throw new Error(`${fixture.name} must carry a Note: it is the value this screen is measured on.`);
+}
+const requestPath = `/api/practices/${practiceId}/engagement-requests/${requestId}`;
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
@@ -96,17 +105,17 @@ describe('the approval screen', () => {
 	it('reads the Request by its own id, independent of any inbox', async () => {
 		await setup();
 
-		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagement-requests/request-1');
+		expect(apiFetchWithSession).toHaveBeenCalledWith(requestPath);
 	});
 
 	it('shows every fact the approver decides on, including the balance after the Credit', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText('Mara Quinn -- new to this practice')).toBeVisible();
-		await expect.element(testPage.getByText('Ada Doula on Aug 1, 2026')).toBeVisible();
+		await expect.element(testPage.getByText(`${clientName} -- new to this practice`)).toBeVisible();
+		await expect.element(testPage.getByText(`${baseDetail.requestedByName} on Aug 1, 2026`)).toBeVisible();
 		await expect.element(testPage.getByText('Birth', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
-		await expect.element(testPage.getByText('Referred by the hospital')).toBeVisible();
+		await expect.element(testPage.getByText(note)).toBeVisible();
 		await expect.element(testPage.getByText('1 credit')).toBeVisible();
 		await expect.element(testPage.getByText('Balance after')).toBeVisible();
 		await expect.element(testPage.getByText('2', { exact: true })).toBeVisible();
@@ -123,10 +132,10 @@ describe('the approval screen', () => {
 			}
 		});
 
-		await expect.element(testPage.getByText('Mara Quinn -- already known here')).toBeVisible();
+		await expect.element(testPage.getByText(`${clientName} -- already known here`)).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: /^Postpartum work, started .+ -- completed$/ }))
-			.toHaveAttribute('href', '/practices/practice-1/engagements/engagement-1');
+			.toHaveAttribute('href', `/practices/${practiceId}/engagements/engagement-1`);
 	});
 
 	it('draws no control that amends the kind or the due date', async () => {
@@ -139,7 +148,7 @@ describe('the approval screen', () => {
 	it('warns on a second live Engagement without blocking the decision', async () => {
 		await setup({ detail: { ...baseDetail, warning: 'this client already has a live engagement' } });
 
-		await expect.element(testPage.getByText('Mara Quinn already has a live engagement.', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText(`${clientName} already has a live engagement.`, { exact: false })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Approve and start the work' })).toBeEnabled();
 	});
 
@@ -148,7 +157,7 @@ describe('the approval screen', () => {
 
 		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1/engagements/engagement-9'));
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/engagements/engagement-9`));
 	});
 
 	it('offers Buy credits inline on an empty balance, leaving the same screen intact', async () => {
@@ -156,13 +165,13 @@ describe('the approval screen', () => {
 
 		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toHaveAttribute(
 			'href',
-			'/practices/practice-1/billing'
+			`/practices/${practiceId}/billing`
 		);
 
 		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
 
 		await expect.element(testPage.getByText("There are no credits left on this practice's balance.")).toBeVisible();
-		await expect.element(testPage.getByText('Ada Doula on Aug 1, 2026')).toBeVisible();
+		await expect.element(testPage.getByText(`${baseDetail.requestedByName} on Aug 1, 2026`)).toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
 	});
 
@@ -173,12 +182,12 @@ describe('the approval screen', () => {
 			.element(testPage.getByRole('link', { name: 'Buy credits' }))
 			.toBeVisible();
 		expect(sessionStorage.getItem('engagement-request-approval-return')).toBe(
-			'/practices/practice-1/engagement-requests/request-1'
+			`/practices/${practiceId}/engagement-requests/${requestId}`
 		);
 	});
 
 	it('forgets the way back once she is on the screen again, so it is offered only once', async () => {
-		sessionStorage.setItem('engagement-request-approval-return', '/practices/practice-1/engagement-requests/request-1');
+		sessionStorage.setItem('engagement-request-approval-return', `/practices/${practiceId}/engagement-requests/${requestId}`);
 
 		await setup();
 
@@ -204,11 +213,11 @@ describe('the approval screen', () => {
 
 		await vi.waitFor(() =>
 			expect(apiFetchWithSession).toHaveBeenCalledWith(
-				'/api/practices/practice-1/engagement-requests/request-1/refuse',
+				`${requestPath}/refuse`,
 				expect.objectContaining({ body: JSON.stringify({ reason: 'No capacity in March' }) })
 			)
 		);
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1/clients/client-1'));
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/${baseDetail.client.clientId}`));
 	});
 
 	it('surfaces a Request somebody already decided rather than rendering a dead screen', async () => {
@@ -234,7 +243,7 @@ describe('the approval screen', () => {
 		await expect.element(testPage.getByLabelText('Why are you refusing this?')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Refuse this request' })).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: "View Mara Quinn's record" }))
-			.toHaveAttribute('href', '/practices/practice-1/clients/client-1');
+			.element(testPage.getByRole('link', { name: `View ${clientName}'s record` }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/${baseDetail.client.clientId}`);
 	});
 });

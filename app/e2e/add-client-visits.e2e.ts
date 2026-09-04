@@ -67,7 +67,13 @@ test('Add Client form and Visits section', async ({ page, request }) => {
 	await expect(page.getByRole('cell', { name: 'No Visits yet.' })).toBeVisible();
 	await page.getByRole('button', { name: 'Add a Visit' }).click();
 
-	// exact: true -- the Reassign cell's visually-hidden text also names the
-	// Staff member, so a loose match resolves to both cells in the row.
-	await expect(page.getByRole('cell', { name: 'Jamie Owner', exact: true })).toBeVisible();
+	// Scoped to the Visits table, and exact: true within it. Two things
+	// name the same Staff member on this screen: the Reassign cell's own
+	// visually-hidden text, which `exact` excludes, and the per-record
+	// Activity ledger #486 added after this test was written, which it
+	// does not -- the ledger records who added the Visit, under the same
+	// name, in its own table.
+	await expect(
+		page.getByLabel('Visits').getByRole('cell', { name: 'Jamie Owner', exact: true })
+	).toBeVisible();
 });
