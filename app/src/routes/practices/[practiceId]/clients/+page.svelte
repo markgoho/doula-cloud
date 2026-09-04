@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem } from '#lib/client.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -21,13 +22,20 @@
 	let { data }: { data?: PageProperties['data'] } = $props();
 	const isContractor = $derived(data?.isContractor ?? false);
 
-	let clients = $state<ClientListItem[]>([]);
+	// Starts empty: unlike Billing and Invoices this screen fetches its own
+	// first page in the effect below rather than through a load, so every
+	// page it holds arrives through this list.
+	const clients = new PaginatedList<ClientListItem>({
+		first: { items: [], hasMore: false },
+		loadPage: (cursor) =>
+			loadClients(apiFetchWithSession, page.params.practiceId!, {
+				cursor,
+				showAll: isShowingEveryone
+			}),
+		failureMessage: 'Failed to load more Clients'
+	});
 	let error = $state('');
 	let isLoaded = $state(false);
-	let cursor = $state('');
-	let isMoreAvailable = $state(false);
-	let isLoadingMore = $state(false);
-	let loadMoreError = $state('');
 
 	// The default filter is "Clients with work" (ADR-0017); `?all=true`
 	// switches to everyone -- including a Client whose only Request was
@@ -46,8 +54,9 @@
 	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
 	async function handleToggleAll(checked: boolean) {
 		// Before the navigation, so a "Load more" already in flight is
-		// abandoned rather than merged into the new filter's list.
-		filterToken += 1;
+		// abandoned rather than merged into the new filter's list. The rows
+		// stay up until the new filter's first page arrives.
+		clients.abandon();
 		await goto(clientsPath(checked));
 	}
 
@@ -107,56 +116,32 @@
 	});
 
 	/*
-	 * Bumped the moment the filter changes. "Load more" is the only fetch
-	 * that *merges* into what is on screen, so it is the only one a stale
-	 * response can corrupt: a page-two request already in flight when the
-	 * reader flips the toggle would append the old filter's Clients onto
-	 * the new filter's list, and nothing afterwards would take them back
-	 * out. It therefore carries the counter's value from when it started
-	 * and drops its own response if the counter has moved.
+	 * "Load more" is the only fetch that *merges* into what is on screen,
+	 * so it is the only one a stale response can corrupt: a page-two
+	 * request already in flight when the reader flips the toggle would
+	 * append the old filter's Clients onto the new filter's list, and
+	 * nothing afterwards would take them back out. `clients.reset` below
+	 * abandons any such response -- the guard now lives in PaginatedList,
+	 * where every paging list gets it rather than only this one.
 	 *
-	 * loadFirstPage needs no such guard. It *replaces* `clients` wholesale
-	 * rather than appending, so two of them racing can only leave a whole,
-	 * self-consistent result set from a filter one flip out of date --
-	 * which the effect's next run corrects -- never a list mixing both.
+	 * loadFirstPage needs no guard of its own. It *replaces* the list
+	 * wholesale rather than appending, so two of them racing can only
+	 * leave a whole, self-consistent result set from a filter one flip out
+	 * of date -- which the effect's next run corrects -- never a list
+	 * mixing both.
 	 */
-	let filterToken = 0;
-
 	async function loadFirstPage(isShowingEveryone: boolean) {
 		isLoaded = false;
 		error = '';
-		loadMoreError = '';
 		try {
-			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!, {
-				showAll: isShowingEveryone
-			});
-			clients = loaded.items;
-			cursor = loaded.nextCursor ?? '';
-			isMoreAvailable = loaded.hasMore;
+			clients.reset(
+				await loadClients(apiFetchWithSession, page.params.practiceId!, {
+					showAll: isShowingEveryone
+				})
+			);
 			isLoaded = true;
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Clients';
-		}
-	}
-
-	async function handleLoadMore() {
-		const token = filterToken;
-		loadMoreError = '';
-		isLoadingMore = true;
-		try {
-			const loaded = await loadClients(apiFetchWithSession, page.params.practiceId!, {
-				cursor,
-				showAll: isShowingEveryone
-			});
-			if (token !== filterToken) return;
-			clients = [...clients, ...loaded.items];
-			cursor = loaded.nextCursor ?? '';
-			isMoreAvailable = loaded.hasMore;
-		} catch (error_) {
-			if (token !== filterToken) return;
-			loadMoreError = error_ instanceof Error ? error_.message : 'Failed to load more Clients';
-		} finally {
-			if (token === filterToken) isLoadingMore = false;
 		}
 	}
 
@@ -202,15 +187,15 @@
 	{:else if isLoaded}
 		<DataTable
 			{columns}
-			rows={clients}
+			rows={clients.items}
 			rowHref={clientHref}
-			hasMore={isMoreAvailable}
-			onLoadMore={handleLoadMore}
-			{isLoadingMore}
-			{loadMoreError}
+			hasMore={clients.hasMore}
+			onLoadMore={() => clients.loadMore()}
+			isLoadingMore={clients.isLoadingMore}
+			loadMoreError={clients.loadMoreError}
 			{emptyMessage}
 		/>
-		{#if isContractor && clients.length === 0}
+		{#if isContractor && clients.items.length === 0}
 			<!--
 				#539, #501 (ADR-0017): hiding "Find or add a Client" above took
 				away this door's only link for a contractor Doula. It only

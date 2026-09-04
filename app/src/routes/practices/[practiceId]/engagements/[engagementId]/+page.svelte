@@ -2,6 +2,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { PaginatedList, type CursorPage } from '#lib/paginatedList.svelte.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
@@ -59,13 +60,17 @@
 	let detail = $state<Detail | undefined>();
 	let error = $state('');
 
-	let visits = $state<Visit[]>([]);
+	// Visits are newest-first from the BFF (#446); a further page is
+	// appended to the end of what is already on screen rather than
+	// reversed, since this is a table read top-to-bottom, not a chat
+	// thread.
+	const visits = new PaginatedList<Visit>({
+		first: { items: [], hasMore: false },
+		loadPage: loadVisitsPage,
+		failureMessage: 'Failed to load more Visits'
+	});
 	let visitsError = $state('');
 	let isCreatingVisit = $state(false);
-	let visitsCursor = $state('');
-	let isMoreVisitsAvailable = $state(false);
-	let isLoadingMoreVisits = $state(false);
-	let loadMoreVisitsError = $state('');
 
 	let portalInviteLink = $state('');
 	let portalInviteError = $state('');
@@ -175,38 +180,20 @@
 		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/visits`;
 	}
 
-	async function loadVisits() {
-		const response = await apiFetchWithSession(visitsURL());
-		if (!response.ok) {
-			visitsError = await response.text();
-			return;
-		}
-		const loaded = await response.json();
-		visits = loaded.items;
-		visitsCursor = loaded.nextCursor ?? '';
-		isMoreVisitsAvailable = loaded.hasMore;
+	// Throws on a refusal rather than returning it, so PaginatedList can
+	// catch it -- the same shape the other five paging lists use.
+	async function loadVisitsPage(cursor: string): Promise<CursorPage<Visit>> {
+		const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+		const response = await apiFetchWithSession(`${visitsURL()}${query}`);
+		if (!response.ok) throw new Error(await apiErrorMessage(response));
+		return (await response.json()) as CursorPage<Visit>;
 	}
 
-	// Visits are newest-first from the BFF (#446); appended to the end of
-	// what's already on screen rather than reversed, since this is a
-	// table read top-to-bottom, not a chat thread.
-	async function handleLoadMoreVisits() {
-		loadMoreVisitsError = '';
-		isLoadingMoreVisits = true;
+	async function loadVisits() {
 		try {
-			const response = await apiFetchWithSession(`${visitsURL()}?cursor=${encodeURIComponent(visitsCursor)}`);
-			if (!response.ok) {
-				loadMoreVisitsError = await response.text();
-				return;
-			}
-			const loaded = await response.json();
-			visits = [...visits, ...loaded.items];
-			visitsCursor = loaded.nextCursor ?? '';
-			isMoreVisitsAvailable = loaded.hasMore;
+			visits.reset(await loadVisitsPage(''));
 		} catch (error_) {
-			loadMoreVisitsError = error_ instanceof Error ? error_.message : 'Failed to load more Visits';
-		} finally {
-			isLoadingMoreVisits = false;
+			visitsError = error_ instanceof Error ? error_.message : 'Failed to load Visits';
 		}
 	}
 
@@ -667,12 +654,12 @@
 			{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
 			{ label: 'Date', accessor: (visit: Visit) => new Date(visit.createdAt).toLocaleDateString() }
 		]}
-		rows={visits}
+		rows={visits.items}
 		rowActions={{ label: 'Reassign', content: reassignAction }}
-		hasMore={isMoreVisitsAvailable}
-		onLoadMore={handleLoadMoreVisits}
-		isLoadingMore={isLoadingMoreVisits}
-		loadMoreError={loadMoreVisitsError}
+		hasMore={visits.hasMore}
+		onLoadMore={() => visits.loadMore()}
+		isLoadingMore={visits.isLoadingMore}
+		loadMoreError={visits.loadMoreError}
 		emptyMessage="No Visits yet."
 	/>
 {/snippet}

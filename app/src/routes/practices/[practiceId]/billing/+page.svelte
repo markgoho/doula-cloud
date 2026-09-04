@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
-	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { PaginatedList, type CursorPage } from '#lib/paginatedList.svelte.js';
 	import {
 		billingPath,
 		formatSignedQuantity,
@@ -28,14 +29,14 @@
 	// this page owned before. Later pages (#446) are appended locally.
 	let { data }: PageProperties = $props();
 
-	// Deliberately captures data.ledger's initial value only (#446):
-	// handleLoadMoreLedger grows this list itself from here on, so
-	// re-deriving from `data` on every change would drop appended pages.
-	let ledgerEntries = $state(data.ledger.items);
-	let ledgerCursor = $state(data.ledger.nextCursor ?? '');
-	let isMoreLedgerAvailable = $state(data.ledger.hasMore);
-	let isLoadingMoreLedger = $state(false);
-	let loadMoreLedgerError = $state('');
+	// untrack because capturing data.ledger's first page once is the point
+	// (#446): the list grows itself from here, so re-deriving from `data`
+	// would drop every page appended since.
+	const ledger = new PaginatedList<LedgerEntry>({
+		first: untrack(() => data.ledger),
+		loadPage: loadLedgerPage,
+		failureMessage: 'Failed to load more ledger entries'
+	});
 
 	let roles = $state<string[]>([]);
 	let isOwner = $derived(roles.includes('owner'));
@@ -78,28 +79,16 @@
 		}
 	});
 
-	async function handleLoadMoreLedger() {
-		loadMoreLedgerError = '';
-		isLoadingMoreLedger = true;
-		try {
-			const response = await apiFetchWithSession(
-				`${billingPath(page.params.practiceId!)}?cursor=${encodeURIComponent(ledgerCursor)}`
-			);
-			if (!response.ok) {
-				loadMoreLedgerError = await response.text();
-				return;
-			}
-			const loaded: { ledger: { items: LedgerEntry[]; nextCursor?: string; hasMore: boolean } } =
-				await response.json();
-			ledgerEntries = [...ledgerEntries, ...loaded.ledger.items];
-			ledgerCursor = loaded.ledger.nextCursor ?? '';
-			isMoreLedgerAvailable = loaded.ledger.hasMore;
-		} catch (error_) {
-			loadMoreLedgerError =
-				error_ instanceof Error ? error_.message : 'Failed to load more ledger entries';
-		} finally {
-			isLoadingMoreLedger = false;
-		}
+	// Throws on a refusal rather than returning it: PaginatedList catches,
+	// and the balance endpoint answers the whole payload, of which only
+	// the ledger pages.
+	async function loadLedgerPage(cursor: string): Promise<CursorPage<LedgerEntry>> {
+		const response = await apiFetchWithSession(
+			`${billingPath(page.params.practiceId!)}?cursor=${encodeURIComponent(cursor)}`
+		);
+		if (!response.ok) throw new Error(await apiErrorMessage(response));
+		const loaded: { ledger: CursorPage<LedgerEntry> } = await response.json();
+		return loaded.ledger;
 	}
 
 	async function handlePurchase(event: SubmitEvent) {
@@ -124,11 +113,11 @@
 {#snippet content()}
 	<DataTable
 		{columns}
-		rows={ledgerEntries}
-		hasMore={isMoreLedgerAvailable}
-		onLoadMore={handleLoadMoreLedger}
-		isLoadingMore={isLoadingMoreLedger}
-		loadMoreError={loadMoreLedgerError}
+		rows={ledger.items}
+		hasMore={ledger.hasMore}
+		onLoadMore={() => ledger.loadMore()}
+		isLoadingMore={ledger.isLoadingMore}
+		loadMoreError={ledger.loadMoreError}
 		emptyMessage="No ledger history yet."
 	/>
 

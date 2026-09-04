@@ -19,7 +19,13 @@ vi.mock('$app/state', () => ({
 }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+// apiErrorMessage is the real one's behavior for a plain-text body, which
+// is what this screen's refusals are: the roster loader reads a failure
+// through it rather than calling response.text() itself.
+vi.mock('#lib/api.js', () => ({
+	apiFetchWithSession,
+	apiErrorMessage: (response: Response) => response.text()
+}));
 
 function textResponse(body: string): Response {
 	return jsonResponse(body, 403);
@@ -193,6 +199,15 @@ async function setup(options: MockOptions = {}) {
 	await testPage.viewport(1024, 800);
 	mockApi(options);
 	await render(Page, {});
+	// The roster arrives from onMount, so `render` returning is not the
+	// same as the screen being there. Several tests below read the DOM
+	// synchronously -- describedByText and the two table helpers all call
+	// .element()/querySelector rather than an awaited locator -- so the
+	// wait belongs here rather than in each of them. Skipped when the load
+	// is meant to fail, since then this heading never renders.
+	if (options.listOk !== false) {
+		await expect.element(testPage.getByRole('heading', { name: 'Pending invitations' })).toBeVisible();
+	}
 }
 
 // "Revoke" (or Edit membership/End sessions everywhere/Remove from
