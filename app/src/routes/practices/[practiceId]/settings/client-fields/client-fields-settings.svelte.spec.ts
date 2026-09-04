@@ -61,7 +61,7 @@ describe('client fields settings screen', () => {
 		mockApi({ roles: ['owner'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByLabelText('Field label')).toHaveValue(firstField.label);
+		await expect.element(testPage.getByLabelText('Field label').first()).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
@@ -69,7 +69,7 @@ describe('client fields settings screen', () => {
 		mockApi({ roles: ['admin'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByLabelText('Field label')).toHaveValue(firstField.label);
+		await expect.element(testPage.getByLabelText('Field label').first()).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
