@@ -43,7 +43,7 @@ func seedLowCreditOutboxRow(t *testing.T, db *testdb.DB, practiceID string, atte
 }
 
 // runLowCreditWorker begins a tx on db.App, sets the trusted session var
-// billing.ProcessOutboxHandler would otherwise set after its own secret
+// outbox.ProcessHandler would otherwise set after its own secret
 // check, runs ProcessPending, and commits.
 func runLowCreditWorker(t *testing.T, db *testdb.DB, w billing.Worker) {
 	t.Helper()

@@ -13,6 +13,7 @@ import (
 
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -35,7 +36,7 @@ func newWorker(sender mail.Sender, now time.Time) offer.Worker {
 // policies read is set the way production sets it.
 func runWorker(t *testing.T, db *testdb.DB, worker offer.Worker) response {
 	t.Helper()
-	srv := httptest.NewServer(offer.ProcessOutboxHandler(db.App, worker, workerSecret))
+	srv := httptest.NewServer(outbox.ProcessHandler(db.App, worker, workerSecret, outbox.NotificationDoor))
 	t.Cleanup(srv.Close)
 	return postWithSecret(t, srv.URL, workerSecret)
 }
@@ -216,7 +217,7 @@ func TestWorker_LeavesAnUndueRowAlone(t *testing.T) {
 
 func TestProcessOutboxHandler_RefusesTheWrongSecret(t *testing.T) {
 	db := testdb.New(t)
-	srv := httptest.NewServer(offer.ProcessOutboxHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), workerSecret))
+	srv := httptest.NewServer(outbox.ProcessHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), workerSecret, outbox.NotificationDoor))
 	defer srv.Close()
 
 	expectStatus(t, postWithSecret(t, srv.URL, "wrong"), http.StatusUnauthorized)
@@ -226,7 +227,7 @@ func TestProcessOutboxHandler_RefusesTheWrongSecret(t *testing.T) {
 // an unauthenticated one.
 func TestProcessOutboxHandler_RefusesWhenNoSecretIsConfigured(t *testing.T) {
 	db := testdb.New(t)
-	srv := httptest.NewServer(offer.ProcessOutboxHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), ""))
+	srv := httptest.NewServer(outbox.ProcessHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), "", outbox.NotificationDoor))
 	defer srv.Close()
 
 	expectStatus(t, postWithSecret(t, srv.URL, ""), http.StatusUnauthorized)

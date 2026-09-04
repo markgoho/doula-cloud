@@ -58,7 +58,7 @@ func portalUserIDForClient(t *testing.T, db *testdb.DB, clientID string) string 
 }
 
 // runWorker begins a tx on db.App, sets the trusted session var
-// ProcessOutboxHandler would otherwise set after its secret check, runs
+// outbox.ProcessHandler would otherwise set after its secret check, runs
 // ProcessPending, and commits -- exercising the worker exactly as the
 // handler drives it, without going through HTTP.
 func runWorker(t *testing.T, db *testdb.DB, w portalinvite.Worker) {

@@ -13,7 +13,7 @@ import (
 
 // TestRLS_NotificationWorkerCannotReadPracticeInvitationsWithoutTrustedFlag
 // proves the policy stays closed by default: with no session context at
-// all -- the shape ProcessOutboxHandler runs under before it sets
+// all -- the shape outbox.ProcessHandler runs under before it sets
 // app.notification_worker_trusted -- practice_invitations_practice_visibility
 // (00030) admits nothing either, since app.current_practice_id is unset.
 func TestRLS_NotificationWorkerCannotReadPracticeInvitationsWithoutTrustedFlag(t *testing.T) {
@@ -37,7 +37,7 @@ func TestRLS_NotificationWorkerCannotReadPracticeInvitationsWithoutTrustedFlag(t
 }
 
 // TestRLS_NotificationWorkerTrustedFlagOpensPracticeInvitationsAcrossPractices
-// proves the door ProcessOutboxHandler relies on actually opens: with
+// proves the door outbox.ProcessHandler relies on actually opens: with
 // app.notification_worker_trusted set, every Invitation is visible,
 // regardless of Practice -- required since the worker has no single
 // Practice's session to scope by.

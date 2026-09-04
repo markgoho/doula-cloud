@@ -118,7 +118,7 @@ func TestRLS_CreditLedgerCannotInsertForAnotherPractice(t *testing.T) {
 
 // TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag
 // proves 00033's two new policies stay closed by default: with no
-// session context at all -- the shape ProcessOutboxHandler runs under
+// session context at all -- the shape outbox.ProcessHandler runs under
 // before it sets app.notification_worker_trusted -- neither table admits
 // a row.
 func TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag(t *testing.T) {

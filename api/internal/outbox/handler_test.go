@@ -31,8 +31,15 @@ func (s *stubProcessor) ProcessPending(_ context.Context, tx *sql.Tx) error {
 }
 
 func newHandlerServer(db *testdb.DB, worker outbox.Processor, secret string) *httptest.Server {
+	return newHandlerServerWithDoor(db, worker, secret, outbox.NotificationDoor)
+}
+
+// newHandlerServerWithDoor is the same, for the door variants: every
+// outbox that mails somebody passes NotificationDoor, and #443's site
+// rebuild passes none because its table is not under RLS.
+func newHandlerServerWithDoor(db *testdb.DB, worker outbox.Processor, secret, door string) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /process", outbox.ProcessHandler(db.App, worker, secret))
+	mux.Handle("POST /process", outbox.ProcessHandler(db.App, worker, secret, door))
 	return httptest.NewServer(mux)
 }
 
@@ -94,7 +101,7 @@ func TestProcessHandler_CorrectSecretRunsWorkerAndReturns200(t *testing.T) {
 
 func TestProcessHandler_BeginTxFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
-	handler := outbox.ProcessHandler(db.App, &stubProcessor{}, "correct-secret")
+	handler := outbox.ProcessHandler(db.App, &stubProcessor{}, "correct-secret", outbox.NotificationDoor)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

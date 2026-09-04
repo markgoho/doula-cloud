@@ -10,24 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// endpointPath maps each OutboxType to the process-* endpoint main.go
-// mounts it at (ADR-0010). Every nudge task hits one of these eleven paths.
-var endpointPath = map[OutboxType]string{
-	SiteBuild:         "/api/internal/site/process-build-outbox",
-	EngagementOffer:   "/api/internal/notifications/process-offer-outbox",
-	EngagementRequest: "/api/internal/notifications/process-engagement-request-outbox",
-	PortalInvite:      "/api/internal/notifications/process-outbox",
-	LowCredit:         "/api/internal/notifications/process-low-credit-outbox",
-	Payout:            "/api/internal/notifications/process-payout-outbox",
-	PaymentReceived:   "/api/internal/notifications/process-payment-outbox",
-	SessionNotice:     "/api/internal/notifications/process-session-notice-outbox",
-	StaffInvite:       "/api/internal/notifications/process-staff-invite-outbox",
-	MFARecoveryCode:   "/api/internal/notifications/process-mfa-recovery-outbox",
-	ClientErasure:     "/api/internal/clients/process-erasure-outbox",
-}
-
 // CloudTasksEnqueuer is the production Enqueuer, backed by one Cloud
-// Tasks queue shared by all eight outbox types (ADR-0013) -- the same
+// Tasks queue shared by every nudged outbox type (ADR-0013) -- the same
 // X-Internal-Secret shape the process-* endpoints already accept from
 // Cloud Scheduler, so no endpoint needs to change to accept a nudge too.
 type CloudTasksEnqueuer struct {
@@ -35,6 +19,7 @@ type CloudTasksEnqueuer struct {
 	queue         string
 	targetBaseURL string
 	secret        string
+	endpointPath  map[OutboxType]string
 }
 
 // NewCloudTasksEnqueuer wraps an existing *cloudtasks.Client -- callers
@@ -44,9 +29,16 @@ type CloudTasksEnqueuer struct {
 // targetBaseURL is the Cloud Run service's own base URL (e.g.
 // https://doula-api-xyz.a.run.app); secret is NOTIFICATION_WORKER_SECRET,
 // reused rather than a second credential.
-func NewCloudTasksEnqueuer(client *cloudtasks.Client, queue, targetBaseURL, secret string) *CloudTasksEnqueuer {
+//
+// endpointPath is where each nudged OutboxType is served, supplied by the
+// caller rather than held here. This package used to keep its own copy of
+// every path, which made a route pattern a fact written in two files that
+// agreed only by hand -- so a renamed endpoint could leave a nudge
+// POSTing an address the mux no longer served. The BFF's outbox list is
+// now the single source for both (outbox.NudgePaths).
+func NewCloudTasksEnqueuer(client *cloudtasks.Client, queue, targetBaseURL, secret string, endpointPath map[OutboxType]string) *CloudTasksEnqueuer {
 	// coverage:ignore reason: requires a real Cloud Tasks client, not exercised by unit tests
-	return &CloudTasksEnqueuer{client: client, queue: queue, targetBaseURL: targetBaseURL, secret: secret}
+	return &CloudTasksEnqueuer{client: client, queue: queue, targetBaseURL: targetBaseURL, secret: secret, endpointPath: endpointPath}
 }
 
 // Enqueue creates a Cloud Task that POSTs outboxType's process-* endpoint
@@ -56,7 +48,7 @@ func NewCloudTasksEnqueuer(client *cloudtasks.Client, queue, targetBaseURL, secr
 // nudge every time, not collapse into a single task.
 func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, outboxType OutboxType) error {
 	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
-	path, ok := endpointPath[outboxType]
+	path, ok := e.endpointPath[outboxType]
 	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 	if !ok {
 		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests

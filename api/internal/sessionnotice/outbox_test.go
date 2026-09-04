@@ -53,7 +53,7 @@ func seedOutboxRow(t *testing.T, db *testdb.DB, identityUID, kind string, attemp
 }
 
 // runWorker begins a tx on db.App, sets the trusted session var
-// sessionnotice.ProcessOutboxHandler would otherwise set after its own
+// outbox.ProcessHandler would otherwise set after its own
 // secret check, runs ProcessPending, and commits.
 func runWorker(t *testing.T, db *testdb.DB, w sessionnotice.Worker) {
 	t.Helper()

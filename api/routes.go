@@ -37,10 +37,18 @@ import (
 // mention it has to change, and a test that does not exercise a worker
 // simply leaves it at its zero value.
 //
-// Flat rather than nested. Grouping the eight outbox workers under a
-// Workers field was considered and dropped: it would say "these are the
-// workers" in the type, which nothing needs to be told, at the cost of a
-// second name at every use.
+// Flat rather than nested. Grouping the outbox workers under a Workers
+// field was considered and dropped: it would say "these are the workers"
+// in the type, which nothing needs to be told, at the cost of a second
+// name at every use.
+//
+// The workers themselves stay flat fields here for exactly that reason.
+// What did move is the *route* half of an outbox -- its path, its
+// Postgres door, and whether ADR-0013 nudges it -- which now lives in
+// outboxes.go as one list. That is not the nesting rejected above: a
+// worker is still named directly, the list adds no second name at any use
+// site, and it replaces six restatements of an outbox's identity that
+// previously had to agree with each other by hand.
 type Deps struct {
 	// Verifier checks an Identity Platform token. Tests substitute
 	// authntest.Verifier.
