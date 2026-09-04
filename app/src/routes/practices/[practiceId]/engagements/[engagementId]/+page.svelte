@@ -2,7 +2,18 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
-	import { PaginatedList, type CursorPage } from '#lib/paginatedList.svelte.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import {
+		loadAttachmentPreviews,
+		loadMessagesPage,
+		loadOffersSection as loadOffers,
+		loadVisitsPage,
+		messagesURL,
+		portalInviteURL,
+		visitsURL,
+		type Visit
+	} from '#lib/engagementDetail.js';
+	import type { PageProps as PageProperties } from './$types';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
@@ -50,15 +61,21 @@
 		dueDate?: string;
 	};
 
-	type Visit = {
-		visitId: string;
-		staffId: string;
-		staffName: string;
-		createdAt: string;
-	};
+	// The Engagement comes from +page.ts's load now, not an onMount fetch
+	// (#695): a refusal has to reach practices/+error.svelte rather than
+	// sit in a local error string, the same move #471 made for billing.
+	// The other six sections still load after mount, each rendering as it
+	// lands.
+	let { data }: PageProperties = $props();
+	const detail = $derived(data);
 
-	let detail = $state<Detail | undefined>();
-	let error = $state('');
+	// The reference every read on this page is about. Derived rather than
+	// captured, so a client-side navigation to a sibling Engagement is
+	// picked up by the reads below.
+	const reference = $derived({
+		practiceId: page.params.practiceId!,
+		engagementId: page.params.engagementId!
+	});
 
 	// Visits are newest-first from the BFF (#446); a further page is
 	// appended to the end of what is already on screen rather than
@@ -66,7 +83,7 @@
 	// thread.
 	const visits = new PaginatedList<Visit>({
 		first: { items: [], hasMore: false },
-		loadPage: loadVisitsPage,
+		loadPage: (cursor) => loadVisitsPage(apiFetchWithSession, reference, cursor),
 		failureMessage: 'Failed to load more Visits'
 	});
 	let visitsError = $state('');
@@ -131,23 +148,14 @@
 		unsubscribePushMessages();
 	});
 
-	async function loadAttachmentPreviews(items: Message[]) {
-		await Promise.all(
-			items
-				.filter(
-					(m) => m.attachmentContentType?.startsWith('image/') && !Object.hasOwn(attachmentPreviewURLs, m.messageId)
-				)
-				.map(async (m) => {
-					const response = await apiFetchWithSession(`${messagesURL()}/${m.messageId}/attachment`);
-					if (!response.ok) return;
-					const blob = await response.blob();
-					attachmentPreviewURLs[m.messageId] = URL.createObjectURL(blob);
-				})
+	// The module fetches and returns the new object URLs; this owns
+	// merging and revoking them, because only the component knows when its
+	// own teardown has come.
+	async function refreshAttachmentPreviews(items: Message[]) {
+		Object.assign(
+			attachmentPreviewURLs,
+			await loadAttachmentPreviews(apiFetchWithSession, reference, items, attachmentPreviewURLs)
 		);
-	}
-
-	function portalInviteURL() {
-		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/portal-invite`;
 	}
 
 	// The Client detail hub (#494). `detail.clientId` comes straight off
@@ -176,42 +184,24 @@
 		return items;
 	}
 
-	function visitsURL() {
-		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/visits`;
-	}
-
-	// Throws on a refusal rather than returning it, so PaginatedList can
-	// catch it -- the same shape the other five paging lists use.
-	async function loadVisitsPage(cursor: string): Promise<CursorPage<Visit>> {
-		const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-		const response = await apiFetchWithSession(`${visitsURL()}${query}`);
-		if (!response.ok) throw new Error(await apiErrorMessage(response));
-		return (await response.json()) as CursorPage<Visit>;
-	}
-
 	async function loadVisits() {
 		try {
-			visits.reset(await loadVisitsPage(''));
+			visits.reset(await loadVisitsPage(apiFetchWithSession, reference, ''));
 		} catch (error_) {
 			visitsError = error_ instanceof Error ? error_.message : 'Failed to load Visits';
 		}
 	}
 
-	function messagesURL() {
-		return `/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}/messages`;
-	}
-
 	async function loadMessages() {
-		const response = await apiFetchWithSession(messagesURL());
-		if (!response.ok) {
-			messagesError = await response.text();
-			return;
+		try {
+			const loaded = await loadMessagesPage<Message>(apiFetchWithSession, reference, '');
+			messages = loaded.items;
+			messagesCursor = loaded.nextCursor ?? '';
+			isMessagesHasMore = loaded.hasMore;
+			await refreshAttachmentPreviews(messages);
+		} catch (error_) {
+			messagesError = error_ instanceof Error ? error_.message : 'Failed to load Messages';
 		}
-		const data = await response.json();
-		messages = data.items.toReversed();
-		messagesCursor = data.nextCursor ?? '';
-		isMessagesHasMore = data.hasMore;
-		await loadAttachmentPreviews(messages);
 	}
 
 	async function loadPlan(planType: PlanType) {
@@ -374,24 +364,15 @@
 
 	// The roster read and the Offers read are both Owner/Admin; either
 	// refusing is what tells this page the caller is a Doula, so the
-	// section is left out rather than shown broken.
+	// section is left out rather than shown broken. The module answers
+	// undefined for exactly that, which says "not for you" in the type
+	// where this used to be a bare empty catch.
 	async function loadOffersSection() {
-		try {
-			offers = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-			const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/staff`);
-			if (!response.ok) return;
-			const roster = await response.json();
-			doulas = roster.members
-				.filter((member: { roles: string[] }) => member.roles.includes('doula'))
-				.map((member: { staffId: string; name: string; employmentType: string }) => ({
-					staffId: member.staffId,
-					name: member.name,
-					employmentType: member.employmentType
-				}));
-			isOffersVisible = true;
-		} catch {
-			// Not permitted to read who was offered this work -- see above.
-		}
+		const section = await loadOffers(apiFetchWithSession, reference, loadEngagementOffers);
+		if (!section) return;
+		offers = section.offers as Offer[];
+		doulas = section.doulas;
+		isOffersVisible = true;
 	}
 
 	async function handleCreateOffer(offer: NewOffer) {
@@ -410,15 +391,8 @@
 	}
 
 	onMount(async () => {
-		const response = await apiFetchWithSession(
-			`/api/practices/${page.params.practiceId}/engagements/${page.params.engagementId}`
-		);
-		if (!response.ok) {
-			error = await response.text();
-			return;
-		}
-
-		detail = await response.json();
+		// The Engagement is already here, from load. What remains is the
+		// six sections that fill in behind it, each rendering as it lands.
 		await loadVisits();
 		await loadMessages();
 		await Promise.all(planSections.map((section) => loadPlan(section.type)));
@@ -440,7 +414,7 @@
 		portalInviteError = '';
 		isSendingPortalInvite = true;
 		try {
-			const response = await apiFetchWithSession(portalInviteURL(), { method: 'POST' });
+			const response = await apiFetchWithSession(portalInviteURL(reference), { method: "POST" });
 			if (!response.ok) {
 				portalInviteError = await apiErrorMessage(response);
 				return;
@@ -459,7 +433,7 @@
 		visitsError = '';
 		isCreatingVisit = true;
 		try {
-			const response = await apiFetchWithSession(visitsURL(), { method: 'POST' });
+			const response = await apiFetchWithSession(visitsURL(reference), { method: 'POST' });
 			if (!response.ok) {
 				visitsError = await response.text();
 				return;
@@ -477,7 +451,7 @@
 		event.preventDefault();
 		reassignError[visitId] = '';
 		try {
-			const response = await apiFetchWithSession(`${visitsURL()}/${visitId}`, {
+			const response = await apiFetchWithSession(`${visitsURL(reference)}/${visitId}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ staffId: reassignStaffId[visitId] ?? '' })
@@ -498,7 +472,7 @@
 		messagesError = '';
 		isLoadingOlderMessages = true;
 		try {
-			const response = await apiFetchWithSession(`${messagesURL()}?cursor=${encodeURIComponent(messagesCursor)}`);
+			const response = await apiFetchWithSession(`${messagesURL(reference)}?cursor=${encodeURIComponent(messagesCursor)}`);
 			if (!response.ok) {
 				messagesError = await response.text();
 				return;
@@ -508,7 +482,7 @@
 			messages = [...data.items.toReversed(), ...messages];
 			messagesCursor = data.nextCursor ?? '';
 			isMessagesHasMore = data.hasMore;
-			await loadAttachmentPreviews(messages);
+			await refreshAttachmentPreviews(messages);
 		} catch (error_) {
 			messagesError = error_ instanceof Error ? error_.message : 'Failed to load older messages';
 		} finally {
@@ -525,9 +499,9 @@
 				const form = new FormData();
 				form.set('body', body);
 				form.set('attachment', attachment);
-				response = await apiFetchWithSession(messagesURL(), { method: 'POST', body: form });
+				response = await apiFetchWithSession(messagesURL(reference), { method: 'POST', body: form });
 			} else {
-				response = await apiFetchWithSession(messagesURL(), {
+				response = await apiFetchWithSession(messagesURL(reference), {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ body })
@@ -540,7 +514,7 @@
 
 			const created = await response.json();
 			messages = [...messages, created];
-			await loadAttachmentPreviews([created]);
+			await refreshAttachmentPreviews([created]);
 			return true;
 		} catch (error_) {
 			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
@@ -551,7 +525,7 @@
 	}
 
 	async function handleDownloadAttachment(messageId: string, filename: string) {
-		const response = await apiFetchWithSession(`${messagesURL()}/${messageId}/attachment`);
+		const response = await apiFetchWithSession(`${messagesURL(reference)}/${messageId}/attachment`);
 		if (!response.ok) {
 			messagesError = await response.text();
 			return;
@@ -760,22 +734,23 @@
 	and Offers is Owner/Admin-only -- which is why `sections` is a typed
 	array and not a run of named regions.
 -->
+<!--
+	No loading or loadError: the Engagement is loaded before this page
+	renders, and a refusal reaches practices/+error.svelte instead (#695).
+	The sections below still fill in after mount, each with its own state.
+-->
 <RecordDetail
-	title={detail ? detail.clientName : ''}
+	title={detail.clientName}
 	{summary}
 	{actions}
 	isContentsShown
-	sections={detail
-		? [
-				{ heading: 'Visits', content: visitsSection },
-				{ heading: 'Care Plan', content: carePlanSection },
-				{ heading: 'Birth Plan', content: birthPlanSection },
-				{ heading: 'Contract', content: contractSection },
-				...(contract ? [{ heading: 'Invoices', content: invoicesSection }] : []),
-				...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
-				{ heading: 'Messages', content: messagesSection }
-			]
-		: []}
-	loading={detail || error ? undefined : 'Loading the Engagement'}
-	loadError={error || undefined}
+	sections={[
+		{ heading: 'Visits', content: visitsSection },
+		{ heading: 'Care Plan', content: carePlanSection },
+		{ heading: 'Birth Plan', content: birthPlanSection },
+		{ heading: 'Contract', content: contractSection },
+		...(contract ? [{ heading: 'Invoices', content: invoicesSection }] : []),
+		...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
+		{ heading: 'Messages', content: messagesSection }
+	]}
 />
