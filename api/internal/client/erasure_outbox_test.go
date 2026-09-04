@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -162,8 +163,147 @@ func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 	if redact.After(time.Now().Add(time.Minute)) {
 		t.Fatalf("redaction due at %v, want it due now for a 200-day-old invoice", redact)
 	}
-	if detail := readDetail(t, session, srv, practiceID, clientID); detail.StripeRedactionEligibleAt != nil {
-		t.Fatalf("stripeRedactionEligibleAt = %v, want absent when there is nothing to wait for", detail.StripeRedactionEligibleAt)
+	// The date is still reported: the redaction has not run yet, and
+	// "absent" is reserved for a redaction that actually succeeded. It
+	// is simply already in the past.
+	detail := readDetail(t, session, srv, practiceID, clientID)
+	if detail.StripeRedactionEligibleAt == nil {
+		t.Fatal("stripeRedactionEligibleAt is absent while the redaction is still outstanding")
+	}
+	if detail.StripeRedactionEligibleAt.After(time.Now()) {
+		t.Fatalf("stripeRedactionEligibleAt = %v, want a date already past for a 200-day-old invoice", detail.StripeRedactionEligibleAt)
+	}
+}
+
+// TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate is the
+// per-transaction half of #394's Stripe criterion: a Redaction Job "for
+// every eligible, 90+ day, invoice/charge", each judged on its own age.
+// payments.CreateInvoice makes a Customer per invoice, so a Client with
+// an old invoice and a recent one has two Customers whose redactions
+// come due months apart. Reading one global newest-invoice date -- the
+// bug this test exists to keep out -- would hold the old one hostage to
+// the new one turning 90.
+func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "owner-erase-two-customers"
+	practiceID, staffID := seedOwner(t, db, uid)
+	clientID := seedFullClient(t, db, practiceID, staffID)
+	seedInvoicedClient(t, db, practiceID, clientID, "cus_ancient", "paid", 200*24*time.Hour)
+	seedInvoicedClient(t, db, practiceID, clientID, "cus_fresh", "paid", 10*24*time.Hour)
+
+	srv, session := newErasureServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postErasure(t, session, srv, practiceID, clientID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	acts := readOutbox(t, db, clientID)
+	ancient, ok := acts["stripe_redaction_job|cus_ancient"]
+	if !ok {
+		t.Fatalf("no redaction row for the older Customer: %+v", acts)
+	}
+	if ancient.After(time.Now().Add(time.Minute)) {
+		t.Fatalf("the 200-day-old Customer's redaction is due at %v, want it due now -- it must not wait on a newer invoice", ancient)
+	}
+	fresh, ok := acts["stripe_redaction_job|cus_fresh"]
+	if !ok {
+		t.Fatalf("no redaction row for the newer Customer: %+v", acts)
+	}
+	if wait := time.Until(fresh); wait < 79*24*time.Hour || wait > 81*24*time.Hour {
+		t.Fatalf("the 10-day-old Customer's redaction is due in %v, want about 80 days", wait)
+	}
+
+	// The Practice is shown when the Stripe half finishes, which is the
+	// later of the two.
+	detail := readDetail(t, session, srv, practiceID, clientID)
+	if detail.StripeRedactionEligibleAt == nil {
+		t.Fatal("detail carries no stripeRedactionEligibleAt")
+	}
+	if diff := detail.StripeRedactionEligibleAt.Sub(fresh); diff > time.Minute || diff < -time.Minute {
+		t.Fatalf("stripeRedactionEligibleAt = %v, want the later of the two dates (%v)", detail.StripeRedactionEligibleAt, fresh)
+	}
+}
+
+// TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering is the
+// other half of "recorded somewhere a Practice can see it": the date
+// must not be a retry timestamp, and it must not disappear when the
+// redaction fails. Stripe's Redaction Jobs API is not enabled on this
+// account (ADR-0027), so a failing job is today's normal path.
+func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "owner-erase-redaction-fails"
+	practiceID, staffID := seedOwner(t, db, uid)
+	clientID := seedFullClient(t, db, practiceID, staffID)
+	seedInvoicedClient(t, db, practiceID, clientID, "cus_failing", "paid", 10*24*time.Hour)
+
+	srv, session := newErasureServer(t, db, uid)
+	defer srv.Close()
+	resp := postErasure(t, session, srv, practiceID, clientID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	atErasure := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt
+	if atErasure == nil {
+		t.Fatal("no stripeRedactionEligibleAt right after the erasure")
+	}
+
+	// Force the redaction row due now, then fail it until it dead-letters
+	// -- every attempt rewrites next_attempt_at, which is exactly what
+	// must not reach the screen.
+	stripe := &fakeStripeEraser{redactErr: errors.New("Unrecognized request URL")}
+	worker := client.ErasureWorker{Stripe: stripe, Identity: authntest.NewFakeAccountManager(), Now: time.Now}
+	for range len(outbox.BackoffSchedule) + 1 {
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`UPDATE client_erasure_outbox SET next_attempt_at = now() - interval '1 hour'
+			  WHERE client_id = $1 AND status = 'pending'`, clientID,
+		); err != nil {
+			t.Fatalf("make rows due: %v", err)
+		}
+		runWorker(t, db, worker)
+	}
+
+	if status := readOutboxStatus(t, db, clientID)["stripe_redaction_job|cus_failing"]; status != deadLetteredStatus {
+		t.Fatalf("redaction status = %q, want dead_lettered after the schedule is exhausted", status)
+	}
+
+	after := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt
+	if after == nil {
+		t.Fatal("stripeRedactionEligibleAt vanished once the redaction dead-lettered -- a failed redaction must not read as a finished one")
+	}
+	if diff := after.Sub(*atErasure); diff > time.Minute || diff < -time.Minute {
+		t.Fatalf("stripeRedactionEligibleAt moved from %v to %v -- a retry must not rewrite the date shown", atErasure, after)
+	}
+}
+
+// TestErasureWorker_ClearsTheRedactionStateOnSuccess is the counterpart:
+// once the redaction actually runs, there is nothing left to wait for
+// and the date goes.
+func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "owner-erase-redaction-succeeds"
+	practiceID, staffID := seedOwner(t, db, uid)
+	clientID := seedFullClient(t, db, practiceID, staffID)
+	seedInvoicedClient(t, db, practiceID, clientID, "cus_done", "paid", 200*24*time.Hour)
+
+	srv, session := newErasureServer(t, db, uid)
+	defer srv.Close()
+	resp := postErasure(t, session, srv, practiceID, clientID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	runWorker(t, db, client.ErasureWorker{
+		Stripe: &fakeStripeEraser{}, Identity: authntest.NewFakeAccountManager(), Now: time.Now,
+	})
+
+	if got := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt; got != nil {
+		t.Fatalf("stripeRedactionEligibleAt = %v, want absent once the redaction has run", got)
 	}
 }
 
@@ -375,7 +515,7 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Identity: authntest.NewFakeAccountManager(), Now: time.Now})
 
 	for act, status := range readOutboxStatus(t, db, clientID) {
-		if status != "dead_lettered" {
+		if status != deadLetteredStatus {
 			t.Errorf("%s = %q, want dead_lettered", act, status)
 		}
 	}

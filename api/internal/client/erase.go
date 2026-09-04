@@ -25,6 +25,17 @@ import (
 // half-typed on a phone.
 const ErasedGivenName = "Erased Client"
 
+// erasureAct names one act client_erasure_outbox carries -- the Go side
+// of the client_erasure_act enum. Each is somebody else's API, which is
+// why none of them happens inside the erasure transaction.
+type erasureAct string
+
+const (
+	actStripeCustomerDelete  erasureAct = "stripe_customer_delete"
+	actStripeRedactionJob    erasureAct = "stripe_redaction_job"
+	actIdentityAccountDelete erasureAct = "identity_account_delete"
+)
+
 // StripeRedactionFloor is how long Stripe makes a platform wait before
 // most transactions can be redacted (ADR-0027). It is Stripe's number,
 // not a Doula Cloud policy, and erasure schedules the redaction job for
@@ -156,7 +167,7 @@ func erase(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffID string
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
-	portalQueued, sessionsEnded, err := enqueuePortalErasure(ctx, tx, practiceID, clientID)
+	portalQueued, sessionsEnded, err := enqueuePortalErasure(ctx, tx, practiceID, clientID, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
@@ -280,22 +291,38 @@ func unsettledInvoices(ctx context.Context, tx *sql.Tx, clientID string) ([]stri
 	return ids, nil
 }
 
+// stripeCustomer is one Stripe Customer of hers and the date its own
+// transactions become redactable -- 90 days past the newest invoice
+// billed to *that* Customer, not past her newest invoice overall.
+//
+// The distinction is the whole point. payments.CreateInvoice makes a
+// fresh Customer per invoice, so a Client with two invoices six months
+// apart has two Customers with two different eligibility dates. Reading
+// one global maximum would hold the older Customer's redaction hostage
+// to the newer one turning 90 -- and #394 asks for a job "against every
+// one of her invoices/charges that is 90+ days old", each judged on its
+// own age.
+type stripeCustomer struct {
+	id         string
+	eligibleAt time.Time
+}
+
 // enqueueStripeErasure writes one outbox row per Stripe Customer she has
-// ever had -- there is one per invoice, since payments.CreateInvoice
-// makes a fresh Customer each time -- for the immediate delete, and one
-// more per Customer for the redaction job, deferred to Stripe's 90-day
-// floor past her newest invoice. It reports that date so the Practice
-// can see the Stripe half is scheduled rather than finished.
+// ever had for the immediate delete, and one more per Customer for the
+// redaction job, each deferred to that Customer's own eligibility date.
+// It reports the latest of those dates -- when the Stripe half of her
+// erasure actually finishes -- or nil when nothing is left to wait for.
 //
 // A Client with no invoices has no Stripe presence at all: no rows, no
 // eligibility date, nothing to wait for.
 func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string, now time.Time) ([]string, *time.Time, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT DISTINCT i.stripe_customer_id, max(i.created_at) OVER ()
+		`SELECT i.stripe_customer_id, max(i.created_at)
 		   FROM invoices i
 		   JOIN contracts ct ON ct.id = i.contract_id
 		   JOIN engagements e ON e.id = ct.engagement_id
-		  WHERE e.client_id = $1 AND i.stripe_customer_id IS NOT NULL`,
+		  WHERE e.client_id = $1 AND i.stripe_customer_id IS NOT NULL
+		  GROUP BY i.stripe_customer_id`,
 		clientID,
 	)
 	if err != nil {
@@ -304,17 +331,16 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 	}
 	defer func() { _ = rows.Close() }()
 
-	var customers []string
-	var newest time.Time
+	var customers []stripeCustomer
 	for rows.Next() {
-		var id string
-		var latest time.Time
-		if err := rows.Scan(&id, &latest); err != nil {
+		var c stripeCustomer
+		var newestInvoice time.Time
+		if err := rows.Scan(&c.id, &newestInvoice); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, nil, fmt.Errorf("client: scan stripe customer: %w", err)
 		}
-		customers = append(customers, id)
-		newest = latest
+		c.eligibleAt = newestInvoice.Add(StripeRedactionFloor)
+		customers = append(customers, c)
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
@@ -324,28 +350,35 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 		return nil, nil, nil
 	}
 
-	eligibleAt := newest.Add(StripeRedactionFloor)
-	// A Practice erasing a Client whose last invoice is already older
-	// than the floor waits for nothing: the job is due immediately, and
-	// there is no future date to show her.
-	var reportedEligibleAt *time.Time
-	if eligibleAt.After(now) {
-		reportedEligibleAt = &eligibleAt
-	} else {
-		eligibleAt = now
+	ids := make([]string, 0, len(customers))
+	var latest time.Time
+	for _, c := range customers {
+		ids = append(ids, c.id)
+		if c.eligibleAt.After(latest) {
+			latest = c.eligibleAt
+		}
+		dueAt := c.eligibleAt
+		// A Customer whose last invoice is already past the floor waits
+		// for nothing -- its job is due immediately.
+		if !dueAt.After(now) {
+			dueAt = now
+		}
+		if err := enqueue(ctx, tx, practiceID, clientID, actStripeCustomerDelete, c.id, now, time.Time{}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return nil, nil, err
+		}
+		if err := enqueue(ctx, tx, practiceID, clientID, actStripeRedactionJob, c.id, dueAt, c.eligibleAt); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return nil, nil, err
+		}
 	}
 
-	for _, customerID := range customers {
-		if err := enqueue(ctx, tx, practiceID, clientID, actStripeCustomerDelete, customerID, now); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return nil, nil, err
-		}
-		if err := enqueue(ctx, tx, practiceID, clientID, actStripeRedactionJob, customerID, eligibleAt); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return nil, nil, err
-		}
+	// Nothing to report when every Customer is already redactable: the
+	// whole Stripe half runs on the worker's next pass.
+	if !latest.After(now) {
+		return ids, nil, nil
 	}
-	return customers, reportedEligibleAt, nil
+	return ids, &latest, nil
 }
 
 // enqueuePortalErasure queues the deletion of her Identity Platform
@@ -358,7 +391,7 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 // identity_uid is cleared on the row so nothing in this database points
 // at an account that is about to stop existing. The row itself stays --
 // it is how her portal history resolves.
-func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string) (queued bool, sessionsEnded int, err error) {
+func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string, now time.Time) (queued bool, sessionsEnded int, err error) {
 	var identityUID sql.NullString
 	err = tx.QueryRowContext(ctx,
 		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID,
@@ -394,7 +427,7 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 		return false, 0, fmt.Errorf("client: count ended portal sessions: %w", err)
 	}
 
-	if err := enqueue(ctx, tx, practiceID, clientID, actIdentityAccountDelete, identityUID.String, time.Now().UTC()); err != nil {
+	if err := enqueue(ctx, tx, practiceID, clientID, actIdentityAccountDelete, identityUID.String, now, time.Time{}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, 0, err
 	}
@@ -434,15 +467,29 @@ func recordErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffI
 // enqueue writes one client_erasure_outbox row, due at dueAt. The
 // partial unique index makes a repeat enqueue of an act still pending a
 // no-op rather than a duplicate call to somebody else's API.
-func enqueue(ctx context.Context, tx *sql.Tx, practiceID, clientID string, act erasureAct, target string, dueAt time.Time) error {
+//
+// redactableAfter is the zero time for every act but a redaction job.
+// Where it is set, it is the durable fact -- when Stripe will first
+// allow this Customer's transactions to be redacted -- and it is written
+// once here and never touched again. dueAt is scheduling, and a retry
+// rewrites it; the two must not be conflated, which is the mistake
+// 00065 exists to correct.
+func enqueue(ctx context.Context, tx *sql.Tx, practiceID, clientID string, act erasureAct, target string, dueAt, redactableAfter time.Time) error {
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO client_erasure_outbox (client_id, practice_id, act, target, next_attempt_at)
-		 VALUES ($1, $2, $3::client_erasure_act, $4, $5)
+		`INSERT INTO client_erasure_outbox (client_id, practice_id, act, target, next_attempt_at, redactable_after)
+		 VALUES ($1, $2, $3::client_erasure_act, $4, $5, $6)
 		 ON CONFLICT (client_id, act, target) WHERE status = 'pending' DO NOTHING`,
-		clientID, practiceID, string(act), target, dueAt,
+		clientID, practiceID, string(act), target, dueAt, nullIfZeroTime(redactableAfter),
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("client: enqueue erasure act: %w", err)
 	}
 	return nil
+}
+
+// nullIfZeroTime turns the zero time into a SQL NULL -- the same "empty
+// means not set" convention nullIfEmpty already applies to this
+// package's optional text columns.
+func nullIfZeroTime(t time.Time) sql.NullTime {
+	return sql.NullTime{Time: t, Valid: !t.IsZero()}
 }

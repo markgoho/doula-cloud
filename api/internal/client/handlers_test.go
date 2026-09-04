@@ -333,7 +333,7 @@ func TestEditHandler_ChangingEmailRevokesPendingInvite(t *testing.T) {
 	}
 
 	status, lastErr := outboxStatus(t, db, outboxID)
-	if status != "dead_lettered" || lastErr == "" {
+	if status != deadLetteredStatus || lastErr == "" {
 		t.Fatalf("outbox row status = %q lastError = %q, want dead_lettered with a reason", status, lastErr)
 	}
 }

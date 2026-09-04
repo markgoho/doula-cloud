@@ -157,6 +157,40 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Sam Admin' })).toBeVisible();
 	});
 
+	it('says an erased record was erased, and that Stripe is not done yet (ADR-0027)', async () => {
+		await setup({
+			overrides: {
+				givenName: 'Erased Client',
+				familyName: '',
+				email: '',
+				erasedAt: '2026-03-01T00:00:00Z',
+				stripeRedactionEligibleAt: '2026-05-30T00:00:00Z'
+			}
+		});
+
+		await expect
+			.element(testPage.getByText(/This client's data was erased on request/))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText(/Payment records at Stripe are redactable from/))
+			.toBeVisible();
+	});
+
+	it('says nothing about erasure for a Client who has not asked', async () => {
+		await setup({});
+
+		await expect.element(testPage.getByText(/was erased on request/)).not.toBeInTheDocument();
+	});
+
+	it('does not claim Stripe is outstanding once the redaction has run', async () => {
+		await setup({ overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
+
+		await expect.element(testPage.getByText(/was erased on request/)).toBeVisible();
+		await expect
+			.element(testPage.getByText(/redactable from/))
+			.not.toBeInTheDocument();
+	});
+
 	it('names an erasure as its own act, not another edit (ADR-0027)', async () => {
 		await setup({
 			overrides: {

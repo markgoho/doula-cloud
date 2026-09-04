@@ -23,17 +23,6 @@ const (
 	eventErased eventType = "erased"
 )
 
-// erasureAct names one act client_erasure_outbox carries -- the Go side
-// of the client_erasure_act enum. Each is somebody else's API, which is
-// why none of them happens inside the erasure transaction.
-type erasureAct string
-
-const (
-	actStripeCustomerDelete  erasureAct = "stripe_customer_delete"
-	actStripeRedactionJob    erasureAct = "stripe_redaction_job"
-	actIdentityAccountDelete erasureAct = "identity_account_delete"
-)
-
 // change is one changed fact's activity diff entry: both sides, so
 // an event row stays legible without joining back to the row it
 // describes.

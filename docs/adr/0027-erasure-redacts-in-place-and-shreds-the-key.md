@@ -26,13 +26,19 @@ The mechanism is crypto-shredding. Every Client gets a random 256-bit data key a
 
 The stated limitation: a database backup taken before erasure holds both the ciphertext and the key, so shredding is effective from the moment of erasure forward and not retroactively across the backup retention window. Wrapping the data key under a KMS-held key encryption key was considered and deferred — it does not serve this goal, since a backup that captures the key table captures the wrapped key too, and the KEK is not what erasure destroys. It becomes worth doing when the threat model is a stolen database dump rather than a right-to-delete request; that is a different ticket.
 
+A second stated limitation, narrower: `activity` rows written before this mechanism existed are plaintext and stay that way. Sealing is a write-time act and `activity` takes no `UPDATE`, so there was never a migration that could have converted them — the read path recognizes both shapes and returns a pre-existing plaintext diff as it is. Shredding therefore covers every Client event written from #394 forward, and none written before it. Pre-launch, no such row holds a real person's data, which is the only reason this is a footnote rather than a blocker.
+
 The erasure act itself is recorded as a plaintext `activity` row — action `erased`, subject the Client, actor the Owner, diff naming what the act covered. It is deliberately outside the sealing path: it describes the act, not her data, and it has to stay readable after her own history is shredded.
 
 ## Stripe: delete the Customer now, redact the transactions when they are old enough
 
 A Client's Stripe Customer lives on her Practice's connected account. Erasure deletes it, which Stripe itself recommends doing first, because it stops new transactions attaching to an object that is about to be redacted. Deleting the Customer is enough to remove her name and email from Stripe; it is not enough to remove her from the charges and payment intents underneath it, which is what Redaction Jobs are for.
 
-Stripe will not redact most transactions until 90 days after they are created. So erasure does not attempt a redaction job it knows will fail. It computes the eligibility date locally — 90 days past the newest of her invoices — and schedules the job for that date through the same outbox pattern every other deferred act in this product uses. Until then `stripeRedactionEligibleAt` is on her detail read, so the Practice can see the state rather than being told the work is finished when it is not.
+Stripe will not redact most transactions until 90 days after they are created. So erasure does not attempt a redaction job it knows will fail. It computes the eligibility date locally and schedules the job for that date through the same outbox pattern every other deferred act in this product uses.
+
+The date is **per Stripe Customer, not per Client**. `payments.CreateInvoice` makes a fresh Customer for every invoice, so a Client billed twice six months apart has two Customers whose transactions come of age six months apart, and each redaction job waits only on its own. One Client-wide date — 90 days past her newest invoice overall — would hold a year-old charge hostage to a bill she paid last week, which is not what the law asks and not what Stripe requires.
+
+What the Practice sees is the last of those dates, on her detail read as `stripeRedactionEligibleAt`: when the Stripe half of her erasure actually finishes. It is present for as long as any redaction has not succeeded — **including after one has failed**, where the date it names may already be in the past. That is deliberate. The date lives in its own `redactable_after` column rather than being read back off the outbox row's `next_attempt_at`, because retry backoff rewrites `next_attempt_at` on every failed attempt: reading it would turn "redactable after March" into a five-minute retry stamp, and dropping dead-lettered rows from the read would make a redaction that failed look like one that finished. Absent means done, and nothing else.
 
 Two things were verified against the Sandbox rather than read from the docs, and both shaped this:
 
