@@ -30,17 +30,21 @@
 		loadPendingRequests,
 		type PendingRequestItem
 	} from '#lib/engagementRequest.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 
-	let requests = $state<PendingRequestItem[]>([]);
+	const requests = new PaginatedList<PendingRequestItem>({
+		first: { items: [], hasMore: false },
+		loadPage: (cursor) =>
+			loadPendingRequests(apiFetchWithSession, page.params.practiceId!, cursor),
+		failureMessage: 'Failed to load more pending requests'
+	});
 	let error = $state('');
 	let isLoaded = $state(false);
-	let cursor = $state('');
-	let isMoreAvailable = $state(false);
 
 	const columns = [
 		{ label: 'Client', accessor: (request: PendingRequestItem) => request.clientName },
@@ -71,24 +75,10 @@
 
 	async function loadFirstPage() {
 		try {
-			const loaded = await loadPendingRequests(apiFetchWithSession, page.params.practiceId!);
-			requests = loaded.items;
-			cursor = loaded.nextCursor ?? '';
-			isMoreAvailable = loaded.hasMore;
+			requests.reset(await loadPendingRequests(apiFetchWithSession, page.params.practiceId!));
 			isLoaded = true;
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load pending requests';
-		}
-	}
-
-	async function handleLoadMore() {
-		try {
-			const loaded = await loadPendingRequests(apiFetchWithSession, page.params.practiceId!, cursor);
-			requests = [...requests, ...loaded.items];
-			cursor = loaded.nextCursor ?? '';
-			isMoreAvailable = loaded.hasMore;
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load more pending requests';
 		}
 	}
 </script>
@@ -101,10 +91,12 @@
 {:else if isLoaded}
 	<DataTable
 		{columns}
-		rows={requests}
+		rows={requests.items}
 		rowHref={approvalHref}
-		hasMore={isMoreAvailable}
-		onLoadMore={handleLoadMore}
+		hasMore={requests.hasMore}
+		onLoadMore={() => requests.loadMore()}
+		isLoadingMore={requests.isLoadingMore}
+		loadMoreError={requests.loadMoreError}
 		emptyMessage="No requests are waiting for a decision."
 	/>
 {:else}

@@ -9,6 +9,7 @@
 	 * and both already adapt to the space they are given. That is also
 	 * what keeps it inside CLAUDE.md's no-new-components block.
 	 */
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -18,6 +19,7 @@
 		loadPracticeInvoices,
 		type PracticeInvoice
 	} from '#lib/invoice.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -29,14 +31,18 @@
 	let { data }: PageProperties = $props();
 
 	/*
-	 * Captures the first page only, the way the Billing ledger does
-	 * (#446): `handleLoadMore` grows this list from here, so re-deriving
-	 * it from `data` would drop every page appended since.
+	 * Takes the load's first page and grows from there (#446). The list
+	 * owns its own cursor, in-flight guard and error text, so re-deriving
+	 * from `data` -- which would drop every page appended since -- is not
+	 * something this file can do by accident any more.
 	 */
-	let invoices = $state(data.items);
-	let cursor = $state(data.nextCursor ?? '');
-	let isMoreAvailable = $state(data.hasMore);
-	let loadError = $state('');
+	const invoices = new PaginatedList({
+		// untrack because capturing the load's page once is the whole point:
+		// re-deriving from `data` would drop every page appended since.
+		first: untrack(() => data),
+		loadPage: (cursor) => loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor),
+		failureMessage: 'Failed to load more invoices'
+	});
 
 	/*
 	 * The totals stay the load's, never the loaded pages': the BFF returns
@@ -80,17 +86,6 @@
 		});
 	}
 
-	async function handleLoadMore() {
-		loadError = '';
-		try {
-			const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor);
-			invoices = [...invoices, ...next.items];
-			cursor = next.nextCursor ?? '';
-			isMoreAvailable = next.hasMore;
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load more invoices';
-		}
-	}
 </script>
 
 <PageTitle page="Invoices" />
@@ -104,13 +99,14 @@
 
 <DataTable
 	{columns}
-	rows={invoices}
+	rows={invoices.items}
 	rowHref={engagementHref}
-	hasMore={isMoreAvailable}
-	onLoadMore={handleLoadMore}
+	hasMore={invoices.hasMore}
+	onLoadMore={() => invoices.loadMore()}
+	isLoadingMore={invoices.isLoadingMore}
 	emptyMessage="No invoices yet. One appears here as soon as a contract is billed."
 />
 
-{#if loadError}
-	<Notice message={loadError} variant="error" />
+{#if invoices.loadMoreError}
+	<Notice message={invoices.loadMoreError} variant="error" />
 {/if}

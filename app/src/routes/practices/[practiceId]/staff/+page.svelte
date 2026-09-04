@@ -3,7 +3,8 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -40,11 +41,17 @@
 	type Roster = { members: StaffSummary[]; invitations: InvitationPage };
 
 	let members = $state<StaffSummary[]>([]);
-	let invitations = $state<InvitationSummary[]>([]);
-	let invitationsCursor = $state('');
-	let isMoreInvitationsAvailable = $state(false);
-	let isLoadingMoreInvitations = $state(false);
-	let loadMoreInvitationsError = $state('');
+	// Only the Invitations grow: the Members roster stays whole (#446 --
+	// it is bounded, unlike the Invitation history), so it needs no cursor
+	// of its own.
+	const invitations = new PaginatedList<InvitationSummary>({
+		first: { items: [], hasMore: false },
+		loadPage: async (cursor) => {
+			const roster = await loadRosterPage(cursor);
+			return roster.invitations;
+		},
+		failureMessage: 'Failed to load more invitations'
+	});
 	let error = $state('');
 	let isLoaded = $state(false);
 
@@ -129,49 +136,30 @@
 		}
 	];
 
-	async function loadRoster() {
-		const response = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/staff`);
-		if (!response.ok) {
-			error = await response.text();
-			return;
-		}
+	// Throws on a refusal rather than returning it, so PaginatedList can
+	// catch it. The endpoint answers the whole roster on every page; only
+	// its invitations half pages.
+	async function loadRosterPage(cursor: string): Promise<Roster> {
+		const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+		const response = await apiFetchWithSession(
+			`/api/practices/${page.params.practiceId}/staff${query}`
+		);
+		if (!response.ok) throw new Error(await apiErrorMessage(response));
+		return (await response.json()) as Roster;
+	}
 
-		const roster: Roster = await response.json();
-		members = roster.members;
-		invitations = roster.invitations.items;
-		invitationsCursor = roster.invitations.nextCursor ?? '';
-		isMoreInvitationsAvailable = roster.invitations.hasMore;
-		loadMoreInvitationsError = '';
-		isLoaded = true;
+	async function loadRoster() {
+		try {
+			const roster = await loadRosterPage('');
+			members = roster.members;
+			invitations.reset(roster.invitations);
+			isLoaded = true;
+		} catch (error_) {
+			error = error_ instanceof Error ? error_.message : 'Failed to load the roster';
+		}
 	}
 
 	onMount(loadRoster);
-
-	// Loads one more page of pending Invitations, appended to what is
-	// already on screen -- the Members roster stays whole (#446: it is
-	// bounded, unlike the Invitation history), so only this list grows.
-	async function handleLoadMoreInvitations() {
-		loadMoreInvitationsError = '';
-		isLoadingMoreInvitations = true;
-		try {
-			const response = await apiFetchWithSession(
-				`/api/practices/${page.params.practiceId}/staff?cursor=${encodeURIComponent(invitationsCursor)}`
-			);
-			if (!response.ok) {
-				loadMoreInvitationsError = await response.text();
-				return;
-			}
-			const roster: Roster = await response.json();
-			invitations = [...invitations, ...roster.invitations.items];
-			invitationsCursor = roster.invitations.nextCursor ?? '';
-			isMoreInvitationsAvailable = roster.invitations.hasMore;
-		} catch (error_) {
-			loadMoreInvitationsError =
-				error_ instanceof Error ? error_.message : 'Failed to load more invitations';
-		} finally {
-			isLoadingMoreInvitations = false;
-		}
-	}
 
 	// One page of a member's work state history, appended to whatever is
 	// already on screen. cursor is undefined for the first page.
@@ -531,17 +519,17 @@
 		{/if}
 
 		<Heading level={2} text="Pending invitations" />
-		{#if invitations.length === 0}
+		{#if invitations.items.length === 0}
 			<Text text="No pending invitations." />
 		{:else}
 			<DataTable
 				columns={invitationColumns}
-				rows={invitations}
+				rows={invitations.items}
 				rowActions={{ label: 'Actions', content: invitationActions }}
-				hasMore={isMoreInvitationsAvailable}
-				onLoadMore={handleLoadMoreInvitations}
-				isLoadingMore={isLoadingMoreInvitations}
-				loadMoreError={loadMoreInvitationsError}
+				hasMore={invitations.hasMore}
+				onLoadMore={() => invitations.loadMore()}
+				isLoadingMore={invitations.isLoadingMore}
+				loadMoreError={invitations.loadMoreError}
 				emptyMessage="No pending invitations."
 			/>
 		{/if}
