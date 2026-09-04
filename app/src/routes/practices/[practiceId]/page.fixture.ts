@@ -51,6 +51,25 @@ export const fixture: RouteFixture = {
 		if (path.includes('/push-subscriptions')) {
 			return jsonResponse({});
 		}
+		// #486: the Recent-activity feed, with one row long enough to
+		// exercise the ledger's own overflow handling (ADR-0024/0025) --
+		// #530's own URL again, this time as the diff a Practice's own
+		// edit produced.
+		if (path.includes('/activity')) {
+			return jsonResponse({
+				items: [
+					{
+						subjectKind: 'engagement',
+						subjectId: 'engagement-1',
+						action: 'contract_sent',
+						actorKind: 'staff',
+						actorName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+						createdAt: '2026-08-01T00:00:00Z'
+					}
+				],
+				hasMore: false
+			});
+		}
 		throw new Error(`practices/[practiceId] fixture: unmatched fetch path ${path}`);
 	},
 	readyText: `Welcome to ${practiceName}`

@@ -20,6 +20,29 @@
 		 * one flag turns on both.
 		 */
 		numeric?: boolean;
+		/*
+		 * The activity ledger's own signature treatment (brief.md's "One
+		 * signature component", amended on #433): "a fixed date column in
+		 * `meta` at tabular figures, the event in `body`, the actor in
+		 * `on-surface-muted`". Independent of `numeric` -- a meta date reads
+		 * start-aligned, not end-aligned like a quantity -- so a column picks
+		 * at most one of the two, never both. Applies to the body cell only:
+		 * the header keeps this table's one heading style regardless of what
+		 * a column's own values look like, the same way `numeric`'s
+		 * alignment is the one part of that flag the header shares.
+		 */
+		variant?: 'meta' | 'body' | 'muted';
+		/*
+		 * ADR-0022: "the exact instant is carried underneath and never
+		 * replaced -- the rendered element keeps the full timestamp as its
+		 * machine-readable value, so a screen reader, a hover and a
+		 * copy-paste all get the real one." A relative or absolute display
+		 * string (dates.ts's formatActivityTimestamp) is what accessor
+		 * returns; datetimeAccessor is the same row's ISO instant, wrapping
+		 * the cell in a native `<time datetime>` rather than plain text.
+		 * Optional because most columns are not a timestamp at all.
+		 */
+		datetimeAccessor?: (row: T) => string;
 	}
 
 	interface RowActions<T> {
@@ -37,6 +60,15 @@
 		isLoadingMore?: boolean;
 		loadMoreError?: string;
 		emptyMessage: string;
+		/**
+		 * Wraps the whole table in a closed-by-default `<details>`, named by
+		 * this string -- the Client portal's own placement for the activity
+		 * ledger (brief.md's #433 amendment: "behind a closed disclosure in
+		 * the Client portal"). Absent everywhere else this component is used
+		 * today (the hub feed and the staff Engagement page render it open,
+		 * per the same amendment's "sits low on the page").
+		 */
+		disclosure?: string;
 	}
 
 	let {
@@ -48,10 +80,12 @@
 		onLoadMore,
 		isLoadingMore = false,
 		loadMoreError,
+		disclosure,
 		emptyMessage
 	}: Properties<T> = $props();
 </script>
 
+{#snippet ledgerContent()}
 <stack-l class="frame">
 	<table class="table-view">
 		<thead>
@@ -73,9 +107,16 @@
 				{#each rows as row, index (index)}
 					<tr>
 						{#each columns as column, columnIndex (column.label)}
-							<td class:numeric={column.numeric}>
+							<td
+								class:numeric={column.numeric}
+								class:meta={column.variant === 'meta'}
+								class:variant-body={column.variant === 'body'}
+								class:muted={column.variant === 'muted'}
+							>
 								{#if columnIndex === 0 && rowHref}
 									<Link href={rowHref(row)} label={column.accessor(row)} />
+								{:else if column.datetimeAccessor}
+									<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
 								{:else}
 									{column.accessor(row)}
 								{/if}
@@ -112,9 +153,16 @@
 				<dl>
 					{#each columns as column, columnIndex (column.label)}
 						<dt>{column.label}</dt>
-						<dd class:numeric={column.numeric}>
+						<dd
+							class:numeric={column.numeric}
+							class:meta={column.variant === 'meta'}
+							class:variant-body={column.variant === 'body'}
+							class:muted={column.variant === 'muted'}
+						>
 							{#if columnIndex === 0 && rowHref}
 								<Link href={rowHref(row)} label={column.accessor(row)} />
+							{:else if column.datetimeAccessor}
+								<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
 							{:else}
 								{column.accessor(row)}
 							{/if}
@@ -137,9 +185,31 @@
 		<Button label="Load more" variant="secondary" loading={isLoadingMore} onClick={onLoadMore} />
 	{/if}
 </stack-l>
+{/snippet}
+
+{#if disclosure}
+	<details>
+		<summary>{disclosure}</summary>
+		{@render ledgerContent()}
+	</details>
+{:else}
+	{@render ledgerContent()}
+{/if}
 
 <style>
 	@layer components {
+		/* A closed <details> hides every child but <summary> per the HTML
+		   spec, but that is a user-agent-origin rule, and a plain author
+		   rule -- whatever gives .frame's own `stack-l` its base `display`
+		   -- wins over user-agent styles regardless of specificity (CSS
+		   cascade origin order, not the layer above: this component's own
+		   @layer components still outranks the UA layer). `!important`
+		   makes the closed state explicit rather than depending on that
+		   base rule happening to stay silent about it. */
+		details:not([open]) > .frame {
+			display: none !important;
+		}
+
 		/* The frame is a container, so the switch below reads the room
 		   DataTable's own wrapper has rather than the room the window has.
 		   Named for the same reason StaffTopBar names its own (#540): body
@@ -218,6 +288,26 @@
 		td.numeric {
 			text-align: end;
 			font-variant-numeric: tabular-nums;
+		}
+
+		/* The activity ledger's three body-cell treatments (brief.md's
+		   #433 amendment). Body-only, unlike .numeric above: the header
+		   keeps this table's one heading style regardless of what a
+		   column's values look like. */
+		td.meta {
+			font-size: var(--text-meta-size);
+			font-weight: var(--text-meta-weight);
+			line-height: var(--text-meta-leading);
+			letter-spacing: var(--text-meta-tracking);
+			font-variant-numeric: tabular-nums;
+		}
+
+		td.variant-body {
+			font-size: var(--text-body-size);
+		}
+
+		td.muted {
+			color: var(--color-on-surface-muted);
 		}
 
 		/* Unavoidable (#564): a <table> and one <dl> per record are
@@ -305,6 +395,36 @@
 		.record-view dd.numeric {
 			text-align: end;
 			font-variant-numeric: tabular-nums;
+		}
+
+		/* The record view's own mirror of td.meta/variant-body/muted above. */
+		.record-view dd.meta {
+			font-size: var(--text-meta-size);
+			font-weight: var(--text-meta-weight);
+			line-height: var(--text-meta-leading);
+			letter-spacing: var(--text-meta-tracking);
+			font-variant-numeric: tabular-nums;
+		}
+
+		.record-view dd.variant-body {
+			font-size: var(--text-body-size);
+		}
+
+		.record-view dd.muted {
+			color: var(--color-on-surface-muted);
+		}
+
+		/* The Client-portal disclosure wrapper (brief.md's #433 amendment).
+		   No marker/appearance override: the platform triangle is what GOV.UK's
+		   own Details component keeps, and this repo has no established
+		   disclosure treatment of its own to depart to. */
+		summary {
+			cursor: pointer;
+			font-family: var(--font-family-base);
+			font-size: var(--text-label-size);
+			font-weight: var(--font-weight-medium);
+			color: var(--color-on-surface-variant);
+			padding-block: var(--space-2);
 		}
 	}
 </style>

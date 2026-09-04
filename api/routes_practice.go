@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"doula-cloud/api/internal/activityfeed"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientfieldtemplate"
@@ -90,6 +91,11 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 // them further would scatter that without separating anything.
 func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d Deps) {
 	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, http.HandlerFunc(practiceSessionHandler))
+	// #486's practice-wide feed: every subject kind #485's registry knows,
+	// gated per row rather than by a role declaration here -- AnyStaff, the
+	// same as engagement.ListActivityHandler below, because the gate (not
+	// this mount) is what a reader may or may not see.
+	g.Get("/api/practices/{practiceId}/activity", staffauth.AnyStaff, activityfeed.PracticeHandler())
 	// Roles and employment type are edited together on one surface
 	// (RA-G2, #261) -- ADR-0008 makes them the two halves of what a
 	// person is at a Practice, so there is one endpoint, not two.

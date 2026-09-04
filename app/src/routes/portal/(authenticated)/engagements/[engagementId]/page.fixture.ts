@@ -29,6 +29,12 @@ export const fixture: RouteFixture = {
 	params: { engagementId: 'engagement-1' },
 	url: 'https://example.test/portal/engagements/engagement-1',
 	pageData: { practiceName },
-	respond: () => jsonResponse(detail),
+	// #486: the Activity ledger's own read shares this route's one mocked
+	// fetcher, and needs the cursor-list envelope docs/api-design.md
+	// section 4 asks for -- the bare `detail` shape above has no `items`,
+	// which is exactly what crashed DataTable when this fixture answered
+	// every path with it alike.
+	respond: (path) =>
+		jsonResponse(path.includes('/activity') ? { items: [], hasMore: false } : detail),
 	readyText: `Welcome to ${practiceName}`
 };

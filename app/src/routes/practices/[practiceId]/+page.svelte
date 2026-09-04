@@ -24,16 +24,31 @@
 		loadPracticeLanding,
 		type PracticeLanding
 	} from '#lib/practiceLanding.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
+	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
 	let landing = $state<PracticeLanding | undefined>();
 	let error = $state('');
+
+	// #486's Recent-activity feed: cursor-paginated on its own, unlike the
+	// one-shot blocks loadPracticeLanding already merges into `landing`, so
+	// it gets its own PaginatedList the same way the Engagement page's own
+	// Visits section does.
+	const activity = new PaginatedList<ActivityEntry>({
+		first: { items: [], hasMore: false },
+		loadPage: (cursor) => loadPracticeActivityPage(apiFetchWithSession, page.params.practiceId!, cursor),
+		failureMessage: 'Failed to load more activity'
+	});
+	let activityError = $state('');
 
 	async function load() {
 		try {
@@ -43,8 +58,17 @@
 		}
 	}
 
+	async function loadActivity() {
+		try {
+			activity.reset(await loadPracticeActivityPage(apiFetchWithSession, page.params.practiceId!, ''));
+		} catch (error_) {
+			activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
+		}
+	}
+
 	onMount(async () => {
 		await load();
+		await loadActivity();
 
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
@@ -211,6 +235,34 @@
 	{#if landing!.connect !== undefined}{@render connectBlock()}{/if}
 {/snippet}
 
+<!--
+	#486 AC1/AC3: the practice-wide feed, gated per row by #485's
+	activitygate and rendered here with the brief's own ledger treatment --
+	a meta date column, the event in body text, the actor muted, hairline
+	rows, no vertical column rule. Low prominence per the design brief's
+	own #433 amendment, which is why it renders through OverviewHub's
+	`feed` slot rather than inside `primary` or `secondary`.
+-->
+{#snippet activityFeed()}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="card" text="Recent activity" />
+			{#if activityError}
+				<Notice variant="error" message={activityError} />
+			{/if}
+			<DataTable
+				columns={activityLedgerColumns()}
+				rows={activity.items}
+				hasMore={activity.hasMore}
+				onLoadMore={() => activity.loadMore()}
+				isLoadingMore={activity.isLoadingMore}
+				loadMoreError={activity.loadMoreError}
+				emptyMessage="Nothing has happened yet."
+			/>
+		</stack-l>
+	</section>
+{/snippet}
+
 {#snippet empty()}
 	<!--
 		The zero-Client state is the reason ADR-0018 makes `empty` a required
@@ -236,6 +288,7 @@
 	isEmpty={landing ? !landing.hasClients : false}
 	{primary}
 	secondary={landing && hasSecondary(landing) ? secondary : undefined}
+	feed={landing ? activityFeed : undefined}
 	{empty}
 	loading={landing || error ? undefined : 'Loading your Practice'}
 	loadError={error || undefined}

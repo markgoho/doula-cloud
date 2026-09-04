@@ -204,6 +204,49 @@ func TestMoneyActions_Sorted(t *testing.T) {
 	}
 }
 
+// TestStaffingActions_ContainsExactlyTheRosterSet pins the set CONTEXT.md's
+// Activity entry keeps off a Client's own portal ledger -- "never who
+// inside the Practice did what": an Offer is which Doula was asked,
+// accepted or bumped, and a Visit reassignment is which Doula covers it,
+// both Practice-roster facts rather than facts about her. Money actions
+// are deliberately absent from this set (CONTEXT.md: "her money" stays on
+// her own ledger) -- a drift here would either leak roster facts to a
+// Client or hide a fact she is owed.
+func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
+	got := map[activity.EngagementAction]bool{}
+	for _, a := range activity.StaffingActions() {
+		got[a] = true
+	}
+	want := []activity.EngagementAction{
+		activity.ActionOfferSent,
+		activity.ActionOfferAccepted,
+		activity.ActionOfferDeclined,
+		activity.ActionOfferSuperseded,
+		activity.ActionOfferWithdrawn,
+		activity.ActionVisitReassigned,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)
+	}
+	for _, a := range want {
+		if !got[a] {
+			t.Errorf("StaffingActions() missing %q", a)
+		}
+	}
+}
+
+// TestStaffingActions_Sorted proves the deterministic ordering a caller
+// building a SQL exclusion clause relies on, the same way MoneyActions'
+// own ordering test does.
+func TestStaffingActions_Sorted(t *testing.T) {
+	got := activity.StaffingActions()
+	for i := 1; i < len(got); i++ {
+		if got[i-1] >= got[i] {
+			t.Fatalf("StaffingActions() not sorted at index %d: %v", i, got)
+		}
+	}
+}
+
 // TestScopeToPractice_LetsAWriteOutsideStaffauthMiddlewarePassRLS proves
 // the landmine ADR-0022 names for a write site with no per-request
 // app.current_practice_id (a Client-portal or webhook path): without

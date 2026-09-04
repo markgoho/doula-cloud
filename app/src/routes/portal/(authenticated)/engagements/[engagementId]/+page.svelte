@@ -15,8 +15,12 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import { activityLedgerColumns, loadPortalActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 
 	type Detail = {
@@ -30,6 +34,16 @@
 	let detail = $state<Detail | undefined>();
 	let error = $state('');
 
+	// #486 AC5: the same record-scoped ledger the staff Engagement page
+	// gets, behind a closed disclosure -- the design brief's own placement
+	// decision for the Client portal.
+	const activity = new PaginatedList<ActivityEntry>({
+		first: { items: [], hasMore: false },
+		loadPage: (cursor) => loadPortalActivityPage(apiFetchWithSession, page.params.engagementId!, cursor),
+		failureMessage: 'Failed to load more activity'
+	});
+	let activityError = $state('');
+
 	onMount(async () => {
 		const response = await apiFetchWithSession(
 			`/api/portal/engagements/${page.params.engagementId}`
@@ -40,6 +54,12 @@
 		}
 
 		detail = await response.json();
+
+		try {
+			activity.reset(await loadPortalActivityPage(apiFetchWithSession, page.params.engagementId!, ''));
+		} catch (error_) {
+			activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
+		}
 	});
 
 	/** The summary row's own facts (#505). `dueDate` is left out of the
@@ -76,9 +96,34 @@
 {/snippet}
 
 <!--
+	#486 AC5: CONTEXT.md's own words for this to a Client -- "Everything
+	that has happened" -- as the section heading. GOV.UK's Details guidance
+	is that a summary names what it reveals rather than a bare "Show" with
+	no subject, so the disclosure's own toggle text repeats "what has
+	happened" instead of the heading's exact words. Behind a closed
+	disclosure, per the design brief's #433 amendment for the Client
+	portal.
+-->
+{#snippet activitySection()}
+	{#if activityError}
+		<Notice variant="error" message={activityError} />
+	{/if}
+	<DataTable
+		disclosure="Show what has happened"
+		columns={activityLedgerColumns()}
+		rows={activity.items}
+		hasMore={activity.hasMore}
+		onLoadMore={() => activity.loadMore()}
+		isLoadingMore={activity.isLoadingMore}
+		loadMoreError={activity.loadMoreError}
+		emptyMessage="Nothing has happened yet."
+	/>
+{/snippet}
+
+<!--
 	Archetype D, ADR-0018 -- the same Template the staff Engagement page
-	uses, which is the point of putting both on it. No sections and no
-	contents region: what this page holds is the record's own summary
+	uses, which is the point of putting both on it. #486 gives this page
+	its first section: everything else here is the record's own summary
 	and the way to its documents.
 -->
 <RecordDetail
@@ -86,7 +131,7 @@
 	serviceName={page.data.practiceName}
 	{summary}
 	{actions}
-	sections={[]}
+	sections={detail ? [{ heading: 'Everything that has happened', content: activitySection }] : []}
 	loading={detail || error ? undefined : 'Loading your Engagement'}
 	loadError={error || undefined}
 />

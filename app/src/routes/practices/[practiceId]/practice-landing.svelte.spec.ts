@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 // The Skeleton reserves a line of body copy with `var(--text-body-size)`,
@@ -8,6 +9,12 @@ import Page from './+page.svelte';
 // the very thing ADR-0020 asks it to do. The real app loads these in the
 // root layout.
 import '#lib/styles/app.css';
+
+// Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
+// only place that calls this in the real app -- without it every layout
+// primitive (`center-l`'s own `max="none"`, included) sits unregistered and
+// inert, matching clients-list.svelte.spec.ts's own reason for the same line.
+if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 vi.mock('$app/state', () => ({ page: { params: { practiceId: 'practice-1' } } }));
 
@@ -70,6 +77,7 @@ async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overri
 			items: [{ requestId: 'request-1' }, { requestId: 'request-2' }],
 			hasMore: false
 		}),
+		activity: jsonResponse({ items: [], hasMore: false }),
 		...overrides
 	};
 
@@ -198,6 +206,51 @@ describe('the Practice landing page', () => {
 		await setup({ overrides: { session: refusal('your session has expired') } });
 
 		await expect.element(testPage.getByText('your session has expired')).toBeVisible();
+	});
+
+	// #486 AC1/AC3: the practice-wide feed, low on the page, rendered
+	// through OverviewHub's own `feed` slot with the ledger's three
+	// columns -- when, what, who.
+	it('renders the practice-wide activity feed low on the page', async () => {
+		// DataTable's own table view needs a frame wider than its content
+		// floor (48.75rem, DataTable.svelte) or it renders the narrow
+		// record view instead, whose cells carry no `cell` role -- see
+		// DataTable.svelte.spec.ts's own WIDE viewport for the same reason.
+		await testPage.viewport(1440, 900);
+		await setup({
+			overrides: {
+				activity: jsonResponse({
+					items: [
+						{
+							subjectKind: 'engagement',
+							subjectId: 'e1',
+							action: 'invoice_raised',
+							actorKind: 'staff',
+							actorName: 'Mark Goho',
+							createdAt: new Date().toISOString()
+						}
+					],
+					hasMore: false
+				})
+			}
+		});
+
+		await expect.element(testPage.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Invoice raised' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Mark Goho' })).toBeVisible();
+	});
+
+	it('says so when the activity feed cannot be read', async () => {
+		await setup({ overrides: { activity: refusal('nope') } });
+
+		await expect.element(testPage.getByText('nope')).toBeVisible();
+	});
+
+	it('shows the empty-feed message when there is no activity yet', async () => {
+		await testPage.viewport(1440, 900);
+		await setup();
+
+		await expect.element(testPage.getByRole('cell', { name: 'Nothing has happened yet.' })).toBeVisible();
 	});
 
 	it('still registers this device for push once it has landed', async () => {

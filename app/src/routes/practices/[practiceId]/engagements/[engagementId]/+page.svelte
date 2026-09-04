@@ -15,6 +15,7 @@
 	} from '#lib/engagementDetail.js';
 	import type { PageProps as PageProperties } from './$types';
 	import { formatCalendarDay } from '#lib/dates.js';
+	import { activityLedgerColumns, loadEngagementActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
 	import {
@@ -88,6 +89,17 @@
 	});
 	let visitsError = $state('');
 	let isCreatingVisit = $state(false);
+
+	// #486 AC4: the same record-scoped ledger the practice-wide feed reuses,
+	// through engagement.ListActivityHandler (unchanged by #486) --
+	// ADR-0008's money tier already applies there, per that handler's own
+	// doc comment.
+	const activity = new PaginatedList<ActivityEntry>({
+		first: { items: [], hasMore: false },
+		loadPage: (cursor) => loadEngagementActivityPage(apiFetchWithSession, reference, cursor),
+		failureMessage: 'Failed to load more activity'
+	});
+	let activityError = $state('');
 
 	let portalInviteLink = $state('');
 	let portalInviteError = $state('');
@@ -189,6 +201,14 @@
 			visits.reset(await loadVisitsPage(apiFetchWithSession, reference, ''));
 		} catch (error_) {
 			visitsError = error_ instanceof Error ? error_.message : 'Failed to load Visits';
+		}
+	}
+
+	async function loadActivity() {
+		try {
+			activity.reset(await loadEngagementActivityPage(apiFetchWithSession, reference, ''));
+		} catch (error_) {
+			activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
 		}
 	}
 
@@ -392,13 +412,14 @@
 
 	onMount(async () => {
 		// The Engagement is already here, from load. What remains is the
-		// six sections that fill in behind it, each rendering as it lands.
+		// seven sections that fill in behind it, each rendering as it lands.
 		await loadVisits();
 		await loadMessages();
 		await Promise.all(planSections.map((section) => loadPlan(section.type)));
 		await loadContractSection();
 		await loadInvoicesSection();
 		await loadOffersSection();
+		await loadActivity();
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free
@@ -729,6 +750,26 @@
 {/snippet}
 
 <!--
+	#486 AC4: the brief's ledger treatment -- a meta date column, the event
+	in body text, the actor muted. Last in `sections` (below), matching the
+	design brief's #433 amendment: it sits low on every page it appears on.
+-->
+{#snippet activitySection()}
+	{#if activityError}
+		<Notice variant="error" message={activityError} />
+	{/if}
+	<DataTable
+		columns={activityLedgerColumns()}
+		rows={activity.items}
+		hasMore={activity.hasMore}
+		onLoadMore={() => activity.loadMore()}
+		isLoadingMore={activity.isLoadingMore}
+		loadMoreError={activity.loadMoreError}
+		emptyMessage="Nothing has happened yet."
+	/>
+{/snippet}
+
+<!--
 	Archetype D, ADR-0018. The Invoices and Offers sections are still
 	conditional exactly as before -- Invoices needs a Contract to exist
 	and Offers is Owner/Admin-only -- which is why `sections` is a typed
@@ -751,6 +792,7 @@
 		{ heading: 'Contract', content: contractSection },
 		...(contract ? [{ heading: 'Invoices', content: invoicesSection }] : []),
 		...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
-		{ heading: 'Messages', content: messagesSection }
+		{ heading: 'Messages', content: messagesSection },
+		{ heading: 'Activity', content: activitySection }
 	]}
 />
