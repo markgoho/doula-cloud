@@ -188,3 +188,34 @@ widening the fixture in passing.
 A `+layout.svelte` or `+error.svelte` spec sitting in a directory that
 happens to hold a `page.fixture.ts` is not covered by this rule: its
 subject is not the route the fixture describes.
+
+## A fixture's row set must hold every state a field renders differently
+
+#537's hostile-value rule picks what to put inside one state — the
+longest name, the widest amount. It says nothing about which states
+exist: a fixture with one row can only ever show one state of every
+field at once, and a thin fixture that holds a single Member, a single
+Client, a single kind of Request reads as full and is not. #596 found
+this by convergence, not by the sweep — the sweep measures whether a
+subject needs more room than it is given, and a thin fixture needs
+less, not more, so it stays green while measuring a screen no Practice
+has (ADR-0025's Fixtures section, [#720](https://github.com/markgoho/doula-cloud/issues/720)).
+
+Two rows, not a row count: one realizing every field's busiest,
+longest, most-flagged state together, one realizing every optional or
+empty state together. See `staff/page.fixture.ts` and
+`clients/page.fixture.ts` for the shape — a Member with no roles beside
+one with two, an Invitation that is both expired and undeliverable
+beside one that is neither, a Client with every column populated
+beside one with every optional column absent. A field whose render
+branches a third way (`offers/page.fixture.ts`'s open-vs-decided
+Offer, `plan-templates/page.fixture.ts`'s select-vs-plain Field) earns
+a third row for that field, not for the fixture as a whole — and only
+where the states actually render differently: an Offer's five terminal
+states differ only in a Badge's own label and variant, already swept
+on the Badge's style-guide page, so none needs its own row here.
+
+No mechanical check enforces this — see ADR-0025's Fixtures section
+for why a shape gate was declined rather than built. Assess it by eye
+against the field's own render branches, the same way a fixture's
+hostile values are chosen by eye against #537.
