@@ -126,6 +126,68 @@ describe('clients list screen', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Bounced — needs re-invite' })).toBeVisible();
 	});
 
+	it.each([
+		['bounced', 'Bounced — unblock the address to invite again'],
+		['dead_lettered', 'Not sent — unblock the address to invite again']
+	])(
+		'shows %s on a suppressed address as %s, not a re-invite that cannot succeed',
+		async (portalInviteStatus, label) => {
+			// #785: the send-time guard (#733) refuses a suppressed address
+			// before Mailgun is asked, so a re-invite dead-letters on
+			// arrival. The row has to name the unblock instead.
+			await setup(
+				jsonResponse({
+					items: [{ ...clients[0], portalInviteStatus, emailSuppressed: true }],
+					hasMore: false
+				})
+			);
+
+			await expect.element(testPage.getByRole('cell', { name: label })).toBeVisible();
+		}
+	);
+
+	it('offers Blocked email addresses on a suppressed row, and nowhere else', async () => {
+		await setup(
+			jsonResponse({
+				items: [
+					{ ...clients[0], portalInviteStatus: 'bounced', emailSuppressed: true },
+					{ ...clients[0], clientId: 'client-2', portalInviteStatus: 'bounced' }
+				],
+				hasMore: false
+			})
+		);
+
+		const link = testPage.getByRole('link', { name: 'Blocked email addresses' });
+		await expect.element(link).toBeVisible();
+		await expect
+			.element(link)
+			.toHaveAttribute('href', '/practices/practice-1/settings/blocked-addresses');
+		expect(link.elements()).toHaveLength(1);
+		// The second row's suppression was lifted; its own words, and its
+		// absence of a link, are what says so.
+		await expect.element(testPage.getByRole('cell', { name: 'Bounced — needs re-invite' })).toBeVisible();
+	});
+
+	it('keeps a suppressed address on a state the unblock does not unstick reading as it did', async () => {
+		// 'complained' is never clearable (ADR-0029) and 'sent' is not a
+		// failure, so neither takes the #785 wording even though the
+		// address is suppressed.
+		await setup(
+			jsonResponse({
+				items: [
+					{ ...clients[0], portalInviteStatus: 'complained', emailSuppressed: true },
+					{ ...clients[0], clientId: 'client-2', portalInviteStatus: 'sent', emailSuppressed: true }
+				],
+				hasMore: false
+			})
+		);
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Marked as spam (no action needed)' }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Invite sent' })).toBeVisible();
+	});
+
 	it('shows the empty message when there are no Clients', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }));
 

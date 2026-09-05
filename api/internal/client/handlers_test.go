@@ -744,6 +744,86 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	}
 }
 
+// TestListHandler_EmailSuppressed proves the #785 column on both list
+// queries at once -- the ambient one an Owner gets and the narrowed one
+// listAttachedClients builds for a contractor are separate SELECTs, so a
+// column added to one proves nothing about the other. It also pins the
+// two facts the Clients list's own wording rests on: an address is
+// suppressed only while cleared_at is null, and the comparison is
+// case-insensitive on the Client's side (00068 stores the address
+// lower-cased and the send-time guard compares it lower-cased, so the
+// list has to agree with the guard that will refuse the next invite).
+func TestListHandler_EmailSuppressed(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "staff-owner-suppression-list"
+	practiceID := seedStaffWithMembership(t, db, ownerUID)
+	suppressed, engagementID := seedClientEngagement(t, db, practiceID, "Suppressed Client", "Blocked@Example.com")
+	cleared, _ := seedClientEngagement(t, db, practiceID, "Cleared Client", "cleared@example.com")
+	untouched, _ := seedClientEngagement(t, db, practiceID, "Untouched Client", "fine@example.com")
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO email_suppressions (address, cause) VALUES ($1, 'bounce'), ($2, 'bounce')`,
+		"blocked@example.com", "cleared@example.com",
+	); err != nil {
+		t.Fatalf("seed suppressions: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`, "cleared@example.com",
+	); err != nil {
+		t.Fatalf("clear suppression: %v", err)
+	}
+
+	const contractorUID = "contractor-suppression-list"
+	contractorStaffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	seedGrantedAttachment(t, db, engagementID, contractorStaffID)
+
+	for _, tc := range []struct {
+		name string
+		uid  string
+		want map[string]bool
+	}{
+		{
+			name: "owner sees every Client's suppression",
+			uid:  ownerUID,
+			want: map[string]bool{suppressed: true, cleared: false, untouched: false},
+		},
+		{
+			// The contractor reaches only the attached Client, which is
+			// the suppressed one -- enough to prove the narrowed query
+			// carries the column at all.
+			name: "contractor's narrowed list carries it too",
+			uid:  contractorUID,
+			want: map[string]bool{suppressed: true},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, session := newServer(t, db, tc.uid)
+			defer srv.Close()
+
+			resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+			defer resp.Body.Close()
+			var listResp client.ListResponse
+			if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+
+			byID := map[string]client.ListItem{}
+			for _, item := range listResp.Items {
+				byID[item.ClientID] = item
+			}
+			for clientID, want := range tc.want {
+				item, ok := byID[clientID]
+				if !ok {
+					t.Fatalf("client %s missing from list", clientID)
+				}
+				if item.EmailSuppressed != want {
+					t.Fatalf("client %s EmailSuppressed = %v, want %v", clientID, item.EmailSuppressed, want)
+				}
+			}
+		})
+	}
+}
+
 // TestListHandler_ContractorSeesOnlyAttachedClients proves
 // listAttachedClients: a contractor's list narrows to Clients she holds
 // a granted attachment to, and an unattached Client never appears.

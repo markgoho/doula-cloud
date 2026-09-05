@@ -35,6 +35,17 @@ type ListItem struct {
 	// otherwise the most recent outbox row's status.
 	PortalInviteStatus *string `json:"portalInviteStatus,omitempty"`
 
+	// EmailSuppressed is whether this Client's address currently sits on
+	// email_suppressions with no cleared_at (#785, ADR-0029). It is what
+	// separates "the invite failed, send another" from "the invite failed
+	// and every further send to this address is refused before Mailgun is
+	// asked" -- the outbox status alone cannot tell those apart, because
+	// the same 'bounced'/'dead_lettered' value survives a Staff member
+	// clearing the suppression on **Blocked email addresses** (#744).
+	// Without it the list instructs Staff to re-invite an address whose
+	// re-invite is guaranteed to dead-letter.
+	EmailSuppressed bool `json:"emailSuppressed"`
+
 	// PendingRequestKinds is the kind ('birth', 'postpartum') of each of
 	// this Client's pending Engagement Requests -- empty when she has
 	// none. Can hold both at once: engagement_requests_one_pending is
@@ -186,6 +197,17 @@ const hasWorkExpr = `(
 	OR EXISTS (SELECT 1 FROM engagement_requests r WHERE r.client_id = c.id AND r.state = 'pending')
 )`
 
+// emailSuppressedExpr is shared by both list queries: whether this
+// Client's address is suppressed right now (#785). Compared lower-cased
+// against a column 00068 already stores lower-cased, the same comparison
+// mailsuppress.Sender makes at send time -- the list must agree with the
+// guard that will actually refuse the next invite. A Client with no
+// address on file compares against ” and is never suppressed.
+const emailSuppressedExpr = `EXISTS (
+	SELECT 1 FROM email_suppressions s
+	WHERE s.address = lower(COALESCE(c.email, '')) AND s.cleared_at IS NULL
+)`
+
 // pendingRequestKindsExpr is also shared: the comma-joined kind of each of
 // a Client's pending Requests, NULL when she has none. Postgres can serve
 // this off engagement_requests_one_pending (client_id, kind) WHERE state =
@@ -202,7 +224,7 @@ const pendingRequestKindsExpr = `(
 // staffauth.Middleware already set up on tx.
 func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnly bool, after *pagecursor.Cursor) ([]ListItem, error) {
 	query := `SELECT c.id, c.given_name, c.preferred_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
-		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status, ` + pendingRequestKindsExpr + `, c.created_at
+		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, c.created_at
 		 FROM clients c
 		 LEFT JOIN client_portal_users pu ON pu.client_id = c.id
 		 LEFT JOIN LATERAL (
@@ -243,6 +265,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 	query := `SELECT * FROM (
 		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
 		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, latest.status,
+		            ` + emailSuppressedExpr + ` AS email_suppressed,
 		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, c.created_at
 		     FROM clients c
 		     JOIN engagements e ON e.client_id = c.id
@@ -471,7 +494,7 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 		var createdAt time.Time
 		if err := rows.Scan(
 			&item.ClientID, &givenName, &preferredName, &item.Email, &item.HasWork,
-			&hasPortalUser, &accepted, &outboxStatus, &pendingKinds, &createdAt,
+			&hasPortalUser, &accepted, &outboxStatus, &item.EmailSuppressed, &pendingKinds, &createdAt,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)

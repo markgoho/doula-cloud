@@ -17,6 +17,14 @@ export interface ClientListItem {
 	email: string;
 	hasWork: boolean;
 	portalInviteStatus?: string;
+	/** Whether this Client's address is suppressed right now (#785,
+	 * ADR-0029) -- a bounce or a spam complaint that has not been lifted
+	 * on **Blocked email addresses** (#744). A failed invite reads
+	 * differently depending on it: while it is true, a re-invite is
+	 * refused before Mailgun is asked, so the row must ask for the
+	 * unblock instead. Absent on an older cached response, which reads as
+	 * "not suppressed" -- the same wording that stood before #785. */
+	emailSuppressed?: boolean;
 	/** The kind ('birth', 'postpartum') of each of this Client's pending
 	 * Engagement Requests -- empty/absent when she has none. Can hold both
 	 * at once (ADR-0017: at most one pending Request per kind, not per

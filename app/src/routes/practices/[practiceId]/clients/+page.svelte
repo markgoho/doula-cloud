@@ -65,7 +65,7 @@
 	// (from client_portal_users.identity_uid) and the absent-key
 	// fallback below for a Client never invited at all. "complained"
 	// reads as informational -- the mail arrived, re-inviting will not
-	// help -- unlike "bounced"/"dead_lettered", which do need one.
+	// help -- unlike "bounced"/"dead_lettered", which ask for one.
 	const portalInviteStatusLabel: Record<string, string> = {
 		pending: 'Invite pending',
 		sent: 'Invite sent',
@@ -75,11 +75,33 @@
 		accepted: 'Accepted'
 	};
 
+	// #785: the same two failed states read differently once the address
+	// is suppressed (ADR-0029). The map above predates #733's send-time
+	// guard and was correct when it was written: a re-invite was worth a
+	// try. It no longer is -- a send to a suppressed address is refused
+	// before Mailgun is asked and dead-letters immediately, so the only
+	// move that changes anything is lifting the block on **Blocked email
+	// addresses**. Keyed on the suppression rather than folded into the
+	// map above because the outbox status does not change when Staff
+	// clear one: the row stays 'bounced'/'dead_lettered' afterwards, and
+	// re-invite becomes the right answer again.
+	const suppressedPortalInviteStatusLabel: Record<string, string> = {
+		bounced: 'Bounced — unblock the address to invite again',
+		dead_lettered: 'Not sent — unblock the address to invite again'
+	};
+
+	// True when this row's words are the suppressed pair above, so the
+	// cell also offers the screen those words name.
+	function isBlockedInvite(client: ClientListItem): boolean {
+		if (!client.emailSuppressed || !client.portalInviteStatus) return false;
+		return Object.hasOwn(suppressedPortalInviteStatusLabel, client.portalInviteStatus);
+	}
+
 	function portalInviteStatusText(client: ClientListItem): string {
-		return (
-			(client.portalInviteStatus && portalInviteStatusLabel[client.portalInviteStatus]) ??
-			'Never invited'
-		);
+		const status = client.portalInviteStatus;
+		if (!status) return 'Never invited';
+		if (isBlockedInvite(client)) return suppressedPortalInviteStatusLabel[status];
+		return portalInviteStatusLabel[status] ?? 'Never invited';
 	}
 
 	// ADR-0017: a pending Engagement Request shows on its Client's row.
@@ -160,7 +182,7 @@
 			content: engagementRollup
 		},
 		{ label: 'Pending request', accessor: pendingRequestText },
-		{ label: 'Portal invite', accessor: portalInviteStatusText },
+		{ label: 'Portal invite', accessor: portalInviteStatusText, content: portalInviteCell },
 		...(isShowingEveryone ? [{ label: 'Work', accessor: workStatusText }] : [])
 	]);
 
@@ -241,6 +263,26 @@
 				<li>{engagementLineText(line)}</li>
 			{/each}
 		</ul>
+	{/if}
+{/snippet}
+
+{#snippet portalInviteCell(client: ClientListItem)}
+	<!--
+		#785: the words alone name an act ("unblock the address") without
+		saying where it happens, and Blocked email addresses is two clicks
+		away under Settings. An anchor is the whole affordance -- no state,
+		no handler -- so the Rule of Least Power puts it here rather than
+		in script. Every other row renders exactly the string the accessor
+		already returned.
+	-->
+	{portalInviteStatusText(client)}
+	{#if isBlockedInvite(client)}
+		<Link
+			href={resolve('/practices/[practiceId]/settings/blocked-addresses', {
+				practiceId: page.params.practiceId!
+			})}
+			label="Blocked email addresses"
+		/>
 	{/if}
 {/snippet}
 
