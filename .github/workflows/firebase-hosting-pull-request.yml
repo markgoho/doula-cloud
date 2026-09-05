@@ -53,9 +53,19 @@ jobs:
         id: firebase_hosting_preview
         env:
           PR_NUMBER: ${{ github.event.number }}
+        # As on the app workflow, and for the same reason (#736):
+        # `--json` puts the command's error on stdout, which is a file
+        # nothing reads when the step fails, so the log said `exit code
+        # 1` and nothing else the day the app site hit Firebase's
+        # fifty-channel cap. This site has not hit it, but it creates
+        # channels exactly the same way and would.
         run: |
-          bunx firebase-tools hosting:channel:deploy "pr-${PR_NUMBER}" \
-            --only hugo --expires 7d --non-interactive --json > deploy-output.json
+          if ! bunx firebase-tools hosting:channel:deploy "pr-${PR_NUMBER}" \
+            --only hugo --expires 3d --non-interactive --json > deploy-output.json; then
+            echo "::error::firebase hosting:channel:deploy failed. Its output follows."
+            cat deploy-output.json
+            exit 1
+          fi
           url=$(bun -e "console.log(Object.values(require('./deploy-output.json').result)[0].url)")
           echo "url=$url" >> "$GITHUB_OUTPUT"
 

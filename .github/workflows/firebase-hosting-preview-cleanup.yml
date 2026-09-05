@@ -1,0 +1,82 @@
+# Release a PR's Firebase Hosting preview channels when the PR closes (#736).
+#
+# Preview channels were left to expire on their own, and at this repo's
+# merge rate -- about twelve PRs a day over the days before #736 -- a
+# seven-day window settles at roughly eighty-four live channels against
+# Firebase's cap of fifty per site. The app site reached the cap on
+# 2026-09-04 and every PR's preview deploy went red, silently, until the
+# stale channels were deleted by hand.
+#
+# Expiry is a clock and the cap is a count, so no `--expires` value fixes
+# this on its own: it only bounds how long a missed release survives.
+# This workflow is the count half -- a channel lives as long as its PR is
+# open, and no longer.
+name: Release Firebase preview channels on PR close
+
+on:
+  pull_request:
+    types: [closed]
+
+# No `paths` filter, deliberately. The two preview workflows have
+# different ones, so which sites a given PR holds a channel on is not
+# knowable here -- this asks about both and tolerates the answer "none".
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release_preview_channels:
+    # The same guard the deploy workflows carry: a fork's PR never had
+    # the credentials to create a channel, so it has none to release.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Authenticate to Google Cloud
+        uses: ./.github/actions/gcp-auth
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+
+      # Both sites in one step, over the site ids `.firebaserc` maps the
+      # `app` and `hugo` targets to. A PR that touched only `app/` has no
+      # Hugo channel and the reverse, so "no such channel" is the
+      # ordinary case and must not fail the job -- but a real failure
+      # (auth, an API error, a quota wall) still has to be seen, which is
+      # why the command's own output is captured and echoed rather than
+      # discarded. That is the same defect this ticket fixes in the
+      # deploy step: a step that fails without saying why costs a session
+      # every time it goes red.
+      #
+      # The 404 is matched literally because that is what the API
+      # actually answers for a channel that is not there, checked rather
+      # than assumed: `HTTP Error: 404, Could not delete channel
+      # `projects/doula-cloud/sites/doula-cloud-app/channels/pr-999999`:
+      # Not Found`. Matching the prose instead would swallow any future
+      # error whose wording happens to contain "not found".
+      - name: Release each site's preview channel
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          failed=0
+          for site in doula-cloud-app doula-cloud; do
+            channel="pr-${PR_NUMBER}"
+            if out=$(bunx firebase-tools hosting:channel:delete "$channel" \
+              --project doula-cloud --site "$site" --force 2>&1); then
+              echo "Released $channel on $site."
+            elif printf '%s' "$out" | grep -qF 'HTTP Error: 404'; then
+              echo "No $channel on $site; nothing to release."
+            else
+              echo "::error::Could not release $channel on $site. Output follows."
+              printf '%s\n' "$out"
+              failed=1
+            fi
+          done
+          exit "$failed"
