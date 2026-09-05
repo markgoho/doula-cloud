@@ -153,9 +153,20 @@
 <nav aria-label={journey}>
 	<details open={expand === 'completed'}>
 		<summary>
-			<span class="summary">{summary}</span>
-			<span class="track" aria-hidden="true">
-				<span class="track-fill" style:inline-size={trackWidth}></span>
+			<!--
+				The row is an inner element, not the <summary> itself.
+				`display: flex` on a <summary> removes the native
+				disclosure marker in Chrome -- the marker only renders
+				while the element is `display: list-item` -- and the
+				marker is the only thing telling a reader the list opens
+				at all. So the <summary> keeps its own display and this
+				span does the arranging.
+			-->
+			<span class="summary-row">
+				<span class="summary">{summary}</span>
+				<span class="track" aria-hidden="true">
+					<span class="track-fill" style:inline-size={trackWidth}></span>
+				</span>
 			</span>
 		</summary>
 
@@ -212,18 +223,33 @@
 
 		/*
 		 * The marker is the only affordance saying the list opens, so it
-		 * stays -- `list-style: none` on a <summary> removes it in Chrome
-		 * and Firefox and, in Safari, needs ::-webkit-details-marker too.
-		 * The summary is a flex row so the caption and its track sit on
-		 * one line beside the marker rather than stacking under it.
+		 * stays. That is why nothing here changes `display` or
+		 * `list-style` on the <summary> -- either one removes the marker
+		 * in Chrome, silently, and a check that measures overflow cannot
+		 * see an affordance that is missing. Caught by looking at the
+		 * rendered page, not by a test.
 		 */
 		summary {
+			/*
+			 * `outside` rather than the browser default: the row inside is
+			 * a block-level flex container, and an inside marker puts that
+			 * block on its own line, dropping the caption below the
+			 * triangle. Outside, the marker sits in the padding beside the
+			 * row's first line, which is where it reads as an affordance
+			 * for the thing next to it. The padding is what gives it room.
+			 */
+			list-style-position: outside;
+			padding-block: var(--space-2);
+			padding-inline-start: var(--space-5);
+			cursor: pointer;
+		}
+
+		/* The arranging happens one level in, so the marker survives it. */
+		summary .summary-row {
 			display: flex;
 			flex-wrap: wrap;
 			align-items: center;
 			gap: var(--space-3);
-			padding-block: var(--space-2);
-			cursor: pointer;
 		}
 
 		/*
