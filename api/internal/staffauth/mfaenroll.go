@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
 
@@ -46,18 +47,18 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			// is stale. Decision 4's fallback is for the client to sign
 			// her in again through the TOTP challenge instead; this
 			// endpoint's job is only the case where it did work.
-			http.Error(w, "that sign-in does not show a second factor", http.StatusBadRequest)
+			apierr.WriteError(w, "that sign-in does not show a second factor", http.StatusBadRequest)
 			return
 		}
 
 		staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, verified.UID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
-			http.Error(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
+			apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
 			return
 		}
 
@@ -70,7 +71,7 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		if oldCookie, err := r.Cookie(authn.SessionCookieName); err == nil {
 			if err := authn.EndSession(r.Context(), tx, oldCookie.Value); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -78,19 +79,19 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, true, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := recordAuthEvent(r.Context(), tx, staffID, AuthEventEnrolled, staffID, ""); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

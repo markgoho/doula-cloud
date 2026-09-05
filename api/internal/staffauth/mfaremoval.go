@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
 
@@ -36,11 +37,11 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 		staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
-			http.Error(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
+			apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
 			return
 		}
 
@@ -50,13 +51,13 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 
 		if err := clearEnrolmentAndRecord(r.Context(), tx, accounts, staffID, uid, AuthEventRemoved, staffID, ""); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
