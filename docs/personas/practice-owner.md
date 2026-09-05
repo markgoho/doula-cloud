@@ -10,18 +10,9 @@
 
 ## Who she is
 
-Renata built Rooted Birth Collective over nine years. Fourteen doulas — nine of them
-employed, four contracted, and herself — plus one office manager, and a book of live
-Clients large enough that she can no longer hold it in her head. She spends her week on
-assignment, coverage, and money, and she is the person clients escalate to when something
-goes wrong.
+Renata built Rooted Birth Collective over nine years. Fourteen doulas — nine of them employed, four contracted, and herself — plus one office manager, and a book of live Clients large enough that she can no longer hold it in her head. She spends her week on assignment, coverage, and money, and she is the person clients escalate to when something goes wrong.
 
-Rooted is sized to the pilot's fourteen-doula agency rather than to a small practice.
-This file said three employed doulas and roughly forty Engagements a year until
-[#761](https://github.com/markgoho/doula-cloud/issues/761); that was the smaller of two
-numbers with nothing behind it, and a Practice that size cannot show what `CLAUDE.md`
-means by a real Practice's data. The agency she brings with her is written down in
-[the World](../simulation/worlds/rooted-birth-collective.md).
+Rooted is sized to the pilot's fourteen-doula agency, not to a small practice: nothing smaller can show what `CLAUDE.md` means by a real Practice's data. The agency she brings with her is written down in [the World](../simulation/worlds/rooted-birth-collective.md) ([#761](https://github.com/markgoho/doula-cloud/issues/761)).
 
 Her real anxiety is coverage. If two Clients go into labor the same night, she needs to
 know within a minute who is free and who is already at a birth.
