@@ -3,7 +3,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -53,7 +53,7 @@
 				picker = landing.engagements;
 			}
 		} catch {
-			errors = [{ message: 'There is a problem with the service. Try again in a few minutes.' }];
+			errors = [{ message: SERVICE_PROBLEM }];
 		} finally {
 			isSubmitting = false;
 		}
