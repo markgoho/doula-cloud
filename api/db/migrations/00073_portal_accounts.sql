@@ -90,6 +90,34 @@ CREATE POLICY portal_accounts_erasure_select ON portal_accounts
 -- identifier at DELETE time. This cascade is what clears it immediately
 -- after, in the same statement, rather than erase.go needing a second,
 -- separately-ordered UPDATE to avoid violating the FK the other way.
+-- Before the constraint can exist, the rows that predate it have to
+-- satisfy it. A client_portal_users row accepted before ADR-0026 holds
+-- an Identity Platform uid, and no portal_accounts row names one -- so
+-- on any database with accepted rows already in it, the ALTER below
+-- fails with a foreign key violation and the whole deploy stops. A
+-- freshly created database (CI, the e2e stack, a local goose up) has no
+-- such row, which is why nothing caught this until it reached the
+-- deployed database.
+--
+-- Clearing the column is the honest reconciliation, not a workaround:
+-- ADR-0026 takes Identity Platform accounts away from Clients entirely,
+-- so a uid stored here names an account that is about to stop existing.
+-- Nulling it returns the row to "invited, not accepted", which is what
+-- it now is -- the Client accepts again and mints a real Portal Account
+-- on the way through (portalinvite.acceptInvite). Minting a
+-- portal_accounts row per uid instead would have to invent a
+-- sign_in_address, and client_portal_users does not hold one.
+--
+-- Safe to do rather than preserve: pre-launch, no users and no
+-- production data (CLAUDE.md), so every row this touches is a walk's
+-- leftover.
+UPDATE client_portal_users pu
+   SET identity_uid = NULL
+ WHERE pu.identity_uid IS NOT NULL
+   AND NOT EXISTS (
+       SELECT 1 FROM portal_accounts pa WHERE pa.identifier = pu.identity_uid
+   );
+
 ALTER TABLE client_portal_users
     ADD CONSTRAINT client_portal_users_identity_uid_fkey
     FOREIGN KEY (identity_uid) REFERENCES portal_accounts (identifier) ON DELETE SET NULL;
