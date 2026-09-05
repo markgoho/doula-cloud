@@ -15,6 +15,16 @@ services:
       POSTGRES_DB: app
     ports:
       - '${DB_HOST_PORT:-15432}:5432'
+    # A named volume, not the postgres image's own anonymous one: an
+    # anonymous volume is tied to its container's lifetime, so `compose
+    # down` (which removes the container) orphans it even without `-v`,
+    # and the next `up -d` gets a fresh, empty one -- a simulation run's
+    # own resume path (#779, e2e/stack.ts's stopStack) needs `down` alone
+    # to actually keep the data. `down -v` still removes this named volume
+    # exactly as it removed the anonymous one, so every other spec's
+    # ordinary teardown is unchanged.
+    volumes:
+      - db-data:/var/lib/postgresql/data
 
   # The object store the BFF writes signed Contract PDFs and message
   # attachments to. Containerized for the same reason `db` is: a pinned
@@ -37,3 +47,8 @@ services:
     command: ['-scheme', 'http', '-port', '4443', '-backend', 'memory', '-external-url', 'http://127.0.0.1:${GCS_HOST_PORT:-14443}']
     ports:
       - '${GCS_HOST_PORT:-14443}:4443'
+
+volumes:
+  # Compose namespaces this by project name (COMPOSE_PROJECT in
+  # e2e/stack.ts), so two worktrees' stacks never share one.
+  db-data:
