@@ -10,10 +10,13 @@ import (
 )
 
 // wantOutboxPaths is every process-* endpoint the BFF serves, written out
-// rather than derived, because these are not free to change: Cloud
-// Scheduler has one job per outbox provisioned by hand against these
-// exact addresses (docs/environment.md), and nothing in this repository
-// would notice a rename. A diff here means a console change too.
+// rather than derived, because these are not free to change: they are the
+// addresses ADR-0013's Cloud Tasks nudges are aimed at, and the ones the
+// runbooks tell a person to POST by hand.
+//
+// Cloud Scheduler is no longer among the callers that would notice a
+// rename -- it calls outbox.DrainPath, and #481 replaced the hand
+// provisioning that made every one of these a console entry.
 var wantOutboxPaths = []string{
 	"/api/internal/clients/process-erasure-outbox",
 	"/api/internal/notifications/process-engagement-request-outbox",

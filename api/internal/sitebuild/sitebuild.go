@@ -70,6 +70,13 @@ const CoalesceWindow = 90 * time.Second
 // page stays pending, and the sweep is what tells the Practice so.
 const MaxAttempts = 10
 
+// dispatchLockKey names this worker's Postgres advisory lock. The value
+// is arbitrary and means nothing beyond "the site rebuild dispatcher" --
+// what matters is that no other advisory lock in this database picks the
+// same number. It is deliberately unlike a row id or a Practice id so a
+// collision cannot arise by someone locking on one of those.
+const dispatchLockKey = 4430481
+
 // Dispatcher asks GitHub to run the deploy workflow. One call per
 // dispatch, carrying no Practice data: the build reads the database for
 // itself, so there is nothing useful to put in a payload and nothing

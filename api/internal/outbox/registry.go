@@ -40,9 +40,10 @@ type Registration struct {
 	// method -- Register supplies POST. It is also the path a nudge task
 	// POSTs, so the two cannot disagree.
 	//
-	// Cloud Scheduler is provisioned against these paths by hand, one job
-	// per outbox, so they are a published contract: changing one is a
-	// console change too, not only a code change.
+	// Cloud Tasks addresses this path directly, so a Path and its Nudge
+	// cannot disagree. Cloud Scheduler no longer names it: one job calls
+	// DrainPath, which runs every registration, so adding an outbox is
+	// not a console change (#481).
 	Path string
 	// Door is the Postgres session variable to set for the length of the
 	// worker's transaction, or empty for none. NotificationDoor for every
@@ -60,22 +61,29 @@ type Registration struct {
 
 // Mux is the part of the BFF's router Register uses. An interface rather
 // than *http.ServeMux so the router that owns every route -- and wants to
-// see this package's thirteen among them rather than trusting that
+// see this package's thirteen and their drain among them rather than trusting that
 // nothing reached around it -- can be handed here unchanged.
 type Mux interface {
 	Write(pattern string, h http.Handler)
 }
 
-// Register mounts every registration's process endpoint on mux, each
-// authenticated by secret rather than by a session, and returns the paths
-// it mounted in sorted order so a caller can assert the contract Cloud
-// Scheduler is provisioned against.
+// Register mounts every registration's process endpoint on mux, plus the
+// one DrainPath endpoint that runs all of them, each authenticated by
+// secret rather than by a session. It returns the paths it mounted in
+// sorted order so a caller can assert the published contract.
+//
+// The drain is mounted here rather than beside the other internal routes
+// so that it cannot be given a different list than the endpoints it is
+// the backstop for. An outbox added to the list is drained by having been
+// added; there is no second place to remember.
 func Register(mux Mux, db *sql.DB, secret string, registrations []Registration) []string {
-	paths := make([]string, 0, len(registrations))
+	paths := make([]string, 0, len(registrations)+1)
 	for _, reg := range registrations {
 		mux.Write("POST "+reg.Path, ProcessHandler(db, reg.Worker, secret, reg.Door))
 		paths = append(paths, reg.Path)
 	}
+	mux.Write("POST "+DrainPath, DrainHandler(db, secret, registrations))
+	paths = append(paths, DrainPath)
 	sort.Strings(paths)
 	return paths
 }

@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"doula-cloud/api/internal/apierr"
-	"fmt"
 	"net/http"
 )
 
@@ -23,14 +22,18 @@ type Processor interface {
 	ProcessPending(ctx context.Context, tx *sql.Tx) error
 }
 
-// ProcessHandler is the internal endpoint Cloud Scheduler invokes on a
-// fixed cadence (and ADR-0013's nudge on demand) to run
+// ProcessHandler is the internal endpoint ADR-0013's nudge invokes on
+// demand, and the address a person invokes by hand, to run
 // worker.ProcessPending -- one instance per outbox, mirroring the
-// per-Notification-type-cost ADR-0010 accepted, since each worker
+// per-Notification-type cost ADR-0010 accepted, since each worker
 // processes its own outbox table. There is no Staff or Client session on
 // this path, so it authenticates the caller against secret instead.
 // secret must be non-empty: an empty configured secret refuses every
 // request rather than accepting an unauthenticated one.
+//
+// Cloud Scheduler no longer calls these one by one: DrainPath's single
+// job runs every registration, for the reason recorded there and on
+// ADR-0010.
 //
 // door is the Postgres session variable to set for the length of the
 // transaction, or empty for none -- see Registration.Door. Callers
@@ -42,49 +45,10 @@ func ProcessHandler(db *sql.DB, worker Processor, secret, door string) http.Hand
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
+		if err := runOutbox(r.Context(), db, worker, door); err != nil {
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				// coverage:ignore reason: only reached by a DB failure after
-				// BeginTx succeeds -- this endpoint takes no request input
-				// past the secret check above.
-				_ = tx.Rollback()
-			}
-		}()
-
-		// Licenses the outbox's own staff/practice_memberships (or
-		// equivalent) SELECT policies for reading recipients at send time --
-		// each one's own migration adds the policy, this sets the session
-		// var it checks. Skipped entirely for an outbox that is not under
-		// RLS, which should not be handed a door it has no use for.
-		//
-		// door is a compile-time constant a Registration names, never
-		// request data, so building it into SQL carries no injection risk
-		// -- the same reasoning Worker.Table already rests on.
-		if door != "" {
-			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`SELECT set_config('%s', 'true', true)`, door)); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-		}
-
-		if err := worker.ProcessPending(r.Context(), tx); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
 		w.WriteHeader(http.StatusOK)
 	})
 }

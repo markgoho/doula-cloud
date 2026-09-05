@@ -100,6 +100,44 @@ func TestProcessOutbox_CollapsesEveryPendingRowIntoOneDispatch(t *testing.T) {
 	}
 }
 
+// TestProcessOutbox_OverlappingRunsDispatchOnce is the same "do not
+// deploy twice" rule under the case the second call above cannot reach:
+// two runs at once rather than one after the other. ADR-0013's nudge and
+// the drain's cadence land together routinely, and until #481 the second
+// one read the first one's rows as still pending -- an uncommitted UPDATE
+// is invisible -- and fired a second repository_dispatch for them.
+func TestProcessOutbox_OverlappingRunsDispatchOnce(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedHostedPage(t, db, "Rochester Doulas", "rochester-doulas")
+	queueRebuild(t, db, practiceID, 120)
+	dispatcher := &fakeDispatcher{}
+	worker := sitebuild.Worker{Dispatcher: dispatcher, Now: fixedNow}
+
+	// The first run, held open rather than committed, is the other run
+	// still in flight.
+	held, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin the first run: %v", err)
+	}
+	defer func() { _ = held.Rollback() }()
+	if err := worker.ProcessPending(t.Context(), held); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	concurrent, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin the concurrent run: %v", err)
+	}
+	defer func() { _ = concurrent.Rollback() }()
+	if err := worker.ProcessPending(t.Context(), concurrent); err != nil {
+		t.Fatalf("concurrent run: %v", err)
+	}
+
+	if dispatcher.count() != 1 {
+		t.Fatalf("dispatched %d times, want one deploy for the two overlapping runs", dispatcher.count())
+	}
+}
+
 // The nudge that arrives for the second publish finds the work already
 // done, and must not deploy again for no reason.
 func TestProcessOutbox_SecondCallDispatchesNothingMore(t *testing.T) {

@@ -49,15 +49,18 @@ func TestRegister_MountsEveryRegistrationAsAPOST(t *testing.T) {
 	wantPatterns := []string{
 		"POST /api/internal/notifications/process-outbox",
 		"POST /api/internal/site/process-build-outbox",
+		"POST " + outbox.DrainPath,
 	}
 	if !reflect.DeepEqual(mux.patterns, wantPatterns) {
 		t.Errorf("mounted patterns = %v, want %v", mux.patterns, wantPatterns)
 	}
 
-	// Sorted, so a caller asserting the contract Cloud Scheduler is
-	// provisioned against does not have to care what order the list is in.
+	// Sorted, so a caller asserting the published contract does not have
+	// to care what order the list is in. The drain is in it: it is a
+	// mounted address like the others, and the one Cloud Scheduler calls.
 	wantPaths := []string{
 		"/api/internal/notifications/process-outbox",
+		outbox.DrainPath,
 		"/api/internal/site/process-build-outbox",
 	}
 	if !reflect.DeepEqual(paths, wantPaths) {
@@ -74,13 +77,13 @@ func TestRegister_MountsHandlersThatRunTheirOwnWorker(t *testing.T) {
 
 	mux := http.NewServeMux()
 	outbox.Register(muxWriter{mux}, db.App, "correct-secret", []outbox.Registration{
-		{Path: "/first", Door: outbox.NotificationDoor, Worker: first},
-		{Path: "/second", Door: outbox.NotificationDoor, Worker: second},
+		{Path: firstPath, Door: outbox.NotificationDoor, Worker: first},
+		{Path: secondPath, Door: outbox.NotificationDoor, Worker: second},
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp := postTo(t, srv, "/second", "correct-secret")
+	resp := postTo(t, srv, secondPath, "correct-secret")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -102,12 +105,12 @@ func TestRegister_CarriesTheSecretToEveryHandler(t *testing.T) {
 
 	mux := http.NewServeMux()
 	outbox.Register(muxWriter{mux}, db.App, "correct-secret", []outbox.Registration{
-		{Path: "/only", Door: outbox.NotificationDoor, Worker: worker},
+		{Path: onlyPath, Door: outbox.NotificationDoor, Worker: worker},
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp := postTo(t, srv, "/only", "wrong-secret")
+	resp := postTo(t, srv, onlyPath, "wrong-secret")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {

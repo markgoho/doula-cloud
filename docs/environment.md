@@ -39,7 +39,7 @@ except `.env.example`. A Sandbox key is still a key.
 | `MAILGUN_API_KEY` | `e2e-mailgun-key`, set by `stack.ts` -- the sandbox mailbox does not check it | same | Secret Manager `doula-cloud-mailgun-api-key` |
 | `MAILGUN_DOMAIN` | `sim.doula.cloud`, set by `stack.ts` -- the domain every persona's and every fixture's address sits under | same | `mg.doula.cloud`, plain env var |
 | `MAILGUN_API_BASE` | the sandbox mailbox's origin, set by `stack.ts` (#764) | same | unset -- `mail.NewMailgunSender` keeps its `https://api.mailgun.net` default |
-| `NOTIFICATION_WORKER_SECRET` | `e2e-worker-secret`, set by `stack.ts`; matched against the `X-Internal-Secret` header on calls to any of the thirteen `/api/internal/**/process-*` endpoints | same | Secret Manager `doula-cloud-notification-worker-secret`, also set as the Cloud Scheduler job's header |
+| `NOTIFICATION_WORKER_SECRET` | `e2e-worker-secret`, set by `stack.ts`; matched against the `X-Internal-Secret` header on calls to any of the thirteen `/api/internal/**/process-*` endpoints and to `/api/internal/outboxes/drain` | same | Secret Manager `doula-cloud-notification-worker-secret`, also set as the `process-outbox-drain` Scheduler job's header |
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | `e2e-mailgun-signing-key`, set by `stack.ts` on both the BFF and the mailbox, which signs its bounce and complaint webhooks with it | same | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, set (#743) -- Mailgun's `permanent_fail` and `complained` webhooks point at the deployed endpoint |
 | `NOTIFICATION_TASKS_QUEUE` | unset (no real `tasknudge.CloudTasksEnqueuer` is constructed in `routes()` tests, which inject `tasknudge.FakeEnqueuer` instead) | unset | the Cloud Tasks queue's full resource name, `projects/doula-cloud/locations/us-central1/queues/doula-cloud-notification-nudge`, plain env var |
 | `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
@@ -107,10 +107,7 @@ Client portal invite's real sender) plus a third,
 `/api/internal/notifications/process-outbox` endpoint. #341 ran the
 deploy step: `MAILGUN_API_KEY` and `NOTIFICATION_WORKER_SECRET` are set
 as Cloud Run secrets on `doula-api`, `MAILGUN_DOMAIN=mg.doula.cloud` is
-a plain env var, and a Cloud Scheduler job
-(`process-portal-invite-outbox`, `us-central1`, every 5 minutes, POSTs
-to `/api/internal/notifications/process-outbox` with the shared secret
-in `X-Internal-Secret`) drives the endpoint on a fixed cadence. Proved
+a plain env var, and a Cloud Scheduler job (`process-portal-invite-outbox`, `us-central1`, every 5 minutes) drove the endpoint on a fixed cadence. That job was deleted by #481, which replaced one job per outbox with a single `process-outbox-drain` — see [The outbox backstop](#the-outbox-backstop-one-drain-job). Proved
 end to end: a real Client portal invite, added and sent through the
 deployed app, arrived in a real inbox via the deployed pipeline (not a
 local one-off).
@@ -123,21 +120,21 @@ the deployed app at all. Enabled via `PATCH
 .../admin/v2/projects/doula-cloud/config?updateMask=signIn.email` with
 `{"signIn":{"email":{"enabled":true,"passwordRequired":true}}}`.
 
-#342 (the out-of-Credits Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a second endpoint, `/api/internal/notifications/process-low-credit-outbox` -- same secret, same header, but its own Cloud Scheduler job, since it processes a separate outbox table (ADR-0010). That second job is left unset for the same reason the first one is.
+#342 (the out-of-Credits Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a second endpoint, `/api/internal/notifications/process-low-credit-outbox` -- same secret, same header, but a separate outbox table (ADR-0010).
 
-#343 (the payout-account-incomplete Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a third endpoint, `/api/internal/notifications/process-payout-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`payout_outbox`). Also left unset for the same reason.
+#343 (the payout-account-incomplete Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a third endpoint, `/api/internal/notifications/process-payout-outbox` -- same secret, same header, its own outbox table (`payout_outbox`).
 
-#344 (the payment-arrived Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a fourth endpoint, `/api/internal/notifications/process-payment-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`payment_received_outbox`). Also left unset for the same reason.
+#344 (the payment-arrived Platform Notification) reuses `NOTIFICATION_WORKER_SECRET` for a fourth endpoint, `/api/internal/notifications/process-payment-outbox` -- same secret, same header, its own outbox table (`payment_received_outbox`).
 
-#345 (the new-sign-in/session-revoked Platform Notifications) reuses `NOTIFICATION_WORKER_SECRET` for a fifth endpoint, `/api/internal/notifications/process-session-notice-outbox` -- same secret, same header, its own Cloud Scheduler job, one outbox table (`session_notice_outbox`) shared by both notices since #345 bundled them into a single ticket. Also left unset for the same reason.
+#345 (the new-sign-in/session-revoked Platform Notifications) reuses `NOTIFICATION_WORKER_SECRET` for a fifth endpoint, `/api/internal/notifications/process-session-notice-outbox` -- same secret, same header, one outbox table (`session_notice_outbox`) shared by both notices since #345 bundled them into a single ticket.
 
-#339 (the Staff invitation Notification, RA-G1) reuses `NOTIFICATION_WORKER_SECRET` for a sixth endpoint, `/api/internal/notifications/process-staff-invite-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`staff_invite_outbox`). `staffauth.InviteHandler` (#316) is its write site; left unset for the same reason as the others.
+#339 (the Staff invitation Notification, RA-G1) reuses `NOTIFICATION_WORKER_SECRET` for a sixth endpoint, `/api/internal/notifications/process-staff-invite-outbox` -- same secret, same header, its own outbox table (`staff_invite_outbox`). `staffauth.InviteHandler` (#316) is its write site.
 
-#317 (the Offer Notification, ADR-0008) reuses `NOTIFICATION_WORKER_SECRET` for a seventh endpoint, `/api/internal/notifications/process-offer-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`engagement_offer_outbox`). Its write site is `offer.CreateHandler`'s email-target path, which mails one link that both joins the Practice and opens the Offer, plus the six-digit access code the pre-account read asks for. Left unset for the same reason as the others.
+#317 (the Offer Notification, ADR-0008) reuses `NOTIFICATION_WORKER_SECRET` for a seventh endpoint, `/api/internal/notifications/process-offer-outbox` -- same secret, same header, its own outbox table (`engagement_offer_outbox`). Its write site is `offer.CreateHandler`'s email-target path, which mails one link that both joins the Practice and opens the Offer, plus the six-digit access code the pre-account read asks for. 
 
-#398 (the Engagement Request Notification, ADR-0017) reuses `NOTIFICATION_WORKER_SECRET` for an eighth endpoint, `/api/internal/notifications/process-engagement-request-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`engagement_request_outbox`, one row per Owner/Admin recipient rather than one per Request). Its write site is `engagementrequest.RequestHandler`, whenever the requester does not already hold approval authority herself. Left unset for the same reason as the others.
+#398 (the Engagement Request Notification, ADR-0017) reuses `NOTIFICATION_WORKER_SECRET` for an eighth endpoint, `/api/internal/notifications/process-engagement-request-outbox` -- same secret, same header, its own outbox table (`engagement_request_outbox`, one row per Owner/Admin recipient rather than one per Request). Its write site is `engagementrequest.RequestHandler`, whenever the requester does not already hold approval authority herself. 
 
-#394 (Client erasure, ADR-0027) reuses `NOTIFICATION_WORKER_SECRET` for a ninth endpoint, `/api/internal/clients/process-erasure-outbox` -- same secret, same header, its own Cloud Scheduler job, its own outbox table (`client_erasure_outbox`). It is the first `process-*` endpoint that mails nobody, which is why it sits under `/api/internal/clients` rather than `/api/internal/notifications`: it deletes a Stripe Customer, runs its Redaction Job once Stripe's 90-day floor has passed, and deletes an Identity Platform account. Its write site is `client.EraseHandler`. Left unset for the same reason as the others. Note that the redaction leg needs one thing no environment variable can supply: Stripe's Redaction Jobs API is in public preview and is **not enabled on the Doula Cloud account** -- `POST /v1/privacy/redaction_jobs` answers "Unrecognized request URL" today, verified against the Sandbox. Until Stripe enables it, that act dead-letters with the API's own error while every other leg of an erasure completes; enabling it is a request to Stripe, not a code change.
+#394 (Client erasure, ADR-0027) reuses `NOTIFICATION_WORKER_SECRET` for a ninth endpoint, `/api/internal/clients/process-erasure-outbox` -- same secret, same header, its own outbox table (`client_erasure_outbox`). It is the first `process-*` endpoint that mails nobody, which is why it sits under `/api/internal/clients` rather than `/api/internal/notifications`: it deletes a Stripe Customer, runs its Redaction Job once Stripe's 90-day floor has passed, and deletes an Identity Platform account. Its write site is `client.EraseHandler`. Note that the redaction leg needs one thing no environment variable can supply: Stripe's Redaction Jobs API is in public preview and is **not enabled on the Doula Cloud account** -- `POST /v1/privacy/redaction_jobs` answers "Unrecognized request URL" today, verified against the Sandbox. Until Stripe enables it, that act dead-letters with the API's own error while every other leg of an erasure completes; enabling it is a request to Stripe, not a code change.
 
 #340 (the Mailgun bounce/complaint webhook, ADR-0010) adds a sixth variable, `MAILGUN_WEBHOOK_SIGNING_KEY` -- Mailgun's HTTP webhook signing key, a separate value from `MAILGUN_API_KEY`, verifying `POST /api/mailgun/webhook`'s HMAC-SHA256 signature rather than a shared-secret header. **Provisioned on #743**, so it is no longer unset on the deployed service. The key does not need Mailgun's dashboard: it comes back from the account-level API, `GET https://api.mailgun.net/v5/accounts/http_signing_key` with the same `api:<MAILGUN_API_KEY>` basic auth every other call uses. It was stored as Secret Manager `doula-cloud-mailgun-webhook-signing-key`, granted to `850855848778-compute@developer.gserviceaccount.com`, and attached to `doula-api` out of band the same way the Stripe and VAPID values are -- `gcloud run services update doula-api --region us-central1 --update-secrets MAILGUN_WEBHOOK_SIGNING_KEY=doula-cloud-mailgun-webhook-signing-key:latest`. That survives every later trunk deploy, because `deploy-cloudrun`'s `secrets:` input merges rather than replaces (see the comment on the deploy step in `ci.yml`).
 
@@ -154,7 +151,7 @@ done
 
 Proved end to end on #743: a real message to `bounce-743@bounce-test.doula.cloud` (an NXDOMAIN subdomain of our own domain, so a genuine first-time permanent failure with no ISP reputation cost -- Mailgun answered `498 No MX for bounce-test.doula.cloud`, reason `generic`, not a `suppress-*` reason) produced Mailgun event `ebsa_POBSEipJK4ci4LETg`, which the deployed endpoint turned into an `email_suppressions` row with cause `bounce`. A Practice signed up on the deployed app with that same address then had its verification email dead-lettered by `mailsuppress.Sender` -- `mail: address is suppressed: bounce-743@bounce-test.doula.cloud`, with no Mailgun request made -- while two unrelated rows drained in the same worker run reached Mailgun normally.
 
-#348 (ADR-0013's Cloud Tasks nudge) adds `NOTIFICATION_TASKS_QUEUE` and `NOTIFICATION_TASKS_TARGET_BASE_URL`, both consumed only by `tasknudge.NewCloudTasksEnqueuer` at startup. No new secret: the enqueued task's `X-Internal-Secret` header is `NOTIFICATION_WORKER_SECRET`, the same value the nine `process-*` endpoints already check against a Cloud Scheduler invocation. One queue serves all nine outbox types (`main.go` builds one `CloudTasksEnqueuer` and passes it into `routes()` as `nudgeEnqueuer`), provisioned once:
+#348 (ADR-0013's Cloud Tasks nudge) adds `NOTIFICATION_TASKS_QUEUE` and `NOTIFICATION_TASKS_TARGET_BASE_URL`, both consumed only by `tasknudge.NewCloudTasksEnqueuer` at startup. No new secret: the enqueued task's `X-Internal-Secret` header is `NOTIFICATION_WORKER_SECRET`, the same value the thirteen `process-*` endpoints already check. One queue serves all nine outbox types (`main.go` builds one `CloudTasksEnqueuer` and passes it into `routes()` as `nudgeEnqueuer`), provisioned once:
 
 ```bash
 gcloud tasks queues create doula-cloud-notification-nudge \
@@ -173,13 +170,13 @@ gcloud run services update doula-api --region us-central1 \
 
 Two more endpoints on the same `X-Internal-Secret` shape, under `/api/internal/site` rather than `/notifications` because neither of them notifies anybody. `NOTIFICATION_WORKER_SECRET` again, not a second credential.
 
-`POST /api/internal/site/process-build-outbox` turns queued rebuilds into one `repository_dispatch`, and is the ninth type on ADR-0013's shared Cloud Tasks queue. It is the one type whose nudge is **delayed** -- 90 seconds, `tasknudge.Delay` -- because the worker collapses every pending row into a single deploy and can only collapse rows that have had a moment to gather. Its Cloud Scheduler job is the durability backstop: a dispatch that fails leaves the rows pending, and the next tick retries.
+`POST /api/internal/site/process-build-outbox` turns queued rebuilds into one `repository_dispatch`, and is the ninth type on ADR-0013's shared Cloud Tasks queue. It is the one type whose nudge is **delayed** -- 90 seconds, `tasknudge.Delay` -- because the worker collapses every pending row into a single deploy and can only collapse rows that have had a moment to gather. The drain job is its durability backstop: a dispatch that fails leaves the rows pending, and the next tick retries.
 
 `POST /api/internal/site/verify-pages` fetches every published page from `doula.cloud` and records whether it resolved. Two callers, and deliberately identical behavior for both: the last step of `firebase-hosting-merge.yml`, which reads the same secret out of Secret Manager over Workload Identity Federation and posts to the raw Cloud Run URL; and a Cloud Scheduler job every fifteen minutes. The sweep is what covers the case the workflow cannot -- a build that fails produces no deploy and no callback at all, so only something that runs anyway can notice a page that never went live.
 
 `GITHUB_DISPATCH_TOKEN` is the one new credential. **Contents: write** is the narrowest permission GitHub's dispatch endpoint accepts, and it is the same level a GitHub App would need, which is why #443 chose the simpler thing. Give it a real expiry rather than "no expiration": a lapsed token is not silent here -- the dispatch fails, the page never leaves `pending`, and the Practice's website settings screen says her page is not confirmed.
 
-**Provisioned.** Both Cloud Scheduler jobs exist and have each run green: `process-site-build-outbox` every five minutes, `verify-practice-pages` every fifteen, both in `us-central1`, both carrying `X-Internal-Secret` the way `process-portal-invite-outbox` does. The deploy workflow's service account (`github-action-733741680@doula-cloud.iam.gserviceaccount.com`) has been granted `roles/secretmanager.secretAccessor` on `doula-cloud-notification-worker-secret`, which it needs to read the secret its last step posts.
+**Provisioned.** `verify-practice-pages` runs every fifteen minutes in `us-central1`, carrying `X-Internal-Secret`. #443's own `process-site-build-outbox` job existed too, and was deleted by #481 once the drain covered it -- see [The outbox backstop](#the-outbox-backstop-one-drain-job). The deploy workflow's service account (`github-action-733741680@doula-cloud.iam.gserviceaccount.com`) has been granted `roles/secretmanager.secretAccessor` on `doula-cloud-notification-worker-secret`, which it needs to read the secret its last step posts.
 
 **Still outstanding: the token itself.** It is created by hand at <https://github.com/settings/personal-access-tokens> -- resource owner `markgoho`, repository access *"Only select repositories"* → `doula-cloud`, Repository permissions → **Contents: Read and write**, expiry 366 days. Until it is in Secret Manager and on the service, `process-site-build-outbox` runs green with nothing to do and a real publish would sit at `pending` with the outbox retrying.
 
@@ -194,7 +191,22 @@ gcloud run services update doula-api --region us-central1 --project=doula-cloud 
   --update-secrets GITHUB_DISPATCH_TOKEN=doula-cloud-github-dispatch-token:latest
 ```
 
-**A gap this ticket found rather than made.** Only `process-portal-invite-outbox` was ever provisioned as a Cloud Scheduler job; the seven other `process-*` endpoints this document describes have no job behind them, so their outboxes have only ADR-0013's nudge and no backstop. Recorded as [#481](https://github.com/markgoho/doula-cloud/issues/481).
+### The outbox backstop: one drain job
+
+**Which Cloud Scheduler jobs exist.** Two, both in `us-central1`, both carrying `X-Internal-Secret`:
+
+| Job | Cadence | Calls |
+| --- | --- | --- |
+| `process-outbox-drain` | `*/5 * * * *` | `POST /api/internal/outboxes/drain` |
+| `verify-practice-pages` | `*/15 * * * *` | `POST /api/internal/site/verify-pages` |
+
+That is the whole list. No `process-*` endpoint has a job of its own any more, and none needs one: the drain runs every registration in `api/outboxes.go` in turn, each in its own transaction behind its own RLS door, so a fourteenth outbox is backstopped by being registered. Adding an outbox is no longer a console change. See [ADR-0010](adr/0010-notification-email-outbox.md)'s amendment and [#481](https://github.com/markgoho/doula-cloud/issues/481).
+
+The drain answers `200` only when every outbox succeeded, and `500` naming the ones that failed, so a single broken outbox turns the job red rather than hiding inside a green tick. Each failure is also logged as `outbox: drain <path>: <error>`.
+
+**Two outboxes have no nudge at all**, so the drain is the only thing that ever runs them: `process-staff-token-mail-outbox` and `process-staff-email-change-outbox` (#613 accepted ADR-0010's plain delay for both rather than wiring a nudge). Before #481 they had no Scheduler job either, which means they did not run outside a test or a hand invocation.
+
+The three jobs that predated this — `process-portal-invite-outbox`, `process-site-build-outbox`, and #443's `verify-practice-pages` — are down to one: the first two were deleted as redundant once the drain covered them, and `verify-practice-pages` stays because it is not an outbox at all.
 
 ## Attachments bucket and VAPID push
 

@@ -53,8 +53,9 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await page.getByRole('button', { name: 'Send invite' }).click();
 	await expect(page.getByText(`is on its way to ${doulaEmail}`)).toBeVisible();
 
-	// Nothing fires by itself locally (#762): the harness POSTs the
-	// `process-*` endpoint Cloud Scheduler would have called.
+	// Nothing fires by itself locally (#762): this POSTs the one
+	// `process-*` endpoint under test, which deployed is reached by
+	// ADR-0013's nudge and by `process-outbox-drain` (#481).
 	const drain = async () =>
 		request.post(`${API_URL}/api/internal/notifications/process-staff-invite-outbox`, {
 			headers: { 'X-Internal-Secret': WORKER_SECRET }
