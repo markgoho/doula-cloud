@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -15,6 +16,12 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
+
+// inviteTokenLifetime is how long a portal invitation stays acceptable --
+// #616's AC, longer than a sign-in link (ADR-0026's 15 minutes) because
+// she may not read mail for days. Re-sendable by the doula: invite
+// rotates both the token and this expiry together.
+const inviteTokenLifetime = 7 * 24 * time.Hour
 
 // InviteResponse identifies the pending client_portal_users row created (or
 // re-invited) and hands back the one-time token the Client needs to accept.
@@ -119,14 +126,15 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 		`SELECT id, identity_uid FROM client_portal_users WHERE client_id = $1`,
 		clientID,
 	).Scan(&existingID, &identityUID)
+	expiresAt := time.Now().Add(inviteTokenLifetime)
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		newID := uuid.NewString()
 		inviteToken := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO client_portal_users (id, client_id, invite_token) VALUES ($1, $2, $3)`,
-			newID, clientID, inviteToken,
+			`INSERT INTO client_portal_users (id, client_id, invite_token, invite_token_expires_at) VALUES ($1, $2, $3, $4)`,
+			newID, clientID, inviteToken, expiresAt,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
@@ -147,8 +155,8 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 	default:
 		inviteToken := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE client_portal_users SET invite_token = $1 WHERE id = $2`,
-			inviteToken, existingID,
+			`UPDATE client_portal_users SET invite_token = $1, invite_token_expires_at = $2 WHERE id = $3`,
+			inviteToken, expiresAt, existingID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError

@@ -383,15 +383,23 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 }
 
 // enqueuePortalErasure queues the deletion of her Identity Platform
-// account and ends every session she currently holds. The sessions are
-// deleted here, inside the erasure transaction, rather than left to the
-// outbox: deleting the Identity Platform account does not invalidate a
-// __session cookie, which is verified against Postgres, so she would
-// otherwise stay signed in to the portal until it expired on its own.
+// account, deletes her Portal Account (#616) outright, and ends every
+// session she currently holds. The sessions are deleted here, inside the
+// erasure transaction, rather than left to the outbox: neither deleting
+// the Identity Platform account nor deleting the Portal Account
+// invalidates a __session cookie, which is verified against Postgres, so
+// she would otherwise stay signed in to the portal until it expired on
+// its own.
 //
 // identity_uid is cleared on the row so nothing in this database points
 // at an account that is about to stop existing. The row itself stays --
-// it is how her portal history resolves.
+// it is how her portal history resolves. Between #616 landing and #617
+// removing the Identity Platform path, a Client's Firebase account (if
+// she still has one) is unreachable by this queued act: acceptInvite no
+// longer stores verified.UID anywhere, so identityUID.String here is
+// always a Portal Account identifier, never an Identity Platform uid.
+// Accepted pre-launch; #617 retires actIdentityAccountDelete once no
+// Client has an Identity Platform account left to delete.
 func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string, now time.Time) (queued bool, sessionsEnded int, err error) {
 	var identityUID sql.NullString
 	err = tx.QueryRowContext(ctx,
@@ -409,7 +417,7 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 		// Platform account behind it, and revoking the pending invite is
 		// enough.
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE client_portal_users SET invite_token = NULL WHERE client_id = $1`, clientID,
+			`UPDATE client_portal_users SET invite_token = NULL, invite_token_expires_at = NULL WHERE client_id = $1`, clientID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return false, 0, fmt.Errorf("client: revoke pending portal invite: %w", err)
@@ -432,8 +440,22 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, 0, err
 	}
+	// The Portal Account itself (#616) is deleted here, synchronously,
+	// rather than through the outbox above: unlike the Identity Platform
+	// account, deleting it is a plain Postgres statement with no outside
+	// API to fail or retry, and it holds the sign-in address -- the exact
+	// PII this erasure exists to scrub. Run before the UPDATE below, not
+	// after: portal_accounts_erasure_delete's own USING clause finds the
+	// row by joining back through client_portal_users.identity_uid, so
+	// that column must still hold the identifier when this DELETE runs.
+	// The FK's ON DELETE SET NULL (#616's migration) is what clears it,
+	// as this statement's own side effect.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM portal_accounts WHERE identifier = $1`, identityUID.String); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, 0, fmt.Errorf("client: delete portal account: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE client_portal_users SET identity_uid = NULL, invite_token = NULL WHERE client_id = $1`, clientID,
+		`UPDATE client_portal_users SET identity_uid = NULL, invite_token = NULL, invite_token_expires_at = NULL WHERE client_id = $1`, clientID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, 0, fmt.Errorf("client: clear portal identity: %w", err)

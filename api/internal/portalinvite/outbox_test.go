@@ -200,6 +200,7 @@ func TestWorker_ProcessPending_AlreadyAcceptedSkipsSend(t *testing.T) {
 	portalUserID := portalUserIDForClient(t, db, clientID)
 	// The Client claimed the invite through some other path before the
 	// worker got to this row.
+	testdb.SeedPortalAccount(t, db, "already-claimed", "already-claimed@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE client_portal_users SET identity_uid = 'already-claimed', invite_token = NULL WHERE id = $1`, portalUserID); err != nil {
 		t.Fatalf("mark accepted: %v", err)
 	}

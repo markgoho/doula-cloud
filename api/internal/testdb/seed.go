@@ -55,3 +55,19 @@ func SeedNamedStaffAtPractice(t *testing.T, db *DB, practiceID, identityUID, nam
 	}
 	return staffID
 }
+
+// SeedPortalAccount inserts a portal_accounts row using the superuser
+// Admin connection. client_portal_users.identity_uid (#616) carries a
+// foreign key to portal_accounts.identifier, so any fixture that seeds a
+// client_portal_users row with identity_uid set needs a matching row
+// here first, or the insert fails.
+func SeedPortalAccount(t *testing.T, db *DB, identifier, signInAddress string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES ($1, $2)`,
+		identifier, signInAddress,
+	); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed portal account %q: %v", identifier, err)
+	}
+}

@@ -61,3 +61,22 @@ func TestSeedNamedStaffAtPractice(t *testing.T) {
 		t.Fatalf("name = %q, want %q", name, "Jamie Doula")
 	}
 }
+
+// TestSeedPortalAccount proves the portal_accounts row lands with the
+// identifier and sign-in address passed in -- every package seeding an
+// accepted client_portal_users row relies on this existing first, or the
+// identity_uid foreign key (#616) refuses the insert.
+func TestSeedPortalAccount(t *testing.T) {
+	db := testdb.New(t)
+	testdb.SeedPortalAccount(t, db, "portal_seed-test", "seed-test@example.com")
+
+	var signInAddress string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, "portal_seed-test",
+	).Scan(&signInAddress); err != nil {
+		t.Fatalf("read seeded portal account: %v", err)
+	}
+	if signInAddress != "seed-test@example.com" {
+		t.Fatalf("sign_in_address = %q, want %q", signInAddress, "seed-test@example.com")
+	}
+}

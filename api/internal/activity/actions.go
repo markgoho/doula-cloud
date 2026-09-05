@@ -70,6 +70,11 @@ const (
 
 	ActionPortalInviteSent EngagementAction = "portal_invite_sent"
 
+	// ActionPortalAccountProvisioned records the Portal Account
+	// portalinvite.acceptInvite creates (#616) -- always a ClientActor,
+	// since accepting her own invitation is the one path that reaches it.
+	ActionPortalAccountProvisioned EngagementAction = "portal_account_provisioned"
+
 	// #303: a Client's own push-notification preference change, recorded
 	// against her Engagement (notificationpref's PUT handler). Neither
 	// action belongs in moneyActions or staffingActions below -- it is

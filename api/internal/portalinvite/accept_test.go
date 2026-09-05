@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/testdb"
@@ -106,6 +109,38 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	}
 }
 
+// TestAcceptInviteHandler_ExpiredInvite proves #616's AC: an invitation
+// past its invite_token_expires_at is refused with 410, and the pending
+// row is left untouched (the doula re-sends rather than this handler
+// flipping any state -- client_portal_users has no status column to
+// flip).
+func TestAcceptInviteHandler_ExpiredInvite(t *testing.T) {
+	db := testdb.New(t)
+	clientID, inviteToken := seedPendingPortalInviteExpiringAt(t, db, time.Now().Add(-time.Minute))
+
+	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	defer srv.Close()
+
+	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusGone {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusGone)
+	}
+
+	var identityUID sql.NullString
+	var storedToken string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid, invite_token::text FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID, &storedToken); err != nil {
+		t.Fatalf("query portal user row: %v", err)
+	}
+	if identityUID.Valid {
+		t.Fatalf("expected identity_uid to remain unset for an expired invite, got %q", identityUID.String)
+	}
+	if storedToken != inviteToken {
+		t.Fatalf("expected invite_token to remain %q, got %q", inviteToken, storedToken)
+	}
+}
+
 func TestAcceptInviteHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
@@ -133,11 +168,26 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid, invite_token::text FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID, &storedToken); err != nil {
 		t.Fatalf("query claimed row: %v", err)
 	}
-	if identityUID != acceptIdentityUID {
-		t.Fatalf("identity_uid = %q, want %q", identityUID, acceptIdentityUID)
+	// identity_uid is a Portal Account Doula Cloud mints itself (#616),
+	// never the caller's Identity Platform uid -- acceptIdentityUID (the
+	// Bearer token's uid, still required until #617 lands) is deliberately
+	// not what gets stored.
+	if !strings.HasPrefix(identityUID, portalaccount.Prefix) {
+		t.Fatalf("identity_uid = %q, want prefix %q", identityUID, portalaccount.Prefix)
+	}
+	if identityUID == acceptIdentityUID {
+		t.Fatal("identity_uid must not be the caller's own Identity Platform uid")
 	}
 	if storedToken.Valid {
 		t.Fatalf("expected invite_token cleared after accept, got %q", storedToken.String)
+	}
+
+	var signInAddress string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, identityUID).Scan(&signInAddress); err != nil {
+		t.Fatalf("query portal account: %v", err)
+	}
+	if signInAddress != "invited@example.com" {
+		t.Fatalf("sign_in_address = %q, want the invited Client's own contact address", signInAddress)
 	}
 
 	// #145: accept-invite sets the session cookie on its own response, same
@@ -216,21 +266,18 @@ func TestAcceptInviteHandler_TokenAlreadyClaimed(t *testing.T) {
 	}
 }
 
-// TestAcceptInviteHandler_IdentityAlreadyClaimedElsewhere proves the
-// already-linked-identity edge case (someone accepting a second invite
-// with an identity_uid that already has a client_portal_users row) fails
-// cleanly with 409, not a 500 or a corrupted row.
-func TestAcceptInviteHandler_IdentityAlreadyClaimedElsewhere(t *testing.T) {
+// TestAcceptInviteHandler_SignInAddressAlreadyClaimed proves #309's
+// scenario in its new shape (see #616): a person who already holds a
+// Portal Account for a given sign-in address cannot get a second one for
+// the same address by accepting another invite -- caught on
+// portal_accounts.sign_in_address's unique index now that identity_uid is
+// a fresh identifier every time, never on identity_uid itself. Cased
+// differently to prove the index is case-insensitive, matching
+// practice_invitations_one_pending's shape.
+func TestAcceptInviteHandler_SignInAddressAlreadyClaimed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "portal-invite-other-owner")
-	otherClientID, _ := seedClientEngagement(t, db, practiceID, "Other Client", "other@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		acceptIdentityUID, otherClientID,
-	); err != nil {
-		t.Fatalf("seed already-linked portal user: %v", err)
-	}
-	_, inviteToken := seedPendingPortalInvite(t, db)
+	testdb.SeedPortalAccount(t, db, "portal_existing-account", "Invited@Example.com")
+	_, inviteToken := seedPendingPortalInvite(t, db) // invites "invited@example.com"
 
 	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
 	defer srv.Close()
