@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
-import { signIn } from './auth';
 import { seedEngagement } from './stack';
+import { signInEnrolled } from './mfa';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -27,7 +27,7 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 		{ data: { email: staffEmail, password, returnSecureToken: true } }
 	);
 	expect(staffSignUp.ok(), `staffSignUp failed: ${staffSignUp.status()} ${await staffSignUp.text()}`).toBe(true);
-	const { idToken: staffIdToken } = await staffSignUp.json();
+	const { idToken: staffIdToken, localId: staffUID } = await staffSignUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${staffIdToken}` },
@@ -37,8 +37,10 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	// Everything after signup is cookie-authenticated (#151).
-	const staffHeaders = await signIn(request, API_URL, staffIdToken);
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment), including the
+	// createClient and portal-invite calls below.
+	const staffHeaders = await signInEnrolled(request, staffIdToken, staffUID);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,

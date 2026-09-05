@@ -195,6 +195,26 @@ func TestMiddleware_NoPracticeMembership(t *testing.T) {
 	}
 }
 
+// TestMiddleware_NoSuchPractice covers a well-formed but nonexistent
+// Practice id -- setPracticeAndCheckMembership's LEFT JOIN against
+// practices finds no row at all, distinct from finding the Practice but
+// no membership (TestMiddleware_NoPracticeMembership above), though both
+// answer the same outward 403.
+func TestMiddleware_NoSuchPractice(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-with-no-such-practice"
+	seedStaff(t, db, identityUID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 func TestMiddleware_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-with-membership"
@@ -282,6 +302,175 @@ func TestRequireTx(t *testing.T) {
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 		}
+	})
+}
+
+// setRequireMFA throws practiceID's switch (#606) directly via the Admin
+// connection, bypassing the PUT handler under test elsewhere. Every test
+// that needs the switch on seeds a Practice off (the migration's own
+// default) and calls this -- nothing needs to reset it false, which is
+// what a Practice already starts as.
+func setRequireMFA(t *testing.T, db *testdb.DB, practiceID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET require_mfa_for_all_staff = true WHERE id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("set require_mfa_for_all_staff: %v", err)
+	}
+}
+
+// TestMiddleware_MFAGate is #606's AC read literally: refuse a
+// Practice-scoped request when the caller's Membership there holds
+// Owner, or the Practice's switch is on, and her session shows no
+// second factor.
+func TestMiddleware_MFAGate(t *testing.T) {
+	t.Run("owner without second factor is refused", func(t *testing.T) {
+		db := testdb.New(t)
+		const identityUID = "owner-no-mfa"
+		_, practiceID := seedOwnerMembership(t, db, identityUID)
+
+		mux := http.NewServeMux()
+		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
+		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+			authntest.AddSessionCookie(req, session)
+		})
+		defer resp.Body.Close()
+		assertStatus(t, resp, http.StatusForbidden)
+
+		var body staffauth.APIError
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body.Code != "MFA_REQUIRED" {
+			t.Fatalf("code = %q, want MFA_REQUIRED", body.Code)
+		}
+	})
+
+	t.Run("owner with second factor is admitted", func(t *testing.T) {
+		db := testdb.New(t)
+		const identityUID = "owner-with-mfa"
+		_, practiceID := seedOwnerMembership(t, db, identityUID)
+
+		mux := http.NewServeMux()
+		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+			authntest.AddSessionCookie(req, session)
+		})
+		defer resp.Body.Close()
+		assertStatus(t, resp, http.StatusOK)
+	})
+
+	t.Run("doula is never forced while the switch is off", func(t *testing.T) {
+		db := testdb.New(t)
+		const identityUID = "doula-no-mfa"
+		_, practiceID := seedStaffWithMembership(t, db, identityUID)
+
+		mux := http.NewServeMux()
+		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
+		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+			authntest.AddSessionCookie(req, session)
+		})
+		defer resp.Body.Close()
+		assertStatus(t, resp, http.StatusOK)
+	})
+
+	t.Run("the switch bars an un-enrolled doula", func(t *testing.T) {
+		db := testdb.New(t)
+		const identityUID = "doula-switch-on"
+		_, practiceID := seedStaffWithMembership(t, db, identityUID)
+		setRequireMFA(t, db, practiceID)
+
+		mux := http.NewServeMux()
+		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
+		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+			authntest.AddSessionCookie(req, session)
+		})
+		defer resp.Body.Close()
+		assertStatus(t, resp, http.StatusForbidden)
+	})
+
+	t.Run("the switch admits an enrolled doula", func(t *testing.T) {
+		db := testdb.New(t)
+		const identityUID = "doula-switch-on-enrolled"
+		_, practiceID := seedStaffWithMembership(t, db, identityUID)
+		setRequireMFA(t, db, practiceID)
+
+		mux := http.NewServeMux()
+		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+			authntest.AddSessionCookie(req, session)
+		})
+		defer resp.Body.Close()
+		assertStatus(t, resp, http.StatusOK)
+	})
+
+	// TestMiddleware_MFAGate/split proves #606's own AC: a person whose
+	// Membership at Practice A requires MFA and at Practice B does not is
+	// barred from A and admitted to B while un-enrolled, one identity and
+	// one session cookie throughout -- the fact CONTEXT.md's per-Membership
+	// role model is what forced the gate off session.CreateHandler in the
+	// first place (#167's amendment).
+	t.Run("split across two practices", func(t *testing.T) {
+		db := testdb.New(t)
+		const identityUID = "contractor-split"
+		staffID, ownerPracticeID := seedOwnerMembership(t, db, identityUID)
+		doulaPracticeID := seedPractice(t, db, "Second Practice")
+		seedMembership(t, db, doulaPracticeID, staffID)
+
+		mux := http.NewServeMux()
+		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		unenrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
+		respA := get(t, pingURL(srv, ownerPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, unenrolled) })
+		defer respA.Body.Close()
+		assertStatus(t, respA, http.StatusForbidden)
+
+		respB := get(t, pingURL(srv, doulaPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, unenrolled) })
+		defer respB.Body.Close()
+		assertStatus(t, respB, http.StatusOK)
+
+		enrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+		respA2 := get(t, pingURL(srv, ownerPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, enrolled) })
+		defer respA2.Body.Close()
+		assertStatus(t, respA2, http.StatusOK)
+
+		respB2 := get(t, pingURL(srv, doulaPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, enrolled) })
+		defer respB2.Body.Close()
+		assertStatus(t, respB2, http.StatusOK)
 	})
 }
 

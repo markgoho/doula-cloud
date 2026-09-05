@@ -201,6 +201,25 @@ func (f *FakeAccountManager) DeleteAccount(_ context.Context, uid string) error 
 	return nil
 }
 
+// CountWithoutSecondFactor implements authn.AccountManager. A uid this
+// fake holds no account for counts as "without a second factor", the
+// same treatment FirebaseVerifier gives an Identity Platform NotFound.
+func (f *FakeAccountManager) CountWithoutSecondFactor(_ context.Context, uids []string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return 0, f.Err
+	}
+	count := 0
+	for _, uid := range uids {
+		a, ok := f.accounts[uid]
+		if !ok || !a.mfaEnrolled {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // ClearSecondFactors implements authn.AccountManager.
 func (f *FakeAccountManager) ClearSecondFactors(_ context.Context, uid string) error {
 	f.mu.Lock()

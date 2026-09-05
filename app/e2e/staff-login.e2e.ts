@@ -6,7 +6,14 @@ import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
-test('Staff login lands on their practice-scoped URL', async ({ page, request }) => {
+// #606: a fresh signup has no second factor enrolled at all, and an Owner
+// is gated behind one at every Practice-scoped route (staffauth.Middleware) --
+// so she is driven into enrolment rather than landing on her Practice.
+// This is still the right spec for login mechanics (the session cookie,
+// the cleared Firebase JS SDK credential, session persistence across a
+// closed tab): none of those depend on which screen she lands on, only on
+// the sign-in itself having gone through.
+test('Staff login drives an unenrolled Owner into MFA enrolment, carrying returnTo', async ({ page, request }) => {
 	// The random suffix (not just Date.now(), millisecond-resolution) avoids
 	// EMAIL_EXISTS collisions with other *.e2e.ts files' own staff-<ts>@
 	// emails when Playwright's parallel workers start within the same
@@ -39,8 +46,8 @@ test('Staff login lands on their practice-scoped URL', async ({ page, request })
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Log in' }).click();
 
-	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
-	await expect(page.locator('h1')).toHaveText('Welcome to Riverside Doulas');
+	const returnTo = encodeURIComponent(`/practices/${practiceId}`);
+	await expect(page).toHaveURL(new RegExp(String.raw`/mfa/enroll\?returnTo=${returnTo}$`));
 
 	// #149: the app exchanges the ID token for the session cookie and
 	// signs out of the Firebase JS SDK locally -- the SDK's default
@@ -85,10 +92,10 @@ test('Staff login lands on their practice-scoped URL', async ({ page, request })
 	// Closing the tab and returning within the session lifetime leaves the
 	// person signed in: the __session cookie lives on the browser context,
 	// not the tab, so a fresh page navigating straight to the practice URL
-	// should land there without a redirect to /login.
+	// lands on the same MFA-enrolment redirect a live session gets -- not
+	// on /login, which is what an ended or missing session would produce.
 	await page.close();
 	const reopened = await page.context().newPage();
 	await reopened.goto(`/practices/${practiceId}`);
-	await expect(reopened).toHaveURL(new RegExp(`/practices/${practiceId}$`));
-	await expect(reopened.locator('h1')).toHaveText('Welcome to Riverside Doulas');
+	await expect(reopened).toHaveURL(new RegExp(String.raw`/mfa/enroll\?returnTo=${returnTo}$`));
 });

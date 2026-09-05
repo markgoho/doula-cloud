@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -8,7 +9,11 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // end-to-end -- the pieces it's built from (contractTemplate.ts, ContractTemplateEditor.svelte) have
 // their own Vitest coverage, but this is the only test that renders the actual route and hits the real
 // API, proving signup's seeded default and edit/save work together.
-test('Practice Owner can view the seeded contract template and edit/save it', async ({ page, request }) => {
+test('Practice Owner can view the seeded contract template and edit/save it', async ({
+	page,
+	request,
+	context
+}) => {
 	const email = `contract-template-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
@@ -17,7 +22,7 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok()).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
@@ -27,10 +32,10 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment).
+	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// Through Settings, which is where these screens live now that the

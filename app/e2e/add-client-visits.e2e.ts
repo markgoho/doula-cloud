@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { seedEngagement } from './stack';
+import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -9,7 +10,7 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // directly -- fixture setup, not automation of the Add Client form itself
 // (#207's rule). This is the first spec to walk the intake form (#497) and
 // the Visits section through the UI.
-test('Add Client form and Visits section', async ({ page, request }) => {
+test('Add Client form and Visits section', async ({ page, request, context }) => {
 	const email = `add-client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
@@ -18,7 +19,7 @@ test('Add Client form and Visits section', async ({ page, request }) => {
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
@@ -28,10 +29,11 @@ test('Add Client form and Visits section', async ({ page, request }) => {
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route, so entering her own Practice can no longer be driven through the
+	// plain /login form (see mfa.ts's signInEnrolled doc comment).
+	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// The three-page intake sequence (#497, ADR-0017): name, then contact,

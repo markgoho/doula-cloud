@@ -140,7 +140,7 @@ type WorkStateResponse struct {
 // is the window both of 00044's policies are scoped to.
 func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
 		}

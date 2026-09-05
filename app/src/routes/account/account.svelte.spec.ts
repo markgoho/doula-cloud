@@ -1,5 +1,5 @@
 import { page as testPage } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
@@ -10,11 +10,34 @@ import { session } from './page.fixture.js';
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession,
+	apiBaseURL: () => '',
 	// The real one reads a plain-text body or a {code, message} JSON body
 	// without the caller knowing which; the screen's job is only to show
 	// whatever it says, so the mock is the plain-text half.
 	apiErrorMessage: (response: Response) => response.text()
 }));
+
+/*
+ * #606's removal flow, faking the Firebase SDK surface the same way
+ * `mfa/enroll`'s and the login screen's own specs do -- it needs a live
+ * project or emulator this suite never runs against.
+ */
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
+
+const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());
+const signOut = vi.hoisted(() => vi.fn());
+const getMultiFactorResolver = vi.hoisted(() => vi.fn());
+const assertionForSignIn = vi.hoisted(() => vi.fn());
+vi.mock('firebase/auth', () => ({
+	signInWithEmailAndPassword,
+	signOut,
+	getMultiFactorResolver,
+	TotpMultiFactorGenerator: { assertionForSignIn }
+}));
+vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({}) }));
+
+const globalFetch = vi.hoisted(() => vi.fn());
 
 const SAVED_AT = '2027-03-14T10:00:00Z';
 
@@ -58,10 +81,31 @@ beforeEach(() => {
 	// (#474), so a fresh test needs a clean slate rather than replaying the
 	// previous test's fetch.
 	resetAccountSession();
+
+	for (const mock of [goto, signInWithEmailAndPassword, signOut, getMultiFactorResolver, assertionForSignIn, globalFetch])
+		mock.mockReset();
+	vi.stubGlobal('fetch', globalFetch);
+	signOut.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+	vi.unstubAllGlobals();
 });
 
 const saveButton = () => testPage.getByRole('button', { name: 'Save work state' });
 const stateSelect = () => testPage.getByRole('combobox', { name: 'Which state do you work from?' });
+
+/*
+ * A field-targeted refusal renders beside its own control -- LabeledField's
+ * own `<p role="alert">`, `id`d off the field's own id -- the same helper
+ * `mfa/enroll`'s and the login screen's own specs use, since `getByText`
+ * cannot single it out from an identical error summary entry.
+ */
+async function fieldError(id: string, message: string) {
+	await vi.waitFor(() => {
+		expect(document.querySelector(`#${id}-error`)?.textContent).toBe(message);
+	});
+}
 
 describe('the account screen', () => {
 	it('shows the work state she has already asserted, and the day she asserted it', async () => {
@@ -223,5 +267,167 @@ describe('when the account screen cannot do its job', () => {
 			.element(testPage.getByRole('alert'))
 			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
 		await expect.element(testPage.getByText('The network dropped')).not.toBeInTheDocument();
+	});
+});
+
+/*
+ * #606: whether a second factor is enrolled, and the two ways off this
+ * screen -- voluntary enrolment when it is off, removal when it is on.
+ * `secondFactor` is read as the session-carried fact it is (see
+ * SessionInfo's own doc comment), so these tests set it on the session
+ * response rather than modeling a fresh enrolment check.
+ */
+describe('two-factor authentication status (#606)', () => {
+	it('shows it is turned on and offers to remove it', async () => {
+		mockApi({ sessionResponse: jsonResponse({ ...session, secondFactor: true }) });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Turned on.')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Remove' })).toBeVisible();
+	});
+
+	it('offers to set it up voluntarily when it is off, returning here afterward', async () => {
+		mockApi({ sessionResponse: jsonResponse({ ...session, secondFactor: false }) });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Not turned on.')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
+			.toHaveAttribute('href', '/mfa/enroll?returnTo=%2Faccount');
+	});
+});
+
+/*
+ * #606's own AC: removing a second factor ends every live session for the
+ * identity. `DELETE /api/staff/mfa` reads both a fresh Bearer ID token
+ * (api/internal/staffauth/reauth.go's RequireRecentAuth) and the
+ * `__session` cookie already on the request (authn.Begin) -- so the step-up
+ * always re-authenticates, and Identity Platform itself challenges the
+ * second factor on that reauth, since one is already enrolled.
+ */
+describe('removing a second factor (#606)', () => {
+	const resolver = { hints: [{ uid: 'enrollment-1' }], resolveSignIn: vi.fn() };
+
+	interface SetupOptions {
+		deleteResponse?: Response;
+	}
+
+	async function setup({ deleteResponse = new Response(undefined, { status: 204 }) }: SetupOptions = {}) {
+		mockApi({ sessionResponse: jsonResponse({ ...session, secondFactor: true }) });
+		globalFetch.mockResolvedValue(deleteResponse);
+		await render(Page, {});
+		await testPage.getByRole('button', { name: 'Remove' }).click();
+		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
+	}
+
+	async function reachCodeStep() {
+		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/multi-factor-auth-required' });
+		getMultiFactorResolver.mockReturnValue(resolver);
+		await setup();
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
+	}
+
+	beforeEach(() => {
+		resolver.resolveSignIn.mockReset();
+	});
+
+	it('refuses an empty password without calling Identity Platform', async () => {
+		await setup();
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await fieldError('account-mfa-password', 'Enter your password');
+		expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
+	});
+
+	it('shows a wrong password as a step-up refusal', async () => {
+		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/wrong-password' });
+		await setup();
+
+		await testPage.getByLabelText('Password').fill('wrong');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await fieldError('account-mfa-password', 'Password is not correct');
+	});
+
+	it('lets her cancel out of the step-up back to the status line', async () => {
+		await setup();
+
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(testPage.getByText('Turned on.')).toBeVisible();
+		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
+	});
+
+	it('challenges for a code, since the identity already holds one enrolled', async () => {
+		await reachCodeStep();
+
+		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
+	});
+
+	it('refuses an empty code without resolving sign-in', async () => {
+		await reachCodeStep();
+
+		await testPage.getByRole('button', { name: 'Remove' }).click();
+
+		await fieldError('account-mfa-code', 'Enter the 6-digit code from your authenticator app');
+		expect(resolver.resolveSignIn).not.toHaveBeenCalled();
+	});
+
+	it('shows a wrong or expired code as a refusal she can retry', async () => {
+		resolver.resolveSignIn.mockRejectedValue({ code: 'auth/invalid-verification-code' });
+		await reachCodeStep();
+
+		await testPage.getByLabelText('Authenticator app code').fill('000000');
+		await testPage.getByRole('button', { name: 'Remove' }).click();
+
+		await fieldError(
+			'account-mfa-code',
+			'The code is not correct. Enter the 6-digit code from your authenticator app.'
+		);
+	});
+
+	it('sends the fresh ID token as a Bearer credential alongside the session cookie, and ends every session on success', async () => {
+		assertionForSignIn.mockReturnValue({ assertion: true });
+		resolver.resolveSignIn.mockResolvedValue({
+			user: { getIdToken: async () => 'fresh-id-token' }
+		});
+		await reachCodeStep();
+
+		await testPage.getByLabelText('Authenticator app code').fill('123456');
+		await testPage.getByRole('button', { name: 'Remove' }).click();
+
+		expect(assertionForSignIn).toHaveBeenCalledWith('enrollment-1', '123456');
+		await vi.waitFor(() =>
+			expect(globalFetch).toHaveBeenCalledWith('/api/staff/mfa', {
+				method: 'DELETE',
+				credentials: 'include',
+				headers: { Authorization: 'Bearer fresh-id-token' }
+			})
+		);
+		expect(signOut).toHaveBeenCalled();
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/login?sessionEnded=true'));
+	});
+
+	// Identity Platform's reauth resolves directly whenever it does not
+	// challenge for the second factor -- the general shape `handleMfaCodeSubmit`
+	// also uses, exercised here since it is the branch that can reach
+	// `finishMfaRemoval` without a code step first.
+	it('shows a DELETE refusal as a service failure and sends her back to the step-up', async () => {
+		signInWithEmailAndPassword.mockResolvedValue({
+			user: { getIdToken: async () => 'fresh-id-token' }
+		});
+		await setup({ deleteResponse: refusal(500, '') });
+
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
+		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
 	});
 });

@@ -55,7 +55,7 @@ type ChangeEmailRequest struct {
 // address is a fact about the person, not about a Membership.
 func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
 		}

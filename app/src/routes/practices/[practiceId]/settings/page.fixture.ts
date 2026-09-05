@@ -1,10 +1,14 @@
 /*
  * The Settings hub, as the continuum check sees it (#595).
  *
- * A fixed five-item nav (see the route's own header comment: "a way in,
- * not a settings design") -- no fetch, and no Practice-typed content;
- * every label and description is this repo's own copy.
+ * A fixed nav (see the route's own header comment: "a way in, not a
+ * settings design") -- no Practice-typed content, every label and
+ * description is this repo's own copy. It reads the caller's role
+ * (#606) to decide whether to include the Owner-only MFA entry, so this
+ * fixture answers as an Owner -- the widest of the two lists the hub
+ * can show.
  */
+import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
@@ -13,5 +17,6 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings',
+	respond: () => jsonResponse({ roles: ['owner'] }),
 	readyText: 'Settings'
 };

@@ -15,9 +15,31 @@ import { fixture, session } from './page.fixture.js';
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
+/*
+ * A field-targeted refusal renders twice by GOV.UK's own design (#467):
+ * once as a link in the error summary, once beside the control itself --
+ * `LabeledField`'s own `<p role="alert">`. `getByText` cannot tell the
+ * two apart, since both carry the identical words; this reads the one
+ * beside the control, by the id `LabeledField` derives from the field's
+ * own id, the same way `WorkStateField.svelte.spec.ts` reads a hint by
+ * id where no accessible query can single it out either.
+ */
+async function fieldError(id: string, message: string) {
+	await vi.waitFor(() => {
+		expect(document.querySelector(`#${id}-error`)?.textContent).toBe(message);
+	});
+}
+
 const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());
 const signOut = vi.hoisted(() => vi.fn());
-vi.mock('firebase/auth', () => ({ signInWithEmailAndPassword, signOut }));
+const getMultiFactorResolver = vi.hoisted(() => vi.fn());
+const assertionForSignIn = vi.hoisted(() => vi.fn());
+vi.mock('firebase/auth', () => ({
+	signInWithEmailAndPassword,
+	signOut,
+	getMultiFactorResolver,
+	TotpMultiFactorGenerator: { assertionForSignIn }
+}));
 vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({}) }));
 
 /*
@@ -45,7 +67,15 @@ vi.mock('#lib/api.js', () => ({
 }));
 
 beforeEach(() => {
-	for (const mock of [goto, apiFetch, apiFetchWithSession, signInWithEmailAndPassword, signOut])
+	for (const mock of [
+		goto,
+		apiFetch,
+		apiFetchWithSession,
+		signInWithEmailAndPassword,
+		signOut,
+		getMultiFactorResolver,
+		assertionForSignIn
+	])
 		mock.mockReset();
 });
 
@@ -174,5 +204,86 @@ describe('Staff login -- a credential that resolves to no Practice (#745)', () =
 		await signIn();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/no-practice'));
+	});
+});
+
+/*
+ * #606: the sign-in challenge for a Staff member who has already
+ * enrolled a TOTP authenticator. `signInWithEmailAndPassword` itself
+ * raises `auth/multi-factor-auth-required` and issues no credential at
+ * all -- the credential only ever arrives from `resolver.resolveSignIn`,
+ * once the code is confirmed.
+ */
+describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
+	const resolver = { hints: [{ uid: 'enrollment-1' }], resolveSignIn: vi.fn() };
+
+	async function reachChallenge() {
+		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/multi-factor-auth-required' });
+		getMultiFactorResolver.mockReturnValue(resolver);
+
+		await render(Page, {});
+		await testPage.getByLabelText('Email').fill('priya@example.com');
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Log in' }).click();
+
+		await expect
+			.element(testPage.getByLabelText('Authenticator app code'))
+			.toBeVisible();
+	}
+
+	beforeEach(() => {
+		resolver.resolveSignIn.mockReset();
+	});
+
+	it('challenges for the code instead of showing a refusal, and asks for nothing else', async () => {
+		await reachChallenge();
+
+		expect(testPage.getByLabelText('Email').elements()).toHaveLength(0);
+		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
+		expect(testPage.getByText(/is not correct/i).elements()).toHaveLength(0);
+	});
+
+	it('refuses an empty code without resolving sign-in', async () => {
+		await reachChallenge();
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await fieldError('login-totp-code', 'Enter the 6-digit code from your authenticator app');
+		expect(resolver.resolveSignIn).not.toHaveBeenCalled();
+	});
+
+	it('resolves sign-in with the one enrolled factor and finishes exactly like a plain sign-in', async () => {
+		assertionForSignIn.mockReturnValue({ assertion: true });
+		resolver.resolveSignIn.mockResolvedValue({
+			user: { getIdToken: async () => 'id-token-after-mfa' }
+		});
+		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 200)));
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...session, memberships: [firstMembership] }));
+
+		await reachChallenge();
+		await testPage.getByLabelText('Authenticator app code').fill('123456');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		expect(assertionForSignIn).toHaveBeenCalledWith('enrollment-1', '123456');
+		await vi.waitFor(() =>
+			expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`)
+		);
+	});
+
+	// #606's own AC: fails as a sign-in failure, not an app error, and she
+	// can retry the code without being sent back to re-enter her password.
+	it('shows a wrong or expired code as a refusal she can retry in place', async () => {
+		resolver.resolveSignIn.mockRejectedValue({ code: 'auth/invalid-verification-code' });
+
+		await reachChallenge();
+		await testPage.getByLabelText('Authenticator app code').fill('000000');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await fieldError(
+			'login-totp-code',
+			'The code is not correct. Enter the 6-digit code from your authenticator app.'
+		);
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
 	});
 });

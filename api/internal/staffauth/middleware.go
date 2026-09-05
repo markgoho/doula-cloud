@@ -10,9 +10,11 @@ package staffauth
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -101,7 +103,7 @@ func RequireConfirmed(w http.ResponseWriter, r *http.Request) (ok bool) {
 func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tx, uid, ok := authn.Begin(w, r, db)
+			tx, uid, secondFactor, ok := authn.Begin(w, r, db)
 			if !ok {
 				return
 			}
@@ -128,7 +130,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			isMember, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
+			isMember, roles, requireMFA, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
@@ -136,6 +138,20 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			}
 			if !isMember {
 				apierr.WriteError(w, "no membership at this practice", http.StatusForbidden)
+				return
+			}
+
+			// #606: refuse a Practice-scoped request when the caller's
+			// Membership there holds Owner, or the Practice's own switch
+			// is on, and her session shows no second factor. Signing in
+			// stays open to everyone (authn.Begin above never gates on
+			// this) -- only entering a Practice that demands it does.
+			// This is not an ended session (401 would send the browser to
+			// the login screen, per credentialed-fetch's own contract),
+			// so it is a distinct, machine-readable 403 the app branches
+			// on to route into enrolment instead.
+			if !secondFactor && (slices.Contains(roles, "owner") || requireMFA) {
+				writeMFARequired(w)
 				return
 			}
 
@@ -215,28 +231,68 @@ func setIdentityAndResolveStaff(ctx context.Context, tx *sql.Tx, identityUID str
 
 // setPracticeAndCheckMembership sets app.current_practice_id and
 // app.current_staff_id -- the session variables practice/staff-tier RLS
-// reads for the rest of the request -- then checks whether staffID holds a
-// practice_memberships row for practiceID. Both vars are set only here,
-// after identity resolution has already succeeded, so no RLS policy that
-// reads them can be satisfied before that check has passed.
-func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (bool, error) {
+// reads for the rest of the request -- then checks whether staffID holds
+// a practice_memberships row for practiceID, and if so returns the roles
+// that row holds and whether practiceID has thrown its "require MFA for
+// all staff" switch (#606) -- one query, so the MFA gate costs no second
+// round trip. Both vars are set only here, after identity resolution has
+// already succeeded, so no RLS policy that reads them can be satisfied
+// before that check has passed.
+func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (isMember bool, roles []string, requireMFA bool, err error) {
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		return false, fmt.Errorf("staffauth: set current practice id: %w", err)
+		return false, nil, false, fmt.Errorf("staffauth: set current practice id: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		return false, fmt.Errorf("staffauth: set current staff id: %w", err)
+		return false, nil, false, fmt.Errorf("staffauth: set current staff id: %w", err)
 	}
 
-	var exists bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2)`,
+	var rolesText sql.NullString
+	scanErr := tx.QueryRowContext(ctx,
+		`SELECT array_to_string(pm.roles, ','), p.require_mfa_for_all_staff
+		 FROM practices p
+		 LEFT JOIN practice_memberships pm ON pm.practice_id = p.id AND pm.staff_id = $2
+		 WHERE p.id = $1`,
 		practiceID, staffID,
-	).Scan(&exists)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return false, fmt.Errorf("staffauth: check practice membership: %w", err)
+	).Scan(&rolesText, &requireMFA)
+	if errors.Is(scanErr, sql.ErrNoRows) {
+		// No such Practice at all -- same outward result as no membership.
+		return false, nil, false, nil
 	}
-	return exists, nil
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if scanErr != nil {
+		return false, nil, false, fmt.Errorf("staffauth: check practice membership: %w", scanErr)
+	}
+	if !rolesText.Valid {
+		// The Practice exists but staffID holds no membership row there.
+		return false, nil, requireMFA, nil
+	}
+	return true, splitRoles(rolesText.String), requireMFA, nil
+}
+
+// codeMFARequired is the machine-readable APIError.Code the app's
+// credentialed fetch reads to route into enrolment rather than treating
+// this as an ended session (#606's AC: "distinguishable from an ended
+// session ... does not send the browser to the login screen").
+const codeMFARequired = "MFA_REQUIRED"
+
+// APIError is docs/api-design.md section 7's structured error shape,
+// this package's own copy per this repo's convention (see
+// portalinvite/errors.go, ratelimit.go).
+type APIError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// writeMFARequired writes the Practice-scoped boundary's MFA refusal: a
+// live, valid session that may not enter this Practice without a second
+// factor. 403, not 401 -- the session itself is fine.
+func writeMFARequired(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(APIError{
+		Code:    codeMFARequired,
+		Message: "this Practice requires a second sign-in factor",
+	})
 }

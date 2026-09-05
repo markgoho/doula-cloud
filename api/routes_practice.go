@@ -32,6 +32,11 @@ import (
 // check doesn't see four independent literals to flag.
 var ownerAndAdmin = []string{"owner", "admin"}
 
+// ownerOnly is the role declaration for a GatedRouter route only a
+// Practice Owner may read (Stripe Connect status, #606's MFA impact
+// count) -- named for the same goconst reason as ownerAndAdmin above.
+var ownerOnly = []string{"owner"}
+
 // practiceSessionResponse confirms to the frontend which Practice the
 // caller landed on -- and, as a side effect of running through
 // staffauth.Middleware, records it as the Staff member's last-used
@@ -132,6 +137,15 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	// necessarily read the first.
 	ir.Replayable("POST /api/practices/{practiceId}/staff/{staffId}/mfa-recovery/vouch",
 		staffauth.Middleware(d.DB)(idempotency.Wrap(staffauth.VouchHandler(d.Verifier, d.NudgeEnqueuer))))
+	// #606: the switch's pre-throw count -- how many Staff it will
+	// affect, read before an Owner ever calls the PUT below. Owner-only,
+	// the same population who may throw the switch at all.
+	g.Get("/api/practices/{practiceId}/mfa-required/impact", ownerOnly, staffauth.GetMFAImpactHandler(d.AccountManager))
+	// A retry with the same body reads the same current value and writes
+	// nothing new -- see PutMFARequiredHandler's own doc comment.
+	ir.Exempt("PUT /api/practices/{practiceId}/mfa-required",
+		"idempotent by construction: the handler reads the current value first and updates/records only when the given value actually differs from it",
+		staffauth.Middleware(d.DB)(staffauth.PutMFARequiredHandler()))
 	// Credit balance and ledger: Owner and Admin only (ADR-0008).
 	g.Get("/api/practices/{practiceId}/billing", ownerAndAdmin, billing.GetBalanceHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/billing/purchases",
@@ -144,7 +158,7 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	// the write side's Owner-only gate (PostConnectHandler,
 	// staffauth.RequireOwner) is the narrowest defensible default until a
 	// real rule lands (#267 stays open for that rule).
-	g.Get("/api/practices/{practiceId}/payments/connect", []string{"owner"}, payments.GetConnectStatusHandler(d.PaymentsClient))
+	g.Get("/api/practices/{practiceId}/payments/connect", ownerOnly, payments.GetConnectStatusHandler(d.PaymentsClient))
 	// The website a Practice declares to Stripe (#440). Read by every
 	// Staff member, because the payments screen has to tell a Doula who
 	// opens it what is outstanding rather than show her an empty panel,

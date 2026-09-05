@@ -36,7 +36,7 @@ type SessionResponse struct {
 // then app.current_client_id, never anything scoped by :engagementId.
 func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
 		}

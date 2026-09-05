@@ -161,6 +161,28 @@ func TestFakeAccountManager_ErrShortCircuitsEveryMethod(t *testing.T) {
 	if err := f.ClearSecondFactors(t.Context(), "uid-6"); !errors.Is(err, wantErr) {
 		t.Fatalf("ClearSecondFactors err = %v, want %v", err, wantErr)
 	}
+	if _, err := f.CountWithoutSecondFactor(t.Context(), []string{"uid-6"}); !errors.Is(err, wantErr) {
+		t.Fatalf("CountWithoutSecondFactor err = %v, want %v", err, wantErr)
+	}
+}
+
+// TestFakeAccountManager_CountWithoutSecondFactor_UnknownUIDCounts proves
+// a uid the fake holds no account for counts as "without a second
+// factor" -- the same treatment FirebaseVerifier gives an Identity
+// Platform NotFound (#606).
+func TestFakeAccountManager_CountWithoutSecondFactor_UnknownUIDCounts(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	f.Seed("uid-enrolled", "enrolled@example.com", true)
+	f.EnrollTOTP("uid-enrolled")
+	f.Seed("uid-bare", "bare@example.com", true)
+
+	count, err := f.CountWithoutSecondFactor(t.Context(), []string{"uid-enrolled", "uid-bare", "uid-unknown"})
+	if err != nil {
+		t.Fatalf("CountWithoutSecondFactor: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("count = %d, want 2 (uid-bare and uid-unknown)", count)
+	}
 }
 
 func TestFakeAccountManager_EnrollTOTPThenClearSecondFactors(t *testing.T) {
