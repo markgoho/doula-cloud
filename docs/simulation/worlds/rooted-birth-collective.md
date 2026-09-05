@@ -2,7 +2,7 @@
 
 The seeded starting state that [run one](https://github.com/markgoho/doula-cloud/issues/759) walks — four Practices, the people in them, and the nine years of work that exists **outside** the product on day zero. Settled on [#761](https://github.com/markgoho/doula-cloud/issues/761).
 
-Read this beside [the friction log format](../README.md), which says what a walk emits. This file says who is walking and what they walked into.
+Read this beside [the friction log format](../README.md), which says what a walk emits, and [the calendar](../calendar.md), which says how much work there is and when it arrives. This file says who is walking and what they walked into.
 
 ## What a World is, and what it is not
 
@@ -35,7 +35,7 @@ Concretely:
 
 A run README states how many of its Clients were provisioned rather than walked, so no later reader mistakes one for the other.
 
-If day zero still costs too much, **the lever is the book, not the roster** — cut Clients, never fake an Invitation. The book is [#765](https://github.com/markgoho/doula-cloud/issues/765)'s to size.
+If day zero still costs too much, **the lever is the book, not the roster** — cut Clients, never fake an Invitation. The book is **58 live Engagements** at Rooted, set on [#765](https://github.com/markgoho/doula-cloud/issues/765) and read at [the calendar](../calendar.md#the-book-on-day-zero); that file also draws the line one level finer, at the act rather than the person — a door is always walked, routine work only where a Persona is on it.
 
 ## The four Practices
 
@@ -110,7 +110,7 @@ Nine years old, Rochester, New York. Renata Alvarez started it alone in a rented
 
 **How the work is held today.** A shared Google Calendar that only Renata and Dee maintain. A filing cabinet of signed paper Contracts, one folder per Client, with the current year's folders on Dee's desk and everything older in a cupboard. A spreadsheet of who owes what, updated when Dee remembers. A group text thread for coverage, and Renata's phone for everything else. Nothing is wrong with any of it individually and all of it fails at once when two Clients labor on the same night.
 
-**What the agency is carrying on day zero.** A live book of Clients, some of them mid-pregnancy with due dates inside the six months the run walks, some of them in postpartum care, some of them owing money on work already finished. Every one of them signed a paper Contract that Doula Cloud has never seen. Every one of them has a doula who has been on the job for weeks or months and who is not recorded anywhere the product can read. The exact counts, the due-date distribution, and how much of the book is birth work against postpartum work are [#765](https://github.com/markgoho/doula-cloud/issues/765)'s to set.
+**What the agency is carrying on day zero.** A live book of Clients, some of them mid-pregnancy with due dates inside the six months the run walks, some of them in postpartum care, some of them owing money on work already finished. Every one of them signed a paper Contract that Doula Cloud has never seen. Every one of them has a doula who has been on the job for weeks or months and who is not recorded anywhere the product can read. The counts, the due-date distribution and the birth-against-postpartum split are settled at [the calendar](../calendar.md#the-book-on-day-zero) ([#765](https://github.com/markgoho/doula-cloud/issues/765)): **58 live Engagements, 32 birth and 26 postpartum**, with 15 of them walked and 43 provisioned, and birth due dates spread across all six months and past the end of the run.
 
 **What Renata is anxious about**, in her own order: coverage first — if two Clients go into labor tonight, who is free — then money, then whether her doulas will actually use the thing she is about to make them use. Nothing about software is in the first three.
 
@@ -137,7 +137,7 @@ She carries two live Clients into the product, both of them Personas:
 
 Maya's day zero is small and complete, and it is the only place in the World where **every** default the product ships with — the seeded Plan Templates, the signup bonus of three Credits, the Practice Page — meets somebody with nobody to ask for help. Her four-to-six Client load against a three-Credit signup bonus means she, too, meets the paywall, and she meets it with no pilot grant behind her.
 
-Nadia's pregnancy ends in stillbirth at 31 weeks. **Where that falls in the six months is [#765](https://github.com/markgoho/doula-cloud/issues/765)'s to place**, not this file's; what this file fixes is that she is Maya's Client, she is in the product before it happens, and she is 20 weeks on day zero — so the run cannot place the loss outside its own span.
+Nadia's pregnancy ends in stillbirth at 31 weeks. **It falls in run week 14**, settled at [the calendar](../calendar.md#nadia-haddads-place-in-it) ([#765](https://github.com/markgoho/doula-cloud/issues/765)) — arithmetic from the two facts this file fixes, and early enough that her remaining six stages fit inside the span. What this file fixes is that she is Maya's Client, she is in the product before it happens, and she is 20 weeks on day zero — so the run cannot place the loss outside its own span.
 
 ## Ridgeline Doula Group
 
@@ -194,7 +194,7 @@ The smallest set that still produces real collisions is most of the model, becau
 
 **Knowingly out of run one**, each for a stated reason:
 
-- **Erasure.** It is the one act that leaves the record deliberately less complete, and it ends a Client's observability for everything after it. It belongs to a run that has something to erase, and its placement is a failure-mode question — [#765](https://github.com/markgoho/doula-cloud/issues/765)'s, if it takes it.
+- **Erasure.** It is the one act that leaves the record deliberately less complete, and it ends a Client's observability for everything after it. It belongs to a run that has something to erase. [#765](https://github.com/markgoho/doula-cloud/issues/765) took the question and confirmed the exclusion: erasing a Client costs the run everything she would have done afterwards.
 - **A Credit refund.** Three-year window, nothing in six months forces it, and it would consume acts to observe a path no Persona wants.
 - **TOTP multi-factor authentication.** Landed recently and worth a run, but it sits in front of every sign-in in the cast — turning it on for fifteen people is a harness problem wearing a domain costume. Run two.
 - **A Connected account at Ridgeline or Bell & Ortiz.** Neither takes money in this World. Two Connect onboardings are enough to see the flow twice.

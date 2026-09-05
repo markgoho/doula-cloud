@@ -214,6 +214,14 @@ _Avoid_: Seed data, test data, scenario, fixture (a Fixture is the longest reali
 The moment one Practice's **World** meets the product — the day its Owner signs up and starts moving a business that already exists into an empty tenancy. It belongs to a Practice and not to a **Run**, so a World may hold several, staggered. It is the one path no test plan has ever walked, and the order the product forces on that day is an observation rather than something a Run scripts.
 _Avoid_: Onboarding (that is the product's own word for a first session, and day zero may take many), migration, go-live, import (nothing imports — a person types it in)
 
+**Calendar**:
+How much work a **World** does over a **Run**'s span, and when: the counts a Practice carries and takes on, the shape those spread into across the weeks, and the things that go wrong. A World says *who*; its Calendar says *how much, when, and what breaks*. Every quantity in it is a parameter the harness accepts rather than a constant, which is what makes a Run repeatable at a different size, and every quantity is an **estimate** until a real Practice's book has been read — a Calendar sizes a Run and never describes an industry. Defined in [docs/simulation/calendar.md](docs/simulation/calendar.md). Decided on [#765](https://github.com/markgoho/doula-cloud/issues/765).
+_Avoid_: Schedule (that is the jump schedule, one part of a Calendar), volume, workload, timeline
+
+**Probe**:
+A moment in a **Run** where two cast members deliberately act on the same object at the same simulated instant — the only place a Run is genuinely simultaneous rather than interleaved. Each one is named, placed on the **Calendar**, and states the object contended for, so it reads in both people's **Friction logs** as ordinary entries carrying one shared id. A Probe is walked once and what happened is recorded; repeating it to see whether it flakes, or running many at once, is load testing and is out of scope. Decided on [#765](https://github.com/markgoho/doula-cloud/issues/765).
+_Avoid_: Race, stress test, concurrency test, load probe (all four imply repetition or synthetic pressure; a Probe is two people and one object)
+
 **Intrinsic layout**:
 Layout resolved from the content and the space available to it, rather than selected by the author from a set of named widths. The anchor term for every layout entry below: a component is laid out intrinsically when it is correct wherever it is placed — a full page, a narrow column, an embedded surface — without being told which of those it is in. See [ADR-0024](docs/adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md) and [ADR-0025](docs/adr/0025-layout-is-verified-across-the-continuum.md).
 _Avoid_: Responsive design (in the common sense — see **Responsive**), adaptive design, mobile-first, breakpoint-driven
