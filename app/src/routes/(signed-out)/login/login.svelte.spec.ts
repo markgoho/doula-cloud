@@ -15,10 +15,9 @@ import { fixture, session } from './page.fixture.js';
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
-vi.mock('firebase/auth', () => ({
-	signInWithEmailAndPassword: vi.fn(),
-	signOut: vi.fn()
-}));
+const signInWithEmailAndPassword = vi.hoisted(() => vi.fn());
+const signOut = vi.hoisted(() => vi.fn());
+vi.mock('firebase/auth', () => ({ signInWithEmailAndPassword, signOut }));
 vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({}) }));
 
 /*
@@ -30,9 +29,10 @@ vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({}) }));
  * answer this route's fetch the same way it answers every other route's.
  */
 const apiFetch = vi.hoisted(() => vi.fn());
+const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiBaseURL: () => '',
-	apiFetchWithSession: vi.fn(),
+	apiFetchWithSession,
 	probeSession: async <Session,>(path: string): Promise<Session | undefined> => {
 		try {
 			const response = await apiFetch(path);
@@ -45,8 +45,8 @@ vi.mock('#lib/api.js', () => ({
 }));
 
 beforeEach(() => {
-	goto.mockReset();
-	apiFetch.mockReset();
+	for (const mock of [goto, apiFetch, apiFetchWithSession, signInWithEmailAndPassword, signOut])
+		mock.mockReset();
 });
 
 afterEach(() => {
@@ -113,5 +113,66 @@ describe('Staff login -- on-load session probe (#283)', () => {
 
 		await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
 		expect(apiFetch).not.toHaveBeenCalledWith('/api/portal/session');
+	});
+});
+
+/*
+ * #745: a credential Identity Platform accepts can still belong to
+ * neither population -- a signup whose BFF half failed leaves exactly
+ * that. This screen used to print the BFF's own `no matching staff
+ * account` at her, which names an internal lookup and offers nothing to
+ * do about it. These cover what the submit does with that 404 instead.
+ */
+async function signIn() {
+	signInWithEmailAndPassword.mockResolvedValue({ user: { getIdToken: async () => 'id-token' } });
+	// The session exchange (`POST /api/session`) is a plain, one-off
+	// `fetch` rather than an `apiFetch`, so it is stubbed at that level.
+	vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 200)));
+
+	await render(Page, {});
+	await testPage.getByLabelText('Email').fill('priya@example.com');
+	await testPage.getByLabelText('Password').fill('correct horse');
+	await testPage.getByRole('button', { name: 'Log in' }).click();
+}
+
+describe('Staff login -- a credential that resolves to no Practice (#745)', () => {
+	it('sends an identity that is in neither population to the no-Practice screen', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+		apiFetchWithSession.mockResolvedValue(jsonResponse('no matching staff account', 404));
+
+		await signIn();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/no-practice'));
+	});
+
+	// A Client signing in at the Staff door is a different problem, and
+	// #610 owns it -- so the BFF's own refusal is left to stand.
+	it('leaves a Client-portal identity with the refusal it already gets', async () => {
+		apiFetch.mockImplementation(async (path: string) =>
+			path === '/api/portal/session'
+				? jsonResponse({ clientId: 'client-1', engagements: [] })
+				: jsonResponse('no matching staff session', 404)
+		);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('no matching staff account', 404));
+
+		await signIn();
+
+		await expect
+			.element(testPage.getByText('no matching staff account', { exact: false }))
+			.toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	// The same screen, reached the other way: her last Membership was
+	// removed, so the session resolves to her and to no Practice at all.
+	it('sends a Staff member with no Membership left to the same screen', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+		apiFetchWithSession.mockResolvedValue(
+			jsonResponse({ ...session, memberships: [], lastPracticeId: undefined })
+		);
+
+		await signIn();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/no-practice'));
 	});
 });

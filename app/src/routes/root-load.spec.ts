@@ -50,6 +50,38 @@ describe('/+page.ts load', () => {
 		expect(result).toEqual({ type: 'staff-picker', memberships });
 	});
 
+	// #745: a Staff member whose last Membership was removed holds a
+	// session that resolves to a person and to no Practice. That is a
+	// state with two ways out of it, not a picker with nothing in it.
+	it('sends a Staff visitor with no Membership to the no-Practice screen', async () => {
+		const { load } = await import('./+page.js');
+		setup({
+			'/api/staff/session': { status: 200, body: { memberships: [], lastPracticeId: undefined } }
+		});
+
+		await expect(load({} as Parameters<typeof load>[0])).rejects.toMatchObject({
+			status: 303,
+			location: '/no-practice'
+		});
+	});
+
+	// The other half of #745: a live credential that resolves to no staff
+	// row at all -- a signup whose second half failed. It is not "signed
+	// out", and offering her the sign-up and log-in links is offering the
+	// two things that have already stopped working for her.
+	it('sends a signed-in identity that belongs to neither population to the no-Practice screen', async () => {
+		const { load } = await import('./+page.js');
+		setup({
+			'/api/staff/session': { status: 404, body: 'no matching staff account' },
+			'/api/portal/session': { status: 404, body: 'no matching client account' }
+		});
+
+		await expect(load({} as Parameters<typeof load>[0])).rejects.toMatchObject({
+			status: 303,
+			location: '/no-practice'
+		});
+	});
+
 	it('redirects a signed-in Client-portal visitor to her only Engagement, once no Staff session answers', async () => {
 		const { load } = await import('./+page.js');
 		setup({

@@ -431,6 +431,17 @@ describe('what happens after the invite is accepted', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
+	// An acceptance that reports success and leaves her in no Practice is
+	// the state #745's screen exists for, reached a third way.
+	it('sends her to the no-Practice screen if the acceptance left her in none', async () => {
+		await setup({ afterAccept: jsonResponse({ ...landing, memberships: [] }) });
+
+		await identifyAsNewPerson();
+		await acceptButton().click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/no-practice'));
+	});
+
 	it("shows the server's own words when the invite is refused", async () => {
 		await setup({ accept: refusal(410, 'this invitation has expired') });
 

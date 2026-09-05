@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+	import {
+		createUserWithEmailAndPassword,
+		signInWithEmailAndPassword,
+		signOut,
+		type Auth,
+		type UserCredential
+	} from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
@@ -10,7 +16,12 @@
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
+	import {
+		authRefusal,
+		isEmailAlreadyInUse,
+		refusalMessage,
+		type FormError
+	} from '#lib/formErrors.js';
 	import { workStateCode } from '#lib/workStates.js';
 
 	const practiceNameId = 'signup-practice-name';
@@ -53,6 +64,41 @@
 		return found;
 	}
 
+	/*
+	 * The credential this signup runs on, whether or not the account
+	 * already exists (#745).
+	 *
+	 * Creating the Identity Platform account and creating the Practice
+	 * are two steps, and the first can land while the second fails -- the
+	 * signup rate limiter's own 403 is the easiest way to see it. Before
+	 * this, the second attempt was refused by Identity Platform ("email
+	 * already in use") and the person was left holding an account no
+	 * Practice pointed at, with nothing to sign in to. So the taken
+	 * address is not treated as the end of the road: signing in with the
+	 * same password gets the same account back, and the BFF half runs
+	 * again against it. `POST /api/staff/signup` is resumable on the
+	 * identity for exactly this (`existingStaff` in
+	 * api/internal/staffauth/signupresume.go): it finishes what the
+	 * account is missing, and refuses outright rather than building a
+	 * second Practice for someone who already has one.
+	 *
+	 * A password that does not match is not a resumable signup at all --
+	 * it is somebody else's address -- so the original refusal is what
+	 * gets reported, not the sign-in's.
+	 */
+	async function credentialFor(auth: Auth): Promise<UserCredential> {
+		try {
+			return await createUserWithEmailAndPassword(auth, email, password);
+		} catch (error_) {
+			if (!isEmailAlreadyInUse(error_)) throw error_;
+			try {
+				return await signInWithEmailAndPassword(auth, email, password);
+			} catch {
+				throw error_;
+			}
+		}
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		errors = [];
@@ -65,7 +111,7 @@
 
 		isSubmitting = true;
 		try {
-			const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
+			const credential = await credentialFor(getFirebaseAuth());
 			const idToken = await credential.user.getIdToken();
 
 			// A plain, one-off fetch: this token makes one trip and is never
@@ -82,6 +128,12 @@
 				})
 			});
 			if (!response.ok) {
+				// Signing out here costs nothing now that the form can pick the
+				// same account back up (see `credentialFor`): submitting again
+				// signs in with the credential she still holds -- her password --
+				// and finishes the half that failed. Keeping the JS SDK session
+				// alive instead would be a second, invisible way to be signed in
+				// on a screen that shows a refusal (#745).
 				errors = [{ message: await refusalMessage(response) }];
 				await signOut(getFirebaseAuth());
 				return;
