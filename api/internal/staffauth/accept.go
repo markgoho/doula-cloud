@@ -113,7 +113,7 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 		// Mint the session before committing, so a failure rolls the new
 		// Membership back rather than leaving it behind a response that
 		// reports failure -- signup.go's reasoning (#145).
-		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
+		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, verified.SecondFactor, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)

@@ -38,11 +38,17 @@ var errNoSession = errors.New("authn: no live session for this token")
 // The token is generated here and only its digest is stored, so this is
 // the one moment the plaintext token exists.
 //
+// secondFactor is recorded on the row as-is, from the ID token that was
+// verified to reach this call (VerifiedToken.SecondFactor) -- #606's
+// decision 3: the boundary that later gates on this reads the session
+// row, never Identity Platform or the token again, so the fact has to be
+// captured here, at the one moment both exist together.
+//
 // It also sweeps expired rows first. Minting is rare (a sign-in) and the
 // sweep is one indexed DELETE, which is enough to keep the table from
 // accumulating the sessions nobody ever returns to -- no reaper job, no
 // background goroutine.
-func MintSession(ctx context.Context, q Querier, identityUID string, now time.Time) (*http.Cookie, error) {
+func MintSession(ctx context.Context, q Querier, identityUID string, secondFactor bool, now time.Time) (*http.Cookie, error) {
 	if _, err := q.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= $1`, now); err != nil {
 		return nil, fmt.Errorf("authn: sweep expired sessions: %w", err)
 	}
@@ -52,8 +58,8 @@ func MintSession(ctx context.Context, q Querier, identityUID string, now time.Ti
 	token := rand.Text()
 
 	if _, err := q.ExecContext(ctx,
-		`INSERT INTO sessions (token_hash, identity_uid, expires_at) VALUES ($1, $2, $3)`,
-		tokenHash(token), identityUID, now.Add(SessionLifetime),
+		`INSERT INTO sessions (token_hash, identity_uid, expires_at, second_factor) VALUES ($1, $2, $3, $4)`,
+		tokenHash(token), identityUID, now.Add(SessionLifetime), secondFactor,
 	); err != nil {
 		return nil, fmt.Errorf("authn: insert session: %w", err)
 	}
@@ -84,23 +90,24 @@ func EndAllSessions(ctx context.Context, q Querier, identityUID string) error {
 	return nil
 }
 
-// lookupSession resolves token to the identity holding it and that
-// session's expiry, or errNoSession if no row is live at now. Expired
-// rows are filtered here rather than deleted, because this read runs
-// inside a transaction that a failed authorization check later rolls
-// back; MintSession's sweep is what actually removes them.
-func lookupSession(ctx context.Context, q Querier, token string, now time.Time) (identityUID string, expiresAt time.Time, err error) {
+// lookupSession resolves token to the identity holding it, that
+// session's expiry, and whether it carries a second factor, or
+// errNoSession if no row is live at now. Expired rows are filtered here
+// rather than deleted, because this read runs inside a transaction that
+// a failed authorization check later rolls back; MintSession's sweep is
+// what actually removes them.
+func lookupSession(ctx context.Context, q Querier, token string, now time.Time) (identityUID string, expiresAt time.Time, secondFactor bool, err error) {
 	err = q.QueryRowContext(ctx,
-		`SELECT identity_uid, expires_at FROM sessions WHERE token_hash = $1 AND expires_at > $2`,
+		`SELECT identity_uid, expires_at, second_factor FROM sessions WHERE token_hash = $1 AND expires_at > $2`,
 		tokenHash(token), now,
-	).Scan(&identityUID, &expiresAt)
+	).Scan(&identityUID, &expiresAt, &secondFactor)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", time.Time{}, errNoSession
+		return "", time.Time{}, false, errNoSession
 	}
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("authn: look up session: %w", err)
+		return "", time.Time{}, false, fmt.Errorf("authn: look up session: %w", err)
 	}
-	return identityUID, expiresAt, nil
+	return identityUID, expiresAt, secondFactor, nil
 }
 
 // renewSession pushes token's expiry out to a full SessionLifetime from

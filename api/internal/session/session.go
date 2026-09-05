@@ -63,7 +63,7 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		}
 
 		now := time.Now()
-		cookie, err := authn.MintSession(r.Context(), db, verified.UID, now)
+		cookie, err := authn.MintSession(r.Context(), db, verified.UID, verified.SecondFactor, now)
 		if err != nil {
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return

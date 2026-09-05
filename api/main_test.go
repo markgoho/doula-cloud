@@ -307,7 +307,13 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-owner-uid"
 	deps := testDeps()
-	deps.Verifier = authntest.Verifier{UID: identityUID}
+	// SecondFactor: true -- #606 requires MFA for an Owner at the
+	// Practice-scoped boundary this test's landing request crosses.
+	// That gate itself is staffauth's own TestMiddleware_MFAGate; this
+	// test is about signup/session/landing wiring, so its fixture
+	// stands in for an already-enrolled Owner rather than exercising
+	// the gate a second time.
+	deps.Verifier = authntest.Verifier{UID: identityUID, SecondFactor: true}
 	deps.DB = db.App
 	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)

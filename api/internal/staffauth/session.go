@@ -52,6 +52,14 @@ type SessionResponse struct {
 	WorkStateReportedAt time.Time    `json:"workStateReportedAt"`
 	LastPracticeID      *string      `json:"lastPracticeId,omitempty"`
 	Memberships         []Membership `json:"memberships"`
+	// SecondFactor is this session's own second-factor fact (#606,
+	// authn.Begin), not a query of her current Identity Platform
+	// enrolment -- decision 3's session-carried claim, read straight
+	// through. It is what the account screen offers "Enrol" or "Remove"
+	// against: a person enrolled on another device still sees "Enrol"
+	// here until she signs in again on this one, at which point the
+	// TOTP challenge fires and the next session carries it.
+	SecondFactor bool `json:"secondFactor"`
 }
 
 // SessionHandler resolves the verified caller to a Staff row and reports
@@ -60,13 +68,13 @@ type SessionResponse struct {
 // never app.current_practice_id.
 func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, db)
+		tx, uid, secondFactor, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		resp, status, msg := resolveSession(r, tx, uid)
+		resp, status, msg := resolveSession(r, tx, uid, secondFactor)
 		if status != http.StatusOK {
 			apierr.WriteError(w, msg, status)
 			return
@@ -80,7 +88,7 @@ func SessionHandler(db *sql.DB) http.Handler {
 	})
 }
 
-func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, int, string) {
+func resolveSession(r *http.Request, tx *sql.Tx, identityUID string, secondFactor bool) (SessionResponse, int, string) {
 	ctx := r.Context()
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -116,6 +124,7 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string) (SessionRes
 		WorkState:           workState,
 		WorkStateReportedAt: workStateReportedAt,
 		Memberships:         memberships,
+		SecondFactor:        secondFactor,
 	}
 	if lastPracticeID.Valid {
 		resp.LastPracticeID = &lastPracticeID.String

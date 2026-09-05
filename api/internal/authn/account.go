@@ -74,6 +74,17 @@ type AccountManager interface {
 	// Reports no error for a uid Identity Platform does not know, so a
 	// retried erasure is a no-op rather than a failure.
 	DeleteAccount(ctx context.Context, uid string) error
+	// CountWithoutSecondFactor reports how many of uids currently hold no
+	// enrolled MFA factor -- #606's switch confirmation, "how many Staff
+	// it will affect before she throws it". A session's second_factor
+	// column (see store.go) describes a past sign-in, not current
+	// enrolment, so this is the one place the count has to ask Identity
+	// Platform directly rather than read Postgres. Batched (100 uids per
+	// Admin SDK call, GetUsers' own limit) rather than one round trip per
+	// Staff member -- CLAUDE.md's performance expectation -- so a
+	// Practice larger than 100 costs a handful of calls, not one per
+	// person.
+	CountWithoutSecondFactor(ctx context.Context, uids []string) (int, error)
 }
 
 var _ AccountManager = (*FirebaseVerifier)(nil)
@@ -156,6 +167,67 @@ func (v *FirebaseVerifier) DeleteAccount(ctx context.Context, uid string) error 
 	}
 	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
 	return nil
+}
+
+// getUsersBatchSize is the Admin SDK's own cap on one GetUsers call
+// (auth.maxGetAccountsBatchSize, unexported in firebase.google.com/go) --
+// CountWithoutSecondFactor chunks to it rather than assuming any one
+// Practice's roster stays under it.
+const getUsersBatchSize = 100
+
+// CountWithoutSecondFactor implements AccountManager, via one batched
+// Admin SDK accounts:lookup call (auth.Client.GetUsers) per
+// getUsersBatchSize-sized chunk of uids.
+func (v *FirebaseVerifier) CountWithoutSecondFactor(ctx context.Context, uids []string) (int, error) {
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	count := 0
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	for chunkStart := 0; chunkStart < len(uids); chunkStart += getUsersBatchSize {
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		chunkEnd := min(chunkStart+getUsersBatchSize, len(uids))
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		chunkCount, err := v.countChunkWithoutSecondFactor(ctx, uids[chunkStart:chunkEnd])
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		if err != nil {
+			// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+			return 0, err
+		}
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		count += chunkCount
+	}
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	return count, nil
+}
+
+// countChunkWithoutSecondFactor is one GetUsers call's worth of
+// CountWithoutSecondFactor -- uids must not exceed getUsersBatchSize.
+func (v *FirebaseVerifier) countChunkWithoutSecondFactor(ctx context.Context, uids []string) (int, error) {
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	identifiers := make([]auth.UserIdentifier, len(uids))
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	for i, uid := range uids {
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		identifiers[i] = auth.UIDIdentifier{UID: uid}
+	}
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	result, err := v.client.GetUsers(ctx, identifiers)
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	if err != nil {
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		return 0, fmt.Errorf("authn: get users: %w", err)
+	}
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	count := len(result.NotFound)
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	for _, u := range result.Users {
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		if u.MultiFactor == nil || len(u.MultiFactor.EnrolledFactors) == 0 {
+			// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+			count++
+		}
+	}
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	return count, nil
 }
 
 // ClearSecondFactors removes every MFA factor uid holds via the Admin

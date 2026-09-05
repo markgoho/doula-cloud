@@ -35,6 +35,11 @@ type Verifier struct {
 	// RequireRecentAuth); a test proving the fresh-token case sets it to
 	// time.Now().
 	AuthTime time.Time
+
+	// SecondFactor is what VerifyIDToken reports for
+	// VerifiedToken.SecondFactor -- #606's tests set this to model an ID
+	// token that did or did not challenge a second factor at sign-in.
+	SecondFactor bool
 }
 
 // Verifier satisfies authn.Verifier by value, so tests can pass
@@ -47,7 +52,7 @@ func (v Verifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedTok
 	if v.Err != nil {
 		return nil, v.Err
 	}
-	return &authn.VerifiedToken{UID: v.UID, Email: v.Email, AuthTime: v.AuthTime}, nil
+	return &authn.VerifiedToken{UID: v.UID, Email: v.Email, AuthTime: v.AuthTime, SecondFactor: v.SecondFactor}, nil
 }
 
 // SeedSession creates a live session for uid and returns the value its
@@ -64,9 +69,32 @@ func SeedSession(t *testing.T, q authn.Querier, uid string) string {
 // so it expires authn.SessionLifetime after that. A now in the past is
 // how a test puts a session past half its life (to drive renewal) or
 // past its expiry (to drive a 401) without waiting or stubbing a clock.
+//
+// The session carries a second factor. #606 made that the realistic
+// default the moment it made MFA mandatory for an Owner: this is "a
+// person who can use the product", and an Owner who can't reach a
+// Practice at all is not that. The flag is inert for every fixture that
+// doesn't care (a Client session, a Doula with the switch off -- the
+// gate never reads it for either), so this costs those tests nothing.
+// SeedSessionWithSecondFactor(..., false) is the explicit opt-in for a
+// test that specifically wants an un-enrolled person.
 func SeedSessionAt(t *testing.T, q authn.Querier, uid string, now time.Time) string {
 	t.Helper()
-	cookie, err := authn.MintSession(t.Context(), q, uid, now)
+	return seedSessionAt(t, q, uid, true, now)
+}
+
+// SeedSessionWithSecondFactor creates a live session for uid that
+// carries a second factor (or not, per secondFactor) -- how a test
+// proves staffauth.Middleware's MFA gate admits an enrolled caller and
+// refuses an un-enrolled one.
+func SeedSessionWithSecondFactor(t *testing.T, q authn.Querier, uid string, secondFactor bool) string {
+	t.Helper()
+	return seedSessionAt(t, q, uid, secondFactor, time.Now())
+}
+
+func seedSessionAt(t *testing.T, q authn.Querier, uid string, secondFactor bool, now time.Time) string {
+	t.Helper()
+	cookie, err := authn.MintSession(t.Context(), q, uid, secondFactor, now)
 	if err != nil {
 		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
 		t.Fatalf("authntest: seed session: %v", err)

@@ -108,6 +108,20 @@ func registerSessionRoutes(g *staffauth.GatedRouter, d Deps) {
 	// path by which she ever sees a saved code's plaintext (#615).
 	g.Write("POST /api/staff/mfa-recovery/saved-codes/rotate",
 		ratelimit.Wrap(d.DB, "staff_mfa_recovery_rotate", mfaRecoveryRotateRules)(staffauth.RotateSavedCodesHandler(d.DB)))
+	// #606: enrolment is per person, not per Practice (the brief), so
+	// finishing one sits beside work-state and email above, not under a
+	// Practice. Rate limited with loginRules, not bootstrapRules: unlike
+	// signup or invite acceptance this can fire more than once per
+	// person (voluntary enrolment, a later re-enrolment after removing a
+	// factor), the same "cached token reused, sign-in fires more than
+	// once" reasoning loginRules exists for.
+	g.Write("POST /api/staff/mfa",
+		ratelimit.Wrap(d.DB, "staff_mfa_enroll", loginRules)(staffauth.FinishEnrollmentHandler(d.Verifier, d.DB)))
+	// Voluntary removal, guarded by RequireRecentAuth's step-up rather
+	// than by rate limiting -- the same reasoning verifyRequestRules
+	// gives for a low-risk, already-signed-in self-service action.
+	g.Write("DELETE /api/staff/mfa",
+		ratelimit.Wrap(d.DB, "staff_mfa_remove", verifyRequestRules)(staffauth.RemoveSecondFactorHandler(d.Verifier, d.AccountManager, d.DB)))
 	// #230's pre-account Offer read: no session of either population, so
 	// it sits outside both middlewares and is authenticated by the
 	// Invitation's token plus the emailed six-digit code. ADR-0008

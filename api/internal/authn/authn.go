@@ -77,45 +77,50 @@ func BearerToken(r *http.Request) (string, bool) {
 }
 
 // Begin opens a transaction on db, resolves the caller's session cookie
-// inside it, and returns the transaction and the caller's UID. The
-// transaction comes first because the session cookie is verified by
-// reading the sessions table, so the credential check and everything the
-// handler does afterwards share one connection and one round trip
-// budget. The session cookie is the only credential it reads: since #151
-// no route behind Begin accepts a Bearer ID token, so no request on this
-// path costs a network verify against Identity Platform. The three
-// bootstrap endpoints, which run before a session exists, use
-// BeginBootstrap instead. A cookie past half its life is renewed on the
-// way through (#147). Begin writes the appropriate HTTP error (401 for a
-// missing, invalid, ended, or expired session; 500 for a DB failure),
-// rolls the transaction back, and returns ok=false if any step fails.
-// Callers must ensure a returned transaction is rolled back or
-// committed.
-func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, string, bool) {
+// inside it, and returns the transaction, the caller's UID, and whether
+// that session carries a second factor (#606 -- read once here, off the
+// session row, rather than re-derived per caller). The transaction comes
+// first because the session cookie is verified by reading the sessions
+// table, so the credential check and everything the handler does
+// afterwards share one connection and one round trip budget. The session
+// cookie is the only credential it reads: since #151 no route behind
+// Begin accepts a Bearer ID token, so no request on this path costs a
+// network verify against Identity Platform. The three bootstrap
+// endpoints, which run before a session exists, use BeginBootstrap
+// instead. A cookie past half its life is renewed on the way through
+// (#147). Begin writes the appropriate HTTP error (401 for a missing,
+// invalid, ended, or expired session; 500 for a DB failure), rolls the
+// transaction back, and returns ok=false if any step fails. Callers must
+// ensure a returned transaction is rolled back or committed.
+func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, string, bool, bool) {
 	tx, ok := beginTx(w, r, db)
 	if !ok {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		return nil, "", false
+		return nil, "", false, false
 	}
 
-	uid, ok := sessionCredential(w, r, tx, db)
+	uid, secondFactor, ok := sessionCredential(w, r, tx, db)
 	if !ok {
 		_ = tx.Rollback()
-		return nil, "", false
+		return nil, "", false, false
 	}
 
-	return tx, uid, true
+	return tx, uid, secondFactor, true
 }
 
-// BeginBootstrap is Begin for the three endpoints that cannot read a
-// session cookie because they run before a session exists: Staff signup,
-// Staff invitation acceptance, and Client portal invitation acceptance.
-// They read a Bearer ID token and verify it against Identity Platform,
-// which costs a network round trip while the transaction is held open --
-// acceptable at these three seams because each is a once-per-person
-// event, and unacceptable everywhere else, which is why Begin no longer
-// offers it. There is no cookie fallback: a caller holding a session has
-// no reason to bootstrap.
+// BeginBootstrap is Begin for the endpoints that cannot read a session
+// cookie because they run before the session they need exists: Staff
+// signup, Staff invitation acceptance, Client portal invitation
+// acceptance, and -- since #606 -- finishing a TOTP enrolment, which
+// deliberately mints a fresh session from the just-enrolled token rather
+// than trusting whatever session cookie the caller already holds. They
+// read a Bearer ID token and verify it against Identity Platform, which
+// costs a network round trip while the transaction is held open --
+// acceptable at these seams because each is a once-per-person or
+// once-per-enrolment event, not a per-request cost, and unacceptable
+// everywhere else, which is why Begin no longer offers it. There is no
+// cookie fallback: a caller with nothing to bootstrap has no reason to
+// be here.
 func BeginBootstrap(w http.ResponseWriter, r *http.Request, verifier Verifier, db *sql.DB) (*sql.Tx, VerifiedToken, bool) {
 	tx, ok := beginTx(w, r, db)
 	if !ok {
@@ -152,26 +157,26 @@ func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool)
 // as "you are signed out". A verified session past half its life is
 // renewed before this returns (see renewIfStale); a rejected one never
 // is.
-func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB) (string, bool) {
+func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB) (string, bool, bool) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		apierr.WriteError(w, "missing credential", http.StatusUnauthorized)
-		return "", false
+		return "", false, false
 	}
 
 	now := time.Now()
-	uid, expiresAt, err := lookupSession(r.Context(), tx, cookie.Value, now)
+	uid, expiresAt, secondFactor, err := lookupSession(r.Context(), tx, cookie.Value, now)
 	if errors.Is(err, errNoSession) {
 		apierr.WriteError(w, "invalid session", http.StatusUnauthorized)
-		return "", false
+		return "", false, false
 	}
 	if err != nil {
 		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
-		return "", false
+		return "", false, false
 	}
 
 	renewIfStale(w, r, db, cookie.Value, expiresAt, now)
-	return uid, true
+	return uid, secondFactor, true
 }
 
 // idTokenCredential resolves the caller's identity from a Bearer ID
@@ -249,6 +254,14 @@ type VerifiedToken struct {
 	// fresh Bearer token whose AuthTime is within a few minutes of now,
 	// which only a real, just-completed sign-in can produce.
 	AuthTime time.Time
+	// SecondFactor reports whether this sign-in challenged a second
+	// factor, read from the `firebase.sign_in_second_factor` claim
+	// (#606). It describes the sign-in event, not enrolment -- but
+	// Identity Platform challenges the second factor on every sign-in
+	// once a person has enrolled one, so it is a sound proxy for "this
+	// identity has MFA". The session store carries it forward onto the
+	// session row at mint, because the cookie outlives this token.
+	SecondFactor bool
 }
 
 // Verifier checks an Identity Platform ID token. Session minting,
@@ -312,5 +325,19 @@ func (v *FirebaseVerifier) VerifyIDToken(ctx context.Context, idToken string) (*
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
 	email, _ := token.Claims["email"].(string)
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
-	return &VerifiedToken{UID: token.UID, Email: email, AuthTime: time.Unix(token.AuthTime, 0)}, nil
+	return &VerifiedToken{UID: token.UID, Email: email, AuthTime: time.Unix(token.AuthTime, 0), SecondFactor: secondFactorClaim(token.Claims)}, nil
+}
+
+// secondFactorClaim reports whether claims carries a non-empty
+// `firebase.sign_in_second_factor` -- the same comma-ok map lookup the
+// email claim above uses, one level deeper: `firebase` is itself a map,
+// present on every Identity Platform token, that
+// token_verifier.go:302 leaves unstripped in Token.Claims.
+func secondFactorClaim(claims map[string]any) bool {
+	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
+	firebase, _ := claims["firebase"].(map[string]any)
+	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
+	factor, _ := firebase["sign_in_second_factor"].(string)
+	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
+	return factor != ""
 }

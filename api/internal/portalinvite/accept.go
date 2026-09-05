@@ -65,7 +65,7 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// new rows back instead of leaving them committed behind a
 		// response that reports failure (#145). uid is the identity
 		// authn.Begin already verified.
-		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
+		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, verified.SecondFactor, time.Now())
 		if err != nil {
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return

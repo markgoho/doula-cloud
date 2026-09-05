@@ -21,6 +21,15 @@ const (
 	AuthEventSelfService AuthEventReason = "self_service"
 	// AuthEventSupport is a Doula Cloud operator's last-resort action.
 	AuthEventSupport AuthEventReason = "support"
+	// AuthEventEnrolled is #606: a person enrolling her own TOTP factor,
+	// outside any of the three recovery paths above. Self-caused, like
+	// AuthEventSelfService -- actor_staff_id equals staff_id.
+	AuthEventEnrolled AuthEventReason = "enrolled"
+	// AuthEventRemoved is #606: a person voluntarily removing her own
+	// TOTP factor. Also self-caused; distinct from the three recovery
+	// reasons above because nobody else acted and nothing was lost --
+	// she still held the factor and chose to drop it.
+	AuthEventRemoved AuthEventReason = "removed"
 )
 
 // clearEnrolmentAndRecord is where #615's three recovery paths converge:

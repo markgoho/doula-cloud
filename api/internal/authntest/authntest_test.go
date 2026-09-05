@@ -69,6 +69,25 @@ func TestSeedSessionAt_Expires(t *testing.T) {
 	}
 }
 
+// TestSeedSessionWithSecondFactor_RoundTrips proves the seeder actually
+// writes the flag it's given -- staffauth's own MFA-gate tests lean on
+// both the true and false case (#606).
+func TestSeedSessionWithSecondFactor_RoundTrips(t *testing.T) {
+	db := testdb.New(t)
+
+	authntest.SeedSessionWithSecondFactor(t, db.App, testUID, true)
+
+	var secondFactor bool
+	if err := db.App.QueryRowContext(t.Context(),
+		`SELECT second_factor FROM sessions WHERE identity_uid = $1`, testUID,
+	).Scan(&secondFactor); err != nil {
+		t.Fatalf("read session row: %v", err)
+	}
+	if !secondFactor {
+		t.Fatalf("second_factor = false, want true")
+	}
+}
+
 // TestEndSession_RemovesTheRow covers the helper that drives the
 // revoked-session case: the row is what makes the token work, so
 // deleting it is what revokes it.
@@ -92,7 +111,7 @@ func TestAddSessionCookie_SignsTheRequestIn(t *testing.T) {
 
 	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, testUID))
 
-	tx, uid, ok := authn.Begin(httptest.NewRecorder(), req, db.App)
+	tx, uid, _, ok := authn.Begin(httptest.NewRecorder(), req, db.App)
 	if !ok {
 		t.Fatal("Begin rejected a request carrying a seeded session cookie")
 	}

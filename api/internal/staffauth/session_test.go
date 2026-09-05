@@ -116,6 +116,43 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 	}
 }
 
+// TestSessionHandler_SecondFactor proves the response carries this
+// session's own second-factor fact (#606) -- the account screen's
+// "Enrol" vs "Remove" branch reads it straight from here, not from a
+// fresh Identity Platform lookup.
+func TestSessionHandler_SecondFactor(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "session-second-factor"
+	seedStaffWithMembership(t, db, identityUID)
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /staff/session", staffauth.SessionHandler(db.App))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	unenrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
+	resp1 := getSession(t, srv, unenrolled)
+	defer resp1.Body.Close()
+	var out1 staffauth.SessionResponse
+	if err := json.NewDecoder(resp1.Body).Decode(&out1); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out1.SecondFactor {
+		t.Fatalf("secondFactor = true, want false")
+	}
+
+	enrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+	resp2 := getSession(t, srv, enrolled)
+	defer resp2.Body.Close()
+	var out2 staffauth.SessionResponse
+	if err := json.NewDecoder(resp2.Body).Decode(&out2); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !out2.SecondFactor {
+		t.Fatalf("secondFactor = false, want true")
+	}
+}
+
 func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "multi-practice-staff"

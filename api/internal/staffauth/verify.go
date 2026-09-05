@@ -31,7 +31,7 @@ import (
 // Membership.
 func RequestVerificationHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
 		}
