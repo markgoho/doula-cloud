@@ -14,6 +14,7 @@ import (
 const (
 	staffTokenMailOutboxPath   = "/api/internal/notifications/process-staff-token-mail-outbox"
 	staffEmailChangeOutboxPath = "/api/internal/notifications/process-staff-email-change-outbox"
+	portalMagicLinkOutboxPath  = "/api/internal/notifications/process-portal-magic-link-outbox"
 	siteBuildOutboxPath        = "/api/internal/site/process-build-outbox"
 )
 
@@ -114,6 +115,17 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Door:   outbox.NotificationDoor,
 			Nudge:  tasknudge.MFARecoveryCode,
 			Worker: d.MFARecoveryMailWorker,
+		},
+		{
+			// #617's Client sign-in-link outbox, whose write site is
+			// clientauth.RequestMagicLinkHandler. No Nudge, for the same
+			// reason as #613's two above: ADR-0026 carves no ADR-0010
+			// exception for this mail -- "no synchronous send and no
+			// exception carved" -- so Cloud Scheduler's own cadence is the
+			// whole delivery guarantee.
+			Path:   portalMagicLinkOutboxPath,
+			Door:   outbox.NotificationDoor,
+			Worker: d.PortalMagicLinkWorker,
 		},
 		{
 			// #394's Client-erasure outbox, under /api/internal/clients

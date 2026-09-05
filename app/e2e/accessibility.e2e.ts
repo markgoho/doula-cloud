@@ -5,6 +5,7 @@ import {
 	seedClient,
 	seedContractorDoula,
 	seedPortalClient,
+	signInPortalClient,
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest } from './stack';
@@ -410,10 +411,7 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 	const sent = await request.post(`${engagementURL}/contract/send`, { headers: staffHeaders });
 	expect(sent.ok(), `send contract failed: ${sent.status()} ${await sent.text()}`).toBe(true);
 
-	await page.goto('/portal/login');
-	await page.getByLabel('Email').fill(seeded.clientEmail);
-	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await signInPortalClient(page, request, seeded.clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	const routes: Route[] = [

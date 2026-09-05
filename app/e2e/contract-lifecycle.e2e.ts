@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { seedPortalClient, PORTAL_CLIENT_PASSWORD } from './portalClient';
+import { seedPortalClient, signInPortalClient } from './portalClient';
 import { enterPracticeAsEnrolled } from './mfa';
 
 // Contract signing became testable at #234, which put a fake-gcs-server in
@@ -46,10 +46,7 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	// otherwise clobber each other on the same origin.
 	const clientContext = await browser.newContext();
 	const clientPage = await clientContext.newPage();
-	await clientPage.goto('/portal/login');
-	await clientPage.getByLabel('Email').fill(clientEmail);
-	await clientPage.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await clientPage.getByRole('button', { name: 'Log in' }).click();
+	await signInPortalClient(clientPage, clientPage.request, clientEmail);
 	await expect(clientPage).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	// Scoped to #main: the shell's own nav carries a same-named "Contract"

@@ -282,21 +282,25 @@ function seedAppE2ERole() {
 	);
 }
 
-// Links identityUID to clientID via client_portal_users. Nothing in the
-// BFF creates this row (see #53: v1 has no Client-portal-provisioning
-// endpoint, staff-side or otherwise -- Staff creates a Client +
-// Engagement per #52, but linking a Client to portal login credentials
-// isn't spec'd anywhere yet), so the e2e test that proves login->landing
-// works has to seed it itself.
+// Links a fresh Portal Account to clientID via client_portal_users, with
+// signInAddress as its sign-in address -- the address a spec's own
+// signInPortalClient (portalClient.ts) requests a magic link for. Nothing
+// in the BFF creates this row (see #53: v1 has no Client-portal-
+// provisioning endpoint, staff-side or otherwise -- Staff creates a
+// Client + Engagement per #52, but linking a Client to portal login
+// credentials isn't spec'd anywhere yet), so the e2e test that proves
+// login->landing works has to seed it itself.
 //
-// portal_accounts (#616) comes first: client_portal_users.identity_uid
-// now carries a foreign key into it, so a bare identity_uid insert fails
-// without a matching row there.
-export function seedClientPortalUser(identityUID: string, clientID: string) {
+// The identifier is minted here rather than taken from a caller (#617
+// removed the Identity Platform uid that used to fill this role): a
+// portal_-prefixed random id, the same shape portalaccount.NewIdentifier
+// mints in the real accept-invite path.
+export function seedClientPortalUser(signInAddress: string, clientID: string) {
+	const identifier = `portal_${randomUUID()}`;
 	execSQL(
-		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(identityUID + '@example.com')})`
+		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(signInAddress)})`
 	);
-	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(clientID)})`);
+	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)})`);
 }
 
 // Seeds an Engagement directly: #397 decoupled Client creation from

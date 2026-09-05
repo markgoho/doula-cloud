@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { signInEnrolled } from './mfa';
+import { signInPortalClient } from './portalClient';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -67,18 +68,9 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
 
-	const clientSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: clientEmail, password, returnSecureToken: true } }
-	);
-	expect(clientSignUp.ok()).toBe(true);
-	const { localId: clientUID } = await clientSignUp.json();
-	seedClientPortalUser(clientUID, clientId);
+	seedClientPortalUser(clientEmail, clientId);
 
-	await page.goto('/portal/login');
-	await page.getByLabel('Email').fill(clientEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	// The thread moved off the hub onto its own route when the portal nav

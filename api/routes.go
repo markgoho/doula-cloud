@@ -8,6 +8,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/idempotency"
@@ -99,6 +100,8 @@ type Deps struct {
 	StaffTokenMailWorker    authmail.TokenMailWorker
 	StaffEmailChangeWorker  authmail.EmailChangeWorker
 	MFARecoveryMailWorker   mfarecoverymail.Worker
+	// PortalMagicLinkWorker is #617's sign-in-link outbox.
+	PortalMagicLinkWorker clientauth.MagicLinkWorker
 	// ClientErasureWorker is the one worker here that sends no mail: it
 	// carries out the Stripe and Identity Platform half of a Client
 	// erasure (#394, ADR-0027).

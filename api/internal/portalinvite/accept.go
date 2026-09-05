@@ -30,20 +30,22 @@ type AcceptInviteResponse struct {
 }
 
 // AcceptInviteHandler lets an invited Client claim their pending
-// client_portal_users row. It still authenticates the caller through
-// Identity Platform (authn.BeginBootstrap) -- removing that is #617's
-// job, the sign-in-flow half of ADR-0026 this ticket (#616) blocks -- but
-// the identity it stores is no longer the caller's Identity Platform uid:
-// per the ADR, Doula Cloud mints its own Portal Account identifier
-// (portalaccount.NewIdentifier) and stores that instead, so a Client's
-// session no longer names an Identity Platform account at all. Like
-// clientauth.SessionHandler, this runs before any Client is resolved, so
-// it never sets app.current_client_id -- mirrors staffauth.AcceptInviteHandler's
-// shape.
-func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
+// client_portal_users row. Public and pre-account, reading no Bearer
+// token or session (#617, ADR-0026): a Client has no Identity Platform
+// account to authenticate through any more, so the invitation token
+// itself is the whole credential -- the same shape
+// staffauth.SpendResetHandler and clientauth.RedeemMagicLinkHandler use
+// for a mailed token. The identity this handler stores is a Portal
+// Account identifier Doula Cloud mints itself (portalaccount.NewIdentifier),
+// never an Identity Platform uid. Like clientauth.SessionHandler, this
+// runs before any Client is resolved, so it never sets
+// app.current_client_id.
+func AcceptInviteHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
-		if !ok {
+		tx, err := db.BeginTx(r.Context(), nil)
+		if err != nil {
+			// coverage:ignore reason: DB connection failure, not exercised by unit tests
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -72,9 +74,10 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 
 		// Create the session before committing, so a failure rolls the
 		// new rows back instead of leaving them committed behind a
-		// response that reports failure (#145). identifier -- not
-		// verified.UID -- is the identity a Client session now names.
-		cookie, err := authn.MintSession(r.Context(), tx, identifier, verified.SecondFactor, time.Now())
+		// response that reports failure (#145). A Client never carries a
+		// second factor -- Identity Platform is Staff-only from here on
+		// (ADR-0026).
+		cookie, err := authn.MintSession(r.Context(), tx, identifier, false, time.Now())
 		if err != nil {
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return

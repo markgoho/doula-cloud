@@ -10,8 +10,11 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // This test drives the real provisioning path #90 added -- invite via the
 // BFF, accept through the UI, then land in the portal -- rather than
-// stack.ts's seedClientPortalUser fixture, which client-portal-login.e2e.ts
-// keeps using for its own (login-only) purpose.
+// stack.ts's seedClientPortalUser fixture, which portalClient.ts's
+// seedPortalClient keeps using for specs that need a signed-in Client
+// but aren't proving provisioning itself. #617: no email or password
+// step any more -- the invitation is the first magic link, so accepting
+// it is nothing but pressing Continue.
 test('Client-portal invite -> accept -> login lands on their engagement-scoped URL', async ({
 	page,
 	request
@@ -62,46 +65,8 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 	const { inviteToken } = JSON.parse(inviteBody);
 
 	await page.goto(`/portal/accept-invite?token=${inviteToken}`);
-	await page.getByLabel('Email').fill(clientEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Accept invite' }).click();
+	await page.getByRole('button', { name: 'Continue' }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 	await expect(page.locator('h1')).toHaveText('Welcome to Riverside Doulas');
-
-	// #150: AcceptInviteHandler sets the session cookie on its own
-	// response, and the app signs out of the Firebase JS SDK locally
-	// either way -- see staff-login.e2e.ts's IndexedDB assertion for why
-	// this is how a lingering credential would show up.
-	const authRecordCount = await page.evaluate(
-		() =>
-			new Promise<number>((resolve) => {
-				const openRequest = indexedDB.open('firebaseLocalStorageDb');
-				openRequest.addEventListener('error', () => resolve(0));
-				openRequest.addEventListener('success', () => {
-					const database = openRequest.result;
-					if (!database.objectStoreNames.contains('firebaseLocalStorage')) {
-						database.close();
-						resolve(0);
-						return;
-					}
-					const countRequest = database
-						.transaction('firebaseLocalStorage', 'readonly')
-						.objectStore('firebaseLocalStorage')
-						.count();
-					countRequest.addEventListener('success', () => {
-						database.close();
-						resolve(countRequest.result);
-					});
-					countRequest.addEventListener('error', () => {
-						database.close();
-						resolve(0);
-					});
-				});
-			})
-	);
-	expect(
-		authRecordCount,
-		'Identity Platform credential left behind in IndexedDB after portal invite acceptance'
-	).toBe(0);
 });

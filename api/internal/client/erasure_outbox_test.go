@@ -256,7 +256,7 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 	// -- every attempt rewrites next_attempt_at, which is exactly what
 	// must not reach the screen.
 	stripe := &fakeStripeEraser{redactErr: errors.New("Unrecognized request URL")}
-	worker := client.ErasureWorker{Stripe: stripe, Identity: authntest.NewFakeAccountManager(), Now: time.Now}
+	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	for range len(outbox.BackoffSchedule) + 1 {
 		if _, err := db.Admin.ExecContext(t.Context(),
 			`UPDATE client_erasure_outbox SET next_attempt_at = now() - interval '1 hour'
@@ -298,9 +298,7 @@ func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
 		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	runWorker(t, db, client.ErasureWorker{
-		Stripe: &fakeStripeEraser{}, Identity: authntest.NewFakeAccountManager(), Now: time.Now,
-	})
+	runWorker(t, db, client.ErasureWorker{Stripe: &fakeStripeEraser{}, Now: time.Now})
 
 	if got := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt; got != nil {
 		t.Fatalf("stripeRedactionEligibleAt = %v, want absent once the redaction has run", got)
@@ -335,8 +333,8 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 }
 
 // TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions covers the
-// Identity Platform criterion, and the session deletion it implies:
-// deleting the account does not by itself sign her out.
+// Portal Account criterion, and the session deletion it implies: deleting
+// the account does not by itself sign her out.
 func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-portal"
@@ -380,8 +378,8 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 		t.Fatalf("identity_uid = %q, want NULL", *storedUID)
 	}
 
-	if _, ok := readOutbox(t, db, clientID)["identity_account_delete|"+portalUID]; !ok {
-		t.Fatal("no identity-account-delete row queued")
+	if rows := readOutbox(t, db, clientID); len(rows) != 0 {
+		t.Fatalf("outbox rows = %+v, want none -- there is no Identity Platform account left to queue a delete for", rows)
 	}
 
 	var portalAccounts int
@@ -434,7 +432,7 @@ func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 }
 
 // TestErasureWorker_PerformsEveryQueuedAct is the worker's happy path,
-// all three acts at once.
+// both Stripe acts at once.
 func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-worker-happy"
@@ -458,18 +456,13 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 	}
 
 	stripe := &fakeStripeEraser{}
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(portalUID, "ada@example.com", true)
-	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Identity: accounts, Now: time.Now})
+	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
 	if len(stripe.deleted) != 1 || stripe.deleted[0] != [2]string{testConnectAccount, "cus_worker"} {
 		t.Fatalf("customer deletes = %v, want one on the Practice's own connected account", stripe.deleted)
 	}
 	if len(stripe.redactions) != 1 || stripe.redactions[0] != [2]string{testConnectAccount, "cus_worker"} {
 		t.Fatalf("redaction jobs = %v, want one", stripe.redactions)
-	}
-	if accounts.Exists(portalUID) {
-		t.Fatal("the Identity Platform account still exists, want it deleted")
 	}
 	for act, status := range readOutboxStatus(t, db, clientID) {
 		if status != "sent" {
@@ -494,7 +487,7 @@ func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 	defer resp.Body.Close()
 
 	stripe := &fakeStripeEraser{deleteErr: errors.New("stripe is down"), redactErr: errors.New("stripe is down")}
-	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Identity: authntest.NewFakeAccountManager(), Now: time.Now})
+	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
 	for act, status := range readOutboxStatus(t, db, clientID) {
 		if status != pendingStatus {
@@ -524,7 +517,7 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 	defer resp.Body.Close()
 
 	stripe := &fakeStripeEraser{}
-	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Identity: authntest.NewFakeAccountManager(), Now: time.Now})
+	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
 	for act, status := range readOutboxStatus(t, db, clientID) {
 		if status != deadLetteredStatus {
@@ -533,39 +526,6 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 	}
 	if len(stripe.deleted) != 0 {
 		t.Fatalf("customer deletes = %v, want none -- there is no account to call", stripe.deleted)
-	}
-}
-
-// TestErasureWorker_RetriesAFailedIdentityDelete covers the third act's
-// own failure branch.
-func TestErasureWorker_RetriesAFailedIdentityDelete(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-worker-identity-fail"
-	const portalUID = "portal-uid-worker-fail"
-	practiceID, staffID := seedOwner(t, db, uid)
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, clientID, portalUID,
-	); err != nil {
-		t.Fatalf("seed portal user: %v", err)
-	}
-
-	srv, session := newErasureServer(t, db, uid)
-	defer srv.Close()
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(portalUID, "ada@example.com", true)
-	accounts.DeleteAccountErr = errors.New("identity platform is down")
-	runWorker(t, db, client.ErasureWorker{Stripe: &fakeStripeEraser{}, Identity: accounts, Now: time.Now})
-
-	if status := readOutboxStatus(t, db, clientID)["identity_account_delete|"+portalUID]; status != pendingStatus {
-		t.Fatalf("identity delete status = %q, want pending", status)
-	}
-	if !accounts.Exists(portalUID) {
-		t.Fatal("the account was deleted despite the error")
 	}
 }
 
@@ -589,7 +549,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 	}
 
 	stripe := &fakeStripeEraser{}
-	worker := client.ErasureWorker{Stripe: stripe, Identity: authntest.NewFakeAccountManager(), Now: time.Now}
+	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/clients/process-erasure-outbox",
 		outbox.ProcessHandler(db.App, worker, "correct-secret", outbox.NotificationDoor))

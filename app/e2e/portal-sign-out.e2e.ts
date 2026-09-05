@@ -1,14 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { PORTAL_CLIENT_PASSWORD, seedPortalClient } from './portalClient';
+import { seedPortalClient, signInPortalClient } from './portalClient';
 
 test('a Client signs out and can no longer reach their Engagement', async ({ page, request }) => {
 	const practiceName = 'Meadowbrook Doulas';
 	const { clientEmail, engagementId } = await seedPortalClient(request, practiceName);
 
-	await page.goto('/portal/login');
-	await page.getByLabel('Email').fill(clientEmail);
-	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 	await expect(page.getByRole('heading', { name: `Welcome to ${practiceName}` })).toBeVisible();
 
@@ -54,10 +51,7 @@ test('a Client signs out and can no longer reach their Engagement', async ({ pag
 test('a Client second tab signing out after the first shows no error', async ({ page, request }) => {
 	const { clientEmail, engagementId } = await seedPortalClient(request, 'Fernwood Doulas');
 
-	await page.goto('/portal/login');
-	await page.getByLabel('Email').fill(clientEmail);
-	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	// A second tab on the same browser context, so it carries the same

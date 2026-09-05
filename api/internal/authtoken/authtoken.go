@@ -39,6 +39,11 @@ const (
 	// rather than Mint -- a short decimal code read aloud over the phone,
 	// not a link.
 	PurposeStaffMFARecovery Purpose = "staff_mfa_recovery"
+	// PurposeClientMagicLink is a Client's sign-in link (#617, ADR-0026):
+	// spending it mints a session for the Portal Account identifier it
+	// names. 15-minute expiry -- Mailgun's message logs (ADR-0012) hold
+	// the token longer than her inbox does, so the window stays short.
+	PurposeClientMagicLink Purpose = "client_magic_link"
 )
 
 // ErrInvalid is what Spend returns for a token that never existed, was

@@ -20,6 +20,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
@@ -204,6 +205,13 @@ func main() {
 		Sender: mailgunSender, Accounts: verifier, Now: time.Now,
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
+	// #617: the sign-in link's recipient resolves with a plain join
+	// against portal_accounts, not the Admin SDK -- unlike
+	// staffTokenMailOutboxWorker above, this worker holds no Accounts.
+	portalMagicLinkOutboxWorker := clientauth.MagicLinkWorker{
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
+	}
 
 	// #443. The HTTP client is shared by both and is deliberately
 	// short-timeout: a probe is a CDN fetch of a static file, and a
@@ -268,15 +276,16 @@ func main() {
 		StaffTokenMailWorker:    staffTokenMailOutboxWorker,
 		StaffEmailChangeWorker:  staffEmailChangeOutboxWorker,
 		MFARecoveryMailWorker:   mfaRecoveryMailOutboxWorker,
-		// The real payments.Client and the real Identity Platform
-		// verifier, passed in structurally: client declares its own
-		// narrow StripeEraser/IdentityEraser rather than importing
+		PortalMagicLinkWorker:   portalMagicLinkOutboxWorker,
+		// The real payments.Client, passed in structurally: client
+		// declares its own narrow StripeEraser rather than importing
 		// payments (which already imports client), so this assignment is
 		// where the two shapes are actually checked against each other.
+		// #617 retired the Identity Platform half of this worker -- a
+		// Client has no Identity Platform account left to delete.
 		ClientErasureWorker: client.ErasureWorker{
-			Stripe:   paymentsClient,
-			Identity: verifier,
-			Now:      time.Now,
+			Stripe: paymentsClient,
+			Now:    time.Now,
 		},
 
 		ExpectedOrigins: resolveExpectedOrigins(),
