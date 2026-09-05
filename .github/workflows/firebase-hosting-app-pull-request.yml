@@ -49,9 +49,29 @@ jobs:
         id: firebase_hosting_preview
         env:
           PR_NUMBER: ${{ github.event.number }}
+        # `--json` sends the command's ERROR to stdout as well as its
+        # result, and stdout is a file nothing reads on the failure path
+        # -- so when the site hit Firebase's fifty-channel cap on
+        # 2026-09-04 the log said `exit code 1` and not one word more
+        # (#736). Hence the explicit failure branch: the output is the
+        # only account of what went wrong, so it goes to the log before
+        # the step gives up.
+        #
+        # `--expires 3d` rather than 7d is the backstop half of #736.
+        # The primary release is now firebase-hosting-preview-cleanup.yml
+        # on PR close, so a channel normally outlives its PR by seconds;
+        # this only bounds how long a MISSED release lingers. Three days
+        # against roughly twelve PRs a day settles near thirty-six
+        # channels, inside the cap of fifty, where seven days settled
+        # near eighty-four -- past it, which is the failure this ticket
+        # is about.
         run: |
-          bunx firebase-tools hosting:channel:deploy "pr-${PR_NUMBER}" \
-            --only app --expires 7d --non-interactive --json > deploy-output.json
+          if ! bunx firebase-tools hosting:channel:deploy "pr-${PR_NUMBER}" \
+            --only app --expires 3d --non-interactive --json > deploy-output.json; then
+            echo "::error::firebase hosting:channel:deploy failed. Its output follows."
+            cat deploy-output.json
+            exit 1
+          fi
           url=$(bun -e "console.log(Object.values(require('./deploy-output.json').result)[0].url)")
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
