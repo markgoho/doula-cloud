@@ -16,7 +16,7 @@ Both failures come from the same missing distinction — between the **defect**,
 
 **A Finding is one defect**, and its identity is **the GitHub issue number**. There is no other id. A Run never mints a `-G` gap id — `README.md` forbids it, and the journey map that owns a stage stays the only thing that mints one. So the tracker carries two shapes of `journey-gap` issue, one with a gap id from the nine walks and one without from a Run, and that is intended: the id says which instrument found it, not how important it is.
 
-**Two Sightings are the same Finding when the same act against the same surface would have to change to fix both.** Not "the same screen", not "the same feeling" — the same change. Fourteen doulas meeting a slow Client list is one Finding, because one query fixes all fourteen. Two doulas meeting the same 500 from different endpoints is two Findings if the endpoints have different causes, and one if the anchor shows one cause. Where the log cannot tell, the anchors decide: entries carrying the same `file:line`, or the same method-and-path with the same status, are one Finding; entries whose only common ground is a screenshot of the same page are two until something joins them.
+**Two Sightings are the same Finding when the same change would answer both.** Not "the same screen", not "the same feeling" — the same change. Fourteen doulas meeting a slow Client list is one Finding, because one query fixes all fourteen. Two doulas meeting the same 500 from different endpoints is two Findings if the endpoints have different causes, and one if the anchor shows one cause. Where the log cannot tell, the anchors decide: entries carrying the same `file:line`, or the same method-and-path with the same status, are one Finding; entries whose only common ground is a screenshot of the same page are two until something joins them.
 
 A Finding carries **every** Sighting of it. Eleven encounters over six months is eleven lines in one issue, not eleven issues and not one issue that mentions the first.
 
@@ -112,6 +112,8 @@ docs/simulation/runs/2027-01-04-1/
 [The World](worlds/rooted-birth-collective.md) walks eleven Extras through their door acts and one stated reason each to open the app, and an Extra has **no Friction log in her voice** — that is what makes her an Extra. She is still observable, and a broken invitation acceptance is a defect whoever met it.
 
 So Extras' walked acts go in one shared `extras.md` per Run, carrying **Observed blocks only** — the five mandatory fields, the anchor, the timing, the four outcomes, and no Narrated register at any outcome. An Extra lacks an interior life, not a screen. Her entries route through the four routes like anyone's, and a Finding sighted only by Extras is filed like any other, minus the `journey:` label.
+
+**An Extra's entries are numbered per Extra per Run** — `jo-1`, `jo-2` — and not on the `x`/`u` scheme, which is per Persona and defined against a journey map she does not have. So her Sighting reads `2027-01-04-1 · jo-nakamura · jo-3`, with her slug standing where a Persona's would, and a reader can still open one file and find the act. The `u` case is the exception that stays shared: an act nobody could observe is a fact about the harness whoever walked it, and it goes to the run README with everyone else's.
 
 ## Mechanics
 
