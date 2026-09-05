@@ -2,7 +2,7 @@
 
 What a simulation run emits, and what an entry must carry to be believed. Settled on [#760](https://github.com/markgoho/doula-cloud/issues/760), under the map [Six months in a sandbox](https://github.com/markgoho/doula-cloud/issues/759).
 
-This file is the instrument. Who is walking, and what they walked into, is the **World** — [Rooted Birth Collective](worlds/rooted-birth-collective.md), settled on [#761](https://github.com/markgoho/doula-cloud/issues/761).
+This file is the instrument. Who is walking, and what they walked into, is the **World** — [Rooted Birth Collective](worlds/rooted-birth-collective.md), settled on [#761](https://github.com/markgoho/doula-cloud/issues/761). Where the walking happens, and the list of things that cannot be seen there, is the **sandbox** — [Where a run runs](environment.md), settled on [#763](https://github.com/markgoho/doula-cloud/issues/763).
 
 ## Why this file exists first
 
@@ -116,11 +116,14 @@ The band is applied to the measurement, not argued with. An agent that thinks a 
 
 **The timing is UI response time and nothing else.** It never measures how long an email or a notification took to arrive — see the next section.
 
+**Every timing is a lower bound.** The BFF, Postgres and the browser share one machine, with no network between them, no CDN, no Cloud Run cold start and no Cloud SQL hop ([Where a run runs](environment.md#every-timing-is-a-lower-bound-and-the-bands-do-not-move)). So a run can prove an act **too slow** and can never prove one **fast enough**: an act inside the 1 s band locally is unproven in production, and a slow local reading is worse news than the same number would be from a deployed service.
+
 ## Claims that are never admissible
 
 These are struck on sight, however well written, and no anchor rescues them. They are named here rather than left to a session's memory, because a session will not remember them.
 
-- **"The notification arrived too late."** A run cannot see notification latency, and must not pretend otherwise. [#762](https://github.com/markgoho/doula-cloud/issues/762) settled why: nothing fires by itself locally — `tasknudge.FakeEnqueuer` records a nudge and issues no request — so the harness POSTs the thirteen `process-*` endpoints itself after each jump. That reproduces Cloud Scheduler exactly, which is what makes the run honest, and it also flattens the difference between a nudged notification arriving in seconds and an un-nudged one waiting for the scheduler's cadence. **Whether** a notification arrived, and **what it said**, are both observable and admissible. **When** it arrived is an artefact of the harness. Any entry claiming otherwise is measuring the drain loop.
+- **"The notification arrived too late."** A run cannot see notification latency, and must not pretend otherwise. [#762](https://github.com/markgoho/doula-cloud/issues/762) settled why: nothing fires by itself locally — `tasknudge.FakeEnqueuer` records a nudge and issues no request — so the harness POSTs the thirteen `process-*` endpoints itself after each jump. That reproduces Cloud Scheduler as it is meant to be — only three of the thirteen jobs were ever provisioned ([#481](https://github.com/markgoho/doula-cloud/issues/481)), and a run deliberately does not model that gap — and it also flattens the difference between a nudged notification arriving in seconds and an un-nudged one waiting for the scheduler's cadence. **Whether** a notification arrived, and **what it said**, are both observable and admissible. **When** it arrived is an artefact of the harness. Any entry claiming otherwise is measuring the drain loop.
+- **"This was fast enough."** A timing under 1 s is recorded and nothing more; it is never evidence that the act is quick in production. Every timing is a local lower bound, so only the slow readings carry outward. An entry that reports a fast act as a passing performance result is struck.
 - **Anything about users.** "Doulas would find this confusing", "most people expect", "this is a common pattern in this market". Nine proto-personas are hypotheses to be falsified, not a sample. A run's output looks like a diary and must never be cited as one.
 - **A claim about the code with no `file:line`.** "The endpoint probably validates this" is not an entry.
 - **A minted gap ID.** See below.

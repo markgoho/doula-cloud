@@ -34,7 +34,7 @@ its own once required checks pass.
 
 - Copies `app/.env.local` from the main checkout if the worktree doesn't already have one.
   This is the only gitignored file local dev needs (Stripe Sandbox + Mailgun test keys); if
-  it's missing from main too, see `docs/environment.md`'s `scripts/stripe-setup.sh`.
+  it's missing from main too, see `docs/environment.md`'s First-time setup.
 - Symlinks root `node_modules` to the main checkout's, unless the branch's own
   `package.json`/`bun.lock` differ from `trunk`, in which case it removes the symlink and
   runs a real `bun install` at the worktree root instead. Re-checked on every provision, so

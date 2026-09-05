@@ -3,7 +3,8 @@
 Every variable `api/main.go` reads, what it is for, and what it holds in
 each of the three places the BFF runs. The Hugo site's own build reads two
 of its own — see [The Hugo site's build](#the-hugo-sites-build). `app/.env.example` is the local
-template; `scripts/stripe-setup.sh` fills the Stripe half of it in.
+template; the Stripe half of it is filled in by hand, from the Sandbox
+keys and the `stripe listen` secret (see [Stripe](#stripe)).
 
 ## Where a value lives
 
@@ -12,6 +13,8 @@ template; `scripts/stripe-setup.sh` fills the Stripe half of it in.
 | Local (`bun run dev:full`) | `app/.env.local`, auto-loaded by bun, spread into the BFF's own environment by `app/e2e/stack.ts` |
 | CI (`bun run test:e2e`) | `app/e2e/stack.ts` only. No Stripe values: the e2e run stays on the fakes — see [CI stays on the fakes](#ci-stays-on-the-fakes) |
 | Deployed (Cloud Run `doula-api`) | Secret Manager for credentials, plain env vars for the rest |
+
+A **simulation run** ([#763](https://github.com/markgoho/doula-cloud/issues/763)) is the local row with three additions, and it does not add a variable: it keeps the Postgres volume instead of destroying it, installs a `sim.now()` shim before goose runs, and drains the `process-*` endpoints itself. `APP_BASE_URL` keeps its local default and `EXPECTED_ORIGINS` is left alone, because `scripts/stripe-listen.sh` is how Stripe reaches a run and no tunnel is involved. See [Where a run runs](simulation/environment.md).
 
 `app/.gitignore` and the repo root `.gitignore` both exclude `.env*`
 except `.env.example`. A Sandbox key is still a key.
@@ -385,7 +388,9 @@ request body, for no gain — a webhook carries no cookie and no session,
 so the rewrite buys nothing here.
 
 `csrf.Wrap` lets them through: a Stripe POST carries no `Origin` header,
-and the rule is "no Origin, no rejection" (`api/main.go:125-129`).
+and the rule is "no Origin, no rejection" (`api/internal/csrf/wrap.go:26`,
+enforced at `wrap.go:44`; the origin list is resolved in
+`api/main.go:47-70`).
 
 | Endpoint | Events | Payload | `events_from` | State |
 | --- | --- | --- | --- | --- |
@@ -537,10 +542,10 @@ Stripe says all of this is changeable later, and it is.
 
 ## First-time setup
 
-```
-bash scripts/stripe-setup.sh
-```
-
-Twelve stages, from the Google Workspace mailbox that owns the account
-through both end-to-end walks. It is re-runnable: values already in
-`app/.env.local` come back as defaults.
+There is no wizard. `scripts/stripe-setup.sh` was retired in `e1ff4eb`
+once the deployed service was pointed at Stripe; only
+`scripts/stripe-listen.sh` remains. Copy `app/.env.example` to
+`app/.env.local` and fill it from the sections above: the Sandbox API key
+and Price id from the Stripe dashboard, the three webhook secrets from
+one `stripe listen --print-secret`, and the Mailgun key paired with the
+account's sandbox domain.
