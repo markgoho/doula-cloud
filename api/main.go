@@ -112,10 +112,11 @@ func main() {
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
 	paymentsClient := payments.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("APP_BASE_URL"))
 
-	// All eight mail kinds share one Mailgun domain/credential and one
-	// APP_BASE_URL, so they share one Sender construction and the two
-	// From/ReplyTo identities ADR-0011 defines -- minting eight otherwise
-	// identical Mailgun senders bought nothing.
+	// All eleven mail kinds (#733 counted them; this comment said eight)
+	// share one Mailgun domain/credential and one APP_BASE_URL, so they
+	// share one Sender construction and the two From/ReplyTo identities
+	// ADR-0011 defines -- minting eleven otherwise identical Mailgun
+	// senders bought nothing.
 	//
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunDomain := os.Getenv("MAILGUN_DOMAIN")
@@ -126,7 +127,6 @@ func main() {
 	// outbox.Worker dead-letters the row instead of retrying an address
 	// Mailgun would decline server-side anyway.
 	//
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunAPI := mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain)
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
