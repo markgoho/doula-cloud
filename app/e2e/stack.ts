@@ -361,12 +361,43 @@ export function readStaffInviteToken(invitationId: string): string {
 	);
 }
 
-export function stopStack() {
+// A run's own interval literal, e.g. "1 day" or "90 minutes" -- the shape
+// Postgres's interval input accepts. Guarded the same way roleName is in
+// api/internal/simclock: every caller here passes a value it built itself
+// from a number and a fixed unit (see simulation/clock.ts), never
+// anything read off a request, but rejecting anything else keeps that
+// true by construction rather than by convention.
+const intervalLiteral = /^\d+ (seconds|minutes|hours|days)$/;
+
+// Advances sim.offset_row.delta by amount (#762, #778) -- the one write
+// every simulation jump makes. Additive, so two jumps compose: advancing
+// "1 day" twice is the same as advancing "2 days" once.
+export function advanceOffset(amount: string) {
+	if (!intervalLiteral.test(amount)) {
+		throw new Error(`stack: invalid interval literal ${JSON.stringify(amount)}`);
+	}
+	execSQL(`UPDATE sim.offset_row SET delta = delta + interval ${sqlLiteral(amount)}`);
+}
+
+// Reads the database's current simulated time, i.e. what sim.now() itself
+// would return right now -- the harness's own read of the clock it moves,
+// never derived by re-summing the amounts passed to advanceOffset.
+export function readSimulatedNow(): string {
+	return querySQLValue('SELECT sim.now()');
+}
+
+// stopStack tears the stack down. keepVolume leaves the Postgres volume,
+// the fake GCS bucket and every host-process pidfile's target already
+// dead -- the shape a resumed run needs (#763): the world (rows,
+// sim.offset_row, Stripe's test clocks, which live at Stripe) survives,
+// and only the host processes, which hold no state of their own, are
+// killed and restarted by a later startStack.
+export function stopStack({ keepVolume = false }: { keepVolume?: boolean } = {}) {
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });
 	killPidfile(MAILBOX_PIDFILE);
 	killPidfile(EMULATOR_PIDFILE);
-	execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'down', '-v'], {
+	execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'down', ...(keepVolume ? [] : ['-v'])], {
 		stdio: 'inherit',
 		timeout: 60_000,
 		env: COMPOSE_ENV
