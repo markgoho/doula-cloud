@@ -19,7 +19,7 @@
 	import {
 		authRefusal,
 		isEmailAlreadyInUse,
-		refusalMessage,
+		refusalErrors,
 		type FormError
 	} from '#lib/formErrors.js';
 	import { workStateCode } from '#lib/workStates.js';
@@ -29,6 +29,15 @@
 	const workStateId = 'signup-work-state';
 	const emailId = 'signup-email';
 	const passwordId = 'signup-password';
+
+	// docs/api-design.md section 7's Details is keyed by the DTO's own
+	// JSON field name -- POST /api/staff/signup's body, right below.
+	const signupFieldIds = {
+		practiceName: practiceNameId,
+		staffName: staffNameId,
+		staffEmail: emailId,
+		workState: workStateId
+	};
 
 	let practiceName = $state('');
 	let staffName = $state('');
@@ -134,7 +143,7 @@
 				// and finishes the half that failed. Keeping the JS SDK session
 				// alive instead would be a second, invisible way to be signed in
 				// on a screen that shows a refusal (#745).
-				errors = [{ message: await refusalMessage(response) }];
+				errors = await refusalErrors(response, signupFieldIds);
 				await signOut(getFirebaseAuth());
 				return;
 			}

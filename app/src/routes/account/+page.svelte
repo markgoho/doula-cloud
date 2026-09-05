@@ -26,7 +26,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { refusalErrors, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -145,7 +145,7 @@
 				body: JSON.stringify({ workState: workStateCode(selectedState) })
 			});
 			if (!response.ok) {
-				saveError = [{ message: await refusalMessage(response) }];
+				saveError = await refusalErrors(response, { workState: workStateId });
 				return;
 			}
 

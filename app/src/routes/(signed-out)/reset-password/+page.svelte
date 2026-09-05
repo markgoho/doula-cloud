@@ -2,7 +2,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL } from '#lib/api.js';
-	import { refusalMessage, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -40,7 +40,7 @@
 				body: JSON.stringify({ token, newPassword })
 			});
 			if (!response.ok) {
-				errors = [{ message: await refusalMessage(response) }];
+				errors = await refusalErrors(response, { newPassword: passwordId });
 				return;
 			}
 			hasSucceeded = true;

@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
+	import { authRefusal, refusalErrors, type FormError } from '#lib/formErrors.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -84,7 +84,7 @@
 				body: JSON.stringify({ inviteToken })
 			});
 			if (!acceptResponse.ok) {
-				errors = [{ message: await refusalMessage(acceptResponse) }];
+				errors = await refusalErrors(acceptResponse);
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -96,7 +96,7 @@
 
 			const sessionResponse = await apiFetchWithSession('/api/portal/session');
 			if (!sessionResponse.ok) {
-				errors = [{ message: await refusalMessage(sessionResponse) }];
+				errors = await refusalErrors(sessionResponse);
 				return;
 			}
 			const session: PortalSessionInfo = await sessionResponse.json();
