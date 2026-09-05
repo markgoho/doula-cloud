@@ -11,33 +11,30 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
-	const inviteToken = page.url.searchParams.get('token') ?? '';
+	const token = page.url.searchParams.get('token') ?? '';
 
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Engagement[] | undefined>();
 
-	// #617, ADR-0026: a Client has no password, so accepting an invitation
-	// is nothing but pressing Continue -- there is no account-setup step.
-	// The token is spent on this POST, never on the GET that rendered this
-	// page, the same GET-then-POST shape #617's own sign-in link uses
-	// (#610 hangs its cross-tier eviction warning on this same button).
+	// #617, ADR-0026: the token is spent on this POST, never on the GET
+	// that rendered this page -- a mail client or a security scanner
+	// following the link to inspect it must not burn it before she reads
+	// the mail.
 	async function handleContinue() {
 		errors = [];
 		isSubmitting = true;
 		try {
-			const acceptResponse = await fetch(`${apiBaseURL()}/api/portal/accept-invite`, {
+			const response = await fetch(`${apiBaseURL()}/api/portal/magic-link`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ inviteToken })
+				body: JSON.stringify({ token })
 			});
-			if (!acceptResponse.ok) {
-				errors = await refusalErrors(acceptResponse);
+			if (!response.ok) {
+				errors = await refusalErrors(response);
 				return;
 			}
 
-			// AcceptInviteHandler already set the session cookie on its own
-			// response (#145).
 			const sessionResponse = await apiFetchWithSession('/api/portal/session');
 			if (!sessionResponse.ok) {
 				errors = await refusalErrors(sessionResponse);
@@ -65,8 +62,8 @@
 {/snippet}
 
 {#snippet content()}
-	{#if !inviteToken}
-		<Notice variant="error" message="Missing invite token" />
+	{#if !token}
+		<Notice variant="error" message="This link is missing its sign-in code." />
 	{:else if picker}
 		<h2>Choose an Engagement</h2>
 		{#if picker.length === 0}
@@ -90,8 +87,4 @@
 	{/if}
 {/snippet}
 
-<EntryPage
-	title="Accept your portal invite"
-	errorSummary={errors.length > 0 ? errorSummary : undefined}
-	{content}
-/>
+<EntryPage title="Sign in" errorSummary={errors.length > 0 ? errorSummary : undefined} {content} />

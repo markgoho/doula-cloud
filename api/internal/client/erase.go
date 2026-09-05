@@ -32,9 +32,8 @@ const ErasedGivenName = "Erased Client"
 type erasureAct string
 
 const (
-	actStripeCustomerDelete  erasureAct = "stripe_customer_delete"
-	actStripeRedactionJob    erasureAct = "stripe_redaction_job"
-	actIdentityAccountDelete erasureAct = "identity_account_delete"
+	actStripeCustomerDelete erasureAct = "stripe_customer_delete"
+	actStripeRedactionJob   erasureAct = "stripe_redaction_job"
 )
 
 // StripeRedactionFloor is how long Stripe makes a platform wait before
@@ -168,7 +167,7 @@ func erase(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffID string
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
-	portalQueued, sessionsEnded, err := enqueuePortalErasure(ctx, tx, practiceID, clientID, now)
+	portalQueued, sessionsEnded, err := enqueuePortalErasure(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
@@ -382,25 +381,18 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 	return ids, &latest, nil
 }
 
-// enqueuePortalErasure queues the deletion of her Identity Platform
-// account, deletes her Portal Account (#616) outright, and ends every
-// session she currently holds. The sessions are deleted here, inside the
-// erasure transaction, rather than left to the outbox: neither deleting
-// the Identity Platform account nor deleting the Portal Account
-// invalidates a __session cookie, which is verified against Postgres, so
-// she would otherwise stay signed in to the portal until it expired on
-// its own.
+// enqueuePortalErasure deletes her Portal Account (#616) outright and
+// ends every session she currently holds -- a Client has no Identity
+// Platform account left to delete (#617, ADR-0026). The sessions are
+// deleted here, inside the erasure transaction, rather than left to the
+// outbox: deleting the Portal Account does not invalidate a __session
+// cookie, which is verified against Postgres, so she would otherwise stay
+// signed in to the portal until it expired on its own.
 //
 // identity_uid is cleared on the row so nothing in this database points
 // at an account that is about to stop existing. The row itself stays --
-// it is how her portal history resolves. Between #616 landing and #617
-// removing the Identity Platform path, a Client's Firebase account (if
-// she still has one) is unreachable by this queued act: acceptInvite no
-// longer stores verified.UID anywhere, so identityUID.String here is
-// always a Portal Account identifier, never an Identity Platform uid.
-// Accepted pre-launch; #617 retires actIdentityAccountDelete once no
-// Client has an Identity Platform account left to delete.
-func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string, now time.Time) (queued bool, sessionsEnded int, err error) {
+// it is how her portal history resolves.
+func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (queued bool, sessionsEnded int, err error) {
 	var identityUID sql.NullString
 	err = tx.QueryRowContext(ctx,
 		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID,
@@ -436,10 +428,6 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 		return false, 0, fmt.Errorf("client: count ended portal sessions: %w", err)
 	}
 
-	if err := enqueue(ctx, tx, practiceID, clientID, actIdentityAccountDelete, identityUID.String, now, time.Time{}); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, 0, err
-	}
 	// The Portal Account itself (#616) is deleted here, synchronously,
 	// rather than through the outbox above: unlike the Identity Platform
 	// account, deleting it is a plain Postgres statement with no outside

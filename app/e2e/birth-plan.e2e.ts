@@ -2,13 +2,14 @@ import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { signInPortalClient } from './portalClient';
 
 // Exercises #65's critical path: Staff fills out a Birth Plan for an
 // Engagement (through the real staff-side UI from #64), then the Client
-// portal shows the matching read-only view. Provisions Practice/Client/
-// Engagement and the two Identity Platform accounts the same way
-// client-portal-login.e2e.ts does -- this test isn't re-proving login
-// itself, just that both sides of the Birth Plan feature agree.
+// portal shows the matching read-only view. Provisions Practice/Staff and
+// the Client-portal account the same way client-portal-login.e2e.ts does
+// -- this test isn't re-proving login itself, just that both sides of the
+// Birth Plan feature agree.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -78,20 +79,11 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	// test switches to the Client-portal session below.
 	await expect(saveButton).toBeEnabled();
 
-	// Client side: a separate Identity Platform account, linked to the same
-	// Client via client_portal_users, viewing the read-only Birth Plan.
-	const clientSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: clientEmail, password, returnSecureToken: true } }
-	);
-	expect(clientSignUp.ok()).toBe(true);
-	const { localId: clientUID } = await clientSignUp.json();
-	seedClientPortalUser(clientUID, clientId);
+	// Client side: a Portal Account (#617) linked to the same Client via
+	// client_portal_users, viewing the read-only Birth Plan.
+	seedClientPortalUser(clientEmail, clientId);
 
-	await page.goto('/portal/login');
-	await page.getByLabel('Email').fill(clientEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	// Scoped to the page: since the shell landed (#452) the portal nav

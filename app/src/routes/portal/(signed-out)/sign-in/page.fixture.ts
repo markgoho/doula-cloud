@@ -1,9 +1,8 @@
 /*
- * Accepting a Client-portal invite, as the continuum check sees it
- * (#595).
+ * Redeeming a Client sign-in link, as the continuum check sees it (#595).
  *
  * A token in the URL reaches the Continue button -- the only state that
- * mounts, since spending the invite is behind a click the sweep never
+ * mounts, since spending the link is behind a click the sweep never
  * simulates (#617's GET-then-POST shape: a GET spends nothing). Nothing
  * here fetches on mount.
  */
@@ -11,9 +10,9 @@ import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const fixture: RouteFixture = {
-	name: 'Accepting a Client-portal invite',
+	name: 'Redeeming a Client sign-in link',
 	component: Page,
 	params: {},
-	url: 'https://example.test/portal/(signed-out)/accept-invite?token=invite-token-1',
-	readyText: 'Accept your portal invite'
+	url: 'https://example.test/portal/(signed-out)/sign-in?token=magic-link-token-1',
+	readyText: 'Sign in'
 };

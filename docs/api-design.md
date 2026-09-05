@@ -139,7 +139,9 @@ Every public unauthenticated endpoint that existed when this landed, and its dis
 | `POST /api/session` (login) | Bearer-token digest 30/hr, IP 100/hr | Fires on every sign-in, well above the once-per-person endpoints below; a cached Identity Platform ID token is legitimately reused for close to an hour. |
 | `POST /api/staff/signup` | Bearer-token digest 5/hr, IP 50/hr | Once-per-person bootstrap event (`authn.BeginBootstrap`). Values are generous rather than tight — nothing has ever limited this endpoint before, so any finite cap is a real improvement — and sized above the Playwright e2e suite's own call volume (one shared BFF and IP per run) and a 14-doula pilot agency's onboarding burst from one connection. |
 | `POST /api/staff/accept-invite` | Bearer-token digest 5/hr, IP 50/hr | Same bootstrap shape as signup. |
-| `POST /api/portal/accept-invite` | Bearer-token digest 5/hr, IP 50/hr | Same bootstrap shape again, for the Client population. |
+| `POST /api/portal/accept-invite` | `inviteToken` digest 10/hr, IP 50/hr | #617: a Client has no Identity Platform account to bootstrap through any more, so this reads no Bearer token either -- the invitation's own token is the whole credential, the same shape as the two token-spend rows below. |
+| `POST /api/portal/magic-link/request` | `email` 5/hr, IP 20/hr | #617, ADR-0026: public, keyed on the posted address (`ratelimit.JSONFieldRule`) -- the sizing #166/#170 reserved below, now built. Same shape as `password-reset/request`. |
+| `POST /api/portal/magic-link` | `token` digest 10/hr, IP 50/hr | #617. Pre-account, spends a mailed link; same shape as `verify-email`/`password-reset`'s own spend endpoints. |
 | `GET /api/offers/{offerId}` | `offerId` 10/hr, IP 50/hr | Pre-account, token+code authenticated (#230); carries no Bearer token or email to key on before its own check runs, so the Offer being probed is the natural "subject" dimension. The per-Offer code-guess cap (`maxAccessCodeAttempts`, `00041`) already bounds one Offer's brute force permanently — this rule set adds an hourly cap on the same thing (10, matching that constant) plus IP volume across many Offers. |
 | `POST /api/offers/{offerId}/decline` | `offerId` 10/hr, IP 50/hr | Same shape as the read above. |
 | `POST /api/staff/verify-email/request` | Session digest 10/hr, IP 50/hr | #613. Signed-in re-request; no Bearer token, only a `__session` cookie to key on (`ratelimit.SessionCookieRule`). |
@@ -167,13 +169,6 @@ Deliberately not limited:
 - `POST /api/internal/**` and `POST /api/stripe/**` / `POST /api/mailgun/webhook` — authenticated
   by `X-Internal-Secret` or a signature over the request body, not a session, and called only by
   Cloud Scheduler, Cloud Tasks, or the vendor itself.
-
-Reserved, not yet built: [#166](https://github.com/markgoho/doula-cloud/issues/166) decided a
-Client magic-link request endpoint — 5 per email address per hour, 20 per IP per hour — as part
-of [#164](https://github.com/markgoho/doula-cloud/issues/164)'s auth-methods map. The endpoint
-itself does not exist yet; [#170](https://github.com/markgoho/doula-cloud/issues/170) files its
-implementation ticket, which should reuse `ratelimit.JSONFieldRule` (#613 built it for the same
-shape — password reset's own request endpoint above) plus `ratelimit.IPRule`.
 
 ---
 

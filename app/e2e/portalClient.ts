@@ -1,13 +1,39 @@
-import { expect, type APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn, sessionCookieFrom } from './auth';
 import { enrollSecondFactor, verifyEmail } from './mfa';
-import { seedClientPortalUser, seedEngagement, readStaffInviteToken } from './stack';
+import { seedClientPortalUser, seedEngagement, readStaffInviteToken, MAILBOX_URL, WORKER_SECRET } from './stack';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+
+/**
+ * Signs a Client into the portal through the real magic-link flow
+ * (#617): request a link, drain the outbox the way Cloud Scheduler
+ * would, and walk the sandbox mailbox (e2e/mailbox.ts) as a browser --
+ * opening the message and clicking what is in it, the same shape
+ * mail-delivery.e2e.ts walks a Staff invitation. A Client has no
+ * password any more, so this is the only way anything reaches the
+ * portal now; every spec that needs a signed-in Client for some *other*
+ * feature under test calls this rather than re-walking the mailbox
+ * itself.
+ */
+export async function signInPortalClient(page: Page, request: APIRequestContext, email: string): Promise<void> {
+	const requested = await request.post(`${API_URL}/api/portal/magic-link/request`, { data: { email } });
+	expect(requested.ok(), `magic-link request failed: ${requested.status()}`).toBe(true);
+
+	const drained = await request.post(`${API_URL}/api/internal/notifications/process-portal-magic-link-outbox`, {
+		headers: { 'X-Internal-Secret': WORKER_SECRET }
+	});
+	expect(drained.ok(), 'draining the portal magic-link outbox failed').toBe(true);
+
+	await page.goto(`${MAILBOX_URL}/inbox/${encodeURIComponent(email)}`);
+	await page.getByRole('link', { name: 'Your Doula Cloud sign-in link' }).click();
+	await page.getByRole('link', { name: /\/portal\/sign-in\?token=/ }).click();
+	await page.getByRole('button', { name: 'Continue' }).click();
+}
 
 /**
  * The password every seeded account here is given -- these are emulator
@@ -147,11 +173,14 @@ export async function seedContractorDoula(
 /**
  * Provisions everything a Client needs to log in to their portal: a
  * Practice with a Staff owner, a Client + Engagement at that Practice,
- * and an Identity Platform account linked to that Client.
+ * and a Portal Account (#617) linked to that Client.
  *
  * Done through the API and stack.ts's client_portal_users fixture rather
  * than through the UI, so that a spec about some *later* portal behaviour
  * is not also re-proving signup, Client creation and portal provisioning.
+ * A caller that also needs the Client actually signed in still calls
+ * signInPortalClient itself -- that is the one real walk of the magic-link
+ * flow, not something this fixture should do on every caller's behalf.
  * The Staff session and IDs come back too, for specs that go on to act as
  * the doula.
  */
@@ -203,17 +232,11 @@ export async function seedPortalClient(
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
 
-	// A separate Identity Platform account for the Client-portal login --
-	// distinct from the Staff account above -- linked to that Client via
+	// A Portal Account for the Client-portal login (#617: no Identity
+	// Platform account any more) -- linked to that Client via
 	// client_portal_users (see stack.ts for why this is seeded directly
 	// rather than through a BFF endpoint).
-	const clientSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: clientEmail, password: PORTAL_CLIENT_PASSWORD, returnSecureToken: true } }
-	);
-	expect(clientSignUp.ok(), `clientSignUp failed: ${clientSignUp.status()} ${await clientSignUp.text()}`).toBe(true);
-	const { localId: clientUID } = await clientSignUp.json();
-	seedClientPortalUser(clientUID, clientId);
+	seedClientPortalUser(clientEmail, clientId);
 
 	return {
 		practiceId,

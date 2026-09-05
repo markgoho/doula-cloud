@@ -25,8 +25,20 @@ const portalPopulation = "clientauth.Middleware, not staffauth -- a Client holds
 // A different population with a different session, which is why none of
 // these reads go through GatedRouter.Get.
 func registerPortalRoutes(g *staffauth.GatedRouter, d Deps) {
+	// #617: a Client has no Identity Platform account to authenticate
+	// through any more, so the invitation token is the whole credential --
+	// tokenSpendRules' shape, not bootstrapRules', keyed on inviteToken
+	// rather than a Bearer token there is none of.
 	g.Write("POST /api/portal/accept-invite",
-		ratelimit.Wrap(d.DB, "portal_accept_invite", bootstrapRules)(portalinvite.AcceptInviteHandler(d.Verifier, d.DB)))
+		ratelimit.Wrap(d.DB, "portal_accept_invite", portalAcceptInviteRules)(portalinvite.AcceptInviteHandler(d.DB)))
+	// #617: request and redeem a Client sign-in link, ADR-0026's magic
+	// link. Same shape as staffauth's own reset request/spend pair --
+	// resetRequestRules is #602's own sizing note for this exact endpoint,
+	// reused verbatim.
+	g.Write("POST /api/portal/magic-link/request",
+		ratelimit.Wrap(d.DB, "portal_magic_link_request", resetRequestRules)(clientauth.RequestMagicLinkHandler(d.DB)))
+	g.Write("POST /api/portal/magic-link",
+		ratelimit.Wrap(d.DB, "portal_magic_link", tokenSpendRules)(clientauth.RedeemMagicLinkHandler(d.DB)))
 	// Not rate limited: gated by authn.Begin's own __session cookie check,
 	// like staffauth.SessionHandler below -- there is no bootstrap window
 	// here for an attacker to spend.

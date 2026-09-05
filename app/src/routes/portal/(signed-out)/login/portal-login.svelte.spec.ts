@@ -16,12 +16,6 @@ import { fixture, session } from './page.fixture.js';
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
-vi.mock('firebase/auth', () => ({
-	signInWithEmailAndPassword: vi.fn(),
-	signOut: vi.fn()
-}));
-vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({}) }));
-
 /*
  * This screen calls `probeSession` directly rather than
  * `apiFetchWithSession` (#lib/api.js's own doc comment on why), so the
@@ -105,7 +99,9 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 
 		await render(Page, {});
 
-		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Send me a sign-in link' }))
+			.toBeVisible();
 	});
 
 	it('never probes the Staff session', async () => {

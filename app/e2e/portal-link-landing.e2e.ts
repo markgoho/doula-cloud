@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { PREVIEW_SERVER_ORIGIN } from './ports';
-import { PORTAL_CLIENT_PASSWORD, seedPortalClient } from './portalClient';
+import { seedPortalClient, signInPortalClient } from './portalClient';
 
 // #138's "Cookie attributes and lifetime" section: SameSite=Lax was chosen
 // over Strict specifically because a Client portal link arrives by email,
@@ -32,10 +32,7 @@ test('a signed-in Client following a portal link from another site arrives authe
 	const practiceName = 'Cedar Grove Doulas';
 	const { clientEmail, engagementId } = await seedPortalClient(request, practiceName);
 
-	await page.goto('/portal/login');
-	await page.getByLabel('Email').fill(clientEmail);
-	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	const engagementURL = `${PREVIEW_SERVER_ORIGIN}/portal/engagements/${engagementId}`;

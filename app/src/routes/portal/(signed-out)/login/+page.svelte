@@ -1,35 +1,32 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
+	import { apiBaseURL, probeSession } from '#lib/api.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import { authRefusal, refusalErrors, type FormError } from '#lib/formErrors.js';
+	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 
 	const emailId = 'portal-login-email';
-	const passwordId = 'portal-login-password';
 
 	let email = $state('');
-	let password = $state('');
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
+	let hasRequested = $state(false);
 	let picker = $state<Engagement[] | undefined>();
 
-	// The Staff login's on-load probe, deliberately identical (#283): a
-	// visitor who already holds a live Client-portal session lands exactly
-	// where a fresh sign-in would send her, without the form ever waiting
-	// on this to render. It checks only the Client-portal session, never
-	// the Staff one -- see `probeSession`'s own doc comment (#lib/api.js)
-	// for why a non-OK response here reads as "not signed in", not an
-	// expired session.
+	// #617: a Client has no password any more, so this screen only ever
+	// asks for an address to mail a sign-in link to. The on-load probe is
+	// otherwise identical to the Staff login's own (#283): a visitor who
+	// already holds a live Client-portal session lands exactly where a
+	// fresh sign-in would send her, without the form ever waiting on this
+	// to render.
 	onMount(async () => {
 		const session = await probeSession<PortalSessionInfo>('/api/portal/session');
 		if (!session) return;
@@ -46,72 +43,28 @@
 		}
 	});
 
-	// The Staff login's mechanism, deliberately identical (#467): the two
-	// screens ask the same two questions and must refuse them the same way.
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
-
-	function findEmptyFields(): FormError[] {
-		const found: FormError[] = [];
-		if (email.trim() === '') found.push({ message: 'Enter your email address', targetId: emailId });
-		if (password === '') found.push({ message: 'Enter your password', targetId: passwordId });
-		return found;
-	}
-
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		errors = [];
-		picker = undefined;
 
-		const empty = findEmptyFields();
-		if (empty.length > 0) {
-			errors = empty;
+		if (email.trim() === '') {
+			errors = [{ message: 'Enter your email address', targetId: emailId }];
 			return;
 		}
 
 		isSubmitting = true;
 		try {
-			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-			const idToken = await credential.user.getIdToken();
-
-			// Exchange the Identity Platform ID token for the session cookie
-			// before signing out of the JS SDK -- the portal session probe
-			// right below this authenticates by cookie, so the exchange must
-			// land first (#150). A plain, one-off fetch: this token makes one
-			// trip and is never carried around the way apiFetchWithSession's
-			// cookie is (#150 deleted the shared ID-token helper).
-			const exchangeResponse = await fetch(`${apiBaseURL()}/api/session`, {
+			// The response is identical whether or not the address is on
+			// record (#168) -- there is nothing here for a refused submit to
+			// report.
+			await fetch(`${apiBaseURL()}/api/portal/magic-link/request`, {
 				method: 'POST',
-				headers: { Authorization: `Bearer ${idToken}` }
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email })
 			});
-			if (!exchangeResponse.ok) {
-				errors = await refusalErrors(exchangeResponse);
-				await signOut(getFirebaseAuth());
-				return;
-			}
-			await signOut(getFirebaseAuth());
-
-			const response = await apiFetchWithSession('/api/portal/session');
-			if (!response.ok) {
-				errors = await refusalErrors(response);
-				return;
-			}
-
-			const session: PortalSessionInfo = await response.json();
-			const landing = decidePortalLanding(session);
-			if (landing.type === 'redirect') {
-				await goto(
-					resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: landing.engagementId })
-				);
-			} else {
-				picker = landing.engagements;
-			}
-		} catch (error_) {
-			// Identity Platform's own words name a product and carry a banned
-			// adjective; `authRefusal` maps the code onto a message and the
-			// control that caused it (#467).
-			errors = [authRefusal(error_, { emailId, passwordId })];
+			hasRequested = true;
+		} catch {
+			errors = [{ message: SERVICE_PROBLEM }];
 		} finally {
 			isSubmitting = false;
 		}
@@ -123,39 +76,35 @@
 {/snippet}
 
 {#snippet content()}
-	<!-- `novalidate`: this page refuses the submit, not the browser. See the
-	     Staff login for the argument. -->
-	<form onsubmit={handleSubmit} novalidate>
-		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="email"
-					value={email}
-					onInput={(value) => (email = value)}
-					required
-					autocomplete="username"
-				/>
-			{/snippet}
-		</LabeledField>
-		<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="password"
-					value={password}
-					onInput={(value) => (password = value)}
-					required
-					autocomplete="current-password"
-				/>
-			{/snippet}
-		</LabeledField>
-		<Button type="submit" label="Log in" loading={isSubmitting} />
-	</form>
+	{#if hasRequested}
+		<Notice
+			variant="status"
+			message="If that address is on our records, we have sent a sign-in link. It can take a minute to arrive."
+		/>
+	{:else}
+		<!-- `novalidate`: this page refuses the submit, not the browser. -->
+		<form onsubmit={handleSubmit} novalidate>
+			<LabeledField
+				id={emailId}
+				label="Email"
+				error={errors.find((entry) => entry.targetId === emailId)?.message}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="email"
+						value={email}
+						onInput={(value) => (email = value)}
+						required
+						autocomplete="username"
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button type="submit" label="Send me a sign-in link" loading={isSubmitting} />
+		</form>
+	{/if}
 
 	{#if picker}
 		<h2>Choose an Engagement</h2>

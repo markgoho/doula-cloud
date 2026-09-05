@@ -9,14 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/testdb"
 )
-
-const acceptIdentityUID = "portal-invite-accepting-uid"
 
 // sessionCookie returns the __session cookie from resp, or nil if none
 // was set.
@@ -29,48 +26,15 @@ func sessionCookie(resp *http.Response) *http.Cookie {
 	return nil
 }
 
-func TestAcceptInviteHandler_MissingToken(t *testing.T) {
-	db := testdb.New(t)
-	srv := newAcceptServer(authntest.Verifier{}, db)
-	defer srv.Close()
-
-	resp := postAccept(t, srv, "", portalinvite.AcceptInviteRequest{InviteToken: "whatever"})
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
-	if c := sessionCookie(resp); c != nil {
-		t.Fatalf("cookie set on missing token: %+v", c)
-	}
-}
-
-func TestAcceptInviteHandler_TokenVerificationFailure(t *testing.T) {
-	db := testdb.New(t)
-	srv := newAcceptServer(authntest.Verifier{Err: errBadToken}, db)
-	defer srv.Close()
-
-	resp := postAccept(t, srv, "bad", portalinvite.AcceptInviteRequest{InviteToken: "whatever"})
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
-	if c := sessionCookie(resp); c != nil {
-		t.Fatalf("cookie set on invalid token: %+v", c)
-	}
-}
-
 func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/portal/accept-invite", bytes.NewReader([]byte("not json")))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer tok")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -85,10 +49,10 @@ func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 
 func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: ""})
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: ""})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -98,10 +62,10 @@ func TestAcceptInviteHandler_MissingInviteToken(t *testing.T) {
 
 func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	db := testdb.New(t)
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: "00000000-0000-0000-0000-000000000000"})
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: "00000000-0000-0000-0000-000000000000"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -118,10 +82,10 @@ func TestAcceptInviteHandler_ExpiredInvite(t *testing.T) {
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInviteExpiringAt(t, db, time.Now().Add(-time.Minute))
 
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusGone {
@@ -145,10 +109,10 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
 
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -168,15 +132,11 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid, invite_token::text FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID, &storedToken); err != nil {
 		t.Fatalf("query claimed row: %v", err)
 	}
-	// identity_uid is a Portal Account Doula Cloud mints itself (#616),
-	// never the caller's Identity Platform uid -- acceptIdentityUID (the
-	// Bearer token's uid, still required until #617 lands) is deliberately
-	// not what gets stored.
+	// identity_uid is a Portal Account Doula Cloud mints itself (#616): with
+	// #617 landed, there is no caller-presented Identity Platform uid left
+	// to compare it against at all.
 	if !strings.HasPrefix(identityUID, portalaccount.Prefix) {
 		t.Fatalf("identity_uid = %q, want prefix %q", identityUID, portalaccount.Prefix)
-	}
-	if identityUID == acceptIdentityUID {
-		t.Fatal("identity_uid must not be the caller's own Identity Platform uid")
 	}
 	if storedToken.Valid {
 		t.Fatalf("expected invite_token cleared after accept, got %q", storedToken.String)
@@ -217,13 +177,13 @@ func TestAcceptInviteHandler_SessionStoreFailure(t *testing.T) {
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
 
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 	if _, err := db.Admin.ExecContext(t.Context(), `DROP TABLE sessions`); err != nil {
 		t.Fatalf("drop sessions: %v", err)
 	}
 
-	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -250,16 +210,16 @@ func TestAcceptInviteHandler_TokenAlreadyClaimed(t *testing.T) {
 	db := testdb.New(t)
 	_, inviteToken := seedPendingPortalInvite(t, db)
 
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	first := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	first := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first accept status = %d, want %d", first.StatusCode, http.StatusOK)
 	}
 
-	second := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	second := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusNotFound {
 		t.Fatalf("second accept status = %d, want %d", second.StatusCode, http.StatusNotFound)
@@ -279,10 +239,10 @@ func TestAcceptInviteHandler_SignInAddressAlreadyClaimed(t *testing.T) {
 	testdb.SeedPortalAccount(t, db, "portal_existing-account", "Invited@Example.com")
 	_, inviteToken := seedPendingPortalInvite(t, db) // invites "invited@example.com"
 
-	srv := newAcceptServer(authntest.Verifier{UID: acceptIdentityUID}, db)
+	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	resp := postAccept(t, srv, "tok", portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {

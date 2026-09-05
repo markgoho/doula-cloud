@@ -213,6 +213,17 @@ var tokenSpendRules = []ratelimit.Rule{
 	ratelimit.IPRule(50, time.Hour),
 }
 
+// portalAcceptInviteRules is tokenSpendRules' own shape for
+// POST /api/portal/accept-invite (#617): since a Client has no Identity
+// Platform account to bootstrap through any more, this endpoint reads no
+// Bearer token either, only the invitation's own token -- so it is keyed
+// on that field (HashedJSONFieldRule) rather than bootstrapRules'
+// BearerTokenRule.
+var portalAcceptInviteRules = []ratelimit.Rule{
+	ratelimit.HashedJSONFieldRule("inviteToken", 10, time.Hour),
+	ratelimit.IPRule(50, time.Hour),
+}
+
 // mfaRecoverySpendRules is #615's AC read literally: "spend is throttled
 // per account on failed attempts, not only per IP" -- a short issued
 // code (8 decimal digits) read aloud over a phone call, live for 24

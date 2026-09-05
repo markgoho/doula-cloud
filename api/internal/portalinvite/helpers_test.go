@@ -3,21 +3,17 @@ package portalinvite_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
-
-var errBadToken = errors.New("invalid token")
 
 // newInviteServer mounts the Staff-side portal-invite route behind
 // staffauth.Middleware and seeds a live session for uid, returning the
@@ -31,11 +27,11 @@ func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 }
 
 // newAcceptServer mounts the Client-portal invitation-acceptance route.
-// It is one of the three bootstrap endpoints, so it still reads a Bearer
-// ID token: it runs before a session exists.
-func newAcceptServer(verifier authn.Verifier, db *testdb.DB) *httptest.Server {
+// Public and pre-account (#617): the invitation token itself is the whole
+// credential, so this reads no Bearer token and no session.
+func newAcceptServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /portal/accept-invite", portalinvite.AcceptInviteHandler(verifier, db.App))
+	mux.Handle("POST /portal/accept-invite", portalinvite.AcceptInviteHandler(db.App))
 	return httptest.NewServer(mux)
 }
 
@@ -54,7 +50,7 @@ func postInvite(t *testing.T, srv *httptest.Server, session, practiceID, engagem
 	return resp
 }
 
-func postAccept(t *testing.T, srv *httptest.Server, token string, body any) *http.Response {
+func postAccept(t *testing.T, srv *httptest.Server, body any) *http.Response {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -63,9 +59,6 @@ func postAccept(t *testing.T, srv *httptest.Server, token string, body any) *htt
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/portal/accept-invite", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)

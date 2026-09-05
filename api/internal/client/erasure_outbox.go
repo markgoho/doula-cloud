@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/outbox"
 )
 
@@ -22,18 +21,11 @@ type StripeEraser interface {
 	CreateRedactionJob(ctx context.Context, accountID, customerID string) (string, error)
 }
 
-// IdentityEraser is the slice of authn.AccountManager this worker needs
-// -- one method, the account deletion #394 adds.
-type IdentityEraser interface {
-	DeleteAccount(ctx context.Context, uid string) error
-}
-
-var _ IdentityEraser = (authn.AccountManager)(nil)
-
-// ErasureWorker performs the three outside-world acts an erasure
-// enqueued: deleting a Stripe Customer, running its Redaction Job once
-// Stripe's 90-day floor has passed, and deleting the Identity Platform
-// account behind a portal login (ADR-0027).
+// ErasureWorker performs the two outside-world acts an erasure enqueued:
+// deleting a Stripe Customer and running its Redaction Job once Stripe's
+// 90-day floor has passed (ADR-0027). It no longer touches Identity
+// Platform: #617 retired that half once a Client stopped having an
+// account there to delete (ADR-0026).
 //
 // It is the only outbox worker in this product that sends no mail. It
 // still rides outbox.ProcessPending because the machinery is what it
@@ -41,9 +33,8 @@ var _ IdentityEraser = (authn.AccountManager)(nil)
 // dead-letter when retrying stops being worth it -- and none of that is
 // about email.
 type ErasureWorker struct {
-	Stripe   StripeEraser
-	Identity IdentityEraser
-	Now      func() time.Time
+	Stripe StripeEraser
+	Now    func() time.Time
 }
 
 func (w ErasureWorker) inner() outbox.Worker {
@@ -110,16 +101,10 @@ func (w ErasureWorker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Wor
 }
 
 // act does the one thing r names. Each branch is idempotent on its own
-// side -- a deleted Customer deletes again as a no-op, a uid Identity
-// Platform does not know is success -- so a retry after a partial
-// failure never double-acts.
+// side -- a deleted Customer deletes again as a no-op -- so a retry after
+// a partial failure never double-acts.
 func (w ErasureWorker) act(ctx context.Context, tx *sql.Tx, r erasurePendingRow) error {
 	switch r.act {
-	case actIdentityAccountDelete:
-		if err := w.Identity.DeleteAccount(ctx, r.target); err != nil {
-			return fmt.Errorf("client: delete identity account: %w", err)
-		}
-		return nil
 	case actStripeCustomerDelete, actStripeRedactionJob:
 		accountID, err := connectAccount(ctx, tx, r.practiceID)
 		if err != nil {
