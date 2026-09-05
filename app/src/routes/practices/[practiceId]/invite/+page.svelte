@@ -8,10 +8,13 @@
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
-	import { refusalMessage, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 
 	const emailId = 'invite-email';
 	const rolesFieldId = 'invite-roles';
+	// docs/api-design.md section 7's Details is keyed by the DTO's own
+	// JSON field name -- the POST body a few lines below.
+	const inviteFieldIds = { email: emailId, roles: rolesFieldId };
 
 	let email = $state('');
 	let roles = $state<string[]>(['doula']);
@@ -61,7 +64,7 @@
 				}
 			);
 			if (!response.ok) {
-				errors = [{ message: await refusalMessage(response) }];
+				errors = await refusalErrors(response, inviteFieldIds);
 				return;
 			}
 

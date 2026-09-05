@@ -12,7 +12,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
+	import { authRefusal, refusalErrors, type FormError } from '#lib/formErrors.js';
 
 	const emailId = 'portal-login-email';
 	const passwordId = 'portal-login-password';
@@ -86,7 +86,7 @@
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {
-				errors = [{ message: await refusalMessage(exchangeResponse) }];
+				errors = await refusalErrors(exchangeResponse);
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -94,7 +94,7 @@
 
 			const response = await apiFetchWithSession('/api/portal/session');
 			if (!response.ok) {
-				errors = [{ message: await refusalMessage(response) }];
+				errors = await refusalErrors(response);
 				return;
 			}
 

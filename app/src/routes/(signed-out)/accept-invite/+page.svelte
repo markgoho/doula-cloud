@@ -29,7 +29,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import { authRefusal, refusalMessage, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { authRefusal, refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -55,6 +55,10 @@
 	const passwordId = 'accept-invite-password';
 	const nameId = 'accept-invite-name';
 	const workStateId = 'accept-invite-work-state';
+
+	// docs/api-design.md section 7's Details is keyed by the DTO's own
+	// JSON field name -- POST /api/staff/accept-invite's body, below.
+	const acceptFieldIds = { name: nameId, workState: workStateId };
 
 	let email = $state('');
 	let password = $state('');
@@ -148,7 +152,7 @@
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {
-				errors = [{ message: await refusalMessage(exchangeResponse) }];
+				errors = await refusalErrors(exchangeResponse);
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -171,7 +175,7 @@
 				// and step two is the two questions only she can answer.
 				existing = undefined;
 			} else {
-				errors = [{ message: await refusalMessage(sessionResponse) }];
+				errors = await refusalErrors(sessionResponse);
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -240,7 +244,7 @@
 				})
 			});
 			if (!acceptResponse.ok) {
-				errors = [{ message: await refusalMessage(acceptResponse) }];
+				errors = await refusalErrors(acceptResponse, acceptFieldIds);
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -252,7 +256,7 @@
 
 			const sessionResponse = await apiFetchWithSession('/api/staff/session');
 			if (!sessionResponse.ok) {
-				errors = [{ message: await refusalMessage(sessionResponse) }];
+				errors = await refusalErrors(sessionResponse);
 				return;
 			}
 			const session: SessionInfo = await sessionResponse.json();

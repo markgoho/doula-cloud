@@ -27,40 +27,93 @@ import type { FormError } from './components/molecules/ErrorSummary.svelte';
 export const SERVICE_PROBLEM = 'There is a problem with the service. Try again in a few minutes.';
 
 /*
+ * The two things worth reading out of a refused response: a message for
+ * the submission as a whole, and -- where the BFF names one -- the
+ * field-keyed map `docs/api-design.md` section 7 calls `APIError.details`.
+ * undefined means the refusal itself carries nothing a reader can act on: a
+ * 5xx, or a body that came back empty. Shared by `refusalMessage` and
+ * `refusalErrors` so the 5xx/empty/JSON split is written once.
+ */
+interface ParsedRefusal {
+	message?: string;
+	details?: Record<string, string>;
+	text: string;
+}
+
+async function parseRefusal(response: Response): Promise<ParsedRefusal | undefined> {
+	if (response.status >= 500) return undefined;
+
+	const text = await response.text();
+	if (text.trim() === '') return undefined;
+
+	try {
+		const parsed: unknown = JSON.parse(text);
+		if (parsed !== null && typeof parsed === 'object') {
+			const message =
+				'message' in parsed && typeof parsed.message === 'string' ? parsed.message : undefined;
+			const rawDetails =
+				'details' in parsed && parsed.details !== null && typeof parsed.details === 'object'
+					? (parsed.details as Record<string, unknown>)
+					: undefined;
+			const details = rawDetails
+				? Object.fromEntries(
+						Object.entries(rawDetails).filter(
+							(entry): entry is [string, string] => typeof entry[1] === 'string'
+						)
+					)
+				: undefined;
+			return { message, details: details && Object.keys(details).length > 0 ? details : undefined, text };
+		}
+	} catch {
+		// Not JSON -- most endpoints still write plain text (see api.ts).
+	}
+	return { text };
+}
+
+/*
  * Reads a refused response into one message.
  *
  * A 4xx is the server saying something true about *this* submission --
  * that address is already invited, that Invitation has expired -- and it
  * is the only thing that knows, so its own words are shown. A 5xx or an
- * unreadable body is ours, and says so instead.
- *
- * The BFF has no per-field shape to read: `docs/api-design.md` section 7
- * defines `APIError.details` as a field-keyed map, and exactly one
- * package (`website`) writes it. Everything else returns one string or
- * plain text, so a per-field summary from a server refusal cannot be
- * built today without parsing prose. Tracked as its own API ticket
- * rather than guessed at here -- see the resolution comment on #467.
+ * unreadable body is ours, and says so instead. Ignores `details` even
+ * where the BFF sends it: a single sentence is what a `Notice` needs,
+ * and picking one entry out of several field refusals would show less
+ * than the server said. `refusalErrors` is where `details` is read.
  */
 export async function refusalMessage(response: Response): Promise<string> {
-	if (response.status >= 500) return SERVICE_PROBLEM;
+	const parsed = await parseRefusal(response);
+	if (parsed === undefined) return SERVICE_PROBLEM;
+	return parsed.message ?? parsed.text;
+}
 
-	const text = await response.text();
-	if (text.trim() === '') return SERVICE_PROBLEM;
+/*
+ * Reads a refused response into the list `ErrorSummary` wants.
+ *
+ * Where the BFF names fields (`APIError.details`, docs/api-design.md
+ * section 7), each one becomes its own entry, mapped through fieldIds
+ * onto the control it is about -- a key with no entry in fieldIds still
+ * reports its message, just with no link, the same way `authRefusal`
+ * leaves a whole-submission refusal untargeted. Most endpoints don't
+ * populate `details` yet (tracked on #488), so most callers see the same
+ * single untargeted entry `refusalMessage` would have shown; a route
+ * that passes fieldIds keeps working once its endpoint catches up,
+ * with no further change on the client.
+ */
+export async function refusalErrors(
+	response: Response,
+	fieldIds: Record<string, string> = {}
+): Promise<FormError[]> {
+	const parsed = await parseRefusal(response);
+	if (parsed === undefined) return [{ message: SERVICE_PROBLEM }];
 
-	try {
-		const parsed: unknown = JSON.parse(text);
-		if (
-			parsed !== null &&
-			typeof parsed === 'object' &&
-			'message' in parsed &&
-			typeof parsed.message === 'string'
-		) {
-			return parsed.message;
-		}
-	} catch {
-		// Not JSON -- most endpoints still write plain text (see api.ts).
+	if (parsed.details) {
+		return Object.entries(parsed.details).map(([field, message]) => ({
+			message,
+			targetId: fieldIds[field]
+		}));
 	}
-	return text;
+	return [{ message: parsed.message ?? parsed.text }];
 }
 
 /*

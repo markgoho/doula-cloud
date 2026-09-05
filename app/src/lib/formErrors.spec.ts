@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { authRefusal, refusalMessage, SERVICE_PROBLEM } from './formErrors.js';
+import { authRefusal, refusalErrors, refusalMessage, SERVICE_PROBLEM } from './formErrors.js';
 import { jsonResponse } from './testResponse.js';
 
 const FIELDS = { emailId: 'email', passwordId: 'password' };
@@ -148,5 +148,72 @@ describe('refusalMessage', () => {
 		expect(await refusalMessage(jsonResponse({ code: 'INVALID_ARGUMENT' }, 400))).toBe(
 			'{"code":"INVALID_ARGUMENT"}'
 		);
+	});
+});
+
+/*
+ * #488's half of #467's own gap: `details` is a field-keyed map
+ * (docs/api-design.md section 7), so a refusal that names fields maps
+ * each one onto the route's own control id -- an unmapped key still
+ * reports its message, just with no link to send the reader to.
+ */
+describe('refusalErrors', () => {
+	const FIELD_IDS = { inviteToken: 'invite-token-field' };
+
+	it('reads one FormError per details entry, targeted at the route’s control', async () => {
+		const errors = await refusalErrors(
+			jsonResponse(
+				{ code: 'INVALID_ARGUMENT', message: 'invalid request body', details: { inviteToken: 'Enter the invitation link you were sent' } },
+				400
+			),
+			FIELD_IDS
+		);
+
+		expect(errors).toEqual([
+			{ message: 'Enter the invitation link you were sent', targetId: 'invite-token-field' }
+		]);
+	});
+
+	it('leaves a details key with no matching control untargeted rather than dropping it', async () => {
+		const errors = await refusalErrors(
+			jsonResponse({ code: 'INVALID_ARGUMENT', message: 'refused', details: { someUnmappedField: 'Enter a value' } }, 400),
+			FIELD_IDS
+		);
+
+		expect(errors).toEqual([{ message: 'Enter a value', targetId: undefined }]);
+	});
+
+	it('falls back to one untargeted entry when there is no details', async () => {
+		const errors = await refusalErrors(jsonResponse('That address is already invited', 409));
+
+		expect(errors).toEqual([{ message: 'That address is already invited' }]);
+	});
+
+	it('falls back to one untargeted entry when details is empty', async () => {
+		const errors = await refusalErrors(
+			jsonResponse({ code: 'INVALID_ARGUMENT', message: 'refused', details: {} }, 400)
+		);
+
+		expect(errors).toEqual([{ message: 'refused' }]);
+	});
+
+	it('reports the service problem as one untargeted entry for a 5xx', async () => {
+		const errors = await refusalErrors(jsonResponse('sql: no rows in result set', 500));
+
+		expect(errors).toEqual([{ message: SERVICE_PROBLEM }]);
+	});
+
+	it('reports the service problem as one untargeted entry for an empty body', async () => {
+		const errors = await refusalErrors(jsonResponse('', 403));
+
+		expect(errors).toEqual([{ message: SERVICE_PROBLEM }]);
+	});
+
+	it('defaults fieldIds to empty when the caller has no fields to target', async () => {
+		const errors = await refusalErrors(
+			jsonResponse({ code: 'INVALID_ARGUMENT', message: 'refused', details: { email: 'Enter an email address' } }, 400)
+		);
+
+		expect(errors).toEqual([{ message: 'Enter an email address', targetId: undefined }]);
 	});
 });

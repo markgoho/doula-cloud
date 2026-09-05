@@ -12,7 +12,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import { authRefusal, refusalMessage, type FormError } from '#lib/formErrors.js';
+	import { authRefusal, refusalErrors, type FormError } from '#lib/formErrors.js';
 
 	const emailId = 'login-email';
 	const passwordId = 'login-password';
@@ -116,7 +116,7 @@
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {
-				errors = [{ message: await refusalMessage(exchangeResponse) }];
+				errors = await refusalErrors(exchangeResponse);
 				await signOut(getFirebaseAuth());
 				return;
 			}
@@ -140,7 +140,7 @@
 						return;
 					}
 				}
-				errors = [{ message: await refusalMessage(response) }];
+				errors = await refusalErrors(response);
 				return;
 			}
 
