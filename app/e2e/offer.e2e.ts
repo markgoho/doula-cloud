@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
-import { signIn } from './auth';
 import { seedEngagement } from './stack';
+import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -21,7 +21,8 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // deliberately mailed and never returned by the API).
 test('Owner offers an Engagement to a Doula, who accepts it from her own inbox', async ({
 	page,
-	request
+	request,
+	context
 }) => {
 	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
@@ -33,7 +34,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
@@ -43,7 +44,10 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId, staffId } = JSON.parse(signupBody);
 
-	const headers = await signIn(request, API_URL, idToken);
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment), including the
+	// membership and createClient calls right below.
+	const headers = await signInEnrolled(request, idToken, localId);
 
 	// She does the work as well as running the practice, and as a
 	// contractor -- which is what makes the fee required.
@@ -65,10 +69,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await enterPracticeAsEnrolled(context, page, headers, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);

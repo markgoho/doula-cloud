@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -8,7 +9,7 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // billing.ts has its own Vitest coverage, but this is the only test that renders the actual route
 // and hits the real API, proving the signup-bonus grant (#74) surfaces through GetBalanceHandler
 // (#75) and the page.
-test('Staff member can view the signup-bonus balance and ledger history', async ({ page, request }) => {
+test('Staff member can view the signup-bonus balance and ledger history', async ({ page, request, context }) => {
 	const email = `billing-${Date.now()}@example.com`;
 	const password = 'password123';
 
@@ -17,7 +18,7 @@ test('Staff member can view the signup-bonus balance and ledger history', async 
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok()).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
@@ -27,10 +28,10 @@ test('Staff member can view the signup-bonus balance and ledger history', async 
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment).
+	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.getByRole('link', { name: 'Billing' }).click();

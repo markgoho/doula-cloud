@@ -19,7 +19,8 @@ export const session: SessionInfo = {
 	name: 'Anne-Marie Ochieng-Whitfield',
 	email: 'anne-marie@example.test',
 	workState: 'NY',
-	workStateReportedAt: '2026-01-01T00:00:00Z'
+	workStateReportedAt: '2026-01-01T00:00:00Z',
+	secondFactor: false
 };
 
 export const fixture: RouteFixture = {

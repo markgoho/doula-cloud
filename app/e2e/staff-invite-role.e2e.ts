@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { readStaffInviteToken } from './stack';
+import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -13,7 +14,11 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // that bundle -- a Doula invited and accepted through the real invite
 // route -- and the one spec that asserts a role refusal (a 403 where a
 // role rule says there must be one), rather than only success paths.
-test('A Doula invited via the Staff invite route is refused an Owner-only action', async ({ page, request }) => {
+test('A Doula invited via the Staff invite route is refused an Owner-only action', async ({
+	page,
+	request,
+	context
+}) => {
 	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
 	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -28,7 +33,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 		{ data: { email: ownerEmail, password, returnSecureToken: true } }
 	);
 	expect(ownerSignUp.ok(), `ownerSignUp failed: ${ownerSignUp.status()} ${await ownerSignUp.text()}`).toBe(true);
-	const { idToken: ownerIdToken } = await ownerSignUp.json();
+	const { idToken: ownerIdToken, localId: ownerUID } = await ownerSignUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${ownerIdToken}` },
@@ -38,14 +43,15 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment).
+	//
 	// The invite send is walked through the real screen (#189's "Invite a
 	// Staff member" route, otherwise untouched by the suite): the default
 	// role selection is 'doula' alone, which is the non-Owner bundle this
 	// spec needs.
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(ownerEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	const ownerHeaders = await signInEnrolled(request, ownerIdToken, ownerUID);
+	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/invite`);

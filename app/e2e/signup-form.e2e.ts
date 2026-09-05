@@ -4,7 +4,14 @@ import { expect, test } from '@playwright/test';
 // POST /api/staff/signup directly (fixture setup is not automation, #207) --
 // this is the one spec that drives the /signup screen itself, so the form
 // under the whole suite is exercised at least once.
-test('Signing up through the /signup form creates a Practice and lands on it', async ({ page }) => {
+//
+// #606: the Practice this creates has a brand-new Owner with no second
+// factor enrolled at all, and an Owner is gated behind one at every
+// Practice-scoped route (staffauth.Middleware) -- so signup drives her
+// into MFA enrolment rather than landing her on the Practice it just
+// created. The IndexedDB/cookie checks below are about the signup
+// exchange itself, not about which screen she lands on afterward.
+test('Signing up through the /signup form drives the new Owner into MFA enrolment', async ({ page }) => {
 	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
 	const email = `signup-form-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -18,8 +25,7 @@ test('Signing up through the /signup form creates a Practice and lands on it', a
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Create Practice' }).click();
 
-	await expect(page).toHaveURL(/\/practices\/[^/]+$/);
-	await expect(page.locator('h1')).toHaveText('Welcome to Riverside Doulas');
+	await expect(page).toHaveURL(/\/mfa\/enroll\?returnTo=%2Fpractices%2F[^&]+$/);
 
 	// #149: the app exchanges the ID token for the session cookie and signs
 	// out of the Firebase JS SDK locally -- a lingering credential would show

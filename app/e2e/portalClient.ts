@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn, sessionCookieFrom } from './auth';
+import { enrollSecondFactor, verifyEmail } from './mfa';
 import { seedClientPortalUser, seedEngagement, readStaffInviteToken } from './stack';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
@@ -69,7 +70,14 @@ export async function seedClient(
 
 export interface SeededContractorDoula {
 	staffId: string;
+	identityUID: string;
 	email: string;
+	// The idToken accept-invite verified, from before any second factor
+	// exists -- #606's e2e specs (mfa-required.e2e.ts) need it to drive
+	// mfa.ts's enrollSecondFactor and get a fresh, claim-carrying token
+	// for the same identity, without this fixture minting a signup it
+	// doesn't otherwise need.
+	idToken: string;
 	headers: { Cookie: string };
 }
 
@@ -118,7 +126,7 @@ export async function seedContractorDoula(
 		signUp.ok(),
 		`contractor doula signUp failed: ${signUp.status()} ${await signUp.text()}`
 	).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId: identityUID } = await signUp.json();
 
 	// AcceptInviteHandler runs before any session exists (a bootstrap
 	// Bearer token, not the __session cookie) and mints the session on
@@ -133,7 +141,7 @@ export async function seedContractorDoula(
 
 	const headers = sessionCookieFrom(accept, 'accept-invite');
 
-	return { staffId, email, headers };
+	return { staffId, identityUID, email, idToken, headers };
 }
 
 /**
@@ -163,7 +171,17 @@ export async function seedPortalClient(
 		{ data: { email: staffEmail, password: PORTAL_CLIENT_PASSWORD, returnSecureToken: true } }
 	);
 	expect(staffSignUp.ok(), `staffSignUp failed: ${staffSignUp.status()} ${await staffSignUp.text()}`).toBe(true);
-	const { idToken: staffIdToken } = await staffSignUp.json();
+	const { idToken: rawIdToken, localId: staffUID } = await staffSignUp.json();
+
+	// #606: every Practice-scoped call this fixture and its callers go on
+	// to make -- including the createClient call right below -- runs
+	// behind staffauth.Middleware, which refuses an Owner with no second
+	// factor regardless of the Practice's own require_mfa_for_all_staff
+	// switch. Enrolled here, once, the same way mfa-required.e2e.ts's own
+	// fixtures are, rather than leaving every one of this helper's six
+	// callers to rediscover the 403 on their own.
+	await verifyEmail(request, staffUID);
+	const staffIdToken = await enrollSecondFactor(request, rawIdToken);
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${staffIdToken}` },

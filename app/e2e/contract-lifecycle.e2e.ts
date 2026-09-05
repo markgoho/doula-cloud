@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { seedPortalClient, PORTAL_CLIENT_PASSWORD } from './portalClient';
+import { enterPracticeAsEnrolled } from './mfa';
 
 // Contract signing became testable at #234, which put a fake-gcs-server in
 // compose.e2e.yaml -- before that the object store made signing 500. This is
@@ -13,17 +14,18 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	// Fixture setup, not the seam under test: provisions a Practice, a Staff
 	// Owner, a Client + Engagement, and a Client-portal account, exactly as
 	// client-portal-login.e2e.ts does.
-	const { practiceId, engagementId, staffEmail, clientEmail } = await seedPortalClient(
+	const { practiceId, engagementId, staffHeaders, clientEmail } = await seedPortalClient(
 		page.request,
 		'Riverside Doulas'
 	);
 
+	// #606: seedPortalClient's Owner is already enrolled (portalClient.ts),
+	// so entering her Practice is a cookie injection rather than the plain
+	// /login form -- see mfa.ts's enterPracticeAsEnrolled doc comment.
+	//
 	// The Practice side: build and send, walked through the real Engagement
 	// screen.
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(staffEmail);
-	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await enterPracticeAsEnrolled(page.context(), page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);

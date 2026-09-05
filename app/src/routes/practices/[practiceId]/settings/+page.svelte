@@ -11,13 +11,31 @@
 	 * a settings design. What each screen is called and how the group is
 	 * ordered belongs to whoever builds archetype F.
 	 */
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 
 	const practiceId = $derived(page.params.practiceId!);
+
+	// Multi-factor authentication (#606) is the first Owner-only entry
+	// this hub has ever needed to hide: its screen reads an Owner-only
+	// endpoint, so a Doula or Admin who followed the link would only meet
+	// a 403. The role comes from the same `/session` read payments' and
+	// website's own settings screens already use for the same gate.
+	let roles = $state<string[]>([]);
+	let isOwner = $derived(roles.includes('owner'));
+
+	onMount(async () => {
+		const response = await apiFetchWithSession(`/api/practices/${practiceId}/session`);
+		if (response.ok) {
+			const body: { roles: string[] } = await response.json();
+			roles = body.roles;
+		}
+	});
 
 	const settings = $derived([
 		{
@@ -44,7 +62,16 @@
 			label: 'Contract Template',
 			description: 'The terms every Contract is written from.',
 			href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId })
-		}
+		},
+		...(isOwner
+			? [
+					{
+						label: 'Multi-factor authentication',
+						description: 'Whether every Staff member must use a second factor to sign in, not only Owners.',
+						href: resolve('/practices/[practiceId]/settings/mfa', { practiceId })
+					}
+				]
+			: [])
 	]);
 </script>
 
@@ -61,10 +88,11 @@
 
 {#snippet empty()}
 	<!--
-		Unreachable in practice: the list is a fixed four, not a query. The
-		region is required by OverviewHub on purpose (#422), and a Template
-		that cannot be instantiated without an empty state is what makes the
-		first-run case impossible to forget.
+		Unreachable in practice: the list is fixed content gated only by
+		role (#606), not a query. The region is required by OverviewHub on
+		purpose (#422), and a Template that cannot be instantiated without
+		an empty state is what makes the first-run case impossible to
+		forget.
 	-->
 	<Text text="This Practice has no settings screens." />
 {/snippet}

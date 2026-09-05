@@ -25,13 +25,18 @@ describe('apiFetchWithSession', () => {
 	}
 
 	function setup({ status = 200, pathname = '/practices/prac-1' }: SetupOptions = {}) {
-		goto.mockClear();
+		// mockReset, not mockClear: a prior test in this block can leave a
+		// pending-promise implementation behind (the concurrent-refusal test
+		// below controls goto's own resolution), which would otherwise hang
+		// the next test that never awaits it explicitly.
+		goto.mockReset();
 		signOut.mockClear();
 		signOut.mockImplementation(async () => {});
 		const fetchMock = vi.fn(async () => new Response(undefined, { status }));
 		vi.stubGlobal('fetch', fetchMock);
-		vi.stubGlobal('location', { pathname });
-		return { fetchMock };
+		const location = { pathname };
+		vi.stubGlobal('location', location);
+		return { fetchMock, location };
 	}
 
 	afterEach(() => {
@@ -83,6 +88,120 @@ describe('apiFetchWithSession', () => {
 		await apiFetchWithSession('/api/portal/engagements/eng-1/session');
 
 		expect(goto).toHaveBeenCalledWith('/portal/login?sessionEnded=true');
+	});
+
+	/*
+	 * #606: a 403 carrying `{code: "MFA_REQUIRED"}` is a live, valid
+	 * session that may not enter this Practice -- not an ended session, so
+	 * it never touches `signOut` -- and it routes to enrolment rather than
+	 * to a login screen.
+	 */
+	it('routes a 403 carrying MFA_REQUIRED to enrolment, carrying returnTo', async () => {
+		setup({ pathname: '/practices/prac-1/invoices' });
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
+		);
+
+		await apiFetchWithSession('/api/practices/prac-1/invoices');
+
+		expect(goto).toHaveBeenCalledWith('/mfa/enroll?returnTo=%2Fpractices%2Fprac-1%2Finvoices');
+		expect(signOut).not.toHaveBeenCalled();
+	});
+
+	it('leaves every other 403 alone -- a role or Membership refusal is not this ticket’s', async () => {
+		setup();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ code: 'FORBIDDEN' }, { status: 403 }))
+		);
+
+		const response = await apiFetchWithSession('/api/practices/prac-1/invoices');
+
+		expect(goto).not.toHaveBeenCalled();
+		expect(response.status).toBe(403);
+	});
+
+	it('reads a 403 with no JSON body as anything other than MFA_REQUIRED', async () => {
+		setup();
+		vi.stubGlobal('fetch', vi.fn(async () => new Response('only an Owner can do that', { status: 403 })));
+
+		await apiFetchWithSession('/api/practices/prac-1/invoices');
+
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	/*
+	 * practices/+layout.svelte and the practice landing page each fire
+	 * several of these calls on one navigation -- confirmed as a real e2e
+	 * failure, not a theoretical one: a second refusal's own redirect read
+	 * location.pathname after the first had already landed on /mfa/enroll,
+	 * clobbering returnTo with that path instead of the Practice she was
+	 * trying to reach.
+	 */
+	it('lets a second concurrent MFA_REQUIRED refusal fall through instead of re-redirecting', async () => {
+		setup({ pathname: '/practices/prac-1' });
+		let resolveGoto!: () => void;
+		goto.mockImplementation(() => new Promise<void>((resolve) => (resolveGoto = resolve)));
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
+		);
+
+		const first = apiFetchWithSession('/api/practices/prac-1/session');
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledTimes(1));
+
+		// Fired while the first redirect is still in flight -- exactly the
+		// concurrent-call shape the race needs.
+		const second = await apiFetchWithSession('/api/practices/prac-1/invoices');
+
+		expect(goto).toHaveBeenCalledTimes(1);
+		expect(goto).toHaveBeenCalledWith('/mfa/enroll?returnTo=%2Fpractices%2Fprac-1');
+		expect(second.status).toBe(403);
+
+		resolveGoto();
+		await first;
+	});
+
+	/*
+	 * The actual shape of the e2e failure: practices/[practiceId]/+page.svelte's
+	 * onMount awaits three such calls one after another, not concurrently --
+	 * `redirecting` alone resets as soon as the first goto's own promise
+	 * settles, which is *before* the later, sequential calls in that same
+	 * onMount discover their own refusal. By then location.pathname already
+	 * reads /mfa/enroll, so the later call must recognise it is already
+	 * there rather than reading that as the destination to send returnTo to.
+	 */
+	it('lets a later, sequential MFA_REQUIRED refusal fall through once an earlier one has already landed on /mfa/enroll', async () => {
+		const { location } = setup({ pathname: '/practices/prac-1' });
+		goto.mockImplementation(async () => {
+			location.pathname = '/mfa/enroll';
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
+		);
+
+		const first = await apiFetchWithSession('/api/practices/prac-1/session');
+		const second = await apiFetchWithSession('/api/practices/prac-1/invoices');
+
+		expect(goto).toHaveBeenCalledTimes(1);
+		expect(goto).toHaveBeenCalledWith('/mfa/enroll?returnTo=%2Fpractices%2Fprac-1');
+		expect(first.status).toBe(403);
+		expect(second.status).toBe(403);
+	});
+
+	it('redirects again on a later, unrelated refusal once the first redirect has finished', async () => {
+		setup({ pathname: '/practices/prac-1' });
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
+		);
+
+		await apiFetchWithSession('/api/practices/prac-1/session');
+		await apiFetchWithSession('/api/practices/prac-1/session');
+
+		expect(goto).toHaveBeenCalledTimes(2);
 	});
 });
 

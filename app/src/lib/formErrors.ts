@@ -183,6 +183,61 @@ export function authRefusal(
 }
 
 /*
+ * Identity Platform's refusal for the password re-entry step MFA
+ * enrolment and removal both use (#606) -- a step-up reauthentication,
+ * not the original sign-in, so there is no email field to blame and no
+ * account-enumeration concern (she is already signed in as herself).
+ */
+export function passwordReauthRefusal(cause: unknown, passwordId: string): FormError {
+	const code = authErrorCode(cause);
+	switch (code) {
+		case 'auth/invalid-credential':
+		case 'auth/wrong-password': {
+			return { message: 'Password is not correct', targetId: passwordId };
+		}
+		case 'auth/too-many-requests': {
+			return { message: 'Too many attempts from this device. Wait a few minutes and try again.' };
+		}
+		case 'auth/network-request-failed': {
+			return { message: 'We could not reach the service. Check your connection and try again.' };
+		}
+		default: {
+			return { message: SERVICE_PROBLEM };
+		}
+	}
+}
+
+/*
+ * A wrong or expired TOTP code, at either the enrolment step (confirming
+ * a freshly scanned authenticator) or the sign-in challenge (#606's AC:
+ * "fails as a sign-in failure ... not an app error"). TOTP has no
+ * separate "expired" code the way SMS does (`auth/code-expired`) -- a
+ * stale code from an app whose clock has drifted, or one entered a
+ * window too late, both come back as `auth/invalid-verification-code`,
+ * so one message covers both.
+ */
+export function totpCodeRefusal(cause: unknown, codeId: string): FormError {
+	const code = authErrorCode(cause);
+	switch (code) {
+		case 'auth/invalid-verification-code': {
+			return {
+				message: 'The code is not correct. Enter the 6-digit code from your authenticator app.',
+				targetId: codeId
+			};
+		}
+		case 'auth/too-many-requests': {
+			return { message: 'Too many attempts from this device. Wait a few minutes and try again.' };
+		}
+		case 'auth/network-request-failed': {
+			return { message: 'We could not reach the service. Check your connection and try again.' };
+		}
+		default: {
+			return { message: SERVICE_PROBLEM };
+		}
+	}
+}
+
+/*
  * Whether Identity Platform refused this because the address already has
  * an account.
  *
@@ -195,6 +250,24 @@ export function authRefusal(
  */
 export function isEmailAlreadyInUse(cause: unknown): boolean {
 	return authErrorCode(cause) === 'auth/email-already-in-use';
+}
+
+/*
+ * Whether Identity Platform is waiting on a second factor to finish a
+ * sign-in (#606) -- what `signInWithEmailAndPassword` throws for an
+ * enrolled person, before any ID token exists. It is not a refusal, so
+ * it carries no message; the login screen's only use for it is deciding
+ * whether to open the TOTP challenge step in place of showing one.
+ *
+ * Lives here rather than being written inline where it is read: the
+ * literal `'auth/multi-factor-auth-required'` is Identity Platform's own
+ * identifier, the same category `authErrorCode`'s callers already read,
+ * and `formErrors.usage.spec.ts` excludes this file from its banned-word
+ * scan for exactly that reason -- an identifier containing "required" is
+ * not the user-facing word the scan exists to catch.
+ */
+export function isMultiFactorAuthRequired(cause: unknown): boolean {
+	return authErrorCode(cause) === 'auth/multi-factor-auth-required';
 }
 
 function authErrorCode(cause: unknown): string {

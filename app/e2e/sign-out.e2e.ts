@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -8,7 +9,8 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 test('a Staff member signs out and can no longer reach an authenticated screen', async ({
 	page,
-	request
+	request,
+	context
 }) => {
 	// The random suffix (not just Date.now(), millisecond-resolution) avoids
 	// EMAIL_EXISTS collisions with other *.e2e.ts files' own staff-<ts>@
@@ -24,7 +26,7 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
@@ -34,10 +36,10 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment).
+	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// The control is in the Staff authenticated layout, so it is on this
@@ -72,7 +74,7 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 // tab signs out against a session the first already ended. It must land
 // on the login screen like any other sign-out, not report an error --
 // the end-session endpoint is idempotent.
-test('a second tab signing out after the first shows no error', async ({ page, request }) => {
+test('a second tab signing out after the first shows no error', async ({ page, request, context }) => {
 	const email = `signout-twice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
 
@@ -81,7 +83,7 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
@@ -91,10 +93,10 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment).
+	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// A second tab on the same browser context, so it carries the same
@@ -122,7 +124,8 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 // session, because both tabs carry the same __session cookie.
 test('a second tab loses access once the first tab signs out, without itself signing out', async ({
 	page,
-	request
+	request,
+	context
 }) => {
 	const email = `signout-second-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';
@@ -132,7 +135,7 @@ test('a second tab loses access once the first tab signs out, without itself sig
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
@@ -142,10 +145,10 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment).
+	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	const secondTab = await page.context().newPage();

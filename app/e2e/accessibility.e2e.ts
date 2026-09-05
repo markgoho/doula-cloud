@@ -8,6 +8,7 @@ import {
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest } from './stack';
+import { enterPracticeAsEnrolled } from './mfa';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -138,7 +139,7 @@ test('Archetype A -- the screens a person meets signed out', async ({ page }) =>
 // once and looped rather than a test per route: signup + login is ~4s of
 // the same work every time, and none of these scans depends on any other
 // having run.
-test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => {
+test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request, context }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId, staffId, engagementId } = seeded;
 
@@ -176,10 +177,10 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request }) => 
 	});
 	const pendingRequestId = seedEngagementRequest(pendingRequestClientId, practiceId, staffId);
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(seeded.staffEmail);
-	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// #606: seedPortalClient's Owner is already enrolled (portalClient.ts),
+	// so entering her Practice is a cookie injection rather than the plain
+	// /login form -- see mfa.ts's enterPracticeAsEnrolled doc comment.
+	await enterPracticeAsEnrolled(context, page, seeded.staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	const routes: Route[] = [

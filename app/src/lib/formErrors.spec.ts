@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { authRefusal, refusalErrors, refusalMessage, SERVICE_PROBLEM } from './formErrors.js';
+import {
+	authRefusal,
+	isMultiFactorAuthRequired,
+	passwordReauthRefusal,
+	refusalErrors,
+	refusalMessage,
+	SERVICE_PROBLEM,
+	totpCodeRefusal
+} from './formErrors.js';
 import { jsonResponse } from './testResponse.js';
 
 const FIELDS = { emailId: 'email', passwordId: 'password' };
@@ -106,6 +114,88 @@ describe('authRefusal', () => {
 	it('never writes a banned word in the service message', () => {
 		expect(BANNED.test(SERVICE_PROBLEM)).toBe(false);
 	});
+});
+
+describe('passwordReauthRefusal', () => {
+	const passwordId = 'password';
+
+	it.each(['auth/invalid-credential', 'auth/wrong-password'])(
+		'sends %s to the password field',
+		(code) => {
+			const refusal = passwordReauthRefusal({ code }, passwordId);
+
+			expect(refusal.message).toBe('Password is not correct');
+			expect(refusal.targetId).toBe(passwordId);
+		}
+	);
+
+	// Rate limiting and a dead connection are both true of the attempt
+	// rather than of the password itself, so neither points at the field.
+	it.each(['auth/too-many-requests', 'auth/network-request-failed'])(
+		'names no field for %s',
+		(code) => {
+			expect(passwordReauthRefusal({ code }, passwordId).targetId).toBeUndefined();
+		}
+	);
+
+	it('falls back to the service message for a code it has never seen', () => {
+		expect(passwordReauthRefusal({ code: 'auth/brand-new' }, passwordId).message).toBe(
+			SERVICE_PROBLEM
+		);
+	});
+
+	it('never writes a banned word, whatever the code', () => {
+		const offences = [...EVERY_CODE, 'auth/brand-new']
+			.map((code) => passwordReauthRefusal({ code }, passwordId).message)
+			.filter((message) => BANNED.test(message));
+
+		expect(offences).toEqual([]);
+	});
+});
+
+describe('totpCodeRefusal', () => {
+	const codeId = 'code';
+
+	it('sends a wrong or expired code to the code field', () => {
+		const refusal = totpCodeRefusal({ code: 'auth/invalid-verification-code' }, codeId);
+
+		expect(refusal.message).toBe(
+			'The code is not correct. Enter the 6-digit code from your authenticator app.'
+		);
+		expect(refusal.targetId).toBe(codeId);
+	});
+
+	it.each(['auth/too-many-requests', 'auth/network-request-failed'])(
+		'names no field for %s',
+		(code) => {
+			expect(totpCodeRefusal({ code }, codeId).targetId).toBeUndefined();
+		}
+	);
+
+	it('falls back to the service message for a code it has never seen', () => {
+		expect(totpCodeRefusal({ code: 'auth/brand-new' }, codeId).message).toBe(SERVICE_PROBLEM);
+	});
+
+	it('never writes a banned word, whatever the code', () => {
+		const offences = [...EVERY_CODE, 'auth/brand-new']
+			.map((code) => totpCodeRefusal({ code }, codeId).message)
+			.filter((message) => BANNED.test(message));
+
+		expect(offences).toEqual([]);
+	});
+});
+
+describe('isMultiFactorAuthRequired', () => {
+	it('recognizes Identity Platform’s own code for a second-factor challenge', () => {
+		expect(isMultiFactorAuthRequired({ code: 'auth/multi-factor-auth-required' })).toBe(true);
+	});
+
+	it.each([[undefined], ['a string'], [new Error('boom')], [{ code: 'auth/wrong-password' }]])(
+		'reads %s as anything else',
+		(cause) => {
+			expect(isMultiFactorAuthRequired(cause)).toBe(false);
+		}
+	);
 });
 
 describe('refusalMessage', () => {

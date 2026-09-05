@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
-import { signIn } from './auth';
 import { seedClientPortalUser, seedEngagement } from './stack';
+import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 
 // Exercises #65's critical path: Staff fills out a Birth Plan for an
 // Engagement (through the real staff-side UI from #64), then the Client
@@ -14,7 +14,8 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 test('Staff fills a Birth Plan, and the Client portal shows the matching read-only view', async ({
 	page,
-	request
+	request,
+	context
 }) => {
 	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
@@ -27,7 +28,7 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 		{ data: { email: staffEmail, password, returnSecureToken: true } }
 	);
 	expect(staffSignUp.ok(), `staffSignUp failed: ${staffSignUp.status()} ${await staffSignUp.text()}`).toBe(true);
-	const { idToken: staffIdToken } = await staffSignUp.json();
+	const { idToken: staffIdToken, localId: staffUID } = await staffSignUp.json();
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${staffIdToken}` },
@@ -37,8 +38,10 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId } = JSON.parse(signupBody);
 
-	// Everything after signup is cookie-authenticated (#151).
-	const staffHeaders = await signIn(request, API_URL, staffIdToken);
+	// #606: an Owner is gated behind a second factor at every Practice-scoped
+	// route (see mfa.ts's signInEnrolled doc comment), including the
+	// createClient call right below.
+	const staffHeaders = await signInEnrolled(request, staffIdToken, staffUID);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
@@ -51,12 +54,9 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
 
-	// Staff side: log in, create the Birth Plan (signup seeds a default
-	// template per Practice per #63), fill one field, and save.
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(staffEmail);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	// Staff side: create the Birth Plan (signup seeds a default template
+	// per Practice per #63), fill one field, and save.
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// The Clients list no longer links each row to an Engagement (#397 --
