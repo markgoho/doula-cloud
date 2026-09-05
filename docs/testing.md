@@ -269,5 +269,5 @@ onboarding, real `invoice.paid` — is a local, by-hand job. `bun run
 dev:full` picks up `app/.env.local`, and `bash scripts/stripe-listen.sh`
 forwards Stripe's events to the local BFF beside it. Everything about
 that setup, including which variable holds what in each environment, is
-in [docs/environment.md](environment.md). First-time setup is `bash
-scripts/stripe-setup.sh`.
+in [docs/environment.md](environment.md). First-time setup is copying
+`app/.env.example` and filling it in by hand.

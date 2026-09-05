@@ -545,9 +545,10 @@ jobs:
           # service also carries APP_BASE_URL and STRIPE_CREDIT_PRICE_ID as
           # env vars, plus STRIPE_API_KEY / STRIPE_WEBHOOK_SECRET /
           # STRIPE_CONNECT_WEBHOOK_SECRET as Secret Manager references --
-          # all set out of band by scripts/stripe-setup.sh, because naming
-          # them here would make a green deploy depend on secrets that only
-          # exist once a human has run that wizard (docs/environment.md).
+          # all set out of band with `gcloud run services update`, because
+          # naming them here would make a green deploy depend on secrets
+          # that only exist once a human has created them
+          # (docs/environment.md).
           # `secrets` merges by default too, so DATABASE_URL above does not
           # displace them either. An unqualified env_vars would wipe the
           # env-var half on the next push.
