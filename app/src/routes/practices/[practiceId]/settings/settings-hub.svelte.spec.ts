@@ -43,6 +43,28 @@ describe('the Settings hub', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Multi-factor authentication' }))
 			.not.toBeInTheDocument();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Blocked email addresses' }))
+			.not.toBeInTheDocument();
+	});
+
+	/*
+	 * #744: the two gated entries are gated differently. An Admin runs the
+	 * work -- an address that bounced can receive neither the invite, the
+	 * Contract nor the payment notice until somebody lifts it -- while who
+	 * is at the Practice at all stays the Owner's.
+	 */
+	it('gives an Admin the blocked-addresses entry but not the Owner-only MFA one', async () => {
+		await setup(['admin']);
+
+		const link = testPage.getByRole('link', { name: 'Blocked email addresses' });
+		await expect.element(link).toBeVisible();
+		await expect
+			.element(link)
+			.toHaveAttribute('href', '/practices/practice-1/settings/blocked-addresses');
+		await expect
+			.element(testPage.getByRole('link', { name: 'Multi-factor authentication' }))
+			.not.toBeInTheDocument();
 	});
 
 	it("adds the Owner-only MFA entry, linking to the switch's own screen", async () => {
@@ -50,6 +72,9 @@ describe('the Settings hub', () => {
 
 		const link = testPage.getByRole('link', { name: 'Multi-factor authentication' });
 		await expect.element(link).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Blocked email addresses' }))
+			.toBeVisible();
 		await expect
 			.element(link)
 			.toHaveAttribute('href', '/practices/practice-1/settings/mfa');
