@@ -49,6 +49,8 @@ So this file states the line at the act rather than at the person, which is a re
 
 An Extra's **door** acts — her Invitation, her acceptance, an Offer to her, her answer — go through the UI without exception, because those are the paths that produce a role-limited Doula or a contractor Attachment at all, and no other route creates one. An Extra's **routine** acts — the intake calls she takes, the Visits she logs for a Client nobody in the log is reading — are provisioned, along with the Clients they belong to. An Engagement Request for a provisioned Client is itself provisioned; only Requests for walked Clients are walked.
 
+One exception, and the World wrote it rather than this file: every Extra has **one stated reason to open the app**, and that one reason is walked. Joss Adeyemi opens it to see who is on call tonight; Rowan Petrosyan opens the list that is the longest in the Practice; Charlene Boateng notices a Contract has not come back; Delia Marchetti opens it under protest and does no admin at all. Eleven Extras, one visit each, about eleven acts — and it is what licenses timing Rowan's list in month 6, which is a reading no Persona's own list can give because no Persona carries seven Clients.
+
 The run README states how many Clients, Requests and Invoices were provisioned rather than walked, so no later reader mistakes one for the other.
 
 ## The book on day zero
@@ -108,7 +110,9 @@ Twenty-six weeks, Monday 4 January to Friday 2 July 2027, in simulated time. (Th
 
 ### Nadia Haddad's place in it
 
-**Run week 14**, mid-April. That is arithmetic, not a choice: she is 20 weeks at Okonkwo's day zero, Okonkwo's day zero is run week 3, and 31 weeks is eleven weeks later.
+**Run week 14**, mid-April. That is arithmetic on a reading, rather than a choice: she is 20 weeks at Okonkwo's day zero, Okonkwo's day zero is run week 3, and 31 weeks is eleven weeks later.
+
+The reading is worth naming, because a later session will otherwise re-derive it and think this is wrong. The World's Personas table gives every Persona's position "on day zero" in one column, and Maya's own row in that table is anchored to the run's first day — which read literally would put Nadia at 20 weeks in week 1 and the loss in week 11. The World also says, in its own words, that **day zero is a Practice's own**, and Nadia is Maya's Client, entering the product when Okonkwo does. That sentence governs, so week 14 it is. The two readings differ by three weeks and both fit the span; this file picks the one the World states as a rule over the one its table implies.
 
 Placing it there is what makes the rest of her journey walkable inside the span. Her eight stages then have twelve weeks: three weeks of not opening the portal (weeks 14–17), the portal read that is her moment of truth (week 17), the Birth Plan that will not go away (week 17), the Invoice and the word "voided" (week 18), postpartum support continuing anyway (weeks 17–22), and the record closing without erasing her (week 24). A loss placed any later pushes her Stage 8 past the end of the run, and Stage 8 is the one that asks whether `engagement_status` has anywhere to put her.
 
@@ -202,8 +206,9 @@ A world where every Client converts, every Invoice is paid and every doula stays
 | Ongoing Visits, Messages, Invoices and Payments on walked Engagements | 260 |
 | The sixteen failure modes | 120 |
 | Five named probes | 40 |
+| Eleven Extras, one stated reason to open the app each | 11 |
 | Sign-ins after the 32 jumps longer than 12 simulated hours | 90 |
-| **Total** | **≈ 1,526** |
+| **Total** | **≈ 1,537** |
 
 At roughly **30 seconds of agent wall-clock per act** — the Playwright interaction, the screenshot, the timing capture and the log entry — that is **twelve to thirteen hours**, plus about twenty minutes of jump overhead. A run is resumable, so that is sittings, not one sitting. Confirmed as acceptable on 2026-09-05.
 
