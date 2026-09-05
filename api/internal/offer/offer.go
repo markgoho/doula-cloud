@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -161,6 +162,6 @@ func writeJSON(w http.ResponseWriter, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	// coverage:ignore reason: response encoding failure, not exercised by unit tests
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 	}
 }

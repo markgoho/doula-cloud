@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -37,16 +38,16 @@ func PostVoidContractHandler() http.Handler {
 
 		id, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if status != statusSigned {
-			http.Error(w, "contract is not signed", http.StatusConflict)
+			apierr.WriteError(w, "contract is not signed", http.StatusConflict)
 			return
 		}
 
@@ -55,7 +56,7 @@ func PostVoidContractHandler() http.Handler {
 			statusVoided, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
@@ -68,7 +69,7 @@ func PostVoidContractHandler() http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -82,7 +83,7 @@ func PostVoidContractHandler() http.Handler {
 		}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

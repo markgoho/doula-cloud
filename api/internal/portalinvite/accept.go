@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/pgerr"
 )
@@ -45,18 +46,18 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 
 		var req AcceptInviteRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", "invalid request body")
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.InviteToken = strings.TrimSpace(req.InviteToken)
 		if req.InviteToken == "" {
-			writeAPIError(w, http.StatusBadRequest, "INVALID_ARGUMENT", "inviteToken is required")
+			apierr.WriteError(w, "inviteToken is required", http.StatusBadRequest)
 			return
 		}
 
 		resp, status, code, msg := acceptInvite(r, tx, verified.UID, req.InviteToken)
 		if status != http.StatusOK {
-			writeAPIError(w, status, code, msg)
+			apierr.Write(w, status, code, msg, nil)
 			return
 		}
 
@@ -66,13 +67,13 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// authn.Begin already verified.
 		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
 		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -82,21 +83,21 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
 
-func acceptInvite(r *http.Request, tx *sql.Tx, identityUID, inviteToken string) (resp AcceptInviteResponse, status int, code, msg string) {
+func acceptInvite(r *http.Request, tx *sql.Tx, identityUID, inviteToken string) (resp AcceptInviteResponse, status int, code apierr.Code, msg string) {
 	ctx := r.Context()
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return AcceptInviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.invite_token', $1, true)`, inviteToken); err != nil {
-		return AcceptInviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	result, err := tx.ExecContext(ctx,
@@ -104,25 +105,25 @@ func acceptInvite(r *http.Request, tx *sql.Tx, identityUID, inviteToken string) 
 		identityUID, inviteToken,
 	)
 	if pgerr.IsUniqueViolation(err) {
-		return AcceptInviteResponse{}, http.StatusConflict, "CONFLICT", "a portal account already exists for this identity"
+		return AcceptInviteResponse{}, http.StatusConflict, apierr.CodeConflict, "a portal account already exists for this identity"
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
 		// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 	if rows == 0 {
-		return AcceptInviteResponse{}, http.StatusNotFound, "NOT_FOUND", "invite not found or already accepted"
+		return AcceptInviteResponse{}, http.StatusNotFound, apierr.CodeNotFound, "invite not found or already accepted"
 	}
 
 	var clientID string
 	if err := tx.QueryRowContext(ctx, `SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identityUID).Scan(&clientID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	return AcceptInviteResponse{ClientID: clientID}, http.StatusOK, "", ""

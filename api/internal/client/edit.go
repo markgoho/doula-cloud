@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -44,28 +45,28 @@ func EditHandler() http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessClient(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
-			http.Error(w, "client not found", http.StatusNotFound)
+			apierr.WriteError(w, "client not found", http.StatusNotFound)
 			return
 		}
 
 		old, err := fetchRecord(r.Context(), tx, practiceID, clientID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "client not found", http.StatusNotFound)
+			apierr.WriteError(w, "client not found", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -76,17 +77,17 @@ func EditHandler() http.Handler {
 		erased, err := isErased(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if erased {
-			http.Error(w, "this client's data has been erased and cannot be edited", http.StatusConflict)
+			apierr.WriteError(w, "this client's data has been erased and cannot be edited", http.StatusConflict)
 			return
 		}
 
 		var req EditRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		if !normalizeAndValidate(w, &req.Record) {
@@ -98,7 +99,7 @@ func EditHandler() http.Handler {
 			matches, err := FindMatches(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, clientID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if len(matches) > 0 {
@@ -106,7 +107,7 @@ func EditHandler() http.Handler {
 				w.WriteHeader(http.StatusConflict)
 				// coverage:ignore reason: response encoding failure, not exercised by unit tests
 				if err := json.NewEncoder(w).Encode(CreateResponse{Matches: matches}); err != nil {
-					http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+					apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				}
 				return
 			}
@@ -114,18 +115,18 @@ func EditHandler() http.Handler {
 
 		if err := updateClient(r.Context(), tx, clientID, req.Record); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordEvent(r.Context(), tx, practiceID, clientID, eventUpdated, diffRecords(old, req.Record), staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if old.Email != req.Email {
 			if err := portalinvite.RevokePending(r.Context(), tx, clientID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -133,7 +134,7 @@ func EditHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(req.Record); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

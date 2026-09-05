@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
 
@@ -69,14 +70,14 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 
 		var req AcceptInviteRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.InviteToken = strings.TrimSpace(req.InviteToken)
 		req.Name = strings.TrimSpace(req.Name)
 		req.WorkState = strings.TrimSpace(req.WorkState)
 		if req.InviteToken == "" {
-			http.Error(w, "inviteToken is required", http.StatusBadRequest)
+			apierr.WriteError(w, "inviteToken is required", http.StatusBadRequest)
 			return
 		}
 
@@ -89,12 +90,12 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 			if status == http.StatusGone {
 				if err := tx.Commit(); err != nil {
 					// coverage:ignore reason: DB commit failure, not exercised by unit tests
-					http.Error(w, MsgInternalError, http.StatusInternalServerError)
+					apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 					return
 				}
 				committed = true
 			}
-			http.Error(w, msg, status)
+			apierr.WriteError(w, msg, status)
 			return
 		}
 
@@ -105,7 +106,7 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 		// account Identity Platform still calls unverified would leave
 		// #606's MFA gate with nothing to enroll against.
 		if err := accounts.SetEmailVerified(r.Context(), verified.UID); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -115,13 +116,13 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -130,7 +131,7 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

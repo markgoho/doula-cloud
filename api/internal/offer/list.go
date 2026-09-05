@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -62,7 +63,7 @@ func InboxHandler() http.Handler {
 
 		if err := expireOpen(r.Context(), tx, byStaffID, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -82,7 +83,7 @@ func InboxHandler() http.Handler {
 			staffID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, page)
@@ -107,7 +108,7 @@ func EngagementListHandler() http.Handler {
 		}
 		if err := expireOpen(r.Context(), tx, byEngagementID, engagementID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -132,7 +133,7 @@ func EngagementListHandler() http.Handler {
 			engagementID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, page)
@@ -148,7 +149,7 @@ func parseCursor(w http.ResponseWriter, r *http.Request) (*cursor, bool) {
 	}
 	c, err := decodeCursor(raw)
 	if err != nil {
-		http.Error(w, "invalid cursor", http.StatusBadRequest)
+		apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 		return nil, false
 	}
 	return &c, true

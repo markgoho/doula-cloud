@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -58,7 +59,7 @@ func RequireTx(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID s
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: Middleware always sets a tx before this handler runs
-		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	practiceID, _ = PracticeID(r.Context())
@@ -70,7 +71,7 @@ func RequireTx(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID s
 // Middleware and downstream handlers.
 func ParseUUID(w http.ResponseWriter, label, value string) (ok bool) {
 	if _, err := uuid.Parse(value); err != nil {
-		http.Error(w, "invalid "+label+" id", http.StatusBadRequest)
+		apierr.WriteError(w, "invalid "+label+" id", http.StatusBadRequest)
 		return false
 	}
 	return true
@@ -87,7 +88,7 @@ func ParseUUID(w http.ResponseWriter, label, value string) (ok bool) {
 // package.
 func RequireConfirmed(w http.ResponseWriter, r *http.Request) (ok bool) {
 	if r.Header.Get("X-Confirmed") != "true" {
-		http.Error(w, "this action requires confirmation", http.StatusBadRequest)
+		apierr.WriteError(w, "this action requires confirmation", http.StatusBadRequest)
 		return false
 	}
 	return true
@@ -119,22 +120,22 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !found {
-				http.Error(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
+				apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
 				return
 			}
 
 			isMember, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !isMember {
-				http.Error(w, "no membership at this practice", http.StatusForbidden)
+				apierr.WriteError(w, "no membership at this practice", http.StatusForbidden)
 				return
 			}
 
@@ -164,7 +165,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				         THEN now() ELSE last_active_at END
 				 WHERE id = $2`, practiceID, staffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 

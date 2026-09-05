@@ -3,6 +3,7 @@ package pushsub
 import (
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -32,7 +33,7 @@ func RegisterHandler() http.Handler {
 
 		if err := upsertSubscription(r, tx, ownerTypeStaff, staffID, req); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -58,7 +59,7 @@ func UnregisterHandler() http.Handler {
 
 		if err := deleteSubscription(r, tx, ownerTypeStaff, staffID, endpoint); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

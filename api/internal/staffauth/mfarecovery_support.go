@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
 
@@ -17,7 +18,7 @@ import (
 // secret only Doula Cloud's own operators and Cloud Scheduler hold.
 func authorizeInternal(w http.ResponseWriter, r *http.Request, secret string) bool {
 	if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(secret)) != 1 {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
 		return false
 	}
 	return true
@@ -52,7 +53,7 @@ func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, secret strin
 
 		var req SupportClearRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		if !ParseUUID(w, "staff", req.StaffID) {
@@ -60,14 +61,14 @@ func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, secret strin
 		}
 		operator := strings.TrimSpace(req.Operator)
 		if operator == "" {
-			http.Error(w, "operator is required", http.StatusBadRequest)
+			apierr.WriteError(w, "operator is required", http.StatusBadRequest)
 			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -84,31 +85,31 @@ func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, secret strin
 		// reason: see that handler's own comment.
 		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		var identityUID string
 		err = tx.QueryRowContext(r.Context(), `SELECT identity_uid FROM staff WHERE id = $1`, req.StaffID).Scan(&identityUID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no staff member found for that id", http.StatusNotFound)
+			apierr.WriteError(w, "no staff member found for that id", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := clearEnrolmentAndRecord(r.Context(), tx, accounts, req.StaffID, identityUID, AuthEventSupport, "", operator); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

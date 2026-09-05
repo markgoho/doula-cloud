@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -67,18 +68,18 @@ func PostInstanceHandler() http.Handler {
 		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
-			http.Error(w, "no plan template found for this practice and plan type", http.StatusNotFound)
+			apierr.WriteError(w, "no plan template found for this practice and plan type", http.StatusNotFound)
 			return
 		}
 
 		fieldsJSON, err := json.Marshal(fields)
 		if err != nil {
 			// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -87,11 +88,11 @@ func PostInstanceHandler() http.Handler {
 			engagementID, planType, fieldsJSON,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
-				http.Error(w, "a plan instance already exists for this engagement and plan type", http.StatusConflict)
+				apierr.WriteError(w, "a plan instance already exists for this engagement and plan type", http.StatusConflict)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -100,7 +101,7 @@ func PostInstanceHandler() http.Handler {
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: Answers{}}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -121,28 +122,28 @@ func GetInstanceHandler() http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
-			http.Error(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
 			return
 		}
 
 		fields, answers, err := fetchInstance(r.Context(), tx, engagementID, planType)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -150,7 +151,7 @@ func GetInstanceHandler() http.Handler {
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers.nonEmpty()}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -168,31 +169,31 @@ func PutInstanceHandler() http.Handler {
 
 		fields, _, err := fetchInstance(r.Context(), tx, engagementID, planType)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		var req PutInstanceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.Answers = req.Answers.nonEmpty()
 
 		if errMsg := validateAnswers(fields, req.Answers); errMsg != "" {
-			http.Error(w, errMsg, http.StatusBadRequest)
+			apierr.WriteError(w, errMsg, http.StatusBadRequest)
 			return
 		}
 
 		answersJSON, err := json.Marshal(req.Answers)
 		if err != nil {
 			// coverage:ignore reason: Answers always marshals cleanly, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -201,7 +202,7 @@ func PutInstanceHandler() http.Handler {
 			answersJSON, engagementID, planType,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
@@ -209,7 +210,7 @@ func PutInstanceHandler() http.Handler {
 		diff, err := json.Marshal(map[string]string{"planType": planType})
 		if err != nil {
 			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
@@ -221,7 +222,7 @@ func PutInstanceHandler() http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -229,7 +230,7 @@ func PutInstanceHandler() http.Handler {
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

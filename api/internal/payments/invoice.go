@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
@@ -80,14 +81,14 @@ func PostInvoiceHandler(client Client) http.Handler {
 		accountID, connected, err := fetchConnectAccount(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !connected {
 			isOwner, err := staffIsOwner(r.Context(), tx, practiceID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			writeJSON(w, http.StatusOK, PostInvoiceResponse{ConnectRequired: true, IsOwner: isOwner})
@@ -96,28 +97,28 @@ func PostInvoiceHandler(client Client) http.Handler {
 
 		var req CreateInvoiceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		if req.AmountCents <= 0 {
-			http.Error(w, "amountCents must be greater than zero", http.StatusBadRequest)
+			apierr.WriteError(w, "amountCents must be greater than zero", http.StatusBadRequest)
 			return
 		}
 
 		clientName, clientEmail, err := fetchClientContact(r.Context(), tx, engagementID)
 		if errors.Is(err, errClientNoEmail) {
-			http.Error(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
+			apierr.WriteError(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests -- the Contract already resolved above implies the Engagement/Client rows exist
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		stripeInvoiceID, stripeCustomerID, err := client.CreateInvoice(r.Context(), accountID, clientEmail, clientName, InvoiceLineItemDescription, req.AmountCents)
 		if err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -129,7 +130,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			practiceID, contractID, stripeInvoiceID, stripeCustomerID, req.AmountCents,
 		).Scan(&invoiceID, &createdAt); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -139,20 +140,20 @@ func PostInvoiceHandler(client Client) http.Handler {
 		// Stripe-side failure here never leaves an Invoice that exists on
 		// Stripe with no corresponding Doula Cloud record.
 		if _, err := client.FinalizeInvoice(r.Context(), accountID, stripeInvoiceID); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if _, err := tx.ExecContext(r.Context(), `UPDATE invoices SET status = 'open' WHERE id = $1`, invoiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
 		diff, err := json.Marshal(map[string]int64{"amountCents": req.AmountCents})
 		if err != nil {
 			// coverage:ignore reason: a map of one int64 always marshals cleanly, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
@@ -164,7 +165,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -200,11 +201,11 @@ func GetInvoicesHandler() http.Handler {
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "engagement not found", http.StatusNotFound)
+				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -212,7 +213,7 @@ func GetInvoicesHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := decodeInvoiceCursor(raw)
 			if err != nil {
-				http.Error(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 				return
 			}
 			after = &c
@@ -221,7 +222,7 @@ func GetInvoicesHandler() http.Handler {
 		items, hasMore, err := listInvoices(r.Context(), tx, engagementID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -253,22 +254,22 @@ func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.T
 	}
 	if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "engagement not found", http.StatusNotFound)
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return nil, "", "", "", false
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", "", "", false
 	}
 
 	contractID, err := fetchCurrentContractID(r.Context(), tx, engagementID)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "no contract found for this engagement", http.StatusNotFound)
+		apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 		return nil, "", "", "", false
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", "", "", false
 	}
 
@@ -373,7 +374,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	// coverage:ignore reason: response encoding failure, not exercised by unit tests
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 	}
 }
 

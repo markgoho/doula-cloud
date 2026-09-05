@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -74,12 +75,12 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		var req InviteRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		address := NormalizeAddress(req.Email)
 		if address == "" {
-			http.Error(w, "email is required", http.StatusBadRequest)
+			apierr.WriteError(w, "email is required", http.StatusBadRequest)
 			return
 		}
 		invited, ok := parseMembership(w, req.Roles, req.EmploymentType)
@@ -89,7 +90,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		resp, status, msg := invite(r.Context(), tx, practiceID, actorStaffID, address, invited)
 		if status != http.StatusCreated && status != http.StatusOK {
-			http.Error(w, msg, status)
+			apierr.WriteError(w, msg, status)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.StaffInvite))
@@ -98,7 +99,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		w.WriteHeader(status)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -240,17 +241,17 @@ func RevokeInvitationHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
-			http.Error(w, "no pending invitation found at this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no pending invitation found at this practice", http.StatusNotFound)
 			return
 		}
 

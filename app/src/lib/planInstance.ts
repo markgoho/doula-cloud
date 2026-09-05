@@ -6,6 +6,7 @@
  * unit-tested directly -- the same shape as planTemplate.ts.
  */
 import type { Field,  } from './planTemplate.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 
 
@@ -75,7 +76,7 @@ export async function loadInstance(
 		return undefined;
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -92,7 +93,7 @@ export async function createInstance(
 ): Promise<Instance> {
 	const response = await fetcher(instancePath(practiceId, engagementId, planType), { method: 'POST' });
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -113,7 +114,7 @@ export async function saveAnswers(
 		body: JSON.stringify({ answers })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -131,7 +132,7 @@ export async function loadClientBirthPlan(fetcher: Fetcher, engagementId: string
 		return null;
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

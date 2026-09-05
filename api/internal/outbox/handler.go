@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"doula-cloud/api/internal/apierr"
 	"fmt"
 	"net/http"
 )
@@ -37,13 +38,13 @@ type Processor interface {
 func ProcessHandler(db *sql.DB, worker Processor, secret, door string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(secret)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -68,19 +69,19 @@ func ProcessHandler(db *sql.DB, worker Processor, secret, door string) http.Hand
 		if door != "" {
 			if _, err := tx.ExecContext(r.Context(), fmt.Sprintf(`SELECT set_config('%s', 'true', true)`, door)); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
 
 		if err := worker.ProcessPending(r.Context(), tx); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

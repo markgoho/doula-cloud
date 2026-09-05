@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 
+	"doula-cloud/api/internal/apierr"
 	"github.com/google/uuid"
 )
 
@@ -54,7 +55,7 @@ func AttachingWrite(next http.Handler) http.Handler {
 		tx, has := Tx(r.Context())
 		if !has {
 			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		staffID, _ := StaffID(r.Context())
@@ -69,17 +70,17 @@ func AttachingWrite(next http.Handler) http.Handler {
 			reader, err := ResolveReader(r.Context(), tx, practiceID, staffID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !canAccess {
-				http.Error(w, "engagement not found", http.StatusNotFound)
+				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
 			}
 		}

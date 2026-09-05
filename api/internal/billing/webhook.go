@@ -9,6 +9,7 @@ import (
 
 	"github.com/stripe/stripe-go/v86"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -33,14 +34,14 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
 		if err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		event, err := stripe.ConstructEvent(body, r.Header.Get("Stripe-Signature"), webhookSecret,
 			stripe.WithIgnoreAPIVersionMismatch())
 		if err != nil {
-			http.Error(w, "invalid signature", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
 			return
 		}
 
@@ -57,7 +58,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 
 		var session stripe.CheckoutSession
 		if err := json.Unmarshal(event.Data.Raw, &session); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -74,7 +75,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 		}
 		quantity, err := strconv.Atoi(session.Metadata["quantity"])
 		if err != nil || quantity < 1 {
-			http.Error(w, "invalid quantity metadata", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid quantity metadata", http.StatusBadRequest)
 			return
 		}
 
@@ -90,7 +91,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 		// computed wrong three years from now. Refuse it and let Stripe
 		// retry: nothing has been written yet.
 		if session.AmountSubtotal <= 0 || session.AmountSubtotal%int64(quantity) != 0 {
-			http.Error(w, "checkout session subtotal does not divide by quantity", http.StatusBadRequest)
+			apierr.WriteError(w, "checkout session subtotal does not divide by quantity", http.StatusBadRequest)
 			return
 		}
 		unitPriceCents := session.AmountSubtotal / int64(quantity)
@@ -103,14 +104,14 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 		// webhook payload, so this carries the id and nothing else --
 		// which is all the ledger keeps.
 		if session.PaymentIntent == nil || session.PaymentIntent.ID == "" {
-			http.Error(w, "checkout session has no payment intent", http.StatusBadRequest)
+			apierr.WriteError(w, "checkout session has no payment intent", http.StatusBadRequest)
 			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -128,7 +129,7 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 			`SELECT set_config('app.current_practice_id', $1, true)`, practiceID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -137,13 +138,13 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
@@ -164,13 +165,13 @@ func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string) http.Handler {
 		); err != nil {
 			// Includes a foreign-key violation if practiceID -- taken
 			// verbatim from event metadata -- doesn't name a real Practice.
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/clientip"
 	"doula-cloud/api/internal/objectstore"
@@ -49,46 +50,46 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var req SignContractRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.FullLegalName = strings.TrimSpace(req.FullLegalName)
 		if req.FullLegalName == "" || !req.Attestation {
-			http.Error(w, "full legal name and attestation are both required to sign", http.StatusBadRequest)
+			apierr.WriteError(w, "full legal name and attestation are both required to sign", http.StatusBadRequest)
 			return
 		}
 
 		id, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if status != statusSent {
-			http.Error(w, "contract is not awaiting signature", http.StatusConflict)
+			apierr.WriteError(w, "contract is not awaiting signature", http.StatusConflict)
 			return
 		}
 
 		pdfBytes, err := renderContractPDF(fillProse(prose, values))
 		if err != nil {
 			// coverage:ignore reason: renderContractPDF only fails on an internal fpdf encoding error, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		objectPath := SignedPDFObjectPath(engagementID)
 		if err := store.Put(r.Context(), objectPath, contentTypePDF, bytes.NewReader(pdfBytes)); err != nil {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -100,12 +101,12 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			statusSigned, req.FullLegalName, req.Attestation, clientip.From(r), objectPath, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordContractSigned(r.Context(), tx, engagementID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -119,7 +120,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

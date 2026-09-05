@@ -2,11 +2,10 @@ package staffauth_test
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
-	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -151,12 +150,12 @@ func TestSignupHandler_RefusesWhenAlreadyInAPractice(t *testing.T) {
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second signup status = %d, want %d", second.StatusCode, http.StatusConflict)
 	}
-	body, err := io.ReadAll(second.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
+	var out apierr.APIError
+	if err := json.NewDecoder(second.Body).Decode(&out); err != nil {
+		t.Fatalf("decode body: %v", err)
 	}
-	if strings.TrimSpace(string(body)) != staffauth.MsgAlreadyBelongsToPractice {
-		t.Fatalf("body = %q, want %q", strings.TrimSpace(string(body)), staffauth.MsgAlreadyBelongsToPractice)
+	if out.Message != staffauth.MsgAlreadyBelongsToPractice {
+		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgAlreadyBelongsToPractice)
 	}
 
 	var count int

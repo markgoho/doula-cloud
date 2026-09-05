@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
@@ -76,13 +77,13 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		var req CreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		area, err := resolveClientArea(r.Context(), tx, engagementID, strings.TrimSpace(req.ClientArea))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		req.ClientArea = area
@@ -98,7 +99,7 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		resp, status, msg := create(r.Context(), tx, practiceID, engagementID, actorStaffID, req, facts)
 		if status != http.StatusCreated {
-			http.Error(w, msg, status)
+			apierr.WriteError(w, msg, status)
 			return
 		}
 		if req.StaffID == "" {
@@ -109,7 +110,7 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 		w.WriteHeader(status)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -151,17 +152,17 @@ type facts struct {
 func parseFacts(w http.ResponseWriter, req CreateRequest) (facts, bool) {
 	initial := strings.TrimSpace(req.ClientFirstInitial)
 	if initial == "" {
-		http.Error(w, "clientFirstInitial is required", http.StatusBadRequest)
+		apierr.WriteError(w, "clientFirstInitial is required", http.StatusBadRequest)
 		return facts{}, false
 	}
 	area := strings.TrimSpace(req.ClientArea)
 	if area == "" {
-		http.Error(w, "clientArea is required", http.StatusBadRequest)
+		apierr.WriteError(w, "clientArea is required", http.StatusBadRequest)
 		return facts{}, false
 	}
 	dueDate, err := time.Parse(time.DateOnly, strings.TrimSpace(req.DueDate))
 	if err != nil {
-		http.Error(w, "dueDate is required, as YYYY-MM-DD", http.StatusBadRequest)
+		apierr.WriteError(w, "dueDate is required, as YYYY-MM-DD", http.StatusBadRequest)
 		return facts{}, false
 	}
 	terms := strings.TrimSpace(req.Terms)
@@ -216,12 +217,12 @@ var errEngagementCompleted = errors.New("offer: engagement already completed")
 func writeEngagementErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		http.Error(w, "engagement not found", http.StatusNotFound)
+		apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 	case errors.Is(err, errEngagementCompleted):
-		http.Error(w, "that engagement has completed", http.StatusConflict)
+		apierr.WriteError(w, "that engagement has completed", http.StatusConflict)
 	default:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 	}
 }
 

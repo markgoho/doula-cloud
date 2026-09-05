@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -93,11 +94,11 @@ func ListWorkStateHistoryHandler() http.Handler {
 		memberSince, err := membershipCreatedAt(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "staff member not found", http.StatusNotFound)
+				apierr.WriteError(w, "staff member not found", http.StatusNotFound)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -105,7 +106,7 @@ func ListWorkStateHistoryHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := pagecursor.Decode(raw)
 			if err != nil {
-				http.Error(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 				return
 			}
 			after = &c
@@ -114,7 +115,7 @@ func ListWorkStateHistoryHandler() http.Handler {
 		items, hasMore, err := listWorkStateChanges(r.Context(), tx, staffID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -127,7 +128,7 @@ func ListWorkStateHistoryHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

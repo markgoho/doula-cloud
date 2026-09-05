@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -51,18 +52,18 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		clientID, err := resolveEngagementClient(r.Context(), tx, engagementID, practiceID)
 		if errors.Is(err, sql.ErrNoRows) {
-			writeAPIError(w, http.StatusNotFound, "NOT_FOUND", "engagement not found")
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		resp, status, code, msg := invite(r.Context(), tx, clientID)
 		if status != http.StatusOK && status != http.StatusCreated {
-			writeAPIError(w, status, code, msg)
+			apierr.Write(w, status, code, msg, nil)
 			return
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
@@ -74,7 +75,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.PortalInvite))
@@ -83,7 +84,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		w.WriteHeader(status)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -111,7 +112,7 @@ func resolveEngagementClient(ctx context.Context, tx *sql.Tx, engagementID, prac
 // invite creates a pending client_portal_users row for clientID, or
 // rotates the existing pending row's invite_token if one already exists.
 // An already-accepted row (identity_uid set) is a 409 Conflict.
-func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteResponse, status int, code, msg string) {
+func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteResponse, status int, code apierr.Code, msg string) {
 	var existingID string
 	var identityUID sql.NullString
 	err := tx.QueryRowContext(ctx,
@@ -128,20 +129,20 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 			newID, clientID, inviteToken,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 		}
 		if err := queueOutboxSend(ctx, tx, newID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 		}
 		return InviteResponse{ClientPortalUserID: newID, InviteToken: inviteToken}, http.StatusCreated, "", ""
 
 	case err != nil:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 
 	case identityUID.Valid:
-		return InviteResponse{}, http.StatusConflict, "CONFLICT", "this client already has portal access"
+		return InviteResponse{}, http.StatusConflict, apierr.CodeConflict, "this client already has portal access"
 
 	default:
 		inviteToken := uuid.NewString()
@@ -150,11 +151,11 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 			inviteToken, existingID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 		}
 		if err := queueOutboxSend(ctx, tx, existingID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, codeInternalError, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 		}
 		return InviteResponse{ClientPortalUserID: existingID, InviteToken: inviteToken}, http.StatusOK, "", ""
 	}

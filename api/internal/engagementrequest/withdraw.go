@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -38,13 +39,13 @@ func WithdrawHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
@@ -65,17 +66,17 @@ func writeWithdrawErr(w http.ResponseWriter, r *http.Request, tx *sql.Tx, reques
 		`SELECT requested_by::text, state::text FROM engagement_requests WHERE id = $1`, requestID,
 	).Scan(&requestedBy, &state)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "engagement request not found", http.StatusNotFound)
+		apierr.WriteError(w, "engagement request not found", http.StatusNotFound)
 		return
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	if requestedBy != staffID {
-		http.Error(w, "only the staff member who made this request may withdraw it", http.StatusForbidden)
+		apierr.WriteError(w, "only the staff member who made this request may withdraw it", http.StatusForbidden)
 		return
 	}
-	http.Error(w, "that request is no longer pending -- it is "+state, http.StatusConflict)
+	apierr.WriteError(w, "that request is no longer pending -- it is "+state, http.StatusConflict)
 }

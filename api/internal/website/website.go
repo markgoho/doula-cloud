@@ -16,16 +16,11 @@
 // answer existing is #442, and rebuilding the site when she publishes is
 // #443. All three read what is written here.
 //
-// Errors follow docs/api-design.md section 7's structured shape rather
-// than the plain-text http.Error most of the BFF still writes. The
-// documented rule is the one to follow on a new pair of endpoints with
-// no consumers to break; the split it lands in is #462's to close, and
-// the app reads either through apiErrorMessage.
+// Errors follow docs/api-design.md section 7's structured shape, written
+// by apierr.Write (#529).
 package website
 
 import (
-	"encoding/json"
-	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -69,29 +64,6 @@ const (
 	MsgTooLong           = "Shorten this to 500 characters or fewer"
 	MsgInternalError     = "internal error"
 )
-
-// The machine-readable codes this package returns. docs/api-design.md
-// section 7 names the first three; INTERNAL_ERROR follows portalinvite,
-// the section's first adopter.
-const (
-	codeInvalidArgument = "INVALID_ARGUMENT"
-	codeInternalError   = "INTERNAL_ERROR"
-)
-
-// APIError is docs/api-design.md section 7's structured error shape.
-type APIError struct {
-	Code    string            `json:"code"`
-	Message string            `json:"message"`
-	Details map[string]string `json:"details,omitempty"`
-}
-
-// writeAPIError writes status with a {code, message, details?} JSON body.
-func writeAPIError(w http.ResponseWriter, status int, code, message string, details map[string]string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	_ = json.NewEncoder(w).Encode(APIError{Code: code, Message: message, Details: details})
-}
 
 // Request is the whole body of a website declaration. A PUT rather than
 // a POST, and a full replacement rather than a patch: there is one

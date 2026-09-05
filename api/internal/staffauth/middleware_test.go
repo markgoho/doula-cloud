@@ -2,11 +2,13 @@ package staffauth_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -299,8 +301,12 @@ func TestParseUUID(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 		}
-		if got := rec.Body.String(); got != "invalid practice id\n" {
-			t.Fatalf("body = %q, want %q", got, "invalid practice id\n")
+		var out apierr.APIError
+		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if out.Message != "invalid practice id" {
+			t.Fatalf("message = %q, want %q", out.Message, "invalid practice id")
 		}
 	})
 }

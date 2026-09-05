@@ -7,6 +7,8 @@
  * contract.ts.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 export interface Invoice {
 	id: string;
 	contractId: string;
@@ -78,7 +80,7 @@ export async function loadPracticeInvoices(
 ): Promise<PracticeInvoicePage> {
 	const response = await fetcher(practiceInvoicesPath(practiceId, cursor));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -98,7 +100,7 @@ function invoicesPath(practiceId: string, engagementId: string): string {
 export async function loadInvoices(fetcher: Fetcher, practiceId: string, engagementId: string): Promise<Invoice[]> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	const body: { items: Invoice[] } = await response.json();
 	return body.items;
@@ -121,7 +123,7 @@ export async function createInvoice(
 		body: JSON.stringify({ amountCents })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

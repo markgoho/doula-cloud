@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -86,7 +87,7 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req DeclineByTokenRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		// Checked before withTokenTx: an unconfirmed request must not
@@ -182,14 +183,14 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		return
 	}
 	if token == "" || code == "" {
-		http.Error(w, "a token and a code are required", http.StatusBadRequest)
+		apierr.WriteError(w, "a token and a code are required", http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	committed := false
@@ -207,23 +208,23 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		if status == http.StatusForbidden {
 			if err := tx.Commit(); err != nil {
 				// coverage:ignore reason: DB commit failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			committed = true
 		}
-		http.Error(w, msg, status)
+		apierr.WriteError(w, msg, status)
 		return
 	}
 
 	body, status, msg := fn(r.Context(), tx, offer)
 	if status != http.StatusOK {
-		http.Error(w, msg, status)
+		apierr.WriteError(w, msg, status)
 		return
 	}
 	if err := tx.Commit(); err != nil {
 		// coverage:ignore reason: DB commit failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	committed = true

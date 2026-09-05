@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 )
 
@@ -47,7 +48,7 @@ func DetailHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		if !has {
 			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		clientID, _ := clientauth.ClientID(r.Context())
@@ -67,12 +68,12 @@ func DetailHandler() http.Handler {
 		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &dueDate)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
-			http.Error(w, "engagement not found", http.StatusNotFound)
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if dueDate.Valid {
@@ -82,7 +83,7 @@ func DetailHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(d); err != nil {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

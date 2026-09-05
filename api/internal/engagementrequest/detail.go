@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
@@ -89,14 +90,14 @@ func DetailHandler() http.Handler {
 		resp, err := loadDetail(r.Context(), tx, practiceID, requestID)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			http.Error(w, "engagement request not found", http.StatusNotFound)
+			apierr.WriteError(w, "engagement request not found", http.StatusNotFound)
 			return
 		case errors.Is(err, errNotPending):
 			writeRequestNotDecidable(w, r, tx, requestID)
 			return
 		case err != nil:
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

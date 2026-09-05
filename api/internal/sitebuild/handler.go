@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"doula-cloud/api/internal/apierr"
 	"net/http"
 )
 
@@ -39,14 +40,14 @@ func VerifyHandler(db *sql.DB, verifier Verifier, secret string) http.Handler {
 func internalHandler(db *sql.DB, secret string, run func(context.Context, *sql.Tx) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(secret)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -60,19 +61,19 @@ func internalHandler(db *sql.DB, secret string, run func(context.Context, *sql.T
 		if _, err := tx.ExecContext(r.Context(),
 			`SELECT set_config('app.site_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := run(r.Context(), tx); err != nil {
 			// coverage:ignore reason: the verifier's only failure mode is a DB error, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

@@ -6,6 +6,7 @@
  */
 
 import type { ClientRecord, EngagementSummary } from './clientDetail.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 /** One row of the Clients list, Client-shaped: one row per Client, never
  * one per Client+Engagement pair (ADR-0017) -- mirrors the Go BFF's
@@ -97,7 +98,7 @@ export async function loadClients(
 ): Promise<ClientListPage> {
 	const response = await fetcher(`${clientsPath(practiceId)}${clientsQuery(options)}`);
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -159,7 +160,7 @@ export async function createClient(
 		return { conflict: true, matches: body.matches };
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return { conflict: false, record: await response.json() };
 }
@@ -200,7 +201,7 @@ export async function searchClients(
 ): Promise<ClientMatch[]> {
 	const response = await fetcher(searchPath(practiceId, fields));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	const body: { matches: ClientMatch[] } = await response.json();
 	return body.matches;
@@ -252,7 +253,7 @@ export async function editClient(
 		return { conflict: true, matches: body.matches };
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return { conflict: false, record: await response.json() };
 }

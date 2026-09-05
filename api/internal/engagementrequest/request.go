@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -52,11 +53,11 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if isContractorOriginator(reader) {
-			http.Error(w, "a contractor doula does not request an engagement at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
+			apierr.WriteError(w, "a contractor doula does not request an engagement at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
 			return
 		}
 
@@ -65,13 +66,13 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		if !clientExists(r.Context(), tx, clientID) {
-			http.Error(w, "client not found", http.StatusNotFound)
+			apierr.WriteError(w, "client not found", http.StatusNotFound)
 			return
 		}
 
 		var body RequestBody
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		kind, dueDate, ok := parseRequestBody(w, body)
@@ -87,11 +88,11 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			practiceID, clientID, kind, dueDate, note, staffID,
 		).Scan(&requestID); err != nil {
 			if pgerr.IsUniqueViolation(err) {
-				http.Error(w, "a pending request for this client and kind already exists", http.StatusConflict)
+				apierr.WriteError(w, "a pending request for this client and kind already exists", http.StatusConflict)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -103,12 +104,12 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		warning, err := hasLiveEngagement(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := queueOutbox(r.Context(), tx, practiceID, requestID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.EngagementRequest))
@@ -156,7 +157,7 @@ func clientExists(ctx context.Context, tx *sql.Tx, clientID string) bool {
 func parseRequestBody(w http.ResponseWriter, body RequestBody) (kind string, dueDate sql.NullString, ok bool) {
 	kind = strings.TrimSpace(body.Kind)
 	if !validKinds[kind] {
-		http.Error(w, "kind must be 'birth' or 'postpartum'", http.StatusBadRequest)
+		apierr.WriteError(w, "kind must be 'birth' or 'postpartum'", http.StatusBadRequest)
 		return "", sql.NullString{}, false
 	}
 	due := strings.TrimSpace(body.DueDate)
@@ -164,7 +165,7 @@ func parseRequestBody(w http.ResponseWriter, body RequestBody) (kind string, due
 		return kind, sql.NullString{}, true
 	}
 	if _, err := time.Parse(time.DateOnly, due); err != nil {
-		http.Error(w, "dueDate must be YYYY-MM-DD", http.StatusBadRequest)
+		apierr.WriteError(w, "dueDate must be YYYY-MM-DD", http.StatusBadRequest)
 		return "", sql.NullString{}, false
 	}
 	return kind, sql.NullString{String: due, Valid: true}, true

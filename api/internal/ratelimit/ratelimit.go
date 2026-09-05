@@ -16,33 +16,20 @@ package ratelimit
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
 	"net/http"
 	"strconv"
 	"time"
+
+	"doula-cloud/api/internal/apierr"
 )
-
-// codeRateLimited is the APIError.Code for a refused request.
-const codeRateLimited = "RATE_LIMITED"
-
-// codeInternalError is the APIError.Code used for every 500 this package
-// writes.
-const codeInternalError = "INTERNAL_ERROR"
 
 // msgInternalError is the response body for a failure the caller can't
 // act on -- deliberately vague, this package's own copy per this repo's
 // convention (see portalinvite/errors.go).
 const msgInternalError = "internal error"
-
-// APIError is docs/api-design.md section 7's structured error shape, this
-// package's own copy per the same convention.
-type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
 
 // Rule is one dimension a request is checked and counted against,
 // independently of every other Rule passed to Wrap alongside it. An
@@ -94,7 +81,7 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 				count, windowStart, err := touch(r.Context(), db, bucketKey(endpoint, rule.Dimension, key), rule.Window)
 				if err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					writeAPIError(w, http.StatusInternalServerError, codeInternalError, msgInternalError)
+					apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
 					return
 				}
 
@@ -111,8 +98,8 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 					w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 					w.Header().Set("RateLimit-Limit", strconv.Itoa(rule.Max))
 					w.Header().Set("RateLimit-Remaining", "0")
-					writeAPIError(w, http.StatusTooManyRequests, codeRateLimited,
-						fmt.Sprintf("too many requests -- try again in %d seconds", retryAfter))
+					apierr.WriteError(w, fmt.Sprintf("too many requests -- try again in %d seconds", retryAfter),
+						http.StatusTooManyRequests)
 					return
 				}
 
@@ -192,12 +179,4 @@ func retryAfterSeconds(windowStart time.Time, window time.Duration) int {
 		return 1
 	}
 	return remaining
-}
-
-// writeAPIError writes status with body {code, message} as JSON.
-func writeAPIError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	_ = json.NewEncoder(w).Encode(APIError{Code: code, Message: message})
 }

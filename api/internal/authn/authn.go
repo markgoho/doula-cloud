@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 )
@@ -138,7 +139,7 @@ func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool)
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		http.Error(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
 		return nil, false
 	}
 	return tx, true
@@ -154,18 +155,18 @@ func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool)
 func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB) (string, bool) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
-		http.Error(w, "missing credential", http.StatusUnauthorized)
+		apierr.WriteError(w, "missing credential", http.StatusUnauthorized)
 		return "", false
 	}
 
 	now := time.Now()
 	uid, expiresAt, err := lookupSession(r.Context(), tx, cookie.Value, now)
 	if errors.Is(err, errNoSession) {
-		http.Error(w, "invalid session", http.StatusUnauthorized)
+		apierr.WriteError(w, "invalid session", http.StatusUnauthorized)
 		return "", false
 	}
 	if err != nil {
-		http.Error(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
 		return "", false
 	}
 
@@ -179,13 +180,13 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 func idTokenCredential(w http.ResponseWriter, r *http.Request, verifier Verifier) (VerifiedToken, bool) {
 	idToken, ok := BearerToken(r)
 	if !ok {
-		http.Error(w, "missing credential", http.StatusUnauthorized)
+		apierr.WriteError(w, "missing credential", http.StatusUnauthorized)
 		return VerifiedToken{}, false
 	}
 
 	verified, err := verifier.VerifyIDToken(r.Context(), idToken)
 	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		apierr.WriteError(w, "invalid token", http.StatusUnauthorized)
 		return VerifiedToken{}, false
 	}
 	return *verified, true

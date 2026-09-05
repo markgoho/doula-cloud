@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -34,11 +35,11 @@ func requireDoula(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	roles, err := staffauth.Roles(r.Context(), tx, practiceID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	if !slices.Contains(roles, doulaRole) {
-		http.Error(w, "only a Staff member with the Doula role can do that", http.StatusForbidden)
+		apierr.WriteError(w, "only a Staff member with the Doula role can do that", http.StatusForbidden)
 		return nil, "", false
 	}
 	return tx, practiceID, true

@@ -7,6 +7,7 @@
  * unit-tested directly -- mirrors planInstance.ts.
  */
 import { MERGE_FIELDS } from './contractTemplate.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 export interface Contract {
 	engagementId: string;
@@ -63,7 +64,7 @@ export async function loadClientContract(fetcher: Fetcher, engagementId: string)
 		return null;
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -82,7 +83,7 @@ export async function loadContract(
 		return undefined;
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -98,7 +99,7 @@ export async function createContract(
 ): Promise<Contract> {
 	const response = await fetcher(contractPath(practiceId, engagementId), { method: 'POST' });
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -119,7 +120,7 @@ export async function saveContractValues(
 		body: JSON.stringify({ values })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -135,7 +136,7 @@ export async function sendContract(
 ): Promise<Contract> {
 	const response = await fetcher(`${contractPath(practiceId, engagementId)}/send`, { method: 'POST' });
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -157,7 +158,7 @@ export async function signContract(
 		body: JSON.stringify({ fullLegalName, attestation: isAttestation })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -174,7 +175,7 @@ export async function voidContract(
 ): Promise<Contract> {
 	const response = await fetcher(`${contractPath(practiceId, engagementId)}/void`, { method: 'POST' });
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

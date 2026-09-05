@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
 
@@ -152,7 +153,7 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 
 		var req UpdateWorkStateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
@@ -161,19 +162,19 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 		// again here should not be told off in different words.
 		normalized, valid := NormalizeWorkState(req.WorkState)
 		if !valid {
-			http.Error(w, MsgWorkStateRequired, http.StatusBadRequest)
+			apierr.WriteError(w, MsgWorkStateRequired, http.StatusBadRequest)
 			return
 		}
 
 		resp, status, msg := updateWorkState(r.Context(), tx, uid, normalized)
 		if status != http.StatusOK {
-			http.Error(w, msg, status)
+			apierr.WriteError(w, msg, status)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -181,7 +182,7 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

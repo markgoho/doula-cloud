@@ -24,6 +24,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 )
 
@@ -39,7 +40,7 @@ func GetHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())
@@ -48,7 +49,7 @@ func GetHandler() http.Handler {
 		enabled, err := readEnabled(r.Context(), tx, identityUID, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -69,7 +70,7 @@ func SetHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())
@@ -78,18 +79,18 @@ func SetHandler() http.Handler {
 
 		var req SetRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		if err := upsertPreference(r.Context(), tx, identityUID, engagementID, !req.Enabled); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordPreferenceChange(r.Context(), tx, engagementID, clientID, req.Enabled); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -102,7 +103,7 @@ func writeResponse(w http.ResponseWriter, enabled bool) {
 	w.Header().Set("Content-Type", "application/json")
 	// coverage:ignore reason: response encoding failure, not exercised by unit tests
 	if err := json.NewEncoder(w).Encode(PreferenceResponse{Enabled: enabled}); err != nil {
-		http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 	}
 }
 

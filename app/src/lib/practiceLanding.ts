@@ -12,6 +12,7 @@
  * renders, so the page asks only for what the caller may have.
  */
 import { isOpen, loadInbox, type Offer } from './offer.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 import { loadPendingRequests } from './engagementRequest.js';
 export type { Fetcher } from './offer.js';
 import { loadBalance } from './billing.js';
@@ -77,7 +78,7 @@ export async function loadWaitingOnReplyPage(
 	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
 	const response = await fetcher(`/api/practices/${practiceId}/messages/awaiting-reply${query}`);
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -146,7 +147,7 @@ async function loadSession(
 ): Promise<{ practiceName: string; roles: string[] }> {
 	const response = await fetcher(`/api/practices/${practiceId}/session`);
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -172,7 +173,7 @@ async function readOpenOffers(fetcher: Fetcher, practiceId: string): Promise<Off
 async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promise<boolean> {
 	const response = await fetcher(`/api/practices/${practiceId}/clients?all=true`);
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	const clients: { items: unknown[] } = await response.json();
 	return clients.items.length > 0;
@@ -185,7 +186,7 @@ async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promise<boole
 async function loadRoster(fetcher: Fetcher, practiceId: string): Promise<RosterHealth> {
 	const response = await fetcher(`/api/practices/${practiceId}/staff`);
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	const roster: {
 		members: unknown[];

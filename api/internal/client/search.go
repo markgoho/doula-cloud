@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -33,11 +34,11 @@ func SearchHandler() http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if reader.IsContractor() && !reader.Has("owner") && !reader.Has("admin") {
-			http.Error(w, "a contractor doula does not search for clients at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
+			apierr.WriteError(w, "a contractor doula does not search for clients at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
 			return
 		}
 
@@ -46,7 +47,7 @@ func SearchHandler() http.Handler {
 		matches, err := FindMatches(r.Context(), tx, practiceID, name, name, q.Get("dateOfBirth"), q.Get("email"), q.Get("phone"), "")
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if matches == nil {
@@ -56,7 +57,7 @@ func SearchHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(SearchResponse{Matches: matches}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

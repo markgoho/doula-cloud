@@ -7,6 +7,8 @@
  * directly -- mirrors planTemplate.ts.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 /** The merge-field placeholders a Contract Template's prose may contain --
  * exported so the settings screen can show them as a reference for the
  * Practice Owner while editing. Values match the Go BFF's default seeded
@@ -42,7 +44,7 @@ export async function loadContractTemplate(
 ): Promise<ContractTemplate> {
 	const response = await fetcher(templatePath(practiceId));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -61,7 +63,7 @@ export async function saveContractTemplate(
 		body: JSON.stringify({ prose })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

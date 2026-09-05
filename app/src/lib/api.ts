@@ -78,27 +78,6 @@ export async function probeSession<Session>(path: string): Promise<Session | und
 	}
 }
 
-/**
-Reads a failed response's body as a human-readable error message. Most
-BFF endpoints still write plain text; a growing few (starting with
-portalinvite, docs/api-design.md section 7's first adopter) write
-{code, message} JSON instead -- this reads either without the caller
-needing to know which.
-*/
-export async function apiErrorMessage(response: Response): Promise<string> {
-	const text = await response.text();
-	try {
-		const parsed: unknown = JSON.parse(text);
-		if (
-			parsed !== null &&
-			typeof parsed === 'object' &&
-			'message' in parsed &&
-			typeof parsed.message === 'string'
-		) {
-			return parsed.message;
-		}
-	} catch {
-		// Not JSON -- most endpoints still write plain text, fall through.
-	}
-	return text;
-}
+// Re-exported for this module's own callers; see apiErrorMessage.ts for
+// why its definition lives there instead of here.
+export { apiErrorMessage } from './apiErrorMessage.js';

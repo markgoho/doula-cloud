@@ -456,7 +456,7 @@
 		try {
 			const response = await apiFetchWithSession(visitsURL(reference), { method: 'POST' });
 			if (!response.ok) {
-				visitsError = await response.text();
+				visitsError = await apiErrorMessage(response);
 				return;
 			}
 
@@ -478,7 +478,7 @@
 				body: JSON.stringify({ staffId: reassignStaffId[visitId] ?? '' })
 			});
 			if (!response.ok) {
-				reassignError[visitId] = await response.text();
+				reassignError[visitId] = await apiErrorMessage(response);
 				return;
 			}
 
@@ -495,7 +495,7 @@
 		try {
 			const response = await apiFetchWithSession(`${messagesURL(reference)}?cursor=${encodeURIComponent(messagesCursor)}`);
 			if (!response.ok) {
-				messagesError = await response.text();
+				messagesError = await apiErrorMessage(response);
 				return;
 			}
 
@@ -529,7 +529,7 @@
 				});
 			}
 			if (!response.ok) {
-				messagesError = await response.text();
+				messagesError = await apiErrorMessage(response);
 				return false;
 			}
 
@@ -548,7 +548,7 @@
 	async function handleDownloadAttachment(messageId: string, filename: string) {
 		const response = await apiFetchWithSession(`${messagesURL(reference)}/${messageId}/attachment`);
 		if (!response.ok) {
-			messagesError = await response.text();
+			messagesError = await apiErrorMessage(response);
 			return;
 		}
 

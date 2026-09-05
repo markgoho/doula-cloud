@@ -5,6 +5,8 @@
  * and the DOM, the same seam client.ts and clientDetail.ts use.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 /** The body a new Request submits: the kind and due date the requester
  * states as part of the ask, and an optional note -- ADR-0017's "the
  * requester describes the work; the approver does not amend it". Mirrors
@@ -66,7 +68,7 @@ export async function requestEngagement(
 		return { noCredits: true };
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return { noCredits: false, outcome: await response.json() };
 }
@@ -129,7 +131,7 @@ export async function loadApprovalDetail(
 ): Promise<ApprovalDetail> {
 	const response = await fetcher(requestPath(practiceId, requestId));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -147,7 +149,7 @@ export async function approveRequest(
 		return { noCredits: true };
 	}
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return { noCredits: false, outcome: await response.json() };
 }
@@ -168,7 +170,7 @@ export async function refuseRequest(
 		body: JSON.stringify({ reason })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 }
 
@@ -184,7 +186,7 @@ export async function refuseRequest(
 export async function withdrawRequest(fetcher: Fetcher, practiceId: string, requestId: string): Promise<void> {
 	const response = await fetcher(`${requestPath(practiceId, requestId)}/withdraw`, { method: 'POST' });
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 }
 
@@ -271,7 +273,7 @@ export async function loadPendingRequests(
 	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
 	const response = await fetcher(`/api/practices/${practiceId}/engagement-requests${query}`);
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

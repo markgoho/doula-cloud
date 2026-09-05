@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -34,12 +35,12 @@ func RefuseHandler() http.Handler {
 
 		var body RefuseRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		reason := strings.TrimSpace(body.Reason)
 		if reason == "" {
-			http.Error(w, "reason is required", http.StatusBadRequest)
+			apierr.WriteError(w, "reason is required", http.StatusBadRequest)
 			return
 		}
 
@@ -51,13 +52,13 @@ func RefuseHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
@@ -79,13 +80,13 @@ func writeRequestNotDecidable(w http.ResponseWriter, r *http.Request, tx *sql.Tx
 	var state string
 	err := tx.QueryRowContext(r.Context(), `SELECT state::text FROM engagement_requests WHERE id = $1`, requestID).Scan(&state)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "engagement request not found", http.StatusNotFound)
+		apierr.WriteError(w, "engagement request not found", http.StatusNotFound)
 		return
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	http.Error(w, "that request is no longer pending -- it is "+state, http.StatusConflict)
+	apierr.WriteError(w, "that request is no longer pending -- it is "+state, http.StatusConflict)
 }

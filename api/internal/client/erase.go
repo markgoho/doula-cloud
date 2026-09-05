@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -101,27 +102,27 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 			clientID, practiceID,
 		).Scan(&erasedAt)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "client not found", http.StatusNotFound)
+			apierr.WriteError(w, "client not found", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if erasedAt.Valid {
-			http.Error(w, "this client's data has already been erased", http.StatusConflict)
+			apierr.WriteError(w, "this client's data has already been erased", http.StatusConflict)
 			return
 		}
 
 		unsettled, err := unsettledInvoices(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if len(unsettled) > 0 {
-			http.Error(w,
+			apierr.WriteError(w,
 				"cannot erase a client with unsettled invoices: settle or void "+strings.Join(unsettled, ", ")+" first",
 				http.StatusConflict)
 			return
@@ -131,7 +132,7 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 		out, err := erase(r.Context(), tx, practiceID, clientID, staffID, time.Now().UTC())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.ClientErasure))
@@ -139,7 +140,7 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

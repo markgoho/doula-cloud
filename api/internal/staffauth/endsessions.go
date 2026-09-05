@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/tasknudge"
@@ -44,18 +45,18 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 			practiceID, targetStaffID,
 		).Scan(&identityUID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no membership found for that staff member at this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no membership found for that staff member at this practice", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := endAllSessionsAndNotify(r.Context(), tx, identityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -72,7 +73,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 			Actor:       activity.StaffActor(actorStaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -82,7 +83,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		// not the target.
 		if err := sessionnotice.QueueSessionRevoked(r.Context(), tx, identityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.SessionNotice))

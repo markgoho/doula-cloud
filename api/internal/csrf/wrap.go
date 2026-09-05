@@ -7,7 +7,11 @@
 // Strict. No token-based CSRF scheme is introduced.
 package csrf
 
-import "net/http"
+import (
+	"net/http"
+
+	"doula-cloud/api/internal/apierr"
+)
 
 // stateChanging is the set of HTTP methods this check applies to. GET,
 // HEAD, and OPTIONS never change state, so a cross-site GET (e.g. an
@@ -38,7 +42,7 @@ func Wrap(allowedOrigins []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if stateChanging[r.Method] {
 			if origin := r.Header.Get("Origin"); origin != "" && !allowed[origin] {
-				http.Error(w, "cross-site request rejected", http.StatusForbidden)
+				apierr.WriteError(w, "cross-site request rejected", http.StatusForbidden)
 				return
 			}
 		}

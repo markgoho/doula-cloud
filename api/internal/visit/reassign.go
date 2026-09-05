@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -42,17 +43,17 @@ func ReassignHandler() http.Handler {
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "engagement not found", http.StatusNotFound)
+				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		var req ReassignRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		if !staffauth.ParseUUID(w, "staff", req.StaffID) {
@@ -62,15 +63,15 @@ func ReassignHandler() http.Handler {
 		hasMembership, isDoula, employmentType, err := doulaMembership(r.Context(), tx, practiceID, req.StaffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !hasMembership {
-			http.Error(w, "staff member not found at this practice", http.StatusBadRequest)
+			apierr.WriteError(w, "staff member not found at this practice", http.StatusBadRequest)
 			return
 		}
 		if !isDoula {
-			http.Error(w, "staff member does not hold the Doula role at this practice", http.StatusBadRequest)
+			apierr.WriteError(w, "staff member does not hold the Doula role at this practice", http.StatusBadRequest)
 			return
 		}
 		// A contractor is put on a birth by her own acceptance of an Offer
@@ -81,11 +82,11 @@ func ReassignHandler() http.Handler {
 			attached, err := hasGrantedAttachment(r.Context(), tx, engagementID, req.StaffID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !attached {
-				http.Error(w, "that contractor has not accepted an offer on this engagement", http.StatusBadRequest)
+				apierr.WriteError(w, "that contractor has not accepted an offer on this engagement", http.StatusBadRequest)
 				return
 			}
 		}
@@ -100,17 +101,17 @@ func ReassignHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
-			http.Error(w, "visit not found", http.StatusNotFound)
+			apierr.WriteError(w, "visit not found", http.StatusNotFound)
 			return
 		}
 		reassignerStaffID, _ := staffauth.StaffID(r.Context())
@@ -122,7 +123,7 @@ func ReassignHandler() http.Handler {
 			Actor:       activity.StaffActor(reassignerStaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -137,7 +138,7 @@ func ReassignHandler() http.Handler {
 			actorStaffID, _ := staffauth.StaffID(r.Context())
 			if err := staffauth.Grant(r.Context(), tx, engagementID, req.StaffID, actorStaffID, nil, nil); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -145,7 +146,7 @@ func ReassignHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(ReassignResponse{VisitID: visitID, StaffID: req.StaffID}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

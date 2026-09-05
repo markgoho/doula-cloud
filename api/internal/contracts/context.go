@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -29,11 +30,11 @@ func resolveContractRequest(w http.ResponseWriter, r *http.Request) (tx *sql.Tx,
 	}
 	if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "engagement not found", http.StatusNotFound)
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return nil, "", false
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 

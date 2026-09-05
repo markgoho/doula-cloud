@@ -11,6 +11,8 @@
  * account yet.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 /** A minimal fetch-shaped function, injected rather than imported -- see
  * contract.ts's Fetcher for why. */
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
@@ -100,7 +102,7 @@ function offerActionPath(practiceId: string, offerId: string, action: string): s
 
 async function readOrThrow<T>(response: Response): Promise<T> {
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json() as Promise<T>;
 }

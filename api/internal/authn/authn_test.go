@@ -2,12 +2,14 @@ package authn_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
@@ -64,15 +66,19 @@ func beginRequest(t *testing.T, db *testdb.DB, setup func(*http.Request)) (*http
 	return rec, uid, ok
 }
 
-// assertUnauthorized fails the test unless rec carries a 401 with body,
+// assertUnauthorized fails the test unless rec carries a 401 with message,
 // and no Set-Cookie -- a rejected request must never renew a session.
-func assertUnauthorized(t *testing.T, rec *httptest.ResponseRecorder, body string) {
+func assertUnauthorized(t *testing.T, rec *httptest.ResponseRecorder, message string) {
 	t.Helper()
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
-	if got := rec.Body.String(); got != body {
-		t.Fatalf("body = %q, want %q", got, body)
+	var out apierr.APIError
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if out.Message != message {
+		t.Fatalf("message = %q, want %q", out.Message, message)
 	}
 	if got := rec.Result().Cookies(); len(got) != 0 {
 		t.Fatalf("Set-Cookie = %v, want none", got)
@@ -86,7 +92,7 @@ func TestBegin_MissingCredential(t *testing.T) {
 	if ok {
 		t.Fatal("expected ok=false, got true")
 	}
-	assertUnauthorized(t, rec, "missing credential\n")
+	assertUnauthorized(t, rec, "missing credential")
 }
 
 func TestBegin_SessionCookie_Success(t *testing.T) {
@@ -147,7 +153,7 @@ func TestBegin_SessionCookie_Rejected(t *testing.T) {
 			if ok {
 				t.Fatal("expected ok=false, got true")
 			}
-			assertUnauthorized(t, rec, "invalid session\n")
+			assertUnauthorized(t, rec, "invalid session")
 		})
 	}
 }
@@ -290,7 +296,7 @@ func TestBegin_BearerTokenAloneIsRejected(t *testing.T) {
 	if ok {
 		t.Fatal("expected ok=false, got true -- Begin still accepts a Bearer ID token")
 	}
-	assertUnauthorized(t, rec, "missing credential\n")
+	assertUnauthorized(t, rec, "missing credential")
 }
 
 // bootstrapRequest runs authn.BeginBootstrap against db for a request
@@ -332,7 +338,7 @@ func TestBeginBootstrap_MissingCredential(t *testing.T) {
 	if ok {
 		t.Fatal("expected ok=false, got true")
 	}
-	assertUnauthorized(t, rec, "missing credential\n")
+	assertUnauthorized(t, rec, "missing credential")
 }
 
 func TestBeginBootstrap_InvalidToken(t *testing.T) {
@@ -344,7 +350,7 @@ func TestBeginBootstrap_InvalidToken(t *testing.T) {
 	if ok {
 		t.Fatal("expected ok=false, got true")
 	}
-	assertUnauthorized(t, rec, "invalid token\n")
+	assertUnauthorized(t, rec, "invalid token")
 }
 
 // TestBeginBootstrap_SessionCookieIsNotACredential pins that the
@@ -361,7 +367,7 @@ func TestBeginBootstrap_SessionCookieIsNotACredential(t *testing.T) {
 	if ok {
 		t.Fatal("expected ok=false, got true")
 	}
-	assertUnauthorized(t, rec, "missing credential\n")
+	assertUnauthorized(t, rec, "missing credential")
 }
 
 // TestMintSession_SweepsExpiredSessions covers the AC that expired rows
