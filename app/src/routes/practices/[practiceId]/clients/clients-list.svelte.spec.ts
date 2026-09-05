@@ -239,6 +239,60 @@ describe('the "see everyone" toggle', () => {
 	});
 });
 
+// #264 (RA-G6): the open-Engagement rollup column.
+describe('the Engagements rollup column (#264)', () => {
+	it('shows one line per open Engagement, dropping none', async () => {
+		// The fixture's first Client already carries two openEngagements
+		// entries (#596: one fully populated, one fully absent).
+		await setup();
+
+		await expect
+			.element(
+				testPage.getByRole('cell', {
+					name: 'Contract: Sent · Doula: Yolanda Okonkwo-Fitzgerald · Active · Invoice: Open ($4,500.00)'
+				})
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Contract: No contract yet · Doula: No Doula assigned · Intake' }))
+			.toBeVisible();
+	});
+
+	it('shows no rollup lines for a Client with zero open Engagements', async () => {
+		// The fixture's second Client carries no openEngagements at all.
+		await setup(jsonResponse({ items: [clients[1]], hasMore: false }));
+
+		await expect
+			.element(testPage.getByRole('columnheader', { name: 'Engagements' }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('Contract:')).not.toBeInTheDocument();
+	});
+
+	it('shows her own fee on a line that carries one, never Invoice money', async () => {
+		await setup(
+			jsonResponse({
+				items: [
+					{
+						...clients[1],
+						openEngagements: [
+							{ engagementId: 'engagement-fee', engagementStatus: 'active', feeCents: 120_000 }
+						]
+					}
+				],
+				hasMore: false
+			})
+		);
+
+		await expect
+			.element(
+				testPage.getByRole('cell', {
+					name: 'Contract: No contract yet · Doula: No Doula assigned · Active · Your fee: $1,200.00'
+				})
+			)
+			.toBeVisible();
+	});
+});
+
 // #499: a pending Engagement Request shows on its Client's row.
 describe('a pending Request on the row', () => {
 	it('shows the kind and "request pending" for a Client with one pending Request', async () => {

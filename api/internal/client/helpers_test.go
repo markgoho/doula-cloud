@@ -45,6 +45,13 @@ const (
 	// deadLetteredStatus is the shared terminal-failure status, asserted
 	// on by both the portal-invite outbox tests and #394's erasure ones.
 	deadLetteredStatus = "dead_lettered"
+	// adminRole mirrors ownerRole's own reasoning -- #264's rollup tests
+	// seed a real Admin membership, on top of erase_test.go's existing
+	// Admin-role literals.
+	adminRole = "admin"
+	// openInvoiceStatus is #264's rollup tests' own repeated literal, on
+	// top of erasure_outbox_test.go's existing one.
+	openInvoiceStatus = "open"
 )
 
 // seedStaffAtPractice seeds an employee Doula at practiceID.
@@ -108,6 +115,21 @@ func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, givenName, em
 	return clientID, engagementID
 }
 
+// seedEngagement inserts a second (or third) Engagement onto an
+// already-seeded clientID -- seedClientEngagement only ever seeds a
+// Client's first, so a test proving a Client can hold more than one
+// concurrent open Engagement (ADR-0017) needs this to add the rest.
+func seedEngagement(t *testing.T, db *testdb.DB, clientID, practiceID, status, kind string) (engagementID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, $3, $4) RETURNING id`,
+		clientID, practiceID, status, kind,
+	).Scan(&engagementID); err != nil {
+		t.Fatalf("seed engagement: %v", err)
+	}
+	return engagementID
+}
+
 // seedPendingRequest inserts a pending engagement_requests row for
 // clientID -- ADR-0017's Engagement Request record, in its default
 // 'pending' state.
@@ -160,6 +182,49 @@ func seedGrantedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID st
 		engagementID, staffID,
 	); err != nil {
 		t.Fatalf("seed granted attachment: %v", err)
+	}
+}
+
+// seedGrantedAttachmentWithFee mirrors seedGrantedAttachment but also
+// sets fee_amount_cents -- ADR-0008's own agreed fee, for the Clients
+// list rollup's contractor-only field (#264).
+func seedGrantedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID string, feeAmountCents int64) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents) VALUES ($1, $2, 'granted', $2, $3)`,
+		engagementID, staffID, feeAmountCents,
+	); err != nil {
+		t.Fatalf("seed granted attachment with fee: %v", err)
+	}
+}
+
+// seedContract inserts a Contract row for engagementID at status,
+// bypassing contracts.PostContractHandler -- for a test that only needs
+// the status a Clients-list rollup line reads, not the merge-field
+// machinery around it.
+func seedContract(t *testing.T, db *testdb.DB, engagementID, status string) (contractID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO contracts (engagement_id, status, prose) VALUES ($1, $2, '') RETURNING id`,
+		engagementID, status,
+	).Scan(&contractID); err != nil {
+		t.Fatalf("seed contract: %v", err)
+	}
+	return contractID
+}
+
+// seedInvoice inserts an Invoice row against contractID at status,
+// bypassing payments.PostInvoiceHandler and Stripe entirely --
+// stripe_invoice_id only needs to be a unique string here, never a real
+// Stripe id.
+func seedInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, status string, amountCents int64) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents)
+		 VALUES ($1, $2, gen_random_uuid()::text, $3, $4)`,
+		practiceID, contractID, status, amountCents,
+	); err != nil {
+		t.Fatalf("seed invoice: %v", err)
 	}
 }
 
