@@ -139,6 +139,7 @@ func TestRLS_ClientPortalUsersInviteUpdateCannotTouchAcceptedRow(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Accepted Row Practice")
 	clientID, _ := seedClientEngagement(t, db, practiceID, "Accepted Row Client", "acceptedrow@example.com")
+	testdb.SeedPortalAccount(t, db, "already-accepted", "already-accepted@example.com")
 	var rowID string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted', $1) RETURNING id`,

@@ -162,6 +162,7 @@ func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 	const identityUID = "invite-already-accepted-staff"
 	practiceID := seedStaffWithMembership(t, db, identityUID)
 	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Accepted Client", "accepted@example.com")
+	testdb.SeedPortalAccount(t, db, "already-accepted-uid", "already-accepted-uid@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted-uid', $1)`,
 		clientID,

@@ -257,9 +257,11 @@ func seedPendingOutboxRow(t *testing.T, db *testdb.DB, clientID string) (outboxI
 // regardless of what portal_invite_outbox says.
 func seedAcceptedPortalUser(t *testing.T, db *testdb.DB, clientID string) {
 	t.Helper()
+	identityUID := "identity-" + clientID
+	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token, identity_uid) VALUES ($1, gen_random_uuid(), $2)`,
-		clientID, "identity-"+clientID,
+		clientID, identityUID,
 	); err != nil {
 		t.Fatalf("seed accepted portal user: %v", err)
 	}

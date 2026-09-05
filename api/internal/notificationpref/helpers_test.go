@@ -39,6 +39,7 @@ func seedEngagement(t *testing.T, db *testdb.DB, practiceID, clientID string) (e
 // using the superuser Admin connection.
 func seedPortalUser(t *testing.T, db *testdb.DB, identityUID, clientID string) {
 	t.Helper()
+	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
 		identityUID, clientID,

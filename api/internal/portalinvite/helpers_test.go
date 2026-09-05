@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
@@ -131,12 +132,22 @@ func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email s
 // AcceptInviteHandler to pick up.
 func seedPendingPortalInvite(t *testing.T, db *testdb.DB) (clientID, inviteToken string) {
 	t.Helper()
+	return seedPendingPortalInviteExpiringAt(t, db, time.Now().Add(7*24*time.Hour))
+}
+
+// seedPendingPortalInviteExpiringAt is seedPendingPortalInvite with an
+// explicit invite_token_expires_at, for a test that drives the #616
+// expiry check directly (a time in the past for an already-expired
+// invite; NULL is what a fixture predating this migration would carry --
+// no other caller needs that case, so no third helper exists for it).
+func seedPendingPortalInviteExpiringAt(t *testing.T, db *testdb.DB, expiresAt time.Time) (clientID, inviteToken string) {
+	t.Helper()
 	practiceID := seedStaffWithMembership(t, db, "portal-invite-owner")
 	clientID, _ = seedClientEngagement(t, db, practiceID, "Invited Client", "invited@example.com")
 
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING invite_token::text`,
-		clientID,
+		`INSERT INTO client_portal_users (client_id, invite_token, invite_token_expires_at) VALUES ($1, gen_random_uuid(), $2) RETURNING invite_token::text`,
+		clientID, expiresAt,
 	).Scan(&inviteToken); err != nil {
 		t.Fatalf("seed pending portal invite: %v", err)
 	}

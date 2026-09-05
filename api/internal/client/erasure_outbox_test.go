@@ -343,6 +343,7 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 	const portalUID = "portal-uid-erasure"
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
+	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, clientID, portalUID,
 	); err != nil {
@@ -381,6 +382,16 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 
 	if _, ok := readOutbox(t, db, clientID)["identity_account_delete|"+portalUID]; !ok {
 		t.Fatal("no identity-account-delete row queued")
+	}
+
+	var portalAccounts int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM portal_accounts WHERE identifier = $1`, portalUID,
+	).Scan(&portalAccounts); err != nil {
+		t.Fatalf("count portal accounts: %v", err)
+	}
+	if portalAccounts != 0 {
+		t.Fatal("portal_accounts row still exists -- it holds the sign-in address erasure exists to scrub")
 	}
 }
 
@@ -431,6 +442,7 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_worker", "paid", 200*24*time.Hour)
+	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, clientID, portalUID,
 	); err != nil {
@@ -532,6 +544,7 @@ func TestErasureWorker_RetriesAFailedIdentityDelete(t *testing.T) {
 	const portalUID = "portal-uid-worker-fail"
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
+	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, clientID, portalUID,
 	); err != nil {
