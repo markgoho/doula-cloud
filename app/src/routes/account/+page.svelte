@@ -25,13 +25,36 @@
 	 * and a load function would buy nothing but a second place to look.
 	 */
 	import { onMount } from 'svelte';
-	import { apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import {
+		getMultiFactorResolver,
+		signInWithEmailAndPassword,
+		signOut,
+		TotpMultiFactorGenerator,
+		type MultiFactorError,
+		type MultiFactorResolver,
+		type User
+	} from 'firebase/auth';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { getFirebaseAuth } from '#lib/firebase.js';
+	import {
+		isMultiFactorAuthRequired,
+		passwordReauthRefusal,
+		refusalErrors,
+		refusalMessage,
+		SERVICE_PROBLEM,
+		totpCodeRefusal
+	} from '#lib/formErrors.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/formErrors.js';
@@ -40,15 +63,44 @@
 	const workStateId = 'account-work-state';
 
 	let name = $state('');
+	let email = $state('');
 	let reportedAt = $state('');
 	// The full state name the <select> speaks; workStateCode() converts it
 	// back to the USPS code the API stores on the way out.
 	let selectedState = $state('');
+	// #606: whether *this session* showed a second factor at sign-in --
+	// see SessionInfo's own doc comment for why that is not the same
+	// question as "is one currently enrolled".
+	let hasSecondFactor = $state(false);
 	let isLoaded = $state(false);
 	let loadError = $state('');
 	let saveError = $state<FormError[]>([]);
 	let savedState = $state('');
 	let isSaving = $state(false);
+
+	const mfaPasswordId = 'account-mfa-password';
+	const mfaCodeId = 'account-mfa-code';
+
+	// #606: voluntary removal of a second factor, from idle status through
+	// the step-up reauth Identity Platform itself demands of an already
+	// enrolled identity -- see the two-step shape below.
+	let mfaStep = $state<'idle' | 'password' | 'code'>('idle');
+	let mfaPassword = $state('');
+	let mfaCode = $state('');
+	let mfaErrors = $state<FormError[]>([]);
+	let isMfaBusy = $state(false);
+
+	/*
+	 * The in-progress reauthentication Identity Platform is waiting on,
+	 * kept across the password and code steps without being `$state` --
+	 * the code step reads it once, to resolve, and the markup never does.
+	 * Same shape as the login screen's own `mfaResolver`.
+	 */
+	let mfaResolver: MultiFactorResolver | undefined;
+
+	function mfaErrorFor(targetId: string): string | undefined {
+		return mfaErrors.find((entry) => entry.targetId === targetId)?.message;
+	}
 
 	// #613: no verified-email flag is exposed here, so this is offered
 	// unconditionally rather than only when unverified -- harmless either
@@ -87,12 +139,25 @@
 		}
 
 		name = result.session.name;
+		email = result.session.email;
 		reportedAt = result.session.workStateReportedAt;
 		selectedState = workStateName(result.session.workState);
+		hasSecondFactor = result.session.secondFactor;
 		isLoaded = true;
 	}
 
 	onMount(loadAccount);
+
+	function signOutOfMfaFirebaseSDK() {
+		void signOut(getFirebaseAuth());
+	}
+
+	// #167's shared-device concern, the same one `/mfa/enroll` guards
+	// against: a live client-side Identity Platform sign-in started by the
+	// removal flow below must not survive her navigating away mid-flow.
+	// Both handlers' own `signOut` calls already cover success and
+	// failure; this is for the exit that skips them.
+	onMount(() => signOutOfMfaFirebaseSDK);
 
 	/*
 	 * One deliberate act: choose a state, press Save. No confirmation
@@ -161,6 +226,107 @@
 			isSaving = false;
 		}
 	}
+
+	function beginMfaRemoval() {
+		mfaErrors = [];
+		mfaPassword = '';
+		mfaCode = '';
+		mfaStep = 'password';
+	}
+
+	function cancelMfaRemoval() {
+		mfaErrors = [];
+		mfaPassword = '';
+		mfaCode = '';
+		mfaStep = 'idle';
+	}
+
+	/*
+	 * The one thing both reauth steps below still have to do once Identity
+	 * Platform accepts the credential: hand a fresh ID token to
+	 * `DELETE /api/staff/mfa`, which reads it two ways at once --
+	 * `authn.Begin` reads the `__session` cookie already on this request
+	 * (`credentials: 'include'`), and `RequireRecentAuth` reads the Bearer
+	 * token as a second, additional proof that the reauth just happened
+	 * (api/internal/staffauth/reauth.go). Success ends every live session
+	 * for the identity, this one included (`authn.EndAllSessions` keys on
+	 * identity, not on the cookie that asked), so there is nothing left to
+	 * show on this screen -- she is signed out and sent to log in again,
+	 * the same shape `handleExpiredSession` (#lib/api.js) uses for any
+	 * other session that has just ended out from under her.
+	 *
+	 * A failure here does not retry in place: the code step's resolver is
+	 * single-use, so both callers fall back to the password step and ask
+	 * her to start the step-up over.
+	 */
+	async function didRemoveSecondFactor(user: User): Promise<boolean> {
+		const idToken = await user.getIdToken();
+		const response = await fetch(`${apiBaseURL()}/api/staff/mfa`, {
+			method: 'DELETE',
+			credentials: 'include',
+			headers: { Authorization: `Bearer ${idToken}` }
+		});
+
+		if (response.ok) {
+			await signOut(getFirebaseAuth());
+			await goto(`${resolve('/(signed-out)/login')}?sessionEnded=true`);
+			return true;
+		}
+
+		await signOut(getFirebaseAuth());
+		mfaErrors = [{ message: await refusalMessage(response) }];
+		return false;
+	}
+
+	async function handleMfaPasswordSubmit() {
+		mfaErrors = [];
+
+		if (mfaPassword === '') {
+			mfaErrors = [{ message: 'Enter your password', targetId: mfaPasswordId }];
+			return;
+		}
+
+		isMfaBusy = true;
+		try {
+			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, mfaPassword);
+			const didRemove = await didRemoveSecondFactor(credential.user);
+			if (!didRemove) mfaStep = 'password';
+		} catch (error_) {
+			if (isMultiFactorAuthRequired(error_)) {
+				// Expected for an identity that already holds the factor
+				// she is trying to remove: Identity Platform challenges the
+				// second factor on every sign-in once one is enrolled.
+				mfaResolver = getMultiFactorResolver(getFirebaseAuth(), error_ as MultiFactorError);
+				mfaCode = '';
+				mfaStep = 'code';
+				return;
+			}
+			mfaErrors = [passwordReauthRefusal(error_, mfaPasswordId)];
+		} finally {
+			isMfaBusy = false;
+		}
+	}
+
+	async function handleMfaCodeSubmit() {
+		mfaErrors = [];
+
+		if (mfaCode.trim() === '') {
+			mfaErrors = [{ message: 'Enter the 6-digit code from your authenticator app', targetId: mfaCodeId }];
+			return;
+		}
+
+		isMfaBusy = true;
+		try {
+			const assertion = TotpMultiFactorGenerator.assertionForSignIn(mfaResolver!.hints[0].uid, mfaCode);
+			const credential = await mfaResolver!.resolveSignIn(assertion);
+			const didRemove = await didRemoveSecondFactor(credential.user);
+			if (!didRemove) mfaStep = 'password';
+		} catch (error_) {
+			mfaErrors = [totpCodeRefusal(error_, mfaCodeId)];
+		} finally {
+			isMfaBusy = false;
+		}
+	}
 </script>
 
 {#snippet intro()}
@@ -197,6 +363,69 @@
 		the comment on handleSubmit. Hence no `disabled` on an unchanged
 		value.
 	-->
+{/snippet}
+
+{#snippet mfaSection()}
+	<!--
+		#606: reads `hasSecondFactor` as the session-carried fact it is (see
+		SessionInfo's own doc comment) rather than re-deriving it, which
+		matches how staffauth.Middleware reads the same fact server-side.
+
+		No nested `<form>` here -- the whole page is already one `<form>`
+		(`handleSubmit`, below), and HTML forbids nesting one inside
+		another. Every control in this fieldset is `type="button"` with its
+		own `onClick`, the same shape "Send a new verification link" (in
+		`actions`, below) already uses for a same-page secondary action.
+	-->
+	{#if hasSecondFactor}
+		{#if mfaStep === 'idle'}
+			<Text text="Turned on. You'll be asked for a code from your authenticator app when you sign in." />
+			<Button type="button" variant="destructive" label="Remove" onClick={beginMfaRemoval} />
+		{:else if mfaStep === 'password'}
+			<Text text="Confirm your password to remove two-factor authentication." />
+			<LabeledField id={mfaPasswordId} label="Password" error={mfaErrorFor(mfaPasswordId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="password"
+						value={mfaPassword}
+						onInput={(value) => (mfaPassword = value)}
+						required
+						autocomplete="current-password"
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button type="button" variant="destructive" label="Continue" loading={isMfaBusy} onClick={handleMfaPasswordSubmit} />
+			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={isMfaBusy} />
+		{:else}
+			<TotpCodeField id={mfaCodeId} value={mfaCode} onInput={(value) => (mfaCode = value)} error={mfaErrorFor(mfaCodeId)} />
+			<Button type="button" variant="destructive" label="Remove" loading={isMfaBusy} onClick={handleMfaCodeSubmit} />
+			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={isMfaBusy} />
+		{/if}
+	{:else}
+		<Text text="Not turned on." />
+		<!--
+			A link, not a button: this only ever navigates, the same reason
+			`DataTable`'s rowHref cells and the practice-picker links are
+			`Link` rather than `Button` + `goto`. `returnTo=/account` brings
+			her back here once enrolment finishes (docs/design's link-text
+			rule is why the label matches /mfa/enroll's own title verbatim).
+		-->
+		<Link href={`${resolve('/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/account'))}`} label="Set up two-factor authentication" />
+	{/if}
+	<!--
+		Field-targeted refusals (a wrong password, a wrong code) already
+		show beside their own control via LabeledField's `error` -- the same
+		"Send a new verification link" precedent below, which shows its own
+		failure as a plain Notice rather than a page-wide ErrorSummary. A
+		service-level failure (the network, the DELETE call itself) names no
+		field, so it is the one case shown here.
+	-->
+	{#if mfaErrors.length > 0 && !mfaErrors[0].targetId}
+		<Notice variant="error" message={mfaErrors[0].message} />
+	{/if}
 {/snippet}
 
 {#snippet errorSummary()}
@@ -249,7 +478,12 @@
 	<FormPage
 		title="Your account"
 		{intro}
-		fieldsets={isLoaded ? [{ legend: `Your details, ${name}`, content: workState }] : []}
+		fieldsets={isLoaded
+			? [
+					{ legend: `Your details, ${name}`, content: workState },
+					{ legend: 'Two-factor authentication', content: mfaSection }
+				]
+			: []}
 		errorSummary={saveError.length > 0 ? errorSummary : undefined}
 		{actions}
 		loading={isLoaded || loadError ? undefined : 'Loading your account'}
