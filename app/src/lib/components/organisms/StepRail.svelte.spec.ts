@@ -45,17 +45,17 @@ describe('StepRail.svelte', () => {
 	});
 
 	/*
-	 * Queried out of the DOM rather than asserted visible: the rail is
-	 * `display: none` until its page frame is 60rem wide, and a test
-	 * renders into no container at all, so what is on screen here is the
-	 * narrow strip. That is the component working, not the test working
-	 * around it -- and it is why the strip's own assertions below can use
-	 * `toBeVisible` and these cannot.
+	 * Queried out of the DOM rather than asserted visible: the default
+	 * `expand: 'current'` is a question page, where the list starts
+	 * closed, so its contents are out of layout and out of the
+	 * accessibility tree. That is the component working, not the test
+	 * working around it -- and it is why the summary's own assertions
+	 * below can use `toBeVisible` and these cannot.
 	 */
 	it('renders one link per step', async () => {
 		const { container } = await setup();
 
-		expect([...container.querySelectorAll(':scope .rail a')].map((node) => node.textContent?.trim())).toEqual([
+		expect([...container.querySelectorAll(':scope details a')].map((node) => node.textContent?.trim())).toEqual([
 			'Who Sarah is',
 			'How to reach Sarah',
 			'Email address',
@@ -109,7 +109,34 @@ describe('StepRail.svelte', () => {
 		);
 	});
 
-	it('names the step and its number in the narrow strip', async () => {
+	/*
+	 * #585's whole mechanism, and the two assertions that replace a
+	 * container query: the open state is derived from what the page is
+	 * FOR, never from how much room it was given. A question page asks a
+	 * question, so the journey is one collapsed line above it; the
+	 * summary page IS the answered journey, so it opens.
+	 */
+	it('starts closed on a question page', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelector('details')?.open).toBe(false);
+	});
+
+	it('starts open on the summary page', async () => {
+		const { container } = await setup({ expand: 'completed' });
+
+		expect(container.querySelector('details')?.open).toBe(true);
+	});
+
+	/*
+	 * That it authors no width condition at all is not asserted here.
+	 * `floor.svelte.spec.ts` discovers every `@container` in the
+	 * component tree and fails any that is not in its registry with a
+	 * written justification, so a query added back to this file fails
+	 * that check by construction -- and re-asserting it here would be a
+	 * second guardrail on the same rule, drifting the moment one moves.
+	 */
+	it('names the step and its number in the always-visible summary', async () => {
 		const { container } = await setup();
 
 		expect(container.querySelector('.summary')?.textContent).toBe(
@@ -120,7 +147,7 @@ describe('StepRail.svelte', () => {
 
 	// The summary page has no current step, so a step number would be a
 	// lie; the count is what is true there.
-	it('counts completed steps in the strip when no step is current', async () => {
+	it('counts completed steps in the summary when no step is current', async () => {
 		const { container } = await setup({
 			steps: steps.map((step) => ({ ...step, status: 'completed' as const })),
 			expand: 'completed'
@@ -137,16 +164,13 @@ describe('StepRail.svelte', () => {
 		expect(container.querySelector<HTMLElement>('.track-fill')?.style.inlineSize).toBe('0%');
 	});
 
-	// Narrow has no room for the rail, so the full list is a page of its
-	// own -- a route, and therefore #466's. Omitting the href omits the link
-	// rather than rendering a dead one.
-	it('links to the whole step list only when given somewhere to send it', async () => {
-		await setup({ allStepsHref: '/clients/new/steps' });
-
-		await expect.element(page.getByRole('link', { name: 'Show all steps' })).toBeVisible();
-	});
-
-	it('renders no "Show all steps" link without an href', async () => {
+	/*
+	 * The "Show all steps" link is gone with the narrow presentation that
+	 * needed it (#585). It existed to recover a step list that a width
+	 * had taken away, and no width takes anything away now -- the list is
+	 * in the page, one disclosure from the reader, on every screen.
+	 */
+	it('offers no link out to a separate step list', async () => {
 		const { container } = await setup();
 
 		expect([...container.querySelectorAll(':scope a')].map((node) => node.textContent?.trim())).not.toContain(

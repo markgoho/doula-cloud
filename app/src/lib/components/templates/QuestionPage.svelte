@@ -116,22 +116,36 @@
 {/snippet}
 
 <container-l>
-	<!-- No cap on the frame: it holds the rail beside the column, and the
-	     column carries the readability cap itself (#541). -->
+	<!-- No cap on the frame: the column carries the readability cap
+	     itself (#541). -->
 	<center-l max="none" gutters="var(--page-gutter)">
 		<!--
-			sidebar-l, side="start" (default) (#564): the rail is FIRST
-			in the DOM, matching side="start"'s own convention. Wraps to
-			a stack once the column cannot keep --form-max -- the
-			column's own cap (below) is what makes that the correct
-			trigger, not a measured pixel.
-		-->
-		<sidebar-l basis="var(--page-rail)" space="var(--space-12)" content-min="min(var(--form-max), 100%)">
-			<StepRail {journey} {steps} expand="current" />
+			The journey sits ABOVE the question, full width, and this
+			Template no longer uses sidebar-l (#585).
 
-			<div class="column">
-				<stack-l space="var(--space-6)">
-					<BackLink href={backHref} />
+			It used to put the journey in a --page-rail column beside the
+			question, and StepRail then guessed with a container query
+			whether that column existed. It could not: the wrap is a
+			flexbox event no selector reports, and the guess was measured
+			wrong across a 125px band. Now nothing guesses. A question
+			page asks one question, so a permanent rail beside it is the
+			rail-column-and-nothing #543 already called out; collapsed
+			above the question, the journey costs one line at every
+			width and the reader opens it when they want it.
+
+			CheckAnswers keeps its sidebar-l: there the whole answered
+			journey IS the page's content, so it earns the column.
+		-->
+		<div class="column">
+			<stack-l space="var(--space-6)">
+				<BackLink href={backHref} />
+
+				<!-- After the back link and before the question: the back link
+				     is where the reader came from, the journey is where they
+				     are, and the question is what is being asked. Inside the
+				     stack, so it takes the same rhythm as everything else in
+				     the column rather than needing spacing of its own. -->
+				<StepRail {journey} {steps} expand="current" />
 
 					{#if errorSummary}
 						{@render errorSummary()}
@@ -173,8 +187,7 @@
 
 					<cluster-l space="var(--space-4)" align="center">{@render actions()}</cluster-l>
 				</stack-l>
-			</div>
-		</sidebar-l>
+		</div>
 	</center-l>
 </container-l>
 
@@ -185,39 +198,22 @@
 		}
 
 		/*
-		 * sidebar-l wraps at content-min="min(var(--form-max), 100%)"
-		 * (markup above), so it never fits beside the rail without its
-		 * full cap -- the leftover space is centred rather than left at
-		 * the inline end, a page that asks one question has nothing more
-		 * to put in a wider window (#543). `align-items: start` keeps the
-		 * rail and the column top-aligned instead of the flex default
-		 * (stretch), which would otherwise match them to whichever is
-		 * taller.
-		 *
-		 * The `min(…, 100%)` matters and is not decoration: `.column`
-		 * also carries `max-inline-size: var(--form-max)` below, and a
-		 * bare `content-min="var(--form-max)"` sets that SAME length as
-		 * `min-inline-size` too -- min and max pinned to the same value
-		 * makes the column unable to shrink ever again, including once
-		 * wrapped onto its own row, so it overflowed a frame narrower
-		 * than --form-max instead of adapting to it. Caught by rendering
-		 * the wrapped state at 320px and reading `.column`'s own width
-		 * back before this fix (704px, past the 320px it was given) and
-		 * after (320px, matching).
-		 */
-		sidebar-l {
-			justify-content: center;
-			align-items: start;
-		}
-
-		/*
 		 * The question column is capped at --form-max while the frame
 		 * around it is not: the column is all controls, and a 1200px input
-		 * is unreadable however wide the window is (#422). The rail takes
-		 * its own width outside that cap.
+		 * is unreadable however wide the window is (#422). Centred rather
+		 * than left at the inline start, because a page that asks one
+		 * question has nothing else to put in a wider window (#543) --
+		 * which is what the sidebar-l this replaced achieved with
+		 * `justify-content: center` once its rail wrapped away (#585).
+		 *
+		 * The journey is inside this cap now rather than beside it. It is
+		 * one collapsed line, so it costs the column nothing, and a
+		 * summary line that ran to 1200px would be as unreadable as the
+		 * inputs under it.
 		 */
 		.column {
 			max-inline-size: var(--form-max);
+			margin-inline: auto;
 		}
 
 		fieldset {

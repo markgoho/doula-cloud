@@ -116,7 +116,9 @@ describe('QuestionPage.svelte', () => {
 		const { container } = await setup();
 
 		expect(container.textContent).not.toContain('There is a problem');
-		expect(container.querySelectorAll(':scope .column > stack-l > *')).toHaveLength(4);
+		// Back link, journey, question, control, actions -- the journey
+		// joined the column on #585, where it used to sit beside it.
+		expect(container.querySelectorAll(':scope .column > stack-l > *')).toHaveLength(5);
 	});
 
 	// The hint is announced from the <fieldset> for a group, because a group

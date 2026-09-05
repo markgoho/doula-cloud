@@ -39,6 +39,34 @@
 	 * landmark either way, and is what the account owner chose over a
 	 * plain unnamed list.
 	 *
+	 * ## One presentation, disclosed by the reader (#585)
+	 *
+	 * This used to render two: a `.rail` of steps, and a `.strip` -- a
+	 * summary line, a progress track and a "Show all steps" link -- with
+	 * `@container (min-width: 67.5rem)` picking between them. That query
+	 * is gone, and so is the second presentation.
+	 *
+	 * The query was trying to observe something CSS cannot see. Its hosts
+	 * lay the journey out with `sidebar-l`, whose flex line wraps when the
+	 * rail and the column stop fitting side by side, and **no selector
+	 * reports that a wrap happened**. So the query was a second opinion
+	 * about an event flexbox had already decided, and it drifted: measured
+	 * on #585, `sidebar-l` pairs at 1078px while the query flipped at
+	 * 1080px, and on `CheckAnswers` in its wide state it pairs at 955px --
+	 * a 125px band where the layout opened a rail column and the component
+	 * put a progress bar in it and left ~250px of the column empty. The
+	 * 67.5rem literal was carried from a 60rem query both hosts had before
+	 * #564 and lost to `sidebar-l`; it outlived its own mechanism, and
+	 * nothing failed, because the coupling the check appeared to assert
+	 * was never registered.
+	 *
+	 * The fix is not a better number. `<details>` moves the decision to
+	 * the reader, which is the one party that can actually make it, and
+	 * costs one line of vertical space when closed at every width. The
+	 * strip's summary and track became the <summary>, so progress is
+	 * legible without opening anything; the step list is what opens. See
+	 * ADR-0024 rule 1 for the general rule this is the worked case of.
+	 *
 	 * ## Steps are data in
 	 *
 	 * The rail never computes its own steps. #432 requires that a Practice
@@ -52,28 +80,27 @@
 
 	interface Properties {
 		/**
-		 * Names the landmark, and captions the narrow strip.
+		 * Names the landmark, and captions the summary the reader opens.
 		 */
 		journey: string;
 		steps: JourneyStep[];
 		/**
-		 * Which steps show their questions. `current` is a question page,
-		 * where the reader is inside one step; `completed` is the summary
-		 * page, where there is no current step and the whole answered
-		 * journey is the point. A closed pair rather than a boolean,
-		 * because these are two behaviours and not one thing switched off.
+		 * Which steps show their questions, and -- since #585 -- whether the
+		 * list starts disclosed at all. `current` is a question page, where
+		 * the reader is inside one step; `completed` is the summary page,
+		 * where there is no current step and the whole answered journey is
+		 * the point. A closed pair rather than a boolean, because these are
+		 * two behaviours and not one thing switched off.
+		 *
+		 * There is deliberately no second `open` prop. `expand` already says
+		 * what the page is FOR, which is the only thing the open state turns
+		 * on, and two props would let a host pass `expand="current"` with the
+		 * list open and get a page whose halves disagree.
 		 */
 		expand?: 'current' | 'completed';
-		/**
-		 * Where the narrow strip's "Show all steps" goes. Narrow has no room
-		 * for the rail, so the full list becomes a page of its own -- which
-		 * is a route, and therefore #466's to build. Omit it and the strip
-		 * shows no link.
-		 */
-		allStepsHref?: string;
 	}
 
-	let { journey, steps, expand = 'current', allStepsHref }: Properties = $props();
+	let { journey, steps, expand = 'current' }: Properties = $props();
 
 	const railId = $props.id();
 
@@ -110,8 +137,28 @@
 	}
 </script>
 
+<!--
+	One <details> inside the one <nav>. The <summary> is what the narrow
+	strip used to be -- the step-or-count line and the progress track --
+	so a reader who never opens it still knows where they are on every
+	page. `open` is derived from `expand` rather than passed: the summary
+	page is where the whole answered journey is the point, and a question
+	page is where the question is.
+
+	No "Show all steps" link any more (#585). It existed to recover the
+	step list the strip dropped, and nothing is dropped now. It was also
+	passed by nothing outside the style guide, pointing at a route #466
+	has not built.
+-->
 <nav aria-label={journey}>
-	<div class="rail">
+	<details open={expand === 'completed'}>
+		<summary>
+			<span class="summary">{summary}</span>
+			<span class="track" aria-hidden="true">
+				<span class="track-fill" style:inline-size={trackWidth}></span>
+			</span>
+		</summary>
+
 		<ol>
 			<!--
 				Keyed on index rather than on the href, the same call
@@ -143,24 +190,7 @@
 				</li>
 			{/each}
 		</ol>
-	</div>
-
-	<!--
-		The same journey where there is no room beside the column. Inside the
-		one <nav> rather than in a second one of its own: two landmarks
-		sharing a label is an axe `landmark-unique` failure, and `display:
-		none` only takes the hidden half out of the accessibility tree -- it
-		does not make two names one.
-	-->
-	<div class="strip">
-		<p class="summary">{summary}</p>
-		<div class="track" aria-hidden="true">
-			<div class="track-fill" style:inline-size={trackWidth}></div>
-		</div>
-		{#if allStepsHref}
-			<Link href={allStepsHref} label="Show all steps" variant="secondary" />
-		{/if}
-	</div>
+	</details>
 </nav>
 
 <style>
@@ -175,8 +205,36 @@
 		   column of transparent bars reads as one track down the list and
 		   the active one lights a segment of it. That is the same reason
 		   RecordDetail's contents list carries no gap. */
-		.rail > ol {
+		details > ol {
 			display: grid;
+			margin-block-start: var(--space-3);
+		}
+
+		/*
+		 * The marker is the only affordance saying the list opens, so it
+		 * stays -- `list-style: none` on a <summary> removes it in Chrome
+		 * and Firefox and, in Safari, needs ::-webkit-details-marker too.
+		 * The summary is a flex row so the caption and its track sit on
+		 * one line beside the marker rather than stacking under it.
+		 */
+		summary {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-3);
+			padding-block: var(--space-2);
+			cursor: pointer;
+		}
+
+		/*
+		 * The track takes the room the caption leaves, and drops to its
+		 * own line below `--page-rail` of it rather than squeezing to
+		 * nothing -- a basis and a wrap, not a threshold: the caption is
+		 * a step name and carries a Client's name, so how much it leaves
+		 * is a question about the content and never about the window.
+		 */
+		summary .track {
+			flex: 1 1 var(--page-rail);
 		}
 
 		/* Aligned under the step's own label rather than under its bar:
@@ -195,58 +253,45 @@
 			padding-inline-start: var(--space-4);
 		}
 
+		/*
+		 * A step label is a Practice's own free text -- "How to reach
+		 * Anne-Marie Ochieng-Whitfield" -- so it gets this repo's answer
+		 * for free text in a track that must not grow past its share:
+		 * `min-inline-size: 0` to let it shrink below its content at all,
+		 * and `overflow-wrap: anywhere` so a name with no spaces in it
+		 * breaks rather than pushing the summary past its frame (#542,
+		 * #725).
+		 */
 		.summary {
-			margin: 0;
+			min-inline-size: 0;
+			overflow-wrap: anywhere;
 			color: var(--color-on-surface);
 			font-size: var(--text-body-sm-size);
 			font-weight: var(--font-weight-medium);
 		}
 
 		.track {
+			display: block;
 			block-size: var(--space-1);
-			margin-block: var(--space-2);
 			border-radius: var(--radius);
 			background-color: var(--color-surface-container);
 		}
 
 		.track-fill {
+			display: block;
 			block-size: 100%;
 			border-radius: var(--radius);
 			background-color: var(--color-primary);
 		}
 
-		/* Narrow first: the rail needs a column beside the content, and
-		   below the host Template's own floor there is not one. */
-		.rail {
-			display: none;
-		}
-
 		/*
-		 * Genuinely coupled to the host Template, not chosen to match it
-		 * (#564). `StepRail` declares no container of its own, so this
-		 * unnamed query resolves against the nearest ANCESTOR container --
-		 * the same one `QuestionPage`'s and `CheckAnswers`'s own 60rem
-		 * query reads, since `StepRail` renders inside their grid with
-		 * nothing of its own in between. That is what makes this a
-		 * mechanism rather than a preference: `.rail` has no content-driven
-		 * floor to derive on its own -- swept on /style-guide/step-rail's
-		 * own demo with the query forced live, the nav never overflows the
-		 * frame down to 144px, well under 320px -- so there is no
-		 * independent number to measure it against, only the width at
-		 * which its host actually opens a --page-rail column for it to
-		 * sit in. 67.5rem is `QuestionPage`'s and `CheckAnswers`'s own
-		 * measured fixed point, carried here rather than re-derived,
-		 * because both read the same container and only one of the two
-		 * has a floor to measure.
+		 * No query, and that is the point of #585. There is nothing left
+		 * for one to decide: the step list is correct at every width --
+		 * swept on /style-guide/step-rail, the nav never overflows its
+		 * frame down to 144px, well under 320px -- so no content floor
+		 * exists to derive, and the thing the old query was really trying
+		 * to read was whether `sidebar-l` had wrapped, which no selector
+		 * reports. ADR-0024 rule 1 now says so as a rule.
 		 */
-		@container (min-width: 67.5rem) {
-			.rail {
-				display: block;
-			}
-
-			.strip {
-				display: none;
-			}
-		}
 	}
 </style>
