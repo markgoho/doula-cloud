@@ -331,7 +331,28 @@ const openEngagementRollupQueryTemplate = `
 	        WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL),
 	       inv.status, inv.amount_cents, att.fee_amount_cents
 	FROM engagements e
-	LEFT JOIN contracts ct ON ct.engagement_id = e.id
+	LEFT JOIN LATERAL (
+	    -- At most one Contract row per Engagement, because there can be
+	    -- several. 00020_contracts_recreate_after_void.sql dropped the
+	    -- table-wide UNIQUE (engagement_id) on purpose and put a partial
+	    -- unique index in its place -- one non-voided row, and "any
+	    -- number of voided rows" -- so #72's void-then-recreate flow
+	    -- gives an Engagement a voided Contract plus a fresh Draft. A
+	    -- plain join then returns both, and this function emits two
+	    -- OpenEngagements carrying the same engagementId, which the
+	    -- route's {#each ... (line.engagementId)} rejects as a duplicate
+	    -- key -- a hard error in production, not a degraded row.
+	    --
+	    -- The ordering prefers a live Contract and falls back to a
+	    -- voided one rather than filtering voided out: an Engagement
+	    -- whose only Contract is voided must still show that, since
+	    -- contractStatusLabel maps the voided status and "no Contract
+	    -- yet" is a different answer for the reader than "the Contract
+	    -- was voided".
+	    SELECT c.id, c.status FROM contracts c
+	    WHERE c.engagement_id = e.id
+	    ORDER BY (c.status = 'voided'), c.created_at DESC LIMIT 1
+	) ct ON true
 	LEFT JOIN LATERAL (
 	    SELECT i.status, i.amount_cents FROM invoices i
 	    WHERE i.contract_id = ct.id ORDER BY i.created_at DESC LIMIT 1

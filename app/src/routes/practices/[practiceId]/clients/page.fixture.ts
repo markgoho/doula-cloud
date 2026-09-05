@@ -35,7 +35,23 @@ export const clients: ClientListItem[] = [
 				contractStatus: 'sent',
 				doulaName: 'Yolanda Okonkwo-Fitzgerald',
 				invoiceStatus: 'open',
-				invoiceAmountCents: 450_000
+				invoiceAmountCents: 450_000,
+				/*
+				 * The third optional field, and the one the first pass
+				 * missed: a fee appends a whole ` · Your fee: $1,200.00`
+				 * segment, which is render-distinct under ADR-0025's
+				 * fixture rule and is the longest a rollup line ever gets.
+				 * The spec reaches it through a spread override, which the
+				 * rule allows for a spec -- but an override is invisible to
+				 * the continuum sweep, so without it here the sweep
+				 * measured this column and never its busiest state.
+				 *
+				 * A fixture need not be role-consistent: no single reader
+				 * sees both an Invoice amount and her own fee, and this row
+				 * carries both on purpose, because the sweep's question is
+				 * how much room the widest possible line needs.
+				 */
+				feeCents: 120_000
 			},
 			{
 				engagementId: 'engagement-2',

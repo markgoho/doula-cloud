@@ -1395,3 +1395,66 @@ func readBody(t *testing.T, resp *http.Response) string {
 	}
 	return buf.String()
 }
+
+// TestListHandler_OpenEngagementsRollup_VoidedContractDoesNotDuplicateLine
+// pins the regression that 00020_contracts_recreate_after_void.sql makes
+// possible. That migration dropped contracts' table-wide UNIQUE
+// (engagement_id) and replaced it with a partial unique index over
+// non-voided rows, so #72's void-then-recreate flow leaves an Engagement
+// holding a voided Contract AND a fresh Draft. The rollup's first
+// implementation joined contracts plainly, returned both rows, and emitted
+// two OpenEngagements sharing one EngagementID -- which the route renders
+// with {#each ... (line.engagementId)}, where a duplicate key is a hard
+// error in production rather than a degraded row.
+//
+// The second Client here is the other half of the rule: an Engagement
+// whose ONLY Contract is voided must still report `voided`, because
+// "no Contract yet" is a different answer for the reader, so the fix
+// cannot simply filter voided rows out.
+func TestListHandler_OpenEngagementsRollup_VoidedContractDoesNotDuplicateLine(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	const ownerUID = "staff-voided-owner"
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
+
+	recreatedClient, recreatedEngagement := seedClientEngagement(t, db, practiceID, "Recreated Contract", "recreated@example.com")
+	seedContract(t, db, recreatedEngagement, "voided")
+	seedContract(t, db, recreatedEngagement, "draft")
+
+	voidedOnlyClient, voidedOnlyEngagement := seedClientEngagement(t, db, practiceID, "Voided Only", "voided@example.com")
+	seedContract(t, db, voidedOnlyEngagement, "voided")
+
+	srv, session := newServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	byClient := map[string][]client.OpenEngagement{}
+	for _, item := range listResp.Items {
+		byClient[item.ClientID] = item.OpenEngagements
+	}
+
+	recreated := byClient[recreatedClient]
+	if len(recreated) != 1 {
+		t.Fatalf("OpenEngagements for the recreated-Contract Client = %+v, want exactly 1 line; a voided Contract must not duplicate its Engagement", recreated)
+	}
+	if recreated[0].EngagementID != recreatedEngagement {
+		t.Fatalf("recreated line engagement = %q, want %q", recreated[0].EngagementID, recreatedEngagement)
+	}
+	if recreated[0].ContractStatus == nil || *recreated[0].ContractStatus != "draft" {
+		t.Fatalf("recreated line contract status = %v, want \"draft\" (the live Contract wins over the voided one)", recreated[0].ContractStatus)
+	}
+
+	voidedOnly := byClient[voidedOnlyClient]
+	if len(voidedOnly) != 1 {
+		t.Fatalf("OpenEngagements for the voided-only Client = %+v, want exactly 1 line", voidedOnly)
+	}
+	if voidedOnly[0].ContractStatus == nil || *voidedOnly[0].ContractStatus != "voided" {
+		t.Fatalf("voided-only line contract status = %v, want \"voided\" rather than nil: a voided Contract is not the absence of one", voidedOnly[0].ContractStatus)
+	}
+}
