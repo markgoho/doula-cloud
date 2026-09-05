@@ -126,6 +126,73 @@ func TestClearedSuppressionIsInactiveUntilRecordedAgain(t *testing.T) {
 	}
 }
 
+func TestRecordIfAbsent_WritesWhenNothingIsOnFile(t *testing.T) {
+	db := testdb.New(t)
+
+	wrote, err := mailsuppress.RecordIfAbsent(t.Context(), db.App, testAddress, mailsuppress.CauseBounce, "evt-1")
+	if err != nil {
+		t.Fatalf("RecordIfAbsent: %v", err)
+	}
+	if !wrote {
+		t.Fatal("RecordIfAbsent reported no write, want one")
+	}
+	got, err := mailsuppress.Active(t.Context(), db.App, testAddress)
+	if err != nil {
+		t.Fatalf("Active: %v", err)
+	}
+	if !got {
+		t.Fatal("the address it claims to have suppressed reads as sendable")
+	}
+}
+
+// A complaint's permanent suppression must not be downgraded to a
+// clearable bounce by a later retry against the same address.
+func TestRecordIfAbsent_LeavesAnActiveSuppressionAlone(t *testing.T) {
+	db := testdb.New(t)
+	if err := mailsuppress.Record(t.Context(), db.App, testAddress, mailsuppress.CauseComplaint, "evt-1"); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	wrote, err := mailsuppress.RecordIfAbsent(t.Context(), db.App, testAddress, mailsuppress.CauseBounce, "evt-2")
+	if err != nil {
+		t.Fatalf("RecordIfAbsent: %v", err)
+	}
+	if wrote {
+		t.Fatal("RecordIfAbsent overwrote an active suppression")
+	}
+	var cause string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT cause FROM email_suppressions WHERE address = $1`, testAddress,
+	).Scan(&cause); err != nil {
+		t.Fatalf("read suppression: %v", err)
+	}
+	if cause != mailsuppress.CauseComplaint {
+		t.Fatalf("cause = %q, want it left at %q", cause, mailsuppress.CauseComplaint)
+	}
+}
+
+// Mailgun still holds an address a Staff member cleared locally without
+// calling Mailgun's own DELETE, so a "suppress-*" event re-arms it.
+func TestRecordIfAbsent_ReArmsAClearedSuppression(t *testing.T) {
+	db := testdb.New(t)
+	if err := mailsuppress.Record(t.Context(), db.App, testAddress, mailsuppress.CauseBounce, "evt-1"); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`, testAddress,
+	); err != nil {
+		t.Fatalf("clear suppression: %v", err)
+	}
+
+	wrote, err := mailsuppress.RecordIfAbsent(t.Context(), db.App, testAddress, mailsuppress.CauseBounce, "evt-2")
+	if err != nil {
+		t.Fatalf("RecordIfAbsent: %v", err)
+	}
+	if !wrote {
+		t.Fatal("a cleared suppression was not re-armed")
+	}
+}
+
 func TestSender_DeliversAnUnsuppressedAddress(t *testing.T) {
 	db := testdb.New(t)
 	inner := &mail.FakeSender{}

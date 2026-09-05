@@ -16,15 +16,17 @@ import (
 // the HMAC inside it, in every payload this package's tests build.
 const signatureField = "signature"
 
-// signedMailgunPayloadWithReason is signedMailgunPayload plus the
-// event-data.reason field ADR-0029 reads to tell a first-time SMTP
-// rejection from a send Mailgun refused because the address was already
-// on its own suppression list.
-func signedMailgunPayloadWithReason(t *testing.T, signingKey, event, severity, recipient, eventID, reason string) []byte {
+// signedPermanentFailurePayload is signedMailgunPayload's
+// permanent-failure case plus the event-data.reason field ADR-0029 reads
+// to tell a first-time SMTP rejection from a send Mailgun refused
+// because the address was already on its own suppression list. Only a
+// permanent failure carries a reason worth reading, so the event and
+// severity are fixed rather than passed.
+func signedPermanentFailurePayload(t *testing.T, recipient, eventID, reason string) []byte {
 	t.Helper()
 	timestamp := "1700000000"
 	token := "test-token-0123456789"
-	mac := hmac.New(sha256.New, []byte(signingKey))
+	mac := hmac.New(sha256.New, []byte(bounceWebhookTestKey))
 	mac.Write([]byte(timestamp + token))
 	sig := hex.EncodeToString(mac.Sum(nil))
 
@@ -36,9 +38,9 @@ func signedMailgunPayloadWithReason(t *testing.T, signingKey, event, severity, r
 		},
 		"event-data": map[string]any{
 			"id":        eventID,
-			"event":     event,
+			"event":     "failed",
 			"recipient": recipient,
-			"severity":  severity,
+			"severity":  "permanent",
 			"reason":    reason,
 		},
 	}
@@ -92,7 +94,7 @@ func TestPostBounceWebhookHandler_HardBounceSuppressesTheAddress(t *testing.T) {
 	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
 	defer srv.Close()
 
-	payload := signedMailgunPayloadWithReason(t, bounceWebhookTestKey, "failed", "permanent", email, "evt-bounce", "bounce")
+	payload := signedPermanentFailurePayload(t, email, "evt-bounce", "bounce")
 	resp := postBounceWebhook(t, srv, payload)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -120,7 +122,7 @@ func TestPostBounceWebhookHandler_AlreadySuppressedReasonKeepsTheOriginalCause(t
 	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
 	defer srv.Close()
 
-	payload := signedMailgunPayloadWithReason(t, bounceWebhookTestKey, "failed", "permanent", email, "evt-suppressed", "suppress-complaint")
+	payload := signedPermanentFailurePayload(t, email, "evt-suppressed", "suppress-complaint")
 	resp := postBounceWebhook(t, srv, payload)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -153,5 +155,52 @@ func TestPostBounceWebhookHandler_TemporaryFailureSuppressesNothing(t *testing.T
 
 	if found, _, _ := suppressionState(t, db, email); found {
 		t.Fatal("a temporary failure suppressed the address")
+	}
+}
+
+// The "suppress-*" event may be the first this endpoint ever sees for an
+// address -- Mailgun held it before the webhook was provisioned, or a
+// delivery was missed. Without a local row every outbox would retry an
+// address Mailgun refuses forever.
+func TestPostBounceWebhookHandler_AlreadySuppressedReasonRecordsWhenNothingIsOnFile(t *testing.T) {
+	db := testdb.New(t)
+	_, email := seedSentOutboxRow(t, db)
+	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
+	defer srv.Close()
+
+	payload := signedPermanentFailurePayload(t, email, "evt-suppressed", "suppress-bounce")
+	resp := postBounceWebhook(t, srv, payload)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	found, cause, _ := suppressionState(t, db, email)
+	if !found {
+		t.Fatal("a suppress-bounce with nothing on file wrote no suppression row")
+	}
+	if cause != mailsuppress.CauseBounce {
+		t.Fatalf("cause = %q, want %q (taken from the reason)", cause, mailsuppress.CauseBounce)
+	}
+}
+
+// Nothing Doula Cloud sends is unsubscribable mail (#731: every kind is
+// transactional), so an unsubscribe on the shared domain is not this
+// product's fact to record.
+func TestPostBounceWebhookHandler_SuppressUnsubscribeRecordsNothing(t *testing.T) {
+	db := testdb.New(t)
+	_, email := seedSentOutboxRow(t, db)
+	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
+	defer srv.Close()
+
+	payload := signedPermanentFailurePayload(t, email, "evt-unsub", "suppress-unsubscribe")
+	resp := postBounceWebhook(t, srv, payload)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	if found, _, _ := suppressionState(t, db, email); found {
+		t.Fatal("suppress-unsubscribe wrote a suppression row")
 	}
 }

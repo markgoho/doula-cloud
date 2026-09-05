@@ -55,6 +55,23 @@ func alreadySuppressed(reason string) bool {
 	return strings.HasPrefix(reason, "suppress-")
 }
 
+// causeFromSuppressReason maps a "suppress-*" reason onto the cause the
+// local row would carry, or "" for one this product records nothing for.
+// "suppress-unsubscribe" is that case: nothing Doula Cloud sends is
+// unsubscribable mail (#731 -- every kind is transactional, so CAN-SPAM's
+// opt-out rules never reach it), so an unsubscribe on the shared domain
+// is not this product's fact to record.
+func causeFromSuppressReason(reason string) string {
+	switch reason {
+	case "suppress-bounce":
+		return mailsuppress.CauseBounce
+	case "suppress-complaint":
+		return mailsuppress.CauseComplaint
+	default:
+		return ""
+	}
+}
+
 // PostBounceWebhookHandler receives Mailgun's delivery-event webhook -- a
 // platform-level endpoint built in the shape of
 // billing.PostPurchaseWebhookHandler: signature-verified, no
@@ -97,14 +114,27 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 		}
 
 		var newStatus, suppressionCause string
+		// onlyIfAbsent keeps a "suppress-*" event from overwriting a
+		// suppression already on record, while still writing one when
+		// nothing is -- see the switch below.
+		onlyIfAbsent := false
 		switch {
 		case payload.EventData.Event == "failed" && payload.EventData.Severity == "permanent":
 			newStatus = "bounced"
 			// A "suppress-*" reason is Mailgun declining a send it never
-			// made; the address is already suppressed, on Mailgun's list
-			// and on ours, so the portal-invite row still records that
-			// this send did not arrive but no new suppression is written.
-			if !alreadySuppressed(payload.EventData.Reason) {
+			// made, so the address is already on Mailgun's list. Ours may
+			// not know it -- an event that arrived before this endpoint
+			// was provisioned, a webhook delivery that failed, or an
+			// address a Staff member added in Mailgun's own dashboard --
+			// and without a local row every outbox would keep retrying an
+			// address Mailgun refuses forever. So the cause comes from
+			// the reason and is written only when nothing already
+			// suppresses the address: overwriting an active complaint
+			// would downgrade a permanent suppression to a clearable one.
+			if alreadySuppressed(payload.EventData.Reason) {
+				suppressionCause = causeFromSuppressReason(payload.EventData.Reason)
+				onlyIfAbsent = true
+			} else {
 				suppressionCause = mailsuppress.CauseBounce
 			}
 		case payload.EventData.Event == "complained":
@@ -170,7 +200,13 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 		// never marked 'complained' on a row without the suppression
 		// that makes the next send refuse.
 		if suppressionCause != "" {
-			if err := mailsuppress.Record(r.Context(), tx, payload.EventData.Recipient, suppressionCause, payload.EventData.ID); err != nil {
+			var err error
+			if onlyIfAbsent {
+				_, err = mailsuppress.RecordIfAbsent(r.Context(), tx, payload.EventData.Recipient, suppressionCause, payload.EventData.ID)
+			} else {
+				err = mailsuppress.Record(r.Context(), tx, payload.EventData.Recipient, suppressionCause, payload.EventData.ID)
+			}
+			if err != nil {
 				// coverage:ignore reason: DB write failure, not exercised by unit tests
 				http.Error(w, MsgInternalError, http.StatusInternalServerError)
 				return

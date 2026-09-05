@@ -97,6 +97,38 @@ func Record(ctx context.Context, e Execer, address, cause, mailgunEventID string
 	return nil
 }
 
+// RecordIfAbsent suppresses address only when nothing already suppresses
+// it, and reports whether it wrote.
+//
+// It is what a "suppress-*" Mailgun event needs: that event says the
+// address is on Mailgun's own list and this send was never attempted, so
+// something must be recorded locally or every outbox would keep retrying
+// an address Mailgun will refuse forever. But it must not overwrite an
+// active row -- a complaint's permanent suppression would be downgraded
+// to a clearable bounce by the next retry against the same address. A
+// cleared row is not active, and is deliberately re-armed: Mailgun still
+// holds the address, so the clear did not take (ADR-0029: clearing must
+// call Mailgun's own DELETE too, not just the local row).
+func RecordIfAbsent(ctx context.Context, db interface {
+	Querier
+	Execer
+}, address, cause, mailgunEventID string,
+) (bool, error) {
+	active, err := Active(ctx, db, address)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, err
+	}
+	if active {
+		return false, nil
+	}
+	if err := Record(ctx, db, address, cause, mailgunEventID); err != nil {
+		// coverage:ignore reason: DB write failure, not exercised by unit tests
+		return false, err
+	}
+	return true, nil
+}
+
 // Sender wraps the real mail.Sender and refuses a suppressed address
 // with mail.ErrSuppressed instead of handing it to Mailgun -- which
 // would refuse it server-side anyway, but without telling Doula Cloud's
