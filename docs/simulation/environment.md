@@ -8,6 +8,8 @@ Four files describe a run. [README.md](README.md) is the **instrument** — what
 
 A run stands up `app/compose.e2e.yaml` plus the host processes `app/e2e/stack.ts` sequences: Postgres 16 and `fake-gcs-server` in containers, and the Firebase Auth emulator, goose, the `app_e2e` login role, the Go BFF and the built Svelte app as host processes. Nothing is deployed, nothing touches GCP, and the whole world lives in one Podman volume.
 
+`app/e2e/stack.ts` installs simulated time ([#762](https://github.com/markgoho/doula-cloud/issues/762), [#778](https://github.com/markgoho/doula-cloud/issues/778)) into that same Postgres before a single migration runs: `go run ./cmd/simclock install app` creates the `sim` schema, its one offset row, and `sim.now()`, and points the `app` superuser's `search_path` at it, so all 72 `DEFAULT now()` columns goose is about to create bind to it. `go run ./cmd/simclock grant app_e2e`, run right after the `app_e2e` role is created, points that role's `search_path` at `sim` too and grants it the `USAGE`/`SELECT` `sim.now()` needs to run under a non-superuser connection. Both are idempotent, so a resumed run against a kept volume calls them again for free; `api/internal/simclock` refuses outright if it's ever pointed at a database that already carries goose's migrations without the shim, which is also what keeps it from ever reaching a deployed one — a deployed database always has its migrations applied already.
+
 The other three candidates lose on recorded decisions rather than on cost.
 
 | Candidate | Why it lost |

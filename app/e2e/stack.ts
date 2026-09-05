@@ -137,8 +137,10 @@ export const WORKER_SECRET = NOTIFICATION_WORKER_SECRET;
 export async function startStack(appOrigin: string) {
 	await startEmulator();
 	await startDatabase();
+	installSimClock();
 	runMigrations();
 	seedAppE2ERole();
+	grantSimClock();
 	await seedGCSBucket();
 	await startMailbox();
 	await startAPI(appOrigin);
@@ -190,6 +192,39 @@ async function seedGCSBucket() {
 	if (!response.ok && response.status !== 409) {
 		throw new Error(`could not create the ${GCS_BUCKET} bucket: ${response.status} ${await response.text()}`);
 	}
+}
+
+// Installs simulated time (#762, #778) into the compose `db` as the
+// `app` superuser, before a single migration runs -- DEFAULT now() binds
+// to a function at CREATE TABLE time, so installed any later, every
+// existing default would stay on real time. Idempotent: a resumed run
+// against a kept volume calls this again and it's a no-op.
+function installSimClock() {
+	execFileSync('go', ['run', './cmd/simclock', 'install', 'app'], {
+		stdio: 'inherit',
+		cwd: '../api',
+		timeout: MIGRATE_TIMEOUT_MS,
+		env: {
+			...process.env,
+			DATABASE_URL: `postgres://app:app@${DB_HOST}:${DB_PORT}/app?sslmode=disable`
+		}
+	});
+}
+
+// Points app_e2e's search_path at the sim schema installSimClock
+// created, and grants it the USAGE and SELECT sim.now() needs to run
+// under a non-superuser role. Must run after seedAppE2ERole -- the role
+// doesn't exist before that.
+function grantSimClock() {
+	execFileSync('go', ['run', './cmd/simclock', 'grant', 'app_e2e'], {
+		stdio: 'inherit',
+		cwd: '../api',
+		timeout: MIGRATE_TIMEOUT_MS,
+		env: {
+			...process.env,
+			DATABASE_URL: `postgres://app:app@${DB_HOST}:${DB_PORT}/app?sslmode=disable`
+		}
+	});
 }
 
 // Runs api/cmd/migrate as a host process against the compose `db`,
