@@ -122,6 +122,7 @@ func testDeps() Deps {
 		PaymentsAccountWebhookSecret: "whsec_account_test",
 
 		MailgunWebhookSigningKey: "mailgun_webhook_test_key",
+		BounceClearer:            &mail.FakeSender{},
 		WorkerSecret:             testWorkerSecret,
 
 		PortalInviteWorker:      testWorker,

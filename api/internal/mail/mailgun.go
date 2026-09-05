@@ -76,3 +76,42 @@ func (m *MailgunSender) Send(ctx context.Context, msg Message) error {
 	}
 	return nil
 }
+
+// DeleteBounce takes address off Mailgun's own bounce list, which is a
+// separate fact from Doula Cloud's own email_suppressions row: ADR-0029
+// is explicit that clearing the local row alone is a lie, because
+// Mailgun keeps refusing the send server-side until this call runs too.
+//
+// A 404 is success, not a failure. Mailgun answers "Address not found in
+// bounces table" for an address it has never listed (verified live
+// against mg.doula.cloud on #744), and Doula Cloud records a suppression
+// from the webhook's own permanent_fail event -- which can arrive
+// without the address ever reaching Mailgun's list, and which a Staff
+// member may already have cleared there by hand. Treating that as an
+// error would leave such a row permanently unclearable. What the caller
+// needs is the goal state, "this address is not on Mailgun's list", and
+// a 404 already satisfies it.
+func (m *MailgunSender) DeleteBounce(ctx context.Context, address string) error {
+	endpoint := strings.TrimSuffix(m.BaseURL, "/") + "/v3/" + m.Domain + "/bounces/" + url.PathEscape(address)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	if err != nil {
+		// coverage:ignore reason: only fails on a malformed URL, unreachable with a well-formed BaseURL/Domain
+		return fmt.Errorf("mail: build request: %w", err)
+	}
+	req.SetBasicAuth("api", m.APIKey)
+
+	resp, err := m.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("mail: delete bounce: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("mail: mailgun status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}

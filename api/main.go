@@ -112,10 +112,11 @@ func main() {
 	// coverage:ignore reason: constructs the real Stripe client, not exercised by unit tests
 	paymentsClient := payments.NewStripeAPIClient(os.Getenv("STRIPE_API_KEY"), os.Getenv("APP_BASE_URL"))
 
-	// All eight mail kinds share one Mailgun domain/credential and one
-	// APP_BASE_URL, so they share one Sender construction and the two
-	// From/ReplyTo identities ADR-0011 defines -- minting eight otherwise
-	// identical Mailgun senders bought nothing.
+	// All eleven mail kinds (#733 counted them; this comment said eight)
+	// share one Mailgun domain/credential and one APP_BASE_URL, so they
+	// share one Sender construction and the two From/ReplyTo identities
+	// ADR-0011 defines -- minting eleven otherwise identical Mailgun
+	// senders bought nothing.
 	//
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunDomain := os.Getenv("MAILGUN_DOMAIN")
@@ -127,10 +128,9 @@ func main() {
 	// Mailgun would decline server-side anyway.
 	//
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
-	mailgunSender := mailsuppress.Sender{
-		Inner: mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
-		DB:    db,
-	}
+	mailgunAPI := mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain)
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	mailgunSender := mailsuppress.Sender{Inner: mailgunAPI, DB: db}
 	appBaseURL := os.Getenv("APP_BASE_URL")
 	notificationsFrom := "Doula Cloud <notifications@" + mailgunDomain + ">"
 	// Platform voice (ADR-0011): a monitored inbox, not noreply -- every
@@ -234,7 +234,10 @@ func main() {
 		PaymentsAccountWebhookSecret: os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"),
 
 		MailgunWebhookSigningKey: os.Getenv("MAILGUN_WEBHOOK_SIGNING_KEY"),
-		WorkerSecret:             os.Getenv("NOTIFICATION_WORKER_SECRET"),
+		// The raw Mailgun client, not mailgunSender: clearing a bounce is
+		// the one call that must reach past ADR-0029's own guard.
+		BounceClearer: mailgunAPI,
+		WorkerSecret:  os.Getenv("NOTIFICATION_WORKER_SECRET"),
 
 		PortalInviteWorker:      outboxWorker,
 		LowCreditWorker:         lowCreditOutboxWorker,

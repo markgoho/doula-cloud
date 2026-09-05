@@ -28,6 +28,12 @@
 	// website's own settings screens already use for the same gate.
 	let roles = $state<string[]>([]);
 	let isOwner = $derived(roles.includes('owner'));
+	// Blocked email addresses (#744) is the second gated entry, and gated
+	// one notch wider: its list is every Client and Staff address at the
+	// Practice whose mail is failing, which ADR-0008 keeps in the same
+	// hands as the roster it is drawn from -- Owner or Admin, matching the
+	// endpoint's own `ownerAndAdmin` guard.
+	let isOwnerOrAdmin = $derived(isOwner || roles.includes('admin'));
 
 	onMount(async () => {
 		const response = await apiFetchWithSession(`/api/practices/${practiceId}/session`);
@@ -63,6 +69,16 @@
 			description: 'The terms every Contract is written from.',
 			href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId })
 		},
+		...(isOwnerOrAdmin
+			? [
+					{
+						label: 'Blocked email addresses',
+						description:
+							'The addresses Doula Cloud has stopped writing to, and why each one stopped.',
+						href: resolve('/practices/[practiceId]/settings/blocked-addresses', { practiceId })
+					}
+				]
+			: []),
 		...(isOwner
 			? [
 					{

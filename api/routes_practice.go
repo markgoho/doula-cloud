@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/payments"
@@ -370,4 +371,13 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 		staffauth.Middleware(d.DB)(pushsub.UnregisterHandler()))
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite",
 		staffauth.Middleware(d.DB)(idempotency.Wrap(portalinvite.InviteHandler(d.NudgeEnqueuer))))
+	// ADR-0029's suppression list, narrowed to the addresses this
+	// Practice is responsible for (#744). ownerAndAdmin rather than
+	// AnyStaff: the list is every Client and Staff address at the
+	// Practice whose mail is failing, which ADR-0008 keeps in the same
+	// hands as the roster it is drawn from.
+	g.Get("/api/practices/{practiceId}/email-suppressions", ownerAndAdmin, mailsuppress.ListHandler())
+	ir.Exempt("POST /api/practices/{practiceId}/email-suppressions/clear",
+		"state-guarded UPDATE ... WHERE cleared_at IS NULL AND cause = 'bounce', and Mailgun's own DELETE answers 404 for an address already off its list; a retry after the first commit 404s instead of clearing twice",
+		staffauth.Middleware(d.DB)(mailsuppress.ClearHandler(d.BounceClearer)))
 }

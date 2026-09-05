@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
@@ -69,6 +70,13 @@ type Deps struct {
 	PaymentsAccountWebhookSecret string
 
 	MailgunWebhookSigningKey string
+
+	// BounceClearer is the vendor half of #744's suppression clear --
+	// mail.MailgunSender in production, mail.FakeSender in tests.
+	// Separate from the Sender the outbox workers hold: those go through
+	// mailsuppress.Sender's guard, and clearing is the one operation
+	// that must reach past it to Mailgun's own bounce list.
+	BounceClearer mailsuppress.BounceClearer
 
 	// WorkerSecret is NOTIFICATION_WORKER_SECRET, which every
 	// process-* endpoint and #443's two site endpoints check the
