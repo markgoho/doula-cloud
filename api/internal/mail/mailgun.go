@@ -39,10 +39,11 @@ func NewMailgunSender(apiKey, domain string) *MailgunSender {
 }
 
 // Send posts msg to Mailgun's /messages endpoint. Tracking (open/click)
-// is explicitly disabled: #218 never installed the tracking CNAME on
-// mg.doula.cloud, and whether tracking is worth its privacy cost is
-// still open on map #213's "Not yet specified" -- a Practice Notification
-// must not default to on for a question nobody has decided.
+// is explicitly disabled, and stays that way: ADR-0030 (#734) rules out
+// third-party open and click tracking in every Doula Cloud email, in
+// either voice. mg.doula.cloud's domain settings already have all three
+// inactive; these three flags are the second guard, so a change in
+// Mailgun's dashboard cannot silently turn tracking on.
 func (m *MailgunSender) Send(ctx context.Context, msg Message) error {
 	form := url.Values{}
 	form.Set("from", msg.From)
