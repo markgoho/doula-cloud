@@ -134,7 +134,7 @@ A push-delivered alert to a person, on any channel (browser Web Push or email) �
 _Avoid_: Message (a Notification is never in-app, bidirectional, immutable, or Engagement-scoped — it is a one-way alert on an outside channel)
 
 **Email Suppression**:
-A durable, address-keyed block on further Notification email, triggered by a Mailgun complaint or hard bounce — not a Client choice, and not scoped to a Notification's voice, channel, or Engagement. Because every email-sending outbox shares one Mailgun domain, one suppressed address is unreachable by all of them at once. See [ADR-0029](docs/adr/0029-email-suppression-is-address-keyed-and-outbox-wide.md).
+A durable, address-keyed block on further Notification email, triggered by a Mailgun complaint or hard bounce — not a Client choice, and not scoped to a Notification's voice, channel, or Engagement. Because every email-sending outbox shares one Mailgun domain, one suppressed address is unreachable by all of them at once. A bounce-caused suppression can be **cleared** by an Owner or Admin of a Practice the address belongs to — at Mailgun as well as locally, since either one alone still refuses the send. A complaint-caused one never is. See [ADR-0029](docs/adr/0029-email-suppression-is-address-keyed-and-outbox-wide.md).
 _Avoid_: Opt-out, unsubscribe (CAN-SPAM's opt-out rules never reach this mail at all — suppression is Mailgun's own deliverability protection reacting to what happened, not a right a Client exercises)
 
 **Activity**:
