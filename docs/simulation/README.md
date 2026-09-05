@@ -2,7 +2,7 @@
 
 What a simulation run emits, and what an entry must carry to be believed. Settled on [#760](https://github.com/markgoho/doula-cloud/issues/760), under the map [Six months in a sandbox](https://github.com/markgoho/doula-cloud/issues/759).
 
-This file is the instrument. Who is walking, and what they walked into, is the **World** — [Rooted Birth Collective](worlds/rooted-birth-collective.md), settled on [#761](https://github.com/markgoho/doula-cloud/issues/761). Where the walking happens, and the list of things that cannot be seen there, is the **sandbox** — [Where a run runs](environment.md), settled on [#763](https://github.com/markgoho/doula-cloud/issues/763).
+This file is the instrument. Who is walking, and what they walked into, is the **World** — [Rooted Birth Collective](worlds/rooted-birth-collective.md), settled on [#761](https://github.com/markgoho/doula-cloud/issues/761). Where the walking happens, and the list of things that cannot be seen there, is the **sandbox** — [Where a run runs](environment.md), settled on [#763](https://github.com/markgoho/doula-cloud/issues/763). How much work there is, when it arrives and what goes wrong is the **calendar** — [Six months of an agency's work](calendar.md), settled on [#765](https://github.com/markgoho/doula-cloud/issues/765).
 
 ## Why this file exists first
 
@@ -19,6 +19,7 @@ Committed to the repo, one directory per run:
 ```
 docs/simulation/
 ├── README.md                       ← this file, the format
+├── calendar.md                     ← the counts, the calendar, and what goes wrong
 ├── worlds/
 │   └── rooted-birth-collective.md  ← the World a run walks: the cast and what they arrive from
 └── runs/

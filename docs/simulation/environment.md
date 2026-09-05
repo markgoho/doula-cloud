@@ -2,7 +2,7 @@
 
 Settled on [#763](https://github.com/markgoho/doula-cloud/issues/763), under the map [Six months in a sandbox](https://github.com/markgoho/doula-cloud/issues/759).
 
-Three files describe a run. [README.md](README.md) is the **instrument** — what a friction log is and what an entry must carry. [worlds/rooted-birth-collective.md](worlds/rooted-birth-collective.md) is the **World** — who is walking and what they arrive from. This file is the **sandbox**: where the run happens, and, just as load-bearing, the list of things that happen there differently from production, or not at all.
+Four files describe a run. [README.md](README.md) is the **instrument** — what a friction log is and what an entry must carry. [worlds/rooted-birth-collective.md](worlds/rooted-birth-collective.md) is the **World** — who is walking and what they arrive from. [calendar.md](calendar.md) is the **calendar** — how much work there is, when it arrives, and what goes wrong. This file is the **sandbox**: where the run happens, and, just as load-bearing, the list of things that happen there differently from production, or not at all.
 
 ## The sandbox is the local stack, on the machine that has the real Chrome
 
@@ -36,7 +36,7 @@ Settled on [#764](https://github.com/markgoho/doula-cloud/issues/764). Eleven of
 
 **The inbox shows arrival order and the run's own clock label, never a wall-clock time.** The mailbox receives in real time while the run is six simulated months in, so a real timestamp would be a lie a persona could narrate confusion about. The harness POSTs `/api/clock` with a label on each jump ([#762](https://github.com/markgoho/doula-cloud/issues/762)) and every later message carries it.
 
-**Mailgun's event side is played by the mailbox.** `POST /api/delivery-event` signs a `failed`/`permanent` or `complained` payload with `MAILGUN_WEBHOOK_SIGNING_KEY` and posts it to the BFF's `/api/mailgun/webhook`, which writes the `email_suppressions` row that makes `mailsuppress.Sender` refuse every later send to that address (ADR-0029). This is the half a missing CLI forwarder used to cost us, and it is the loop #743 proved live against the deployed service. Whether run one *uses* it — a typo'd Client address, a Client who marks a notification as spam — belongs to [#765](https://github.com/markgoho/doula-cloud/issues/765).
+**Mailgun's event side is played by the mailbox.** `POST /api/delivery-event` signs a `failed`/`permanent` or `complained` payload with `MAILGUN_WEBHOOK_SIGNING_KEY` and posts it to the BFF's `/api/mailgun/webhook`, which writes the `email_suppressions` row that makes `mailsuppress.Sender` refuse every later send to that address (ADR-0029). This is the half a missing CLI forwarder used to cost us, and it is the loop #743 proved live against the deployed service. **Run one uses both**, settled at [the calendar](calendar.md#what-goes-wrong-and-how-often) ([#765](https://github.com/markgoho/doula-cloud/issues/765)): a Client's address is typed wrong and hard-bounces in month 2, and a Client marks a notification as spam in month 5. Each suppresses her silently, and nobody at the Practice is told.
 
 `app/e2e/mail-delivery.e2e.ts` walks the whole of it and runs in CI, so the mailbox cannot rot between runs.
 
