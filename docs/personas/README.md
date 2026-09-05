@@ -4,6 +4,12 @@ Nine people the journey maps (`docs/journeys/`) and test plans (`docs/test-plans
 refer to by name. Each file names one archetype. Rename the person freely; keep the
 file slug, because journey and test-plan files correspond to it one-to-one.
 
+**The nine are fixed.** A simulation needs more people than this — a fourteen-doula
+agency is thirteen colleagues Priya works beside — and those are **Extras**, not a tenth
+persona: a name, a Practice, a role and a reason to open the app, with no journey map, no
+test plan, and no friction log in their voice. See `CONTEXT.md` and
+[the World](../simulation/worlds/rooted-birth-collective.md).
+
 ## These are proto-personas
 
 They are built from assumptions and from what the schema and handlers actually do —
