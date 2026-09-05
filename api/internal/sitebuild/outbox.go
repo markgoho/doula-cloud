@@ -44,6 +44,28 @@ type Worker struct {
 // ADR-0013, and the reason a nudge that never arrives loses nothing.
 // Rows past MaxAttempts are dead-lettered rather than retried forever.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
+	// The other twelve outboxes claim their rows with FOR UPDATE SKIP
+	// LOCKED, which no aggregate over "every pending row" can express.
+	// This worker's unit of work is the whole pending set at once, so the
+	// lock is taken over the whole worker instead: two runs that overlap
+	// -- ADR-0013's nudge and the drain's cadence, which routinely land
+	// together -- would otherwise both read the same rows as pending and
+	// both fire a repository_dispatch for them.
+	//
+	// try rather than wait, and nil rather than an error, for the same
+	// reason SKIP LOCKED returns no rows: a run that finds another run
+	// already holding the set has nothing left to do, and that is a
+	// success.
+	var locked bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT pg_try_advisory_xact_lock($1)`, dispatchLockKey).Scan(&locked); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("sitebuild: lock rebuild dispatch: %w", err)
+	}
+	if !locked {
+		return nil
+	}
+
 	var (
 		oldest   time.Time
 		attempts int
