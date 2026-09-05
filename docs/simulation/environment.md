@@ -24,6 +24,22 @@ So **`APP_BASE_URL` keeps its local default and `EXPECTED_ORIGINS` is left alone
 
 The one Stripe cost that binds the sandbox is that a **test clock holds at most three Customers** and is **deleted 30 real days after creation** ([#762](https://github.com/markgoho/doula-cloud/issues/762)). The client book, not the Practice count, sizes the number of clocks, and 30 real days is the hard expiry on the Stripe half of a world.
 
+## How a persona receives her email
+
+Settled on [#764](https://github.com/markgoho/doula-cloud/issues/764). Eleven of the product's mail kinds are the only way something reaches a person, and several are the first thing that ever happens to her — a Staff invitation, a Client's portal invitation, a verification link. The nine walks got past this by reading the token off the pending outbox row (`readStaffInviteToken` in `app/e2e/stack.ts`), which proves a code path and skips the act.
+
+**Mail goes to the sandbox mailbox** (`app/e2e/mailbox.ts`), a Bun host process `stack.ts` starts beside the BFF and the Auth emulator. It answers the one endpoint `mail.MailgunSender` posts to, `POST /v3/<domain>/messages`, so the message it holds is the message the product built — subject, From, Reply-To and body, rendered by the real worker. `MAILGUN_API_BASE` (`api/main.go`) is the whole seam; `MailgunSender.BaseURL` is the field its own httptest tests already use, and this only exposes it to the environment.
+
+**Every address is `<name>@sim.doula.cloud`**, a subdomain of our own domain with no MX — the same shape #743 used for `bounce-test.doula.cloud`. The mailbox holds mail for any domain, so the convention is for the reader's benefit, not the harness's: an address in a log says at a glance that it was a simulated person. The mailbox is keyed on the bare address, case-insensitively, so a persona typing her own address into a form types it however she likes.
+
+**She reads it in a browser.** `GET /inbox/<address>` is an inbox page and each message is a page of its own, with the URLs in the body rendered as links — so following an invitation is a click out of a message, and a broken link is found by clicking it. That is the observed act. `GET /api/messages?to=…` returns the same messages as JSON; that is the harness asserting, and it is never itself an act in a log.
+
+**The inbox shows arrival order and the run's own clock label, never a wall-clock time.** The mailbox receives in real time while the run is six simulated months in, so a real timestamp would be a lie a persona could narrate confusion about. The harness POSTs `/api/clock` with a label on each jump ([#762](https://github.com/markgoho/doula-cloud/issues/762)) and every later message carries it.
+
+**Mailgun's event side is played by the mailbox.** `POST /api/delivery-event` signs a `failed`/`permanent` or `complained` payload with `MAILGUN_WEBHOOK_SIGNING_KEY` and posts it to the BFF's `/api/mailgun/webhook`, which writes the `email_suppressions` row that makes `mailsuppress.Sender` refuse every later send to that address (ADR-0029). This is the half a missing CLI forwarder used to cost us, and it is the loop #743 proved live against the deployed service. Whether run one *uses* it — a typo'd Client address, a Client who marks a notification as spam — belongs to [#765](https://github.com/markgoho/doula-cloud/issues/765).
+
+`app/e2e/mail-delivery.e2e.ts` walks the whole of it and runs in CI, so the mailbox cannot rot between runs.
+
 ## What the sandbox cannot show
 
 Every environment loses something. A run that quietly cannot see a thing is worse than one that knows it cannot, so these are written down rather than remembered. Each is either accepted with its owner named, or it is somebody's ticket.
@@ -34,7 +50,7 @@ Every environment loses something. A run that quietly cannot see a thing is wors
 | **The missing outbox backstops** | Only three Cloud Scheduler jobs were ever provisioned; ten `process-*` endpoints have none. The harness drains all thirteen, so a run reproduces Scheduler **as it is meant to be**, not as it is, and cannot find a bug caused by a missing job. | [#481](https://github.com/markgoho/doula-cloud/issues/481), accepted |
 | **Hosting's `/api/**` cookie stripping** | Locally vite proxies `/api` same-origin, so the rewrite that strips every cookie but `__session` is never exercised. | [#138](https://github.com/markgoho/doula-cloud/issues/138), accepted |
 | **Anything Firebase itself would email** | The Auth emulator sends no mail; verification and password-reset messages exist only in its logs. TOTP across the cast is already out of run one. | [#761](https://github.com/markgoho/doula-cloud/issues/761), accepted |
-| **Mailgun's bounce and complaint webhooks** | Unlike Stripe, Mailgun has no CLI forwarder, so `permanent_fail` and `complained` cannot reach a `localhost` endpoint without a tunnel. | [#764](https://github.com/markgoho/doula-cloud/issues/764) decides whether a run needs it |
+| **Mailgun's own delivery machinery** | Reputation, spam placement, greylisting, the real bounce a real bad address produces. Nothing in a run leaves the machine. The bounce and complaint *webhooks* are observable — the mailbox signs and posts them itself, which is what a missing CLI forwarder cost us. | [#764](https://github.com/markgoho/doula-cloud/issues/764), accepted |
 | **Real GCS, Cloud Tasks, Cloud SQL, Secret Manager** | Faked, no-op, containerised, or read from the environment. A permissions or quota failure in any of them is invisible to a run. | Accepted |
 | **Production-shaped timings** | See below. | Accepted |
 

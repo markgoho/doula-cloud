@@ -59,6 +59,11 @@ export const DB_HOST = '127.0.0.1';
 export const DB_PORT = shift(15_432);
 export const GCS_HOST = '127.0.0.1';
 export const GCS_PORT = shift(14_443);
+// The sandbox mailbox (e2e/mailbox.ts, #764) -- the Mailgun-shaped sink
+// the BFF's MAILGUN_API_BASE points at, and the inbox a persona opens in
+// a browser. 1000 above the BFF, keeping this file's collision-free gap.
+export const MAILBOX_HOST = '127.0.0.1';
+export const MAILBOX_PORT = shift(19_080);
 
 export const DEV_SERVER_PORT = shift(5173);
 export const PREVIEW_SERVER_PORT = shift(4173);

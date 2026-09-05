@@ -36,10 +36,11 @@ except `.env.example`. A Sandbox key is still a key.
 | `GCS_ATTACHMENTS_BUCKET` | `doula-cloud-e2e-attachments` | same | `doula-cloud-attachments`, a real bucket in `us-central1`, uniform access, public access prevention enforced |
 | `VAPID_PUBLIC_KEY` / `VAPID_SUBSCRIBER` | throwaway keypair in `stack.ts` | same | `VAPID_PUBLIC_KEY` plain env var, `VAPID_SUBSCRIBER=mailto:admin@doula.cloud` (not `mg.doula.cloud`: that domain has no inbound MX, see [Mailgun](#mailgun)) |
 | `VAPID_PRIVATE_KEY` | throwaway keypair in `stack.ts` | same | Secret Manager `doula-cloud-vapid-private-key` |
-| `MAILGUN_API_KEY` | one account-level key in `.env.local` | unset | Secret Manager `doula-cloud-mailgun-api-key` |
-| `MAILGUN_DOMAIN` | the account's sandbox domain (`sandbox….mailgun.org`), authorized recipients only | unset | `mg.doula.cloud`, plain env var |
-| `NOTIFICATION_WORKER_SECRET` | any value, matched against the `X-Internal-Secret` header on manual calls to `/api/internal/notifications/process-outbox` | unset (no scheduler runs in CI; the fake `mail.Sender` never gets a request either) | Secret Manager `doula-cloud-notification-worker-secret`, also set as the Cloud Scheduler job's header |
-| `MAILGUN_WEBHOOK_SIGNING_KEY` | any value, tests sign their own fixtures with it | unset (nothing calls `/api/mailgun/webhook`) | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, set (#743) -- Mailgun's `permanent_fail` and `complained` webhooks point at the deployed endpoint |
+| `MAILGUN_API_KEY` | `e2e-mailgun-key`, set by `stack.ts` -- the sandbox mailbox does not check it | same | Secret Manager `doula-cloud-mailgun-api-key` |
+| `MAILGUN_DOMAIN` | `sim.doula.cloud`, set by `stack.ts` -- the domain every persona's and every fixture's address sits under | same | `mg.doula.cloud`, plain env var |
+| `MAILGUN_API_BASE` | the sandbox mailbox's origin, set by `stack.ts` (#764) | same | unset -- `mail.NewMailgunSender` keeps its `https://api.mailgun.net` default |
+| `NOTIFICATION_WORKER_SECRET` | `e2e-worker-secret`, set by `stack.ts`; matched against the `X-Internal-Secret` header on calls to any of the thirteen `/api/internal/**/process-*` endpoints | same | Secret Manager `doula-cloud-notification-worker-secret`, also set as the Cloud Scheduler job's header |
+| `MAILGUN_WEBHOOK_SIGNING_KEY` | `e2e-mailgun-signing-key`, set by `stack.ts` on both the BFF and the mailbox, which signs its bounce and complaint webhooks with it | same | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, set (#743) -- Mailgun's `permanent_fail` and `complained` webhooks point at the deployed endpoint |
 | `NOTIFICATION_TASKS_QUEUE` | unset (no real `tasknudge.CloudTasksEnqueuer` is constructed in `routes()` tests, which inject `tasknudge.FakeEnqueuer` instead) | unset | the Cloud Tasks queue's full resource name, `projects/doula-cloud/locations/us-central1/queues/doula-cloud-notification-nudge`, plain env var |
 | `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
 | `GITHUB_DISPATCH_TOKEN` | unset (nothing local fires a real deploy) | unset | Secret Manager `doula-cloud-github-dispatch-token`, a fine-grained personal access token scoped to `markgoho/doula-cloud` with **Contents: write** |
@@ -74,6 +75,8 @@ Provisioned for #218 (map #213). One account, one API key, no per-domain
 Sending Key: Mailgun's API key is account-wide, so the same value works
 against both the sandbox domain and the verified one — only `MAILGUN_DOMAIN`
 changes between Local and Deployed.
+
+**No local stack reaches Mailgun any more.** `app/e2e/stack.ts` sets `MAILGUN_API_BASE` to the sandbox mailbox (`app/e2e/mailbox.ts`, #764) on every BFF it starts, which is both the Playwright e2e run and `bun run dev:full`, and it sets `MAILGUN_DOMAIN`/`MAILGUN_API_KEY` explicitly alongside it rather than inheriting them. That is deliberate: `.env.local` holds a real account-level key, `bun` loads it before `stack.ts` runs, and without those three lines a local run would post real mail to real Mailgun. The mailbox answers the same `POST /v3/<domain>/messages` endpoint, holds what it is sent, and serves it back as JSON and as a browsable inbox. A walk that genuinely needs a real Mailgun send now runs the BFF by hand with the real values in its environment; nothing that goes through `startStack` will do it for you.
 
 `mg.doula.cloud` is verified: SPF (TXT) and both DKIM records (CNAME, under
 Mailgun's automatic sender security, which rotates the key every 120 days)

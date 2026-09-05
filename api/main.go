@@ -121,14 +121,30 @@ func main() {
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunDomain := os.Getenv("MAILGUN_DOMAIN")
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	mailgunAPI := mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain)
+	// MAILGUN_API_BASE points the same sender at something other than
+	// api.mailgun.net. Unset everywhere a real person receives mail --
+	// local, CI and Cloud Run all leave it alone and keep
+	// mail.NewMailgunSender's default (docs/environment.md). The e2e
+	// stack and a simulation run set it to the sandbox mailbox
+	// (app/e2e/mailbox.ts, #764), which speaks Mailgun's /messages
+	// endpoint and holds what it is sent instead of delivering it.
+	// MailgunSender.BaseURL is the seam its own httptest tests already
+	// use; this only exposes it to the environment. It moves #744's
+	// BounceClearer with it, which is the point -- both halves of the
+	// vendor relationship reach the same place.
+	//
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	if base := os.Getenv("MAILGUN_API_BASE"); base != "" {
+		mailgunAPI.BaseURL = base
+	}
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	// ADR-0029's suppression guard wraps that one Sender once, so every
 	// mail kind gets it without knowing it exists: a complained or
 	// hard-bounced address is refused here with mail.ErrSuppressed, and
 	// outbox.Worker dead-letters the row instead of retrying an address
 	// Mailgun would decline server-side anyway.
 	//
-	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
-	mailgunAPI := mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain)
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunSender := mailsuppress.Sender{Inner: mailgunAPI, DB: db}
 	appBaseURL := os.Getenv("APP_BASE_URL")

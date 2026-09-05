@@ -14,6 +14,8 @@ import {
 	DB_PORT,
 	GCS_HOST,
 	GCS_PORT,
+	MAILBOX_HOST,
+	MAILBOX_PORT,
 	PORT_OFFSET
 } from './ports';
 
@@ -95,6 +97,29 @@ const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE ?? 'podman';
 const EMULATOR_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-firebase-emulator${PIDFILE_SUFFIX}.pid`);
 const API_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-api${PIDFILE_SUFFIX}.pid`);
 const API_BINARY_PATH = path.join(tmpdir(), `doula-cloud-e2e-api${PIDFILE_SUFFIX}`);
+const MAILBOX_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-mailbox${PIDFILE_SUFFIX}.pid`);
+const MAILBOX_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mailbox.ts');
+
+// The sandbox mail settings (#764). These are set explicitly rather than
+// inherited, and that is the point: `app/.env.local` carries a real
+// Mailgun key and the account's sandbox domain for interactive dev, bun
+// loads it before this file runs, and without these four lines a local
+// e2e run or a simulation run would post real mail to real Mailgun.
+// MAILGUN_API_BASE redirects every one of the eleven mail kinds to
+// e2e/mailbox.ts instead; MAILGUN_DOMAIN is what the From/Reply-To
+// identities in api/main.go are built from, so it is the domain every
+// persona's address sits under.
+const MAILGUN_SIM_DOMAIN = 'sim.doula.cloud';
+const MAILGUN_WEBHOOK_SIGNING_KEY = 'e2e-mailgun-signing-key';
+// The shared secret every `process-*` outbox endpoint checks
+// (X-Internal-Secret, api/internal/outbox/handler.go). Empty refuses
+// every call, so a stack that never set it could not drain an outbox at
+// all -- which is how mail stayed unobservable here until now.
+const NOTIFICATION_WORKER_SECRET = 'e2e-worker-secret';
+
+export const MAILBOX_URL = `http://${MAILBOX_HOST}:${MAILBOX_PORT}`;
+export const MAILBOX_DOMAIN = MAILGUN_SIM_DOMAIN;
+export const WORKER_SECRET = NOTIFICATION_WORKER_SECRET;
 
 // Brings up the whole e2e stack: the Firebase Auth emulator, the db-only
 // compose stack (see compose.e2e.yaml), the goose migrations and the
@@ -115,7 +140,25 @@ export async function startStack(appOrigin: string) {
 	runMigrations();
 	seedAppE2ERole();
 	await seedGCSBucket();
+	await startMailbox();
 	await startAPI(appOrigin);
+}
+
+// The sandbox mailbox (e2e/mailbox.ts), started before the BFF for the
+// same reason the database is: the BFF is pointed at it at boot. A plain
+// Bun host process, tracked by pidfile exactly like the emulator.
+async function startMailbox() {
+	killPidfile(MAILBOX_PIDFILE);
+	const child = spawn('bun', [MAILBOX_SCRIPT], {
+		stdio: 'inherit',
+		detached: true,
+		env: { ...process.env, MAILGUN_WEBHOOK_SIGNING_KEY }
+	});
+	child.unref();
+	if (child.pid) {
+		writeFileSync(MAILBOX_PIDFILE, String(child.pid));
+	}
+	await waitForPort(MAILBOX_HOST, MAILBOX_PORT, READY_TIMEOUT_MS);
 }
 
 // Deliberately doesn't use `up --wait` for `db`: under CI's rootless
@@ -275,6 +318,7 @@ export function readStaffInviteToken(invitationId: string): string {
 export function stopStack() {
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });
+	killPidfile(MAILBOX_PIDFILE);
 	killPidfile(EMULATOR_PIDFILE);
 	execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'down', '-v'], {
 		stdio: 'inherit',
@@ -373,6 +417,11 @@ async function startAPI(appOrigin: string) {
 			// tunnelled walk (see docs/environment.md) overrides it via
 			// app/.env.local, which bun loads before this file runs.
 			APP_BASE_URL: process.env.APP_BASE_URL ?? appOrigin,
+			MAILGUN_API_BASE: MAILBOX_URL,
+			MAILGUN_API_KEY: 'e2e-mailgun-key',
+			MAILGUN_DOMAIN: MAILGUN_SIM_DOMAIN,
+			MAILGUN_WEBHOOK_SIGNING_KEY,
+			NOTIFICATION_WORKER_SECRET,
 			PORT: String(E2E_API_PORT)
 		}
 	});
