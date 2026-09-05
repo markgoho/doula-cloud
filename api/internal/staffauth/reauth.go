@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
 
@@ -41,29 +42,29 @@ const recentAuthWindow = 5 * time.Minute
 func RequireRecentAuth(w http.ResponseWriter, r *http.Request, verifier authn.Verifier, tx *sql.Tx, staffID string) (ok bool) {
 	idToken, present := authn.BearerToken(r)
 	if !present {
-		http.Error(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
+		apierr.WriteError(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
 		return false
 	}
 
 	verified, err := verifier.VerifyIDToken(r.Context(), idToken)
 	if err != nil {
-		http.Error(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
+		apierr.WriteError(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
 		return false
 	}
 
 	var sessionIdentityUID string
 	if err := tx.QueryRowContext(r.Context(), `SELECT identity_uid FROM staff WHERE id = $1`, staffID).Scan(&sessionIdentityUID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		return false
 	}
 	if verified.UID != sessionIdentityUID {
-		http.Error(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
+		apierr.WriteError(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
 		return false
 	}
 
 	if time.Since(verified.AuthTime) > recentAuthWindow {
-		http.Error(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
+		apierr.WriteError(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
 		return false
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -35,11 +36,11 @@ func CreateHandler() http.Handler {
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "engagement not found", http.StatusNotFound)
+				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -49,7 +50,7 @@ func CreateHandler() http.Handler {
 			visitID, engagementID, staffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
@@ -60,7 +61,7 @@ func CreateHandler() http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -79,13 +80,13 @@ func CreateHandler() http.Handler {
 		employmentType, err := callerEmploymentType(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if employmentType == employeeType {
 			if err := staffauth.Grant(r.Context(), tx, engagementID, staffID, staffID, nil, nil); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -94,7 +95,7 @@ func CreateHandler() http.Handler {
 		w.WriteHeader(http.StatusCreated)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(CreateResponse{VisitID: visitID, StaffID: staffID}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

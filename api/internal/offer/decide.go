@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -65,7 +66,7 @@ func decisionHandler(decide func(context.Context, *sql.Tx, string, string) (Deci
 
 		resp, status, msg := decide(r.Context(), tx, offerID, staffID)
 		if status != http.StatusOK {
-			http.Error(w, msg, status)
+			apierr.WriteError(w, msg, status)
 			return
 		}
 		writeJSON(w, resp)

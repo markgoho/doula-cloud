@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -110,56 +111,56 @@ func DetailHandler() http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessClient(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
-			http.Error(w, "client not found", http.StatusNotFound)
+			apierr.WriteError(w, "client not found", http.StatusNotFound)
 			return
 		}
 
 		rec, err := fetchRecord(r.Context(), tx, practiceID, clientID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "client not found", http.StatusNotFound)
+			apierr.WriteError(w, "client not found", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		engagements, err := ListEngagementsForClient(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		history, err := mergedHistory(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		resolvedFields, err := resolveFields(r.Context(), tx, practiceID, rec.FieldValues)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		erasedAt, redactionEligibleAt, err := readErasureState(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -174,7 +175,7 @@ func DetailHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

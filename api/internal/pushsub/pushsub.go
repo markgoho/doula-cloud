@@ -14,6 +14,7 @@ package pushsub
 
 import (
 	"database/sql"
+	"doula-cloud/api/internal/apierr"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -35,11 +36,11 @@ type SubscribeRequest struct {
 func decodeSubscribeRequest(w http.ResponseWriter, r *http.Request) (SubscribeRequest, bool) {
 	var req SubscribeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 		return SubscribeRequest{}, false
 	}
 	if req.Endpoint == "" || req.Keys.P256dh == "" || req.Keys.Auth == "" {
-		http.Error(w, "endpoint and keys.p256dh and keys.auth are required", http.StatusBadRequest)
+		apierr.WriteError(w, "endpoint and keys.p256dh and keys.auth are required", http.StatusBadRequest)
 		return SubscribeRequest{}, false
 	}
 	return req, true
@@ -89,7 +90,7 @@ func deleteSubscription(r *http.Request, tx *sql.Tx, ownerType, ownerID, endpoin
 func requireEndpointQueryParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	endpoint := r.URL.Query().Get("endpoint")
 	if endpoint == "" {
-		http.Error(w, "endpoint is required", http.StatusBadRequest)
+		apierr.WriteError(w, "endpoint is required", http.StatusBadRequest)
 		return "", false
 	}
 	return endpoint, true

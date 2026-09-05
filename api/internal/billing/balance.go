@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -116,7 +117,7 @@ func GetBalanceHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := pagecursor.Decode(raw)
 			if err != nil {
-				http.Error(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 				return
 			}
 			after = &c
@@ -125,14 +126,14 @@ func GetBalanceHandler() http.Handler {
 		balance, err := Balance(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		entries, err := ledgerHistory(r.Context(), tx, practiceID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -150,7 +151,7 @@ func GetBalanceHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(BalanceResponse{Balance: balance, Ledger: ledger}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

@@ -2,6 +2,7 @@ package staffauth
 
 import (
 	"database/sql"
+	"doula-cloud/api/internal/apierr"
 	"fmt"
 	"net/http"
 	"slices"
@@ -139,7 +140,7 @@ func requireAnyRole(roles []string, h http.Handler) http.Handler {
 		tx, has := Tx(r.Context())
 		if !has {
 			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		staffID, _ := StaffID(r.Context())
@@ -148,7 +149,7 @@ func requireAnyRole(roles []string, h http.Handler) http.Handler {
 		callerRoles, err := Roles(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		for _, want := range roles {
@@ -157,6 +158,6 @@ func requireAnyRole(roles []string, h http.Handler) http.Handler {
 				return
 			}
 		}
-		http.Error(w, "not permitted to read this", http.StatusForbidden)
+		apierr.WriteError(w, "not permitted to read this", http.StatusForbidden)
 	})
 }

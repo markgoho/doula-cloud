@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/tasknudge"
@@ -51,20 +52,20 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idToken, ok := authn.BearerToken(r)
 		if !ok {
-			http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			apierr.WriteError(w, "missing bearer token", http.StatusUnauthorized)
 			return
 		}
 
 		verified, err := verifier.VerifyIDToken(r.Context(), idToken)
 		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
+			apierr.WriteError(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
 
 		now := time.Now()
 		cookie, err := authn.MintSession(r.Context(), db, verified.UID, now)
 		if err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		// Best-effort, same as EndHandler's swallowed EndSession below: a
@@ -109,6 +110,6 @@ func writeStatus(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(StatusResponse{OK: true}); err != nil {
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 	}
 }

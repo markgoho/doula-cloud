@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -39,18 +40,18 @@ func GetTemplateHandler() http.Handler {
 		prose, found, err := fetchProse(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
-			http.Error(w, "no contract template found for this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no contract template found for this practice", http.StatusNotFound)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(TemplateResponse{Prose: prose}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -69,22 +70,22 @@ func PutTemplateHandler() http.Handler {
 		roles, err := staffauth.Roles(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !slices.Contains(roles, "owner") {
-			http.Error(w, "only a Practice Owner can do that", http.StatusForbidden)
+			apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
 			return
 		}
 
 		var req TemplateResponse
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.Prose = strings.TrimSpace(req.Prose)
 		if req.Prose == "" {
-			http.Error(w, "prose is required", http.StatusBadRequest)
+			apierr.WriteError(w, "prose is required", http.StatusBadRequest)
 			return
 		}
 
@@ -94,14 +95,14 @@ func PutTemplateHandler() http.Handler {
 			practiceID, req.Prose,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(TemplateResponse{Prose: req.Prose}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

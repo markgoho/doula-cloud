@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activityfeed"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientfieldtemplate"
@@ -56,14 +57,14 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 	var name string
 	if err := tx.QueryRowContext(r.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&name); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
 	reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 

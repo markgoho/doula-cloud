@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -32,7 +33,7 @@ func WithdrawHandler() http.Handler {
 
 		if err := expireOpen(r.Context(), tx, byID, offerID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -45,12 +46,12 @@ func WithdrawHandler() http.Handler {
 			actorStaffID, offerID,
 		).Scan(&engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no open offer found at this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no open offer found at this practice", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
@@ -61,7 +62,7 @@ func WithdrawHandler() http.Handler {
 			Actor:       activity.StaffActor(actorStaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

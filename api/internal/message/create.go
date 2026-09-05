@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
@@ -70,11 +71,11 @@ func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handl
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "engagement not found", http.StatusNotFound)
+				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -87,7 +88,7 @@ func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handl
 		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeStaff, staffID, body, attachment)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -127,10 +128,10 @@ func decodeMultipartCreate(w http.ResponseWriter, r *http.Request, store objects
 		// is, to the caller, the same failure.
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			http.Error(w, "attachment exceeds the 10MB limit", http.StatusRequestEntityTooLarge)
+			apierr.WriteError(w, "attachment exceeds the 10MB limit", http.StatusRequestEntityTooLarge)
 			return "", nil, false
 		}
-		http.Error(w, "malformed multipart request", http.StatusBadRequest)
+		apierr.WriteError(w, "malformed multipart request", http.StatusBadRequest)
 		return "", nil, false
 	}
 
@@ -140,14 +141,14 @@ func decodeMultipartCreate(w http.ResponseWriter, r *http.Request, store objects
 	switch {
 	case errors.Is(err, http.ErrMissingFile):
 		if body == "" {
-			http.Error(w, "body or attachment is required", http.StatusBadRequest)
+			apierr.WriteError(w, "body or attachment is required", http.StatusBadRequest)
 			return "", nil, false
 		}
 		return body, nil, true
 	case err != nil:
 		// coverage:ignore reason: r.FormFile only returns a non-ErrMissingFile error on a
 		// filesystem-level failure opening an already-parsed part, not exercised by unit tests
-		http.Error(w, "invalid attachment", http.StatusBadRequest)
+		apierr.WriteError(w, "invalid attachment", http.StatusBadRequest)
 		return "", nil, false
 	}
 	defer func() { _ = file.Close() }()
@@ -174,7 +175,7 @@ func validAttachmentContentType(contentType string) bool {
 // scoped by engagementID/messageID.
 func validateAndStoreAttachment(w http.ResponseWriter, r *http.Request, store objectstore.ObjectStore, file multipart.File, header *multipart.FileHeader, engagementID, messageID, internalErrorMsg string) (*attachmentInfo, bool) {
 	if header.Size > maxAttachmentBytes {
-		http.Error(w, "attachment exceeds the 10MB limit", http.StatusRequestEntityTooLarge)
+		apierr.WriteError(w, "attachment exceeds the 10MB limit", http.StatusRequestEntityTooLarge)
 		return nil, false
 	}
 
@@ -183,24 +184,24 @@ func validateAndStoreAttachment(w http.ResponseWriter, r *http.Request, store ob
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		// coverage:ignore reason: a parsed multipart.File failing mid-read is a
 		// filesystem-level failure, not exercised by unit tests
-		http.Error(w, "invalid attachment", http.StatusBadRequest)
+		apierr.WriteError(w, "invalid attachment", http.StatusBadRequest)
 		return nil, false
 	}
 	contentType := http.DetectContentType(sniff[:n])
 	if !validAttachmentContentType(contentType) {
-		http.Error(w, "attachment must be an image or a PDF", http.StatusBadRequest)
+		apierr.WriteError(w, "attachment must be an image or a PDF", http.StatusBadRequest)
 		return nil, false
 	}
 
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		// coverage:ignore reason: multipart.File always supports Seek in practice, not exercised by unit tests
-		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return nil, false
 	}
 
 	objectPath := fmt.Sprintf("messages/%s/%s", engagementID, messageID)
 	if err := store.Put(r.Context(), objectPath, contentType, file); err != nil {
-		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return nil, false
 	}
 
@@ -219,12 +220,12 @@ func validateAndStoreAttachment(w http.ResponseWriter, r *http.Request, store ob
 func decodeCreateRequest(w http.ResponseWriter, r *http.Request) (CreateRequest, bool) {
 	var req CreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 		return CreateRequest{}, false
 	}
 	req.Body = strings.TrimSpace(req.Body)
 	if req.Body == "" {
-		http.Error(w, "body is required", http.StatusBadRequest)
+		apierr.WriteError(w, "body is required", http.StatusBadRequest)
 		return CreateRequest{}, false
 	}
 	return req, true
@@ -237,7 +238,7 @@ func writeCreated(w http.ResponseWriter, item Message, internalErrorMsg string) 
 	w.WriteHeader(http.StatusCreated)
 	// coverage:ignore reason: response encoding failure, not exercised by unit tests
 	if err := json.NewEncoder(w).Encode(item); err != nil {
-		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 	}
 }
 

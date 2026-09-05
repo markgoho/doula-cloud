@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
@@ -19,38 +20,12 @@ import (
 // not a report somebody scrolls.
 const awaitingPageSize = 30
 
-// The machine-readable codes this endpoint returns, per
-// docs/api-design.md section 7.
-const (
-	codeInvalidArgument = "INVALID_ARGUMENT"
-	codeInternalError   = "INTERNAL_ERROR"
-)
-
 // The messages the roll-up returns, named because the screen renders them
 // and the tests assert them.
 const (
 	MsgInvalidCursor = "invalid cursor"
 	MsgInternalError = "internal error"
 )
-
-// APIError is docs/api-design.md section 7's structured error shape,
-// mirroring website.APIError. This endpoint is the first in contracts to
-// use it; the older per-Engagement Contract handlers still answer in
-// plain text, and rewriting those is a contract change #426 does not ask
-// for.
-type APIError struct {
-	Code    string            `json:"code"`
-	Message string            `json:"message"`
-	Details map[string]string `json:"details,omitempty"`
-}
-
-// writeAPIError writes status with a {code, message} JSON body.
-func writeAPIError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	_ = json.NewEncoder(w).Encode(APIError{Code: code, Message: message})
-}
 
 // AwaitingItem is one row of the "Contracts awaiting signature" list: the
 // Engagement the Contract hangs off, the Client whose signature is
@@ -112,7 +87,7 @@ func AwaitingSignatureHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := pagecursor.Decode(raw)
 			if err != nil {
-				writeAPIError(w, http.StatusBadRequest, codeInvalidArgument, MsgInvalidCursor)
+				apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgInvalidCursor, nil)
 				return
 			}
 			after = &c
@@ -121,7 +96,7 @@ func AwaitingSignatureHandler() http.Handler {
 		list, err := listAwaiting(r.Context(), tx, practiceID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
 			return
 		}
 
@@ -139,7 +114,7 @@ func AwaitingSignatureHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			// coverage:ignore reason: response encoding failure, not exercised by unit tests
-			writeAPIError(w, http.StatusInternalServerError, codeInternalError, MsgInternalError)
+			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
 		}
 	})
 }

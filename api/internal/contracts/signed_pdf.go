@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/staffauth"
@@ -47,7 +48,7 @@ func ClientGetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handl
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
@@ -69,18 +70,18 @@ func serveSignedPDF(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store ob
 		engagementID, statusSigned,
 	).Scan(&objectPath)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "no signed contract found for this engagement", http.StatusNotFound)
+		apierr.WriteError(w, "no signed contract found for this engagement", http.StatusNotFound)
 		return
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return
 	}
 
 	obj, err := store.Get(r.Context(), objectPath)
 	if err != nil {
-		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return
 	}
 	defer func() { _ = obj.Close() }()

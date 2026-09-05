@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
@@ -38,12 +39,12 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req RequestResetRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		address := NormalizeAddress(req.Email)
 		if address == "" {
-			http.Error(w, "email is required", http.StatusBadRequest)
+			apierr.WriteError(w, "email is required", http.StatusBadRequest)
 			return
 		}
 
@@ -55,14 +56,14 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 			return
 		}
 		if err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -76,18 +77,18 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeStaffPasswordReset, authmail.ResetLinkLifetime, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := authmail.QueueTokenMail(r.Context(), tx, uid, authmail.KindPasswordReset, token); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -119,23 +120,23 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req SpendResetRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.Token = strings.TrimSpace(req.Token)
 		if req.Token == "" {
-			http.Error(w, "token is required", http.StatusBadRequest)
+			apierr.WriteError(w, "token is required", http.StatusBadRequest)
 			return
 		}
 		if len(req.NewPassword) < minPasswordLength {
-			http.Error(w, fmt.Sprintf("newPassword must be at least %d characters", minPasswordLength), http.StatusBadRequest)
+			apierr.WriteError(w, fmt.Sprintf("newPassword must be at least %d characters", minPasswordLength), http.StatusBadRequest)
 			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -147,29 +148,29 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 
 		uid, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeStaffPasswordReset, time.Now())
 		if errors.Is(err, authtoken.ErrInvalid) {
-			http.Error(w, "this link is invalid or has expired -- ask for a new one", http.StatusBadRequest)
+			apierr.WriteError(w, "this link is invalid or has expired -- ask for a new one", http.StatusBadRequest)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := accounts.SetPassword(r.Context(), uid, req.NewPassword); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := endAllSessionsAndNotify(r.Context(), tx, uid); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

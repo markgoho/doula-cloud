@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 )
 
@@ -25,19 +26,19 @@ func ClientGetBirthPlanHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		fields, answers, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no birth plan found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -45,7 +46,7 @@ func ClientGetBirthPlanHandler() http.Handler {
 		out := InstanceResponse{EngagementID: engagementID, PlanType: birthPlanType, Fields: fields, Answers: answers.nonEmpty()}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
 )
@@ -178,7 +179,7 @@ func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
-	var out portalinvite.APIError
+	var out apierr.APIError
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

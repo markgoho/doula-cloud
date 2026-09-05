@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -76,9 +77,9 @@ func ApproveHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tasknudge.Enqueuer, tx *sql.Tx, practiceID string, err error) {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		http.Error(w, "engagement request not found", http.StatusNotFound)
+		apierr.WriteError(w, "engagement request not found", http.StatusNotFound)
 	case errors.Is(err, errNotPending):
-		http.Error(w, "that request is no longer pending", http.StatusConflict)
+		apierr.WriteError(w, "that request is no longer pending", http.StatusConflict)
 	case errors.Is(err, billing.ErrNoCreditsRemaining):
 		// Read while the request tx (and its app.current_practice_id) is
 		// still live -- credit_ledger is practice-tier RLS, and this is
@@ -87,20 +88,20 @@ func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tas
 		_ = tx.Rollback()
 		if notifyCheckErr != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if shouldNotify {
 			if err := billing.QueueOutOfCreditsNotification(r.Context(), db, practiceID, enq); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
-		http.Error(w, "no credits remaining, ask a practice owner or admin to buy more", http.StatusPaymentRequired)
+		apierr.WriteError(w, "no credits remaining, ask a practice owner or admin to buy more", http.StatusPaymentRequired)
 	default:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 	}
 }
 

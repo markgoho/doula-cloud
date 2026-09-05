@@ -196,6 +196,7 @@ type APIError struct {
    * `409 Conflict`: Resource state conflict or duplicate idempotency key conflict.
    * `429 Too Many Requests`: Rate limit reached.
    * `500 Internal Server Error`: Unhandled server or database error (log details internally, do not leak raw stack traces to caller).
+3. **One Writer**: `api/internal/apierr` is the only place this shape is written from. Every handler calls `apierr.Write` (or `apierr.WriteError` for the common status+message case) rather than `http.Error` or a package-local helper; a new endpoint that needs a `Code` not yet in `apierr.Code`'s enumerated set adds one there (#529).
 
 ---
 

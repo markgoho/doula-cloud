@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/website"
 )
@@ -20,32 +21,6 @@ const MsgWebsiteRequired = "Tell us where Clients can find you online before you
 // her, because it is ours: she wrote the words and we failed to put
 // them anywhere (#443).
 const MsgPageNotLive = "The page we publish for you is not loading, so Stripe would see nothing at your web address. Open your website settings and publish it again; if it keeps failing, tell us."
-
-// The machine-readable codes this handler returns, in
-// docs/api-design.md section 7's shape. codeFailedPrecondition is the
-// one #442 adds: the request is well-formed and the caller is allowed to
-// make it, but the Practice is in a state where it cannot be granted.
-const (
-	codeFailedPrecondition = "FAILED_PRECONDITION"
-)
-
-// apiError is docs/api-design.md section 7's structured error shape.
-// The rest of this package still writes plain text via http.Error, which
-// is what #462 exists to finish; a new refusal follows the documented
-// rule rather than the surrounding habit, the same way the website
-// package's endpoints do.
-type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// writeAPIError writes status with a {code, message} JSON body.
-func writeAPIError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	_ = json.NewEncoder(w).Encode(apiError{Code: code, Message: message})
-}
 
 // ConnectStatus is the single status GetConnectStatusHandler reports for
 // a Practice's Stripe Connect account, and the Payments settings screen
@@ -144,7 +119,7 @@ func PostConnectHandler(client Client) http.Handler {
 		// customer lock.
 		if _, err := tx.ExecContext(r.Context(), `SELECT id FROM practices WHERE id = $1 FOR UPDATE`, practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -154,7 +129,7 @@ func PostConnectHandler(client Client) http.Handler {
 			`SELECT stripe_connect_account_id, name FROM practices WHERE id = $1`, practiceID,
 		).Scan(&accountID, &practiceName); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -173,11 +148,11 @@ func PostConnectHandler(client Client) http.Handler {
 		profile, err := website.ReadStripeProfile(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !profile.Declared {
-			writeAPIError(w, http.StatusConflict, codeFailedPrecondition, MsgWebsiteRequired)
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgWebsiteRequired, nil)
 			return
 		}
 		// #443's second refusal, on the same rule and for the same
@@ -186,7 +161,7 @@ func PostConnectHandler(client Client) http.Handler {
 		// this -- a Practice's own address is hers, and we do not check
 		// up on it.
 		if profile.PageFailed {
-			writeAPIError(w, http.StatusConflict, codeFailedPrecondition, MsgPageNotLive)
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgPageNotLive, nil)
 			return
 		}
 
@@ -202,14 +177,14 @@ func PostConnectHandler(client Client) http.Handler {
 				StatementDescriptor: StatementDescriptor(practiceName),
 			})
 			if err != nil {
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if _, err := tx.ExecContext(r.Context(),
 				`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, id, practiceID,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			accountID = sql.NullString{String: id, Valid: true}
@@ -217,14 +192,14 @@ func PostConnectHandler(client Client) http.Handler {
 
 		onboardingURL, err := client.CreateAccountLink(r.Context(), accountID.String, practiceID)
 		if err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(ConnectResponse{OnboardingURL: onboardingURL}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -252,7 +227,7 @@ func GetConnectStatusHandler(client Client) http.Handler {
 			`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
 		).Scan(&accountID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -265,7 +240,7 @@ func GetConnectStatusHandler(client Client) http.Handler {
 		if accountID.Valid {
 			status, err := client.RetrieveAccount(r.Context(), accountID.String)
 			if err != nil {
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			out.CardPaymentsStatus = status.CardPayments
@@ -277,7 +252,7 @@ func GetConnectStatusHandler(client Client) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

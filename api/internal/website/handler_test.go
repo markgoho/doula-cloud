@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -118,9 +119,9 @@ func decodeWebsite(t *testing.T, resp *http.Response) website.Response {
 	return out
 }
 
-func decodeError(t *testing.T, resp *http.Response) website.APIError {
+func decodeError(t *testing.T, resp *http.Response) apierr.APIError {
 	t.Helper()
-	var out website.APIError
+	var out apierr.APIError
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}

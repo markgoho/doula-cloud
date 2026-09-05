@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -66,7 +67,7 @@ func Wrap(next http.Handler) http.Handler {
 		found, status, body, err := lookup(r.Context(), tx, key, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, msgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if found {

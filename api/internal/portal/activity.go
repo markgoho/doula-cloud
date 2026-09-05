@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activityfeed"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/pagecursor"
 )
@@ -80,7 +81,7 @@ func ActivityHandler() http.Handler {
 		tx, ok := clientauth.Tx(r.Context())
 		if !ok {
 			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
@@ -88,7 +89,7 @@ func ActivityHandler() http.Handler {
 		practiceID, err := engagementPracticeID(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed this row exists
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -99,7 +100,7 @@ func ActivityHandler() http.Handler {
 		// this avoids. Nothing but this read runs on tx afterward.
 		if err := activity.ScopeToPractice(r.Context(), tx, practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -107,7 +108,7 @@ func ActivityHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := pagecursor.Decode(raw)
 			if err != nil {
-				http.Error(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 				return
 			}
 			after = &c
@@ -116,7 +117,7 @@ func ActivityHandler() http.Handler {
 		resp, err := activityfeed.ListForSubject(r.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, staffingActionsNotIn, after, activityPageSize)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		redactStaffActorNames(resp.Items)
@@ -124,7 +125,7 @@ func ActivityHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

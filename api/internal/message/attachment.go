@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/staffauth"
@@ -30,11 +31,11 @@ func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 		}
 		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "engagement not found", http.StatusNotFound)
+				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -42,17 +43,17 @@ func AttachmentHandler(store objectstore.ObjectStore) http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
-			http.Error(w, "engagement not found", http.StatusNotFound)
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 
@@ -75,7 +76,7 @@ func ClientAttachmentHandler(store objectstore.ObjectStore) http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
@@ -102,18 +103,18 @@ func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store o
 		messageID, engagementID,
 	).Scan(&objectPath, &contentType, &filename)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !objectPath.Valid) {
-		http.Error(w, "attachment not found", http.StatusNotFound)
+		apierr.WriteError(w, "attachment not found", http.StatusNotFound)
 		return
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return
 	}
 
 	obj, err := store.Get(r.Context(), objectPath.String)
 	if err != nil {
-		http.Error(w, internalErrorMsg, http.StatusInternalServerError)
+		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return
 	}
 	defer func() { _ = obj.Close() }()

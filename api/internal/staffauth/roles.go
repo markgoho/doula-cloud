@@ -3,6 +3,7 @@ package staffauth
 import (
 	"context"
 	"database/sql"
+	"doula-cloud/api/internal/apierr"
 	"fmt"
 	"net/http"
 	"slices"
@@ -64,7 +65,7 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	staffID, _ := StaffID(r.Context())
@@ -73,11 +74,11 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	isOwner, err := staffHasRole(r.Context(), tx, practiceID, staffID, "owner")
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	if !isOwner {
-		http.Error(w, "only a Practice Owner can do that", http.StatusForbidden)
+		apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
 		return nil, "", false
 	}
 	return tx, practiceID, true
@@ -92,7 +93,7 @@ func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, pr
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	staffID, _ := StaffID(r.Context())
@@ -101,11 +102,11 @@ func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, pr
 	roles, err := Roles(r.Context(), tx, practiceID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		http.Error(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	if !slices.Contains(roles, "owner") && !slices.Contains(roles, "admin") {
-		http.Error(w, "only a Practice Owner or Admin can do that", http.StatusForbidden)
+		apierr.WriteError(w, "only a Practice Owner or Admin can do that", http.StatusForbidden)
 		return nil, "", false
 	}
 	return tx, practiceID, true

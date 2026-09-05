@@ -3,13 +3,13 @@ package staffauth_test
 import (
 	"database/sql"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -346,12 +346,12 @@ func TestUpdateWorkState_RejectsSomethingThatIsNotAState(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
+	var out apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode body: %v", err)
 	}
-	if got := strings.TrimSpace(string(body)); got != staffauth.MsgWorkStateRequired {
-		t.Fatalf("body = %q, want %q", got, staffauth.MsgWorkStateRequired)
+	if out.Message != staffauth.MsgWorkStateRequired {
+		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgWorkStateRequired)
 	}
 	state, events := readWorkState(t, db, "not-a-state-uid")
 	if state != "NY" {

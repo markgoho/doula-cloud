@@ -7,6 +7,8 @@
  * seam client.ts's list/create orchestration uses.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 /**
 A Client's structural core, Record-shaped -- mirrors client.Record.
 */
@@ -118,7 +120,7 @@ export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 export async function loadClientDetail(fetcher: Fetcher, practiceId: string, clientId: string): Promise<ClientDetail> {
 	const response = await fetcher(`/api/practices/${practiceId}/clients/${clientId}`);
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

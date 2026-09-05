@@ -6,6 +6,8 @@
  * SvelteKit and the DOM so it can be unit-tested directly.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 /** The field-type palette from ADR-0001 -- the only kinds of field a Plan
  * Template may contain. Values match the Go BFF's `plan_templates.fields`
  * JSONB shape exactly (api/internal/plans/template.go); there is no
@@ -63,7 +65,7 @@ export async function loadTemplate(
 ): Promise<Template> {
 	const response = await fetcher(templatePath(practiceId, planType));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -83,7 +85,7 @@ export async function saveTemplate(
 		body: JSON.stringify({ planType, fields })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

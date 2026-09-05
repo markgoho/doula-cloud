@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
 
@@ -90,29 +91,29 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 
 			engagementID := r.PathValue("engagementId")
 			if _, err := uuid.Parse(engagementID); err != nil {
-				http.Error(w, "invalid engagement id", http.StatusBadRequest)
+				apierr.WriteError(w, "invalid engagement id", http.StatusBadRequest)
 				return
 			}
 
 			clientID, found, err := setIdentityAndResolveClient(r.Context(), tx, uid)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !found {
-				http.Error(w, "no matching client account", http.StatusForbidden)
+				apierr.WriteError(w, "no matching client account", http.StatusForbidden)
 				return
 			}
 
 			owns, err := setClientAndCheckEngagement(r.Context(), tx, clientID, engagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !owns {
-				http.Error(w, "engagement not linked to this client", http.StatusForbidden)
+				apierr.WriteError(w, "engagement not linked to this client", http.StatusForbidden)
 				return
 			}
 

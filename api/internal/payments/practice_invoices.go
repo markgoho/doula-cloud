@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -94,7 +95,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := decodeInvoiceCursor(raw)
 			if err != nil {
-				http.Error(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 				return
 			}
 			after = &c
@@ -104,14 +105,14 @@ func GetPracticeInvoicesHandler() http.Handler {
 		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, unpaidOnly)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

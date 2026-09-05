@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/mfarecoverymail"
@@ -49,19 +50,19 @@ func VouchHandler(verifier authn.Verifier, enq tasknudge.Enqueuer) http.Handler 
 			practiceID, targetStaffID,
 		).Scan(&targetIdentityUID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no membership found for that staff member at this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no membership found for that staff member at this practice", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		code, err := authtoken.MintCode(r.Context(), tx, targetIdentityUID, authtoken.PurposeStaffMFARecovery, mfarecoverymail.CodeLifetime, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -70,19 +71,19 @@ func VouchHandler(verifier authn.Verifier, enq tasknudge.Enqueuer) http.Handler 
 			authtoken.Digest(code), targetStaffID, ownerStaffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		var ownerIdentityUID string
 		if err := tx.QueryRowContext(r.Context(), `SELECT identity_uid FROM staff WHERE id = $1`, ownerStaffID).Scan(&ownerIdentityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := mfarecoverymail.QueueVouchedCodeMail(r.Context(), tx, ownerIdentityUID, targetStaffID, code); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.MFARecoveryCode))

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"slices"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -69,7 +70,7 @@ type TemplateResponse struct {
 func planTypeFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 	planType := r.PathValue("planType")
 	if !validPlanTypes[planType] {
-		http.Error(w, "unknown plan type: "+planType, http.StatusBadRequest)
+		apierr.WriteError(w, "unknown plan type: "+planType, http.StatusBadRequest)
 		return "", false
 	}
 	return planType, true
@@ -93,18 +94,18 @@ func GetTemplateHandler() http.Handler {
 		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
-			http.Error(w, "no plan template found for this practice and plan type", http.StatusNotFound)
+			apierr.WriteError(w, "no plan template found for this practice and plan type", http.StatusNotFound)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(TemplateResponse{PlanType: planType, Fields: fields}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -124,11 +125,11 @@ func PutTemplateHandler() http.Handler {
 		roles, err := staffauth.Roles(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !hasOwnerRole(roles) {
-			http.Error(w, "only a Practice Owner can do that", http.StatusForbidden)
+			apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
 			return
 		}
 
@@ -139,20 +140,20 @@ func PutTemplateHandler() http.Handler {
 
 		var req TemplateResponse
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		fields, errMsg := normalizeFields(req.Fields)
 		if errMsg != "" {
-			http.Error(w, errMsg, http.StatusBadRequest)
+			apierr.WriteError(w, errMsg, http.StatusBadRequest)
 			return
 		}
 
 		fieldsJSON, err := json.Marshal(fields)
 		if err != nil {
 			// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -162,14 +163,14 @@ func PutTemplateHandler() http.Handler {
 			practiceID, planType, fieldsJSON,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(TemplateResponse{PlanType: planType, Fields: fields}); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

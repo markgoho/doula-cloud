@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 )
 
 // MembershipEvent is one recorded change to a Membership, subject_kind
@@ -97,17 +98,17 @@ type membership struct {
 // way RequireOwner writes its own 403.
 func parseMembership(w http.ResponseWriter, roles []string, employmentType string) (membership, bool) {
 	if len(roles) == 0 {
-		http.Error(w, "at least one role is required", http.StatusBadRequest)
+		apierr.WriteError(w, "at least one role is required", http.StatusBadRequest)
 		return membership{}, false
 	}
 	for _, role := range roles {
 		if !validRoles[role] {
-			http.Error(w, "unknown role: "+role, http.StatusBadRequest)
+			apierr.WriteError(w, "unknown role: "+role, http.StatusBadRequest)
 			return membership{}, false
 		}
 	}
 	if !validEmploymentTypes[employmentType] {
-		http.Error(w, "employmentType must be employee or contractor", http.StatusBadRequest)
+		apierr.WriteError(w, "employmentType must be employee or contractor", http.StatusBadRequest)
 		return membership{}, false
 	}
 	// Every role here is a known enum member, so this literal is safe to
@@ -166,7 +167,7 @@ func UpdateMembershipHandler() http.Handler {
 
 		var req UpdateMembershipRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		next, ok := parseMembership(w, req.Roles, req.EmploymentType)
@@ -183,12 +184,12 @@ func UpdateMembershipHandler() http.Handler {
 			practiceID, targetStaffID,
 		).Scan(&previousRoles, &previousEmploymentType)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no membership found for that staff member at this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no membership found for that staff member at this practice", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -199,11 +200,11 @@ func UpdateMembershipHandler() http.Handler {
 		lastOwner, err := removesLastOwner(r.Context(), tx, practiceID, targetStaffID, previousRoles, next.roles)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if lastOwner {
-			http.Error(w, "a practice must keep at least one Owner", http.StatusConflict)
+			apierr.WriteError(w, "a practice must keep at least one Owner", http.StatusConflict)
 			return
 		}
 
@@ -214,7 +215,7 @@ func UpdateMembershipHandler() http.Handler {
 			next.rolesLiteral, next.employmentType, practiceID, targetStaffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -228,7 +229,7 @@ func UpdateMembershipHandler() http.Handler {
 				ActorStaffID: actorStaffID,
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -239,7 +240,7 @@ func UpdateMembershipHandler() http.Handler {
 				ActorStaffID: actorStaffID,
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -249,7 +250,7 @@ func UpdateMembershipHandler() http.Handler {
 		// giving a Practice a second one.
 		if err := reconcileOwnersAtPractice(r.Context(), tx, practiceID, targetStaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -257,7 +258,7 @@ func UpdateMembershipHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(updated); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -321,12 +322,12 @@ func RemoveMembershipHandler() http.Handler {
 			practiceID, targetStaffID,
 		).Scan(&roles, &employmentType)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no membership found for that staff member at this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no membership found for that staff member at this practice", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -335,11 +336,11 @@ func RemoveMembershipHandler() http.Handler {
 		lastOwner, err := removesLastOwner(r.Context(), tx, practiceID, targetStaffID, roles, nil)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if lastOwner {
-			http.Error(w, "a practice must keep at least one Owner", http.StatusConflict)
+			apierr.WriteError(w, "a practice must keep at least one Owner", http.StatusConflict)
 			return
 		}
 
@@ -351,7 +352,7 @@ func RemoveMembershipHandler() http.Handler {
 			ActorStaffID: actorStaffID,
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -360,7 +361,7 @@ func RemoveMembershipHandler() http.Handler {
 			practiceID, targetStaffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -370,7 +371,7 @@ func RemoveMembershipHandler() http.Handler {
 		// DELETE so isSoleOwnerAnywhere no longer sees this Membership.
 		if err := reconcileOwnersAtPractice(r.Context(), tx, practiceID, targetStaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

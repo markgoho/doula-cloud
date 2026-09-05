@@ -5,6 +5,8 @@
  * only loads the read-only view; there is no save/mutate path here.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 export interface LedgerEntry {
 	origin: string;
 	quantity: number;
@@ -73,7 +75,7 @@ export function billingPath(practiceId: string): string {
 export async function loadBalance(fetcher: Fetcher, practiceId: string): Promise<Balance> {
 	const response = await fetcher(billingPath(practiceId));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -94,7 +96,7 @@ export async function purchaseCredits(
 		body: JSON.stringify({ quantity })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	const body: { checkoutUrl: string } = await response.json();
 	return body.checkoutUrl;

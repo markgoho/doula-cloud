@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
@@ -73,26 +74,26 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 
 		var req SignupRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.PracticeName = strings.TrimSpace(req.PracticeName)
 		req.StaffName = strings.TrimSpace(req.StaffName)
 		req.StaffEmail = strings.TrimSpace(req.StaffEmail)
 		if req.PracticeName == "" || req.StaffName == "" || req.StaffEmail == "" {
-			http.Error(w, "practiceName, staffName, and staffEmail are required", http.StatusBadRequest)
+			apierr.WriteError(w, "practiceName, staffName, and staffEmail are required", http.StatusBadRequest)
 			return
 		}
 		workState, ok := NormalizeWorkState(req.WorkState)
 		if !ok {
-			http.Error(w, MsgWorkStateRequired, http.StatusBadRequest)
+			apierr.WriteError(w, MsgWorkStateRequired, http.StatusBadRequest)
 			return
 		}
 		req.WorkState = workState
 
 		resp, status, msg := signup(r, tx, verified.UID, req)
 		if status != http.StatusCreated {
-			http.Error(w, msg, status)
+			apierr.WriteError(w, msg, status)
 			return
 		}
 
@@ -102,13 +103,13 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// authn.Begin already verified.
 		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
 		if err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -119,7 +120,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		w.WriteHeader(http.StatusCreated)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
@@ -98,11 +99,11 @@ func PostContractHandler() http.Handler {
 		prose, found, err := fetchProse(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
-			http.Error(w, "no contract template found for this practice", http.StatusNotFound)
+			apierr.WriteError(w, "no contract template found for this practice", http.StatusNotFound)
 			return
 		}
 
@@ -110,13 +111,13 @@ func PostContractHandler() http.Handler {
 		values, err := prefillClientName(r.Context(), tx, engagementID, mergeFields)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		valuesJSON, err := json.Marshal(values)
 		if err != nil {
 			// coverage:ignore reason: MergeFieldValues always marshals cleanly, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -125,11 +126,11 @@ func PostContractHandler() http.Handler {
 			engagementID, prose, valuesJSON,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
-				http.Error(w, "a contract already exists for this engagement", http.StatusConflict)
+				apierr.WriteError(w, "a contract already exists for this engagement", http.StatusConflict)
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
@@ -141,7 +142,7 @@ func PostContractHandler() http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -156,7 +157,7 @@ func PostContractHandler() http.Handler {
 		}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -180,28 +181,28 @@ func GetContractHandler() http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
-			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
 		}
 
 		_, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -216,7 +217,7 @@ func GetContractHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(ReadContract(reader, full)); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -235,36 +236,36 @@ func PutContractHandler() http.Handler {
 
 		id, prose, status, _, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "no contract found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if status != statusDraft {
-			http.Error(w, "contract is no longer a draft", http.StatusConflict)
+			apierr.WriteError(w, "contract is no longer a draft", http.StatusConflict)
 			return
 		}
 
 		var req PutContractRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.Values = req.Values.nonEmpty()
 
 		mergeFields := extractMergeFields(prose)
 		if errMsg := validateMergeFieldValues(mergeFields, req.Values); errMsg != "" {
-			http.Error(w, errMsg, http.StatusBadRequest)
+			apierr.WriteError(w, errMsg, http.StatusBadRequest)
 			return
 		}
 
 		valuesJSON, err := json.Marshal(req.Values)
 		if err != nil {
 			// coverage:ignore reason: MergeFieldValues always marshals cleanly, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -273,7 +274,7 @@ func PutContractHandler() http.Handler {
 			valuesJSON, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -287,7 +288,7 @@ func PutContractHandler() http.Handler {
 		}
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(out); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

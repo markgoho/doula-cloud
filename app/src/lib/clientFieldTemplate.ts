@@ -9,6 +9,8 @@
  * disappear from the array once created.
  */
 
+import { apiErrorMessage } from './apiErrorMessage.js';
+
 export const FIELD_TYPES = [
 	'short_text',
 	'long_text',
@@ -58,7 +60,7 @@ function templatePath(practiceId: string): string {
 export async function loadTemplate(fetcher: Fetcher, practiceId: string): Promise<Template> {
 	const response = await fetcher(templatePath(practiceId));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
@@ -76,7 +78,7 @@ export async function saveTemplate(
 		body: JSON.stringify({ fields })
 	});
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }

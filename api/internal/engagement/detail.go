@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -54,17 +55,17 @@ func DetailHandler() http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
-			http.Error(w, "engagement not found", http.StatusNotFound)
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 
@@ -80,12 +81,12 @@ func DetailHandler() http.Handler {
 			engagementID, practiceID,
 		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt, &dueDate)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "engagement not found", http.StatusNotFound)
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		d.ClientName = client.PreferredName(givenName, preferredName.String)
@@ -96,7 +97,7 @@ func DetailHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(d); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -49,17 +50,17 @@ func CreateHandler() http.Handler {
 		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if reader.IsContractor() && !reader.Has("owner") && !reader.Has("admin") {
-			http.Error(w, "a contractor doula does not create clients at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
+			apierr.WriteError(w, "a contractor doula does not create clients at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
 			return
 		}
 
 		var req CreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		if !normalizeAndValidate(w, &req.Record) {
@@ -70,7 +71,7 @@ func CreateHandler() http.Handler {
 			matches, err := FindMatches(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, "")
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if len(matches) > 0 {
@@ -78,7 +79,7 @@ func CreateHandler() http.Handler {
 				w.WriteHeader(http.StatusConflict)
 				// coverage:ignore reason: response encoding failure, not exercised by unit tests
 				if err := json.NewEncoder(w).Encode(CreateResponse{Matches: matches}); err != nil {
-					http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+					apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				}
 				return
 			}
@@ -87,7 +88,7 @@ func CreateHandler() http.Handler {
 		req.ID = uuid.NewString()
 		if err := insertClient(r.Context(), tx, practiceID, req.Record); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		// Her key is made in the same transaction that makes her, so a
@@ -96,12 +97,12 @@ func CreateHandler() http.Handler {
 		// seals the created diff under it.
 		if err := clientkey.Ensure(r.Context(), tx, practiceID, req.ID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordEvent(r.Context(), tx, practiceID, req.ID, eventCreated, createdDiff(req.Record), staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -109,7 +110,7 @@ func CreateHandler() http.Handler {
 		w.WriteHeader(http.StatusCreated)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(req.Record); err != nil {
-			http.Error(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -135,12 +136,12 @@ func normalizeAndValidate(w http.ResponseWriter, rec *Record) bool {
 	}
 
 	if rec.GivenName == "" {
-		http.Error(w, "givenName is required", http.StatusBadRequest)
+		apierr.WriteError(w, "givenName is required", http.StatusBadRequest)
 		return false
 	}
 	if rec.DateOfBirth != "" {
 		if _, err := time.Parse(time.DateOnly, rec.DateOfBirth); err != nil {
-			http.Error(w, "dateOfBirth must be YYYY-MM-DD", http.StatusBadRequest)
+			apierr.WriteError(w, "dateOfBirth must be YYYY-MM-DD", http.StatusBadRequest)
 			return false
 		}
 	}

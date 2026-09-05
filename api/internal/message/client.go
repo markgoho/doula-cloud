@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
@@ -22,7 +23,7 @@ func ClientListHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
@@ -31,7 +32,7 @@ func ClientListHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := decodeCursor(raw)
 			if err != nil {
-				http.Error(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
 				return
 			}
 			after = &c
@@ -40,7 +41,7 @@ func ClientListHandler() http.Handler {
 		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -53,7 +54,7 @@ func ClientListHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
@@ -74,7 +75,7 @@ func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		clientID, _ := clientauth.ClientID(r.Context())
@@ -89,7 +90,7 @@ func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http
 		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeClient, clientID, body, attachment)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

@@ -9,6 +9,7 @@ import (
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
@@ -67,24 +68,24 @@ func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 
 		var req ChangeEmailRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		newAddress := NormalizeAddress(req.NewEmail)
 		if newAddress == "" {
-			http.Error(w, "newEmail is required", http.StatusBadRequest)
+			apierr.WriteError(w, "newEmail is required", http.StatusBadRequest)
 			return
 		}
 
 		status, msg := changeEmail(r.Context(), tx, accounts, uid, newAddress)
 		if status != http.StatusNoContent {
-			http.Error(w, msg, status)
+			apierr.WriteError(w, msg, status)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

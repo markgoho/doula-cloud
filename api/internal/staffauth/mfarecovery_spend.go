@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 )
@@ -48,12 +49,12 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req SpendMFARecoveryRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		address := NormalizeAddress(req.Email)
 		if address == "" || req.Code == "" {
-			http.Error(w, "email and code are required", http.StatusBadRequest)
+			apierr.WriteError(w, "email and code are required", http.StatusBadRequest)
 			return
 		}
 
@@ -62,18 +63,18 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 		// unknown address short-circuits here, before any DB work the
 		// code check would otherwise do, mirroring RequestResetHandler.
 		if _, err := accounts.GetAccountByEmail(r.Context(), address); errors.Is(err, authn.ErrAccountNotFound) {
-			http.Error(w, msgMFARecoveryInvalid, http.StatusBadRequest)
+			apierr.WriteError(w, msgMFARecoveryInvalid, http.StatusBadRequest)
 			return
 		} else if err != nil {
 			// coverage:ignore reason: Admin SDK failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -93,30 +94,30 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 		// even though it isn't a mail worker.
 		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		staffID, identityUID, reason, actorStaffID, ok, err := spendAnyMFACode(r.Context(), tx, req.Code, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !ok {
-			http.Error(w, msgMFARecoveryInvalid, http.StatusBadRequest)
+			apierr.WriteError(w, msgMFARecoveryInvalid, http.StatusBadRequest)
 			return
 		}
 
 		if err := clearEnrolmentAndRecord(r.Context(), tx, accounts, staffID, identityUID, reason, actorStaffID, ""); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			http.Error(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

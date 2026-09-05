@@ -44,12 +44,12 @@ function connectPath(practiceId: string): string {
 }
 
 /** Loads a Practice's current Stripe Connect status. Throws with the
- * response body text on a non-2xx response, mirroring loadBalance's
+ * response body's message on a non-2xx response, mirroring loadBalance's
  * error-surfacing convention. */
 export async function loadConnectStatus(fetcher: Fetcher, practiceId: string): Promise<ConnectStatusResult> {
 	const response = await fetcher(connectPath(practiceId));
 	if (!response.ok) {
-		throw new Error(await response.text());
+		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
