@@ -25,6 +25,7 @@ package outbox
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -108,7 +109,18 @@ func (w Worker) MarkDeadLetteredNow(ctx context.Context, tx *sql.Tx, id, reason 
 
 // MarkFailed schedules id's next retry per BackoffSchedule, or
 // dead-letters it once attemptCount has exhausted the schedule.
+//
+// A mail.ErrSuppressed failure skips the schedule entirely and
+// dead-letters on the spot (ADR-0029): the address is on the suppression
+// list, so five more attempts over about a day could only produce the
+// same refusal, and Mailgun would decline the send server-side even if
+// this process did not. Every mail kind reaches this one branch, which is
+// why the guard lives in a mail.Sender decorator rather than in eleven
+// separate claim queries.
 func (w Worker) MarkFailed(ctx context.Context, tx *sql.Tx, id string, attemptCount int, sendErr error, now time.Time) error {
+	if errors.Is(sendErr, mail.ErrSuppressed) {
+		return w.MarkDeadLetteredNow(ctx, tx, id, sendErr.Error())
+	}
 	nextAttempt := attemptCount + 1
 	if nextAttempt >= len(BackoffSchedule) {
 		//nolint:gosec // w.Table is a compile-time constant each package supplies, never request data
@@ -139,23 +151,41 @@ func (w Worker) MarkFailed(ctx context.Context, tx *sql.Tx, id string, attemptCo
 // sent with nothing to mail), failed otherwise. Only the multi-recipient
 // kinds (billing's low-credit, payments' payout and payment-received) use
 // this; single-recipient kinds call w.Sender.Send directly.
+//
+// A suppressed address (ADR-0029) is skipped rather than treated as a
+// failure: one owner who complained must not cost the Practice's other
+// owners a Notification they never objected to. Only if *every* address
+// was suppressed does the row dead-letter, so the reason is on the row
+// instead of the send looking like a success with nothing sent.
 func (w Worker) SendAll(ctx context.Context, tx *sql.Tx, id string, attemptCount int, now time.Time, addresses []string, subject, text string) error {
 	var sendErr error
+	var suppressedErr error
+	suppressed := 0
 	for _, addr := range addresses {
-		if sendErr = w.Sender.Send(ctx, mail.Message{
+		err := w.Sender.Send(ctx, mail.Message{
 			To:      addr,
 			From:    w.From,
 			ReplyTo: w.ReplyTo,
 			Subject: subject,
 			Text:    text,
-		}); sendErr != nil {
+		})
+		if errors.Is(err, mail.ErrSuppressed) {
+			suppressed++
+			suppressedErr = err
+			continue
+		}
+		if err != nil {
+			sendErr = err
 			break
 		}
 	}
-	if sendErr == nil {
-		return w.MarkSent(ctx, tx, id, now)
+	if sendErr != nil {
+		return w.MarkFailed(ctx, tx, id, attemptCount, sendErr, now)
 	}
-	return w.MarkFailed(ctx, tx, id, attemptCount, sendErr, now)
+	if suppressed > 0 && suppressed == len(addresses) {
+		return w.MarkDeadLetteredNow(ctx, tx, id, suppressedErr.Error())
+	}
+	return w.MarkSent(ctx, tx, id, now)
 }
 
 // ProcessPending claims every row claimQuery selects (a query that must

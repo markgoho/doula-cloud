@@ -39,10 +39,10 @@ func signedMailgunPayload(t *testing.T, signingKey, event, severity, recipient, 
 	sig := hex.EncodeToString(mac.Sum(nil))
 
 	body := map[string]any{
-		"signature": map[string]any{
-			"timestamp": timestamp,
-			"token":     token,
-			"signature": sig,
+		signatureField: map[string]any{
+			"timestamp":    timestamp,
+			"token":        token,
+			signatureField: sig,
 		},
 		"event-data": map[string]any{
 			"id":        eventID,

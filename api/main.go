@@ -22,6 +22,7 @@ import (
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
@@ -119,7 +120,17 @@ func main() {
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunDomain := os.Getenv("MAILGUN_DOMAIN")
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
-	mailgunSender := mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain)
+	// ADR-0029's suppression guard wraps that one Sender once, so every
+	// mail kind gets it without knowing it exists: a complained or
+	// hard-bounced address is refused here with mail.ErrSuppressed, and
+	// outbox.Worker dead-letters the row instead of retrying an address
+	// Mailgun would decline server-side anyway.
+	//
+	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
+	mailgunSender := mailsuppress.Sender{
+		Inner: mail.NewMailgunSender(os.Getenv("MAILGUN_API_KEY"), mailgunDomain),
+		DB:    db,
+	}
 	appBaseURL := os.Getenv("APP_BASE_URL")
 	notificationsFrom := "Doula Cloud <notifications@" + mailgunDomain + ">"
 	// Platform voice (ADR-0011): a monitored inbox, not noreply -- every

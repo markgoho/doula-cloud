@@ -5,7 +5,10 @@
 // docs/testing.md's "no real vendor reachable from api/ tests" rule.
 package mail
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // Message is one outbound Notification email. Per ADR-0009's content
 // rule (no Client name, no Engagement detail, nothing identifying) and
@@ -25,3 +28,12 @@ type Message struct {
 type Sender interface {
 	Send(ctx context.Context, msg Message) error
 }
+
+// ErrSuppressed is what a Sender returns instead of attempting delivery
+// when the address is on ADR-0029's suppression list -- a spam complaint,
+// or a permanent bounce. It is not a transient send failure: retrying it
+// on ADR-0010's backoff schedule could only produce the same answer, and
+// Mailgun would refuse the send server-side anyway. outbox.Worker
+// recognises it and dead-letters the row on the spot instead of
+// scheduling a retry.
+var ErrSuppressed = errors.New("mail: address is suppressed")
