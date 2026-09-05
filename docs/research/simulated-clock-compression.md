@@ -36,7 +36,7 @@ FAKE180
 
 The BFF is the component whose clock matters most, and it is the one component `libfaketime` cannot touch.
 
-Second, **there is almost no container stack left to fake.** `app/compose.e2e.yaml` runs exactly two services, `db` and `gcs`; its own header comment says migrations, the `app_e2e` login role, and the Go BFF "all run as host processes now (see `app/e2e/stack.ts`)", and `app/e2e/stack.ts:302` starts the Firebase Auth emulator as a host process too (`bunx firebase-tools emulators:start`). So a container-level clock fake would reach Postgres — the one component the `sim.now()` shim already handles correctly — and nothing else. On the local host it would also have to work on macOS, where `DYLD_INSERT_LIBRARIES` is stripped for system binaries under SIP.
+Second, **there is almost no container stack left to fake.** `app/compose.e2e.yaml` runs exactly two services, `db` and `gcs`; its own header comment says migrations, the `app_e2e` login role, and the Go BFF "all run as host processes now (see `app/e2e/stack.ts`)", and `app/e2e/stack.ts:302` starts the Firebase Auth emulator as a host process too (`bunx firebase-tools emulators:start`). So a container-level clock fake would reach Postgres — the one component the `sim.now()` shim already handles correctly — and nothing else. On the local host it would also have to work on macOS, where `DYLD_INSERT_LIBRARIES` is stripped for system binaries under SIP — that last clause is reasoned, not run, and it does not carry the rejection on its own.
 
 **Backdating written rows — rejected, and the map already rejected it.** It shifts nothing: a row inserted with an old `created_at` still fails a `WHERE next_attempt_at <= now()` claim against a real Postgres clock, so no behavior fires. The map's settled note ("Time actually elapses") rules this out on its own; the mechanical reason is in Area 2.
 
@@ -136,12 +136,14 @@ So the compression ratio is not a property of the clock, and "six months in ten 
 wall_clock =  Σ (observed UI acts × seconds per act)          <- the volume ticket supplies the act count
             + Σ over jumps of:
                  0.001 s   (offset UPDATE)
-                 + 6 s × (number of Stripe test clocks advanced)
+                 + 0.4 s × (Stripe test clocks) + ~6 s   (advances are async: issue all, wait once)
                  + drain   (13 process-* POSTs, repeated until no rows claim)
                  + one sign-in per persona active after the jump   (Area 7)
+
+where Stripe test clocks = Σ over connected accounts of ceil(Clients with a Stripe Customer ÷ 3)
 ```
 
-Two numbers a later ticket multiplies out are measured here: the offset update at **0.644 ms**, and a Stripe test-clock advance of 45 simulated days at **~6 s** wall-clock (Area 6). Everything else is act count and per-act latency, which this ticket does not own.
+Three numbers a later ticket multiplies out are measured here: the offset update at **0.644 ms**; a Stripe test-clock advance at **~6 s**, asynchronous, so clocks advanced together share one wait; and **three Customers per test clock**, which is what makes the client book — not the number of Practices — the driver of the Stripe term (Area 6). Everything else is act count and per-act latency, which this ticket does not own.
 
 The practical consequence is that **the number of jumps, not the size of them, is the budget**. Advancing 180 days in one jump costs the same as advancing 1 day, so the run's granularity should be chosen by what the personas need to observe, not by clock cost. A run with a daily jump for six months pays 180 × (Stripe advances + drain + sign-ins); a run that jumps only between acts pays far less. The map's "total wall-clock time is an input of the system" is satisfiable directly: jump granularity is that input.
 
@@ -169,6 +171,8 @@ There are **13** `process-*` endpoints, all registered in one list at `api/outbo
 
 **What each gates on:** 12 of the 13 claim rows with `WHERE status = 'pending' AND next_attempt_at <= now()` — `offer/outbox.go:91`, `payments/payment_outbox.go:78`, `payments/outbox.go:72`, `engagementrequest/outbox.go:102`, `authmail/authmail.go:98` and `:205`, `portalinvite/outbox.go:57`, `mfarecoverymail/outbox.go:83`, `staffinvite/outbox.go:108`, `sessionnotice/outbox.go:209`, `client/erasure_outbox.go:67`, `billing/outbox.go:109`. That `now()` is Postgres's, per `outbox/outbox.go:198`. The shim moves all twelve at once; nothing else does.
 
+The thirteenth is the exception that proves the two-part recommendation necessary. `sitebuild/outbox.go:72` passes `w.Now()` into its claim query as a **parameter**, and `:61` compares `w.Now().Sub(oldest)` against its coalesce window — so the site-rebuild outbox is gated by the *Go* clock, not Postgres's. Twelve endpoints need the shim, one needs the seam, and the harness needs both moved together or the thirteen fall out of step with each other.
+
 **The nudge does not fire locally, and it is not a lie about the product — but only if the harness drains.** `api/internal/tasknudge/fake.go` shows `FakeEnqueuer.Enqueue` appends the `OutboxType` to a slice and returns. It records; it never issues an HTTP request. So a nudge scheduled at +24h fires *never* locally, not late. What must simulate it is the harness POSTing the endpoints itself.
 
 That drain is sound rather than a lie, because in production Cloud Scheduler POSTs the same paths on a cadence and the Cloud Tasks nudge (ADR-0013) only shortens the wait — `api/internal/tasknudge/tasknudge.go:3` says the nudge "calls the same `process-*` endpoint Cloud Scheduler already" calls. A harness that drains every endpoint after each jump reproduces the scheduler exactly. What it does **not** reproduce is nudge *latency* — production delivers a nudged notification in seconds and an un-nudged one within the scheduler's cadence, and a drain flattens that distinction. A run therefore cannot find a bug about a notification arriving too late, and the friction log must not claim otherwise.
@@ -195,17 +199,26 @@ $ stripe test_helpers test_clocks create --frozen-time 1767225600 --name clock-p
 "webhooks_delivered_at": 1767225600
 ```
 
-**Advancing moves the invoice's own lifecycle timestamps.** After advancing the clock to `1771113600` (2026-02-15), finalizing the invoice recorded `"finalized_at": 1771113600` and `"paid_at": 1771113600` — the simulated instant, not the real one. The event stream on the connected account carried `test_helpers.test_clock.advancing` and `test_helpers.test_clock.ready` alongside `invoice.created`, so a webhook-driven path sees the advance.
+**Advancing moves the invoice's own lifecycle timestamps.** After advancing the clock to `1771113600` (2026-02-15), finalizing that first (zero-total) invoice recorded `"finalized_at": 1771113600` and `"paid_at": 1771113600` — the simulated instant, not the real one. It was marked paid at finalization only because its total was $0; the invoice item had not attached to it. The second invoice below is the real-money case.
 
-**Cost of an advance: about six seconds.** The `advance` call returned in `0.417 s` with `status: advancing`; polling `retrieve` showed `ready` six seconds later (`1788632245` → `1788632251`) for a 45-day advance. This is the only per-jump cost in the model with a number bigger than milliseconds.
+**Cost of an advance: about six seconds, and it is asynchronous.** Two advances were timed: 45 simulated days returned in `0.417 s` with `status: advancing` and reached `ready` **6 s** later (`1788632245` → `1788632251`); 61 simulated days returned immediately and reached `ready` **4 s** later (`1788632643` → `1788632647`). The wait is not proportional to the span. Because the `advance` call returns straight away, *n* clocks can be issued together and then polled once — *n* clocks cost roughly *n* × 0.4 s to issue plus **one** ~6 s wait, not *n* × 6 s.
 
-**The conditions.** Three, and each is real work for the build ticket:
+**A due date passing changes nothing on Stripe's side. Observed, not assumed.** A second Customer on the same clock was invoiced for $50,000 (`collection_method=send_invoice`, `days_until_due=30`) at simulated 2026-02-15, finalized to `"status": "open"`, `"total": 50000`, `"due_date": 1773705600` (2026-03-17). The clock was then advanced to `1776384000` (2026-04-17), a month past the due date. The invoice re-read as:
+
+```
+"status": "open",  "due_date": 1773705600,  "total": 50000,  "attempt_count": 0
+```
+
+The events the advance emitted were `test_helpers.test_clock.advancing`, `test_helpers.test_clock.ready`, `invoice.finalized` and `invoice.updated` — **no overdue event of any kind**. Stripe has no `overdue` invoice status and takes no action when a `send_invoice` due date passes.
+
+The app has none either. The word `overdue` (and `days_overdue`, `is_late`) appears **zero times** across `api/internal`, `api/db/migrations`, and `app/src` outside tests; `api/internal/payments/practice_invoices.go:33` surfaces Stripe's own `Status` string straight through. So "an invoice goes overdue" — the map's own headline example of elapsed time — is **not a behavior that exists anywhere in the system**. A run will observe an invoice sitting `open` past its due date and nothing happening. That is a legitimate finding, and it is worth filing now rather than discovering mid-run.
+
+**The conditions.** Four, and each is real work for the build ticket:
 
 1. **The app must attach the test clock at Customer creation.** `test_clock` is settable only when a Customer is created, so the product's Customer-creation path needs a sandbox-only seam that passes it. This is a test-only parameter in production code, which is the price of Stripe participating at all.
-2. **One clock per connected account, advanced in lockstep with `sim.offset_row`.** A test clock is account-scoped, so a run with *n* connected Practices pays *n* × ~6 s per jump. Drift between the Stripe clock and the database offset is the failure mode: an invoice `due_date` computed by Stripe against its clock, compared by the app against a differently-offset `now()`.
-3. **A test clock is deleted after 30 real days** (`deletes_after` was exactly 2,592,000 s after `created`). A run must complete, and its Stripe state must be read, within that window. This is generous for a run measured in hours, and fatal for a "standing world" that is expected to persist across months of real calendar.
-
-**What an invoice's due date does when the clocks disagree — and a gap the map should know about.** Stripe has no `overdue` invoice status; a `send_invoice` invoice past its `due_date` simply stays `open`. And the word `overdue` (with `days_overdue`, `is_late`) appears **zero times** in `api/internal`, `api/db/migrations`, and `app/src` outside tests. `api/internal/payments/practice_invoices.go:33` surfaces Stripe's own `Status` string straight through. So "an invoice goes overdue" — the map's own headline example of elapsed time — is **not a behavior the product currently has**. A run will observe an invoice sitting `open` past its due date and nothing happening, which is a legitimate finding, but the map should not expect to test overdue logic that has not been written.
+2. **A test clock holds at most three Customers.** Measured: the fourth `customers create` against `clock_1UCO9D…` was refused with *"You already have the maximum number (3) of customers allowed on this test clock."* This is the fact that sizes the Stripe cost, and it is not the account count — it is **`ceil(Clients with a Stripe Customer ÷ 3)` clocks per connected account**. A 14-doula agency with sixty clients on the books needs twenty clocks for that one Practice. All of them must be advanced in lockstep with `sim.offset_row`, and (per the timing above) they can be issued in parallel, so the wall-clock cost stays near one ~6 s wait plus ~0.4 s per clock issued.
+3. **Drift between Stripe's clocks and the database offset is the failure mode** — an invoice `due_date` computed by Stripe against its clock, compared by the app against a differently-offset `now()`. With twenty-plus clocks per Practice, "advance them all, then verify every one reached `ready` before resuming" is a required harness step, not a nicety.
+4. **A test clock is deleted after 30 real days** (`deletes_after` was exactly 2,592,000 s after `created`). A run must complete, and its Stripe state must be read, within that window. Generous for a run measured in hours; fatal for a "standing world" expected to persist across months of real calendar.
 
 ## Area 7 — Sessions expire on real time
 
@@ -228,5 +241,6 @@ So the answer, plainly: **a jump of more than 12 simulated hours expires every o
 
 - The four in-migration `SET search_path` clauses (`00003_staff_signup.sql:40`, `00010_...:29`, `00067_...:72` and `:116`) pin `public` (or `public, pg_temp`) inside function bodies. Any of those functions that calls `now()` will keep real time unless `sim` is prepended. Which of them call `now()` was not checked here.
 - The 27 production `time.Now()` sites were counted, not read. Which of them are genuinely simulated time (a session expiry, a due date) and which are genuinely real time (a rate-limit window, a metric, a token-verification skew) is a judgment per call site, and `internal/ratelimit`'s four SQL `now()` uses raise the same question on the database side: a six-month jump would expire every rate-limit window instantly.
-- Whether the Stripe test clock should be created per connected account or per Practice-plus-platform depends on whether the platform account itself ever raises a dated Invoice. Not checked.
+- Whether the Stripe test clock should be created per connected account or per Practice-plus-platform depends on whether the platform account itself ever raises a dated Invoice. Not checked. Nor was any per-account ceiling on the *number* of test clocks — with twenty-plus clocks needed per Practice, that limit is worth measuring before the harness is built.
+- **The shim needs more than one role.** `compose.e2e.yaml` runs Postgres as `POSTGRES_USER: app`, while `app/e2e/stack.ts` provisions a separate `app_e2e` login role. Goose's role needs the `search_path` for the 72 `DEFAULT now()` columns to bind to `sim.now()` at migration time; the BFF's role needs it for the 85 query-side `now()` calls. And `sim.now()` as prototyped is not `SECURITY DEFINER`, so whichever role runs under RLS needs `SELECT` on `sim.offset_row`. Which roles exist and which need the grant was not enumerated.
 
