@@ -39,10 +39,11 @@ One file per run, written before the first act and closed after the last. It car
 
 An entry's id **is** the journey step's id, exactly as `docs/test-plans/README.md` already does it: `3.2` in Renata's log is Renata 3.2 in `docs/journeys/practice-owner.md`, so a journey map, a test plan and a run log read side by side. A run never renumbers a map.
 
-Two ids do not come from a map, and both are marked so a reader can see it:
+Three ids do not come from a map, and each is marked so a reader can see it:
 
 - **`3.2-a`** — an extra act inside a step the map does not name, appended exactly as a test plan appends a check.
 - **`x1`, `x2`, …** — an act that belongs to no step on the map at all: the persona improvised, or the six months threw something at her the map never anticipated. These are the most interesting entries in a run, because they are what a single-instant walk against a fixture structurally could not see. They are numbered per persona per run and carry a plain-language note saying what she was trying to do.
+- **`u1`, `u2`, …** — an act that happened but could not be observed, because the harness dropped the screenshot or lost the network log. These are a fact about the **harness**, never about the product, and they are numbered separately from `x` for exactly that reason: an improvised act and a failed capture are opposite kinds of thing, and a run whose harness failures were counted as improvisation reads as more interesting than it was. Every `u` entry also goes in the run README, where the harness is accounted for.
 
 The same step walked twice in six months is two entries. An entry is an act, not a step.
 
@@ -89,7 +90,7 @@ Narration is the exception, not the running commentary — see [Silence](#silenc
 4. A **schema reference** — table and column.
 5. A **timing**, machine-captured (this one is always present anyway, so it never stands alone as the only anchor for a claim about behaviour — it anchors a claim about speed).
 
-**An entry that cannot meet this is deleted, not weakened.** It is not rewritten as a hedge, not moved to a "possible issues" section, and not kept with a note that evidence was unavailable. A run that emits fewer, anchored entries is worth more than a run that emits many, and the deletion is the mechanism that keeps that true. Where an act genuinely could not be captured — the harness dropped the screenshot, the network log was lost — the honest record is a **`x`-numbered entry saying the act was not observable**, which is a fact about the harness and belongs in the run README too.
+**An entry that cannot meet this is deleted, not weakened.** It is not rewritten as a hedge, not moved to a "possible issues" section, and not kept with a note that evidence was unavailable. A run that emits fewer, anchored entries is worth more than a run that emits many, and the deletion is the mechanism that keeps that true. Where an act genuinely could not be captured — the harness dropped the screenshot, the network log was lost — the honest record is a **`u`-numbered entry saying the act was not observable**, which is a fact about the harness and belongs in the run README too.
 
 **Never soften a finding.** Inherited from #203 and it cuts both ways: an entry either clears the bar and says plainly what happened, or it does not exist.
 
@@ -143,7 +144,7 @@ A run may also **re-mark or narrow an existing claim** — the run settles what 
 
 1. **Header** — persona link, journey link, run id, the product commit SHA, and what this persona was doing in this run.
 2. **Stages** — one section per journey stage, in map order, each holding its entries and closing with its mandatory stage line.
-3. **Off-map acts** — the `x`-numbered entries, which by definition belong to no stage.
+3. **Off-map acts** — the `x`-numbered entries, which by definition belong to no stage, and the `u`-numbered ones, which belong to the harness.
 4. **Counts** — entries by outcome, and the acts that could not be observed.
 
 Entries are tables where they fit and blocks where the Narrated register makes a table unreadable. The Narrated block always sits directly under the Observed block it interprets, indented as a blockquote so no reader can mistake one for the other.
@@ -152,7 +153,7 @@ Entries are tables where they fit and blocks where the Narrated register makes a
 
 Renata Alvarez, walking [Stage 2 — Invite a new Doula](../journeys/practice-owner.md), in simulated March.
 
-**This example is illustrative and is not a record of a walk.** No run has happened yet, so nothing below is a claim about what the product does; the statuses, timings and citations are shaped like real ones so the format is legible. The first real log replaces it.
+**This example is illustrative and is not a record of a walk.** No run has happened yet, so nothing below is a claim about what the product does. The statuses and timings are shaped like real ones so the format is legible, and the one `file:line` is deliberately written as `<package>/<file>.go:<line>` rather than a real path — a document whose central rule is that an unanchored code claim gets struck must not illustrate the anchor with a citation nobody checked. The first real log replaces all of it.
 
 > ### Stage 2 — Invite a new Doula
 >
@@ -171,7 +172,7 @@ Renata Alvarez, walking [Stage 2 — Invite a new Doula](../journeys/practice-ow
 > **2.2-a** — `refused` · 180 ms
 > **Act**: Submitted the same form again for the same address, to see what a duplicate does.
 > **Result**: `POST /api/practices/{id}/invitations → 409 conflict`, rendered as "Something went wrong" with no field named.
-> **Evidence**: `POST /api/practices/{id}/invitations → 409`; `api/internal/staffinvite/invite.go:145`; `shots/practice-owner-2.2-a.png`
+> **Evidence**: `POST /api/practices/{id}/invitations → 409`; `api/internal/<package>/<file>.go:<line>`; `shots/practice-owner-2.2-a.png`
 >
 > > It stopped me, which is right, but it didn't tell me it was because I'd already invited her. I don't know if the problem is the email address or something else, so now I'm going to go and look at the roster to work out what I actually did.
 >

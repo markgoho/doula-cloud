@@ -187,7 +187,7 @@ routes.
 _Avoid_: Webhook payload, notification (both blur the thin/snapshot distinction that matters here)
 
 **Persona**:
-One of eight named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
+One of nine named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
 _Avoid_: User type, actor, role
 
 **Journey**:
