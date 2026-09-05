@@ -2,7 +2,7 @@
 
 What a simulation run emits, and what an entry must carry to be believed. Settled on [#760](https://github.com/markgoho/doula-cloud/issues/760), under the map [Six months in a sandbox](https://github.com/markgoho/doula-cloud/issues/759).
 
-This file is the instrument. Who is walking, and what they walked into, is the **World** — [Rooted Birth Collective](worlds/rooted-birth-collective.md), settled on [#761](https://github.com/markgoho/doula-cloud/issues/761). Where the walking happens, and the list of things that cannot be seen there, is the **sandbox** — [Where a run runs](environment.md), settled on [#763](https://github.com/markgoho/doula-cloud/issues/763). How much work there is, when it arrives and what goes wrong is the **calendar** — [Six months of an agency's work](calendar.md), settled on [#765](https://github.com/markgoho/doula-cloud/issues/765).
+This file is the instrument, and it stops at the log. What happens to the log afterwards — how a **Sighting** becomes a filed, deduplicated **Finding** — is [findings.md](findings.md), settled on [#766](https://github.com/markgoho/doula-cloud/issues/766). Who is walking, and what they walked into, is the **World** — [Rooted Birth Collective](worlds/rooted-birth-collective.md), settled on [#761](https://github.com/markgoho/doula-cloud/issues/761). Where the walking happens, and the list of things that cannot be seen there, is the **sandbox** — [Where a run runs](environment.md), settled on [#763](https://github.com/markgoho/doula-cloud/issues/763). How much work there is, when it arrives and what goes wrong is the **calendar** — [Six months of an agency's work](calendar.md), settled on [#765](https://github.com/markgoho/doula-cloud/issues/765).
 
 ## Why this file exists first
 
@@ -20,11 +20,14 @@ Committed to the repo, one directory per run:
 docs/simulation/
 ├── README.md                       ← this file, the format
 ├── calendar.md                     ← the counts, the calendar, and what goes wrong
+├── findings.md                     ← how a log becomes filed, deduplicated issues
 ├── worlds/
 │   └── rooted-birth-collective.md  ← the World a run walks: the cast and what they arrive from
 └── runs/
     └── 2027-01-04-1/
         ├── README.md               ← the run's own header (see below)
+        ├── findings.md             ← what was filed, and the sightings each finding holds
+        ├── extras.md               ← the Extras' observed acts, no narrated register
         ├── practice-owner.md       ← one log per persona, slug matching docs/personas/
         ├── employed-doula.md
         └── …
@@ -147,7 +150,7 @@ That line is mandatory, it is written per stage per persona, and it carries the 
 
 `docs/test-plans/README.md` fixes the rule for a plan; it holds for a run. **One gap, one ID**, owned by the journey map that found it, and a run cites what exists rather than minting beside it. The nine walks already found 58 gaps; a run that re-mints them buries the tracker.
 
-Where a run exposes something no map owns, the entry says so plainly and stops there. Turning that into a filed, deduplicated finding is the pipeline's job, and the pipeline is [From friction log to filed finding, without burying the tracker](https://github.com/markgoho/doula-cloud/issues/766). **The log is the input to filing, never the filing itself.**
+Where a run exposes something no map owns, the entry says so plainly and stops there. Turning that into a filed, deduplicated finding is the pipeline's job, and the pipeline is [findings.md](findings.md), settled on [#766](https://github.com/markgoho/doula-cloud/issues/766). **The log is the input to filing, never the filing itself** — and filing happens in one pass *after* the run closes, so nothing in a log is written with an issue number in it.
 
 A run may also **re-mark or narrow an existing claim** — the run settles what the code does, and re-marking is not minting. The gap's wording is corrected on the map that owns it.
 

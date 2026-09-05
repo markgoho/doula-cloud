@@ -202,6 +202,14 @@ _Avoid_: Flow, use case, scenario
 What one Persona's walk through one simulation Run emits: an ordered record of the acts she attempted and what each one cost her. It holds two registers that are never mixed — an **observed** one, third person, where every claim carries evidence and a measured timing, and a **narrated** one, in her own voice, which interprets an observed act and asserts nothing about the code. It is **heuristic evaluation, never user research**: a Persona is a hypothesis, and a Friction log describes one agent walking one seeded world once, never what users do. Distinct from a filed finding, which is what the log is the input to. Defined in [docs/simulation/](docs/simulation/).
 _Avoid_: Diary, session notes, user feedback, research (all four claim a person was there)
 
+**Sighting**:
+One encounter with a defect during a **Run** — one act, by one cast member, at one moment, identified by the Run, the person, and the entry id. A Sighting is an observation and never a work item: it lives in a **Friction log** and is cited inside the **Finding** it belongs to. Several Sightings of one defect are not several problems, and their number describes how often that **World** put a person in front of it, never how much the defect matters. Decided on [#766](https://github.com/markgoho/doula-cloud/issues/766).
+_Avoid_: Occurrence, hit, repro, instance (the first three read as a bug report, and a Sighting is not one)
+
+**Finding**:
+A defect a **Run** exposed, as one thing to be fixed — however many **Sightings** of it there were. Its identity is the tracker issue, and it has no other id: a Run cites the gap ids the journey maps own and never mints one beside them. Two Sightings are one Finding when the same change would answer both. A Finding carries every Sighting of it, states plainly what happened, and carries no severity and no priority, because pre-launch everything found is fixed. Distinct from a **Friction log** entry, which is the observation a Finding is filed from. Defined in [docs/simulation/findings.md](docs/simulation/findings.md). Decided on [#766](https://github.com/markgoho/doula-cloud/issues/766).
+_Avoid_: Issue (that is the tracker's word for the record, not the defect), gap (a gap belongs to a Journey and carries a gap id), defect report, ticket
+
 **Run**:
 One pass of the simulation harness: a **World**, a cast of **Personas** and **Extras**, and a stated span of simulated time walked end to end, producing a **Friction log** per Persona. Reproducible from its seed, and identified by the day it started in real time — so a Run is a thing you can repeat against a product that has moved on, and compare against the Run before it. A bare "run" elsewhere in this repo means an execution of the test suite; this term is always qualified in prose where both could be meant.
 _Avoid_: Simulation (the harness, not one pass of it), session, test run
