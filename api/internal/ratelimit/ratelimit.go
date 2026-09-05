@@ -81,7 +81,7 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 				count, windowStart, err := touch(r.Context(), db, bucketKey(endpoint, rule.Dimension, key), rule.Window)
 				if err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, msgInternalError, nil)
+					apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
 					return
 				}
 
@@ -98,8 +98,8 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 					w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 					w.Header().Set("RateLimit-Limit", strconv.Itoa(rule.Max))
 					w.Header().Set("RateLimit-Remaining", "0")
-					apierr.Write(w, http.StatusTooManyRequests, apierr.CodeRateLimited,
-						fmt.Sprintf("too many requests -- try again in %d seconds", retryAfter), nil)
+					apierr.WriteError(w, fmt.Sprintf("too many requests -- try again in %d seconds", retryAfter),
+						http.StatusTooManyRequests)
 					return
 				}
 

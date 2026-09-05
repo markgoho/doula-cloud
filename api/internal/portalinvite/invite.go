@@ -52,12 +52,12 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		clientID, err := resolveEngagementClient(r.Context(), tx, engagementID, practiceID)
 		if errors.Is(err, sql.ErrNoRows) {
-			apierr.Write(w, http.StatusNotFound, apierr.CodeNotFound, "engagement not found", nil)
+			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -75,7 +75,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.PortalInvite))
@@ -84,7 +84,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		w.WriteHeader(status)
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

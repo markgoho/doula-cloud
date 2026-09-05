@@ -87,7 +87,7 @@ func AwaitingSignatureHandler() http.Handler {
 		if raw := r.URL.Query().Get("cursor"); raw != "" {
 			c, err := pagecursor.Decode(raw)
 			if err != nil {
-				apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgInvalidCursor, nil)
+				apierr.WriteError(w, MsgInvalidCursor, http.StatusBadRequest)
 				return
 			}
 			after = &c
@@ -96,7 +96,7 @@ func AwaitingSignatureHandler() http.Handler {
 		list, err := listAwaiting(r.Context(), tx, practiceID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -114,7 +114,7 @@ func AwaitingSignatureHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			// coverage:ignore reason: response encoding failure, not exercised by unit tests
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }

@@ -30,7 +30,7 @@ func GetHandler() http.Handler {
 		tx, ok := staffauth.Tx(r.Context())
 		if !ok {
 			// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
@@ -38,7 +38,7 @@ func GetHandler() http.Handler {
 		resp, err := read(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -68,7 +68,7 @@ func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 
 		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgInvalidBody, nil)
+			apierr.WriteError(w, MsgInvalidBody, http.StatusBadRequest)
 			return
 		}
 
@@ -81,7 +81,7 @@ func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 		resp, siteIsStale, err := write(r.Context(), tx, practiceID, staffID, valid)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -94,7 +94,7 @@ func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 		if siteIsStale {
 			if err := sitebuild.Queue(r.Context(), tx, practiceID); err != nil {
 				// coverage:ignore reason: DB insert failure, not exercised by unit tests
-				apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			tasknudge.Register(r.Context(), tasknudge.Fire(nudge, tasknudge.SiteBuild))
@@ -256,7 +256,7 @@ func writeJSON(w http.ResponseWriter, resp Response) {
 	w.Header().Set("Content-Type", "application/json")
 	// coverage:ignore reason: response encoding failure, not exercised by unit tests
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 	}
 }
 

@@ -46,12 +46,12 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 
 		var req AcceptInviteRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "invalid request body", nil)
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		req.InviteToken = strings.TrimSpace(req.InviteToken)
 		if req.InviteToken == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "inviteToken is required", nil)
+			apierr.WriteError(w, "inviteToken is required", http.StatusBadRequest)
 			return
 		}
 
@@ -67,13 +67,13 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		// authn.Begin already verified.
 		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, time.Now())
 		if err != nil {
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -83,7 +83,7 @@ func AcceptInviteHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.Write(w, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError, nil)
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		}
 	})
 }
