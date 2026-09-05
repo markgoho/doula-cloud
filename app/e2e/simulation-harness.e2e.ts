@@ -5,8 +5,7 @@ import { expect, test } from '@playwright/test';
 import { jump } from './simulation/clock';
 import { observedAct } from './simulation/capture';
 import { PersonaLog } from './simulation/persona-log';
-import { MAILBOX_URL, WORKER_SECRET, readSimulatedNow, startStack, stopStack } from './stack';
-import { PREVIEW_SERVER_ORIGIN } from './ports';
+import { MAILBOX_URL, WORKER_SECRET, readSimulatedNow } from './stack';
 
 // A scratch directory, not docs/simulation/runs/ -- this proves the
 // harness's mechanics (#779, under map #759), not a real six-month walk
@@ -16,7 +15,7 @@ import { PREVIEW_SERVER_ORIGIN } from './ports';
 const RUNS_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'test-results', 'simulation-harness-rehearsal');
 const RUN_ID = 'rehearsal-1';
 
-test.describe.serial('The harness spine: jump, capture, log, resume', () => {
+test.describe.serial('The harness spine: jump, capture, log', () => {
 	test.afterAll(() => {
 		rmSync(RUNS_ROOT, { recursive: true, force: true });
 	});
@@ -121,16 +120,14 @@ test.describe.serial('The harness spine: jump, capture, log, resume', () => {
 		}
 	});
 
-	test('a run can be stopped with its volume kept and resumed with simulated time intact', async () => {
-		const beforeStop = new Date(readSimulatedNow());
-
-		stopStack({ keepVolume: true });
-		await startStack(PREVIEW_SERVER_ORIGIN);
-
-		const afterResume = new Date(readSimulatedNow());
-		// The world -- sim.offset_row included -- survives a kept-volume
-		// stop/start; only the host processes, which hold no state of their
-		// own, were ever killed (stack.ts's stopStack).
-		expect(afterResume.getTime()).toBeGreaterThanOrEqual(beforeStop.getTime());
-	});
+	// stack.ts's stopStack({ keepVolume: true }) + startStack is deliberately
+	// NOT exercised here. global-setup.ts stands up one BFF/emulator/mailbox
+	// stack shared by every *.e2e.ts file, run across parallel workers; a
+	// test that tears it down and rebuilds it here would kill whatever other
+	// spec is mid-request at the same moment (confirmed: doing this broke
+	// staff-invite-role.e2e.ts and staff-login.e2e.ts in CI, both ECONNREFUSED
+	// the instant this test's stopStack call fired). Resumability needs its
+	// own isolated stack to prove safely -- a dedicated harness run with its
+	// own port offset, the way a real simulation run would use one, not a
+	// spec sharing this suite's global fixture. That's still open on #779.
 });
