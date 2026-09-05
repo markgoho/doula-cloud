@@ -187,8 +187,12 @@ routes.
 _Avoid_: Webhook payload, notification (both blur the thin/snapshot distinction that matters here)
 
 **Persona**:
-One of nine named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
+One of nine named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. The nine are fixed: a person a simulation needs who is not one of them is an **Extra**, not a tenth Persona. Defined in [docs/personas/](docs/personas/).
 _Avoid_: User type, actor, role
+
+**Extra**:
+A named person in a **World** who is not a **Persona** — a name, a Practice, a role, an **Employment type**, and one reason to open the app, and nothing beyond that. An Extra is a person and not a row: she is invited and she accepts like anybody else, because a **World** is seeded through the product rather than into the database. What she lacks is an interior life — no journey map, no test plan, and no **Friction log** written in her voice. She exists so that a Practice is the size a real one is, and so that the people a Persona works beside are people rather than volume. Decided on [#761](https://github.com/markgoho/doula-cloud/issues/761).
+_Avoid_: NPC, background user, filler, dummy staff (all four say row, and an Extra walks through the same door everyone else does)
 
 **Journey**:
 The path one Persona takes toward a single goal, from where they arrive to a stated end state, described in two layers: an **experience layer** (what the Persona thinks and feels, and what hurts) and an **interaction layer** (the concrete steps through the product). A Journey is not a task flow — the interaction layer alone is a task flow. Each Persona has exactly one primary Journey. Defined in [docs/journeys/](docs/journeys/).
@@ -199,8 +203,16 @@ What one Persona's walk through one simulation Run emits: an ordered record of t
 _Avoid_: Diary, session notes, user feedback, research (all four claim a person was there)
 
 **Run**:
-One pass of the simulation harness: a seeded world, a cast of Personas, and a stated span of simulated time walked end to end, producing a Friction log per Persona. Reproducible from its seed, and identified by the day it started in real time — so a Run is a thing you can repeat against a product that has moved on, and compare against the Run before it. A bare "run" elsewhere in this repo means an execution of the test suite; this term is always qualified in prose where both could be meant.
+One pass of the simulation harness: a **World**, a cast of **Personas** and **Extras**, and a stated span of simulated time walked end to end, producing a **Friction log** per Persona. Reproducible from its seed, and identified by the day it started in real time — so a Run is a thing you can repeat against a product that has moved on, and compare against the Run before it. A bare "run" elsewhere in this repo means an execution of the test suite; this term is always qualified in prose where both could be meant.
 _Avoid_: Simulation (the harness, not one pass of it), session, test run
+
+**World**:
+The starting state a **Run** walks, described as businesses that exist *outside* Doula Cloud rather than as rows: the Practices, the **Personas** and **Extras** in them, and the work each Practice is already carrying on the day it meets the product. A World is **seeded through the product, never into the database** — an agency's roster and book get in the way a real one would, because whether they can is the question a Run exists to ask. It is an input the harness accepts and not a constant, so two Runs are comparable only if they walked the same one. Distinct from a **Fixture**, which is content a surface is *measured* with; a World is a place people work. Defined in [docs/simulation/worlds/](docs/simulation/worlds/). Decided on [#761](https://github.com/markgoho/doula-cloud/issues/761).
+_Avoid_: Seed data, test data, scenario, fixture (a Fixture is the longest realistic value for a field; a World is an agency with a history)
+
+**Day zero**:
+The moment one Practice's **World** meets the product — the day its Owner signs up and starts moving a business that already exists into an empty tenancy. It belongs to a Practice and not to a **Run**, so a World may hold several, staggered. It is the one path no test plan has ever walked, and the order the product forces on that day is an observation rather than something a Run scripts.
+_Avoid_: Onboarding (that is the product's own word for a first session, and day zero may take many), migration, go-live, import (nothing imports — a person types it in)
 
 **Intrinsic layout**:
 Layout resolved from the content and the space available to it, rather than selected by the author from a set of named widths. The anchor term for every layout entry below: a component is laid out intrinsically when it is correct wherever it is placed — a full page, a narrow column, an embedded surface — without being told which of those it is in. See [ADR-0024](docs/adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md) and [ADR-0025](docs/adr/0025-layout-is-verified-across-the-continuum.md).

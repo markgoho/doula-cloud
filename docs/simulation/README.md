@@ -2,6 +2,8 @@
 
 What a simulation run emits, and what an entry must carry to be believed. Settled on [#760](https://github.com/markgoho/doula-cloud/issues/760), under the map [Six months in a sandbox](https://github.com/markgoho/doula-cloud/issues/759).
 
+This file is the instrument. Who is walking, and what they walked into, is the **World** — [Rooted Birth Collective](worlds/rooted-birth-collective.md), settled on [#761](https://github.com/markgoho/doula-cloud/issues/761).
+
 ## Why this file exists first
 
 An agent told to keep a friction log **will produce a friction log** — fluent, in character, well argued, and possibly about a screen it never struggled with. Left unconstrained, a run emits a large volume of confident prose whose relationship to the product is unknown, in a format that reads exactly like a diary. `docs/personas/README.md` already forbids citing the nine proto-personas as user research; that line gets much harder to hold once the output reads like lived experience.
@@ -17,6 +19,8 @@ Committed to the repo, one directory per run:
 ```
 docs/simulation/
 ├── README.md                       ← this file, the format
+├── worlds/
+│   └── rooted-birth-collective.md  ← the World a run walks: the cast and what they arrive from
 └── runs/
     └── 2027-01-04-1/
         ├── README.md               ← the run's own header (see below)
