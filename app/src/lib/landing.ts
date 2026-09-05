@@ -41,12 +41,22 @@ export interface SessionInfo {
 
 export type Landing =
 	| { type: 'redirect'; practiceId: string }
-	| { type: 'picker'; memberships: Membership[] };
+	| { type: 'picker'; memberships: Membership[] }
+	| { type: 'no-practice' };
 
 /**
  * Decides where a Staff member lands after login: straight to their only
  * Practice, back to their last-used Practice if it's still one they
- * belong to, or a picker otherwise (including when they have none yet).
+ * belong to, a picker when there is a choice to make, or the
+ * no-Practice screen when there is nothing to choose between.
+ *
+ * That last outcome is a variant here rather than a picker with an empty
+ * list (#745). Three screens asked "and what if she has none?" -- login,
+ * `/`, and the no-Practice screen's own check that it is still telling
+ * the truth -- and three copies of one condition is how two of them come
+ * to disagree. It is also not a small case: a person with no Membership
+ * is either a Staff member her last Practice removed or a signup that
+ * half-landed, and both need a screen that says so.
  */
 export function decideLanding(
 	// Only the two fields it actually reads, not the whole SessionInfo:
@@ -56,6 +66,10 @@ export function decideLanding(
 	// holding a full SessionInfo still satisfies this.
 	session: Pick<SessionInfo, 'memberships' | 'lastPracticeId'>
 ): Landing {
+	if (session.memberships.length === 0) {
+		return { type: 'no-practice' };
+	}
+
 	if (session.memberships.length === 1) {
 		return { type: 'redirect', practiceId: session.memberships[0].practiceId };
 	}

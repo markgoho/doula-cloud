@@ -259,6 +259,13 @@
 			const landing = decideLanding(session);
 			if (landing.type === 'redirect') {
 				await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
+			} else if (landing.type === 'no-practice') {
+				// Accepting an Invitation is what gives her a Membership, so
+				// arriving here with none means the acceptance reported
+				// success and left her with nothing. That is the same state
+				// #745's screen is for, and the same two ways on from it --
+				// not a picker with nothing in it.
+				await goto(resolve('/(signed-out)/no-practice'));
 			} else {
 				picker = landing.memberships;
 			}

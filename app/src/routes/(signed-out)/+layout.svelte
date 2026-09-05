@@ -3,8 +3,11 @@
 	import SignedOutTopBar from '#lib/components/organisms/SignedOutTopBar.svelte';
 
 	/*
-	 * The chrome for archetype A, the six screens a person can reach with no
-	 * session: login, signup, accept-invite and the pre-account Offer read.
+	 * The chrome for archetype A: login, signup, accept-invite and the
+	 * pre-account Offer read -- the screens a person meets before there is
+	 * an account -- plus `/no-practice` (#745), which is the one screen
+	 * here that needs a session and shows the same reduced bar because
+	 * that session belongs to no Practice to put a name to.
 	 *
 	 * It is a route group rather than the root layout because SvelteKit
 	 * layouts nest rather than replace -- a reduced bar in `routes/+layout`

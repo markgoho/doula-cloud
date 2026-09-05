@@ -33,10 +33,12 @@ describe('decideLanding', () => {
 		});
 	});
 
-	it('falls back to a picker when there are no memberships at all', () => {
+	// #745: not a picker with nothing in it. She is either a Staff member
+	// her last Practice removed or a signup that half-landed, and both
+	// need a screen that names the state and offers a way on.
+	it('reports no Practice at all as its own outcome, not an empty picker', () => {
 		expect(decideLanding({ memberships: [], lastPracticeId: undefined })).toEqual({
-			type: 'picker',
-			memberships: []
+			type: 'no-practice'
 		});
 	});
 });

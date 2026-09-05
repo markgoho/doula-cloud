@@ -36,14 +36,9 @@ describe('/+page.svelte', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Hilltop Doulas' })).toBeVisible();
 	});
 
-	it('tells a Staff visitor with no Practice yet to ask an Owner, rather than showing an empty list', async () => {
-		const data: RootLanding = { ...staffPickerData, memberships: [] };
-		await render(Page, { params: fixture.params, data });
-
-		await expect
-			.element(testPage.getByText("You don't belong to any Practice yet. Ask an Owner to invite you."))
-			.toBeVisible();
-	});
+	// #745 removed this screen's own empty-picker branch: a Staff visitor
+	// with no Membership never reaches it, because `+page.ts` redirects
+	// her to `/no-practice` first. `root-load.spec.ts` covers that.
 
 	it("lists a signed-in Client-portal visitor's several Engagements", async () => {
 		const data: RootLanding = {

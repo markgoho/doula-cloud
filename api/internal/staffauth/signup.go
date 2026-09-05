@@ -25,6 +25,13 @@ const MsgInternalError = "internal error"
 // rather than drifting per call site.
 const MsgNoMatchingStaffAccount = "no matching staff account"
 
+// MsgAlreadyBelongsToPractice is what signup answers a caller whose
+// identity already holds a staff row with at least one Membership. The
+// wording is aimed at a reader, not at a log line: `refusalMessage` in
+// the app prints a 4xx body verbatim, so this sentence is what she sees
+// (#745).
+const MsgAlreadyBelongsToPractice = "This account already belongs to a Practice. Log in instead."
+
 // SignupRequest is the body of a Practice-signup request: a new Practice,
 // created together with the Staff row for the person creating it.
 type SignupRequest struct {
@@ -125,6 +132,36 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
+	// Signup is answered against what the identity already holds (#745),
+	// not against a blank slate. The natural key is identity_uid, and it
+	// decides which of three things this call is:
+	//
+	//   nothing            -- a first signup, the path below. A signup
+	//                         whose first attempt failed arrives here
+	//                         too: everything below runs in one
+	//                         transaction, so a failure leaves no staff
+	//                         row to find. What the retry has to get past
+	//                         is Identity Platform refusing the address,
+	//                         and the signup screen handles that end.
+	//   a staff row alone  -- a Staff member whose last Membership was
+	//                         removed, starting a Practice of her own.
+	//                         Keep the row, give it a Practice.
+	//   a staff row with a
+	//   Membership         -- she is already somewhere; 409, rather than
+	//                         quietly discarding the Practice name she
+	//                         just typed. This is also what a retry that
+	//                         only *looked* like it failed gets, so a
+	//                         second Practice is never built on top of
+	//                         one that committed.
+	//
+	// This lookup runs before app.current_practice_id is set, which is
+	// what staff_self_visibility (00002) requires to admit her own row --
+	// the same ordering the staff INSERT below depends on.
+	resumeStaffID, resumeWorkState, resuming, status, msg := existingStaff(ctx, tx, identityUID)
+	if status != 0 {
+		return SignupResponse{}, status, msg
+	}
+
 	var practiceID string
 	if err := tx.QueryRowContext(ctx, `INSERT INTO practices (name) VALUES ($1) RETURNING id`, req.PracticeName).Scan(&practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -137,17 +174,26 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 	// after staff exists is app.current_practice_id set, which then covers
 	// the signup-bonus, membership, and plan_templates inserts that need
 	// it.
-	var staffID string
-	err := tx.QueryRowContext(ctx,
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, $4) RETURNING id`,
-		identityUID, req.StaffName, req.StaffEmail, req.WorkState,
-	).Scan(&staffID)
-	if pgerr.IsUniqueViolation(err) {
-		return SignupResponse{}, http.StatusConflict, "a staff account already exists for this identity"
-	}
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	staffID := resumeStaffID
+	if !resuming {
+		err := tx.QueryRowContext(ctx,
+			`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, $4) RETURNING id`,
+			identityUID, req.StaffName, req.StaffEmail, req.WorkState,
+		).Scan(&staffID)
+		// Two signups for one identity racing each other, both past
+		// existingStaff before either inserted: the loser gets the same
+		// answer as a caller who already had a Membership when
+		// existingStaff looked. Unreachable in sequence -- the pre-check
+		// answers every non-racing duplicate -- so what is left here is a
+		// concurrency guard rather than a branch a test can drive.
+		// coverage:ignore reason: two concurrent signups for one identity, not exercised by unit tests
+		if pgerr.IsUniqueViolation(err) {
+			return SignupResponse{}, http.StatusConflict, MsgAlreadyBelongsToPractice
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		}
 	}
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -160,14 +206,20 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 	// the invite token is already proof of mailbox control (accept.go) --
 	// so this is signup's own step, not something shared code does for
 	// both bootstrap paths.
-	verifyToken, err := authtoken.Mint(ctx, tx, identityUID, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
-	}
-	if err := authmail.QueueTokenMail(ctx, tx, identityUID, authmail.KindEmailVerification, verifyToken); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+	//
+	// A resumed signup sends nothing: the staff row already existed, so
+	// this address has already been sent its link, and a second one for
+	// the same mailbox is noise rather than a step (#745).
+	if !resuming {
+		verifyToken, err := authtoken.Mint(ctx, tx, identityUID, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		}
+		if err := authmail.QueueTokenMail(ctx, tx, identityUID, authmail.KindEmailVerification, verifyToken); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		}
 	}
 
 	// The signup bonus: +3 credits, granted exactly once per Practice, in
@@ -215,7 +267,12 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 	// because staff_work_state_events_practice_visibility (00043) admits
 	// a row only for someone holding a Membership at the current
 	// Practice -- which is true from the statement above and not before.
-	if err := RecordFirstWorkStateAssertion(ctx, tx, staffID, req.WorkState, staffID); err != nil {
+	//
+	// A resumed signup already has one, so what this form collected is a
+	// correction rather than a first answer -- and it moves the stored
+	// value with it, the way UpdateWorkStateHandler does, so the column
+	// and the event log cannot disagree (#745).
+	if err := recordSignupPerson(ctx, tx, staffID, req, resumeWorkState, resuming); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
 	}

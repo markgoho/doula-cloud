@@ -38,13 +38,28 @@
 		const session = await probeSession<SessionInfo>('/api/staff/session');
 		if (!session) return;
 
+		await land(session);
+	});
+
+	/*
+	 * Where a Staff session goes, in one place because two callers reach
+	 * it -- the on-load probe above and a fresh sign-in below -- and #283's
+	 * whole point is that they must agree.
+	 *
+	 * `decideLanding` owns the "and what if she has none?" case as its own
+	 * outcome (#745) rather than each caller reading it back out of an
+	 * empty picker.
+	 */
+	async function land(session: SessionInfo) {
 		const landing = decideLanding(session);
 		if (landing.type === 'redirect') {
 			await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
+		} else if (landing.type === 'no-practice') {
+			await goto(resolve('/(signed-out)/no-practice'));
 		} else {
 			picker = landing.memberships;
 		}
-	});
+	}
 
 	/*
 	 * One array is the whole mechanism (#467). The summary lists it and
@@ -109,17 +124,28 @@
 
 			const response = await apiFetchWithSession('/api/staff/session');
 			if (!response.ok) {
+				/*
+				 * A 404 here means the credential was good and the identity
+				 * behind it matches no staff row -- the state #745 is about.
+				 * If she is a Client, that is signing into the wrong
+				 * population and #610 owns it, so the BFF's own refusal
+				 * stands. If she is neither, there is nothing to correct on
+				 * this form and `/no-practice` is the screen that says what
+				 * to do instead.
+				 */
+				if (response.status === 404) {
+					const portal = await probeSession('/api/portal/session');
+					if (!portal) {
+						await goto(resolve('/(signed-out)/no-practice'));
+						return;
+					}
+				}
 				errors = [{ message: await refusalMessage(response) }];
 				return;
 			}
 
 			const session: SessionInfo = await response.json();
-			const landing = decideLanding(session);
-			if (landing.type === 'redirect') {
-				await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
-			} else {
-				picker = landing.memberships;
-			}
+			await land(session);
 		} catch (error_) {
 			// Identity Platform's own words are a product name, a code and a
 			// banned adjective ("Firebase: Error (auth/invalid-credential)."),
@@ -180,22 +206,23 @@
 
 	<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
 
+	<!--
+		A picker is only ever rendered with something in it: `land` sends a
+		person with no Membership to `/no-practice` instead (#745), which is
+		a screen about her state rather than an empty list.
+	-->
 	{#if picker}
 		<h2>Choose a Practice</h2>
-		{#if picker.length === 0}
-			<p>You don't belong to any Practice yet. Ask an Owner to invite you.</p>
-		{:else}
-			<ul>
-				{#each picker as membership (membership.practiceId)}
-					<li>
-						<Link
-							href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-							label={membership.practiceName}
-						/>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+		<ul>
+			{#each picker as membership (membership.practiceId)}
+				<li>
+					<Link
+						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
+						label={membership.practiceName}
+					/>
+				</li>
+			{/each}
+		</ul>
 	{/if}
 {/snippet}
 

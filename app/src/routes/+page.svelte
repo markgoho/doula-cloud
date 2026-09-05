@@ -19,20 +19,21 @@
 	</ul>
 {:else if data.type === 'staff-picker'}
 	<Heading level={1} text="Choose a Practice" />
-	{#if data.memberships.length === 0}
-		<p>You don't belong to any Practice yet. Ask an Owner to invite you.</p>
-	{:else}
-		<ul>
-			{#each data.memberships as membership (membership.practiceId)}
-				<li>
-					<Link
-						href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
-						label={membership.practiceName}
-					/>
-				</li>
-			{/each}
-		</ul>
-	{/if}
+	<!--
+		Always at least one: `+page.ts` redirects a Staff member with no
+		Membership to `/no-practice` rather than handing this an empty list
+		(#745).
+	-->
+	<ul>
+		{#each data.memberships as membership (membership.practiceId)}
+			<li>
+				<Link
+					href={resolve('/practices/[practiceId]', { practiceId: membership.practiceId })}
+					label={membership.practiceName}
+				/>
+			</li>
+		{/each}
+	</ul>
 {:else}
 	<Heading level={1} text="Choose an Engagement" />
 	{#if data.engagements.length === 0}

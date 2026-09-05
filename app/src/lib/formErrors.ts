@@ -129,6 +129,21 @@ export function authRefusal(
 	}
 }
 
+/*
+ * Whether Identity Platform refused this because the address already has
+ * an account.
+ *
+ * Signup asks (#745). An account whose signup half-landed -- the
+ * Identity Platform account created, `POST /api/staff/signup` refused --
+ * hits exactly this code on the retry, and the retry is the fix rather
+ * than the failure: the screen signs in with the same credential and
+ * finishes the half that is missing. `authRefusal` still owns what the
+ * reader is told when that sign-in does not work.
+ */
+export function isEmailAlreadyInUse(cause: unknown): boolean {
+	return authErrorCode(cause) === 'auth/email-already-in-use';
+}
+
 function authErrorCode(cause: unknown): string {
 	if (cause !== null && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string') {
 		return cause.code;
