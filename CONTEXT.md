@@ -187,12 +187,20 @@ routes.
 _Avoid_: Webhook payload, notification (both blur the thin/snapshot distinction that matters here)
 
 **Persona**:
-One of eight named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
+One of nine named people the product is designed and tested against, each standing for a distinct way of arriving at Doula Cloud. A Persona is the person behind a Staff or Client record, not the record itself, and may hold several roles or none. Defined in [docs/personas/](docs/personas/).
 _Avoid_: User type, actor, role
 
 **Journey**:
 The path one Persona takes toward a single goal, from where they arrive to a stated end state, described in two layers: an **experience layer** (what the Persona thinks and feels, and what hurts) and an **interaction layer** (the concrete steps through the product). A Journey is not a task flow — the interaction layer alone is a task flow. Each Persona has exactly one primary Journey. Defined in [docs/journeys/](docs/journeys/).
 _Avoid_: Flow, use case, scenario
+
+**Friction log**:
+What one Persona's walk through one simulation Run emits: an ordered record of the acts she attempted and what each one cost her. It holds two registers that are never mixed — an **observed** one, third person, where every claim carries evidence and a measured timing, and a **narrated** one, in her own voice, which interprets an observed act and asserts nothing about the code. It is **heuristic evaluation, never user research**: a Persona is a hypothesis, and a Friction log describes one agent walking one seeded world once, never what users do. Distinct from a filed finding, which is what the log is the input to. Defined in [docs/simulation/](docs/simulation/).
+_Avoid_: Diary, session notes, user feedback, research (all four claim a person was there)
+
+**Run**:
+One pass of the simulation harness: a seeded world, a cast of Personas, and a stated span of simulated time walked end to end, producing a Friction log per Persona. Reproducible from its seed, and identified by the day it started in real time — so a Run is a thing you can repeat against a product that has moved on, and compare against the Run before it. A bare "run" elsewhere in this repo means an execution of the test suite; this term is always qualified in prose where both could be meant.
+_Avoid_: Simulation (the harness, not one pass of it), session, test run
 
 **Intrinsic layout**:
 Layout resolved from the content and the space available to it, rather than selected by the author from a set of named widths. The anchor term for every layout entry below: a component is laid out intrinsically when it is correct wherever it is placed — a full page, a narrow column, an embedded surface — without being told which of those it is in. See [ADR-0024](docs/adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md) and [ADR-0025](docs/adr/0025-layout-is-verified-across-the-continuum.md).
