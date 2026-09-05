@@ -43,36 +43,41 @@
 <stack-l space="var(--space-6)">
 	<Heading level={2} variant="section" text="Step rail" />
 	<Text
-		text="The journey rail QuestionPage and CheckAnswers both carry. It is a named nav landmark; below the Templates' 60rem threshold it becomes a one-line strip with a track, because there is no column beside the content to put it in."
+		text="The journey QuestionPage and CheckAnswers both carry. It is a named nav landmark holding one disclosure: the summary line and progress track are always visible, and the step list is what opens. No width decides anything (#585) — the summary page opens it because the journey is the point there, a question page leaves it closed because the question is, and after that it is the reader's."
 		tone="variant"
 	/>
 
-	<Heading level={3} variant="card" text="On a question page (expand=current)" />
+	<!--
+		Three demos, one per render branch, which is #720's shape rule: the
+		closed state, the open state, and the open state with no room. A
+		fixture that showed only the closed one would sweep a <details>
+		whose entire contents are out of layout.
+	-->
+	<Heading level={3} variant="card" text="On a question page (expand=current, closed)" />
 	<container-l>
 		<div class="frame">
-			<StepRail journey="Adding a Client to Highland Midwifery" {steps} allStepsHref="/style-guide/step-rail" />
+			<StepRail journey="Adding a Client to Highland Midwifery" {steps} />
 		</div>
 	</container-l>
 
-	<Heading level={3} variant="card" text="On the summary page (expand=completed)" />
+	<Heading level={3} variant="card" text="On the summary page (expand=completed, open)" />
 	<container-l>
 		<div class="frame">
 			<StepRail
 				journey="Adding a Client to Highland Midwifery"
 				steps={completed}
 				expand="completed"
-				allStepsHref="/style-guide/step-rail"
 			/>
 		</div>
 	</container-l>
 
-	<Heading level={3} variant="card" text="Narrow, where the rail has no column" />
+	<Heading level={3} variant="card" text="Open, with no column to sit in" />
 	<div class="narrow">
 		<container-l>
 			<StepRail
 				journey="Adding a Client to Highland Midwifery"
-				{steps}
-				allStepsHref="/style-guide/step-rail"
+				steps={completed}
+				expand="completed"
 			/>
 		</container-l>
 	</div>
@@ -80,13 +85,14 @@
 
 <style>
 	@layer components {
-		/* The rail is a grid column in a Template, so it needs a width to
-		   sit in before it looks like anything. */
+		/* The journey sits in a --page-rail column on CheckAnswers, so it
+		   needs that width to sit in before it looks like anything. */
 		.frame {
 			max-inline-size: var(--page-rail);
 		}
 
-		/* Under the 60rem container threshold, so the strip shows instead. */
+		/* Wider than the rail and narrower than a paired layout: where the
+		   journey lands once sidebar-l has wrapped it above the content. */
 		.narrow {
 			max-inline-size: var(--form-max);
 		}

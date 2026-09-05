@@ -52,11 +52,10 @@
  * which is the one job no intrinsic mechanism can do: CSS rearranges a
  * tree, it does not swap one.
  *
- * `StepRail` is the exception that proves the rule and is in `UNDERIVABLE`
- * below rather than here -- both its presentations are correct at every
- * width, so it has no content question to derive a floor from, and what
- * separates them is vertical cost in a layout context the component
- * cannot observe.
+ * `StepRail` was the exception that proved the rule, in `UNDERIVABLE`
+ * below rather than here. It is not any more: #585 replaced its query
+ * with a `<details>` the reader opens, so it authors no condition at all
+ * and `UNDERIVABLE` is empty.
  *
  * Every surviving entry in `CRITERIA` below carries a `justification`, and
  * `has a justification for existing at all` (below) is what enforces
@@ -115,8 +114,17 @@ const conditions = findConditions(sources);
  *                  itself, and `lineCount`'s Range rects cannot tell the
  *                  two apart because separate chips produce separate
  *                  rects on the same line
- *   `coupled`      this condition shares its host Template's ancestor
- *                  container and has no content-driven floor of its own
+ * There was a fourth kind, `coupled` -- this condition shares its host
+ * Template's ancestor container and has no content-driven floor of its
+ * own, so it must fire at exactly the width its host does. It is deleted
+ * (#585). It never had a member: `StepRail`, the only component its
+ * comment ever named, sat in `UNDERIVABLE` instead, so the assertion
+ * `expect(condition.floorRem).toBe(host!.floorRem)` never ran on
+ * anything. #585's body and #518's #729 entry both stated that the
+ * coupling was asserted; it was not, which is why nothing failed when
+ * `StepRail`'s literal outlived the host query it was copied from. A
+ * criterion that appears to hold a component to a rule and does not is
+ * worse than no criterion, so it goes rather than gaining a member.
  *
  * `justification` is the new field (#564): every entry states, in
  * writing, why no intrinsic mechanism can do this job -- the burden the
@@ -135,8 +143,7 @@ type Criterion =
 			readonly justification: string;
 	  }
 	| { readonly kind: 'no-wrap'; readonly selectors: readonly string[]; readonly justification: string }
-	| { readonly kind: 'single-row'; readonly selector: string; readonly justification: string }
-	| { readonly kind: 'coupled'; readonly to: readonly string[]; readonly justification: string };
+	| { readonly kind: 'single-row'; readonly selector: string; readonly justification: string };
 
 const CRITERIA: Readonly<Record<string, Criterion>> = {
 	'organisms/DataTable.svelte#1': {
@@ -178,21 +185,20 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
  * reason: an exception that names its ticket is visible, and one that
  * does not is a suppression.
  *
- * `StepRail`'s two presentations are both correct at every width -- a
- * vertical list of steps reads fine anywhere, and its strip is a summary
- * line, a track and a link stacked vertically, so nothing in either fits
- * or fails to fit. What separates them is vertical cost in a layout
- * context the component cannot observe: `sidebar-l` decides whether the
- * journey sits beside the record or above it, the browser decides that,
- * and CSS exposes no selector reporting it. Detecting it from the rail's
- * own width was tried and disproved on #564 -- paired it is exactly its
- * 20rem basis and wrapped it is the container's width, and at 320px those
- * are the same number, so any floor separating them would sit on the
- * conformance commitment, which CONTEXT.md forbids.
+ * **Empty, and kept empty deliberately** (#585). Its only member was ever
+ * `StepRail#1`, whose query tried to read whether `sidebar-l` had wrapped
+ * -- and #585 measured that it read it wrong, by 2px on two hosts and by
+ * 125px on `CheckAnswers` in its wide state, because a wrap is an event
+ * no selector reports and the literal had outlived the host query it was
+ * copied from. That component now renders one presentation with a
+ * `<details>` the reader opens, so it authors no condition and is
+ * discovered by nothing here. ADR-0024 rule 1 carries the general rule.
+ *
+ * Kept rather than deleted, exactly as `KNOWN_BROKEN` and `UNSWEPT` are:
+ * an empty named hatch makes the next exception visible in a diff, and
+ * deleting it would make one invisible instead.
  */
-const UNDERIVABLE: Readonly<Record<string, string>> = {
-	'organisms/StepRail.svelte#1': '#585'
-};
+const UNDERIVABLE: Readonly<Record<string, string>> = {};
 
 // `../../lib/components/organisms/DataTable.svelte` -> `organisms/DataTable.svelte#1`
 function toRegistryKey(condition: Condition): string {
@@ -309,7 +315,7 @@ function isWrapAcceptable(measurement: WrapMeasurement): boolean {
 function assertCriterionAt(
 	frame: HTMLElement,
 	key: string,
-	criterion: Exclude<Criterion, { readonly kind: 'coupled' }>,
+	criterion: Criterion,
 	px: number,
 	isExpected: boolean
 ): void {
@@ -436,29 +442,6 @@ describe('the floor check (#564)', () => {
 		const key = toRegistryKey(condition);
 		const criterion = CRITERIA[key];
 		if (!criterion) continue; // reported by the registry test above
-
-		if (criterion.kind === 'coupled') {
-			for (const to of criterion.to) {
-				it(`${key} is coupled to ${to}`, () => {
-					const host = conditions.find((c) => toRegistryKey(c) === to);
-					expect(host, `${to} was not discovered`).toBeDefined();
-					/*
-					 * The whole assertion for a coupled condition: it has no
-					 * content of its own to derive a floor from (StepRail's
-					 * own comment records the overflow sweep that found none
-					 * down to 144px), and it shares its host's ancestor
-					 * container with no container of its own -- so the only
-					 * way it can be correct is to fire at exactly the width
-					 * its host does. Both hosts are checked, not just one:
-					 * `StepRail` renders inside `QuestionPage` AND
-					 * `CheckAnswers`, and a coupling to only one would leave
-					 * the other free to drift without this catching it.
-					 */
-					expect(condition.floorRem).toBe(host!.floorRem);
-				});
-			}
-			continue;
-		}
 
 		const floorPx = remToPx(condition.floorRem);
 		/*
