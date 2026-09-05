@@ -210,7 +210,14 @@ function seedAppE2ERole() {
 // Engagement per #52, but linking a Client to portal login credentials
 // isn't spec'd anywhere yet), so the e2e test that proves login->landing
 // works has to seed it itself.
+//
+// portal_accounts (#616) comes first: client_portal_users.identity_uid
+// now carries a foreign key into it, so a bare identity_uid insert fails
+// without a matching row there.
 export function seedClientPortalUser(identityUID: string, clientID: string) {
+	execSQL(
+		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(identityUID + '@example.com')})`
+	);
 	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identityUID)}, ${sqlLiteral(clientID)})`);
 }
 
