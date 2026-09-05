@@ -168,9 +168,12 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 	// There is no status column to flip here the way staffauth.acceptInvite
 	// flips practice_invitations.status: a re-invite already rotates both
 	// invite_token and invite_token_expires_at, so nothing needs marking
-	// on the way past.
+	// on the way past. apierr has no dedicated Gone/expired code, so this
+	// takes CodeForStatus's default the way staffauth's own 410 path does
+	// (via apierr.WriteError) -- an explicit derivation, not a mistaken
+	// CodeInternal literal for what is an expected, not a server, failure.
 	if !expiresAt.Valid || !expiresAt.Time.After(time.Now()) {
-		return acceptResult{}, "", "", http.StatusGone, apierr.CodeInternal, "this invitation has expired -- ask your practice to send a new one"
+		return acceptResult{}, "", "", http.StatusGone, apierr.CodeForStatus(http.StatusGone), "this invitation has expired -- ask your practice to send a new one"
 	}
 
 	// Opens clients_self_visibility (00009_messaging_client_portal_read.sql)

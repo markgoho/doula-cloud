@@ -5,11 +5,26 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
 )
+
+// inviteTokenExpiresAt reads back the current invite_token_expires_at for
+// portalUserID, so a test can prove a re-invite moves it forward rather
+// than just rotating the token.
+func inviteTokenExpiresAt(t *testing.T, db *testdb.DB, portalUserID string) time.Time {
+	t.Helper()
+	var expiresAt time.Time
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT invite_token_expires_at FROM client_portal_users WHERE id = $1`, portalUserID,
+	).Scan(&expiresAt); err != nil {
+		t.Fatalf("read invite_token_expires_at: %v", err)
+	}
+	return expiresAt
+}
 
 func TestInviteHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
@@ -110,6 +125,7 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
+	firstExpiresAt := inviteTokenExpiresAt(t, db, firstOut.ClientPortalUserID)
 
 	second := postInvite(t, srv, session, practiceID, engagementID)
 	defer second.Body.Close()
@@ -126,6 +142,10 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	}
 	if secondOut.InviteToken == firstOut.InviteToken {
 		t.Fatalf("expected invite_token to rotate, got the same token twice")
+	}
+	secondExpiresAt := inviteTokenExpiresAt(t, db, firstOut.ClientPortalUserID)
+	if !secondExpiresAt.After(firstExpiresAt) {
+		t.Fatalf("expected invite_token_expires_at to move forward on re-invite, first=%v second=%v", firstExpiresAt, secondExpiresAt)
 	}
 
 	var count int

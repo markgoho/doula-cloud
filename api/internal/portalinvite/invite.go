@@ -126,6 +126,7 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 		`SELECT id, identity_uid FROM client_portal_users WHERE client_id = $1`,
 		clientID,
 	).Scan(&existingID, &identityUID)
+	expiresAt := time.Now().Add(inviteTokenLifetime)
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -133,7 +134,7 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 		inviteToken := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO client_portal_users (id, client_id, invite_token, invite_token_expires_at) VALUES ($1, $2, $3, $4)`,
-			newID, clientID, inviteToken, time.Now().Add(inviteTokenLifetime),
+			newID, clientID, inviteToken, expiresAt,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
@@ -155,7 +156,7 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 		inviteToken := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE client_portal_users SET invite_token = $1, invite_token_expires_at = $2 WHERE id = $3`,
-			inviteToken, time.Now().Add(inviteTokenLifetime), existingID,
+			inviteToken, expiresAt, existingID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
