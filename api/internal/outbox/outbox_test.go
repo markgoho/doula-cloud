@@ -282,7 +282,7 @@ func TestSendAll_MailsEveryAddressAndMarksSent(t *testing.T) {
 		t.Fatalf("begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	addrs := []string{"a@example.test", "b@example.test"}
+	addrs := []string{addrA, addrB}
 	if err := w.SendAll(t.Context(), tx, "row-1", 0, time.Now(), addrs, "subject", "text"); err != nil {
 		t.Fatalf("SendAll: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestSendAll_StopsAtFirstFailureAndMarksFailed(t *testing.T) {
 		t.Fatalf("begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	addrs := []string{"a@example.test", "b@example.test", "c@example.test"}
+	addrs := []string{addrA, addrB, addrC}
 	if err := w.SendAll(t.Context(), tx, "row-1", 0, time.Now(), addrs, "subject", "text"); err != nil {
 		t.Fatalf("SendAll: %v", err)
 	}

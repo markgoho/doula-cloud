@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
+
+	"doula-cloud/api/internal/mailsuppress"
 )
 
 // maxMailgunWebhookBodyBytes bounds how much of a webhook request body
@@ -32,7 +35,24 @@ type mailgunWebhookPayload struct {
 		Event     string `json:"event"`
 		Recipient string `json:"recipient"`
 		Severity  string `json:"severity"`
+		// Reason distinguishes a first-time SMTP rejection from a send
+		// Mailgun never attempted because the address was already on its
+		// own suppression list. The "suppress-bounce" /
+		// "suppress-complaint" / "suppress-unsubscribe" values mean the
+		// latter (ADR-0029, research on #731): recording a fresh
+		// suppression for one of those would only restate what is
+		// already true, and would overwrite the original cause -- a
+		// complaint's permanent suppression could be downgraded to a
+		// clearable bounce by a later retry against the same address.
+		Reason string `json:"reason"`
 	} `json:"event-data"`
+}
+
+// alreadySuppressed reports whether reason says Mailgun refused this
+// send server-side because the address was already suppressed, rather
+// than attempting it and being rejected.
+func alreadySuppressed(reason string) bool {
+	return strings.HasPrefix(reason, "suppress-")
 }
 
 // PostBounceWebhookHandler receives Mailgun's delivery-event webhook -- a
@@ -43,9 +63,20 @@ type mailgunWebhookPayload struct {
 // (00037). Record-only per #337/#340: a hard bounce
 // ("failed"/"permanent") sets the matching portal_invite_outbox row to
 // 'bounced', a spam complaint ("complained") sets it to 'complained'.
-// Every other event type is acknowledged and ignored. No retry state is
-// touched and no automatic remedy is triggered -- a Staff member
-// re-invites by hand, same as today.
+// Every other event type is acknowledged and ignored.
+//
+// No longer record-only as of #733/ADR-0029: either event also writes an
+// email_suppressions row, which every one of the eleven mail kinds
+// consults through mailsuppress.Sender before sending. The portal-invite
+// row's own status stays exactly as #340 left it, for #346's Staff
+// screen; the suppression is the part that reaches the other ten
+// outboxes. It still triggers no remedy -- a Staff member re-invites by
+// hand, and only after clearing a bounce-caused suppression.
+//
+// It lives in portalinvite because the portal-invite row update is the
+// package-specific half and this is where the signature check and its
+// tests already are; the endpoint itself is platform-level, mounted at
+// one path Mailgun's console is configured against.
 func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxMailgunWebhookBodyBytes))
@@ -65,12 +96,20 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 			return
 		}
 
-		var newStatus string
+		var newStatus, suppressionCause string
 		switch {
 		case payload.EventData.Event == "failed" && payload.EventData.Severity == "permanent":
 			newStatus = "bounced"
+			// A "suppress-*" reason is Mailgun declining a send it never
+			// made; the address is already suppressed, on Mailgun's list
+			// and on ours, so the portal-invite row still records that
+			// this send did not arrive but no new suppression is written.
+			if !alreadySuppressed(payload.EventData.Reason) {
+				suppressionCause = mailsuppress.CauseBounce
+			}
 		case payload.EventData.Event == "complained":
 			newStatus = "complained"
+			suppressionCause = mailsuppress.CauseComplaint
 		default:
 			// Every other event type -- delivered, opened, clicked,
 			// unsubscribed, or a temporary failure Mailgun itself will
@@ -121,6 +160,21 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 			}
 			w.WriteHeader(http.StatusOK)
 			return
+		}
+
+		// The suppression row is the half of this handler that reaches
+		// every outbox, not only portal_invite_outbox: ADR-0011 puts all
+		// eleven mail kinds on one Mailgun domain, so one complaint has
+		// to stop every one of them. Written before the portal-invite
+		// UPDATE below and in the same transaction, so an address is
+		// never marked 'complained' on a row without the suppression
+		// that makes the next send refuse.
+		if suppressionCause != "" {
+			if err := mailsuppress.Record(r.Context(), tx, payload.EventData.Recipient, suppressionCause, payload.EventData.ID); err != nil {
+				// coverage:ignore reason: DB write failure, not exercised by unit tests
+				http.Error(w, MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		// Licenses the client_portal_users/clients SELECT policies
