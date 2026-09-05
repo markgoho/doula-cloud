@@ -219,8 +219,11 @@ spec touches the attachment endpoints — which also made Contract signing
 answer a bare 500, since it puts the PDF in the store before it writes the
 status (`api/internal/contracts/sign.go`). Everything else Playwright e2e
 tests run against —
-the goose migration step, the `app_e2e` login role, the Go BFF, and the
-Firebase Auth emulator — runs as a plain host process, started/stopped by
+the goose migration step, the `app_e2e` login role, the Go BFF, the
+Firebase Auth emulator, and the sandbox mailbox (`app/e2e/mailbox.ts`,
+#764 — the Mailgun-shaped sink `MAILGUN_API_BASE` points the BFF at, so
+no local stack can post real mail to real Mailgun and a spec can read
+what a person would have received) — runs as a plain host process, started/stopped by
 `app/e2e/stack.ts` (`startStack`/`stopStack`), which `app/playwright.config.ts`
 wires up via `globalSetup`/`globalTeardown`
 (`app/e2e/global-setup.ts`/`app/e2e/global-teardown.ts`). `stack.ts` runs
