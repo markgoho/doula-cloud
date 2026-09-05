@@ -9,7 +9,7 @@
 	 */
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -58,7 +58,7 @@
 	async function loadMessages() {
 		const response = await apiFetchWithSession(messagesURL());
 		if (!response.ok) {
-			messagesError = await response.text();
+			messagesError = await apiErrorMessage(response);
 			return;
 		}
 		const data = await response.json();
@@ -88,7 +88,7 @@
 				`${messagesURL()}?cursor=${encodeURIComponent(messagesCursor)}`
 			);
 			if (!response.ok) {
-				messagesError = await response.text();
+				messagesError = await apiErrorMessage(response);
 				return;
 			}
 
@@ -122,7 +122,7 @@
 				});
 			}
 			if (!response.ok) {
-				messagesError = await response.text();
+				messagesError = await apiErrorMessage(response);
 				return false;
 			}
 
@@ -141,7 +141,7 @@
 	async function handleDownloadAttachment(messageId: string, filename: string) {
 		const response = await apiFetchWithSession(`${messagesURL()}/${messageId}/attachment`);
 		if (!response.ok) {
-			messagesError = await response.text();
+			messagesError = await apiErrorMessage(response);
 			return;
 		}
 

@@ -13,7 +13,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
-	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { activityLedgerColumns, loadPortalActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
@@ -49,7 +49,7 @@
 			`/api/portal/engagements/${page.params.engagementId}`
 		);
 		if (!response.ok) {
-			error = await response.text();
+			error = await apiErrorMessage(response);
 			return;
 		}
 

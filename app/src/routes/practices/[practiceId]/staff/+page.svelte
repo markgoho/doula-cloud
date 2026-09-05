@@ -172,7 +172,7 @@
 				`/api/practices/${page.params.practiceId}/staff/${staffId}/work-state-history${query}`
 			);
 			if (!response.ok) {
-				historyError[staffId] = await response.text();
+				historyError[staffId] = await apiErrorMessage(response);
 				return;
 			}
 			const loaded: WorkStateHistory = await response.json();
@@ -234,7 +234,7 @@
 				{ method: 'DELETE', headers: { 'X-Confirmed': 'true' } }
 			);
 			if (!response.ok) {
-				endSessionsError[staffId] = await response.text();
+				endSessionsError[staffId] = await apiErrorMessage(response);
 				return;
 			}
 			endSessionsDone[staffId] = true;
@@ -267,7 +267,7 @@
 				}
 			);
 			if (!response.ok) {
-				editError = await response.text();
+				editError = await apiErrorMessage(response);
 				return;
 			}
 			editingStaffId = '';
@@ -289,7 +289,7 @@
 				{ method: 'DELETE', headers: { 'X-Confirmed': 'true' } }
 			);
 			if (!response.ok) {
-				removeError[staffId] = await response.text();
+				removeError[staffId] = await apiErrorMessage(response);
 				return;
 			}
 			await loadRoster();
@@ -307,7 +307,7 @@
 				{ method: 'POST', headers: { 'X-Confirmed': 'true' } }
 			);
 			if (!response.ok) {
-				revokeError[invitationId] = await response.text();
+				revokeError[invitationId] = await apiErrorMessage(response);
 				return;
 			}
 			await loadRoster();
