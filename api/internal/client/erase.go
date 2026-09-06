@@ -83,6 +83,15 @@ type erasureScope struct {
 // also with 409, if she is already erased -- the act is irreversible and
 // running it twice is a mistake worth naming rather than absorbing.
 //
+// The two refusals share a status and are told apart by their code, not
+// by their prose (#692). Already erased is CONFLICT: the resource is
+// already in the state the caller asked for. Unsettled invoices is
+// FAILED_PRECONDITION: nothing about the Client conflicts, a condition
+// on other resources is unmet -- the same reading payments/connect
+// already gives a 409 that is not a resource conflict. Both codes are
+// written explicitly rather than derived from the status, so neither can
+// quietly collapse back onto the other.
+//
 // Must be mounted behind staffauth.Middleware.
 func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +109,8 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		if erasedAt != nil {
-			apierr.WriteError(w, "this client's data has already been erased", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
+				"this client's data has already been erased", nil)
 			return
 		}
 
@@ -115,9 +125,9 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 			for i, s := range unsettled {
 				ids[i] = s.stripeInvoiceID
 			}
-			apierr.WriteError(w,
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition,
 				"cannot erase a client with unsettled invoices: settle or void "+strings.Join(ids, ", ")+" first",
-				http.StatusConflict)
+				nil)
 			return
 		}
 

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/outbox"
@@ -324,6 +326,16 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusConflict {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+			}
+			// The code, not the prose, is what tells this refusal from
+			// "already erased" -- see EraseHandler's own doc comment.
+			// The message still has to name the blocking invoice.
+			got := readAPIError(t, resp)
+			if got.Code != string(apierr.CodeFailedPrecondition) {
+				t.Fatalf("code = %q, want %q", got.Code, apierr.CodeFailedPrecondition)
+			}
+			if !strings.Contains(got.Message, "in_cus_"+status) {
+				t.Fatalf("message = %q, want it to name invoice %q", got.Message, "in_cus_"+status)
 			}
 			if rows := readOutbox(t, db, clientID); len(rows) != 0 {
 				t.Fatalf("outbox rows = %+v, want none after a refusal", rows)
