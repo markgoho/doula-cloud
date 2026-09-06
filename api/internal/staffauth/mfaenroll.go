@@ -1,13 +1,14 @@
 package staffauth
 
 import (
+	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/sessionmint"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // FinishEnrollmentHandler lets a signed-in Staff member exchange a
@@ -28,7 +29,7 @@ import (
 // SDK hands back a fresh ID token. Self-only, same "no {practiceId}, no
 // staff id" shape as UpdateWorkStateHandler: enrolment is per person
 // (#606's brief), not per Practice.
-func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
+func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
 		if !ok {
@@ -51,55 +52,34 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 			return
 		}
 
-		staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, verified.UID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !found {
-			apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
-			return
-		}
-
-		// Replace, don't leave in place: if this browser already held a
-		// pre-enrolment session, end it now rather than letting it sit
-		// alongside the new one until it is swept. Not present on the
-		// refusal-driven path (#606's app.ts routes there before any
-		// session is even readable), so a missing cookie is not an
-		// error.
-		if oldCookie, err := r.Cookie(authn.SessionCookieName); err == nil {
-			if err := authn.EndSession(r.Context(), tx, oldCookie.Value); err != nil {
+		step := func(ctx context.Context, tx *sql.Tx) (sessionmint.Result, error) {
+			staffID, found, err := setIdentityAndResolveStaff(ctx, tx, verified.UID)
+			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-				return
+				return sessionmint.Result{}, err
 			}
+			if !found {
+				return sessionmint.Result{Refusal: &sessionmint.Refusal{
+					Status: http.StatusForbidden, Message: MsgNoMatchingStaffAccount,
+				}}, nil
+			}
+			if err := recordAuthEvent(ctx, tx, staffID, AuthEventEnrolled, staffID, ""); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return sessionmint.Result{}, err
+			}
+			return sessionmint.Result{IdentityUID: verified.UID, Body: struct {
+				OK bool `json:"ok"`
+			}{true}}, nil
 		}
 
-		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, true, time.Now())
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := recordAuthEvent(r.Context(), tx, staffID, AuthEventEnrolled, staffID, ""); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		http.SetCookie(w, cookie)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(struct {
-			OK bool `json:"ok"`
-		}{true})
+		// #816's trap: this seam always minted over its own
+		// pre-enrolment session (a live cookie of the same tier, since
+		// enrolment never crosses populations), which sessionmint.Issue
+		// now ends silently for every seam rather than only here -- see
+		// its own doc comment. A live *portal* session in this browser
+		// is not that case, and is asked about exactly like every other
+		// cross-population mint, replacing the unconditional EndSession
+		// this handler used to run regardless of tier (#816's own AC).
+		committed = sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
 	})
 }

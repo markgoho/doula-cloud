@@ -15,11 +15,13 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import {
 		authRefusal,
 		isEmailAlreadyInUse,
 		refusalErrors,
+		refusalOrConfirmable,
 		type FormError
 	} from '#lib/formErrors.js';
 	import { workStateCode } from '#lib/workStates.js';
@@ -49,6 +51,19 @@
 	let password = $state('');
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
+
+	// #816: this multi-step form has no single Continue button to hang
+	// #610's cross-population warning on, so it hangs on the form's own
+	// final submit -- the deliberate press that mints a session, the same
+	// reasoning the sign-in page's Continue button and the portal's own
+	// Continue button already use. See the sign-in page's copy of this
+	// comment for the fuller picture.
+	let step = $state<'form' | 'confirm-sign-out'>('form');
+	let signOutWarning = $state<string | undefined>();
+	// The ID token this signup runs on, kept across the confirm press --
+	// a plain local, not $state, for the same reason the sign-in page's
+	// own pendingIdToken is: the markup never reads it.
+	let pendingIdToken = '';
 
 	function errorFor(targetId: string): string | undefined {
 		return errors.find((entry) => entry.targetId === targetId)?.message;
@@ -111,6 +126,47 @@
 		}
 	}
 
+	/*
+	 * The POST every attempt runs, first unconfirmed and then -- if #816's
+	 * cross-population check refuses it -- again with X-Confirmed. Split
+	 * out of handleSubmit so the confirmed retry re-runs exactly this,
+	 * with the same idToken.
+	 */
+	async function postSignup(idToken: string, isConfirmed: boolean) {
+		// A plain, one-off fetch: this token makes one trip and is never
+		// carried around the way apiFetchWithSession's cookie is (#150
+		// deleted the shared ID-token helper).
+		return fetch(`${apiBaseURL()}/api/staff/signup`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${idToken}`,
+				...(isConfirmed && { 'X-Confirmed': 'true' })
+			},
+			// No address goes up. The one she typed above is what
+			// `credentialFor` created the Identity Platform account with, so
+			// it is already on the ID token in the Authorization header, and
+			// that copy -- not a body field -- is what the BFF writes to
+			// staff.email (#614).
+			body: JSON.stringify({
+				practiceName,
+				staffName,
+				workState: workStateCode(workStateName)
+			})
+		});
+	}
+
+	async function land(response: Response) {
+		const created: { practiceId: string } = await response.json();
+
+		// SignupHandler already set the session cookie on its own
+		// response (#145) -- just drop the JS SDK credential before
+		// landing (#149).
+		await signOut(getFirebaseAuth());
+
+		await goto(resolve('/practices/[practiceId]', { practiceId: created.practiceId }));
+	}
+
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		errors = [];
@@ -124,45 +180,33 @@
 		isSubmitting = true;
 		try {
 			const credential = await credentialFor(getFirebaseAuth());
-			const idToken = await credential.user.getIdToken();
+			pendingIdToken = await credential.user.getIdToken();
 
-			// A plain, one-off fetch: this token makes one trip and is never
-			// carried around the way apiFetchWithSession's cookie is (#150
-			// deleted the shared ID-token helper).
-			const response = await fetch(`${apiBaseURL()}/api/staff/signup`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-				// No address goes up. The one she typed above is what
-				// `credentialFor` created the Identity Platform account with, so
-				// it is already on the ID token in the Authorization header, and
-				// that copy -- not a body field -- is what the BFF writes to
-				// staff.email (#614).
-				body: JSON.stringify({
-					practiceName,
-					staffName,
-					workState: workStateCode(workStateName)
-				})
-			});
+			const response = await postSignup(pendingIdToken, false);
 			if (!response.ok) {
+				// #816: a live portal session in this browser is not a form
+				// error -- nothing is wrong with what she typed, and the same
+				// submit sent again with X-Confirmed goes through. Keep the JS
+				// SDK signed in for that retry, exactly as the sign-in page's
+				// own confirm-sign-out step does.
+				const refusal = await refusalOrConfirmable(response, signupFieldIds);
+				if (refusal.kind === 'confirmable') {
+					signOutWarning = refusal.message;
+					step = 'confirm-sign-out';
+					return;
+				}
 				// Signing out here costs nothing now that the form can pick the
 				// same account back up (see `credentialFor`): submitting again
 				// signs in with the credential she still holds -- her password --
 				// and finishes the half that failed. Keeping the JS SDK session
 				// alive instead would be a second, invisible way to be signed in
 				// on a screen that shows a refusal (#745).
-				errors = await refusalErrors(response, signupFieldIds);
+				errors = refusal.errors;
 				await signOut(getFirebaseAuth());
 				return;
 			}
 
-			const created: { practiceId: string } = await response.json();
-
-			// SignupHandler already set the session cookie on its own
-			// response (#145) -- just drop the JS SDK credential before
-			// landing (#149).
-			await signOut(getFirebaseAuth());
-
-			await goto(resolve('/practices/[practiceId]', { practiceId: created.practiceId }));
+			await land(response);
 		} catch (error_) {
 			// Identity Platform refuses an address that already has an account
 			// and a password it thinks too weak, and both belong to a field on
@@ -173,6 +217,48 @@
 			isSubmitting = false;
 		}
 	}
+
+	/*
+	 * #816's press-through: the same signup, sent again with X-Confirmed,
+	 * on the same Identity Platform credential the first attempt already
+	 * produced.
+	 */
+	async function handleConfirmSignOut() {
+		errors = [];
+		isSubmitting = true;
+		try {
+			const response = await postSignup(pendingIdToken, true);
+			if (!response.ok) {
+				errors = await refusalErrors(response, signupFieldIds);
+				step = 'form';
+				await signOut(getFirebaseAuth());
+				return;
+			}
+			await land(response);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	/*
+	 * Backing out of #816's warning. Nothing was minted, so the only way
+	 * back in is to submit again -- and the portal session she chose to
+	 * keep is untouched. The Identity Platform account this attempt
+	 * created or signed into is left as-is: `credentialFor` picks it back
+	 * up on the next submit (#745).
+	 */
+	async function handleCancelSignOut() {
+		signOutWarning = undefined;
+		pendingIdToken = '';
+		step = 'form';
+		await signOut(getFirebaseAuth());
+	}
+
+	// Moves focus to #816's warning the moment it replaces the form -- see
+	// the sign-in page's own copy of this comment for why.
+	function focusOnAppearing(element: HTMLElement) {
+		element.focus();
+	}
 </script>
 
 {#snippet errorSummary()}
@@ -180,6 +266,23 @@
 {/snippet}
 
 {#snippet content()}
+	{#if step === 'confirm-sign-out'}
+		<!--
+			#816: the warning goes on the button that acts, not on a screen
+			of its own -- see the sign-in page's own copy of this pattern.
+			Her form is already accepted, so there is nothing to re-render
+			here but the consequence and the two ways out of it.
+		-->
+		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
+		<WarningText message={signOutWarning ?? ''} />
+		<Button
+			type="button"
+			label="Continue and sign out"
+			loading={isSubmitting}
+			onClick={handleConfirmSignOut}
+		/>
+		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
+	{:else}
 	<!-- `novalidate`: this page refuses the submit and says so once, at the
 	     top, rather than letting the browser's own bubble refuse the first
 	     empty field and say nothing about the other four (#467). -->
@@ -247,6 +350,7 @@
 		</LabeledField>
 		<Button type="submit" label="Create Practice" loading={isSubmitting} />
 	</form>
+	{/if}
 {/snippet}
 
 <EntryPage

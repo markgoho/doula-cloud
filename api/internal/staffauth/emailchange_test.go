@@ -128,8 +128,8 @@ func TestChangeEmailHandler_Success(t *testing.T) {
 	).Scan(&oldEmail, &status); err != nil {
 		t.Fatalf("query email change outbox row: %v", err)
 	}
-	if oldEmail != "old@example.com" || status != "pending" {
-		t.Fatalf("old_email/status = %q/%q, want old@example.com/pending", oldEmail, status)
+	if oldEmail != "old@example.com" || status != statusPending {
+		t.Fatalf("old_email/status = %q/%q, want old@example.com/%s", oldEmail, status, statusPending)
 	}
 
 	var pendingVerify int

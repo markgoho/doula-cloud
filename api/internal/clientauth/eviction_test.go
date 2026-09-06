@@ -127,9 +127,15 @@ func TestRedeemMagicLinkHandler_ConfirmedEvictsAndNotifiesTheStaffSession(t *tes
 	}
 }
 
-// A live portal session is not a cross-population eviction: redeeming a
-// fresh link is an ordinary re-sign-in, and goes straight through.
-func TestRedeemMagicLinkHandler_LivePortalSessionSignsStraightThrough(t *testing.T) {
+// A live portal session in this browser is not a cross-population
+// eviction, so redeeming a fresh link goes straight through with no
+// warning -- but #837 centralised what mfaenroll already did for its own
+// pre-enrolment session: whatever this browser's cookie names is ended
+// silently once the new one is minted, same tier or not, because the
+// cookie is being overwritten either way and a same-population row left
+// behind is the same "token that still verifies" defect #610 named for
+// the cross-population case.
+func TestRedeemMagicLinkHandler_LivePortalSessionSignsStraightThroughAndEndsIt(t *testing.T) {
 	db := testdb.New(t)
 	const identifier = "portal_evict-same-tier"
 	token := seedMagicLink(t, db, identifier)
@@ -143,8 +149,11 @@ func TestRedeemMagicLinkHandler_LivePortalSessionSignsStraightThrough(t *testing
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	if got := countRows(t, db, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, "portal_someone-else"); got != 1 {
-		t.Errorf("the other portal session rows = %d, want 1 -- a same-population sign-in evicts nothing", got)
+	if got := countRows(t, db, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, "portal_someone-else"); got != 0 {
+		t.Errorf("the other portal session rows = %d, want 0 -- a same-population replacement ends silently", got)
+	}
+	if got := countRows(t, db, `SELECT count(*) FROM session_notice_outbox WHERE identity_uid = $1 AND kind = 'session_evicted'`, "portal_someone-else"); got != 0 {
+		t.Errorf("eviction notices for a same-population replacement = %d, want 0 -- it is not an eviction", got)
 	}
 }
 

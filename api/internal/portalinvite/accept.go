@@ -1,19 +1,20 @@
 package portalinvite
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/portalaccount"
-	"doula-cloud/api/internal/sessionevict"
+	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -49,19 +50,6 @@ type AcceptInviteResponse struct {
 // evicted Staff session queues.
 func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
-
 		var req AcceptInviteRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
@@ -73,78 +61,54 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		resp, identifier, engagementID, reused, status, code, msg := acceptInvite(r, tx, req.InviteToken)
-		if status != http.StatusOK {
-			apierr.Write(w, status, code, msg, nil)
-			return
-		}
-
-		// #610, after acceptInvite and not before it: a dead or already
-		// claimed invitation is refused above, so nobody is warned about
-		// a session this token was never going to displace. The refusal
-		// rolls back the rows acceptInvite just wrote, and the confirmed
-		// retry writes them again.
-		now := time.Now()
-		evicted, ok := sessionevict.Apply(w, r, tx, authn.TierPortal, now)
-		if !ok {
-			return
-		}
-
-		// Create the session before committing, so a failure rolls the
-		// new rows back instead of leaving them committed behind a
-		// response that reports failure (#145). A Client never carries a
-		// second factor -- Identity Platform is Staff-only from here on
-		// (ADR-0026).
-		cookie, err := authn.MintSession(r.Context(), tx, identifier, false, now)
-		if err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
+		var result acceptResult
+		var engagementID string
+		var reused bool
+		step := func(_ context.Context, tx *sql.Tx) (sessionmint.Result, error) {
+			var identifier string
+			var status int
+			var code apierr.Code
+			var msg string
+			result, identifier, engagementID, reused, status, code, msg = acceptInvite(r, tx, req.InviteToken)
+			if status != http.StatusOK {
+				return sessionmint.Result{Refusal: &sessionmint.Refusal{Status: status, Code: code, Message: msg}}, nil
+			}
+			return sessionmint.Result{IdentityUID: identifier, Body: result.AcceptInviteResponse}, nil
 		}
 
 		// activity.ScopeToPractice's contract is "nothing runs after it
-		// but the Record call it exists for" (see offer.recordPreAccountDecline):
-		// this must be the last write before Commit.
-		if err := activity.ScopeToPractice(r.Context(), tx, resp.practiceID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		// #309: an accept that reuses an existing Portal Account (ADR-0015)
-		// records its own action -- no Portal Account came into being, an
-		// existing one gained reach into this Practice.
-		action := activity.ActionPortalAccountProvisioned
-		if reused {
-			action = activity.ActionPortalAccountLinked
-		}
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  resp.practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   engagementID,
-			Action:      string(action),
-			Actor:       activity.ClientActor(resp.ClientID),
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
+		// but the Record call it exists for" (see
+		// offer.recordPreAccountDecline): this must be the last write
+		// before Commit, which is why it runs as Finish -- after the
+		// mint, not inside step, which runs before eviction is even
+		// decided.
+		finish := func(ctx context.Context, tx *sql.Tx) error {
+			if err := activity.ScopeToPractice(ctx, tx, result.practiceID); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return fmt.Errorf("portalinvite: scope activity to practice: %w", err)
+			}
+			// #309: an accept that reuses an existing Portal Account
+			// (ADR-0015) records its own action -- no Portal Account came
+			// into being, an existing one gained reach into this
+			// Practice.
+			action := activity.ActionPortalAccountProvisioned
+			if reused {
+				action = activity.ActionPortalAccountLinked
+			}
+			if err := activity.Record(ctx, tx, activity.Entry{
+				PracticeID:  result.practiceID,
+				SubjectKind: activity.SubjectEngagement,
+				SubjectID:   engagementID,
+				Action:      string(action),
+				Actor:       activity.ClientActor(result.ClientID),
+			}); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return fmt.Errorf("portalinvite: record activity: %w", err)
+			}
+			return nil
 		}
 
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		if evicted {
-			tasknudge.Fire(enq, tasknudge.SessionNotice)(r.Context())
-		}
-		http.SetCookie(w, cookie)
-
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp.AcceptInviteResponse); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		sessionmint.IssueFromDB(w, r, db, enq, sessionmint.Portal(), step, finish)
 	})
 }
 

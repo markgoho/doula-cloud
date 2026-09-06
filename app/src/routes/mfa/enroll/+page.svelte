@@ -39,6 +39,7 @@
 	import {
 		passwordReauthRefusal,
 		refusalMessage,
+		refusalOrConfirmable,
 		totpCodeRefusal,
 		type FormError
 	} from '#lib/formErrors.js';
@@ -46,6 +47,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -54,7 +56,12 @@
 	const passwordId = 'mfa-enroll-password';
 	const codeId = 'mfa-enroll-code';
 
-	let step = $state<'password' | 'setup'>('password');
+	// #816: this two-step form has no single Continue button to hang
+	// #610's cross-population warning on, so it hangs on step two's own
+	// final submit -- "Confirm and turn on" is the deliberate press that
+	// mints a session, the same reasoning the sign-in page's Continue
+	// button uses.
+	let step = $state<'password' | 'setup' | 'confirm-sign-out'>('password');
 	let email = $state('');
 	let password = $state('');
 	let code = $state('');
@@ -62,6 +69,7 @@
 	let isSubmitting = $state(false);
 	let qrCodeDataUrl = $state('');
 	let secretKey = $state('');
+	let signOutWarning = $state<string | undefined>();
 
 	/*
 	 * Held across the two steps without being `$state`: neither is ever
@@ -71,6 +79,11 @@
 	 */
 	let enrollingUser: User | undefined;
 	let totpSecret: Awaited<ReturnType<typeof TotpMultiFactorGenerator.generateSecret>> | undefined;
+	// The freshly-minted, second-factor-showing ID token #816's confirmed
+	// retry re-sends -- computed once in handleCodeSubmit rather than
+	// re-derived, since a second `getIdToken(true)` call is a second
+	// network round trip for no reason the retry needs.
+	let pendingIdToken = '';
 
 	function errorFor(targetId: string): string | undefined {
 		return errors.find((entry) => entry.targetId === targetId)?.message;
@@ -132,6 +145,22 @@
 		}
 	}
 
+	/*
+	 * The POST every enrolment-finish attempt runs, first unconfirmed and
+	 * then -- if #816's cross-population check refuses it -- again with
+	 * X-Confirmed, on the same idToken.
+	 */
+	async function postFinishEnrollment(idToken: string, isConfirmed: boolean) {
+		return fetch(`${apiBaseURL()}/api/staff/mfa`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: {
+				Authorization: `Bearer ${idToken}`,
+				...(isConfirmed && { 'X-Confirmed': 'true' })
+			}
+		});
+	}
+
 	async function handleCodeSubmit(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
 		errors = [];
@@ -152,13 +181,9 @@
 			 * the BFF must be handed a freshly minted one or it reads a token
 			 * that does not show the second factor yet.
 			 */
-			const idToken = await enrollingUser!.getIdToken(true);
+			pendingIdToken = await enrollingUser!.getIdToken(true);
 
-			const response = await fetch(`${apiBaseURL()}/api/staff/mfa`, {
-				method: 'POST',
-				credentials: 'include',
-				headers: { Authorization: `Bearer ${idToken}` }
-			});
+			const response = await postFinishEnrollment(pendingIdToken, false);
 
 			if (response.ok) {
 				await signOut(getFirebaseAuth());
@@ -178,12 +203,62 @@
 				return;
 			}
 
-			errors = [{ message: await refusalMessage(response) }];
+			// #816: a live portal session in this browser is not a form
+			// refusal -- nothing is wrong with the code she entered, and the
+			// same finish sent again with X-Confirmed goes through. Keep the
+			// JS SDK signed in for that retry.
+			const refusal = await refusalOrConfirmable(response);
+			if (refusal.kind === 'confirmable') {
+				signOutWarning = refusal.message;
+				step = 'confirm-sign-out';
+				return;
+			}
+			errors = refusal.errors;
 		} catch (error_) {
 			errors = [totpCodeRefusal(error_, codeId)];
 		} finally {
 			isSubmitting = false;
 		}
+	}
+
+	/*
+	 * #816's press-through: the same enrolment finish, sent again with
+	 * X-Confirmed, on the same freshly-minted idToken.
+	 */
+	async function handleConfirmSignOut(): Promise<void> {
+		errors = [];
+		isSubmitting = true;
+		try {
+			const response = await postFinishEnrollment(pendingIdToken, true);
+			if (response.ok) {
+				await signOut(getFirebaseAuth());
+				await landAfterEnrolment();
+				return;
+			}
+			errors = [{ message: await refusalMessage(response) }];
+			step = 'setup';
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	/*
+	 * Backing out of #816's warning. Nothing was minted, so she is back on
+	 * step two with the same secret and QR code -- and the portal session
+	 * she chose to keep is untouched. The just-enrolled TOTP factor is
+	 * left in place: Identity Platform, not this screen, owns undoing an
+	 * enrolment, and re-submitting the same code finishes what only the
+	 * mint was waiting on.
+	 */
+	function handleCancelSignOut(): void {
+		signOutWarning = undefined;
+		step = 'setup';
+	}
+
+	// Moves focus to #816's warning the moment it replaces the form -- see
+	// the sign-in page's own copy of this comment for why.
+	function focusOnAppearing(element: HTMLElement) {
+		element.focus();
 	}
 </script>
 
@@ -212,6 +287,22 @@
 			</LabeledField>
 			<Button type="submit" label="Continue" loading={isSubmitting} />
 		</form>
+	{:else if step === 'confirm-sign-out'}
+		<!--
+			#816: the warning goes on the button that acts, not on a screen
+			of its own -- see the sign-in page's own copy of this pattern.
+			Her code is already accepted, so there is nothing to re-render
+			here but the consequence and the two ways out of it.
+		-->
+		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
+		<WarningText message={signOutWarning ?? ''} />
+		<Button
+			type="button"
+			label="Continue and sign out"
+			loading={isSubmitting}
+			onClick={handleConfirmSignOut}
+		/>
+		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
 		<form onsubmit={handleCodeSubmit} novalidate>
 			<Text
