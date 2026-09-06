@@ -5,6 +5,8 @@
  * Birth Plan sections, decoupled from SvelteKit and the DOM so it can be
  * unit-tested directly -- the same shape as planTemplate.ts.
  */
+import type { Fetcher } from './fetcher.js';
+
 import type { Field,  } from './planTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 
@@ -25,10 +27,6 @@ export interface Instance {
 	fields: Field[];
 	answers: Answers;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported -- see
- * planTemplate.ts's Fetcher for why. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /** Reads fieldId's raw stored value out of answers as a string, or '' if
  * unset/mistyped -- shared by PlanInstanceForm.svelte (editable) and

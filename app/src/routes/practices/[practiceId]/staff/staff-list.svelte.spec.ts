@@ -40,16 +40,16 @@ vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
-// apiErrorMessage is the real one's behavior for a plain-text body, which
-// is what this screen's refusals are: the roster loader reads a failure
-// through it rather than calling response.text() itself.
-vi.mock('#lib/api.js', () => ({
-	apiFetchWithSession,
-	apiErrorMessage: (response: Response) => response.text()
-}));
+// The page no longer imports apiErrorMessage itself (#840) -- it calls
+// #lib/staff.js, which reads a refusal through the real apiErrorMessage.
+// The envelope shape below (`{code, message}`, docs/api-design.md
+// section 7) is what that real reader expects; a bare JSON-encoded
+// string would parse to a non-object and fall through to the quoted raw
+// text instead of `message`.
+vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-function textResponse(body: string): Response {
-	return jsonResponse(body, 403);
+function textResponse(message: string): Response {
+	return jsonResponse({ code: 'FAILED_PRECONDITION', message }, 403);
 }
 
 const { members } = roster;

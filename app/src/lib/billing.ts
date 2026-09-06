@@ -5,6 +5,8 @@
  * only loads the read-only view; there is no save/mutate path here.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 export interface LedgerEntry {
@@ -56,11 +58,6 @@ export function originLabel(origin: string): string {
 export function formatSignedQuantity(quantity: number): string {
 	return `${quantity > 0 ? '+' : ''}${quantity}`;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported, so load
- * can be unit-tested without mocking the global fetch or SvelteKit's `$app`
- * modules -- mirrors planTemplate.ts's Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /** Exported for `billing/+page.ts` (#471), which needs the response's raw
  * status to distinguish a role refusal (403) from any other failure --

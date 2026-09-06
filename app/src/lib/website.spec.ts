@@ -3,9 +3,9 @@ import {
 	loadWebsite,
 	saveWebsite,
 	WebsiteValidationError,
-	MAX_FACT_LENGTH,
-	type Fetcher
+	MAX_FACT_LENGTH
 } from './website.js';
+import type { Fetcher } from './fetcher.js';
 import { jsonResponse as response } from './testResponse.js';
 
 const undeclared = {

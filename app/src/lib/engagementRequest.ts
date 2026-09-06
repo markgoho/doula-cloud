@@ -5,6 +5,8 @@
  * and the DOM, the same seam client.ts and clientDetail.ts use.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 /** The body a new Request submits: the kind and due date the requester
@@ -38,10 +40,6 @@ export interface EngagementRequestOutcome {
 export type RequestEngagementResult =
 	| { noCredits: false; outcome: EngagementRequestOutcome }
 	| { noCredits: true };
-
-/** A minimal fetch-shaped function, injected rather than imported --
- * mirrors client.ts's Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function engagementRequestsPath(practiceId: string, clientId: string): string {
 	return `/api/practices/${practiceId}/clients/${clientId}/engagement-requests`;

@@ -1,4 +1,4 @@
-import type { Fetcher } from './pushRegistration.js';
+import type { Fetcher } from './fetcher.js';
 
 /**
  * What a person sees when sign-out did not go through. Deliberately says

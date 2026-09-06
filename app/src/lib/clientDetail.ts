@@ -7,6 +7,8 @@
  * seam client.ts's list/create orchestration uses.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 /**
@@ -115,10 +117,6 @@ export interface ClientDetail extends ClientRecord {
 	 * redirects to the survivor rather than rendering anything here. */
 	mergedInto?: string;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported --
- * mirrors client.ts's Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /** Loads one Client's full detail read. Throws with the response body
  * text on a non-2xx response, mirroring loadClients' error-surfacing

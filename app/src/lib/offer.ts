@@ -11,11 +11,9 @@
  * account yet.
  */
 
-import { apiErrorMessage } from './apiErrorMessage.js';
+import type { Fetcher } from './fetcher.js';
 
-/** A minimal fetch-shaped function, injected rather than imported -- see
- * contract.ts's Fetcher for why. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 /** One Offer as either side reads it. targetName/targetAddress are filled
  * only on the Practice-side read: her own inbox does not need to tell her

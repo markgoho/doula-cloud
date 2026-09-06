@@ -17,11 +17,9 @@
  * imported) so this can be unit-tested directly -- mirrors client.ts and
  * mfaRequirement.ts.
  */
-import { apiErrorMessage } from './apiErrorMessage.js';
+import type { Fetcher } from './fetcher.js';
 
-/** A minimal fetch-shaped function, injected rather than imported -- see
- * client.ts's Fetcher for why. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 /**
  * One blocked address -- mirrors the Go BFF's mailsuppress.suppressionDTO.

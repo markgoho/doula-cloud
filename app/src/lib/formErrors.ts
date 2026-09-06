@@ -33,19 +33,55 @@ export const SERVICE_PROBLEM = 'There is a problem with the service. Try again i
  * undefined means the refusal itself carries nothing a reader can act on: a
  * 5xx, or a body that came back empty. Shared by `refusalMessage` and
  * `refusalErrors` so the 5xx/empty/JSON split is written once.
+ *
+ * Exported (#840): this is the one reader of the `{code, message, details}`
+ * envelope. `apiErrorMessage.ts` imports it to build its own one-line
+ * projection rather than re-reading the body itself -- that file stays
+ * `$app`-free either way, since this one is too (its only import is a
+ * type from `ErrorSummary.svelte`).
+ *
+ * `opaque5xx` (default true) is the "5xx split" the module comment
+ * above promises: a 5xx or an empty body reads as `undefined` --
+ * nothing a reader can act on -- for every caller in *this* file. One
+ * caller outside it disagrees on purpose: `emailSuppression.ts`'s
+ * `clearEmailSuppression` reads a failed Mailgun call's 502 body
+ * (`{message: "...; nothing was changed"}`) through `apiErrorMessage`
+ * rather than `refusalMessage`, because that clause is the one thing a
+ * person needs after a failed attempt, and collapsing every 5xx into
+ * `SERVICE_PROBLEM` would lose it. `apiErrorMessage.ts` passes
+ * `opaque5xx: false` for exactly that reason -- still the one reader of
+ * the envelope, just without this file's own opinion on what a 5xx is
+ * worth showing.
  */
-interface ParsedRefusal {
+export interface ParsedRefusal {
 	message?: string;
 	code?: string;
 	details?: Record<string, string>;
 	text: string;
 }
 
-async function parseRefusal(response: Response): Promise<ParsedRefusal | undefined> {
-	if (response.status >= 500) return undefined;
+// Overloaded on a literal `opaque5xx: false` so `apiErrorMessage.ts` gets
+// back a plain `ParsedRefusal`, never `undefined` -- both of this
+// function's `return undefined` branches below are gated on `opaque5xx`,
+// so passing `false` makes that half of the return type unreachable, and
+// the overload lets the type system say so instead of a caller needing a
+// non-null assertion for a branch that can't happen.
+export async function parseRefusal(
+	response: Response,
+	options: { opaque5xx: false }
+): Promise<ParsedRefusal>;
+export async function parseRefusal(
+	response: Response,
+	options?: { opaque5xx?: boolean }
+): Promise<ParsedRefusal | undefined>;
+export async function parseRefusal(
+	response: Response,
+	{ opaque5xx = true }: { opaque5xx?: boolean } = {}
+): Promise<ParsedRefusal | undefined> {
+	if (opaque5xx && response.status >= 500) return undefined;
 
 	const text = await response.text();
-	if (text.trim() === '') return undefined;
+	if (opaque5xx && text.trim() === '') return undefined;
 
 	try {
 		const parsed: unknown = JSON.parse(text);

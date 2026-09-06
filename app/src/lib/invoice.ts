@@ -7,6 +7,8 @@
  * contract.ts.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 export interface Invoice {
@@ -55,10 +57,6 @@ export interface PracticeInvoicePage {
 	outstandingCount: number;
 	paidCents: number;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported -- see
- * contract.ts's Fetcher for why. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /** The Practice-wide Invoice list's path -- exported so the route's
  * `load` can call `apiFetch` on it directly and handle 401/403 the way

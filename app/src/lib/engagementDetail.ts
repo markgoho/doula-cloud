@@ -19,13 +19,10 @@
  * first change deleted thirteen of.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './api.js';
 import type { CursorPage } from './paginatedList.svelte.js';
-
-/** A fetch-shaped function, injected so these can be unit-tested without
- * mocking the global fetch or SvelteKit's `$app` modules -- the same
- * seam `invoice.ts` and `planInstance.ts` already take. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /** Which Engagement, at which Practice. Passed as one value because every
  * function here needs both and neither is ever meaningful alone. */

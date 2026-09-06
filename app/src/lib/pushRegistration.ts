@@ -1,16 +1,11 @@
 /**
- * A path-and-init fetch function, already carrying whatever credential
- * the caller authenticates with -- mirrors billing.ts's Fetcher so this
- * module stays agnostic to Bearer-token vs. session-cookie callers.
- */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
-
-/**
  * Converts a URL-safe base64 VAPID public key (the shape
  * webpush.GenerateVAPIDKeys and the api/internal/push package produce)
  * into the Uint8Array PushManager.subscribe's applicationServerKey
  * expects.
  */
+import type { Fetcher } from './fetcher.js';
+
 export function urlBase64ToUint8Array(base64String: string): Uint8Array {
 	const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
 	const base64 = (base64String + padding).replaceAll('-', '+').replaceAll('_', '/');

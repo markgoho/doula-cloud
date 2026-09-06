@@ -9,6 +9,7 @@ import {
 	SERVICE_PROBLEM,
 	totpCodeRefusal
 } from './formErrors.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 import { jsonResponse } from './testResponse.js';
 
 const FIELDS = { emailId: 'email', passwordId: 'password' };
@@ -239,6 +240,52 @@ describe('refusalMessage', () => {
 		expect(await refusalMessage(jsonResponse({ code: 'INVALID_ARGUMENT' }, 400))).toBe(
 			'{"code":"INVALID_ARGUMENT"}'
 		);
+	});
+});
+
+/*
+ * `apiErrorMessage` (apiErrorMessage.ts) is `parseRefusal` projected to
+ * one string, the same as `refusalMessage` above -- except it calls
+ * `parseRefusal(response, { opaque5xx: false })`, so a 5xx's own message
+ * still comes through rather than collapsing to `SERVICE_PROBLEM`. That
+ * keeps its fifty-six call sites' existing behavior unchanged across
+ * #840 -- `parseRefusal` is still the one reader of the envelope, this
+ * is just the other value its own "5xx split" parameter was built to
+ * let a caller opt out of, which `clearEmailSuppression`'s doc comment
+ * explains a real caller needs.
+ */
+describe('apiErrorMessage', () => {
+	it('reads the message out of a structured error body', async () => {
+		expect(
+			await apiErrorMessage(jsonResponse({ code: 'INVALID_ARGUMENT', message: 'The token has expired' }, 400))
+		).toBe('The token has expired');
+	});
+
+	it('falls back to the raw text when the body is neither JSON nor empty', async () => {
+		expect(await apiErrorMessage(jsonResponse('engagement not found', 404))).toBe(
+			'engagement not found'
+		);
+	});
+
+	it('falls back to the raw text when the JSON carries no message', async () => {
+		expect(await apiErrorMessage(jsonResponse({ code: 'CONFLICT' }, 409))).toBe(
+			'{"code":"CONFLICT"}'
+		);
+	});
+
+	// Unlike `refusalMessage`, a 5xx's own message still comes through --
+	// `clearEmailSuppression`'s doc comment is why: a failed Mailgun call's
+	// 502 carries a clause ("nothing was changed") worth keeping.
+	it('shows a 5xx’s own message rather than collapsing it to SERVICE_PROBLEM', async () => {
+		expect(
+			await apiErrorMessage(
+				jsonResponse({ message: 'could not reach the email provider; nothing was changed' }, 502)
+			)
+		).toBe('could not reach the email provider; nothing was changed');
+	});
+
+	it('falls back to the raw text on an empty body, rather than SERVICE_PROBLEM', async () => {
+		expect(await apiErrorMessage(jsonResponse('', 403))).toBe('');
 	});
 });
 

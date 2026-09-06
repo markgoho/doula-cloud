@@ -9,6 +9,8 @@
  * disappear from the array once created.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 export const FIELD_TYPES = [
@@ -45,10 +47,6 @@ export interface Field {
 export interface Template {
 	fields: Field[];
 }
-
-/** A minimal fetch-shaped function, injected rather than imported --
- * the same seam planTemplate.ts's Fetcher uses. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function templatePath(practiceId: string): string {
 	return `/api/practices/${practiceId}/client-field-template`;
