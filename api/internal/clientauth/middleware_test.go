@@ -165,3 +165,40 @@ func TestMiddleware_Success(t *testing.T) {
 		t.Fatalf("X-Identity-Uid = %q, want %q", got, identityUID)
 	}
 }
+
+// TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices
+// proves #309's own correctness requirement on the read side: a Portal
+// Account with client_portal_users rows at two Practices (ADR-0015 --
+// possible once #309 lifted identity_uid's UNIQUE constraint) must still
+// authorize a request for either Practice's Engagement, not just
+// whichever row Postgres happens to return first.
+func TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-at-two-practices"
+
+	practiceA := seedPractice(t, db, "Practice A")
+	clientA, _ := seedClientEngagement(t, db, practiceA, "Client A", "a@example.com")
+	seedPortalUser(t, db, identityUID, clientA)
+
+	practiceB := seedPractice(t, db, "Practice B")
+	clientB, engagementB := seedClientEngagement(t, db, practiceB, "Client B", "b@example.com")
+	// The same Portal Account reaching a second Practice (#309): a second
+	// client_portal_users row, not a second seedPortalUser call -- the
+	// Portal Account itself already exists from clientA's call above.
+	testdb.AttachPortalUser(t, db, identityUID, clientB)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := get(t, pingURL(srv, engagementB), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d (Practice B's own Engagement, reached through the second client_portal_users row)", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("X-Client-Id"); got != clientB {
+		t.Fatalf("X-Client-Id = %q, want %q", got, clientB)
+	}
+}

@@ -95,18 +95,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			clientID, found, err := setIdentityAndResolveClient(r.Context(), tx, uid)
-			if err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-			if !found {
-				apierr.WriteError(w, "no matching client account", http.StatusForbidden)
-				return
-			}
-
-			owns, err := setClientAndCheckEngagement(r.Context(), tx, clientID, engagementID)
+			clientID, owns, err := resolveOwningClient(r.Context(), tx, uid, engagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
@@ -129,6 +118,56 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			}
 		})
 	}
+}
+
+// resolveOwningClient sets app.current_identity_uid, then finds which of
+// identityUID's client_portal_users rows owns engagementID. Before #309
+// there was exactly one row per identity_uid, so resolving the identity
+// alone was enough; #309 lifted that constraint (ADR-0015: a Portal
+// Account reaches many Clients, one per Practice), so a Client-portal
+// caller who holds access at more than one Practice can now have more
+// than one candidate row here. Trying each until one owns the named
+// Engagement, rather than picking the first arbitrarily, is what keeps a
+// request for Practice B's Engagement from being refused because the
+// first row Postgres happened to return was Practice A's.
+func resolveOwningClient(ctx context.Context, tx *sql.Tx, identityUID, engagementID string) (clientID string, owns bool, err error) {
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
+		return "", false, fmt.Errorf("clientauth: set current identity uid: %w", err)
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identityUID)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return "", false, fmt.Errorf("clientauth: list clients for identity: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var candidates []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return "", false, fmt.Errorf("clientauth: scan client id: %w", err)
+		}
+		candidates = append(candidates, id)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return "", false, fmt.Errorf("clientauth: iterate client rows: %w", err)
+	}
+
+	for _, candidate := range candidates {
+		owns, err := setClientAndCheckEngagement(ctx, tx, candidate, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return "", false, err
+		}
+		if owns {
+			return candidate, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 // setIdentityAndResolveClient sets app.current_identity_uid -- the
