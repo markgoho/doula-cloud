@@ -19,12 +19,15 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import {
 		authRefusal,
 		isMultiFactorAuthRequired,
 		refusalErrors,
+		refusalOrConfirmable,
+		SERVICE_PROBLEM,
 		totpCodeRefusal,
 		type FormError
 	} from '#lib/formErrors.js';
@@ -39,10 +42,24 @@
 	// #606: a second factor is challenged only after a first-factor sign-in
 	// that Identity Platform itself flags as needing one -- never guessed
 	// at up front, since most Staff have no second factor enrolled at all.
-	let step = $state<'credentials' | 'challenge'>('credentials');
+	// #610 adds a third: the exchange was refused because this browser
+	// holds a live Client-portal session, and she has to say she is
+	// willing to lose it before one is minted here.
+	let step = $state<'credentials' | 'challenge' | 'confirm-sign-out'>('credentials');
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Membership[] | undefined>();
+
+	// #610: what the BFF said continuing costs. Set only by its own
+	// refusal, so nothing here guesses at what the other session is.
+	let signOutWarning = $state<string | undefined>();
+
+	/*
+	 * The ID token the exchange below runs on, kept across #610's confirm
+	 * press. Not `$state` -- the markup never reads it -- and deliberately
+	 * one variable for both sign-in steps, since either can produce it.
+	 */
+	let pendingIdToken = '';
 
 	/*
 	 * The in-progress sign-in Identity Platform is waiting to finish, kept
@@ -182,7 +199,54 @@
 	 * #606 added a second way to reach the same finish line.
 	 */
 	async function finishSignIn(credential: UserCredential) {
-		const idToken = await credential.user.getIdToken();
+		pendingIdToken = await credential.user.getIdToken();
+		await exchangeAndLand(false);
+	}
+
+	/*
+	 * #610's press-through. The first exchange is refused when this
+	 * browser holds a live Client-portal session, because a browser holds
+	 * exactly one Doula Cloud session and minting this one would end that
+	 * one silently. She is told what it costs and sends the same exchange
+	 * again, this time carrying `X-Confirmed`.
+	 */
+	/*
+	 * Backing out of #610's warning. The credential is discarded rather
+	 * than parked: nothing was minted, so the only way back in is to sign
+	 * in again -- and the portal session she chose to keep is untouched.
+	 */
+	async function handleCancelSignOut() {
+		signOutWarning = undefined;
+		pendingIdToken = '';
+		password = '';
+		totpCode = '';
+		step = 'credentials';
+		await signOut(getFirebaseAuth());
+	}
+
+	async function handleConfirmSignOut() {
+		errors = [];
+		isSubmitting = true;
+		try {
+			await exchangeAndLand(true);
+		} catch {
+			errors = [{ message: SERVICE_PROBLEM }];
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	/*
+	 * Everything after Identity Platform has accepted the credential:
+	 * exchange the ID token for the session cookie, sign the JS SDK back
+	 * out (#149), read the Staff session and land her. Split out of
+	 * `finishSignIn` so #610's confirmed retry re-runs exactly this, with
+	 * the same ID token -- which is why `pendingIdToken` is a plain local
+	 * rather than `$state`: the markup never reads it, and it has to
+	 * survive whichever of the two sign-in steps produced it.
+	 */
+	async function exchangeAndLand(isConfirmed: boolean) {
+		const idToken = pendingIdToken;
 
 		// Exchange the Identity Platform ID token for the session cookie
 		// before signing out of the JS SDK -- the Staff session probe
@@ -199,10 +263,22 @@
 		const exchangeResponse = await fetch(`${apiBaseURL()}/api/session`, {
 			method: 'POST',
 			credentials: 'include',
-			headers: { Authorization: `Bearer ${idToken}` }
+			headers: {
+				Authorization: `Bearer ${idToken}`,
+				...(isConfirmed && { "X-Confirmed": "true" })
+			}
 		});
 		if (!exchangeResponse.ok) {
-			errors = await refusalErrors(exchangeResponse);
+			const refusal = await refusalOrConfirmable(exchangeResponse);
+			if (refusal.kind === 'confirmable') {
+				// Not a failure and not terminal: the same exchange goes
+				// through once she presses again, so the SDK stays signed in
+				// and this ID token is kept for that second press.
+				signOutWarning = refusal.message;
+				step = 'confirm-sign-out';
+				return;
+			}
+			errors = refusal.errors;
 			await signOut(getFirebaseAuth());
 			return;
 		}
@@ -282,6 +358,22 @@
 		</form>
 
 		<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
+	{:else if step === 'confirm-sign-out'}
+		<!--
+			#610: the warning goes on the button that acts, not on a screen
+			of its own. Her password is already accepted, so there is no form
+			to re-render here -- only the consequence and the two ways out of
+			it. "Cancel" is a real outcome: staying signed in to the portal
+			is a thing she may prefer once she knows the price.
+		-->
+		<WarningText message={signOutWarning ?? ''} />
+		<Button
+			type="button"
+			label="Continue and sign out"
+			loading={isSubmitting}
+			onClick={handleConfirmSignOut}
+		/>
+		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
 		<!--
 			#606: Identity Platform accepted the password and is waiting on

@@ -3,10 +3,11 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, refusalOrConfirmable, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -16,6 +17,16 @@
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Engagement[] | undefined>();
+
+	/*
+	 * #610: what the BFF said continuing costs, once it has refused an
+	 * unconfirmed press. A browser holds exactly one Doula Cloud session,
+	 * so a doula who is also a Client loses her Practice session by
+	 * signing in here -- she is told before it happens, not after. Set
+	 * only by the refusal, so the button below is an ordinary Continue
+	 * until the BFF says otherwise.
+	 */
+	let signOutWarning = $state<string | undefined>();
 
 	// #617, ADR-0026: the token is spent on this POST, never on the GET
 	// that rendered this page -- a mail client or a security scanner
@@ -27,11 +38,22 @@
 		try {
 			const response = await fetch(`${apiBaseURL()}/api/portal/magic-link`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: {
+					'Content-Type': 'application/json',
+					// The BFF refuses the first press and answers with what it
+					// costs; this is the second press, which is why nothing
+					// sends it until `signOutWarning` has been read.
+					...(signOutWarning && { 'X-Confirmed': 'true' })
+				},
 				body: JSON.stringify({ token })
 			});
 			if (!response.ok) {
-				errors = await refusalErrors(response);
+				const refusal = await refusalOrConfirmable(response);
+				if (refusal.kind === 'confirmable') {
+					signOutWarning = refusal.message;
+				} else {
+					errors = refusal.errors;
+				}
 				return;
 			}
 
@@ -83,7 +105,22 @@
 			</ul>
 		{/if}
 	{:else}
-		<Button type="button" label="Continue" loading={isSubmitting} onClick={handleContinue} />
+		<!--
+			#610: the warning goes on the Continue button, not on a screen of
+			its own -- this button is already a deliberate press on a request
+			the BFF handles, which is what makes it the right place. The
+			label changes with it, so the action names what it does (GOV.UK's
+			own rule for a button that carries a consequence).
+		-->
+		{#if signOutWarning}
+			<WarningText message={signOutWarning} />
+		{/if}
+		<Button
+			type="button"
+			label={signOutWarning ? 'Continue and sign out' : 'Continue'}
+			loading={isSubmitting}
+			onClick={handleContinue}
+		/>
 	{/if}
 {/snippet}
 

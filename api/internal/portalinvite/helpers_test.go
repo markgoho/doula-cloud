@@ -31,7 +31,7 @@ func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 // credential, so this reads no Bearer token and no session.
 func newAcceptServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /portal/accept-invite", portalinvite.AcceptInviteHandler(db.App))
+	mux.Handle("POST /portal/accept-invite", portalinvite.AcceptInviteHandler(db.App, &tasknudge.FakeEnqueuer{}))
 	return httptest.NewServer(mux)
 }
 

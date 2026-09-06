@@ -16,6 +16,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/sessionevict"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -48,6 +49,15 @@ type StatusResponse struct {
 // cookie. Since #151 removed the Bearer path from authn.Begin, the only
 // other places an ID token is read are the three bootstrap endpoints,
 // via authn.BeginBootstrap.
+//
+// This is one of the three seams #610 guards: a browser holds exactly
+// one session, so signing in here with a live *portal* session
+// overwrites it. That is refused once with a warning and only done on
+// the retry that confirms it -- see authn/eviction.go. The eviction, the
+// notice it queues and the new session all ride one transaction, which
+// is why this no longer mints straight on the pool: an evicted row and
+// an unminted replacement would leave the browser holding a cookie that
+// verifies as nothing.
 func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idToken, ok := authn.BearerToken(r)
@@ -62,12 +72,43 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 			return
 		}
 
+		tx, err := db.BeginTx(r.Context(), nil)
+		if err != nil {
+			// coverage:ignore reason: DB connection failure, not exercised by unit tests
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				_ = tx.Rollback()
+			}
+		}()
+
 		now := time.Now()
-		cookie, err := authn.MintSession(r.Context(), db, verified.UID, verified.SecondFactor, now)
+		// The queued flag is discarded rather than nudged on, unlike
+		// clientauth's and portalinvite's own calls: this seam mints a
+		// Staff session, so the only thing it can ever evict is a
+		// Client's -- and an evicted Client is sent no mail at all
+		// (sessionnotice.QueueSessionEvicted records why), so there is
+		// never an outbox row here to nudge.
+		if _, ok := sessionevict.Apply(w, r, tx, authn.TierStaff, now); !ok {
+			return
+		}
+
+		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, verified.SecondFactor, now)
 		if err != nil {
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+
+		if err := tx.Commit(); err != nil {
+			// coverage:ignore reason: DB commit failure, not exercised by unit tests
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		committed = true
+
 		// Best-effort, same as EndHandler's swallowed EndSession below: a
 		// failed notice queue must never turn a legitimate sign-in into a
 		// 500 (#345).

@@ -13,7 +13,9 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/sessionevict"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // MagicLinkLifetime is #617's 15-minute expiry (ADR-0026): Mailgun
@@ -139,7 +141,11 @@ type redeemMagicLinkResponse struct {
 // token and minting the session happen inside one transaction, so a
 // failure after the spend never strands her with a burned link and no
 // session.
-func RedeemMagicLinkHandler(db *sql.DB) http.Handler {
+//
+// That same Continue button is where #610 hangs its cross-population
+// warning, which is why enq is here: evicting a live Staff session
+// queues a notice, and the outbox wants a nudge once this commits.
+func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req RedeemMagicLinkRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -177,6 +183,17 @@ func RedeemMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
+		// #610, after the spend and not before it: a token that is
+		// already burned or was never issued gets the 400 above, so a
+		// stranger following a dead link is never shown a warning about
+		// a session he is not going to displace. The refusal below rolls
+		// this transaction back, which un-spends the token -- so the
+		// confirmed retry redeems the same live link.
+		evicted, ok := sessionevict.Apply(w, r, tx, authn.TierPortal, now)
+		if !ok {
+			return
+		}
+
 		// A Client never carries a second factor -- Identity Platform is
 		// Staff-only from here on (ADR-0026) -- so this is always false,
 		// unlike accept.go's own MintSession call.
@@ -194,6 +211,9 @@ func RedeemMagicLinkHandler(db *sql.DB) http.Handler {
 		}
 		committed = true
 
+		if evicted {
+			tasknudge.Fire(enq, tasknudge.SessionNotice)(r.Context())
+		}
 		http.SetCookie(w, cookie)
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests

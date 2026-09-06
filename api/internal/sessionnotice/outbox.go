@@ -1,11 +1,14 @@
-// Package sessionnotice sends the two security-notice Platform
+// Package sessionnotice sends the security-notice Platform
 // Notifications ADR-0004 orphaned when session ownership moved off
 // Identity Platform to the BFF's own `sessions` table (#345, map #213):
-// "new sign-in" and "session revoked". Both are Platform voice (ADR-0009)
-// with a single recipient -- the Staff member whose session it is,
-// resolved from identity_uid via `staff` at send time, mirroring how
-// billing.Worker resolves Owner emails rather than storing them on the
-// row.
+// "new sign-in" and "session revoked", joined since by
+// "two-factor reset" (#615) and "signed out in one browser" (#610).
+// All are Platform voice (ADR-0009) with a single recipient -- the Staff
+// member whose session it is, resolved from identity_uid via `staff` at
+// send time, mirroring how billing.Worker resolves Owner emails rather
+// than storing them on the row. That resolver is Staff-only, which is
+// half of why an evicted *portal* session gets no mail at all -- see
+// QueueSessionEvicted for the whole decision.
 package sessionnotice
 
 import (
@@ -15,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
@@ -49,6 +53,19 @@ const sessionRevokedSubject = "Doula Cloud: your sessions were signed out"
 func sessionRevokedText() string {
 	return "Hello,\n\n" +
 		"All of your Doula Cloud sessions were signed out. You'll need to sign in again on every device.\n\n" +
+		"If you didn't expect this, reply to this email.\n"
+}
+
+const sessionEvictedSubject = "Doula Cloud: you were signed out in one browser"
+
+// Deliberately not sessionRevokedText: an eviction ends exactly one
+// session -- the one the browser she is standing at held -- and every
+// other device she is signed in from is untouched, which "all of your
+// sessions ... on every device" would misreport. See 00076 for the same
+// reasoning at the schema.
+func sessionEvictedText() string {
+	return "Hello,\n\n" +
+		"You were signed out of Doula Cloud in one browser, because that browser was used to sign in to the client portal. Your other devices are still signed in.\n\n" +
 		"If you didn't expect this, reply to this email.\n"
 }
 
@@ -162,6 +179,38 @@ func QueueSessionRevoked(ctx context.Context, tx *sql.Tx, identityUID string) er
 	return nil
 }
 
+// QueueSessionEvicted records that ev's session was just evicted by a
+// sign-in to the other population (#610), and reports whether it queued
+// anything.
+//
+// It queues only for an evicted Staff session, and the "false" it
+// returns for a portal one is #610's own recorded decision, not an
+// omission. Two reasons, either sufficient. This package resolves its
+// recipient from identity_uid via `staff` (see the package comment and
+// staffEmail), so a Portal Account identifier has no address to send to
+// here at all. And an eviction is self-inflicted and immediate: she
+// pressed through a warning that said this would happen, in the browser
+// it happened in, seconds ago -- there is nothing an email would tell
+// her that the screen in front of her did not.
+//
+// Runs on the caller's own tx, like QueueSessionRevoked: the mint seam
+// that evicts already holds one, and the delete and this insert must
+// land or roll back together.
+func QueueSessionEvicted(ctx context.Context, tx *sql.Tx, ev authn.Eviction) (queued bool, err error) {
+	if ev.Tier != authn.TierStaff {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO session_notice_outbox (identity_uid, kind) VALUES ($1, 'session_evicted')
+		 ON CONFLICT (identity_uid) WHERE status = 'pending' AND kind = 'session_evicted' DO NOTHING`,
+		ev.IdentityUID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("sessionnotice: queue session-evicted notice: %w", err)
+	}
+	return true, nil
+}
+
 // QueueMFARecoveryCleared records that identityUID's TOTP enrolment was
 // just cleared by one of #615's three recovery paths -- a distinct
 // notice from QueueSessionRevoked's "sessions ended", queued alongside
@@ -252,6 +301,8 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pen
 	switch r.kind {
 	case "session_revoked":
 		subject, text = sessionRevokedSubject, sessionRevokedText()
+	case "session_evicted":
+		subject, text = sessionEvictedSubject, sessionEvictedText()
 	case "mfa_recovery_cleared":
 		subject, text = mfaRecoveryClearedSubject, mfaRecoveryClearedText()
 	default:

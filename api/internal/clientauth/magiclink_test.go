@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -20,7 +21,7 @@ func newMagicLinkRequestServer(db *testdb.DB) *httptest.Server {
 
 func newMagicLinkRedeemServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /portal/magic-link", clientauth.RedeemMagicLinkHandler(db.App))
+	mux.Handle("POST /portal/magic-link", clientauth.RedeemMagicLinkHandler(db.App, &tasknudge.FakeEnqueuer{}))
 	return httptest.NewServer(mux)
 }
 

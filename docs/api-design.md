@@ -193,7 +193,8 @@ type APIError struct {
    * `409 Conflict`: Resource state conflict or duplicate idempotency key conflict.
    * `429 Too Many Requests`: Rate limit reached.
    * `500 Internal Server Error`: Unhandled server or database error (log details internally, do not leak raw stack traces to caller).
-3. **One Writer**: `api/internal/apierr` is the only place this shape is written from. Every handler calls `apierr.Write` (or `apierr.WriteError` for the common status+message case) rather than `http.Error` or a package-local helper; a new endpoint that needs a `Code` not yet in `apierr.Code`'s enumerated set adds one there (#529).
+3. **A refusal that can be pressed through**: three sign-in endpoints — `POST /api/session`, `POST /api/portal/magic-link` and `POST /api/portal/accept-invite` — answer `409 FAILED_PRECONDITION` when the caller already holds a live session in the *other* population, because minting would end it (#610, ADR-0026). Nothing is written on that refusal; the same request repeated with `X-Confirmed: true` goes through and deletes the other session. The message names the population being left and nothing else about the session behind the cookie. A client tells this 409 apart from a resource conflict by its code, never by its prose (#692).
+4. **One Writer**: `api/internal/apierr` is the only place this shape is written from. Every handler calls `apierr.Write` (or `apierr.WriteError` for the common status+message case) rather than `http.Error` or a package-local helper; a new endpoint that needs a `Code` not yet in `apierr.Code`'s enumerated set adds one there (#529).
 
 ---
 
