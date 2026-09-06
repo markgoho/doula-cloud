@@ -1,10 +1,9 @@
 // Package sessionmint is #837's one session-issue seam: the ritual every
 // sign-in path copied around authn.MintSession -- begin the transaction,
 // run the caller's own business step, evict a live session in the other
-// population (#610), silently end whatever session this browser already
-// held in the same population, mint the new one, run the caller's own
-// post-mint step, commit, nudge the eviction notice, set the cookie and
-// write the body.
+// population (#610), mint the new one, run the caller's own post-mint
+// step, commit, nudge the eviction notice, set the cookie and write the
+// body.
 //
 // Two adapters describe the only two things that vary across the seven
 // callers: which tier is being minted and whether the mint carries a
@@ -40,12 +39,22 @@ import (
 // cluster writes for its own internal errors.
 const msgInternalError = "internal error"
 
-// Adapter is the two-field difference between minting a Staff session
-// and a Portal Account one: which tier's rules govern eviction and
-// lifetime, and whether the session shows a second factor.
+// Adapter is the difference between minting a Staff session and a Portal
+// Account one: which tier's rules govern eviction and lifetime, whether
+// the session shows a second factor, and -- for the one caller entitled
+// to it -- whether a same-tier cookie already in the browser gets
+// replaced rather than left alone.
 type Adapter struct {
 	Tier         authn.Tier
 	SecondFactor bool
+	// ReplaceSameTier ends whatever live session this browser's cookie
+	// already names, once #610's cross-population check has resolved,
+	// when that session turns out to share Tier with the mint (a
+	// cross-tier one is #610's own concern, asked about and evicted
+	// there, never here). False for every adapter except mfaenroll's
+	// own: see Issue's own doc comment for why generalising this to
+	// every seam is exactly the mistake it looks like it is not.
+	ReplaceSameTier bool
 }
 
 // Staff builds the adapter a Staff mint uses, reading the second factor
@@ -115,19 +124,33 @@ type Finish func(ctx context.Context, tx *sql.Tx) error
 // given rather than opening a second one. IssueFromDB, below, is the
 // version for a caller that has only a *sql.DB.
 //
-// Order is step, evict, end, mint, finish, commit, nudge, cookie, body --
-// exactly the acceptance criterion's own words. step runs first so its
+// Order is step, evict, replace, mint, finish, commit, nudge, cookie,
+// body -- exactly the acceptance criterion's own words plus the one
+// caller-scoped step ReplaceSameTier adds. step runs first so its
 // rollback is what undoes a refused mint. Eviction is #610's
 // cross-population check: a live session in the other population is
 // refused once (409, unconfirmed) and deleted on the confirmed retry.
-// Whatever this browser's cookie names in adapter.Tier's own population
-// is then ended silently and unconditionally, confirmed or not -- the
-// same replacement mfaenroll always did for its own pre-enrolment
-// session, generalised to every seam: the cookie is being overwritten
-// either way, so a same-population row left behind is a token that still
-// verifies, exactly the failure #610 named for the cross-population
-// case. EndSession no-ops for a token naming nothing, so this is safe to
-// run unconditionally once eviction has already been settled.
+//
+// A live session in the *same* population as the mint is deliberately
+// left alone by default. ADR-0026's own words are "signing in again as
+// yourself replaces your own session", not "signing in as anyone in this
+// tier evicts whoever the browser already held" -- a browser used as a
+// shared HTTP client across two different people's sign-ins (a test
+// fixture composing two fixture identities in one browser context, or
+// two Staff members trading a shared birth-centre laptop) must not have
+// the first person's still-valid session deleted out from under her by
+// the second person's unrelated sign-in. An earlier version of this
+// function generalised mfaenroll's own "replace, don't leave in place"
+// habit to every seam on exactly that reasoning, and #837's own CI
+// caught the regression: mail-delivery.e2e.ts signs in as an Owner, then
+// as a Doula accepting an invitation in the same browser context, then
+// expects the Owner's still-injected cookie to keep working -- which a
+// blanket same-tier replace silently broke. adapter.ReplaceSameTier is
+// the caller-scoped opt-in that survives that lesson: true only for
+// mfaenroll, whose pre-enrolment cookie is, by that flow's own
+// construction (a step-up on an already-signed-in identity, or a
+// refusal-driven redirect that starts with none at all), always the
+// same identity re-authenticating, never someone else's.
 //
 // Issue always writes a response before returning, success or refusal,
 // so a caller's own defer-rollback need only roll back when committed
@@ -149,11 +172,18 @@ func Issue(w http.ResponseWriter, r *http.Request, tx *sql.Tx, enq tasknudge.Enq
 	if !ok {
 		return false
 	}
-	if cookie, err := r.Cookie(authn.SessionCookieName); err == nil {
-		if err := authn.EndSession(ctx, tx, cookie.Value); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
-			return false
+	if adapter.ReplaceSameTier {
+		// Cross-tier is already handled above (refused unconfirmed, or
+		// evicted and queued); what reaches here is either no cookie, a
+		// dead one, or a live one sharing adapter.Tier -- EndSession is a
+		// safe no-op on the first two and exactly the replacement wanted
+		// on the third.
+		if cookie, err := r.Cookie(authn.SessionCookieName); err == nil {
+			if err := authn.EndSession(ctx, tx, cookie.Value); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+				return false
+			}
 		}
 	}
 

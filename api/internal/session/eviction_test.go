@@ -114,17 +114,18 @@ func TestCreateHandler_ConfirmedEvictsThePortalSession(t *testing.T) {
 	}
 }
 
-// A live Staff session in this browser is not a cross-population
-// eviction, so it mints straight through with no warning -- but #837
-// centralised what mfaenroll already did for its own pre-enrolment
-// session: whatever this browser's cookie names is ended silently once
-// the new one is minted, same tier or not, because the cookie is being
-// overwritten either way and a same-population row left behind is the
-// same "token that still verifies" defect #610 named for the
-// cross-population case. That holds even when the cookie names a
-// different Staff member than the one signing in -- a shared
-// birth-centre laptop where the previous doula forgot to sign out.
-func TestCreateHandler_LiveStaffSessionSignsStraightThroughAndEndsIt(t *testing.T) {
+// A live Staff session is not a cross-population eviction: signing in
+// again as yourself replaces your own session, which is what a
+// re-sign-in has always done and carries nothing to warn about. It is
+// deliberately not ended either, even though it shares a tier with the
+// mint: sessionmint.Issue leaves a same-tier cookie alone by default
+// (see its own doc comment), because a browser can be a shared HTTP
+// client across two different people's sign-ins -- the exact case this
+// test drives, a different Staff member's still-live session -- and
+// deleting the first person's session out from under her because a
+// second person happened to sign in in the same browser is not this
+// endpoint's call to make.
+func TestCreateHandler_LiveStaffSessionSignsStraightThrough(t *testing.T) {
 	srv, db := newServer(t, authntest.Verifier{UID: staffUID})
 	defer srv.Close()
 	existing := authntest.SeedSession(t, db.App, "other-staff-uid")
@@ -135,11 +136,8 @@ func TestCreateHandler_LiveStaffSessionSignsStraightThroughAndEndsIt(t *testing.
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	if got := countSessions(t, db, "other-staff-uid"); got != 0 {
-		t.Errorf("the other Staff session rows = %d, want 0 -- a same-population replacement ends silently", got)
-	}
-	if got := countEvictionNotices(t, db, "other-staff-uid"); got != 0 {
-		t.Errorf("eviction notices for a same-population replacement = %d, want 0 -- it is not an eviction", got)
+	if got := countSessions(t, db, "other-staff-uid"); got != 1 {
+		t.Errorf("the other Staff session rows = %d, want 1 -- a same-population sign-in evicts nothing", got)
 	}
 }
 

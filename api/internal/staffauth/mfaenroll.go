@@ -72,14 +72,17 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.
 			}{true}}, nil
 		}
 
-		// #816's trap: this seam always minted over its own
-		// pre-enrolment session (a live cookie of the same tier, since
-		// enrolment never crosses populations), which sessionmint.Issue
-		// now ends silently for every seam rather than only here -- see
-		// its own doc comment. A live *portal* session in this browser
-		// is not that case, and is asked about exactly like every other
-		// cross-population mint, replacing the unconditional EndSession
-		// this handler used to run regardless of tier (#816's own AC).
-		committed = sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
+		// #816's own AC: this seam used to mint over its own
+		// pre-enrolment session with an unconditional EndSession,
+		// regardless of tier -- so a live *portal* session in this
+		// browser was silently deleted outright. ReplaceSameTier keeps
+		// the silent replacement for this seam's own same-tier cookie
+		// (always the same identity re-authenticating -- see
+		// sessionmint.Issue's own doc comment for why this is the one
+		// caller entitled to it) while routing a cross-tier cookie
+		// through the same ask-first path every other seam uses.
+		adapter := sessionmint.Staff(verified)
+		adapter.ReplaceSameTier = true
+		committed = sessionmint.Issue(w, r, tx, enq, adapter, step, nil)
 	})
 }

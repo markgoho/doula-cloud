@@ -169,16 +169,18 @@ func TestIssue_CrossPopulationConfirmedEvictsAndMints(t *testing.T) {
 	}
 }
 
-// TestIssue_SamePopulationEndsThePriorSessionSilently is #816's trap:
-// mfaenroll always minted over its own pre-enrolment session, and every
-// other seam left that row to expire uncleaned. Issue now ends it for
-// every seam, without a warning, since nothing crosses a population.
-func TestIssue_SamePopulationEndsThePriorSessionSilently(t *testing.T) {
+// TestIssue_ReplaceSameTierEndsThePriorSessionSilently is mfaenroll's own
+// shape: its adapter sets ReplaceSameTier, so its own pre-enrolment
+// session (same identity, same tier) is ended silently rather than left
+// to expire uncleaned.
+func TestIssue_ReplaceSameTierEndsThePriorSessionSilently(t *testing.T) {
 	db := testdb.New(t)
 	const staffUID = "staff-uid"
 	token := authntest.SeedSession(t, db.App, staffUID)
+	adapter := sessionmint.Staff(authn.VerifiedToken{UID: staffUID, SecondFactor: true})
+	adapter.ReplaceSameTier = true
 
-	rec, enq, committed := issue(t, db, token, false, sessionmint.Staff(authn.VerifiedToken{UID: staffUID, SecondFactor: true}), okStep(staffUID), nil)
+	rec, enq, committed := issue(t, db, token, false, adapter, okStep(staffUID), nil)
 
 	if !committed {
 		t.Fatal("committed = false, want true -- same population needs no confirmation")
@@ -191,6 +193,32 @@ func TestIssue_SamePopulationEndsThePriorSessionSilently(t *testing.T) {
 	}
 	if len(enq.Calls()) != 0 {
 		t.Errorf("nudges fired = %d, want 0 -- a same-population replacement is silent", len(enq.Calls()))
+	}
+}
+
+// TestIssue_DefaultAdapterLeavesASameTierSessionAlone is the regression
+// this package's own CI caught: a blanket same-tier replace silently
+// deleted a *different* identity's still-valid session sharing this
+// browser context (mail-delivery.e2e.ts signs in as an Owner, then as a
+// Doula accepting an invitation, in one browser, and expects the Owner's
+// cookie to keep working). Every adapter except mfaenroll's own leaves a
+// same-tier cookie alone, matching ADR-0026's "signing in again as
+// yourself", not "as anyone in this tier".
+func TestIssue_DefaultAdapterLeavesASameTierSessionAlone(t *testing.T) {
+	db := testdb.New(t)
+	const otherStaffUID = "other-staff-uid"
+	token := authntest.SeedSession(t, db.App, otherStaffUID)
+
+	rec, _, committed := issue(t, db, token, false, sessionmint.Staff(authn.VerifiedToken{UID: "signing-in-uid", SecondFactor: true}), okStep("signing-in-uid"), nil)
+
+	if !committed {
+		t.Fatal("committed = false, want true -- same population needs no confirmation")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := countSessions(t, db, otherStaffUID); got != 1 {
+		t.Errorf("session rows for %s = %d, want 1 -- a same-tier cookie belonging to someone else is left alone", otherStaffUID, got)
 	}
 }
 
