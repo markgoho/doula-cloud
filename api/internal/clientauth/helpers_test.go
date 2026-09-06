@@ -50,8 +50,10 @@ func seedPractice(t *testing.T, db *testdb.DB, name string) string {
 }
 
 // seedClientEngagement inserts a Client and an Engagement linking them to
-// practiceID, using the superuser Admin connection.
-func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email, status string) (clientID, engagementID string) {
+// practiceID, using the superuser Admin connection. The Engagement is
+// always at 'intake': nothing in this package reads engagements.status,
+// so a parameter for it would be a knob no test has a reason to turn.
+func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email string) (clientID, engagementID string) {
 	t.Helper()
 
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -61,8 +63,8 @@ func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email, 
 		t.Fatalf("seed client: %v", err)
 	}
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, $3, 'birth') RETURNING id`,
-		clientID, practiceID, status,
+		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'intake', 'birth') RETURNING id`,
+		clientID, practiceID,
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)
 	}
@@ -89,7 +91,7 @@ func seedClientWithEngagement(t *testing.T, db *testdb.DB, identityUID string) (
 	t.Helper()
 
 	practiceID := seedPractice(t, db, "Test Practice")
-	clientID, engagementID = seedClientEngagement(t, db, practiceID, "Test Client", "client@example.com", "intake")
+	clientID, engagementID = seedClientEngagement(t, db, practiceID, "Test Client", "client@example.com")
 	seedPortalUser(t, db, identityUID, clientID)
 	return clientID, engagementID
 }

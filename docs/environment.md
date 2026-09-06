@@ -204,7 +204,7 @@ That is the whole list. No `process-*` endpoint has a job of its own any more, a
 
 The drain answers `200` only when every outbox succeeded, and `500` naming the ones that failed, so a single broken outbox turns the job red rather than hiding inside a green tick. Each failure is also logged as `outbox: drain <path>: <error>`.
 
-**Two outboxes have no nudge at all**, so the drain is the only thing that ever runs them: `process-staff-token-mail-outbox` and `process-staff-email-change-outbox` (#613 accepted ADR-0010's plain delay for both rather than wiring a nudge). Before #481 they had no Scheduler job either, which means they did not run outside a test or a hand invocation.
+**Four outboxes have no nudge at all**, so the drain is the only thing that ever runs them: `process-staff-token-mail-outbox` and `process-staff-email-change-outbox` (#613 accepted ADR-0010's plain delay for both rather than wiring a nudge), plus `process-portal-magic-link-outbox` (#617) and `process-portal-address-change-outbox` (#619), which follow the same acceptance — ADR-0026 carves no ADR-0010 exception for either mail. Before #481 the first two had no Scheduler job either, which means they did not run outside a test or a hand invocation.
 
 The three jobs that predated this — `process-portal-invite-outbox`, `process-site-build-outbox`, and #443's `verify-practice-pages` — are down to one: the first two were deleted as redundant once the drain covered them, and `verify-practice-pages` stays because it is not an outbox at all.
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -25,8 +26,14 @@ type EngagementSummary struct {
 // picker if they somehow have more than one (a Client can, in principle,
 // have Engagements at more than one Practice over time).
 type SessionResponse struct {
-	ClientID    string              `json:"clientId"`
-	Engagements []EngagementSummary `json:"engagements"`
+	ClientID string `json:"clientId"`
+	// SignInAddress is the address her Portal Account signs in with
+	// today (#619): the change screen has to show her which mailbox that
+	// is before asking for a new one, and this is the only read that
+	// tells it. Additive to the contract, and it discloses nothing --
+	// she just signed in with it.
+	SignInAddress string              `json:"signInAddress"`
+	Engagements   []EngagementSummary `json:"engagements"`
 }
 
 // SessionHandler resolves the verified caller to a Client (via
@@ -83,7 +90,17 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
 	}
 
-	return SessionResponse{ClientID: clientID, Engagements: engagements}, http.StatusOK, ""
+	// Read through portal_accounts_signin_lookup (00074), the same
+	// USING (true) SELECT policy the magic-link request reads through --
+	// portal_accounts carries no Practice or Client column to scope a
+	// policy of its own against.
+	var signInAddress string
+	if err := tx.QueryRowContext(ctx, `SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, identityUID).Scan(&signInAddress); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+	}
+
+	return SessionResponse{ClientID: clientID, SignInAddress: signInAddress, Engagements: engagements}, http.StatusOK, ""
 }
 
 func listEngagements(ctx context.Context, tx *sql.Tx, clientID string) ([]EngagementSummary, error) {

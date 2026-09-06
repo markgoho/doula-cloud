@@ -14,6 +14,26 @@ import "slices"
 // still lives in Diff, for a reader that needs it.
 const SubjectEngagement = "engagement"
 
+// ClientAction is one of the fixed action strings a write site records
+// against SubjectClient. Only #619's own action is named here so far --
+// client/events.go's created/updated/erased are that package's own
+// eventType, sealed diffs and all (ADR-0027), and are not in this
+// vocabulary.
+type ClientAction string
+
+// ActionPortalSignInAddressChanged records a Client moving her Portal
+// Account's sign-in address to a mailbox she has just proved she reads
+// (#619, ADR-0026). Always a ClientActor: it is hers to change, and no
+// Staff path reaches it.
+//
+// Its diff is deliberately empty. ADR-0015 makes the sign-in address her
+// login, not the Practice's contact detail -- writing either the old or
+// the new address into a ledger the Practice reads would put her private
+// login in front of it for the first time. The row answers "who did it
+// and when", which is what CLAUDE.md's audit-trail expectation asks of
+// it; the address itself is on portal_accounts, where it belongs.
+const ActionPortalSignInAddressChanged ClientAction = "portal_sign_in_address_changed"
+
 // SubjectClient is the subject_kind client/events.go's recordEvent writes
 // every create/update/erase event against (subject_id = client_id).
 // Exported for the same reason SubjectEngagement is: a caller building a

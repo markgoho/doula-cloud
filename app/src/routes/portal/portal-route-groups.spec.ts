@@ -30,9 +30,19 @@ describe('portal signed-out route group', () => {
 		expect(existsSync(new URL('(signed-out)/+layout.svelte', portalRoot))).toBe(true);
 	});
 
-	it('holds both screens a Client can reach with no session', () => {
+	it('holds every screen a Client can reach with no session', () => {
 		expect(existsSync(new URL('(signed-out)/login/+page.svelte', portalRoot))).toBe(true);
 		expect(existsSync(new URL('(signed-out)/accept-invite/+page.svelte', portalRoot))).toBe(true);
+		/*
+		 * #619's confirmation screen belongs here rather than under the
+		 * authenticated group: the link arrives in the *new* mailbox, which
+		 * may be read on a device that has never signed in, and the token is
+		 * the whole credential. Putting it behind a session would make the
+		 * link unusable exactly where it is meant to be opened.
+		 */
+		expect(existsSync(new URL('(signed-out)/confirm-sign-in-address/+page.svelte', portalRoot))).toBe(
+			true
+		);
 	});
 
 	it('leaves neither screen behind at the old ungrouped path', () => {

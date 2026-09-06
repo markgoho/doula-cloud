@@ -44,6 +44,15 @@ const (
 	// names. 15-minute expiry -- Mailgun's message logs (ADR-0012) hold
 	// the token longer than her inbox does, so the window stays short.
 	PurposeClientMagicLink Purpose = "client_magic_link"
+	// PurposeClientSignInAddressChange proves control of the *new*
+	// address a Client asked to move her Portal Account to (#619,
+	// ADR-0026): spending it moves portal_accounts.sign_in_address and
+	// mints no session -- the old address keeps signing her in until
+	// this is spent. 24-hour expiry: it grants no session and no
+	// credential on its own, the same reasoning
+	// PurposeStaffEmailVerification carries, and the mailbox it is
+	// proving may be one she only reads once a day.
+	PurposeClientSignInAddressChange Purpose = "client_sign_in_address_change"
 )
 
 // ErrInvalid is what Spend returns for a token that never existed, was

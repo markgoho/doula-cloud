@@ -122,7 +122,7 @@ func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
 	// A different, unrelated Client's Engagement: the caller is a known
 	// Client-portal user, but not linked to this Engagement.
 	otherPracticeID := seedPractice(t, db, "Other Practice")
-	_, otherEngagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com", "intake")
+	_, otherEngagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()

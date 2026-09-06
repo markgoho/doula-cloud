@@ -5,17 +5,20 @@ import (
 	"doula-cloud/api/internal/tasknudge"
 )
 
-// The three paths named more than once in this package: #613's two
-// un-nudged Staff auth mail outboxes and #443's doorless site rebuild.
-// Constants only because each is a fact two tests assert about, not
-// because a path is more special than the other eleven -- those stay
-// written out at their registration, where they read as the address they
-// are.
+// The paths named more than once in this package: #613's two un-nudged
+// Staff auth mail outboxes, #617's and #619's un-nudged portal mails,
+// and #443's doorless site rebuild. Constants only because each is a
+// fact two tests assert about, not because a path is more special than
+// the rest -- those stay written out at their registration, where they
+// read as the address they are.
 const (
 	staffTokenMailOutboxPath   = "/api/internal/notifications/process-staff-token-mail-outbox"
 	staffEmailChangeOutboxPath = "/api/internal/notifications/process-staff-email-change-outbox"
 	portalMagicLinkOutboxPath  = "/api/internal/notifications/process-portal-magic-link-outbox"
-	siteBuildOutboxPath        = "/api/internal/site/process-build-outbox"
+	// #619's confirmation mail, a second path rather than a mode of the
+	// one above: two outbox tables, two workers, two schedules.
+	portalAddressChangeOutboxPath = "/api/internal/notifications/process-portal-address-change-outbox"
+	siteBuildOutboxPath           = "/api/internal/site/process-build-outbox"
 )
 
 // outboxRegistrations is every outbox the BFF serves (ADR-0010), in one
@@ -126,6 +129,13 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Path:   portalMagicLinkOutboxPath,
 			Door:   outbox.NotificationDoor,
 			Worker: d.PortalMagicLinkWorker,
+		},
+		{
+			// #619's sign-in-address confirmation outbox. No Nudge, for
+			// the same reason as #617's above.
+			Path:   portalAddressChangeOutboxPath,
+			Door:   outbox.NotificationDoor,
+			Worker: d.PortalAddressChangeWorker,
 		},
 		{
 			// #394's Client-erasure outbox, under /api/internal/clients

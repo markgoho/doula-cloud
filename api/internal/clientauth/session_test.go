@@ -105,6 +105,12 @@ func TestSessionHandler_SingleEngagement(t *testing.T) {
 	if out.Engagements[0].PracticeName != "Test Practice" {
 		t.Fatalf("practiceName = %q, want %q", out.Engagements[0].PracticeName, "Test Practice")
 	}
+	// #619: the change screen has to show her which mailbox signs her in
+	// before it asks for another, and this is the read that tells it.
+	// seedPortalUser mints the address from the identifier.
+	if out.SignInAddress != identityUID+"@example.com" {
+		t.Fatalf("signInAddress = %q, want %q", out.SignInAddress, identityUID+"@example.com")
+	}
 }
 
 func TestSessionHandler_MultipleEngagements(t *testing.T) {
@@ -112,7 +118,7 @@ func TestSessionHandler_MultipleEngagements(t *testing.T) {
 	const identityUID = "multi-engagement-client"
 	practiceA := seedPractice(t, db, "Practice A")
 	practiceB := seedPractice(t, db, "Practice B")
-	clientID, engagementA := seedClientEngagement(t, db, practiceA, "Shared Client", "shared@example.com", "intake")
+	clientID, engagementA := seedClientEngagement(t, db, practiceA, "Shared Client", "shared@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'intake', 'birth')`,
 		clientID, practiceB,

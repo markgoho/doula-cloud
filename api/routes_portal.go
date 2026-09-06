@@ -39,6 +39,21 @@ func registerPortalRoutes(g *staffauth.GatedRouter, d Deps) {
 		ratelimit.Wrap(d.DB, "portal_magic_link_request", resetRequestRules)(clientauth.RequestMagicLinkHandler(d.DB)))
 	g.Write("POST /api/portal/magic-link",
 		ratelimit.Wrap(d.DB, "portal_magic_link", tokenSpendRules)(clientauth.RedeemMagicLinkHandler(d.DB, d.NudgeEnqueuer)))
+	// #619: she changes her own sign-in address, proved by a link to the
+	// new one. The request is authenticated by her live portal session
+	// and the spend is not -- the confirmation link is read in the new
+	// mailbox, which may be on a device she has never signed in on -- so
+	// the two carry different rate-limit shapes, and neither is
+	// Engagement-scoped: a Portal Account reaches Clients at more than
+	// one Practice (ADR-0015), so this is not clientauth.Middleware's
+	// surface. Not idempotency-keyed: the request mints a fresh token and
+	// resets the pending outbox row rather than sending a second mail
+	// (docs/api-design.md section 3), and the spend's own single-use
+	// token already makes a repeat a no-op.
+	g.Write("POST /api/portal/sign-in-address/request",
+		ratelimit.Wrap(d.DB, "portal_sign_in_address_request", portalAddressChangeRequestRules)(clientauth.RequestAddressChangeHandler(d.DB)))
+	g.Write("POST /api/portal/sign-in-address",
+		ratelimit.Wrap(d.DB, "portal_sign_in_address", tokenSpendRules)(clientauth.SpendAddressChangeHandler(d.DB)))
 	// Not rate limited: gated by authn.Begin's own __session cookie check,
 	// like staffauth.SessionHandler below -- there is no bootstrap window
 	// here for an attacker to spend.
