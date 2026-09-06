@@ -211,12 +211,13 @@ At roughly **30 seconds of agent wall-clock per act** — the Playwright interac
 
 ### What this costs at Stripe, for #780
 
-A test clock holds at most three Customers and is deleted 30 real days after creation ([#762](https://github.com/markgoho/doula-cloud/issues/762)), so `clocks = ceil(Customers ÷ 3)`, per connected account. The Customer count depends on one thing this file cannot settle: whether an Engagement in the provisioned tail can carry an Invoice without a Stripe Customer behind it.
+A test clock holds at most three Customers and is deleted 30 real days after creation ([#762](https://github.com/markgoho/doula-cloud/issues/762)), so `clocks = ceil(Customers ÷ 3)`, per connected account. There is no ceiling on the number of clocks worth designing around: 80 were made on one connected account with no refusal, measured during #780's triage.
 
-- **If it can**, only walked, invoiced Clients need one — about 23 across Rooted and Okonkwo, so **8 clocks**.
-- **If it cannot**, every Engagement that is ever invoiced needs one — up to 142 at Rooted and 15 at Okonkwo, so **53 clocks**.
+**The Customers are counted per Client, not per Engagement or per Invoice.** Since [#780](https://github.com/markgoho/doula-cloud/issues/780) a Client has at most one Stripe Customer per connected account, however many times she is billed. Before it, every Invoice raised its own, which is what made this sum look like a function of Engagements.
 
-Both are inside Stripe's limits and both issue in parallel at about 0.4 s each, so the difference is seconds, not a constraint. Which it is belongs to [#780](https://github.com/markgoho/doula-cloud/issues/780), which owns the Customer seam. This file states only that **the client book sizes the clocks, and the Practice count does not**.
+**The provisioned tail needs no Stripe Customer at all.** `invoices.stripe_customer_id` is nullable and `stripe_invoice_id` carries no live Stripe object behind it, and no persona ever observes a tail Invoice — in the product or in mail. So run one is sized by the **walked, invoiced Clients** only: about 23 across Rooted and Okonkwo, so **8 clocks**. That settles the question this section used to hand to #780.
+
+Eight clocks issue their advances in parallel at about 0.4 s each on top of one roughly six-second wait, so a jump costs one wait rather than one per clock. **The client book sizes the clocks, and the Practice count does not.**
 
 ## What this file does not decide
 

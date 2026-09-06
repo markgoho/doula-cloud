@@ -138,17 +138,28 @@ type Client interface {
 	// rather than trusting that, since
 	// practices.stripe_connect_requirements_due is NOT NULL.
 	RetrieveAccount(ctx context.Context, accountID string) (AccountStatus, error)
+	// CreateCustomer creates a Stripe Customer on accountID's connected
+	// account, carrying the Client's name and email and nothing else -- no
+	// metadata, per #78's no-PHI-to-Stripe rule.
+	//
+	// It is separate from CreateInvoice because a Client has at most one
+	// Stripe Customer per connected account (#780,
+	// client_stripe_customers): the caller resolves that mapping first and
+	// reaches this only when the Client has no Customer on the account
+	// yet. Nothing here decides whether a Customer is needed -- the
+	// database does, which is what lets a simulation run pre-create the
+	// Customer against a test clock and leave the product with nothing to
+	// create.
+	CreateCustomer(ctx context.Context, accountID, customerEmail, customerName string) (customerID string, err error)
 	// CreateInvoice creates a Stripe Invoice (draft, not yet finalized) on
-	// behalf of accountID's connected account, billing
-	// customerEmail/customerName amountCents for a single line item read
-	// as description (always InvoiceLineItemDescription in production) --
-	// no clinical content is ever included, per #78's no-PHI-to-Stripe
-	// rule. Returns the created Invoice's id.
-	// It returns the Stripe Customer it created alongside the Invoice.
-	// #394 (Client erasure) needs that id later, to delete the Customer
-	// and to root a Redaction Job at it; nothing persisted it before, so
-	// there was nothing for erasure to reach.
-	CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (invoiceID, customerID string, err error)
+	// behalf of accountID's connected account, billing customerID
+	// amountCents for a single line item read as description (always
+	// InvoiceLineItemDescription in production). Returns the created
+	// Invoice's id.
+	//
+	// customerID is resolved by the caller, never created here: see
+	// CreateCustomer.
+	CreateInvoice(ctx context.Context, accountID, customerID, description string, amountCents int64) (invoiceID string, err error)
 	// DeleteCustomer deletes customerID on accountID's connected account.
 	// #394's erasure calls it first, before any redaction: Stripe's own
 	// recommendation, because a deleted Customer cannot take on new

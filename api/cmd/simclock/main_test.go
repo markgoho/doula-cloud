@@ -53,3 +53,56 @@ func TestWaitForConnection_TimesOutWhenUnreachable(t *testing.T) {
 		t.Fatal("expected an error once the timeout elapses, got nil")
 	}
 }
+
+// TestRun_BadAllocateAndAdvanceUsage covers the argument validation on
+// the two subcommands that reach Stripe: the wrong number of arguments,
+// an account id that is not a Connect account id, and a duration Go
+// cannot parse are all refused before any connection is opened.
+func TestRun_BadAllocateAndAdvanceUsage(t *testing.T) {
+	cases := [][]string{
+		{modeAllocate},
+		{modeAllocate, "some-client"},
+		{modeAllocate, "some-client", "acct_ok", "extra"},
+		{modeAllocate, "some-client", "not-an-account"},
+		{modeAdvance},
+		{modeAdvance, "168h", "extra"},
+		{modeAdvance, "a fortnight"},
+	}
+	for _, args := range cases {
+		if err := run(args); err == nil {
+			t.Fatalf("run(%v): expected a usage error, got nil", args)
+		}
+	}
+}
+
+// TestRun_MissingStripeKey proves allocate and advance refuse before they
+// open a database connection when there is no Stripe key to use.
+func TestRun_MissingStripeKey(t *testing.T) {
+	t.Setenv("STRIPE_API_KEY", "")
+	t.Setenv("DATABASE_URL", "")
+
+	for _, args := range [][]string{
+		{modeAllocate, "some-client", "acct_ok"},
+		{modeAdvance, "168h"},
+	} {
+		if err := run(args); err == nil {
+			t.Fatalf("run(%v): expected an error when STRIPE_API_KEY is unset, got nil", args)
+		}
+	}
+}
+
+// TestRun_MissingDatabaseURLForStripeModes proves the same for the
+// database: a Stripe key alone is not enough to run either subcommand.
+func TestRun_MissingDatabaseURLForStripeModes(t *testing.T) {
+	t.Setenv("STRIPE_API_KEY", "sk_test_not_a_real_key")
+	t.Setenv("DATABASE_URL", "")
+
+	for _, args := range [][]string{
+		{modeAllocate, "some-client", "acct_ok"},
+		{modeAdvance, "168h"},
+	} {
+		if err := run(args); err == nil {
+			t.Fatalf("run(%v): expected an error when DATABASE_URL is unset, got nil", args)
+		}
+	}
+}

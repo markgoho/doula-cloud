@@ -90,6 +90,15 @@ func Install(ctx context.Context, db *sql.DB, migrateRole string) error {
 		}
 	}
 
+	// Unconditionally, not only on a fresh install: a run resumed against
+	// a kept volume already has the schema and skips the block above, and
+	// its clock bookkeeping still has to exist. Every statement is
+	// IF NOT EXISTS, so this is a no-op on a database that has them.
+	if _, err := db.ExecContext(ctx, clockTablesSQL); err != nil {
+		// coverage:ignore reason: DDL failure against a database that just accepted the schema, not exercised by unit tests
+		return fmt.Errorf("simclock: install clock tables: %w", err)
+	}
+
 	if _, err := db.ExecContext(ctx, fmt.Sprintf("ALTER ROLE %s SET search_path = %s", migrateRole, searchPath)); err != nil {
 		return fmt.Errorf("simclock: set search_path on %s: %w", migrateRole, err)
 	}

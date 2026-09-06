@@ -408,13 +408,18 @@ func unsettledInvoiceSummaries(ctx context.Context, tx *sql.Tx, clientID string)
 // transactions become redactable -- 90 days past the newest invoice
 // billed to *that* Customer, not past her newest invoice overall.
 //
-// The distinction is the whole point. payments.CreateInvoice makes a
-// fresh Customer per invoice, so a Client with two invoices six months
-// apart has two Customers with two different eligibility dates. Reading
-// one global maximum would hold the older Customer's redaction hostage
-// to the newer one turning 90 -- and #394 asks for a job "against every
-// one of her invoices/charges that is 90+ days old", each judged on its
-// own age.
+// The distinction is the whole point. A Client can hold more than one
+// Customer with more than one eligibility date, so reading one global
+// maximum would hold the older Customer's redaction hostage to the newer
+// one turning 90 -- and #394 asks for a job "against every one of her
+// invoices/charges that is 90+ days old", each judged on its own age.
+//
+// She holds more than one for two reasons. Historically, every Invoice
+// raised a fresh Customer, so a Client billed six times before #780 has
+// six of them recorded on six invoices rows. Since #780 she has one per
+// connected account, recorded in client_stripe_customers -- and a
+// Practice that re-connects under a new Stripe account gets a second
+// mapping row. Erasure has to reach all of them, from both places.
 type stripeCustomer struct {
 	id         string
 	eligibleAt time.Time
@@ -429,13 +434,24 @@ type stripeCustomer struct {
 // A Client with no invoices has no Stripe presence at all: no rows, no
 // eligibility date, nothing to wait for.
 func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string, now time.Time) ([]string, *time.Time, error) {
+	// The union of both places a Customer of hers can be recorded, grouped
+	// so an id recorded in both is deleted once, not twice. A mapping row
+	// with no invoice behind it still has a date to age from -- when the
+	// Customer was made -- so a Customer allocated but never billed is
+	// still redactable on a schedule rather than never.
 	rows, err := tx.QueryContext(ctx,
-		`SELECT i.stripe_customer_id, max(i.created_at)
-		   FROM invoices i
-		   JOIN contracts ct ON ct.id = i.contract_id
-		   JOIN engagements e ON e.id = ct.engagement_id
-		  WHERE e.client_id = $1 AND i.stripe_customer_id IS NOT NULL
-		  GROUP BY i.stripe_customer_id`,
+		`SELECT customer_id, max(dated_at) FROM (
+		     SELECT i.stripe_customer_id AS customer_id, i.created_at AS dated_at
+		       FROM invoices i
+		       JOIN contracts ct ON ct.id = i.contract_id
+		       JOIN engagements e ON e.id = ct.engagement_id
+		      WHERE e.client_id = $1 AND i.stripe_customer_id IS NOT NULL
+		     UNION ALL
+		     SELECT m.stripe_customer_id, m.created_at
+		       FROM client_stripe_customers m
+		      WHERE m.client_id = $1
+		 ) hers
+		 GROUP BY customer_id`,
 		clientID,
 	)
 	if err != nil {
@@ -447,12 +463,12 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 	var customers []stripeCustomer
 	for rows.Next() {
 		var c stripeCustomer
-		var newestInvoice time.Time
-		if err := rows.Scan(&c.id, &newestInvoice); err != nil {
+		var newestDate time.Time
+		if err := rows.Scan(&c.id, &newestDate); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, nil, fmt.Errorf("client: scan stripe customer: %w", err)
 		}
-		c.eligibleAt = newestInvoice.Add(StripeRedactionFloor)
+		c.eligibleAt = newestDate.Add(StripeRedactionFloor)
 		customers = append(customers, c)
 	}
 	if err := rows.Err(); err != nil {

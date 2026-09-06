@@ -105,7 +105,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
-		clientName, clientEmail, err := fetchClientContact(r.Context(), tx, engagementID)
+		clientID, clientName, clientEmail, err := fetchClientContact(r.Context(), tx, engagementID)
 		if errors.Is(err, errClientNoEmail) {
 			apierr.WriteError(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
 			return
@@ -116,7 +116,21 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
-		stripeInvoiceID, stripeCustomerID, err := client.CreateInvoice(r.Context(), accountID, clientEmail, clientName, InvoiceLineItemDescription, req.AmountCents)
+		staffID, _ := staffauth.StaffID(r.Context())
+		stripeCustomerID, err := resolveStripeCustomer(r.Context(), tx, client, stripeCustomerFor{
+			PracticeID: practiceID,
+			ClientID:   clientID,
+			AccountID:  accountID,
+			Email:      clientEmail,
+			Name:       clientName,
+			StaffID:    staffID,
+		})
+		if err != nil {
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		stripeInvoiceID, err := client.CreateInvoice(r.Context(), accountID, stripeCustomerID, InvoiceLineItemDescription, req.AmountCents)
 		if err != nil {
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -149,7 +163,6 @@ func PostInvoiceHandler(client Client) http.Handler {
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
 		diff, err := json.Marshal(map[string]int64{"amountCents": req.AmountCents})
 		if err != nil {
 			// coverage:ignore reason: a map of one int64 always marshals cleanly, not exercised by unit tests
@@ -349,22 +362,96 @@ var errClientNoEmail = errors.New("payments: client has no email on file")
 // #78's no-PHI-to-Stripe rule (no visit, Care Plan, Birth Plan, or other
 // clinical content). name uses client.LegalName -- the document name
 // Stripe invoicing reads, per ADR-0017's read table.
-func fetchClientContact(ctx context.Context, tx *sql.Tx, engagementID string) (name, email string, err error) {
+func fetchClientContact(ctx context.Context, tx *sql.Tx, engagementID string) (clientID, name, email string, err error) {
 	var givenName string
 	var familyName, clientEmail sql.NullString
 	err = tx.QueryRowContext(ctx,
-		`SELECT c.given_name, c.family_name, c.email
+		`SELECT c.id, c.given_name, c.family_name, c.email
 		 FROM clients c JOIN engagements e ON e.client_id = c.id WHERE e.id = $1`,
 		engagementID,
-	).Scan(&givenName, &familyName, &clientEmail)
+	).Scan(&clientID, &givenName, &familyName, &clientEmail)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceEngagement already proved the Engagement (and therefore its Client) exists
 	if err != nil {
-		return "", "", fmt.Errorf("payments: fetch client contact: %w", err)
+		return "", "", "", fmt.Errorf("payments: fetch client contact: %w", err)
 	}
 	if !clientEmail.Valid || clientEmail.String == "" {
-		return "", "", errClientNoEmail
+		return "", "", "", errClientNoEmail
 	}
-	return client.LegalName(givenName, familyName.String), clientEmail.String, nil
+	return clientID, client.LegalName(givenName, familyName.String), clientEmail.String, nil
+}
+
+// stripeCustomerFor is everything resolveStripeCustomer needs to find, or
+// failing that make, one Client's Stripe Customer on one connected
+// account. Grouped into a struct rather than seven positional arguments,
+// four of which are strings that would sit next to each other.
+type stripeCustomerFor struct {
+	PracticeID string
+	ClientID   string
+	AccountID  string
+	Email      string
+	Name       string
+	// StaffID is who is raising the Invoice that needed the Customer --
+	// recorded on the mapping row as who caused it to exist. Empty only
+	// where staffauth did not set one, which the middleware guarantees it
+	// does.
+	StaffID string
+}
+
+// resolveStripeCustomer returns the Stripe Customer that bills spec.ClientID
+// on spec.AccountID, creating it at Stripe and recording the mapping only
+// when the Client has none there yet (#780). A Client has at most one
+// Stripe Customer per connected account: her second Invoice bills the
+// Customer her first one made, and her whole billing history sits under
+// one Customer rather than one per bill.
+//
+// Because the mapping is a row rather than something the product infers,
+// a simulation run can write it first -- with a Customer it created
+// against a Stripe test clock -- and this finds a Customer and creates
+// nothing. That is why no test-only parameter exists on any api/ path.
+//
+// The Client row is locked for the rest of the request's transaction
+// first, so two concurrent Invoices for the same Client cannot both miss
+// the mapping and both create a Customer -- the same race-prevention
+// shape as billing.PostPurchaseHandler's Practice lock.
+func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client, spec stripeCustomerFor) (string, error) {
+	if _, err := tx.ExecContext(ctx, `SELECT id FROM clients WHERE id = $1 FOR UPDATE`, spec.ClientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", fmt.Errorf("payments: lock client for customer resolution: %w", err)
+	}
+
+	var customerID string
+	err := tx.QueryRowContext(ctx,
+		`SELECT stripe_customer_id FROM client_stripe_customers
+		  WHERE client_id = $1 AND stripe_account_id = $2`,
+		spec.ClientID, spec.AccountID,
+	).Scan(&customerID)
+	if err == nil {
+		return customerID, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", fmt.Errorf("payments: read stripe customer mapping: %w", err)
+	}
+
+	customerID, err = stripeClient.CreateCustomer(ctx, spec.AccountID, spec.Email, spec.Name)
+	if err != nil {
+		return "", fmt.Errorf("payments: create stripe customer: %w", err)
+	}
+
+	var staffID sql.NullString
+	if spec.StaffID != "" {
+		staffID = sql.NullString{String: spec.StaffID, Valid: true}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO client_stripe_customers
+		     (practice_id, client_id, stripe_account_id, stripe_customer_id, created_by_staff_id)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		spec.PracticeID, spec.ClientID, spec.AccountID, customerID, staffID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the row above is locked, so the UNIQUE constraint cannot be raced
+		return "", fmt.Errorf("payments: record stripe customer mapping: %w", err)
+	}
+	return customerID, nil
 }
 
 // writeJSON encodes body as the response, setting the Content-Type header

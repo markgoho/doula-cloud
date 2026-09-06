@@ -301,8 +301,21 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	if call.AccountID != accountID {
 		t.Fatalf("CreateInvoice accountID = %q, want %q", call.AccountID, accountID)
 	}
-	if call.CustomerEmail != "jane@example.com" || call.CustomerName != "Jane Client" {
-		t.Fatalf("CreateInvoice customer = (%q, %q), want (%q, %q)", call.CustomerName, call.CustomerEmail, "Jane Client", "jane@example.com")
+	// The Customer is resolved before the Invoice is raised (#780), and
+	// her name and email -- and nothing else, no clinical field -- are all
+	// that reach Stripe to make it.
+	if len(client.CreateCustomerCalls) != 1 {
+		t.Fatalf("CreateCustomer calls = %d, want 1", len(client.CreateCustomerCalls))
+	}
+	cust := client.CreateCustomerCalls[0]
+	if cust.AccountID != accountID {
+		t.Fatalf("CreateCustomer accountID = %q, want %q", cust.AccountID, accountID)
+	}
+	if cust.CustomerEmail != "jane@example.com" || cust.CustomerName != "Jane Client" {
+		t.Fatalf("CreateCustomer customer = (%q, %q), want (%q, %q)", cust.CustomerName, cust.CustomerEmail, "Jane Client", "jane@example.com")
+	}
+	if call.CustomerID == "" {
+		t.Fatal("CreateInvoice customerID is empty, want the resolved Customer")
 	}
 	if call.Description != payments.InvoiceLineItemDescription {
 		t.Fatalf("CreateInvoice description = %q, want %q", call.Description, payments.InvoiceLineItemDescription)
