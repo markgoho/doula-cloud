@@ -33,6 +33,9 @@ export async function seedFoundingOwner(
 	fields: FoundingOwnerFields = {}
 ): Promise<SeededFoundingOwner> {
 	const { practiceName = 'Riverside Doulas', staffName = 'Jamie Owner', workState = 'NY' } = fields;
+	// Random suffix, not just Date.now(): millisecond-only uniqueness
+	// collides across parallel Playwright workers -- confirmed as a real,
+	// intermittent failure across this suite, not a theoretical one.
 	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const email = `staff-${unique}@example.com`;
 

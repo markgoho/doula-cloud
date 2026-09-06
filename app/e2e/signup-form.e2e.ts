@@ -12,7 +12,7 @@ import { expect, test } from '@playwright/test';
 // created. The IndexedDB/cookie checks below are about the signup
 // exchange itself, not about which screen she lands on afterward.
 test('Signing up through the /signup form drives the new Owner into MFA enrolment', async ({ page }) => {
-	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
+	// Random suffix, not just Date.now(): see staffSignup.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
 	const email = `signup-form-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const password = 'password123';

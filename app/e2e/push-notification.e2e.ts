@@ -25,7 +25,7 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	request,
 	context
 }) => {
-	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
+	// Random suffix, not just Date.now(): see staffSignup.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
 	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 

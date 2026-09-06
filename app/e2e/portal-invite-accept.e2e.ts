@@ -17,7 +17,7 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 	page,
 	request
 }) => {
-	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
+	// Random suffix, not just Date.now(): see staffSignup.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
 	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
