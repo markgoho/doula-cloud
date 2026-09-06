@@ -1,10 +1,12 @@
 package client_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
@@ -280,4 +282,17 @@ func outboxStatus(t *testing.T, db *testdb.DB, outboxID string) (status, lastErr
 		lastError, _ = le.(string)
 	}
 	return status, lastError
+}
+
+// readAPIError decodes one docs/api-design.md section 7 error envelope.
+// A test that reads only the status cannot tell two refusals of the same
+// status apart -- which is exactly what #692 makes the erasure endpoint
+// say in its code field, so the assertion has to read the body.
+func readAPIError(t *testing.T, resp *http.Response) apierr.APIError {
+	t.Helper()
+	var out apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode api error: %v", err)
+	}
+	return out
 }

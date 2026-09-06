@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/staffauth"
@@ -268,6 +269,13 @@ func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusConflict)
+	}
+	// CONFLICT is what an already-erased Client is: the resource is
+	// already in the state the caller asked for. Asserted here so it
+	// stays the chosen code rather than collapsing back onto whatever
+	// the unsettled-invoice refusal happens to return.
+	if got := readAPIError(t, second); got.Code != string(apierr.CodeConflict) {
+		t.Fatalf("second code = %q, want %q", got.Code, apierr.CodeConflict)
 	}
 }
 
