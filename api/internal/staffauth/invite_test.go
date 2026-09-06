@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -28,10 +29,9 @@ func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 	t.Helper()
 	enq = &recordingEnqueuer{}
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/staff/invitations",
-		staffauth.Middleware(db.App)(staffauth.InviteHandler(enq)))
-	mux.Handle("POST /practices/{practiceId}/staff/invitations/{invitationId}/revoke",
-		staffauth.Middleware(db.App)(staffauth.RevokeInvitationHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), enq)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid), enq
 }
 
@@ -41,7 +41,7 @@ func postInvite(t *testing.T, srv *httptest.Server, session, practiceID string, 
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	return doInviteRequest(t, srv, session, "/practices/"+practiceID+"/staff/invitations", payload)
+	return doInviteRequest(t, srv, session, "/api/practices/"+practiceID+"/staff/invitations", payload)
 }
 
 func doInviteRequest(t *testing.T, srv *httptest.Server, session, path string, payload []byte) *http.Response {
@@ -246,7 +246,7 @@ func TestInviteHandler_Rejects(t *testing.T) {
 	}
 
 	t.Run("invalid body", func(t *testing.T) {
-		resp := doInviteRequest(t, srv, session, "/practices/"+practiceID+"/staff/invitations", []byte("not json"))
+		resp := doInviteRequest(t, srv, session, "/api/practices/"+practiceID+"/staff/invitations", []byte("not json"))
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -282,7 +282,7 @@ func TestRevokeInvitationHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	resp := doInviteRequest(t, srv, session,
-		"/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
@@ -311,7 +311,7 @@ func TestRevokeInvitationHandler_NotFound(t *testing.T) {
 
 	t.Run("no such invitation", func(t *testing.T) {
 		resp := doInviteRequest(t, srv, session,
-			"/practices/"+practiceID+"/staff/invitations/"+emptyUUID+"/revoke", nil)
+			"/api/practices/"+practiceID+"/staff/invitations/"+emptyUUID+"/revoke", nil)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -320,7 +320,7 @@ func TestRevokeInvitationHandler_NotFound(t *testing.T) {
 
 	t.Run("malformed id", func(t *testing.T) {
 		resp := doInviteRequest(t, srv, session,
-			"/practices/"+practiceID+"/staff/invitations/not-a-uuid/revoke", nil)
+			"/api/practices/"+practiceID+"/staff/invitations/not-a-uuid/revoke", nil)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -335,7 +335,7 @@ func TestRevokeInvitationHandler_NotFound(t *testing.T) {
 			t.Fatalf("pre-revoke: %v", err)
 		}
 		resp := doInviteRequest(t, srv, session,
-			"/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+			"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -353,7 +353,7 @@ func TestRevokeInvitationHandler_RequiresConfirmation(t *testing.T) {
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+		srv.URL+"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestRevokeInvitationHandler_NonOwnerForbidden(t *testing.T) {
 	defer srv.Close()
 
 	resp := doInviteRequest(t, srv, session,
-		"/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {

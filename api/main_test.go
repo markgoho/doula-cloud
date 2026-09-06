@@ -373,7 +373,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	if landingResp.StatusCode != http.StatusOK {
 		t.Fatalf("landing status = %d, want %d", landingResp.StatusCode, http.StatusOK)
 	}
-	var landing practiceSessionResponse
+	var landing staffauth.PracticeSessionResponse
 	if err := json.NewDecoder(landingResp.Body).Decode(&landing); err != nil {
 		t.Fatalf("decode landing response: %v", err)
 	}
@@ -394,7 +394,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 }
 
 // TestRoutes_PracticeSessionContractorFlag confirms
-// practiceSessionHandler's IsContractor field, which #501's contractor
+// staffauth.PracticeSessionHandler's IsContractor field, which #501's contractor
 // Add-a-Client door reads to branch before ever calling
 // client.SearchHandler -- straight fixtures rather than a full
 // signup/invite/accept round trip, since only the response's employment-
@@ -422,7 +422,7 @@ func TestRoutes_PracticeSessionContractorFlag(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	var landing practiceSessionResponse
+	var landing staffauth.PracticeSessionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&landing); err != nil {
 		t.Fatalf("decode landing response: %v", err)
 	}

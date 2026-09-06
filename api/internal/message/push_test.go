@@ -40,7 +40,7 @@ func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Hi, checking in."})
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -86,7 +86,7 @@ func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "Question about my visit."})
-	resp := authedPost(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -127,7 +127,7 @@ func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "no subscribers yet"})
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -156,7 +156,7 @@ func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "still gets created"})
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -186,7 +186,7 @@ func TestCreateHandler_MutedEngagementReceivesNoClientPush(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "should not push"})
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -214,7 +214,7 @@ func TestCreateHandler_DoesNotNotifyStaffSubscriptionsForClientRecipient(t *test
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "checking population filter"})
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)

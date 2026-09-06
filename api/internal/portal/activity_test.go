@@ -9,21 +9,15 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activityfeed"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clientauth"
-	"doula-cloud/api/internal/portal"
 	"doula-cloud/api/internal/testdb"
 )
 
-// activityServer mirrors newServer but also mounts ActivityHandler --
-// kept separate so detail_test.go's own server stays exactly the route
-// main.go wires for DetailHandler (see #706 for the standing per-package
-// duplication this repeats).
+// activityServer is newServer under another name: portal.Mount already
+// registers ActivityHandler alongside DetailHandler, so both test files
+// share one mount.
 func activityServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	mux.Handle("GET /portal/engagements/{engagementId}/activity",
-		clientauth.Middleware(db.App)(portal.ActivityHandler()))
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return newServer(t, db, uid)
 }
 
 // ownerRole avoids goconst flagging the literal at every seed call below.
@@ -115,7 +109,7 @@ func TestActivityHandler_ReturnsOwnEngagementActivity(t *testing.T) {
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedActivityGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/activity")
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -149,7 +143,7 @@ func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedActivityGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/activity")
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -182,7 +176,7 @@ func TestActivityHandler_KeepsMoneyEntries(t *testing.T) {
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedActivityGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/activity")
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -210,7 +204,7 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedActivityGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/activity")
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -237,7 +231,7 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
 
-	firstResp := authedActivityGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/activity")
+	firstResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
 	defer firstResp.Body.Close()
 	var first activityfeed.ListResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -248,7 +242,7 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedActivityGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
+	secondResp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second activityfeed.ListResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
@@ -270,7 +264,7 @@ func TestActivityHandler_InvalidCursorRejected(t *testing.T) {
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedActivityGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)

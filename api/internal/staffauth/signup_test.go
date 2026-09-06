@@ -11,9 +11,13 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -58,7 +62,9 @@ func sessionCookie(resp *http.Response) *http.Cookie {
 
 func newSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
@@ -68,7 +74,7 @@ func postSignup(t *testing.T, srv *httptest.Server, token string, body any) *htt
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/signup", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -120,7 +126,7 @@ func TestSignupHandler_InvalidBody(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "bad-body-uid"}, db)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/signup", bytes.NewReader([]byte("not json")))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader([]byte("not json")))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -347,11 +353,10 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	verifier := authntest.Verifier{UID: roundtripOwnerUID, Email: jamieEmail}
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
-	mux.Handle("GET /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(db.App)(plans.GetTemplateHandler()))
-	mux.Handle("PUT /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(db.App)(plans.PutTemplateHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
+	plans.Mount(g, ir, db.App)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -370,7 +375,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 
 	for _, planType := range []string{"care_plan", "birth_plan"} {
 		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-			srv.URL+"/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, nil)
+			srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, nil)
 		if err != nil {
 			t.Fatalf("build GET request: %v", err)
 		}
@@ -396,7 +401,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 			t.Fatalf("marshal seeded %s fields: %v", planType, err)
 		}
 		putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-			srv.URL+"/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, bytes.NewReader(putBody))
+			srv.URL+"/api/practices/"+signedUp.PracticeID+"/plan-templates/"+planType, bytes.NewReader(putBody))
 		if err != nil {
 			t.Fatalf("build PUT request: %v", err)
 		}
@@ -454,11 +459,10 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	verifier := authntest.Verifier{UID: ownerUID, Email: jamieEmail}
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/signup", staffauth.SignupHandler(verifier, db.App))
-	mux.Handle("GET /practices/{practiceId}/contract-template",
-		staffauth.Middleware(db.App)(contracts.GetTemplateHandler()))
-	mux.Handle("PUT /practices/{practiceId}/contract-template",
-		staffauth.Middleware(db.App)(contracts.PutTemplateHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
+	contracts.Mount(g, ir, db.App, objectstore.NewMemoryStore(), push.NewFakePusher())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -476,7 +480,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	}
 
 	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		srv.URL+"/practices/"+signedUp.PracticeID+"/contract-template", nil)
+		srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", nil)
 	if err != nil {
 		t.Fatalf("build GET request: %v", err)
 	}
@@ -502,7 +506,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 		t.Fatalf("marshal seeded prose: %v", err)
 	}
 	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/practices/"+signedUp.PracticeID+"/contract-template", bytes.NewReader(putBody))
+		srv.URL+"/api/practices/"+signedUp.PracticeID+"/contract-template", bytes.NewReader(putBody))
 	if err != nil {
 		t.Fatalf("build PUT request: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -116,22 +117,15 @@ func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSO
 func newPlanServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(db.App)(plans.GetTemplateHandler()))
-	mux.Handle("PUT /practices/{practiceId}/plan-templates/{planType}",
-		staffauth.Middleware(db.App)(plans.PutTemplateHandler()))
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db.App)(plans.PostInstanceHandler()))
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db.App)(plans.GetInstanceHandler()))
-	mux.Handle("PUT /practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		staffauth.Middleware(db.App)(plans.PutInstanceHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	plans.Mount(g, ir, db.App)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID, planType string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/plan-templates/"+planType, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -145,7 +139,7 @@ func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID,
 
 func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID, planType string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/practices/"+practiceID+"/plan-templates/"+planType, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/plan-templates/"+planType, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -168,7 +162,7 @@ func putTemplate(t *testing.T, srv *httptest.Server, session string, practiceID,
 }
 
 func instancePath(practiceID, engagementID, planType string) string {
-	return "/practices/" + practiceID + "/engagements/" + engagementID + "/plans/" + planType
+	return "/api/practices/" + practiceID + "/engagements/" + engagementID + "/plans/" + planType
 }
 
 func postInstance(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, planType string) *http.Response {

@@ -24,7 +24,7 @@ func TestRequestHandler_DoulaCreatesPendingRequestAndMailsOwnersAndAdmins(t *tes
 	srv, session := newServer(t, db, "doula-1", enq)
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	var out engagementrequest.RequestResponse
 	decode(t, resp, http.StatusCreated, &out)
@@ -52,7 +52,7 @@ func TestRequestHandler_ContractorForbidden(t *testing.T) {
 	srv, session := newServer(t, db, "contractor-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	expectStatus(t, resp, http.StatusForbidden)
 }
@@ -70,11 +70,11 @@ func TestRequestHandler_DuplicatePendingSameKindRefused(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	first := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	expectStatus(t, first, http.StatusCreated)
 
-	second := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	second := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	expectStatus(t, second, http.StatusConflict)
 }
@@ -88,11 +88,11 @@ func TestRequestHandler_DifferentKindAllowed(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	first := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	expectStatus(t, first, http.StatusCreated)
 
-	second := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	second := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindPostpartum, DueDate: testDueDate})
 	expectStatus(t, second, http.StatusCreated)
 }
@@ -109,7 +109,7 @@ func TestRequestHandler_LiveEngagementWarns(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindPostpartum, DueDate: testDueDate})
 	var out engagementrequest.RequestResponse
 	decode(t, resp, http.StatusCreated, &out)
@@ -131,7 +131,7 @@ func TestRequestHandler_SoloOwnerCollapsesToApprovedAndMailsNobody(t *testing.T)
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	var out engagementrequest.RequestResponse
 	decode(t, resp, http.StatusCreated, &out)
@@ -167,7 +167,7 @@ func TestRequestHandler_SoloOwnerNoCreditsLeavesNothingBehind(t *testing.T) {
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	expectStatus(t, resp, http.StatusPaymentRequired)
 
@@ -195,7 +195,7 @@ func TestRequestHandler_ClientNotFound(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+otherClientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+otherClientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	expectStatus(t, resp, http.StatusNotFound)
 }
@@ -211,7 +211,7 @@ func TestRequestHandler_InvalidKindRejected(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: "adoption", DueDate: testDueDate})
 	expectStatus(t, resp, http.StatusBadRequest)
 }
@@ -226,7 +226,7 @@ func TestRequestHandler_InvalidClientIDRejected(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/not-a-uuid/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/not-a-uuid/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	expectStatus(t, resp, http.StatusBadRequest)
 }
@@ -241,7 +241,7 @@ func TestRequestHandler_InvalidBodyRejected(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session, "not json")
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session, "not json")
 	expectStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -256,7 +256,7 @@ func TestRequestHandler_NoDueDateAllowed(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindPostpartum})
 	expectStatus(t, resp, http.StatusCreated)
 }
@@ -272,7 +272,7 @@ func TestRequestHandler_InvalidDueDateRejected(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: "not-a-date"})
 	expectStatus(t, resp, http.StatusBadRequest)
 }
@@ -291,7 +291,7 @@ func TestRequestHandler_SoloOwnerCollapseWarnsOnLiveEngagement(t *testing.T) {
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindPostpartum, DueDate: testDueDate})
 	var out engagementrequest.RequestResponse
 	decode(t, resp, http.StatusCreated, &out)

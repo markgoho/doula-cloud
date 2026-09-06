@@ -13,7 +13,7 @@ import (
 )
 
 func voidContractURL(srv *httptest.Server, practiceID, engagementID string) string {
-	return srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/contract/void"
+	return srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract/void"
 }
 
 func postVoidContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {

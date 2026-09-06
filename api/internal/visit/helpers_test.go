@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
@@ -14,21 +15,20 @@ import (
 const (
 	doulaRole = "doula"
 	adminRole = "admin"
+	// grantedOrigin is named once so golangci-lint's goconst check doesn't
+	// see three independent "granted" literals across this package's tests.
+	grantedOrigin = "granted"
 )
 
-// newServer mounts the same routes main.go wires up for this package,
-// behind staffauth.Middleware, and seeds a live session for uid --
-// returning the token its __session cookie carries, since #151 the
-// cookie is the only credential the middleware reads.
+// newServer mounts this package's whole surface through visit.Mount, the
+// same call main.go makes on the real GatedRouter and idempotency.Router,
+// and seeds a live session for uid.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(db.App)(visit.ListHandler()))
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(db.App)(visit.CreateHandler()))
-	mux.Handle("PATCH /practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
-		staffauth.Middleware(db.App)(visit.ReassignHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	visit.Mount(g, ir)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

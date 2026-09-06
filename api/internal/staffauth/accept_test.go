@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -43,7 +45,7 @@ func postAccept(t *testing.T, srv *httptest.Server, body staffauth.AcceptInviteR
 
 func postAcceptRaw(t *testing.T, srv *httptest.Server, payload []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/accept-invite", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/accept-invite", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -70,8 +72,9 @@ func newAcceptServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.S
 func newAcceptServerWithAccounts(t *testing.T, db *testdb.DB, uid, email string, accounts *authntest.FakeAccountManager) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/accept-invite",
-		staffauth.AcceptInviteHandler(authntest.Verifier{UID: uid, Email: email}, accounts, db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: uid, Email: email}, accounts, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
@@ -393,7 +396,7 @@ func TestAcceptInviteHandler_NoCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/accept-invite", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/accept-invite", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

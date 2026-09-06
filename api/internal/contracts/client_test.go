@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -82,18 +84,15 @@ func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 func newPortalServerWithStore(t *testing.T, db *testdb.DB, uid string, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /portal/engagements/{engagementId}/contract",
-		clientauth.Middleware(db.App)(contracts.ClientGetContractHandler()))
-	mux.Handle("POST /portal/engagements/{engagementId}/contract/sign",
-		clientauth.Middleware(db.App)(contracts.ClientPostSignContractHandler(store)))
-	mux.Handle("GET /portal/engagements/{engagementId}/contract/pdf",
-		clientauth.Middleware(db.App)(contracts.ClientGetSignedContractPDFHandler(store)))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	contracts.Mount(g, ir, db.App, store, push.NewFakePusher())
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getClientContract(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/contract", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/contract", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -107,7 +106,7 @@ func getClientContract(t *testing.T, srv *httptest.Server, session string, engag
 
 func getClientContractPDFRaw(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/contract/pdf", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/contract/pdf", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

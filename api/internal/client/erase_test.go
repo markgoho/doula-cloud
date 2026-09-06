@@ -9,30 +9,9 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
-
-// newErasureServer mounts the erasure endpoint alongside the reads an
-// erasure test needs to prove its effects -- the detail read (for the
-// redacted record and the unreadable history), the edit (for the
-// post-erasure refusal), and #691's eligibility precheck.
-func newErasureServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/clients/{clientId}/erasure",
-		staffauth.Middleware(db.App)(client.EraseHandler(tasknudge.NoOpEnqueuer{})))
-	mux.Handle("GET /practices/{practiceId}/clients/{clientId}/erasure",
-		staffauth.Middleware(db.App)(client.EraseEligibilityHandler()))
-	mux.Handle("GET /practices/{practiceId}/clients/{clientId}",
-		staffauth.Middleware(db.App)(client.DetailHandler()))
-	mux.Handle("PUT /practices/{practiceId}/clients/{clientId}",
-		staffauth.Middleware(db.App)(client.EditHandler()))
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
 
 // seedOwner seeds a Practice with an Owner at it, the only seat erasure
 // admits.
@@ -68,7 +47,7 @@ func seedFullClient(t *testing.T, db *testdb.DB, practiceID, staffID string) (cl
 // null out, so the sealed diff really does hold personal data.
 func editOnce(t *testing.T, session string, srv *httptest.Server, practiceID, clientID string) {
 	t.Helper()
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{
 			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199",
 		}, Override: true})
@@ -80,7 +59,7 @@ func editOnce(t *testing.T, session string, srv *httptest.Server, practiceID, cl
 
 func postErasure(t *testing.T, session string, srv *httptest.Server, practiceID, clientID string) *http.Response {
 	t.Helper()
-	return authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/erasure", nil)
+	return authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/erasure", nil)
 }
 
 // TestEraseHandler_RedactsTheRecordInPlace is the central acceptance
@@ -92,7 +71,7 @@ func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
@@ -150,7 +129,7 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	editOnce(t, session, srv, practiceID, clientID)
@@ -228,7 +207,7 @@ func TestEraseHandler_RefusesEveryRoleButOwner(t *testing.T) {
 			staffID := testdb.SeedStaffAtPractice(t, db, practiceID, uid, roles, "employee")
 			clientID := seedFullClient(t, db, practiceID, staffID)
 
-			srv, session := newErasureServer(t, db, uid)
+			srv, session := newServer(t, db, uid)
 			defer srv.Close()
 
 			resp := postErasure(t, session, srv, practiceID, clientID)
@@ -257,7 +236,7 @@ func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	first := postErasure(t, session, srv, practiceID, clientID)
@@ -288,7 +267,7 @@ func TestEraseHandler_RefusesAnUnknownClient(t *testing.T) {
 	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "other-owner", []string{ownerRole}, "employee")
 	otherClientID := seedFullClient(t, db, otherPracticeID, otherStaffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, otherClientID)
@@ -303,7 +282,7 @@ func TestEraseHandler_RefusesAMalformedClientID(t *testing.T) {
 	const uid = "owner-erase-bad-id"
 	practiceID, _ := seedOwner(t, db, uid)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, "not-a-uuid")
@@ -321,7 +300,7 @@ func TestEditHandler_RefusesAnErasedClient(t *testing.T) {
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	erased := postErasure(t, session, srv, practiceID, clientID)
@@ -330,7 +309,7 @@ func TestEditHandler_RefusesAnErasedClient(t *testing.T) {
 		t.Fatalf("erase status = %d, want %d", erased.StatusCode, http.StatusOK)
 	}
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Ada"}, Override: true})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
@@ -375,7 +354,7 @@ func readActivityRows(t *testing.T, db *testdb.DB, clientID string) []string {
 
 func readDetail(t *testing.T, session string, srv *httptest.Server, practiceID, clientID string) client.DetailResponse {
 	t.Helper()
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
 	var out client.DetailResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {

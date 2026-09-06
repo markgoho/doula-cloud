@@ -23,7 +23,7 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	defer srv.Close()
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+cursor)
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+cursor)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
@@ -48,7 +48,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer firstResp.Body.Close()
 	var first visit.ListResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -59,7 +59,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second visit.ListResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
@@ -119,7 +119,7 @@ func TestCreateHandler_Success(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -144,7 +144,7 @@ func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -162,7 +162,7 @@ func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -178,7 +178,7 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -196,7 +196,7 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -222,7 +222,7 @@ func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	srv, session := newServer(t, db, "admin-bystander")
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -244,7 +244,7 @@ func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -266,7 +266,7 @@ func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -284,7 +284,7 @@ func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -300,7 +300,7 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -323,7 +323,7 @@ func TestReassignHandler_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -353,7 +353,7 @@ func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -376,7 +376,7 @@ func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -398,7 +398,7 @@ func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -421,7 +421,7 @@ func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -442,7 +442,7 @@ func TestReassignHandler_VisitNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000", body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -460,7 +460,7 @@ func TestReassignHandler_InvalidBody(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, []byte("not json"))
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -482,7 +482,7 @@ func TestReassignHandler_InvalidStaffID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -502,7 +502,7 @@ func TestReassignHandler_InvalidEngagementID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000", body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -523,7 +523,7 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid", body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -549,7 +549,7 @@ func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -562,7 +562,7 @@ func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
 	).Scan(&origin, &attachedBy); err != nil {
 		t.Fatalf("read attachment: %v", err)
 	}
-	if origin != "granted" || attachedBy != creatorStaffID {
+	if origin != grantedOrigin || attachedBy != creatorStaffID {
 		t.Fatalf("attachment = %s by %s, want granted by the person who handed it over", origin, attachedBy)
 	}
 }
@@ -585,7 +585,7 @@ func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -621,7 +621,7 @@ func TestReassignHandler_AllowsAnAttachedContractor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPatch(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -638,7 +638,7 @@ func TestCreateHandler_GrantsTheEmployeeWhoLoggedTheVisit(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
@@ -651,39 +651,77 @@ func TestCreateHandler_GrantsTheEmployeeWhoLoggedTheVisit(t *testing.T) {
 	).Scan(&origin); err != nil {
 		t.Fatalf("read attachment: %v", err)
 	}
-	if origin != "granted" {
+	if origin != grantedOrigin {
 		t.Fatalf("origin = %q, want granted", origin)
 	}
 }
 
-// A contractor logging a Visit gets no grant: that would hand her the
-// reach an Offer exists to ask for. She is left with whatever the
-// write-side seam accrues, which is a record and never a key.
+// A contractor logging a Visit gets no *additional* grant: that would
+// hand her the reach an Offer exists to ask for. She must already be
+// attached to reach the route at all -- staffauth.AttachingWrite's own
+// CanAccessEngagement precheck, mounted in front of CreateHandler in
+// production, refuses an unattached contractor's write before
+// CreateHandler's own body ever runs (#836 wired this package's own test
+// mount through visit.Mount, the same production interface, and this
+// test's earlier form -- posting with no attachment at all and expecting
+// 201 -- only ever passed because the test mux had never applied
+// AttachingWrite). What create.go's own contractor branch guards against
+// is attachActor's accrual promoting her existing granted row, or a
+// second row appearing beside it; ON CONFLICT DO NOTHING is what this
+// proves.
 func TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "contractor-logging"
 	practiceID := seedPractice(t, db)
 	staffID := seedContractorAtPractice(t, db, practiceID, identityUID)
 	engagementID := seedEngagement(t, db, practiceID)
+	seedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
 
 	var count int
+	var origin string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_attachments
-		  WHERE engagement_id = $1 AND staff_id = $2 AND origin = 'granted'`,
+		`SELECT count(*), max(origin::text) FROM engagement_attachments
+		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NULL`,
 		engagementID, staffID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count granted attachments: %v", err)
+	).Scan(&count, &origin); err != nil {
+		t.Fatalf("count attachments: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("granted attachments = %d, want none", count)
+	if count != 1 {
+		t.Fatalf("open attachments = %d, want exactly the one seeded", count)
+	}
+	if origin != grantedOrigin {
+		t.Fatalf("origin = %q, want granted -- creating a Visit must not touch it", origin)
+	}
+}
+
+// TestCreateHandler_RefusesAnUnattachedContractor is what the old form of
+// the test above never actually exercised: with no attachment at all, a
+// contractor cannot reach the route -- staffauth.AttachingWrite's own
+// CanAccessEngagement precheck 404s before CreateHandler's own body runs,
+// the same "not found" shape TestListHandler_ContractorWithoutAttachmentForbidden
+// proves for the read side.
+func TestCreateHandler_RefusesAnUnattachedContractor(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "contractor-unattached-logging"
+	practiceID := seedPractice(t, db)
+	seedContractorAtPractice(t, db, practiceID, identityUID)
+	engagementID := seedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
 }

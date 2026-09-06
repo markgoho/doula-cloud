@@ -8,34 +8,28 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/pushsub"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newStaffServer mounts the same push-subscription routes main.go wires
-// up for the Staff population, behind staffauth.Middleware.
+// newStaffServer and newPortalServer both mount this package's whole
+// surface through pushsub.Mount, the same call main.go makes on the real
+// GatedRouter and idempotency.Router -- one server, two populations,
+// since that is what Mount itself registers.
 func newStaffServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/push-subscriptions",
-		staffauth.Middleware(db.App)(pushsub.RegisterHandler()))
-	mux.Handle("DELETE /practices/{practiceId}/push-subscriptions",
-		staffauth.Middleware(db.App)(pushsub.UnregisterHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	pushsub.Mount(g, ir, db.App)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-// newPortalServer mirrors newStaffServer for the Client-portal population,
-// behind clientauth.Middleware.
 func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	mux.Handle("POST /portal/engagements/{engagementId}/push-subscriptions",
-		clientauth.Middleware(db.App)(pushsub.ClientRegisterHandler()))
-	mux.Handle("DELETE /portal/engagements/{engagementId}/push-subscriptions",
-		clientauth.Middleware(db.App)(pushsub.ClientUnregisterHandler()))
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return newStaffServer(t, db, uid)
 }
 
 func authedRequest(t *testing.T, session, method, url string, body []byte) *http.Response {
@@ -83,7 +77,7 @@ func TestRegisterHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/staff-device"
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
+	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
@@ -107,13 +101,13 @@ func TestRegisterHandler_ReregisterSameEndpointUpserts(t *testing.T) {
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/staff-rotating-keys"
-	first := authedRequest(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
+	first := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusNoContent {
 		t.Fatalf("first register status = %d, want %d", first.StatusCode, http.StatusNoContent)
 	}
 
-	second := authedRequest(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
+	second := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
 	_ = second.Body.Close()
 	if second.StatusCode != http.StatusNoContent {
 		t.Fatalf("second register status = %d, want %d", second.StatusCode, http.StatusNoContent)
@@ -132,7 +126,7 @@ func TestRegisterHandler_InvalidJSONBody(t *testing.T) {
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/push-subscriptions", []byte("not json"))
+	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions", []byte("not json"))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -149,7 +143,7 @@ func TestRegisterHandler_MissingFieldsRejected(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(pushsub.SubscribeRequest{})
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/push-subscriptions", body)
+	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -166,10 +160,10 @@ func TestUnregisterHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/staff-leaving"
-	regResp := authedRequest(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
+	regResp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
 	_ = regResp.Body.Close()
 
-	unregResp := authedRequest(t, session, http.MethodDelete, srv.URL+"/practices/"+practiceID+"/push-subscriptions?endpoint="+endpoint, nil)
+	unregResp := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions?endpoint="+endpoint, nil)
 	defer unregResp.Body.Close()
 	if unregResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", unregResp.StatusCode, http.StatusNoContent)
@@ -188,7 +182,7 @@ func TestUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedRequest(t, session, http.MethodDelete, srv.URL+"/practices/"+practiceID+"/push-subscriptions", nil)
+	resp := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/push-subscriptions", nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -208,12 +202,12 @@ func TestUnregisterHandler_CannotDeleteAnotherStaffMembersSubscription(t *testin
 	const endpoint = "https://push.example.com/staff-a-device"
 	srvA, srvASession := newStaffServer(t, db, "staff-a-owns-sub")
 	defer srvA.Close()
-	regResp := authedRequest(t, srvASession, http.MethodPost, srvA.URL+"/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
+	regResp := authedRequest(t, srvASession, http.MethodPost, srvA.URL+"/api/practices/"+practiceID+"/push-subscriptions", subscribeBody(t, endpoint))
 	_ = regResp.Body.Close()
 
 	srvB, srvBSession := newStaffServer(t, db, "staff-b-attacker")
 	defer srvB.Close()
-	unregResp := authedRequest(t, srvBSession, http.MethodDelete, srvB.URL+"/practices/"+practiceID+"/push-subscriptions?endpoint="+endpoint, nil)
+	unregResp := authedRequest(t, srvBSession, http.MethodDelete, srvB.URL+"/api/practices/"+practiceID+"/push-subscriptions?endpoint="+endpoint, nil)
 	defer unregResp.Body.Close()
 	if unregResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d (a no-op delete is still a success response)", unregResp.StatusCode, http.StatusNoContent)
@@ -234,7 +228,7 @@ func TestClientRegisterHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/client-device"
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/portal/engagements/"+engagementID+"/push-subscriptions", subscribeBody(t, endpoint))
+	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/portal/engagements/"+engagementID+"/push-subscriptions", subscribeBody(t, endpoint))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
@@ -254,7 +248,7 @@ func TestClientRegisterHandler_InvalidJSONBody(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/portal/engagements/"+engagementID+"/push-subscriptions", []byte("not json"))
+	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/portal/engagements/"+engagementID+"/push-subscriptions", []byte("not json"))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -272,10 +266,10 @@ func TestClientUnregisterHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	const endpoint = "https://push.example.com/client-leaving"
-	regResp := authedRequest(t, session, http.MethodPost, srv.URL+"/portal/engagements/"+engagementID+"/push-subscriptions", subscribeBody(t, endpoint))
+	regResp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/portal/engagements/"+engagementID+"/push-subscriptions", subscribeBody(t, endpoint))
 	_ = regResp.Body.Close()
 
-	unregResp := authedRequest(t, session, http.MethodDelete, srv.URL+"/portal/engagements/"+engagementID+"/push-subscriptions?endpoint="+endpoint, nil)
+	unregResp := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/portal/engagements/"+engagementID+"/push-subscriptions?endpoint="+endpoint, nil)
 	defer unregResp.Body.Close()
 	if unregResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", unregResp.StatusCode, http.StatusNoContent)
@@ -295,7 +289,7 @@ func TestClientUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedRequest(t, session, http.MethodDelete, srv.URL+"/portal/engagements/"+engagementID+"/push-subscriptions", nil)
+	resp := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/portal/engagements/"+engagementID+"/push-subscriptions", nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)

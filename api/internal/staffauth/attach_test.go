@@ -183,7 +183,7 @@ func TestAttachingWrite_RefusesAContractorWithOnlyAnAccruedAttachment(t *testing
 	f := newAttachFixture(t)
 	contractorID := seedStaff(t, f.db, "attach-accrued-only-contractor")
 	seedContractorMembership(t, f.db, f.practiceID, contractorID)
-	seedAttachment(t, f.db, f.engagementID, contractorID, "accrued", false)
+	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "accrued", false)
 
 	resp := f.writeStatus(t, "attach-accrued-only-contractor", "ok")
 	defer func() { _ = resp.Body.Close() }()
@@ -199,7 +199,7 @@ func TestAttachingWrite_AllowsAContractorWithAGrantedAttachment(t *testing.T) {
 	f := newAttachFixture(t)
 	contractorID := seedStaff(t, f.db, "attach-granted-contractor")
 	seedContractorMembership(t, f.db, f.practiceID, contractorID)
-	seedAttachment(t, f.db, f.engagementID, contractorID, "granted", false)
+	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "granted", false)
 
 	resp := f.writeStatus(t, "attach-granted-contractor", "ok")
 	defer func() { _ = resp.Body.Close() }()
@@ -215,7 +215,7 @@ func TestAttachingWrite_RefusesAContractorWhoseAttachmentHasEnded(t *testing.T) 
 	f := newAttachFixture(t)
 	contractorID := seedStaff(t, f.db, "attach-ended-contractor")
 	seedContractorMembership(t, f.db, f.practiceID, contractorID)
-	seedAttachment(t, f.db, f.engagementID, contractorID, "granted", true)
+	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "granted", true)
 
 	resp := f.writeStatus(t, "attach-ended-contractor", "ok")
 	defer func() { _ = resp.Body.Close() }()

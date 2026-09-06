@@ -33,7 +33,7 @@ func TestAcceptInviteHandler_InvalidBody(t *testing.T) {
 	srv := newAcceptServer(db)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/portal/accept-invite", bytes.NewReader([]byte("not json")))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/accept-invite", bytes.NewReader([]byte("not json")))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

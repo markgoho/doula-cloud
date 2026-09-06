@@ -43,7 +43,7 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_mapped_and_billed", "paid", 100*24*time.Hour)
 	seedMappedCustomer(t, db, practiceID, clientID, testConnectAccount, "cus_mapped_and_billed", 120*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
@@ -85,7 +85,7 @@ func TestEraseHandler_MappedCustomerWithNoInvoiceAgesFromItsOwnCreation(t *testi
 	}
 	seedMappedCustomer(t, db, practiceID, clientID, testConnectAccount, "cus_never_billed", 10*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)

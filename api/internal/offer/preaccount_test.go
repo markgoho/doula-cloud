@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/testdb"
 )
 
 // seedEmailOffer makes an Offer to a bare email address and returns its
@@ -23,7 +24,7 @@ func seedEmailOffer(t *testing.T, f fixture) (offerID, token, code string) {
 // readURL is the pre-account read URL for one Offer, token and code in
 // the query string the way the emailed link and the typed code arrive.
 func (f fixture) readURL(offerID, token, code string) string {
-	return f.srv + "/offers/" + offerID + "?token=" + url.QueryEscape(token) + "&code=" + url.QueryEscape(code)
+	return f.srv + "/api/offers/" + offerID + "?token=" + url.QueryEscape(token) + "&code=" + url.QueryEscape(code)
 }
 
 func TestReadHandler_ServesTheFourFactsAndTerms(t *testing.T) {
@@ -72,8 +73,8 @@ func TestReadHandler_RefusesTheWrongCredentials(t *testing.T) {
 		url  string
 		want int
 	}{
-		{"no token", f.srv + "/offers/" + offerID + "?code=" + code, http.StatusBadRequest},
-		{"no code", f.srv + "/offers/" + offerID + "?token=" + token, http.StatusBadRequest},
+		{"no token", f.srv + "/api/offers/" + offerID + "?code=" + code, http.StatusBadRequest},
+		{"no code", f.srv + "/api/offers/" + offerID + "?token=" + token, http.StatusBadRequest},
 		{"offer id is not a uuid", f.readURL("not-a-uuid", token, code), http.StatusBadRequest},
 		{"unknown token", f.readURL(offerID, "11111111-1111-1111-1111-111111111111", code), http.StatusNotFound},
 		{"wrong code", f.readURL(offerID, token, "000000"), http.StatusForbidden},
@@ -99,6 +100,13 @@ func TestReadHandler_DoesNotReachAStaffTargetOffer(t *testing.T) {
 
 // Ten wrong guesses burn the Offer: a six-digit code in front of an
 // unauthenticated endpoint is otherwise a space anyone may walk.
+//
+// #836 mounted this read behind offer.Mount's real ratelimit.Wrap
+// (offerRules' PathValueRule also caps 10 requests per offerId per hour,
+// by design -- see offerRules' own doc comment). Without
+// resetOfferReadBucket, the 11th request below would 429 at that outer
+// layer instead of resolveByToken's own maxAccessCodeAttempts check,
+// which is what this test is actually about.
 func TestReadHandler_BoundsCodeGuessing(t *testing.T) {
 	f := newFixture(t)
 	offerID, token, code := seedEmailOffer(t, f)
@@ -106,6 +114,7 @@ func TestReadHandler_BoundsCodeGuessing(t *testing.T) {
 	for range 10 {
 		expectStatus(t, do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil), http.StatusForbidden)
 	}
+	resetOfferReadBucket(t, f.db)
 	// Even the right code no longer opens it.
 	expectStatus(t, do(t, http.MethodGet, f.readURL(offerID, token, code), "", nil), http.StatusTooManyRequests)
 }
@@ -128,7 +137,7 @@ func TestReadHandler_ReportsAnExpiredOffer(t *testing.T) {
 func TestDeclineByTokenHandler_DeclinesWithoutAnAccount(t *testing.T) {
 	f := newFixture(t)
 	offerID, token, code := seedEmailOffer(t, f)
-	declineURL := f.srv + "/offers/" + offerID + "/decline"
+	declineURL := f.srv + "/api/offers/" + offerID + "/decline"
 	body := offer.DeclineByTokenRequest{Token: token, Code: code}
 
 	var decided offer.DecisionResponse
@@ -150,7 +159,7 @@ func TestDeclineByTokenHandler_DeclinesWithoutAnAccount(t *testing.T) {
 func TestDeclineByTokenHandler_RequiresConfirmation(t *testing.T) {
 	f := newFixture(t)
 	offerID, token, code := seedEmailOffer(t, f)
-	declineURL := f.srv + "/offers/" + offerID + "/decline"
+	declineURL := f.srv + "/api/offers/" + offerID + "/decline"
 	payload, err := json.Marshal(offer.DeclineByTokenRequest{Token: token, Code: code})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
@@ -187,7 +196,7 @@ func TestDeclineByTokenHandler_RequiresConfirmation(t *testing.T) {
 func TestDeclineByTokenHandler_RefusesBadInput(t *testing.T) {
 	f := newFixture(t)
 	offerID, token, code := seedEmailOffer(t, f)
-	declineURL := f.srv + "/offers/" + offerID + "/decline"
+	declineURL := f.srv + "/api/offers/" + offerID + "/decline"
 
 	expectStatus(t, do(t, http.MethodPost, declineURL, "", "not an object"), http.StatusBadRequest)
 	expectStatus(t, do(t, http.MethodPost, declineURL, "", offer.DeclineByTokenRequest{Token: token}), http.StatusBadRequest)
@@ -234,7 +243,7 @@ func TestCreate_ReissuesAnOpenOfferWhenTheTokenRotates(t *testing.T) {
 	fee := int64(52000)
 	var created offer.CreateResponse
 	decode(t, do(t, http.MethodPost,
-		f.srv+"/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",
 		f.ownerSession, emailOfferBody(testAddress, &fee)), http.StatusCreated, &created)
 
 	// The credentials the first Offer was mailed with no longer open it.
@@ -260,6 +269,19 @@ func TestCreate_ReissuesAnOpenOfferWhenTheTokenRotates(t *testing.T) {
 // A re-issue resets the guess counter with the code it replaces: guesses
 // spent against a code nobody can use any more are not held against its
 // successor.
+//
+// #836 mounted this package's pre-account read through offer.Mount, the
+// same ratelimit.Wrap(offerRules) production always ran it behind --
+// PathValueRule caps 10 requests per offerId per hour, matching
+// maxAccessCodeAttempts by design (offerRules' own doc comment). This
+// test's 10 deliberate wrong guesses spend that whole budget on purpose,
+// so the reissue's own correct read below would 429 on the rate limit
+// rather than exercise what this test is actually about -- a real,
+// pre-existing gap between the read-rate-limit and the reissue flow,
+// filed as #846 rather than fixed here (#836 is the routing seam, not
+// ratelimit's sizing policy). resetOfferReadBucket clears the counter the
+// same way expireOffer above backdates one, so the test can still prove
+// the guess-count reset without waiting on -- or changing -- that limit.
 func TestCreate_ReissueResetsTheGuessCounter(t *testing.T) {
 	f := newFixture(t)
 	firstOffer, firstToken, _ := seedEmailOffer(t, f)
@@ -270,9 +292,20 @@ func TestCreate_ReissueResetsTheGuessCounter(t *testing.T) {
 	secondEngagement := seedEngagement(t, f.db, f.practiceID)
 	fee := int64(52000)
 	decode(t, do(t, http.MethodPost,
-		f.srv+"/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",
 		f.ownerSession, emailOfferBody(testAddress, &fee)), http.StatusCreated, nil)
 
+	resetOfferReadBucket(t, f.db)
 	reissuedToken, reissuedCode := outboxCredentials(t, f.db, firstOffer)
 	expectStatus(t, do(t, http.MethodGet, f.readURL(firstOffer, reissuedToken, reissuedCode), "", nil), http.StatusOK)
+}
+
+// resetOfferReadBucket clears every offer_read rate-limit bucket, the
+// same "reach past the seam under test to move time/state along" pattern
+// expireOffer already uses for expires_at.
+func resetOfferReadBucket(t *testing.T, db *testdb.DB) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(), `DELETE FROM rate_limit_buckets WHERE key LIKE 'offer_read:%'`); err != nil {
+		t.Fatalf("reset offer_read rate limit bucket: %v", err)
+	}
 }

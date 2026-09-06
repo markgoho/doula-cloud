@@ -23,7 +23,7 @@ type sendPushNotificationPayload struct {
 }
 
 func sendContractURL(srv *httptest.Server, practiceID, engagementID string) string {
-	return srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/contract/send"
+	return srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract/send"
 }
 
 func postSendContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {

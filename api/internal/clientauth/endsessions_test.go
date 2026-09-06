@@ -10,6 +10,8 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -36,13 +38,14 @@ func findSessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
 
 func newEndSessionsServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("DELETE /portal/sessions", clientauth.EndAllSessionsHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	clientauth.Mount(g, db.App, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
 func deleteWithSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/portal/sessions", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/portal/sessions", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

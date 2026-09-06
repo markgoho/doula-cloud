@@ -17,40 +17,6 @@ func seedContractorMembership(t *testing.T, db *testdb.DB, practiceID, staffID s
 	}
 }
 
-func seedAccessEngagement(t *testing.T, db *testdb.DB, practiceID string) string {
-	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Access Test Client', 'access-client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	var engagementID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return engagementID
-}
-
-func seedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID, origin string, ended bool) {
-	t.Helper()
-	endedAt := "NULL"
-	if ended {
-		endedAt = "now()"
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at)
-		 VALUES ($1, $2, $3::attachment_origin, $2, `+endedAt+`)`,
-		engagementID, staffID, origin,
-	); err != nil {
-		t.Fatalf("seed attachment (origin=%s, ended=%v): %v", origin, ended, err)
-	}
-}
-
 // TestReader_CanAccessEngagement covers every ADR-0008 read-table cell
 // this method decides: Owner and Admin reach every Engagement, an
 // employee Doula reaches every Engagement at the Practice (#227's
@@ -60,7 +26,7 @@ func seedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID, origin s
 func TestReader_CanAccessEngagement(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Access Test Practice")
-	engagementID := seedAccessEngagement(t, db, practiceID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	ownerID := seedStaff(t, db, "access-owner")
 	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
@@ -76,15 +42,15 @@ func TestReader_CanAccessEngagement(t *testing.T) {
 
 	accruedContractorID := seedStaff(t, db, "access-contractor-accrued")
 	seedContractorMembership(t, db, practiceID, accruedContractorID)
-	seedAttachment(t, db, engagementID, accruedContractorID, "accrued", false)
+	testdb.SeedAttachment(t, db, engagementID, accruedContractorID, "accrued", false)
 
 	endedContractorID := seedStaff(t, db, "access-contractor-ended")
 	seedContractorMembership(t, db, practiceID, endedContractorID)
-	seedAttachment(t, db, engagementID, endedContractorID, "granted", true)
+	testdb.SeedAttachment(t, db, engagementID, endedContractorID, "granted", true)
 
 	grantedContractorID := seedStaff(t, db, "access-contractor-granted")
 	seedContractorMembership(t, db, practiceID, grantedContractorID)
-	seedAttachment(t, db, engagementID, grantedContractorID, "granted", false)
+	testdb.SeedAttachment(t, db, engagementID, grantedContractorID, "granted", false)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -130,7 +96,7 @@ func TestReader_CanAccessEngagement(t *testing.T) {
 func TestReader_CanAccessClient(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db, "Client Access Test Practice")
-	engagementID := seedAccessEngagement(t, db, practiceID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	var clientID string
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT client_id FROM engagements WHERE id = $1`, engagementID).Scan(&clientID); err != nil {
 		t.Fatalf("read client id: %v", err)
@@ -144,7 +110,7 @@ func TestReader_CanAccessClient(t *testing.T) {
 
 	attachedContractorID := seedStaff(t, db, "client-access-contractor-attached")
 	seedContractorMembership(t, db, practiceID, attachedContractorID)
-	seedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
+	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {

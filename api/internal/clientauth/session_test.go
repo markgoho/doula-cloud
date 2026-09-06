@@ -8,21 +8,25 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newSessionServer mounts the portal session route and seeds a live
-// session for uid, returning the token its __session cookie carries.
+// newSessionServer mounts this package's whole surface through
+// clientauth.Mount, and seeds a live session for uid, returning the token
+// its __session cookie carries.
 func newSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /portal/session", clientauth.SessionHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	clientauth.Mount(g, db.App, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/session", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/session", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

@@ -10,14 +10,18 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newSpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/mfa-recovery/spend", staffauth.SpendMFARecoveryHandler(accounts, db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
@@ -69,7 +73,7 @@ func TestSpendMFARecoveryHandler_InvalidRequestBody(t *testing.T) {
 	srv := newSpendServer(authntest.NewFakeAccountManager(), db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `not json`)
+	resp := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `not json`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -81,7 +85,7 @@ func TestSpendMFARecoveryHandler_UnknownAddress(t *testing.T) {
 	srv := newSpendServer(authntest.NewFakeAccountManager(), db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"nobody@example.com","code":"12345678"}`)
+	resp := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"nobody@example.com","code":"12345678"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -98,9 +102,9 @@ func TestSpendMFARecoveryHandler_UnknownAddressAndWrongCodeAnswerIdentically(t *
 	srv := newSpendServer(accounts, db)
 	defer srv.Close()
 
-	unknown := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"nobody@example.com","code":"12345678"}`)
+	unknown := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"nobody@example.com","code":"12345678"}`)
 	defer unknown.Body.Close()
-	wrongCode := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"known@example.com","code":"12345678"}`)
+	wrongCode := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"known@example.com","code":"12345678"}`)
 	defer wrongCode.Body.Close()
 
 	if unknown.StatusCode != wrongCode.StatusCode {
@@ -121,7 +125,7 @@ func TestSpendMFARecoveryHandler_MissingFields(t *testing.T) {
 	srv := newSpendServer(authntest.NewFakeAccountManager(), db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"","code":""}`)
+	resp := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"","code":""}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -147,7 +151,7 @@ func TestSpendMFARecoveryHandler_IssuedCode(t *testing.T) {
 	srv := newSpendServer(accounts, db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"target-issued@example.com","code":"`+code+`"}`)
+	resp := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"target-issued@example.com","code":"`+code+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", resp.StatusCode)
@@ -191,7 +195,7 @@ func TestSpendMFARecoveryHandler_ClearSecondFactorsFailureIs500(t *testing.T) {
 	srv := newSpendServer(accounts, db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"target-clear-fails@example.com","code":"`+code+`"}`)
+	resp := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"target-clear-fails@example.com","code":"`+code+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", resp.StatusCode)
@@ -211,13 +215,13 @@ func TestSpendMFARecoveryHandler_IssuedCodeIsSingleUse(t *testing.T) {
 	srv := newSpendServer(accounts, db)
 	defer srv.Close()
 
-	first := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"target-single-use@example.com","code":"`+code+`"}`)
+	first := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"target-single-use@example.com","code":"`+code+`"}`)
 	defer first.Body.Close()
 	if first.StatusCode != http.StatusNoContent {
 		t.Fatalf("first spend status = %d, want 204", first.StatusCode)
 	}
 
-	second := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"target-single-use@example.com","code":"`+code+`"}`)
+	second := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"target-single-use@example.com","code":"`+code+`"}`)
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusBadRequest {
 		t.Fatalf("second spend status = %d, want 400", second.StatusCode)
@@ -240,7 +244,7 @@ func TestSpendMFARecoveryHandler_SavedCode(t *testing.T) {
 	srv := newSpendServer(accounts, db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/staff/mfa-recovery/spend", `{"email":"target-saved@example.com","code":"`+code+`"}`)
+	resp := postJSONTo(t, srv, "/api/staff/mfa-recovery/spend", `{"email":"target-saved@example.com","code":"`+code+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", resp.StatusCode)

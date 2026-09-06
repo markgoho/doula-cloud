@@ -26,7 +26,7 @@ func TestApproveHandler_CreatesEngagementConsumesCreditAndStampsRequest(t *testi
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
 	var out engagementrequest.ApproveResponse
 	decode(t, resp, http.StatusOK, &out)
 	if out.EngagementID == "" || out.State != testStateApproved {
@@ -61,7 +61,7 @@ func TestApproveHandler_EmptyBalanceLeavesRequestPendingAndQueuesNotification(t 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
 	expectStatus(t, resp, http.StatusPaymentRequired)
 
 	row := readRequest(t, db, requestID)
@@ -88,7 +88,7 @@ func TestApproveHandler_DoulaForbidden(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
 	expectStatus(t, resp, http.StatusForbidden)
 }
 
@@ -106,10 +106,10 @@ func TestApproveHandler_AlreadyDecidedConflict(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
+	first := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
 	expectStatus(t, first, http.StatusOK)
 
-	second := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
+	second := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
 	expectStatus(t, second, http.StatusConflict)
 }
 
@@ -122,7 +122,7 @@ func TestApproveHandler_NotFound(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/approve", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/approve", session, nil)
 	expectStatus(t, resp, http.StatusNotFound)
 }
 
@@ -136,7 +136,7 @@ func TestApproveHandler_InvalidRequestIDRejected(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/not-a-uuid/approve", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/not-a-uuid/approve", session, nil)
 	expectStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -155,7 +155,7 @@ func TestApproveHandler_WarnsOnLiveEngagement(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil)
 	var out engagementrequest.ApproveResponse
 	decode(t, resp, http.StatusOK, &out)
 	if out.Warning == "" {

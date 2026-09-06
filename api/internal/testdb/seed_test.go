@@ -6,6 +6,10 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// doulaRole is named once so golangci-lint's goconst check doesn't see
+// three independent "doula" literals across this file's tests.
+const doulaRole = "doula"
+
 // TestSeedStaffAtPractice proves SeedStaffAtPractice's Staff row and
 // practice_memberships row land with the roles and employment type
 // passed in -- every package composing seed helpers on top of this one
@@ -13,7 +17,7 @@ import (
 func TestSeedStaffAtPractice(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Seed Test Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "seed-test-staff", []string{"owner", "doula"}, "contractor")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "seed-test-staff", []string{"owner", doulaRole}, "contractor")
 
 	var name, email string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -78,6 +82,92 @@ func TestSeedPortalAccount(t *testing.T) {
 	}
 	if signInAddress != "seed-test@example.com" {
 		t.Fatalf("sign_in_address = %q, want %q", signInAddress, "seed-test@example.com")
+	}
+}
+
+// TestSeedEngagement proves the Client and Engagement it inserts are
+// actually linked to each other and to practiceID -- every package
+// deciding Engagement-scoped access against a fixture relies on that
+// shape (#706 collapsed the near-identical per-package copies into this).
+func TestSeedEngagement(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Engagement Test Practice")
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	var gotClientID, gotPracticeID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT client_id, practice_id FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&gotClientID, &gotPracticeID); err != nil {
+		t.Fatalf("read seeded engagement: %v", err)
+	}
+	if gotClientID != clientID {
+		t.Fatalf("engagement.client_id = %q, want the seeded Client %q", gotClientID, clientID)
+	}
+	if gotPracticeID != practiceID {
+		t.Fatalf("engagement.practice_id = %q, want %q", gotPracticeID, practiceID)
+	}
+
+	var clientPracticeID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT practice_id FROM clients WHERE id = $1`, clientID,
+	).Scan(&clientPracticeID); err != nil {
+		t.Fatalf("read seeded client: %v", err)
+	}
+	if clientPracticeID != practiceID {
+		t.Fatalf("client.practice_id = %q, want %q", clientPracticeID, practiceID)
+	}
+}
+
+// TestSeedAttachment proves origin and ended_at land as given -- both
+// origins, both open and ended -- the four combinations ADR-0008's
+// attachment-narrowing tests distinguish between.
+func TestSeedAttachment(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Attachment Test Practice")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "seed-attachment-staff", []string{doulaRole}, "contractor")
+
+	testdb.SeedAttachment(t, db, engagementID, staffID, "granted", false)
+
+	var origin string
+	var endedAt *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT origin::text, ended_at::text FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
+		engagementID, staffID,
+	).Scan(&origin, &endedAt); err != nil {
+		t.Fatalf("read seeded attachment: %v", err)
+	}
+	if origin != "granted" {
+		t.Fatalf("origin = %q, want granted", origin)
+	}
+	if endedAt != nil {
+		t.Fatalf("ended_at = %v, want NULL (open)", *endedAt)
+	}
+}
+
+// TestSeedAttachment_Ended proves ended=true actually sets ended_at,
+// rather than leaving the attachment open.
+func TestSeedAttachment_Ended(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Ended Attachment Test Practice")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "seed-ended-attachment-staff", []string{doulaRole}, "contractor")
+
+	testdb.SeedAttachment(t, db, engagementID, staffID, "accrued", true)
+
+	var origin string
+	var endedAt *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT origin::text, ended_at::text FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
+		engagementID, staffID,
+	).Scan(&origin, &endedAt); err != nil {
+		t.Fatalf("read seeded attachment: %v", err)
+	}
+	if origin != "accrued" {
+		t.Fatalf("origin = %q, want accrued", origin)
+	}
+	if endedAt == nil {
+		t.Fatal("ended_at = NULL, want set (ended)")
 	}
 }
 

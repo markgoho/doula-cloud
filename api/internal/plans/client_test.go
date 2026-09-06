@@ -7,8 +7,9 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/plans"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -51,14 +52,15 @@ func seedPortalUser(t *testing.T, db *testdb.DB, identityUID, clientID string) {
 func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /portal/engagements/{engagementId}/birth-plan",
-		clientauth.Middleware(db.App)(plans.ClientGetBirthPlanHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	plans.Mount(g, ir, db.App)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getClientBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/birth-plan", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

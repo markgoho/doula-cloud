@@ -50,7 +50,7 @@ func TestListActivityHandler_OwnerSeesEveryEntry(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -83,7 +83,7 @@ func TestListActivityHandler_EmployeeDoulaExcludesMoneyEntries(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -123,7 +123,7 @@ func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -151,7 +151,7 @@ func TestListActivityHandler_SystemActorRendersAsDoulaCloud(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	var got engagement.ActivityListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -179,7 +179,7 @@ func TestListActivityHandler_InvalidEngagementIDRejected(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/activity")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -198,7 +198,7 @@ func TestListActivityHandler_InvalidCursorRejected(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -222,7 +222,7 @@ func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer firstResp.Body.Close()
 	var first engagement.ActivityListResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -233,7 +233,7 @@ func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second engagement.ActivityListResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
@@ -258,7 +258,7 @@ func TestListActivityHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)

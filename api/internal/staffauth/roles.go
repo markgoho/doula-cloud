@@ -10,7 +10,7 @@ import (
 // validRoles is the practice_role enum from 00002_practice_staff_tenancy.sql,
 // mirrored here so role-assignment requests can be validated before they
 // ever reach Postgres.
-var validRoles = map[string]bool{"owner": true, "admin": true, "doula": true}
+var validRoles = map[string]bool{roleOwner: true, roleAdmin: true, "doula": true}
 
 // RequireOwner resolves the caller's Reader and request-scoped tx from
 // context (both set by staffauth.Middleware) and confirms the caller
@@ -34,7 +34,7 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
-	if !reader.Has("owner") {
+	if !reader.Has(roleOwner) {
 		apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
 		return nil, "", false
 	}

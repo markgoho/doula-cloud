@@ -24,11 +24,11 @@ func TestRefuseHandler_RequiresReasonAndStampsRequest(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	noReason := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
+	noReason := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
 		engagementrequest.RefuseRequest{})
 	expectStatus(t, noReason, http.StatusBadRequest)
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
 		engagementrequest.RefuseRequest{Reason: "already has a doula elsewhere"})
 	var out engagementrequest.DecisionResponse
 	decode(t, resp, http.StatusOK, &out)
@@ -52,7 +52,7 @@ func TestRefuseHandler_InvalidRequestIDRejected(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/not-a-uuid/refuse", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/not-a-uuid/refuse", session,
 		engagementrequest.RefuseRequest{Reason: "no"})
 	expectStatus(t, resp, http.StatusBadRequest)
 }
@@ -69,7 +69,7 @@ func TestRefuseHandler_InvalidBodyRejected(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session, "not json")
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session, "not json")
 	expectStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -82,7 +82,7 @@ func TestRefuseHandler_NotFound(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/refuse", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/refuse", session,
 		engagementrequest.RefuseRequest{Reason: "no"})
 	expectStatus(t, resp, http.StatusNotFound)
 }
@@ -117,7 +117,7 @@ func TestRefuseHandler_DoulaForbidden(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
 		engagementrequest.RefuseRequest{Reason: "no"})
 	expectStatus(t, resp, http.StatusForbidden)
 }
@@ -135,11 +135,11 @@ func TestRefuseHandler_AlreadyDecidedConflict(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
+	first := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
 		engagementrequest.RefuseRequest{Reason: "no"})
 	expectStatus(t, first, http.StatusOK)
 
-	second := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
+	second := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/refuse", session,
 		engagementrequest.RefuseRequest{Reason: "no"})
 	expectStatus(t, second, http.StatusConflict)
 }

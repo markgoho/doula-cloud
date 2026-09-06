@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -31,15 +32,16 @@ func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID stri
 func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient billing.StripeClient) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/billing/purchases",
-		staffauth.Middleware(db.App)(billing.PostPurchaseHandler(stripeClient)))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	billing.Mount(g, ir, stripeClient)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func postPurchase(t *testing.T, srv *httptest.Server, session string, practiceID string, body string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/practices/"+practiceID+"/billing/purchases", bytes.NewBufferString(body))
+		srv.URL+"/api/practices/"+practiceID+"/billing/purchases", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

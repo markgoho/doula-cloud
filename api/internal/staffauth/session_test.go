@@ -7,22 +7,27 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newSessionServer mounts the Staff session route and seeds a live
-// session for uid, returning the token its __session cookie carries.
+// newSessionServer mounts this package's whole surface through
+// staffauth.Mount, and seeds a live session for uid, returning the token
+// its __session cookie carries.
 func newSessionServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /staff/session", staffauth.SessionHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/staff/session", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/staff/session", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -126,7 +131,9 @@ func TestSessionHandler_SecondFactor(t *testing.T) {
 	seedStaffWithMembership(t, db, identityUID)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /staff/session", staffauth.SessionHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

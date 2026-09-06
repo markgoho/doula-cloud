@@ -9,12 +9,18 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
+
+// newServer's Client-portal-side sibling, mounted through message.Mount
+// alongside the Staff routes -- both packages' comments below still say
+// clientauth.Middleware because that is what actually gates the request
+// once past message.Mount.
 
 // newPortalServer mounts the same routes main.go wires up for the
 // Client-portal side of this package, behind clientauth.Middleware,
@@ -33,12 +39,9 @@ func newPortalServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher p
 	t.Helper()
 	store := objectstore.NewMemoryStore()
 	mux := http.NewServeMux()
-	mux.Handle("GET /portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(db.App)(message.ClientListHandler()))
-	mux.Handle("POST /portal/engagements/{engagementId}/messages",
-		clientauth.Middleware(db.App)(message.ClientCreateHandler(store, pusher)))
-	mux.Handle("GET /portal/engagements/{engagementId}/messages/{messageId}/attachment",
-		clientauth.Middleware(db.App)(message.ClientAttachmentHandler(store)))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	message.Mount(g, ir, db.App, store, pusher)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -56,7 +59,7 @@ func TestClientCreateHandler_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	resp := authedPost(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -83,7 +86,7 @@ func TestClientCreateHandler_EmptyBodyRejected(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "   "})
-	resp := authedPost(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -101,7 +104,7 @@ func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedPost(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages", []byte("not json"))
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", []byte("not json"))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -128,7 +131,7 @@ func TestClientCreateHandler_NotLinkedToClientForbidden(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(message.CreateRequest{Body: "trying to post anyway"})
-	resp := authedPost(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages", body)
+	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -146,7 +149,7 @@ func TestClientListHandler_EmptyThread(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -171,7 +174,7 @@ func TestClientListHandler_InvalidCursorRejected(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages?cursor=not!valid!base64!")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -198,7 +201,7 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages")
+	firstResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer firstResp.Body.Close()
 	if firstResp.StatusCode != http.StatusOK {
 		t.Fatalf("first page status = %d, want %d", firstResp.StatusCode, http.StatusOK)
@@ -212,7 +215,7 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	if secondResp.StatusCode != http.StatusOK {
 		t.Fatalf("second page status = %d, want %d", secondResp.StatusCode, http.StatusOK)
@@ -241,7 +244,7 @@ func TestClientListHandler_NotLinkedToClientForbidden(t *testing.T) {
 	srv, session := newPortalServer(t, db, "client-listing-elsewhere")
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -274,14 +277,14 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 	defer portalSrv.Close()
 
 	staffBody, _ := json.Marshal(message.CreateRequest{Body: bodyFromStaff})
-	staffResp := authedPost(t, staffSession, staffSrv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages", staffBody)
+	staffResp := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", staffBody)
 	defer staffResp.Body.Close()
 	if staffResp.StatusCode != http.StatusCreated {
 		t.Fatalf("staff create status = %d, want %d", staffResp.StatusCode, http.StatusCreated)
 	}
 
 	clientBody, _ := json.Marshal(message.CreateRequest{Body: bodyFromClient})
-	clientResp := authedPost(t, portalSession, portalSrv.URL+"/portal/engagements/"+engagementID+"/messages", clientBody)
+	clientResp := authedPost(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages", clientBody)
 	defer clientResp.Body.Close()
 	if clientResp.StatusCode != http.StatusCreated {
 		t.Fatalf("client create status = %d, want %d", clientResp.StatusCode, http.StatusCreated)
@@ -301,7 +304,7 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 		}
 	}
 
-	staffListResp := authedGet(t, staffSession, staffSrv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	staffListResp := authedGet(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
 	defer staffListResp.Body.Close()
 	var staffView message.ListResponse
 	if err := json.NewDecoder(staffListResp.Body).Decode(&staffView); err != nil {
@@ -309,7 +312,7 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 	}
 	assertBothMessagesInOrder(t, staffView.Items)
 
-	clientListResp := authedGet(t, portalSession, portalSrv.URL+"/portal/engagements/"+engagementID+"/messages")
+	clientListResp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer clientListResp.Body.Close()
 	var clientView message.ListResponse
 	if err := json.NewDecoder(clientListResp.Body).Decode(&clientView); err != nil {
@@ -331,7 +334,7 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedMultipartPost(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages",
+	resp := authedMultipartPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages",
 		"Here's a photo", "photo.png", pngBytes)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -345,7 +348,7 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 		t.Fatalf("attachmentContentType = %q, want image/png", created.AttachmentContentType)
 	}
 
-	dlResp := authedGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	dlResp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
 	defer dlResp.Body.Close()
 	if dlResp.StatusCode != http.StatusOK {
 		t.Fatalf("download status = %d, want %d", dlResp.StatusCode, http.StatusOK)
@@ -371,7 +374,7 @@ func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/portal/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
+	resp := authedGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages/not-a-uuid/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -389,7 +392,7 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 
 	ownerSrv, ownerSession := newPortalServer(t, db, "client-owner-of-thread")
 	defer ownerSrv.Close()
-	createResp := authedMultipartPost(t, ownerSession, ownerSrv.URL+"/portal/engagements/"+engagementID+"/messages",
+	createResp := authedMultipartPost(t, ownerSession, ownerSrv.URL+"/api/portal/engagements/"+engagementID+"/messages",
 		"", "photo.png", pngBytes)
 	defer createResp.Body.Close()
 	var created message.Message
@@ -403,7 +406,7 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 	unrelatedSrv, unrelatedSession := newPortalServer(t, db, "client-elsewhere-dl")
 	defer unrelatedSrv.Close()
 
-	resp := authedGet(t, unrelatedSession, unrelatedSrv.URL+"/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
+	resp := authedGet(t, unrelatedSession, unrelatedSrv.URL+"/api/portal/engagements/"+engagementID+"/messages/"+created.MessageID+"/attachment")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)

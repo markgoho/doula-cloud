@@ -88,6 +88,10 @@ func GetPracticeInvoicesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
 		if !ok {
+			// coverage:ignore reason: belt-and-braces -- payments.Mount's own
+			// OwnerAndAdmin declaration (g.Get) already refuses a non-owner/admin
+			// caller before this handler runs, so !ok is unreachable through the
+			// real mount.
 			return
 		}
 

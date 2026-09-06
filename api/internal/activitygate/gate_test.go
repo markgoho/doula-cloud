@@ -19,41 +19,6 @@ const (
 	invoicePaidAction    = "invoice_paid"
 )
 
-// seedEngagement seeds one Client and one Engagement at practiceID, the
-// minimum an engagement-scoped Rule needs to decide access on.
-func seedEngagement(t *testing.T, db *testdb.DB, practiceID string) (clientID, engagementID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Gate Test Client', 'gate-client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return clientID, engagementID
-}
-
-// seedAttachment mirrors staffauth_test's own helper of the same name.
-func seedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID, origin string, ended bool) {
-	t.Helper()
-	endedAt := "NULL"
-	if ended {
-		endedAt = "now()"
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at)
-		 VALUES ($1, $2, $3::attachment_origin, $2, `+endedAt+`)`,
-		engagementID, staffID, origin,
-	); err != nil {
-		t.Fatalf("seed attachment (origin=%s, ended=%v): %v", origin, ended, err)
-	}
-}
-
 // buildReader scopes a tx to practiceID (the same set_config
 // staffauth.Middleware performs per request) and builds a Reader for
 // staffID/roles/employmentType directly via staffauth.NewReader -- no
@@ -120,12 +85,12 @@ func TestCanSeeAction_UnregisteredKindRefused(t *testing.T) {
 func TestCanAccessSubject_Engagement(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Gate Engagement Access Practice")
-	_, engagementID := seedEngagement(t, db, practiceID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-owner", []string{ownerRole}, employeeType)
 	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-contractor-unattached", []string{doulaRole}, contractorType)
 	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-contractor-attached", []string{doulaRole}, contractorType)
-	seedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
+	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
 
 	cases := []struct {
 		name           string
@@ -231,12 +196,12 @@ func TestCanSeeAction_Engagement(t *testing.T) {
 func TestCanAccessSubject_Client(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Gate Client Access Practice")
-	clientID, engagementID := seedEngagement(t, db, practiceID)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-owner", []string{ownerRole}, employeeType)
 	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-contractor-unattached", []string{doulaRole}, contractorType)
 	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-contractor-attached", []string{doulaRole}, contractorType)
-	seedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
+	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
 
 	cases := []struct {
 		name           string

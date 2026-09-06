@@ -11,7 +11,9 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -233,13 +235,15 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 func newWorkStateServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("PUT /staff/work-state", staffauth.UpdateWorkStateHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func putWorkState(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/staff/work-state", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/staff/work-state", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

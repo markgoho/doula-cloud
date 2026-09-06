@@ -8,20 +8,24 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newRemoveSecondFactorServer(t *testing.T, db *testdb.DB, verifier authn.Verifier, accounts *authntest.FakeAccountManager) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("DELETE /staff/mfa", staffauth.RemoveSecondFactorHandler(verifier, accounts, db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, verifier, accounts, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
 func deleteSecondFactor(t *testing.T, srv *httptest.Server, session, bearer string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/staff/mfa", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/staff/mfa", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

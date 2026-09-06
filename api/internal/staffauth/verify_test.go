@@ -10,20 +10,24 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newVerifyRequestServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/verify-email/request", staffauth.RequestVerificationHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func postVerifyRequest(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/verify-email/request", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/verify-email/request", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -39,13 +43,15 @@ func postVerifyRequest(t *testing.T, srv *httptest.Server, session string) *http
 
 func newVerifySpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/verify-email", staffauth.SpendVerificationHandler(accounts, db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
 func postVerifySpend(t *testing.T, srv *httptest.Server, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/verify-email", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/verify-email", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

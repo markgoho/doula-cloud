@@ -9,25 +9,28 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newStaffListServer mounts ListStaffHandler the way main.go really does
-// -- through GatedRouter with the "owner","admin" declaration -- since
-// the Owner/Admin-vs-Doula boundary lives at that mount, not inside the
-// handler (#315).
+// newStaffListServer mounts this package's whole surface through
+// staffauth.Mount, the same call main.go makes on the real GatedRouter --
+// since the Owner/Admin-vs-Doula boundary lives at that mount, not inside
+// the handler (#315).
 func newStaffListServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
-	g.Get("/practices/{practiceId}/staff", []string{ownerRole, adminRole}, staffauth.ListStaffHandler())
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getStaffList(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/staff", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/staff", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -254,7 +257,7 @@ func TestListStaffHandler_InvalidCursorRejected(t *testing.T) {
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-			srv.URL+"/practices/"+practiceID+"/staff?cursor="+cursor, nil)
+			srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+cursor, nil)
 		if err != nil {
 			t.Fatalf("build request: %v", err)
 		}
@@ -299,7 +302,7 @@ func TestListStaffHandler_PaginatesInvitationsNewestFirst(t *testing.T) {
 	}
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		srv.URL+"/practices/"+practiceID+"/staff?cursor="+*first.Invitations.NextCursor, nil)
+		srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+*first.Invitations.NextCursor, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

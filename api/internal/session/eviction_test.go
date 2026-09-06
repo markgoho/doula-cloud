@@ -18,7 +18,7 @@ import (
 // per confirmed.
 func postCreateWithSession(t *testing.T, srv *httptest.Server, idToken, cookieToken string, confirmed bool) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/session", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/session", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

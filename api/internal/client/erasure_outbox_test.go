@@ -88,7 +88,7 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_recent", "paid", 10*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
@@ -148,7 +148,7 @@ func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_old", "paid", 200*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
@@ -193,7 +193,7 @@ func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) 
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_ancient", "paid", 200*24*time.Hour)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_fresh", "paid", 10*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
@@ -241,7 +241,7 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_failing", "paid", 10*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
@@ -292,7 +292,7 @@ func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_done", "paid", 200*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
@@ -319,7 +319,7 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 			clientID := seedFullClient(t, db, practiceID, staffID)
 			seedInvoicedClient(t, db, practiceID, clientID, "cus_"+status, status, time.Hour)
 
-			srv, session := newErasureServer(t, db, uid)
+			srv, session := newServer(t, db, uid)
 			defer srv.Close()
 
 			resp := postErasure(t, session, srv, practiceID, clientID)
@@ -361,7 +361,7 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 	}
 	authntest.SeedSession(t, db.App, portalUID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
@@ -420,7 +420,7 @@ func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 		t.Fatalf("seed portal invite: %v", err)
 	}
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := postErasure(t, session, srv, practiceID, clientID)
@@ -459,7 +459,7 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 		t.Fatalf("seed portal user: %v", err)
 	}
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
@@ -493,7 +493,7 @@ func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_retry", "paid", 200*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
@@ -523,7 +523,7 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 		t.Fatalf("clear connect account: %v", err)
 	}
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()
@@ -552,7 +552,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_endpoint", "paid", 200*24*time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 	resp := postErasure(t, session, srv, practiceID, clientID)
 	defer resp.Body.Close()

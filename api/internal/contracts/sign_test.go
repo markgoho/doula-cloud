@@ -32,7 +32,7 @@ func (failingStore) Get(_ context.Context, _ string) (io.ReadCloser, error) {
 }
 
 func signContractURL(srv *httptest.Server, engagementID string) string {
-	return srv.URL + "/portal/engagements/" + engagementID + "/contract/sign"
+	return srv.URL + "/api/portal/engagements/" + engagementID + "/contract/sign"
 }
 
 func postSignContractRaw(t *testing.T, srv *httptest.Server, session string, engagementID string, body []byte) *http.Response {

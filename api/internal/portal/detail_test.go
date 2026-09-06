@@ -7,18 +7,18 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newServer mounts the same route main.go wires up for this package,
-// behind clientauth.Middleware.
+// newServer mounts this package's whole surface through portal.Mount, the
+// same call main.go makes on the real GatedRouter.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /portal/engagements/{engagementId}",
-		clientauth.Middleware(db.App)(portal.DetailHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	portal.Mount(g, db.App)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -73,7 +73,7 @@ func TestDetailHandler_Success(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/"+engagementID, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestDetailHandler_NotLinkedToClient(t *testing.T) {
 	srv, session := newServer(t, db, "unrelated-uid")
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/portal/engagements/00000000-0000-0000-0000-000000000000", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/00000000-0000-0000-0000-000000000000", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

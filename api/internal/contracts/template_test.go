@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
@@ -154,30 +155,15 @@ func newContractServerWithStore(t *testing.T, db *testdb.DB, uid string, store o
 func newContractServerWithPusherAndStore(t *testing.T, db *testdb.DB, uid string, pusher push.Pusher, store objectstore.ObjectStore) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/contract-template",
-		staffauth.Middleware(db.App)(contracts.GetTemplateHandler()))
-	mux.Handle("PUT /practices/{practiceId}/contract-template",
-		staffauth.Middleware(db.App)(contracts.PutTemplateHandler()))
-	mux.Handle("GET /practices/{practiceId}/contracts/awaiting-signature",
-		staffauth.Middleware(db.App)(contracts.AwaitingSignatureHandler()))
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db.App)(contracts.PostContractHandler()))
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db.App)(contracts.GetContractHandler()))
-	mux.Handle("PUT /practices/{practiceId}/engagements/{engagementId}/contract",
-		staffauth.Middleware(db.App)(contracts.PutContractHandler()))
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/send",
-		staffauth.Middleware(db.App)(contracts.PostSendContractHandler(pusher)))
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/void",
-		staffauth.Middleware(db.App)(contracts.PostVoidContractHandler()))
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract/pdf",
-		staffauth.Middleware(db.App)(contracts.GetSignedContractPDFHandler(store)))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	contracts.Mount(g, ir, db.App, store, pusher)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/contract-template", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/contract-template", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -191,7 +177,7 @@ func getTemplate(t *testing.T, srv *httptest.Server, session string, practiceID 
 
 func putTemplateRaw(t *testing.T, srv *httptest.Server, session string, practiceID string, body []byte) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/practices/"+practiceID+"/contract-template", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/contract-template", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

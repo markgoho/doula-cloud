@@ -151,17 +151,3 @@ func packageSources(t *testing.T) map[string]string {
 	}
 	return sources
 }
-
-// packageSource is every non-test .go file concatenated, for the two
-// guardrails that still have to ask "is this middleware in that handler's
-// chain?" -- a question an http.Handler value cannot answer at runtime,
-// and the one thing closing the mux door did not make structural.
-func packageSource(t *testing.T) string {
-	t.Helper()
-	var all strings.Builder
-	for _, src := range packageSources(t) {
-		all.WriteString(src)
-		all.WriteString("\n")
-	}
-	return all.String()
-}

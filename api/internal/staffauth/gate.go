@@ -34,6 +34,28 @@ type GatedRoute struct {
 // open on purpose" apart from "nobody declared anything".
 var AnyStaff = []string{"*"}
 
+// roleOwner and roleAdmin are this package's own two role literals, named
+// once so golangci-lint's package-wide goconst check sees one definition
+// rather than the repeats scattered across gate.go, reader.go, roles.go
+// and membership.go.
+const (
+	roleOwner = "owner"
+	roleAdmin = "admin"
+)
+
+// OwnerAndAdmin is the role declaration for every GatedRouter route
+// ADR-0008's read table admits to Owner and Admin only (Staff roster,
+// Credit balance and ledger, Contract's money-bearing Signed PDF and
+// Invoice history). Moved here from routes_practice.go by #836: a
+// feature Mount declares its own role table, and this vocabulary belongs
+// to ADR-0008, not to main.
+var OwnerAndAdmin = []string{roleOwner, roleAdmin}
+
+// OwnerOnly is the role declaration for a GatedRouter route only a
+// Practice Owner may read (Stripe Connect status, #606's MFA impact
+// count).
+var OwnerOnly = []string{roleOwner}
+
 // GatedRouter closes GET registration until a route explicitly declares
 // who may read it. #231 chose this mount-seam mechanism (proved on branch
 // prototype/231-read-gate) to answer ADR-0008's read table: every GET

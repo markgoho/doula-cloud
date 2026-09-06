@@ -39,7 +39,7 @@ func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Portal Client", Email: "new-contact@example.com"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -92,7 +92,7 @@ func TestDetailHandler_ShowsHerOwnSignInAddressChange(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
 	var out client.DetailResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {

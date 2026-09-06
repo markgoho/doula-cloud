@@ -268,7 +268,7 @@ func UpdateMembershipHandler() http.Handler {
 // true when the target currently holds 'owner', is losing it, and nobody
 // else at the Practice holds it.
 func removesLastOwner(ctx context.Context, tx *sql.Tx, practiceID, targetStaffID, previousRoles string, nextRoles []string) (bool, error) {
-	if !slices.Contains(splitRoles(previousRoles), "owner") || slices.Contains(nextRoles, "owner") {
+	if !slices.Contains(splitRoles(previousRoles), roleOwner) || slices.Contains(nextRoles, roleOwner) {
 		return false, nil
 	}
 	var otherOwners bool

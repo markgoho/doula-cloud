@@ -56,7 +56,7 @@ func TestCreateHandler_MinimalSavesFreely(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients",
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{Record: client.Record{GivenName: "Jamie"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -100,7 +100,7 @@ func TestCreateHandler_InvalidBodyAndInvalidDateOfBirth(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	badBody, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients", bytes.NewReader([]byte(`{`)))
+	badBody, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients", bytes.NewReader([]byte(`{`)))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestCreateHandler_InvalidBodyAndInvalidDateOfBirth(t *testing.T) {
 		t.Fatalf("invalid body status = %d, want %d", badBodyResp.StatusCode, http.StatusBadRequest)
 	}
 
-	badDate := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients",
+	badDate := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{Record: client.Record{GivenName: "Bad Date", DateOfBirth: "not-a-date"}})
 	defer badDate.Body.Close()
 	if badDate.StatusCode != http.StatusBadRequest {
@@ -129,7 +129,7 @@ func TestCreateHandler_MissingGivenName(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients", client.CreateRequest{})
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients", client.CreateRequest{})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -147,7 +147,7 @@ func TestCreateHandler_RefusesContractor(t *testing.T) {
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients",
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{Record: client.Record{GivenName: "Refused"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
@@ -176,7 +176,7 @@ func TestCreateHandler_OwnerWithContractorEmploymentTypeMayCreate(t *testing.T) 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients",
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{Record: client.Record{GivenName: "Solo Client"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -195,7 +195,7 @@ func TestCreateHandler_RefusesOnMatchAndOverrideProceeds(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients",
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{Record: client.Record{GivenName: testSarah, Email: "sarah@example.com"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
@@ -209,7 +209,7 @@ func TestCreateHandler_RefusesOnMatchAndOverrideProceeds(t *testing.T) {
 		t.Fatalf("matches = %+v, want one match on %q", out.Matches, existingID)
 	}
 
-	overridden := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients",
+	overridden := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{Record: client.Record{GivenName: testSarah, Email: "sarah@example.com"}, Override: true})
 	defer overridden.Body.Close()
 	if overridden.StatusCode != http.StatusCreated {
@@ -241,7 +241,7 @@ func TestSearchHandler_MatchesNameDOBEmailPhoneWithinPractice(t *testing.T) {
 		"?phone=555-0100",
 	}
 	for _, q := range cases {
-		resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/search"+q)
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/search"+q)
 		var out client.SearchResponse
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			t.Fatalf("decode response for %q: %v", q, err)
@@ -264,7 +264,7 @@ func TestEditHandler_WhoeverMayReadMayEdit(t *testing.T) {
 	seedContractorAtPractice(t, db, practiceID, unattachedUID)
 	srvUnattached, sessionUnattached := newServer(t, db, unattachedUID)
 	defer srvUnattached.Close()
-	respUnattached := authedJSON(t, sessionUnattached, http.MethodPut, srvUnattached.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	respUnattached := authedJSON(t, sessionUnattached, http.MethodPut, srvUnattached.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Edit Client"}})
 	defer respUnattached.Body.Close()
 	if respUnattached.StatusCode != http.StatusNotFound {
@@ -276,7 +276,7 @@ func TestEditHandler_WhoeverMayReadMayEdit(t *testing.T) {
 	seedGrantedAttachment(t, db, engagementID, attachedStaffID)
 	srvAttached, sessionAttached := newServer(t, db, attachedUID)
 	defer srvAttached.Close()
-	respAttached := authedJSON(t, sessionAttached, http.MethodPut, srvAttached.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	respAttached := authedJSON(t, sessionAttached, http.MethodPut, srvAttached.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Edited By Attached Contractor"}})
 	defer respAttached.Body.Close()
 	if respAttached.StatusCode != http.StatusOK {
@@ -297,14 +297,14 @@ func TestEditHandler_RefusesOnMatchWithDifferentClientAndOverrideProceeds(t *tes
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: testNadia, FamilyName: testHaddad, Email: "nadia@example.com"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
-	overridden := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	overridden := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: testNadia, FamilyName: testHaddad, Email: "nadia@example.com"}, Override: true})
 	defer overridden.Body.Close()
 	if overridden.StatusCode != http.StatusOK {
@@ -325,7 +325,7 @@ func TestEditHandler_ChangingEmailRevokesPendingInvite(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Revoke Client", Email: testNewEmail}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -349,7 +349,7 @@ func TestEditHandler_EveryEditWritesOneClientEvent(t *testing.T) {
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Event Client", Phone: "555-0199"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -381,7 +381,7 @@ func TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent(t *testing.T) {
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Noop Client", Email: "noop@example.com"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -412,7 +412,7 @@ func TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent(t *testing.T) {
 func readClientEventDiff(t *testing.T, db *testdb.DB, session string, srv *httptest.Server, practiceID, clientID, action string) json.RawMessage {
 	t.Helper()
 	_ = db
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
 	var out client.DetailResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -438,7 +438,7 @@ func TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob(t *testing.T) {
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{Record: client.Record{GivenName: "Field Values Client", FieldValues: json.RawMessage(`{"favoriteColor":"blue"}`)}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -467,7 +467,7 @@ func TestDetailHandler_ReturnsRecordEngagementsAndHistory(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -507,7 +507,7 @@ func TestDetailHandler_ResolvedFieldsCoverActiveBlankArchivedHeldAndDropped(t *t
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer resp.Body.Close()
 	var out client.DetailResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -552,7 +552,7 @@ func TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	before := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	before := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	var beforeOut client.DetailResponse
 	if err := json.NewDecoder(before.Body).Decode(&beforeOut); err != nil {
 		t.Fatalf("decode before response: %v", err)
@@ -564,7 +564,7 @@ func TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted(t *testing.T) {
 
 	seedFieldTemplate(t, db, practiceID, `[{"id":"new_field","type":"short_text","label":"Added later","order":0,"archived":false}]`)
 
-	after := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	after := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
 	defer after.Body.Close()
 	var afterOut client.DetailResponse
 	if err := json.NewDecoder(after.Body).Decode(&afterOut); err != nil {
@@ -594,7 +594,7 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -605,7 +605,7 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 		t.Fatalf("default list = %+v, want exactly one row for the two-Engagement Client", list)
 	}
 
-	all := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	all := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer all.Body.Close()
 	var allListResp client.ListResponse
 	if err := json.NewDecoder(all.Body).Decode(&allListResp); err != nil {
@@ -651,7 +651,7 @@ func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	all := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	all := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer all.Body.Close()
 	var allResp client.ListResponse
 	if err := json.NewDecoder(all.Body).Decode(&allResp); err != nil {
@@ -675,7 +675,7 @@ func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
 		t.Fatalf("refused-only HasWork = true, want false")
 	}
 
-	def := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	def := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer def.Body.Close()
 	var defResp client.ListResponse
 	if err := json.NewDecoder(def.Body).Decode(&defResp); err != nil {
@@ -719,7 +719,7 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -800,7 +800,7 @@ func TestListHandler_EmailSuppressed(t *testing.T) {
 			srv, session := newServer(t, db, tc.uid)
 			defer srv.Close()
 
-			resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 			defer resp.Body.Close()
 			var listResp client.ListResponse
 			if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -841,7 +841,7 @@ func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -870,7 +870,7 @@ func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing
 
 	srvContractor, sessionContractor := newServer(t, db, contractorUID)
 	defer srvContractor.Close()
-	respContractor := authedGet(t, sessionContractor, srvContractor.URL+"/practices/"+practiceID+"/clients/search?name=Anyone")
+	respContractor := authedGet(t, sessionContractor, srvContractor.URL+"/api/practices/"+practiceID+"/clients/search?name=Anyone")
 	defer respContractor.Body.Close()
 	if respContractor.StatusCode != http.StatusForbidden {
 		t.Fatalf("contractor search status = %d, want %d", respContractor.StatusCode, http.StatusForbidden)
@@ -880,7 +880,7 @@ func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing
 	seedStaffAtPractice(t, db, practiceID, ownerUID)
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/search")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/search")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("empty query status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -903,7 +903,7 @@ func TestEditHandler_InvalidClientIDAndBody(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	badID := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/not-a-uuid",
+	badID := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/not-a-uuid",
 		client.EditRequest{Record: client.Record{GivenName: "Whoever"}})
 	defer badID.Body.Close()
 	if badID.StatusCode != http.StatusBadRequest {
@@ -911,7 +911,7 @@ func TestEditHandler_InvalidClientIDAndBody(t *testing.T) {
 	}
 
 	missingRequest, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/practices/"+practiceID+"/clients/00000000-0000-0000-0000-000000000000", bytes.NewReader([]byte(`{"givenName":"Ghost"}`)))
+		srv.URL+"/api/practices/"+practiceID+"/clients/00000000-0000-0000-0000-000000000000", bytes.NewReader([]byte(`{"givenName":"Ghost"}`)))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -925,7 +925,7 @@ func TestEditHandler_InvalidClientIDAndBody(t *testing.T) {
 		t.Fatalf("nonexistent clientId status = %d, want %d", missingResp.StatusCode, http.StatusNotFound)
 	}
 
-	badBody, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID, bytes.NewReader([]byte(`{`)))
+	badBody, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID, bytes.NewReader([]byte(`{`)))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -939,7 +939,7 @@ func TestEditHandler_InvalidClientIDAndBody(t *testing.T) {
 		t.Fatalf("invalid body status = %d, want %d", badBodyResp.StatusCode, http.StatusBadRequest)
 	}
 
-	missingGivenName := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
+	missingGivenName := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
 		client.EditRequest{})
 	defer missingGivenName.Body.Close()
 	if missingGivenName.StatusCode != http.StatusBadRequest {
@@ -956,13 +956,13 @@ func TestDetailHandler_InvalidAndMissing(t *testing.T) {
 	srv, session := newServer(t, db, "staff-detail-validation")
 	defer srv.Close()
 
-	badID := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/not-a-uuid")
+	badID := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/not-a-uuid")
 	defer badID.Body.Close()
 	if badID.StatusCode != http.StatusBadRequest {
 		t.Fatalf("invalid clientId status = %d, want %d", badID.StatusCode, http.StatusBadRequest)
 	}
 
-	missing := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/00000000-0000-0000-0000-000000000000")
+	missing := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/00000000-0000-0000-0000-000000000000")
 	defer missing.Body.Close()
 	if missing.StatusCode != http.StatusNotFound {
 		t.Fatalf("nonexistent clientId status = %d, want %d", missing.StatusCode, http.StatusNotFound)
@@ -973,7 +973,7 @@ func TestDetailHandler_InvalidAndMissing(t *testing.T) {
 	unattachedID := seedClient(t, db, practiceID, "Unattached Detail Client", "unattached-cd@example.com")
 	srvContractor, sessionContractor := newServer(t, db, contractorUID)
 	defer srvContractor.Close()
-	forbidden := authedGet(t, sessionContractor, srvContractor.URL+"/practices/"+practiceID+"/clients/"+unattachedID)
+	forbidden := authedGet(t, sessionContractor, srvContractor.URL+"/api/practices/"+practiceID+"/clients/"+unattachedID)
 	defer forbidden.Body.Close()
 	if forbidden.StatusCode != http.StatusNotFound {
 		t.Fatalf("unattached contractor detail status = %d, want %d", forbidden.StatusCode, http.StatusNotFound)
@@ -991,7 +991,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	created := authedJSON(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/clients",
+	created := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients",
 		client.CreateRequest{Record: client.Record{GivenName: "History Client"}})
 	var rec client.Record
 	if err := json.NewDecoder(created.Body).Decode(&rec); err != nil {
@@ -999,7 +999,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 	}
 	_ = created.Body.Close()
 
-	edited := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+rec.ID,
+	edited := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+rec.ID,
 		client.EditRequest{Record: client.Record{GivenName: "History Client", Phone: "555-0177"}})
 	_ = edited.Body.Close()
 
@@ -1037,7 +1037,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 		t.Fatalf("seed approved request: %v", err)
 	}
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+rec.ID)
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+rec.ID)
 	defer resp.Body.Close()
 	var out client.DetailResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -1102,7 +1102,7 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	defer srv.Close()
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?cursor="+cursor)
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?cursor="+cursor)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
@@ -1126,7 +1126,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer firstResp.Body.Close()
 	var first client.ListResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -1137,7 +1137,7 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second client.ListResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
@@ -1167,7 +1167,7 @@ func TestListHandler_ContractorPaginatesNewestFirst(t *testing.T) {
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer firstResp.Body.Close()
 	var first client.ListResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -1178,7 +1178,7 @@ func TestListHandler_ContractorPaginatesNewestFirst(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true&cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second client.ListResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
@@ -1216,7 +1216,7 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -1291,7 +1291,7 @@ func TestListHandler_OpenEngagementsRollup_AdminSeesInvoiceAndMoney(t *testing.T
 	srv, session := newServer(t, db, adminUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -1325,7 +1325,7 @@ func TestListHandler_OpenEngagementsRollup_NoClientsSkipsTheRollupQuery(t *testi
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -1353,7 +1353,7 @@ func TestListHandler_OpenEngagementsRollup_ZeroOpenEngagementsShowsNoLines(t *te
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -1386,7 +1386,7 @@ func TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney(
 	srv, session := newServer(t, db, employeeUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -1441,7 +1441,7 @@ func TestListHandler_OpenEngagementsRollup_ContractorSeesOwnFeeOnlyOnAttachedEng
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients?all=true")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
@@ -1507,7 +1507,7 @@ func TestListHandler_OpenEngagementsRollup_VoidedContractDoesNotDuplicateLine(t 
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
 	defer resp.Body.Close()
 	var listResp client.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
