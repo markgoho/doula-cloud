@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createClient, editClient, loadClients, searchClients, type ClientEditFields } from './client.js';
+import {
+	createClient,
+	editClient,
+	loadClients,
+	mergeClient,
+	searchClients,
+	type ClientEditFields
+} from './client.js';
 import { jsonResponse as response } from './testResponse.js';
 
 const editFields: ClientEditFields = {
@@ -197,13 +204,26 @@ describe('editClient', () => {
 		expect(body.override).toBe(true);
 	});
 
-	it('decodes a 409 into a named conflict rather than throwing', async () => {
-		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [] }];
-		const fetcher = vi.fn().mockResolvedValue(response({ matches }, 409));
+	it('decodes a 409 into a named conflict, carrying substitution and mergeOffered, rather than throwing', async () => {
+		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [], wouldSurvive: true }];
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(response({ matches, substitution: false, mergeOffered: true }, 409));
 
 		const result = await editClient(fetcher, 'practice-1', 'client-1', editFields, false);
 
-		expect(result).toEqual({ conflict: true, matches });
+		expect(result).toEqual({ conflict: true, matches, substitution: false, mergeOffered: true });
+	});
+
+	it('decodes gate one (substitution: true, mergeOffered always false)', async () => {
+		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [], wouldSurvive: false }];
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(response({ matches, substitution: true, mergeOffered: false }, 409));
+
+		const result = await editClient(fetcher, 'practice-1', 'client-1', editFields, false);
+
+		expect(result).toEqual({ conflict: true, matches, substitution: true, mergeOffered: false });
 	});
 
 	it('throws with the response body text on a non-conflict, non-ok response', async () => {
@@ -212,5 +232,29 @@ describe('editClient', () => {
 		await expect(editClient(fetcher, 'practice-1', 'client-1', editFields, false)).rejects.toThrow(
 			'client not found'
 		);
+	});
+});
+
+describe('mergeClient', () => {
+	it('posts the typed fields plus otherClientId to the merge path', async () => {
+		const survivor = { id: 'client-2', ...editFields };
+		const fetcher = vi.fn().mockResolvedValue(response(survivor));
+
+		const result = await mergeClient(fetcher, 'practice-1', 'client-1', editFields, 'client-2');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/client-1/merge', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ...editFields, otherClientId: 'client-2' })
+		});
+		expect(result).toEqual(survivor);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('this client record has already been merged into another', 409));
+
+		await expect(
+			mergeClient(fetcher, 'practice-1', 'client-1', editFields, 'client-2')
+		).rejects.toThrow('this client record has already been merged into another');
 	});
 });

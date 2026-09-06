@@ -120,6 +120,18 @@ export interface ClientMatch extends ClientRecord {
 	engagements: EngagementSummary[];
 }
 
+/** One Match the edit path's collision predicate turned up (ADR-0017's
+ * amendment, #814) -- mirrors the Go BFF's client.CollisionMatch.
+ * `wouldSurvive` is meaningless (and false) unless the 409 that carried it
+ * also set `mergeOffered`: it says which side a "This is her" answer on
+ * this match would keep -- `true` means this match survives and the
+ * record being edited is absorbed into it, `false` means the reverse.
+ * Direction is decided server-side, never assumed from which record is
+ * open for editing. */
+export interface CollisionMatch extends ClientMatch {
+	wouldSurvive: boolean;
+}
+
 /** The fields intake collects -- every structural column but `id`, which
  * the endpoint mints, plus the Practice-defined layer. Widened on #466:
  * intake used to ask six of ADR-0017's twelve columns and never reached
@@ -231,14 +243,19 @@ export async function searchClients(
  * unchanged rather than wiping them (see ClientRecord.fieldValues). */
 export type ClientEditFields = Omit<ClientRecord, 'id'>;
 
-/** The outcome of a save attempt: either it went through, or the match
- * query refused it and named who it matched. A discriminated union
- * rather than a thrown error, because a conflict is an expected outcome
- * this screen has a real next step for -- the override prompt -- not a
- * failure. */
+/** The outcome of a save attempt: either it went through, or the edit
+ * path's two gates (ADR-0017's amendment, #814) refused it. A
+ * discriminated union rather than a thrown error, because a conflict is
+ * an expected outcome this screen has a real next step for, not a
+ * failure. `substitution` true is gate one -- a name column changed and
+ * the result exactly matches another Client on file; the one next step
+ * is the existing override. `substitution` false is gate two -- a
+ * possible duplicate, asked rather than blocked; `mergeOffered` says
+ * whether "This is her" is available at all, or only "No, a different
+ * person" is. */
 export type EditClientResult =
 	| { conflict: false; record: ClientRecord }
-	| { conflict: true; matches: ClientMatch[] };
+	| { conflict: true; matches: CollisionMatch[]; substitution: boolean; mergeOffered: boolean };
 
 function clientPath(practiceId: string, clientId: string): string {
 	return `${clientsPath(practiceId)}/${clientId}`;
@@ -249,11 +266,11 @@ function clientPath(practiceId: string, clientId: string): string {
  * ADR-0017's single deliberate "No, a different person" act: send it
  * only after the caller has shown the reader the match a prior call
  * returned and she chose to proceed anyway. A 409 decodes into
- * `{ conflict: true, matches }` rather than throwing -- the caller's
- * expected path, not an exceptional one. Any other non-2xx response
- * throws with the response body text, so a refusal that is not a match
- * conflict (a validation failure, a permission refusal, a dropped
- * connection) is never a silent failure. */
+ * `{ conflict: true, matches, substitution, mergeOffered }` rather than
+ * throwing -- the caller's expected path, not an exceptional one. Any
+ * other non-2xx response throws with the response body text, so a
+ * refusal that is not a match conflict (a validation failure, a
+ * permission refusal, a dropped connection) is never a silent failure. */
 export async function editClient(
 	fetcher: Fetcher,
 	practiceId: string,
@@ -267,11 +284,46 @@ export async function editClient(
 		body: JSON.stringify({ ...fields, override: shouldOverride })
 	});
 	if (response.status === 409) {
-		const body: { matches: ClientMatch[] } = await response.json();
-		return { conflict: true, matches: body.matches };
+		const body: { matches: CollisionMatch[]; substitution: boolean; mergeOffered: boolean } =
+			await response.json();
+		return {
+			conflict: true,
+			matches: body.matches,
+			substitution: body.substitution,
+			mergeOffered: body.mergeOffered
+		};
 	}
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
 	return { conflict: false, record: await response.json() };
+}
+
+/** Answers gate two's "This is her": absorbs the record open for editing
+ * into `otherClientId` or the reverse, whichever `CollisionMatch.wouldSurvive`
+ * said would happen (api/internal/client/merge.go). `fields` is what was
+ * typed for the record at `clientId` -- not yet saved, since gate two fired
+ * before the plain edit could write it -- and rides through as the merge's
+ * own contribution on that side. Returns the survivor's full record: its
+ * `id` may be either `clientId` or `otherClientId`, so a caller reads it
+ * rather than assuming which side won. Throws with the response body text
+ * on a non-2xx response -- there is no structured conflict shape to decode
+ * here, unlike `editClient`'s 409 (docs/api-design.md section 7's plain
+ * error envelope only). */
+export async function mergeClient(
+	fetcher: Fetcher,
+	practiceId: string,
+	clientId: string,
+	fields: ClientEditFields,
+	otherClientId: string
+): Promise<ClientRecord> {
+	const response = await fetcher(`${clientPath(practiceId, clientId)}/merge`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ ...fields, otherClientId })
+	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
 }

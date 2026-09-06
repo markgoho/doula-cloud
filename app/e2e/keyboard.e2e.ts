@@ -218,7 +218,7 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	await expect(dialog).toBeVisible();
 	await tabTo(
 		page,
-		dialog.getByRole('button', { name: 'Save as a different person' }),
+		dialog.getByRole('button', { name: 'Yes, a different person' }),
 		'the override button in the duplicate-Client dialog'
 	);
 	await page.keyboard.press('Enter');
