@@ -50,12 +50,15 @@ func queue(ctx context.Context, tx *sql.Tx, offerID, token, code string) error {
 // Worker sends due engagement_offer_outbox rows -- the
 // Cloud-Scheduler-driven half of ADR-0010's outbox (outbox.ProcessPending
 // owns the claim/retry/dead-letter machinery every mail kind shares).
+//
+// Hand-written rather than built on outbox.MailWorker[R], unlike most of
+// its siblings (#839): send does a second write after mailing -- stamping
+// engagement_offers.access_code_sent_at -- which outbox.MailWorker's
+// Compose has no seam for (Compose describes one message, not a
+// post-send side effect). outbox.Mailer is still embedded, so no field
+// here redeclares Sender, Now, AppBaseURL, From or ReplyTo.
 type Worker struct {
-	Sender     mail.Sender
-	Now        func() time.Time
-	AppBaseURL string
-	From       string
-	ReplyTo    string
+	outbox.Mailer
 }
 
 // invite_token/access_code are cleared on both sent and dead-lettered
@@ -63,11 +66,7 @@ type Worker struct {
 // for holding plaintext at all is that its exposure window is "queued
 // but not yet resolved", and a dead-lettered row is done retrying too.
 func (w Worker) inner() outbox.Worker {
-	return outbox.Worker{
-		Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo,
-		Table:           "engagement_offer_outbox",
-		ClearOnTerminal: []string{"invite_token", "access_code"},
-	}
+	return w.Worker("engagement_offer_outbox", "invite_token", "access_code")
 }
 
 // pendingRow is one due outbox row joined to the Offer and Invitation it

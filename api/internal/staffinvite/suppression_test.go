@@ -33,7 +33,7 @@ func TestWorker_ProcessPending_SuppressedAddressDeadLettersWithoutSending(t *tes
 	if len(mailgun.Sent()) != 0 {
 		t.Fatalf("handed %d messages to Mailgun, want 0", len(mailgun.Sent()))
 	}
-	status, _, inviteToken := outboxRowState(t, db, outboxID)
+	status, inviteToken := outboxRowState(t, db, outboxID)
 	if status != "dead_lettered" {
 		t.Fatalf("status = %q, want dead_lettered (no retry for a suppressed address)", status)
 	}
@@ -66,7 +66,7 @@ func TestWorker_ProcessPending_ClearedSuppressionSendsNormally(t *testing.T) {
 	if len(mailgun.Sent()) != 1 {
 		t.Fatalf("delivered %d messages, want 1", len(mailgun.Sent()))
 	}
-	status, _, _ := outboxRowState(t, db, outboxID)
+	status, _ := outboxRowState(t, db, outboxID)
 	if status != testOutboxStatusSent {
 		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
 	}

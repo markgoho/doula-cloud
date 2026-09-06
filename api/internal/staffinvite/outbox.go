@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"time"
 
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 )
 
@@ -22,6 +21,10 @@ import (
 // Cloud, never which one, and no Client name or Engagement detail
 // (neither applies here regardless). link is the only variable.
 const staffInviteSubject = "You've been invited to join a practice on Doula Cloud"
+
+// invitationStatusPending mirrors practice_invitations.status's live
+// value (00030): a row still open to being accepted.
+const invitationStatusPending = "pending"
 
 func staffInviteText(link string) string {
 	return "Hello,\n\n" +
@@ -70,36 +73,32 @@ func Refresh(ctx context.Context, tx *sql.Tx, invitationID, token string) error 
 	return nil
 }
 
-// Worker sends due staff_invite_outbox rows -- the Cloud-Scheduler-driven
-// half of ADR-0010's outbox (outbox.ProcessPending owns the claim/retry/
-// dead-letter machinery every mail kind shares).
-type Worker struct {
-	Sender     mail.Sender
-	Now        func() time.Time
-	AppBaseURL string
-	From       string
-	ReplyTo    string
-}
+// Worker sends due staff_invite_outbox rows through outbox.MailWorker's
+// shared claim-scan-compose-send-mark loop -- this kind's own share is
+// only its table, claim query, row shape and Compose below. invite_token
+// is cleared on both sent and dead-lettered terminal states, not only on
+// sent: this table's whole justification for holding plaintext at all is
+// that its exposure window is "queued but not yet sent", and a
+// dead-lettered row is done retrying too.
+type Worker = outbox.MailWorker[pendingRow]
 
-// invite_token is cleared on both sent and dead-lettered terminal states,
-// not only on sent: this table's whole justification for holding
-// plaintext at all is that its exposure window is "queued but not yet
-// sent", and a dead-lettered row is done retrying too.
-func (w Worker) inner() outbox.Worker {
-	return outbox.Worker{
-		Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo,
+// NewWorker builds the Staff invitation outbox worker around mailer.
+func NewWorker(mailer outbox.Mailer) Worker {
+	return Worker{
+		Mailer:          mailer,
 		Table:           "staff_invite_outbox",
 		ClearOnTerminal: []string{"invite_token"},
+		ClaimQuery:      claimQuery,
+		Scan:            scanRow,
+		Compose:         compose(mailer),
 	}
 }
 
 type pendingRow struct {
-	id           string
-	attemptCount int
-	inviteToken  sql.NullString
-	address      string
-	status       string
-	expiresAt    time.Time
+	inviteToken sql.NullString
+	address     string
+	status      string
+	expiresAt   time.Time
 }
 
 const claimQuery = `SELECT o.id, o.attempt_count, o.invite_token, pi.address, pi.status, pi.expires_at
@@ -110,53 +109,31 @@ const claimQuery = `SELECT o.id, o.attempt_count, o.invite_token, pi.address, pi
 	 LIMIT $1
 	 FOR UPDATE OF o SKIP LOCKED`
 
-func scanRow(rows *sql.Rows) (pendingRow, error) {
+func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
+	var meta outbox.RowMeta
 	var r pendingRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.inviteToken, &r.address, &r.status, &r.expiresAt)
-	return r, wrapOutboxErr(err)
-}
-
-// wrapOutboxErr gives an error from the outbox package (a sibling
-// package, so wrapcheck treats its errors as external) this package's
-// own prefix, without outbox's own already-descriptive message.
-func wrapOutboxErr(err error) error {
-	if err == nil {
-		return nil
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.inviteToken, &r.address, &r.status, &r.expiresAt); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("staffinvite: scan outbox row: %w", err)
 	}
-	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
-	return fmt.Errorf("staffinvite: %w", err)
+	return meta, r, nil
 }
 
-// ProcessPending sends every due staff_invite_outbox row within tx: it
+// compose resolves one pending row: skipped if the Invitation is no
+// longer pending or has expired -- accepted, revoked, or expired,
+// whether or not something has gotten around to flipping the status
+// column yet, either way nothing to deliver -- mailed otherwise. It
 // joins practice_invitations for the recipient's address and current
-// status at send time, so an Invitation accepted, revoked, or expired
-// through some other path before this row was sent is never mailed. The
-// mailable token itself comes from the outbox row, not the join --
-// practice_invitations only ever holds its digest (00030) -- and is
-// cleared once sent, keeping its plaintext exposure window to "queued
-// but not yet sent".
-func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
-}
-
-func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
-	// Not (still) 'pending', or past its own expires_at -- accepted,
-	// revoked, or expired, whether or not something has gotten around to
-	// flipping the status column yet -- either way, nothing to deliver.
-	if r.status != "pending" || !r.expiresAt.After(now) {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
+// status at send time, so an Invitation resolved through some other path
+// before this row was sent is never mailed. The mailable token itself
+// comes from the outbox row, not the join -- practice_invitations only
+// ever holds its digest (00030).
+func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, time.Time) (string, string, string, error) {
+	return func(_ context.Context, _ *sql.Tx, r pendingRow, now time.Time) (string, string, string, error) {
+		if r.status != invitationStatusPending || !r.expiresAt.After(now) {
+			return "", "", "", outbox.ErrAlreadyDone
+		}
+		link := mailer.AppBaseURL + "/accept-invite?token=" + r.inviteToken.String
+		return r.address, staffInviteSubject, staffInviteText(link), nil
 	}
-
-	link := w.AppBaseURL + "/accept-invite?token=" + r.inviteToken.String
-	sendErr := w.Sender.Send(ctx, mail.Message{
-		To:      r.address,
-		From:    w.From,
-		ReplyTo: w.ReplyTo,
-		Subject: staffInviteSubject,
-		Text:    staffInviteText(link),
-	})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
 }

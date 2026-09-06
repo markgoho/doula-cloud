@@ -2,12 +2,12 @@ package staffinvite_test
 
 import (
 	"database/sql"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/testdb"
 )
@@ -21,10 +21,12 @@ const (
 )
 
 // newTestWorker builds a Worker around sender with this file's stand-in
-// AppBaseURL/From/ReplyTo -- every outbox test needs one, only the
-// injected Sender and (occasionally) Now vary.
+// AppBaseURL/From/ReplyTo -- the one end-to-end test below needs it to
+// prove claimQuery's columns still match scanRow; every other case
+// belongs to compose_test.go (pure Compose) or outbox.MailWorker's own
+// suite (skip/retry/dead-letter/suppression/terminal-clear).
 func newTestWorker(sender mail.Sender) staffinvite.Worker {
-	return staffinvite.Worker{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: "support@b.test"}
+	return staffinvite.NewWorker(outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: "support@b.test"})
 }
 
 // seedOutboxRow inserts a pending staff_invite_outbox row for
@@ -67,14 +69,15 @@ func runWorker(t *testing.T, db *testdb.DB, w staffinvite.Worker) {
 	}
 }
 
-func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int, inviteToken sql.NullString) {
+func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string, inviteToken sql.NullString) {
 	t.Helper()
+	var attemptCount int
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT status, attempt_count, invite_token::text FROM staff_invite_outbox WHERE id = $1`, id,
 	).Scan(&status, &attemptCount, &inviteToken); err != nil {
 		t.Fatalf("query outbox row: %v", err)
 	}
-	return status, attemptCount, inviteToken
+	return status, inviteToken
 }
 
 func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
@@ -87,7 +90,7 @@ func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
 
-	status, _, inviteToken := outboxRowState(t, db, outboxID)
+	status, inviteToken := outboxRowState(t, db, outboxID)
 	if status != testOutboxStatusSent {
 		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
 	}
@@ -110,102 +113,6 @@ func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
 	}
 	if strings.Contains(sent[0].Subject, "Staff Invite Test Practice") || strings.Contains(sent[0].Text, "Staff Invite Test Practice") {
 		t.Fatalf("subject/body names the Practice, violating ADR-0009's content rule: %q / %q", sent[0].Subject, sent[0].Text)
-	}
-}
-
-func TestWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Not Due Practice")
-	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
-	outboxID := seedOutboxRow(t, db, invitationID, "22222222-2222-2222-2222-222222222222", 0, time.Now().Add(time.Hour))
-
-	sender := &mail.FakeSender{}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, _, _ := outboxRowState(t, db, outboxID)
-	if status != testOutboxStatusPending {
-		t.Fatalf("status = %q, want %s (not due yet)", status, testOutboxStatusPending)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no send for a not-yet-due row")
-	}
-}
-
-func TestWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Retry Practice")
-	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
-	outboxID := seedOutboxRow(t, db, invitationID, "33333333-3333-3333-3333-333333333333", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, attemptCount, _ := outboxRowState(t, db, outboxID)
-	if status != testOutboxStatusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want %s/1", status, attemptCount, testOutboxStatusPending)
-	}
-}
-
-func TestWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Dead Letter Practice")
-	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
-	// One attempt short of the schedule's length -- this failure is the
-	// last one before dead-letter.
-	outboxID := seedOutboxRow(t, db, invitationID, "44444444-4444-4444-4444-444444444444", 4, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, attemptCount, inviteToken := outboxRowState(t, db, outboxID)
-	if status != "dead_lettered" || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
-	}
-	if inviteToken.Valid {
-		t.Fatalf("invite_token = %v, want NULL once dead-lettered -- it will never be sent", inviteToken.String)
-	}
-}
-
-func TestWorker_ProcessPending_ExpiredInvitationSkipsSend(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Expired Invitation Practice")
-	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
-	// The Invitation's own window lapsed before the worker got to this
-	// row -- nothing has swept its status to 'expired' (no such sweep
-	// exists yet), so it still reads 'pending'.
-	setInvitationExpiresAt(t, db, invitationID, time.Now().Add(-time.Minute))
-	outboxID := seedOutboxRow(t, db, invitationID, "77777777-7777-7777-7777-777777777777", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, _, _ := outboxRowState(t, db, outboxID)
-	if status != testOutboxStatusSent {
-		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no mail sent for an expired invitation")
-	}
-}
-
-func TestWorker_ProcessPending_AlreadyResolvedSkipsSend(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Already Accepted Practice")
-	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
-	// The invited person accepted through some other path (#316, not yet
-	// built) before the worker got to this row.
-	setInvitationStatus(t, db, invitationID, "accepted")
-	outboxID := seedOutboxRow(t, db, invitationID, "55555555-5555-5555-5555-555555555555", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, _, _ := outboxRowState(t, db, outboxID)
-	if status != testOutboxStatusSent {
-		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no mail sent for an already-resolved invitation")
 	}
 }
 

@@ -2,21 +2,18 @@ package clientauth_test
 
 import (
 	"database/sql"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newAddressChangeWorker(sender mail.Sender) clientauth.AddressChangeWorker {
-	return clientauth.AddressChangeWorker{
-		Sender: sender, Now: time.Now,
-		AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: testReplyTo,
-	}
+	return clientauth.NewAddressChangeWorker(outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: testReplyTo})
 }
 
 func seedAddressChangeRow(t *testing.T, db *testdb.DB, identityUID, toAddress string, attemptCount int, nextAttemptAt time.Time) string {
@@ -73,59 +70,5 @@ func TestAddressChangeWorker_ProcessPending_MailsTheRowsOwnAddress(t *testing.T)
 	}
 	if strings.Contains(sent[0].Text, "still-the-old@example.com") {
 		t.Fatal("the confirmation mail names the old address")
-	}
-}
-
-func TestAddressChangeWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	const identifier = "portal_change-not-due"
-	testdb.SeedPortalAccount(t, db, identifier, "change-not-due@example.com")
-	rowID := seedAddressChangeRow(t, db, identifier, "new@example.com", 0, time.Now().Add(time.Hour))
-
-	sender := &mail.FakeSender{}
-	runMagicLinkTx(t, db, newAddressChangeWorker(sender).ProcessPending)
-
-	status, _, _ := addressChangeRowState(t, db, rowID)
-	if status != statusPending {
-		t.Fatalf("status = %q, want pending", status)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatal("expected no send for a not-yet-due row")
-	}
-}
-
-func TestAddressChangeWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	const identifier = "portal_change-retry"
-	testdb.SeedPortalAccount(t, db, identifier, "change-retry@example.com")
-	rowID := seedAddressChangeRow(t, db, identifier, "new@example.com", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runMagicLinkTx(t, db, newAddressChangeWorker(sender).ProcessPending)
-
-	status, attemptCount, token := addressChangeRowState(t, db, rowID)
-	if status != statusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want pending/1", status, attemptCount)
-	}
-	if !token.Valid {
-		t.Fatal("token cleared after a retry, want it preserved for the next attempt")
-	}
-}
-
-func TestAddressChangeWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	const identifier = "portal_change-final"
-	testdb.SeedPortalAccount(t, db, identifier, "change-final@example.com")
-	rowID := seedAddressChangeRow(t, db, identifier, "new@example.com", 4, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runMagicLinkTx(t, db, newAddressChangeWorker(sender).ProcessPending)
-
-	status, attemptCount, token := addressChangeRowState(t, db, rowID)
-	if status != statusDeadLettered || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
-	}
-	if token.Valid {
-		t.Fatal("token still set once dead-lettered, want NULL -- it will never be sent")
 	}
 }

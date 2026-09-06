@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 )
 
@@ -50,46 +49,30 @@ const (
 	ResetLinkLifetime        = time.Hour
 )
 
-// wrapOutboxErr gives an error from the outbox package (a sibling
-// package, so wrapcheck treats its errors as external) this package's
-// own prefix -- portalinvite and staffinvite each keep the same small
-// helper rather than sharing one, since it does nothing but rename an
-// error.
-func wrapOutboxErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
-	return fmt.Errorf("authmail: %w", err)
-}
+// TokenMailWorker sends due staff_token_mail_outbox rows through
+// outbox.MailWorker's shared claim-scan-compose-send-mark loop -- this
+// kind's own share is only its table, claim query, row shape and Compose
+// below. Accounts resolves the *current* recipient address at send time,
+// per this package's own doc comment.
+type TokenMailWorker = outbox.MailWorker[tokenMailRow]
 
-// TokenMailWorker sends due staff_token_mail_outbox rows -- the
-// Cloud-Scheduler-driven half of ADR-0010's outbox for verification and
-// reset mail. Accounts resolves the *current* recipient address at send
-// time, per this package's own doc comment.
-type TokenMailWorker struct {
-	Sender     mail.Sender
-	Accounts   authn.AccountManager
-	Now        func() time.Time
-	AppBaseURL string
-	From       string
-	ReplyTo    string
-}
-
-func (w TokenMailWorker) inner() outbox.Worker {
-	return outbox.Worker{
-		Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo,
+// NewTokenMailWorker builds the Staff verification/reset outbox worker
+// around mailer and accounts.
+func NewTokenMailWorker(mailer outbox.Mailer, accounts authn.AccountManager) TokenMailWorker {
+	return TokenMailWorker{
+		Mailer:          mailer,
 		Table:           "staff_token_mail_outbox",
 		ClearOnTerminal: []string{"token"},
+		ClaimQuery:      tokenMailClaimQuery,
+		Scan:            scanTokenMailRow,
+		Compose:         composeTokenMail(mailer, accounts),
 	}
 }
 
 type tokenMailRow struct {
-	id           string
-	attemptCount int
-	identityUID  string
-	kind         TokenMailKind
-	token        sql.NullString
+	identityUID string
+	kind        TokenMailKind
+	token       sql.NullString
 }
 
 //nolint:gosec // G101 flags the "token" column name; this is SQL query text, not a credential
@@ -100,47 +83,47 @@ const tokenMailClaimQuery = `SELECT id, attempt_count, identity_uid, kind, token
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
 
-func scanTokenMailRow(rows *sql.Rows) (tokenMailRow, error) {
+func scanTokenMailRow(rows *sql.Rows) (outbox.RowMeta, tokenMailRow, error) {
+	var meta outbox.RowMeta
 	var r tokenMailRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.identityUID, &r.kind, &r.token)
-	return r, wrapOutboxErr(err)
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.identityUID, &r.kind, &r.token); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("authmail: scan token mail row: %w", err)
+	}
+	return meta, r, nil
 }
 
-// ProcessPending sends every due staff_token_mail_outbox row within tx.
-func (w TokenMailWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), tokenMailClaimQuery, scanTokenMailRow, w.send))
-}
+// composeTokenMail resolves the recipient's current Identity Platform
+// account, which is what makes this Compose need ctx (accounts.GetAccount
+// is a network call). ErrAccountNotFound is terminal (dead-lettered, no
+// account left to notify); any other AccountManager error retries per
+// BackoffSchedule, same as a Mailgun failure would.
+func composeTokenMail(mailer outbox.Mailer, accounts authn.AccountManager) func(context.Context, *sql.Tx, tokenMailRow, time.Time) (string, string, string, error) {
+	return func(ctx context.Context, _ *sql.Tx, r tokenMailRow, _ time.Time) (string, string, string, error) {
+		account, err := accounts.GetAccount(ctx, r.identityUID)
+		if errors.Is(err, authn.ErrAccountNotFound) {
+			return "", "", "", &outbox.DeadLetterError{Reason: "no Identity Platform account for this identity"}
+		}
+		if err != nil {
+			return "", "", "", fmt.Errorf("authmail: resolve account: %w", err)
+		}
 
-func (w TokenMailWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r tokenMailRow, now time.Time) error {
-	account, err := w.Accounts.GetAccount(ctx, r.identityUID)
-	if errors.Is(err, authn.ErrAccountNotFound) {
-		// The identity this row named no longer has an Identity Platform
-		// account at all -- nothing a retry could fix.
-		return wrapOutboxErr(inner.MarkDeadLetteredNow(ctx, tx, r.id, "no Identity Platform account for this identity"))
-	}
-	if err != nil {
-		return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, err, now))
-	}
+		if r.kind == KindEmailVerification && account.EmailVerified {
+			// Already verified through some other path -- another link
+			// sent before this row's own re-request superseded it, or a
+			// provider that reports addresses pre-verified -- before this
+			// row got sent. Nothing to deliver.
+			return "", "", "", outbox.ErrAlreadyDone
+		}
 
-	if r.kind == KindEmailVerification && account.EmailVerified {
-		// Already verified through some other path -- another link sent
-		// before this row's own re-request superseded it, or a provider
-		// that reports addresses pre-verified -- before this row got
-		// sent. Nothing to deliver.
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
+		if !r.token.Valid || r.token.String == "" {
+			// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside Queue
+			return "", "", "", &outbox.DeadLetterError{Reason: "outbox row carries no token"}
+		}
 
-	if !r.token.Valid || r.token.String == "" {
-		// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside Queue
-		return wrapOutboxErr(inner.MarkDeadLetteredNow(ctx, tx, r.id, "outbox row carries no token"))
+		subject, text := tokenMailCopy(r.kind, mailer.AppBaseURL, r.token.String)
+		return account.Email, subject, text, nil
 	}
-
-	subject, text := tokenMailCopy(r.kind, w.AppBaseURL, r.token.String)
-	sendErr := w.Sender.Send(ctx, mail.Message{To: account.Email, From: w.From, ReplyTo: w.ReplyTo, Subject: subject, Text: text})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
 }
 
 // tokenMailCopy is verification and reset mail's fixed, content-free
@@ -182,22 +165,24 @@ func QueueTokenMail(ctx context.Context, tx *sql.Tx, identityUID string, kind To
 }
 
 // EmailChangeWorker sends due staff_email_change_outbox rows -- the
-// notice a Staff email change mails to the address it moved away from.
-type EmailChangeWorker struct {
-	Sender  mail.Sender
-	Now     func() time.Time
-	From    string
-	ReplyTo string
-}
+// notice a Staff email change mails to the address it moved away from --
+// through the same outbox.MailWorker loop as TokenMailWorker above.
+type EmailChangeWorker = outbox.MailWorker[emailChangeRow]
 
-func (w EmailChangeWorker) inner() outbox.Worker {
-	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "staff_email_change_outbox"}
+// NewEmailChangeWorker builds the Staff email-change-notice outbox
+// worker around mailer.
+func NewEmailChangeWorker(mailer outbox.Mailer) EmailChangeWorker {
+	return EmailChangeWorker{
+		Mailer:     mailer,
+		Table:      "staff_email_change_outbox",
+		ClaimQuery: emailChangeClaimQuery,
+		Scan:       scanEmailChangeRow,
+		Compose:    composeEmailChange,
+	}
 }
 
 type emailChangeRow struct {
-	id           string
-	attemptCount int
-	oldEmail     string
+	oldEmail string
 }
 
 const emailChangeClaimQuery = `SELECT id, attempt_count, old_email
@@ -207,15 +192,14 @@ const emailChangeClaimQuery = `SELECT id, attempt_count, old_email
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
 
-func scanEmailChangeRow(rows *sql.Rows) (emailChangeRow, error) {
+func scanEmailChangeRow(rows *sql.Rows) (outbox.RowMeta, emailChangeRow, error) {
+	var meta outbox.RowMeta
 	var r emailChangeRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.oldEmail)
-	return r, wrapOutboxErr(err)
-}
-
-// ProcessPending sends every due staff_email_change_outbox row within tx.
-func (w EmailChangeWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), emailChangeClaimQuery, scanEmailChangeRow, w.send))
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.oldEmail); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("authmail: scan email change row: %w", err)
+	}
+	return meta, r, nil
 }
 
 // emailChangeSubject and emailChangeText are the notice's fixed,
@@ -228,12 +212,8 @@ const emailChangeText = "Hello,\n\n" +
 	"The email address on your Doula Cloud account was changed.\n\n" +
 	"If you made this change, no action is needed. If you did not, reply to this email right away.\n"
 
-func (w EmailChangeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r emailChangeRow, now time.Time) error {
-	sendErr := w.Sender.Send(ctx, mail.Message{To: r.oldEmail, From: w.From, ReplyTo: w.ReplyTo, Subject: emailChangeSubject, Text: emailChangeText})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
+func composeEmailChange(_ context.Context, _ *sql.Tx, r emailChangeRow, _ time.Time) (string, string, string, error) {
+	return r.oldEmail, emailChangeSubject, emailChangeText, nil
 }
 
 // QueueEmailChangeNotice inserts a pending staff_email_change_outbox row

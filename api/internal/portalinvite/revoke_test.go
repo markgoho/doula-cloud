@@ -44,7 +44,7 @@ func TestRevokePending_DeadLettersThePendingRow(t *testing.T) {
 		t.Fatalf("commit: %v", err)
 	}
 
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != "dead_lettered" {
 		t.Fatalf("status = %q, want dead_lettered", status)
 	}

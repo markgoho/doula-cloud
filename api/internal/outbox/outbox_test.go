@@ -21,6 +21,7 @@ const (
 	testStatusDead    = "dead_lettered"
 	testFrom          = "sender@example.test"
 	testReplyTo       = "reply@example.test"
+	testDeadReason    = "no address on file"
 )
 
 // createTestTable makes a scratch outbox-shaped table in db's own cloned
@@ -223,7 +224,7 @@ func TestMarkDeadLetteredNow(t *testing.T) {
 		t.Fatalf("begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := w.MarkDeadLetteredNow(t.Context(), tx, "row-1", "no address on file"); err != nil {
+	if err := w.MarkDeadLetteredNow(t.Context(), tx, "row-1", testDeadReason); err != nil {
 		t.Fatalf("MarkDeadLetteredNow: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -237,8 +238,8 @@ func TestMarkDeadLetteredNow(t *testing.T) {
 	if got.attemptCount != 0 {
 		t.Fatalf("attempt_count = %d, want unchanged 0 (outright dead-letter, not a retry)", got.attemptCount)
 	}
-	if !got.lastError.Valid || got.lastError.String != "no address on file" {
-		t.Fatalf("last_error = %+v, want %q", got.lastError, "no address on file")
+	if !got.lastError.Valid || got.lastError.String != testDeadReason {
+		t.Fatalf("last_error = %+v, want %q", got.lastError, testDeadReason)
 	}
 }
 

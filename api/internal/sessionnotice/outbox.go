@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -229,28 +228,29 @@ func QueueMFARecoveryCleared(ctx context.Context, tx *sql.Tx, identityUID string
 	return nil
 }
 
-// Worker sends due session_notice_outbox rows -- the Cloud-Scheduler-
-// driven half of ADR-0010's outbox (outbox.ProcessPending owns the claim/
-// retry/dead-letter machinery every mail kind shares). No AppBaseURL:
-// unlike its siblings, neither notice's body links anywhere -- ADR-0004
-// built no "active sessions" screen to link to, and a security notice
-// needs no more than "reply if this wasn't you" to be actionable.
-type Worker struct {
-	Sender  mail.Sender
-	Now     func() time.Time
-	From    string
-	ReplyTo string
-}
+// Worker sends due session_notice_outbox rows through outbox.MailWorker's
+// shared claim-scan-compose-send-mark loop -- this kind's own share is
+// only its table, claim query, row shape and Compose below. No
+// AppBaseURL: unlike its siblings, neither notice's body links anywhere
+// -- ADR-0004 built no "active sessions" screen to link to, and a
+// security notice needs no more than "reply if this wasn't you" to be
+// actionable.
+type Worker = outbox.MailWorker[pendingRow]
 
-func (w Worker) inner() outbox.Worker {
-	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "session_notice_outbox"}
+// NewWorker builds the session-notice outbox worker around mailer.
+func NewWorker(mailer outbox.Mailer) Worker {
+	return Worker{
+		Mailer:     mailer,
+		Table:      "session_notice_outbox",
+		ClaimQuery: claimQuery,
+		Scan:       scanRow,
+		Compose:    compose,
+	}
 }
 
 type pendingRow struct {
-	id           string
-	identityUID  string
-	kind         string
-	attemptCount int
+	identityUID string
+	kind        string
 }
 
 const claimQuery = `SELECT id, identity_uid, kind, attempt_count
@@ -260,41 +260,29 @@ const claimQuery = `SELECT id, identity_uid, kind, attempt_count
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
 
-func scanRow(rows *sql.Rows) (pendingRow, error) {
+func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
+	var meta outbox.RowMeta
 	var r pendingRow
-	err := rows.Scan(&r.id, &r.identityUID, &r.kind, &r.attemptCount)
-	return r, wrapOutboxErr(err)
-}
-
-// wrapOutboxErr gives an error from the outbox package (a sibling
-// package, so wrapcheck treats its errors as external) this package's
-// own prefix, without outbox's own already-descriptive message.
-func wrapOutboxErr(err error) error {
-	if err == nil {
-		return nil
+	if err := rows.Scan(&meta.ID, &r.identityUID, &r.kind, &meta.AttemptCount); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("sessionnotice: scan outbox row: %w", err)
 	}
-	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
-	return fmt.Errorf("sessionnotice: %w", err)
+	return meta, r, nil
 }
 
-// ProcessPending sends every due session_notice_outbox row within tx,
-// resolving the target Staff member's current email at send time (not
-// stored on the row, same reasoning as billing.Worker.ownerEmails) and
-// skipping a row whose identity no longer names a Staff member -- an
-// offboarded account deleted between queuing and send has no address
-// left to notify.
-func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
-}
-
-func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
+// compose resolves the target Staff member's current email at send time
+// (not stored on the row, same reasoning as billing.Worker.ownerEmails,
+// which is why it needs tx) and resolves to ErrAlreadyDone for a row
+// whose identity no longer names a Staff member -- an offboarded account
+// deleted between queuing and send has no address left to notify.
+func compose(ctx context.Context, tx *sql.Tx, r pendingRow, _ time.Time) (string, string, string, error) {
 	email, found, err := staffEmail(ctx, tx, r.identityUID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return "", "", "", err
 	}
 	if !found {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
+		return "", "", "", outbox.ErrAlreadyDone
 	}
 
 	var subject, text string
@@ -308,18 +296,7 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pen
 	default:
 		subject, text = newSignInSubject, newSignInText()
 	}
-
-	sendErr := w.Sender.Send(ctx, mail.Message{
-		To:      email,
-		From:    w.From,
-		ReplyTo: w.ReplyTo,
-		Subject: subject,
-		Text:    text,
-	})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
+	return email, subject, text, nil
 }
 
 // staffEmail returns the email of the Staff member holding identityUID.

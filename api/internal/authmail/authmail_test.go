@@ -3,13 +3,13 @@ package authmail_test
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -18,20 +18,20 @@ const (
 	testSenderAddr = "a@b.test"
 	testReplyTo    = "support@b.test"
 
-	statusPending      = "pending"
-	statusSent         = "sent"
-	statusDeadLettered = "dead_lettered"
+	statusSent = "sent"
 )
 
+// newTokenMailWorker and newEmailChangeWorker build a Worker around
+// sender -- the one end-to-end test each keeps below needs it to prove
+// claimQuery's columns still match Scan; every kind-specific branch
+// belongs to compose_test.go (pure Compose), and skip/retry/dead-letter/
+// suppression/terminal-clear belong to outbox.MailWorker's own suite.
 func newTokenMailWorker(sender mail.Sender, accounts *authntest.FakeAccountManager) authmail.TokenMailWorker {
-	return authmail.TokenMailWorker{
-		Sender: sender, Accounts: accounts, Now: time.Now,
-		AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: testReplyTo,
-	}
+	return authmail.NewTokenMailWorker(outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: testReplyTo}, accounts)
 }
 
 func newEmailChangeWorker(sender mail.Sender) authmail.EmailChangeWorker {
-	return authmail.EmailChangeWorker{Sender: sender, Now: time.Now, From: testSenderAddr, ReplyTo: testReplyTo}
+	return authmail.NewEmailChangeWorker(outbox.Mailer{Sender: sender, Now: time.Now, From: testSenderAddr, ReplyTo: testReplyTo})
 }
 
 func seedTokenMailRow(t *testing.T, db *testdb.DB, identityUID string, kind authmail.TokenMailKind, token string, attemptCount int, nextAttemptAt time.Time) string {
@@ -117,129 +117,6 @@ func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing
 	}
 }
 
-func TestTokenMailWorker_ProcessPending_SendsResetAndMarksSent(t *testing.T) {
-	db := testdb.New(t)
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("uid-2", "person@example.com", true)
-	rowID := seedTokenMailRow(t, db, "uid-2", authmail.KindPasswordReset, "reset-token", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
-
-	status, _, _ := tokenMailRowState(t, db, rowID)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
-	}
-	if len(sender.Sent()) != 1 {
-		t.Fatalf("sent %d messages, want 1", len(sender.Sent()))
-	}
-}
-
-func TestTokenMailWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("uid-3", "person@example.com", false)
-	rowID := seedTokenMailRow(t, db, "uid-3", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(time.Hour))
-
-	sender := &mail.FakeSender{}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
-
-	status, _, _ := tokenMailRowState(t, db, rowID)
-	if status != statusPending {
-		t.Fatalf("status = %q, want pending", status)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatal("expected no send for a not-yet-due row")
-	}
-}
-
-func TestTokenMailWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("uid-4", "person@example.com", false)
-	rowID := seedTokenMailRow(t, db, "uid-4", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
-
-	status, attemptCount, token := tokenMailRowState(t, db, rowID)
-	if status != statusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want pending/1", status, attemptCount)
-	}
-	if !token.Valid {
-		t.Fatal("token cleared after a retry, want it preserved for the next attempt")
-	}
-}
-
-func TestTokenMailWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("uid-5", "person@example.com", false)
-	rowID := seedTokenMailRow(t, db, "uid-5", authmail.KindEmailVerification, "verify-token", 4, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
-
-	status, attemptCount, token := tokenMailRowState(t, db, rowID)
-	if status != statusDeadLettered || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
-	}
-	if token.Valid {
-		t.Fatal("token still set once dead-lettered, want NULL -- it will never be sent")
-	}
-}
-
-func TestTokenMailWorker_ProcessPending_AlreadyVerifiedSkipsSend(t *testing.T) {
-	db := testdb.New(t)
-	accounts := authntest.NewFakeAccountManager()
-	// Verified through some other path -- a fresher re-request, or a
-	// provider that reports addresses pre-verified -- before this row
-	// got sent.
-	accounts.Seed("uid-6", "person@example.com", true)
-	rowID := seedTokenMailRow(t, db, "uid-6", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
-
-	status, _, _ := tokenMailRowState(t, db, rowID)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatal("expected no mail sent for an already-verified account")
-	}
-}
-
-func TestTokenMailWorker_ProcessPending_UnknownAccountDeadLetters(t *testing.T) {
-	db := testdb.New(t)
-	accounts := authntest.NewFakeAccountManager() // no account seeded
-	rowID := seedTokenMailRow(t, db, "uid-ghost", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
-
-	status, _, _ := tokenMailRowState(t, db, rowID)
-	if status != statusDeadLettered {
-		t.Fatalf("status = %q, want dead_lettered", status)
-	}
-}
-
-func TestTokenMailWorker_ProcessPending_AccountManagerErrorRetries(t *testing.T) {
-	db := testdb.New(t)
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("uid-7", "person@example.com", false)
-	accounts.Err = errors.New("admin sdk unreachable")
-	rowID := seedTokenMailRow(t, db, "uid-7", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
-
-	status, attemptCount, _ := tokenMailRowState(t, db, rowID)
-	if status != statusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want pending/1", status, attemptCount)
-	}
-}
-
 func TestQueueTokenMail_InsertsPendingRowThenReRequestResetsToken(t *testing.T) {
 	db := testdb.New(t)
 
@@ -297,19 +174,6 @@ func TestEmailChangeWorker_ProcessPending_SendsAndMarksSent(t *testing.T) {
 	}
 }
 
-func TestEmailChangeWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	rowID := seedEmailChangeRow(t, db, "uid-10", "old@example.com", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runTx(t, db, newEmailChangeWorker(sender).ProcessPending)
-
-	status, attemptCount := emailChangeRowState(t, db, rowID)
-	if status != statusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want pending/1", status, attemptCount)
-	}
-}
-
 func TestQueueEmailChangeNotice_InsertsRow(t *testing.T) {
 	db := testdb.New(t)
 
@@ -323,7 +187,7 @@ func TestQueueEmailChangeNotice_InsertsRow(t *testing.T) {
 	).Scan(&oldEmail, &status); err != nil {
 		t.Fatalf("query row: %v", err)
 	}
-	if oldEmail != "old@example.com" || status != statusPending {
+	if oldEmail != "old@example.com" || status != "pending" {
 		t.Fatalf("old_email/status = %q/%q, want old@example.com/pending", oldEmail, status)
 	}
 }

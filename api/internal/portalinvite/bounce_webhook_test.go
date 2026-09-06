@@ -104,7 +104,7 @@ func TestPostBounceWebhookHandler_HardBounceMarksRowBounced(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != "bounced" {
 		t.Fatalf("status = %q, want bounced", status)
 	}
@@ -123,7 +123,7 @@ func TestPostBounceWebhookHandler_ComplaintMarksRowComplained(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != "complained" {
 		t.Fatalf("status = %q, want complained", status)
 	}
@@ -142,7 +142,7 @@ func TestPostBounceWebhookHandler_TemporaryFailureLeavesRowUntouched(t *testing.
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testOutboxStatusSent {
 		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
 	}
@@ -161,7 +161,7 @@ func TestPostBounceWebhookHandler_UnrelatedEventTypeLeavesRowUntouched(t *testin
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testOutboxStatusSent {
 		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
 	}
@@ -206,7 +206,7 @@ func TestPostBounceWebhookHandler_ReplayedEventIsNotDoubleProcessed(t *testing.T
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("replayed delivery status = %d, want %d", resp2.StatusCode, http.StatusOK)
 	}
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testOutboxStatusSent {
 		t.Fatalf("status = %q, want %s (replay must not reprocess)", status, testOutboxStatusSent)
 	}

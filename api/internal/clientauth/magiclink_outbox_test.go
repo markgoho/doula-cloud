@@ -3,12 +3,12 @@ package clientauth_test
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -17,16 +17,17 @@ const (
 	testSenderAddr = "a@b.test"
 	testReplyTo    = "support@b.test"
 
-	statusPending      = "pending"
-	statusSent         = "sent"
-	statusDeadLettered = "dead_lettered"
+	statusPending = "pending"
+	statusSent    = "sent"
 )
 
+// newMagicLinkWorker builds a Worker around sender -- the one end-to-end
+// test below needs it to prove claimQuery's columns still match Scan;
+// every other case belongs to compose_test.go (pure Compose) or
+// outbox.MailWorker's own suite (skip/retry/dead-letter/suppression/
+// terminal-clear).
 func newMagicLinkWorker(sender mail.Sender) clientauth.MagicLinkWorker {
-	return clientauth.MagicLinkWorker{
-		Sender: sender, Now: time.Now,
-		AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: testReplyTo,
-	}
+	return clientauth.NewMagicLinkWorker(outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: testReplyTo})
 }
 
 func seedMagicLinkRow(t *testing.T, db *testdb.DB, identityUID string, attemptCount int, nextAttemptAt time.Time) string {
@@ -86,60 +87,6 @@ func TestMagicLinkWorker_ProcessPending_SendsAndMarksSent(t *testing.T) {
 	sent := sender.Sent()
 	if len(sent) != 1 || sent[0].To != "worker-send@example.com" {
 		t.Fatalf("sent = %+v, want one message to worker-send@example.com", sent)
-	}
-}
-
-func TestMagicLinkWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	const identifier = "portal_worker-not-due"
-	testdb.SeedPortalAccount(t, db, identifier, "worker-not-due@example.com")
-	rowID := seedMagicLinkRow(t, db, identifier, 0, time.Now().Add(time.Hour))
-
-	sender := &mail.FakeSender{}
-	runMagicLinkTx(t, db, newMagicLinkWorker(sender).ProcessPending)
-
-	status, _, _ := magicLinkRowState(t, db, rowID)
-	if status != statusPending {
-		t.Fatalf("status = %q, want pending", status)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatal("expected no send for a not-yet-due row")
-	}
-}
-
-func TestMagicLinkWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	const identifier = "portal_worker-retry"
-	testdb.SeedPortalAccount(t, db, identifier, "worker-retry@example.com")
-	rowID := seedMagicLinkRow(t, db, identifier, 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runMagicLinkTx(t, db, newMagicLinkWorker(sender).ProcessPending)
-
-	status, attemptCount, token := magicLinkRowState(t, db, rowID)
-	if status != statusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want pending/1", status, attemptCount)
-	}
-	if !token.Valid {
-		t.Fatal("token cleared after a retry, want it preserved for the next attempt")
-	}
-}
-
-func TestMagicLinkWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	const identifier = "portal_worker-final"
-	testdb.SeedPortalAccount(t, db, identifier, "worker-final@example.com")
-	rowID := seedMagicLinkRow(t, db, identifier, 4, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runMagicLinkTx(t, db, newMagicLinkWorker(sender).ProcessPending)
-
-	status, attemptCount, token := magicLinkRowState(t, db, rowID)
-	if status != statusDeadLettered || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
-	}
-	if token.Valid {
-		t.Fatal("token still set once dead-lettered, want NULL -- it will never be sent")
 	}
 }
 

@@ -18,20 +18,11 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 )
 
 // CodeLifetime is #605's §4.2.1.3 expiry for an issued recovery code.
 const CodeLifetime = 24 * time.Hour
-
-func wrapOutboxErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
-	return fmt.Errorf("mfarecoverymail: %w", err)
-}
 
 // QueueVouchedCodeMail inserts a pending staff_mfa_recovery_outbox row
 // delivering code to recipientIdentityUID (the vouching Owner), naming
@@ -50,29 +41,29 @@ func QueueVouchedCodeMail(ctx context.Context, tx *sql.Tx, recipientIdentityUID,
 	return nil
 }
 
-// Worker sends due staff_mfa_recovery_outbox rows. Accounts resolves the
-// recipient Owner's *current* address at send time, mirroring
-// authmail.TokenMailWorker's own reasoning (#614: staff.email can drift
-// from the account Identity Platform actually holds).
-type Worker struct {
-	Sender   mail.Sender
-	Accounts authn.AccountManager
-	Now      func() time.Time
-	From     string
-	ReplyTo  string
-}
+// Worker sends due staff_mfa_recovery_outbox rows through
+// outbox.MailWorker's shared claim-scan-compose-send-mark loop -- this
+// kind's own share is only its table, claim query, row shape and Compose
+// below. Accounts resolves the recipient Owner's *current* address at
+// send time, mirroring authmail.TokenMailWorker's own reasoning (#614:
+// staff.email can drift from the account Identity Platform actually
+// holds).
+type Worker = outbox.MailWorker[pendingRow]
 
-func (w Worker) inner() outbox.Worker {
-	return outbox.Worker{
-		Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo,
+// NewWorker builds the recovery-code outbox worker around mailer and
+// accounts.
+func NewWorker(mailer outbox.Mailer, accounts authn.AccountManager) Worker {
+	return Worker{
+		Mailer:          mailer,
 		Table:           "staff_mfa_recovery_outbox",
 		ClearOnTerminal: []string{"token"},
+		ClaimQuery:      claimQuery,
+		Scan:            scanRow,
+		Compose:         compose(accounts),
 	}
 }
 
 type pendingRow struct {
-	id                   string
-	attemptCount         int
 	recipientIdentityUID string
 	subjectStaffID       string
 	token                sql.NullString
@@ -85,43 +76,44 @@ const claimQuery = `SELECT id, attempt_count, recipient_identity_uid, subject_st
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
 
-func scanRow(rows *sql.Rows) (pendingRow, error) {
+func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
+	var meta outbox.RowMeta
 	var r pendingRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.recipientIdentityUID, &r.subjectStaffID, &r.token)
-	return r, wrapOutboxErr(err)
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.recipientIdentityUID, &r.subjectStaffID, &r.token); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("mfarecoverymail: scan outbox row: %w", err)
+	}
+	return meta, r, nil
 }
 
-// ProcessPending sends every due staff_mfa_recovery_outbox row within tx.
-func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
-}
+// compose resolves the vouching Owner's current Identity Platform account
+// (ctx: a network call) and the locked-out colleague's name (tx: a query
+// in the same transaction the row was claimed in) -- the two reasons this
+// kind's Compose needs both.
+func compose(accounts authn.AccountManager) func(context.Context, *sql.Tx, pendingRow, time.Time) (string, string, string, error) {
+	return func(ctx context.Context, tx *sql.Tx, r pendingRow, _ time.Time) (string, string, string, error) {
+		account, err := accounts.GetAccount(ctx, r.recipientIdentityUID)
+		if errors.Is(err, authn.ErrAccountNotFound) {
+			return "", "", "", &outbox.DeadLetterError{Reason: "no Identity Platform account for this recipient"}
+		}
+		if err != nil {
+			return "", "", "", fmt.Errorf("mfarecoverymail: resolve account: %w", err)
+		}
 
-func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
-	account, err := w.Accounts.GetAccount(ctx, r.recipientIdentityUID)
-	if errors.Is(err, authn.ErrAccountNotFound) {
-		return wrapOutboxErr(inner.MarkDeadLetteredNow(ctx, tx, r.id, "no Identity Platform account for this recipient"))
-	}
-	if err != nil {
-		return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, err, now))
-	}
+		if !r.token.Valid || r.token.String == "" {
+			// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside QueueVouchedCodeMail
+			return "", "", "", &outbox.DeadLetterError{Reason: "outbox row carries no token"}
+		}
 
-	if !r.token.Valid || r.token.String == "" {
-		// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside Queue
-		return wrapOutboxErr(inner.MarkDeadLetteredNow(ctx, tx, r.id, "outbox row carries no token"))
-	}
+		name, err := subjectName(ctx, tx, r.subjectStaffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return "", "", "", err
+		}
 
-	name, err := subjectName(ctx, tx, r.subjectStaffID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, err, now))
+		subject, text := vouchedCodeCopy(name, r.token.String)
+		return account.Email, subject, text, nil
 	}
-
-	subject, text := vouchedCodeCopy(name, r.token.String)
-	sendErr := w.Sender.Send(ctx, mail.Message{To: account.Email, From: w.From, ReplyTo: w.ReplyTo, Subject: subject, Text: text})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
 }
 
 // subjectName reads the name of the person a vouched code is for, so the
