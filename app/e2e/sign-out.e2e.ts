@@ -30,7 +30,7 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Lakeside Doulas', staffName: 'Robin Owner', staffEmail: email , workState: 'NY' }
+		data: { practiceName: 'Lakeside Doulas', staffName: 'Robin Owner', workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
@@ -87,7 +87,7 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Hillcrest Doulas', staffName: 'Sam Owner', staffEmail: email , workState: 'NY' }
+		data: { practiceName: 'Hillcrest Doulas', staffName: 'Sam Owner', workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
@@ -139,7 +139,7 @@ test('a second tab loses access once the first tab signs out, without itself sig
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Elm Street Doulas', staffName: 'Robin Owner', staffEmail: email , workState: 'NY' }
+		data: { practiceName: 'Elm Street Doulas', staffName: 'Robin Owner', workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);

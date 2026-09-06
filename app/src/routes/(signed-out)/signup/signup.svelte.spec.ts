@@ -98,3 +98,26 @@ describe('signing up when the account half-landed (#745)', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 });
+
+describe('the address the Practice is created with (#614)', () => {
+	it('sends no address in the body, leaving the ID token as the only copy', async () => {
+		await render(Page, {});
+		await fillForm();
+
+		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+		globalFetch.mockResolvedValueOnce(jsonResponse({ practiceId: 'practice-1' }, 201));
+		await submit();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1'));
+		const [, init] = globalFetch.mock.calls[0];
+		// The Email field still exists -- it is what the Identity Platform
+		// account was created with -- but it goes up as the token's `email`
+		// claim, not as a field the BFF could take at its word.
+		expect(JSON.parse(init.body)).toEqual({
+			practiceName: 'Riverside Doulas',
+			staffName: 'Priya Sharma',
+			workState: 'NJ'
+		});
+		expect(init.headers.Authorization).toBe('Bearer id-token');
+	});
+});

@@ -25,7 +25,7 @@ const resumeUID = "resume-owner"
 // Practice, keeps its identity, and no second staff row appears.
 func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: resumeUID}, db)
+	srv := newSignupServer(authntest.Verifier{UID: resumeUID, Email: jamieEmail}, db)
 	defer srv.Close()
 	seeded := seedStaff(t, db, resumeUID)
 
@@ -33,7 +33,6 @@ func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 		WorkState:    "VT",
 		PracticeName: "Resumed Practice",
 		StaffName:    jamieOwnerName,
-		StaffEmail:   jamieEmail,
 	})
 	defer resp.Body.Close()
 
@@ -101,12 +100,12 @@ func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 // address has already been sent a verification link.
 func TestSignupHandler_ResumeQueuesNoSecondVerificationMail(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: resumeUID}, db)
+	srv := newSignupServer(authntest.Verifier{UID: resumeUID, Email: jamieEmail}, db)
 	defer srv.Close()
 	seedStaff(t, db, resumeUID)
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "Quiet Practice", StaffName: jamieOwnerName, StaffEmail: jamieEmail,
+		WorkState: "NY", PracticeName: "Quiet Practice", StaffName: jamieOwnerName,
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -131,11 +130,11 @@ func TestSignupHandler_ResumeQueuesNoSecondVerificationMail(t *testing.T) {
 // nothing.
 func TestSignupHandler_RefusesWhenAlreadyInAPractice(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: resumeUID}, db)
+	srv := newSignupServer(authntest.Verifier{UID: resumeUID, Email: jamieEmail}, db)
 	defer srv.Close()
 
 	first := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "First Practice", StaffName: jamieName, StaffEmail: jamieEmail,
+		WorkState: "NY", PracticeName: "First Practice", StaffName: jamieName,
 	})
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
@@ -144,7 +143,7 @@ func TestSignupHandler_RefusesWhenAlreadyInAPractice(t *testing.T) {
 
 	const secondName = "Second Practice"
 	second := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: secondName, StaffName: jamieName, StaffEmail: jamieEmail,
+		WorkState: "NY", PracticeName: secondName, StaffName: jamieName,
 	})
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {

@@ -40,11 +40,11 @@ func readWorkState(t *testing.T, db *testdb.DB, identityUID string) (string, int
 
 func TestSignup_RejectsMissingWorkState(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: workStateUID}, db)
+	srv := newSignupServer(authntest.Verifier{UID: workStateUID, Email: testStaffEmail}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "No State Practice", StaffName: workStateName, StaffEmail: testStaffEmail,
+		PracticeName: "No State Practice", StaffName: workStateName,
 	})
 	defer resp.Body.Close()
 
@@ -58,11 +58,11 @@ func TestSignup_RejectsMissingWorkState(t *testing.T) {
 // the 500 an unhandled constraint violation would produce.
 func TestSignup_RejectsUnknownWorkState(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: workStateUID}, db)
+	srv := newSignupServer(authntest.Verifier{UID: workStateUID, Email: testStaffEmail}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Bad State Practice", StaffName: workStateName, StaffEmail: testStaffEmail,
+		PracticeName: "Bad State Practice", StaffName: workStateName,
 		WorkState: "ZZ",
 	})
 	defer resp.Body.Close()
@@ -77,11 +77,11 @@ func TestSignup_RejectsUnknownWorkState(t *testing.T) {
 // stored, so the apportionment query never has to match case.
 func TestSignup_NormalizesWorkStateAndRecordsFirstEvent(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: workStateUID}, db)
+	srv := newSignupServer(authntest.Verifier{UID: workStateUID, Email: testStaffEmail}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Lower Case Practice", StaffName: workStateName, StaffEmail: testStaffEmail,
+		PracticeName: "Lower Case Practice", StaffName: workStateName,
 		WorkState: "  nj ",
 	})
 	defer resp.Body.Close()
@@ -153,11 +153,10 @@ func TestAcceptInvite_RejectsUnknownWorkStateForANewPerson(t *testing.T) {
 func TestAcceptInvite_IgnoresWorkStateForAnExistingPerson(t *testing.T) {
 	db := testdb.New(t)
 
-	signupSrv := newSignupServer(authntest.Verifier{UID: "roaming-uid"}, db)
+	signupSrv := newSignupServer(authntest.Verifier{UID: "roaming-uid", Email: "nell@example.com"}, db)
 	defer signupSrv.Close()
 	first := postSignup(t, signupSrv, "tok", staffauth.SignupRequest{
-		PracticeName: "Her First Practice", StaffName: "Nell Ward",
-		StaffEmail: "nell@example.com", WorkState: "NY",
+		PracticeName: "Her First Practice", StaffName: "Nell Ward", WorkState: "NY",
 	})
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
@@ -191,12 +190,11 @@ func TestAcceptInvite_IgnoresWorkStateForAnExistingPerson(t *testing.T) {
 // the date she asserted it, for an Owner who never entered either.
 func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "roster-work-state-uid"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: "roster-work-state-uid", Email: "ada@example.com"}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Roster Practice", StaffName: "Ada Frost",
-		StaffEmail: "ada@example.com", WorkState: "CT",
+		PracticeName: "Roster Practice", StaffName: "Ada Frost", WorkState: "CT",
 	})
 	defer resp.Body.Close()
 	var created staffauth.SignupResponse

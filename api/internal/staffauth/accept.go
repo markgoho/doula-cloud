@@ -147,6 +147,13 @@ type invitation struct {
 	expiresAt      time.Time
 }
 
+// MsgNoAddressToAcceptAnInvitation is what acceptInvite answers an
+// invitee whose ID token carries no email claim: with no address there is
+// nothing to compare against the invited one. It is the pair of
+// MsgNoAddressToCreateAPractice (#614) -- one rule, two bootstrap paths,
+// two sentences differing only in the step they name.
+const MsgNoAddressToAcceptAnInvitation = "your account has no verified email address, so it cannot accept an invitation"
+
 // acceptInvite does the work in the order the RLS policies demand: look
 // the Invitation up through practice_invitations_accept_lookup (00039)
 // while no Practice context is set, resolve or create the staff row
@@ -157,7 +164,7 @@ type invitation struct {
 func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken, req AcceptInviteRequest) (AcceptInviteResponse, int, string) {
 	address := NormalizeAddress(verified.Email)
 	if address == "" {
-		return AcceptInviteResponse{}, http.StatusForbidden, "your account has no verified email address, so it cannot accept an invitation"
+		return AcceptInviteResponse{}, http.StatusForbidden, MsgNoAddressToAcceptAnInvitation
 	}
 
 	digest := TokenDigest(req.InviteToken)

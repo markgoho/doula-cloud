@@ -32,10 +32,13 @@
 
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- POST /api/staff/signup's body, right below.
+	// The Email field is not in here. It is the Identity Platform account's
+	// address, and the BFF never sees it: `POST /api/staff/signup` reads
+	// the address off the verified ID token rather than off the body
+	// (#614), so it has no body field to key a Details entry to.
 	const signupFieldIds = {
 		practiceName: practiceNameId,
 		staffName: staffNameId,
-		staffEmail: emailId,
 		workState: workStateId
 	};
 
@@ -129,10 +132,14 @@
 			const response = await fetch(`${apiBaseURL()}/api/staff/signup`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+				// No address goes up. The one she typed above is what
+				// `credentialFor` created the Identity Platform account with, so
+				// it is already on the ID token in the Authorization header, and
+				// that copy -- not a body field -- is what the BFF writes to
+				// staff.email (#614).
 				body: JSON.stringify({
 					practiceName,
 					staffName,
-					staffEmail: email,
 					workState: workStateCode(workStateName)
 				})
 			});

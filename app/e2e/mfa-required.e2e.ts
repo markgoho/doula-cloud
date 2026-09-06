@@ -45,7 +45,7 @@ async function seedEnrolledOwner(
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${enrolledIdToken}` },
-		data: { practiceName, staffName: 'Riley Owner', staffEmail: ownerEmail, workState: 'NY' }
+		data: { practiceName, staffName: 'Riley Owner', workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `owner staff/signup failed: ${signup.status()} ${signupBody}`).toBe(true);
@@ -172,7 +172,7 @@ test('one identity, two Practices: MFA required at one and not the other', async
 
 	const signupA = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${xIdToken}` },
-		data: { practiceName: 'Practice A', staffName: 'Sasha Owner', staffEmail: xEmail, workState: 'NY' }
+		data: { practiceName: 'Practice A', staffName: 'Sasha Owner', workState: 'NY' }
 	});
 	const signupABody = await signupA.text();
 	expect(signupA.ok(), `Practice A signup failed: ${signupA.status()} ${signupABody}`).toBe(true);
