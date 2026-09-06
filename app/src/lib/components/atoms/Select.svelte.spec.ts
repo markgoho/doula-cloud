@@ -1,5 +1,5 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Select from './Select.svelte';
 
@@ -13,6 +13,7 @@ interface SetupOptions {
 	describedBy?: string;
 	name?: string;
 	id?: string;
+	onChange?: (value: string) => void;
 }
 
 async function setup({
@@ -24,9 +25,10 @@ async function setup({
 	invalid,
 	describedBy,
 	name,
-	id
+	id,
+	onChange
 }: SetupOptions = {}) {
-	await render(Select, { options, value, placeholder, disabled, required, invalid, describedBy, name, id });
+	await render(Select, { options, value, placeholder, disabled, required, invalid, describedBy, name, id, onChange });
 }
 
 describe('Select.svelte', () => {
@@ -114,5 +116,25 @@ describe('Select.svelte', () => {
 		await setup({ required: true });
 
 		await expect.element(page.getByRole('combobox')).toHaveAttribute('required');
+	});
+
+	// The callback form `bind:value` cannot serve: a caller rendering one
+	// select per entry in a Practice's own field list (#466) has no
+	// separate variable to bind each one to.
+	it('reports what was chosen when a caller passes onChange', async () => {
+		const onChange = vi.fn();
+		await setup({ onChange });
+
+		await page.getByRole('combobox').selectOptions('Hospital');
+
+		expect(onChange).toHaveBeenCalledWith('Hospital');
+	});
+
+	it('changes without a caller listening', async () => {
+		await setup();
+
+		await page.getByRole('combobox').selectOptions('Hospital');
+
+		await expect.element(page.getByRole('combobox')).toHaveValue('Hospital');
 	});
 });

@@ -18,7 +18,16 @@ import { describe, expect, it } from 'vitest';
  * +layout.svelte`, not per component demo.
  */
 
+/*
+ * `IntakeQuestion` is not a Template. It is `clients/new`'s own shared
+ * question page (#466): six routes compose it, and it composes
+ * `QuestionPage`, so it renders the title exactly as a Template does --
+ * one level further out than this scan can read. Named here rather than
+ * dropped from the glob, so the gate still asks the question of all six
+ * and the answer is that something they compose calls the primitive.
+ */
 const TEMPLATES_WITH_PAGE_TITLE = [
+	'IntakeQuestion',
 	'OverviewHub',
 	'RecordDetail',
 	'FormPage',

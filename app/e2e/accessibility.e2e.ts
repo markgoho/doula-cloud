@@ -287,10 +287,28 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request, conte
 			h1: 'Find a Client'
 		},
 		{
-			key: 'practices/[practiceId]/clients/new',
+			key: 'practices/[practiceId]/clients/new/name',
 			archetype: 'E',
-			url: `/practices/${practiceId}/clients/new`,
+			url: `/practices/${practiceId}/clients/new/name`,
 			h1: "What is the Client's name?"
+		},
+		{
+			key: 'practices/[practiceId]/clients/new/date-of-birth',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/new/date-of-birth`,
+			h1: /date of birth\?$/
+		},
+		{
+			key: 'practices/[practiceId]/clients/new/address',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/new/address`,
+			h1: /address\?$/
+		},
+		{
+			key: 'practices/[practiceId]/clients/new/check',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/new/check`,
+			h1: /^Check /
 		},
 		{
 			key: 'practices/[practiceId]/invite',

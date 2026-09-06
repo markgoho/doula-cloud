@@ -342,8 +342,16 @@
 		<Text
 			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you."
 		/>
+		<!--
+			Through search, not straight into intake (#466). ADR-0017 makes
+			search the first screen of intake and the only door to it, so a
+			link that jumped the queue here would be the top-level "Add a
+			Client" action the ADR rules out. The search's own empty state
+			carries whatever was typed into the new record, so nothing is
+			asked twice.
+		-->
 		<Link
-			href={resolve('/practices/[practiceId]/clients/new', {
+			href={resolve('/practices/[practiceId]/clients/search', {
 				practiceId: page.params.practiceId!
 			})}
 			label="Add your first Client"
