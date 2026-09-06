@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
-import type { ClientMatch } from '#lib/client.js';
+import type { CollisionMatch } from '#lib/client.js';
+import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
@@ -32,8 +33,9 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const { practiceId, clientId } = fixture.params;
 const detailHref = `/practices/${practiceId}/clients/${clientId}`;
+const editDuplicateHref = `${detailHref}/edit/duplicate`;
 
-const anotherClientMatch: ClientMatch = {
+const anotherClientMatch: CollisionMatch = {
 	id: 'client-2',
 	givenName: 'Ada',
 	familyName: 'Byron',
@@ -46,12 +48,14 @@ const anotherClientMatch: ClientMatch = {
 	addressRegion: '',
 	addressPostalCode: '',
 	dateOfBirth: '1815-12-10',
+	wouldSurvive: false,
 	engagements: []
 };
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
+	editMergeDraft.clear();
 });
 
 async function setup(overrides: Partial<ClientDetail> = {}) {
@@ -95,6 +99,15 @@ describe('client edit', () => {
 		await expect.element(testPage.getByText('client not found')).toBeVisible();
 	});
 
+	it('redirects to the survivor rather than rendering a tombstoned record', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ ...baseDetail, mergedInto: 'client-9' }));
+
+		await render(Page, {});
+
+		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-9`);
+	});
+
 	it("refuses to save with a blank given name, client-side, before any request", async () => {
 		await setup();
 
@@ -109,9 +122,11 @@ describe('client edit', () => {
 		expect(apiFetchWithSession).toHaveBeenCalledTimes(1);
 	});
 
-	it('refuses a save that matches a different Client, naming the match, before writing anything', async () => {
+	it('refuses a save that exactly matches a different Client (gate one), naming the match, before writing anything', async () => {
 		await setup();
-		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ matches: [anotherClientMatch] }, 409));
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
 
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
@@ -123,17 +138,38 @@ describe('client edit', () => {
 
 	it('saves after the deliberate override, retrying with override: true', async () => {
 		await setup();
-		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ matches: [anotherClientMatch] }, 409));
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse(baseDetail));
 
 		await testPage.getByRole('button', { name: 'Save' }).click();
 		await expect.element(testPage.getByRole('dialog')).toBeVisible();
 
-		await testPage.getByRole('button', { name: 'Save as a different person' }).click();
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
 
 		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
 		expect(requestBody(2).override).toBe(true);
 		expect(goto).toHaveBeenCalledWith(detailHref);
+	});
+
+	it('sends a possible duplicate (gate two) to its own question page rather than a dialog', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse(
+				{ matches: [{ ...anotherClientMatch, wouldSurvive: true }], substitution: false, mergeOffered: true },
+				409
+			)
+		);
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
+		expect(goto).toHaveBeenCalledWith(editDuplicateHref);
+		expect(editMergeDraft.clientId).toBe(clientId);
+		expect(editMergeDraft.matches).toEqual([{ ...anotherClientMatch, wouldSurvive: true }]);
+		expect(editMergeDraft.mergeOffered).toBe(true);
+		expect(editMergeDraft.fields.givenName).toBe(baseDetail.givenName);
 	});
 
 	it('surfaces the endpoint refusal as an error rather than a silent failure', async () => {

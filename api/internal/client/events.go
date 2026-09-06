@@ -15,6 +15,17 @@ type eventType string
 const (
 	eventCreated eventType = "created"
 	eventUpdated eventType = "updated"
+	// eventMerged is written on a merge's survivor row: its own field
+	// changes, plus a synthetic "mergedFrom" entry naming the absorbed
+	// row -- "the survivor records what changed and where it came from"
+	// (ADR-0017's amendment).
+	eventMerged eventType = "merged"
+	// eventAbsorbed is written on a merge's tombstoned row: no field
+	// diff of its own (nothing on it changed; it is the row that stopped
+	// being current), only a "mergedInto" entry naming the survivor.
+	// ADR-0017's amendment puts it this way: the absorbed row records
+	// where it went.
+	eventAbsorbed eventType = "absorbed"
 	// eventErased is the one client-subject action whose diff is NOT
 	// sealed (ADR-0027). It describes the erasure, not the data erased,
 	// and it has to stay readable after her key is destroyed -- so it

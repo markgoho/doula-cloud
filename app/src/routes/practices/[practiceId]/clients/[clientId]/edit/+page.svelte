@@ -8,19 +8,29 @@
 	 * rather than sent empty, which would silently wipe them (see
 	 * ClientRecord.fieldValues in clientDetail.ts).
 	 *
-	 * The match-query refusal (ADR-0017's name-substitution guard) is
-	 * checked by sending the save with `override: false` first: a 409
-	 * names the Client it matched and nothing is written. The override --
-	 * "No, a different person" -- is the one deliberate act that retries
-	 * with `override: true`, via ConfirmDialog, the app's one
-	 * confirmation mechanism (#473). It is never a pre-checked box.
+	 * The collision predicate re-runs on every save (`override: false`
+	 * first) and sorts a hit into ADR-0017's amendment's two gates
+	 * (#814), told apart by the 409's own `substitution` flag:
+	 *
+	 * - Gate one, substitution -- exactly `substitution: true`. A name
+	 *   column changed and the result is exactly another Client's given
+	 *   and family name. The one deliberate override -- "Yes, a different
+	 *   person" -- retries with `override: true`, via ConfirmDialog, the
+	 *   app's one confirmation mechanism (#473). It is never a
+	 *   pre-checked box, and on this path nothing is created: the record
+	 *   being edited already exists and simply keeps its own identity.
+	 * - Gate two, a possible duplicate -- `substitution: false`. Nothing
+	 *   is written; the reader is sent to this route's own `duplicate`
+	 *   sub-route, a question page rather than a dismissible dialog, per
+	 *   the ADR. `mergeOffered` there says whether "This is her" (which
+	 *   absorbs one record into the other) is even offered.
 	 */
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { editClient, type ClientEditFields, type ClientMatch } from '#lib/client.js';
+	import { editClient, type ClientEditFields, type CollisionMatch } from '#lib/client.js';
 	import { displayName, loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -31,6 +41,7 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 
 	const givenNameId = 'client-edit-given-name';
 	const familyNameId = 'client-edit-family-name';
@@ -62,7 +73,7 @@
 
 	let saveErrors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
-	let matches = $state<ClientMatch[]>([]);
+	let matches = $state<CollisionMatch[]>([]);
 	let isConflictOpen = $state(false);
 
 	// AC5: editing the email revokes any pending portal invite
@@ -70,8 +81,15 @@
 	// rather than discovered after the fact.
 	const hasChangedEmail = $derived(detail !== undefined && email.trim() !== detail.email);
 
-	function detailHref(): string {
+	function detailHref(clientId: string = page.params.clientId!): string {
 		return resolve('/practices/[practiceId]/clients/[clientId]', {
+			practiceId: page.params.practiceId!,
+			clientId
+		});
+	}
+
+	function editHref(): string {
+		return resolve('/practices/[practiceId]/clients/[clientId]/edit', {
 			practiceId: page.params.practiceId!,
 			clientId: page.params.clientId!
 		});
@@ -111,6 +129,13 @@
 	onMount(async () => {
 		try {
 			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
+			// A tombstoned row is redirected, never rendered (ADR-0017's
+			// amendment): every other field on this response is meaningless
+			// placeholder data once mergedInto is set (detail.go).
+			if (detail.mergedInto) {
+				await goto(detailHref(detail.mergedInto));
+				return;
+			}
 			givenName = detail.givenName;
 			familyName = detail.familyName;
 			preferredName = detail.preferredName;
@@ -149,11 +174,19 @@
 				false
 			);
 			if (result.conflict) {
-				// The client-side refusal: named before anything is written,
-				// and nothing here was destructive -- FindMatches ran, found
-				// a hit, and the endpoint wrote nothing (edit.go).
-				matches = result.matches;
-				isConflictOpen = true;
+				// Named before anything is written, and nothing here was
+				// destructive -- the collision predicate ran, found a hit, and
+				// the endpoint wrote nothing (edit.go). Gate one (an exact name
+				// substitution) blocks with the existing dialog; gate two (a
+				// possible duplicate) is a real question page, not a dialog,
+				// per ADR-0017's amendment.
+				if (result.substitution) {
+					matches = result.matches;
+					isConflictOpen = true;
+					return;
+				}
+				editMergeDraft.open(page.params.clientId!, currentFields(), result.matches, result.mergeOffered);
+				await goto(`${editHref()}/duplicate`);
 				return;
 			}
 			await goto(detailHref());
@@ -293,8 +326,8 @@
 <ConfirmDialog
 	bind:open={isConflictOpen}
 	title="Possible duplicate Client"
-	consequence={`This matches an existing Client at this Practice: ${matchNames()}. Saving keeps them as two separate records -- there is no way to merge them here.`}
-	confirmLabel="Save as a different person"
+	consequence={`This name exactly matches an existing Client at this Practice: ${matchNames()}. Saving keeps this as its own separate record -- nothing here is merged.`}
+	confirmLabel="Yes, a different person"
 	onConfirm={handleOverrideConfirm}
 	onCancel={handleConflictCancel}
 />

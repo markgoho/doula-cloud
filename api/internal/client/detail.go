@@ -79,6 +79,12 @@ type DetailResponse struct {
 	// screen reads to explain why her record shows a placeholder instead
 	// of a name, and why editing her is refused.
 	ErasedAt *time.Time `json:"erasedAt,omitempty"`
+	// MergedInto is the survivor's id when this row has been absorbed
+	// (ADR-0017's amendment tombstone), absent otherwise. It is what
+	// tells the detail screen to redirect rather than render -- her own
+	// data is still here (activity holds links to this id), but this is
+	// no longer the current record of her.
+	MergedInto *string `json:"mergedInto,omitempty"`
 	// StripeRedactionEligibleAt is the date Stripe will first allow her
 	// transactions to be redacted -- 90 days past the newest invoice on
 	// whichever of her Stripe Customers is furthest from eligible.
@@ -133,6 +139,24 @@ func DetailHandler() http.Handler {
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		mergedInto, err := readMergedInto(r.Context(), tx, clientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if mergedInto != nil {
+			// Absorbed: the screen redirects rather than renders, so
+			// nothing past this point (history, resolved fields, erasure
+			// state) is worth reading.
+			w.Header().Set("Content-Type", "application/json")
+			// coverage:ignore reason: response encoding failure, not exercised by unit tests
+			if err := json.NewEncoder(w).Encode(DetailResponse{Record: Record{ID: clientID}, MergedInto: mergedInto}); err != nil {
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			}
 			return
 		}
 

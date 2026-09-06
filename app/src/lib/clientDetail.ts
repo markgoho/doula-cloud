@@ -108,6 +108,12 @@ export interface ClientDetail extends ClientRecord {
 	 * still in the future: until it passes, the Stripe half of her
 	 * erasure is scheduled, not finished. */
 	stripeRedactionEligibleAt?: string;
+	/** The survivor's id, present only once this row has been absorbed
+	 * into another Client (ADR-0017's amendment, #814). Every other field
+	 * on this response is meaningless placeholder data when this is set
+	 * -- the Go handler returns only `{id, mergedInto}` -- so a reader
+	 * redirects to the survivor rather than rendering anything here. */
+	mergedInto?: string;
 }
 
 /** A minimal fetch-shaped function, injected rather than imported --

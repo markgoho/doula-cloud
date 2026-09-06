@@ -30,6 +30,8 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 		staffauth.Middleware(db.App)(client.DetailHandler()))
 	mux.Handle("PUT /practices/{practiceId}/clients/{clientId}",
 		staffauth.Middleware(db.App)(client.EditHandler()))
+	mux.Handle("POST /practices/{practiceId}/clients/{clientId}/merge",
+		staffauth.Middleware(db.App)(client.MergeHandler()))
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -96,6 +98,24 @@ func seedClient(t *testing.T, db *testdb.DB, practiceID, givenName, email string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, NULLIF($3, '')) RETURNING id`,
 		practiceID, givenName, email,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	return clientID
+}
+
+// seedClientFull inserts a Client row with given name, family name, email
+// and date of birth all set -- what #814's collision-predicate tests need
+// and seedClient's single given-name field can't provide (given_name
+// alone there carries a whole "Jane Doe"-shaped string, with family_name
+// left NULL). dateOfBirth is "" to leave it unset.
+func seedClientFull(t *testing.T, db *testdb.DB, practiceID, givenName, familyName, email, dateOfBirth string) (clientID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (practice_id, given_name, family_name, email, date_of_birth)
+		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, '')::date) RETURNING id`,
+		practiceID, givenName, familyName, email, dateOfBirth,
 	).Scan(&clientID); err != nil {
 		t.Fatalf("seed client: %v", err)
 	}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
@@ -251,6 +252,14 @@
 		void loadStaffId();
 		try {
 			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
+			// A tombstoned row is redirected, never rendered (ADR-0017's
+			// amendment): every other field on this response is meaningless
+			// placeholder data once mergedInto is set (detail.go), so this
+			// hub must not draw from it at all.
+			if (detail.mergedInto) {
+				await goto(`/practices/${page.params.practiceId}/clients/${detail.mergedInto}`);
+				return;
+			}
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Client';
 		}

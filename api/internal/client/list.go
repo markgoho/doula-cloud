@@ -113,7 +113,9 @@ type ListResponse struct {
 // ListHandler lists Clients at the current Practice, Client-shaped,
 // cursor-paginated. Default filter is "Clients with work" -- a Client
 // with at least one Engagement, or a pending Engagement Request -- per
-// ADR-0017; ?all=true returns everyone. A contractor Doula's list is
+// ADR-0017; ?all=true returns everyone. A row already merged into
+// another (ADR-0017's amendment tombstone) never appears, under either
+// filter. A contractor Doula's list is
 // narrowed to Clients she holds an open, granted attachment to (through
 // any of their Engagements) regardless of the filter, the same ADR-0008
 // carve-out Reader.CanAccessClient enforces. Must be mounted behind
@@ -232,7 +234,7 @@ func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnl
 		     WHERE o.client_portal_user_id = pu.id
 		     ORDER BY o.created_at DESC LIMIT 1
 		 ) latest ON true
-		 WHERE c.practice_id = $1 AND (NOT $2 OR ` + hasWorkExpr + `)`
+		 WHERE c.practice_id = $1 AND c.merged_into IS NULL AND (NOT $2 OR ` + hasWorkExpr + `)`
 	args := []any{practiceID, withWorkOnly}
 	if after != nil {
 		query += ` AND (c.created_at, c.id) < ($3, $4) ORDER BY c.created_at DESC, c.id DESC LIMIT $5`
@@ -276,7 +278,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		         WHERE o.client_portal_user_id = pu.id
 		         ORDER BY o.created_at DESC LIMIT 1
 		     ) latest ON true
-		     WHERE c.practice_id = $1 AND ea.staff_id = $2
+		     WHERE c.practice_id = $1 AND c.merged_into IS NULL AND ea.staff_id = $2
 		       AND ea.origin = 'granted' AND ea.ended_at IS NULL
 		       AND (NOT $3 OR ` + hasWorkExpr + `)
 		 ) attached`

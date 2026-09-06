@@ -38,6 +38,9 @@ Object.assign(pageState, toPageState(fixture));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
+
 const { practiceId, clientId } = fixture.params;
 // The Address DescriptionList row joins the same fields the same way the
 // route does -- an empty addressLine2 is filtered out rather than shown
@@ -54,6 +57,7 @@ const address = [
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	goto.mockReset();
 });
 
 interface SetupOptions {
@@ -381,6 +385,13 @@ describe('client detail hub', () => {
 		await render(Page, {});
 
 		await expect.element(testPage.getByText('client not found')).toBeVisible();
+	});
+
+	it('redirects to the survivor rather than rendering a tombstoned record (ADR-0017 amendment)', async () => {
+		await setup({ overrides: { mergedInto: 'client-9' } });
+
+		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-9`);
 	});
 });
 

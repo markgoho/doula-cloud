@@ -26,21 +26,24 @@ type Match struct {
 	Engagements []EngagementSummary `json:"engagements"`
 }
 
-// FindMatches runs ADR-0017's match query -- name, date of birth, email
-// and phone, scoped to practiceID -- and is reused everywhere that query
-// runs: the search that fronts intake, the lookup-before-insert check at
-// create, and the re-run at edit. givenName and familyName each match
-// given_name, family_name or preferred_name case-insensitively, by
-// substring, independently of one another -- a search box that only has
-// one free-text field can pass the same text as both, which still
-// matches any of the three name columns; a structured create/edit
-// request passes its own two fields apart. dateOfBirth (a "YYYY-MM-DD"
-// string) and email (case-insensitively) match exactly; phone matches
-// exactly. Blank fields are ignored. If every field is blank, FindMatches
-// returns no rows rather than the whole Practice -- callers with nothing
-// to match on should not call this at all. excludeClientID, when
-// non-empty, omits that Client's own row, so an edit's re-run can't
-// match itself.
+// FindMatches runs the search that fronts intake's substring recall --
+// name, date of birth, email and phone, scoped to practiceID. ADR-0017's
+// amendment moved the write paths (create's lookup-before-insert, edit's
+// re-run) off this query and onto FindCollisions' exact-key predicate,
+// leaving FindMatches to the one caller substring recall is right for:
+// SearchHandler. givenName and familyName each match given_name,
+// family_name or preferred_name case-insensitively, by substring,
+// independently of one another -- a search box that only has one
+// free-text field can pass the same text as both, which still matches
+// any of the three name columns. dateOfBirth (a "YYYY-MM-DD" string) and
+// email (case-insensitively) match exactly; phone matches exactly. Blank
+// fields are ignored. If every field is blank, FindMatches returns no
+// rows rather than the whole Practice -- callers with nothing to match
+// on should not call this at all. excludeClientID, when non-empty, omits
+// that Client's own row -- kept for callers that still want it, though
+// SearchHandler itself never passes one. A row already merged into
+// another is never a candidate: it is a tombstone, excluded from search
+// the same way it is excluded from the Clients list.
 func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyName, dateOfBirth, email, phone, excludeClientID string) ([]Match, error) {
 	givenName = strings.TrimSpace(givenName)
 	familyName = strings.TrimSpace(familyName)
@@ -55,6 +58,7 @@ func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyN
 		`SELECT `+recordColumns+`
 		 FROM clients
 		 WHERE practice_id = $1
+		   AND merged_into IS NULL
 		   AND (NULLIF($7, '') IS NULL OR id <> NULLIF($7, '')::uuid)
 		   AND (
 		       ($2 <> '' AND (given_name ILIKE '%' || $2 || '%' OR family_name ILIKE '%' || $2 || '%' OR preferred_name ILIKE '%' || $2 || '%'))
