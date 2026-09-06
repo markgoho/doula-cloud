@@ -33,12 +33,19 @@ const MsgNoMatchingStaffAccount = "no matching staff account"
 // (#745).
 const MsgAlreadyBelongsToPractice = "This account already belongs to a Practice. Log in instead."
 
-// MsgNoVerifiedAddress is what signup answers a caller whose ID token
-// carries no email claim. staff.email is the address the identity
+// MsgNoAddressToCreateAPractice is what signup answers a caller whose ID
+// token carries no email claim. staff.email is the address the identity
 // authenticated with (#614), so an identity that reports no address has
 // nothing to put there -- the same reasoning, and the same 403, that
-// acceptInvite gives the invitee whose provider reports none.
-const MsgNoVerifiedAddress = "your account has no verified email address, so it cannot create a Practice"
+// MsgNoAddressToAcceptAnInvitation gives the invitee whose provider
+// reports none. The two sentences are a pair and differ only in the step
+// they name.
+//
+// "verified" in the sentence is about the ID token, which Identity
+// Platform verified, not about email_verified -- at signup the address is
+// unconfirmed by construction, and #613's mail is what proves control of
+// it later.
+const MsgNoAddressToCreateAPractice = "your account has no verified email address, so it cannot create a Practice"
 
 // SignupRequest is the body of a Practice-signup request: a new Practice,
 // created together with the Staff row for the person creating it.
@@ -146,7 +153,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	// checked before anything is written, so the refusal leaves no rows.
 	address := NormalizeAddress(verified.Email)
 	if address == "" {
-		return SignupResponse{}, http.StatusForbidden, MsgNoVerifiedAddress
+		return SignupResponse{}, http.StatusForbidden, MsgNoAddressToCreateAPractice
 	}
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests

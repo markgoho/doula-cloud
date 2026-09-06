@@ -541,8 +541,8 @@ func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if out.Message != staffauth.MsgNoVerifiedAddress {
-		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgNoVerifiedAddress)
+	if out.Message != staffauth.MsgNoAddressToCreateAPractice {
+		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgNoAddressToCreateAPractice)
 	}
 	if c := sessionCookie(resp); c != nil {
 		t.Fatalf("cookie set on refused signup: %+v", c)
