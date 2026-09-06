@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { HTMLInputAttributes } from 'svelte/elements';
+
 	interface Properties {
 		id?: string;
 		name?: string;
@@ -18,6 +20,13 @@
 		 * the default; this is the recorded exception to it.
 		 */
 		ariaLabel?: string;
+		/*
+		 * Whose data this is, per docs/design/govuk-alignment.md (#469).
+		 * A checkbox is autofilled the same as any other control, and
+		 * intake collecting a Practice's own questions ABOUT a Client
+		 * (#466) is the first caller that has to say "off".
+		 */
+		autocomplete?: HTMLInputAttributes['autocomplete'];
 	}
 
 	const generatedId = $props.id();
@@ -32,7 +41,8 @@
 		invalid = false,
 		describedBy,
 		variant = 'checkbox',
-		ariaLabel
+		ariaLabel,
+		autocomplete
 	}: Properties = $props();
 </script>
 
@@ -43,6 +53,7 @@
 	{checked}
 	{disabled}
 	{required}
+	{autocomplete}
 	class:invalid
 	class:toggle={variant === 'toggle'}
 	role={variant === 'toggle' ? 'switch' : undefined}

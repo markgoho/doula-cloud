@@ -20,7 +20,7 @@ describe('IntakeDraft', () => {
 		const draft = new IntakeDraft();
 
 		expect(draft.answers).toEqual(blankAnswers());
-		expect(draft.hasStarted).toBe(false);
+		expect(draft.hasGivenName).toBe(false);
 	});
 
 	// ADR-0017: the search that fronts intake carries whatever was typed
@@ -32,7 +32,7 @@ describe('IntakeDraft', () => {
 
 		expect(draft.answers.givenName).toBe('Sarah');
 		expect(draft.answers.phone).toBe('555-0100');
-		expect(draft.hasStarted).toBe(true);
+		expect(draft.hasGivenName).toBe(true);
 	});
 
 	it('never overwrites what has been typed with what was searched', () => {
@@ -46,7 +46,7 @@ describe('IntakeDraft', () => {
 	});
 
 	// The layout seeds from the query string on every render, and a reader
-	// who clears the given name to retype it flips `hasStarted` back to
+	// who clears the given name to retype it flips `hasGivenName` back to
 	// false -- so a seed carrying empty strings would wipe the phone,
 	// email and date of birth already typed on the pages after it.
 	it('never seeds a key the search did not carry', () => {

@@ -97,9 +97,10 @@ export class IntakeDraft {
 	practiceId = $state('');
 	answers = $state<IntakeAnswers>(blankAnswers());
 	/**
-	 * Which steps the reader has been through. An array rather than a Set
-	 * so it serialises and so Svelte's proxy reports a push -- membership
-	 * is asked through `visited`, which hands out the Set the rail wants.
+	 * Which steps the reader has been through, in the order they were
+	 * walked. An array rather than a Set so it serialises and so Svelte's
+	 * proxy reports a push; `journeySteps` asks it with `includes`, which
+	 * is why no Set is needed at all.
 	 */
 	visitedSteps = $state<string[]>([]);
 	/**
@@ -109,9 +110,11 @@ export class IntakeDraft {
 	 */
 	matches = $state<ClientMatch[]>([]);
 
-	/** Whether anything has been typed at all -- what a step past the
-	 * first checks before rendering a form nobody filled in. */
-	get hasStarted(): boolean {
+	/** Whether the one fact ADR-0017 requires is here. Read by `start`,
+	 * to decide whether the search's carried values are seeding an empty
+	 * draft or would overwrite a typed one, and by `givenNameRefusal`,
+	 * which is what every page's save asks before sending anything. */
+	get hasGivenName(): boolean {
 		return this.answers.givenName.trim() !== '';
 	}
 
@@ -130,7 +133,7 @@ export class IntakeDraft {
 			this.visitedSteps = [];
 			this.matches = [];
 		}
-		if (!this.hasStarted) {
+		if (!this.hasGivenName) {
 			this.answers = { ...this.answers, ...carried };
 		}
 	}

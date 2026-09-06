@@ -21,6 +21,16 @@
  * Practice named in a sentence, a multi-select with five options. The
  * fixture's job is to find the width at which the screen breaks, and a
  * representative value never will.
+ *
+ * ## Two states, not one row (`.claude/rules/svelte-tests.md`)
+ *
+ * The draft carries one Client, so the rule's two-row shape is realised
+ * inside it: every field that renders one way is at its longest, and the
+ * two genuinely optional columns -- a second address line, a preferred
+ * name that matches the given one -- are left blank, so the summary's
+ * `Not answered` row is a state the sweep measures rather than one
+ * nobody ever put in front of it. Same for the Practice-defined layer:
+ * one field of the five is unanswered.
  */
 import type { ClientMatch } from '#lib/client.js';
 import type { Field } from '#lib/clientFieldTemplate.js';
@@ -154,21 +164,22 @@ export function seedIntake(): void {
 	intakeDraft.answers = {
 		givenName: 'Anne-Marie',
 		familyName: 'Ochieng-Whitfield',
-		preferredName: 'Anne-Marie',
+		preferredName: '',
 		email: 'anne-marie.ochieng-whitfield@finger-lakes-midwifery.example.com',
 		phone: '+1 (585) 555-0142',
 		addressLine1: '4827 Pittsford-Mendon Center Road',
-		addressLine2: 'Apartment 12B, rear entrance off the alley',
+		addressLine2: '',
 		addressLocality: 'Honeoye Falls',
 		addressRegion: 'NY',
 		addressPostalCode: '14472',
 		dateOfBirth: '1988-02-09',
 		fieldValues: {
 			referral: 'A sister who was a Client here in 2024',
-			hopes: 'To be able to move around freely and to have nobody ask the same question twice.',
 			birthplace: 'Strong Memorial Hospital',
 			attendees: ['Partner', 'Mother', 'Photographer'],
 			photos: true
+			// `hopes` is deliberately absent: one Practice-defined question
+			// left unanswered is the summary's other state.
 		}
 	};
 	intakeDraft.visitedSteps = ['name', 'date-of-birth', 'email', 'phone', 'address'];

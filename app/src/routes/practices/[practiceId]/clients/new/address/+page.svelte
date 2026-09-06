@@ -6,136 +6,58 @@
 	 * --form-max column and set no widths, and a ZIP code narrower than
 	 * an address line is content sizing rather than page arrangement.
 	 */
-	import { goto } from '$app/navigation';
-	import { page } from '#lib/appState.svelte.js';
-	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
-	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
-	import { journeySteps, nextStepHref, previousStepHref } from '#lib/intakeJourney.js';
-	import type { FormError } from '#lib/formErrors.js';
-	import IntakeActions from '../IntakeActions.svelte';
-	import { JOURNEY, backHref, basePath, continueHref, knownAs, saveIntake, searchHref } from '../intake.js';
+	import type { IntakeAnswers } from '#lib/intakeDraft.svelte.js';
+	import IntakeQuestion from '../IntakeQuestion.svelte';
+	import { knownAs } from '../intake.js';
 
-	const STEP = 'address';
+	/*
+	 * Five near-identical blocks became one snippet after a review of
+	 * this ticket: what actually differs between them is the column, its
+	 * label and how wide the box is. `width` is a class rather than a
+	 * length so the sizes stay together in one place in the stylesheet
+	 * below, where the reason for each is written once.
+	 */
+	const lines: { key: keyof IntakeAnswers; label: string; width: 'line' | 'town' | 'short' }[] = [
+		{ key: 'addressLine1', label: 'Address line 1', width: 'line' },
+		{ key: 'addressLine2', label: 'Address line 2 (optional)', width: 'line' },
+		{ key: 'addressLocality', label: 'City', width: 'town' },
+		{ key: 'addressRegion', label: 'State', width: 'short' },
+		{ key: 'addressPostalCode', label: 'ZIP code', width: 'short' }
+	];
 
-	const practiceId = $derived(page.params.practiceId ?? '');
-	const base = $derived(basePath(practiceId));
-	const steps = $derived(journeySteps(intakeFlow.steps, base, STEP, intakeDraft.visitedSteps));
-
-	let errors = $state<FormError[]>([]);
-	let isSaving = $state(false);
-
-	async function handleContinue(event: SubmitEvent) {
-		event.preventDefault();
-		intakeDraft.visit(STEP);
-		await goto(
-			continueHref(page.url.searchParams, practiceId, nextStepHref(intakeFlow.steps, base, STEP))
-		);
-	}
-
-	async function handleSaveForLater() {
-		isSaving = true;
-		errors = (await saveIntake(practiceId, false)) ?? [];
-		isSaving = false;
+	function idFor(key: string): string {
+		return `intake-${key.replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
 	}
 </script>
 
-<form onsubmit={handleContinue} novalidate>
-	<QuestionPage
-		journey={JOURNEY}
-		{steps}
-		backHref={backHref(
-			page.url.searchParams,
-			practiceId,
-			previousStepHref(intakeFlow.steps, base, STEP, searchHref(practiceId))
-		)}
-		question={{ as: 'legend', text: `What is ${knownAs()}'s address?` }}
-		hint="Where a Practice sends anything on paper, and where a Doula drives to."
-	>
-		{#snippet errorSummary()}
-			{#if errors.length > 0}
-				<ErrorSummary {errors} />
-			{/if}
-		{/snippet}
-
-		{#snippet content()}
-			<stack-l space="var(--space-5)">
-				<div class="line">
-					<LabeledField id="intake-address-line-1" label="Address line 1">
+<IntakeQuestion
+	stepId="address"
+	question={{ as: 'legend', text: `What is ${knownAs()}'s address?` }}
+	hint="Where a Practice sends anything on paper, and where a Doula drives to."
+>
+	{#snippet controls()}
+		<stack-l space="var(--space-5)">
+			{#each lines as line (line.key)}
+				<div class={line.width}>
+					<LabeledField id={idFor(line.key)} label={line.label}>
 						{#snippet children({ id, describedBy })}
 							<TextInput
 								{id}
 								{describedBy}
-								value={intakeDraft.answers.addressLine1}
-								onInput={(value) => intakeDraft.update({ addressLine1: value })}
+								value={String(intakeDraft.answers[line.key] ?? '')}
+								onInput={(value) => intakeDraft.update({ [line.key]: value })}
 								autocomplete="off"
 							/>
 						{/snippet}
 					</LabeledField>
 				</div>
-				<div class="line">
-					<LabeledField id="intake-address-line-2" label="Address line 2 (optional)">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								value={intakeDraft.answers.addressLine2}
-								onInput={(value) => intakeDraft.update({ addressLine2: value })}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-				</div>
-				<div class="town">
-					<LabeledField id="intake-address-locality" label="City">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								value={intakeDraft.answers.addressLocality}
-								onInput={(value) => intakeDraft.update({ addressLocality: value })}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-				</div>
-				<div class="short">
-					<LabeledField id="intake-address-region" label="State">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								value={intakeDraft.answers.addressRegion}
-								onInput={(value) => intakeDraft.update({ addressRegion: value })}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-				</div>
-				<div class="short">
-					<LabeledField id="intake-address-postal-code" label="ZIP code">
-						{#snippet children({ id, describedBy })}
-							<TextInput
-								{id}
-								{describedBy}
-								value={intakeDraft.answers.addressPostalCode}
-								onInput={(value) => intakeDraft.update({ addressPostalCode: value })}
-								autocomplete="off"
-							/>
-						{/snippet}
-					</LabeledField>
-				</div>
-			</stack-l>
-		{/snippet}
-
-		{#snippet actions()}
-			<IntakeActions {isSaving} onSaveForLater={handleSaveForLater} />
-		{/snippet}
-	</QuestionPage>
-</form>
+			{/each}
+		</stack-l>
+	{/snippet}
+</IntakeQuestion>
 
 <style>
 	@layer components {
@@ -154,8 +76,8 @@
 		 * put in, and a 12ch wrapper around one would have been a box the
 		 * control painted straight out of. `Select` and `Textarea` both
 		 * stretch, so the three controls in one form do not agree; that is
-		 * app-wide, predates this ticket, and is #805, which removes this
-		 * rule when it lands.
+		 * app-wide, predates this ticket, and is #805, which takes these
+		 * three rules out when it lands.
 		 */
 		.line :global(input),
 		.town :global(input),

@@ -29,6 +29,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { editClient, type ClientMatch } from '#lib/client.js';
 	import { displayName } from '#lib/clientDetail.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
@@ -59,6 +60,15 @@
 
 	let answer = $state('');
 	let errors = $state<FormError[]>([]);
+	/*
+	 * The refusal that belongs to the radio group, separate from
+	 * `errors`. GOV.UK asks for a field's message twice -- in the summary
+	 * and again against the control -- but a whole-submission refusal (a
+	 * 5xx, a dropped connection) belongs only in the summary, because
+	 * there is no control it is about. One list could not tell them
+	 * apart.
+	 */
+	let answerError = $state<string | undefined>();
 	let isSaving = $state(false);
 
 	/*
@@ -82,7 +92,11 @@
 
 	function matchDescription(match: ClientMatch): string {
 		const facts = [
-			match.dateOfBirth ? `Born ${match.dateOfBirth}` : 'No date of birth on file',
+			// In words, through `dates.ts`, like every other date the app
+			// shows: this line's whole job is telling two people with the
+			// same name apart, and "1988-02-09" is storage rather than a
+			// fact a reader recognises.
+			match.dateOfBirth ? `Born ${formatCalendarDay(match.dateOfBirth)}` : 'No date of birth on file',
 			match.email || match.phone || 'No contact details on file',
 			match.engagements.length === 1
 				? '1 Engagement'
@@ -110,15 +124,13 @@
 		if (answer === '') {
 			// Linked to the first option, which is where GOV.UK's error
 			// summary sends a reader whose refusal belongs to a group: the
-			// first control in it, not the group itself.
-			errors = [
-				{
-					message: 'Choose whether this is the same person',
-					targetId: `${ANSWER_NAME}-${options[0]!.value}`
-				}
-			];
+			// first control in it, not the group itself. The same words
+			// appear against the group through `answerError`.
+			answerError = 'Choose whether this is the same person';
+			errors = [{ message: answerError, targetId: `${ANSWER_NAME}-${options[0]!.value}` }];
 			return;
 		}
+		answerError = undefined;
 		errors = [];
 		if (answer === DIFFERENT_PERSON) {
 			isSaving = true;
@@ -221,7 +233,7 @@
 						{options}
 						value={answer}
 						onChange={(chosen) => (answer = chosen)}
-						error={errors.find((entry) => entry.targetId === undefined)?.message}
+						error={answerError}
 					/>
 					<Text
 						step="body-sm"

@@ -15,82 +15,43 @@
 	 */
 	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
-	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import ClientFieldAnswers from '#lib/components/organisms/ClientFieldAnswers.svelte';
-	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
-	import { journeySteps, nextStepHref, previousStepHref } from '#lib/intakeJourney.js';
-	import type { FormError } from '#lib/formErrors.js';
-	import IntakeActions from '../../IntakeActions.svelte';
-	import { JOURNEY, backHref, basePath, continueHref, saveIntake, searchHref } from '../../intake.js';
+	import { sectionStepId } from '#lib/intakeJourney.js';
+	import IntakeQuestion from '../../IntakeQuestion.svelte';
+	import { basePath } from '../../intake.js';
 
 	const practiceId = $derived(page.params.practiceId ?? '');
-	const base = $derived(basePath(practiceId));
 	const index = $derived(Number(page.params.sectionIndex));
 	const section = $derived(intakeFlow.sections[index]);
-	const stepId = $derived(`section-${index}`);
-	const steps = $derived(journeySteps(intakeFlow.steps, base, stepId, intakeDraft.visitedSteps));
-
-	let errors = $state<FormError[]>([]);
-	let isSaving = $state(false);
 
 	// A Practice can archive its last field, or rename a section, between
 	// one visit and the next -- and a bookmark outlives either. An index
 	// with no section behind it is the end of the sequence rather than an
-	// error page: the summary is where it would have led anyway.
+	// error page: the summary is where it would have led anyway. An
+	// effect rather than an onMount, because SvelteKit keeps one component
+	// across a change of `sectionIndex` and this has to follow it.
 	$effect(() => {
 		if (section === undefined && intakeFlow.status === 'ready') {
-			void goto(`${base}/check`);
+			void goto(`${basePath(practiceId)}/check`);
 		}
 	});
-
-	async function handleContinue(event: SubmitEvent) {
-		event.preventDefault();
-		intakeDraft.visit(stepId);
-		await goto(
-			continueHref(page.url.searchParams, practiceId, nextStepHref(intakeFlow.steps, base, stepId))
-		);
-	}
-
-	async function handleSaveForLater() {
-		isSaving = true;
-		errors = (await saveIntake(practiceId, false)) ?? [];
-		isSaving = false;
-	}
 </script>
 
 {#if section}
-	<form onsubmit={handleContinue} novalidate>
-		<QuestionPage
-			journey={JOURNEY}
-			{steps}
-			backHref={backHref(
-				page.url.searchParams,
-				practiceId,
-				previousStepHref(intakeFlow.steps, base, stepId, searchHref(practiceId))
-			)}
-			question={{ as: 'legend', text: section.heading }}
-			hint="These are the questions this Practice asks. Every one of them can be left for later."
-		>
-			{#snippet errorSummary()}
-				{#if errors.length > 0}
-					<ErrorSummary {errors} />
-				{/if}
-			{/snippet}
-
-			{#snippet content()}
-				<ClientFieldAnswers
-					fields={section.fields}
-					values={intakeDraft.answers.fieldValues}
-					onChange={(fieldId, value) => intakeDraft.setFieldValue(fieldId, value)}
-					idPrefix="intake-field-{index}"
-				/>
-			{/snippet}
-
-			{#snippet actions()}
-				<IntakeActions {isSaving} onSaveForLater={handleSaveForLater} />
-			{/snippet}
-		</QuestionPage>
-	</form>
+	<IntakeQuestion
+		stepId={sectionStepId(index)}
+		question={{ as: 'legend', text: section.heading }}
+		hint="These are the questions this Practice asks. Every one of them can be left for later."
+	>
+		{#snippet controls()}
+			<ClientFieldAnswers
+				fields={section.fields}
+				values={intakeDraft.answers.fieldValues}
+				onChange={(fieldId, value) => intakeDraft.setFieldValue(fieldId, value)}
+				idPrefix="intake-field-{index}"
+			/>
+		{/snippet}
+	</IntakeQuestion>
 {/if}

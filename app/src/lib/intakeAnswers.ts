@@ -13,21 +13,29 @@
  * answered questions would show that reader one row and no way to see
  * what else was asked -- the Change link on an empty row is how the rest
  * of the sequence stays reachable from the end of it.
+ *
+ * ## The headings and the rows are the journey's own
+ *
+ * Both come from `intakeJourney.ts`'s `STRUCTURAL_STEPS`, so a section
+ * heading here is the same string the rail shows for that step and a
+ * Change link goes to the same slug the rail links to. They were typed
+ * out twice until a review of this ticket noticed.
  */
 
 import type { AnswerSection } from './components/templates/CheckAnswers.svelte';
 import type { Field } from './clientFieldTemplate.js';
-import type { IntakeSection } from './intakeJourney.js';
+import { formatCalendarDay } from './dates.js';
+import {
+	CHANGE_QUERY,
+	sectionSlug,
+	STRUCTURAL_STEPS,
+	type IntakeSection
+} from './intakeJourney.js';
 import type { FieldValue, IntakeAnswers } from './intakeDraft.svelte.js';
 
 /** What an unanswered row says. Not an em dash: this page is read aloud
  * as often as it is looked at, and a dash announces as nothing. */
 export const NOT_ANSWERED = 'Not answered';
-
-/** The query the Change round trip carries, and the value it carries.
- * A question page reading it sends Continue back to the summary instead
- * of on to the next question. */
-export const FROM_CHECK = 'from=check';
 
 function shown(value: string): string {
 	return value.trim() === '' ? NOT_ANSWERED : value.trim();
@@ -42,8 +50,21 @@ export function fieldValueText(field: Field, value: FieldValue | undefined): str
 	return shown(typeof value === 'string' ? value : '');
 }
 
+/*
+ * A date of birth is stored as "YYYY-MM-DD" and read here as words --
+ * `dates.ts`, which every other screen in the app already goes through.
+ * GOV.UK's Check answers pattern shows a date the way a person says it,
+ * and a summary that read "1988-02-09" back to somebody who had just
+ * typed 2, 9 and 1988 into three boxes would be showing storage rather
+ * than an answer.
+ */
+function answerText(key: string, value: string): string {
+	if (key !== 'dateOfBirth' || value.trim() === '') return shown(value);
+	return formatCalendarDay(value);
+}
+
 function changeHref(basePath: string, slug: string): string {
-	return `${basePath}/${slug}?${FROM_CHECK}`;
+	return `${basePath}/${slug}?${CHANGE_QUERY}`;
 }
 
 /**
@@ -58,44 +79,15 @@ export function answerSections(
 	sections: IntakeSection[],
 	basePath: string
 ): AnswerSection[] {
-	const structural: AnswerSection[] = [
-		{
-			heading: 'Name',
-			answers: [
-				{ label: 'Given name', value: shown(answers.givenName), changes: 'given name', changeHref: changeHref(basePath, 'name') },
-				{ label: 'Family name', value: shown(answers.familyName), changes: 'family name', changeHref: changeHref(basePath, 'name') },
-				{ label: 'Preferred name', value: shown(answers.preferredName), changes: 'preferred name', changeHref: changeHref(basePath, 'name') }
-			]
-		},
-		{
-			heading: 'Date of birth',
-			answers: [
-				{ label: 'Date of birth', value: shown(answers.dateOfBirth), changes: 'date of birth', changeHref: changeHref(basePath, 'date-of-birth') }
-			]
-		},
-		{
-			heading: 'Email address',
-			answers: [
-				{ label: 'Email address', value: shown(answers.email), changes: 'email address', changeHref: changeHref(basePath, 'email') }
-			]
-		},
-		{
-			heading: 'Phone number',
-			answers: [
-				{ label: 'Phone number', value: shown(answers.phone), changes: 'phone number', changeHref: changeHref(basePath, 'phone') }
-			]
-		},
-		{
-			heading: 'Address',
-			answers: [
-				{ label: 'Address line 1', value: shown(answers.addressLine1), changes: 'address line 1', changeHref: changeHref(basePath, 'address') },
-				{ label: 'Address line 2', value: shown(answers.addressLine2), changes: 'address line 2', changeHref: changeHref(basePath, 'address') },
-				{ label: 'City', value: shown(answers.addressLocality), changes: 'city', changeHref: changeHref(basePath, 'address') },
-				{ label: 'State', value: shown(answers.addressRegion), changes: 'state', changeHref: changeHref(basePath, 'address') },
-				{ label: 'ZIP code', value: shown(answers.addressPostalCode), changes: 'ZIP code', changeHref: changeHref(basePath, 'address') }
-			]
-		}
-	];
+	const structural: AnswerSection[] = STRUCTURAL_STEPS.map((step) => ({
+		heading: step.label,
+		answers: step.questions.map((question) => ({
+			label: question.label,
+			value: answerText(question.key, answers[question.key]),
+			changes: question.changes,
+			changeHref: changeHref(basePath, step.slug)
+		}))
+	}));
 
 	const practiceDefined: AnswerSection[] = sections.map((section, index) => ({
 		heading: section.heading,
@@ -103,7 +95,7 @@ export function answerSections(
 			label: field.label,
 			value: fieldValueText(field, answers.fieldValues[field.id]),
 			changes: field.label,
-			changeHref: changeHref(basePath, `sections/${index}`)
+			changeHref: changeHref(basePath, sectionSlug(index))
 		}))
 	}));
 

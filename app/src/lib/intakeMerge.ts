@@ -11,10 +11,16 @@
  * already on file, and a field typed the same as what is on file is not
  * a change worth showing anyone. Only a non-blank, genuinely different
  * value becomes a proposed edit.
+ *
+ * What each column is called comes from `intakeJourney.ts`'s own table,
+ * the same one the summary's rows read, so a change proposed here is
+ * named the way the reader was asked for it.
  */
 
 import type { ClientEditFields, ClientMatch } from './client.js';
+import { NOT_ANSWERED } from './intakeAnswers.js';
 import type { IntakeAnswers } from './intakeDraft.svelte.js';
+import { STRUCTURAL_QUESTIONS } from './intakeJourney.js';
 
 /** One row of "what saving this would change" -- what is on file, and
  * what intake was told instead. */
@@ -23,34 +29,6 @@ export interface ProposedChange {
 	onFile: string;
 	typed: string;
 }
-
-/*
- * Every structural column but `id` and `fieldValues`: the eleven a
- * reader types, paired with what the review screen calls each. Typed as
- * the keys whose value is a string on BOTH sides, so `text()` below
- * needs no runtime guard for a shape the types already rule out.
- */
-type TextColumn = {
-	[Key in keyof IntakeAnswers & keyof ClientMatch]: IntakeAnswers[Key] extends string
-		? ClientMatch[Key] extends string
-			? Key
-			: never
-		: never;
-}[keyof IntakeAnswers & keyof ClientMatch];
-
-const STRUCTURAL_LABELS: [TextColumn, string][] = [
-	['givenName', 'Given name'],
-	['familyName', 'Family name'],
-	['preferredName', 'Preferred name'],
-	['email', 'Email address'],
-	['phone', 'Phone number'],
-	['addressLine1', 'Address line 1'],
-	['addressLine2', 'Address line 2'],
-	['addressLocality', 'City'],
-	['addressRegion', 'State'],
-	['addressPostalCode', 'ZIP code'],
-	['dateOfBirth', 'Date of birth']
-];
 
 function text(value: string): string {
 	return value.trim();
@@ -61,11 +39,11 @@ function text(value: string): string {
  * nothing to confirm and nothing to save. */
 export function proposedChanges(answers: IntakeAnswers, match: ClientMatch): ProposedChange[] {
 	const rows: ProposedChange[] = [];
-	for (const [key, label] of STRUCTURAL_LABELS) {
+	for (const { key, label } of STRUCTURAL_QUESTIONS) {
 		const typed = text(answers[key]);
 		const onFile = text(match[key]);
 		if (typed !== '' && typed !== onFile) {
-			rows.push({ label, onFile: onFile === '' ? 'Not answered' : onFile, typed });
+			rows.push({ label, onFile: onFile === '' ? NOT_ANSWERED : onFile, typed });
 		}
 	}
 	return rows;

@@ -18,7 +18,7 @@
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import { journeySteps } from '#lib/intakeJourney.js';
 	import type { FormError } from '#lib/formErrors.js';
-	import { JOURNEY, basePath, knownAs, saveIntake } from '../intake.js';
+	import { givenNameRefusal, JOURNEY, basePath, knownAs, saveIntake } from '../intake.js';
 
 	/*
 	 * GOV.UK's wider column for a long answer list. Eleven structural
@@ -40,14 +40,8 @@
 	let isSaving = $state(false);
 
 	async function handleSave() {
-		if (intakeDraft.answers.givenName.trim() === '') {
-			// The one thing a Client record cannot be saved without
-			// (ADR-0017). No `targetId`: the field is on another page, and
-			// GOV.UK renders an entry with nowhere to send the reader as
-			// text rather than as a link that goes nowhere useful.
-			errors = [{ message: "Enter the Client's given name on the Name step" }];
-			return;
-		}
+		errors = givenNameRefusal('the-summary');
+		if (errors.length > 0) return;
 		isSaving = true;
 		errors = (await saveIntake(practiceId, false)) ?? [];
 		isSaving = false;

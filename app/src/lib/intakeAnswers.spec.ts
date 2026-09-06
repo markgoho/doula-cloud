@@ -62,6 +62,24 @@ describe('answerSections', () => {
 		expect(rows).toHaveLength(11);
 	});
 
+	// GOV.UK's Check answers shows a date the way a person says it, and
+	// `dates.ts` is where every other screen in the app formats one.
+	it('reads the date of birth back in words, not as it is stored', () => {
+		const sections = answerSections(
+			{ ...blankAnswers(), dateOfBirth: '1988-02-09' },
+			[],
+			basePath
+		);
+
+		expect(sections[1].answers[0].value).toBe('Feb 9, 1988');
+	});
+
+	it('leaves an unanswered date of birth unanswered rather than formatting a blank', () => {
+		const sections = answerSections(blankAnswers(), [], basePath);
+
+		expect(sections[1].answers[0].value).toBe(NOT_ANSWERED);
+	});
+
 	it('sends each Change link back to the question that asked it', () => {
 		const sections = answerSections(blankAnswers(), [], basePath);
 

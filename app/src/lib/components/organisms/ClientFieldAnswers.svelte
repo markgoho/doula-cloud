@@ -93,6 +93,7 @@
 						{describedBy}
 						checked={isChecked(field)}
 						onChange={(isTicked) => onChange(field.id, isTicked)}
+						autocomplete="off"
 					/>
 				{/snippet}
 			</LabeledField>
@@ -125,6 +126,7 @@
 									checked={listValue(field).includes(option)}
 									ariaLabel="{field.label}: {option}"
 									onChange={(isChosen) => toggleOption(field, option, isChosen)}
+									autocomplete="off"
 								/>
 							{/snippet}
 						</LabeledField>
@@ -142,6 +144,7 @@
 						value={textValue(field)}
 						placeholder="Not answered yet"
 						onChange={(chosen) => onChange(field.id, chosen)}
+						autocomplete="off"
 					/>
 				{/snippet}
 			</LabeledField>
