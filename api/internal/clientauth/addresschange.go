@@ -296,7 +296,7 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 		return "", http.StatusInternalServerError, MsgInternalError
 	}
 
-	if err := recordAddressChange(ctx, tx, identifier); err != nil {
+	if err := recordForEachClient(ctx, tx, identifier, activity.ActionPortalSignInAddressChanged); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", http.StatusInternalServerError, MsgInternalError
 	}
@@ -319,15 +319,19 @@ type clientSubject struct {
 	practiceID string
 }
 
-// recordAddressChange writes ADR-0022's history for the change, one row
-// per Practice holding a Client behind this Portal Account.
+// recordForEachClient writes ADR-0022's history for a Portal-Account-wide
+// action -- one row per Practice holding a Client behind identifier, since
+// ADR-0015 says a single Portal Account can reach Clients at more than
+// one Practice. #619's own sign-in-address change was this loop's first
+// caller; #618's sign-out-everywhere is its second, which is the bar
+// this codebase extracts a shared name at rather than duplicating.
 //
-// The two loops are deliberately not one: activity.ScopeToPractice
+// The two loops inside it are deliberately not one: activity.ScopeToPractice
 // widens every practice_id-scoped read the transaction makes afterwards,
 // so its own doc comment says nothing but the activity insert may follow
 // it. Every clients read this needs is therefore done first, and the
 // second loop does nothing but scope and record.
-func recordAddressChange(ctx context.Context, tx *sql.Tx, identifier string) error {
+func recordForEachClient(ctx context.Context, tx *sql.Tx, identifier string, action activity.ClientAction) error {
 	clientIDs, err := listPortalClientIDs(ctx, tx, identifier)
 	if err != nil {
 		// coverage:ignore reason: listPortalClientIDs only errors on a DB failure, not exercised by unit tests
@@ -360,11 +364,11 @@ func recordAddressChange(ctx context.Context, tx *sql.Tx, identifier string) err
 			PracticeID:  s.practiceID,
 			SubjectKind: activity.SubjectClient,
 			SubjectID:   s.clientID,
-			Action:      string(activity.ActionPortalSignInAddressChanged),
+			Action:      string(action),
 			Actor:       activity.ClientActor(s.clientID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return fmt.Errorf("clientauth: record address change: %w", err)
+			return fmt.Errorf("clientauth: record activity: %w", err)
 		}
 	}
 	return nil

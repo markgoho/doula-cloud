@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
@@ -320,7 +321,7 @@ func TestSpendAddressChangeHandler_MovesTheAddressAndRecordsIt(t *testing.T) {
 	// Spending mints no session -- it moves an address, it does not sign
 	// anybody in.
 	for _, c := range resp.Cookies() {
-		if c.Name == "__session" {
+		if c.Name == authn.SessionCookieName {
 			t.Fatal("the confirmation minted a session")
 		}
 	}

@@ -58,8 +58,9 @@ export interface SignOutRequest {
  *
  * Only this browser's session ends. The same person's sessions on other
  * devices are separate rows and no refresh token is revoked, so their own
- * phone stays signed in; cutting every device off is a separate
- * administrative action.
+ * phone stays signed in; cutting every device off is a distinct action --
+ * a Staff Owner's administrative revoke, or a Client's own
+ * sign-out-everywhere (#618) -- built separately from this one.
  */
 export async function signOutOfSession({
 	unsubscribeURL,
@@ -89,8 +90,13 @@ export async function signOutOfSession({
  * throws: the caller carries on either way. Work that outlives its
  * deadline is abandoned, not cancelled -- there is nothing to cancel,
  * which is the point of it being best-effort.
+ *
+ * Exported so #618's sign-out-everywhere can bound its own push
+ * unregister the same way this file's own signOutOfSession does --
+ * ending every session on every device is still, from this browser's
+ * side, this device going off push too.
  */
-async function bestEffort(work: () => Promise<void>, milliseconds: number): Promise<void> {
+export async function bestEffort(work: () => Promise<void>, milliseconds: number): Promise<void> {
 	const { promise: expired, resolve: expire } = Promise.withResolvers<void>();
 	const timer = setTimeout(expire, milliseconds);
 	try {

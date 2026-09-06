@@ -34,9 +34,9 @@ type Querier interface {
 var errNoSession = errors.New("authn: no live session for this token")
 
 // MintSession creates a session for identityUID that expires
-// SessionLifetime after now, and returns the cookie carrying its token.
-// The token is generated here and only its digest is stored, so this is
-// the one moment the plaintext token exists.
+// SessionLifetimeFor(identityUID) after now, and returns the cookie
+// carrying its token. The token is generated here and only its digest is
+// stored, so this is the one moment the plaintext token exists.
 //
 // secondFactor is recorded on the row as-is, from the ID token that was
 // verified to reach this call (VerifiedToken.SecondFactor) -- #606's
@@ -56,15 +56,16 @@ func MintSession(ctx context.Context, q Querier, identityUID string, secondFacto
 	// rand.Text returns 128+ bits of cryptographic randomness as text and
 	// cannot fail, so a session token needs no error path of its own.
 	token := rand.Text()
+	lifetime := SessionLifetimeFor(identityUID)
 
 	if _, err := q.ExecContext(ctx,
 		`INSERT INTO sessions (token_hash, identity_uid, expires_at, second_factor) VALUES ($1, $2, $3, $4)`,
-		tokenHash(token), identityUID, now.Add(SessionLifetime), secondFactor,
+		tokenHash(token), identityUID, now.Add(lifetime), secondFactor,
 	); err != nil {
 		return nil, fmt.Errorf("authn: insert session: %w", err)
 	}
 
-	return NewSessionCookie(token), nil
+	return NewSessionCookie(token, lifetime), nil
 }
 
 // EndSession deletes the session token names. It reports no error for a
@@ -110,13 +111,13 @@ func lookupSession(ctx context.Context, q Querier, token string, now time.Time) 
 	return identityUID, expiresAt, secondFactor, nil
 }
 
-// renewSession pushes token's expiry out to a full SessionLifetime from
-// now. The token itself never changes, so the browser keeps the cookie
-// value it already holds and only its MaxAge is refreshed.
-func renewSession(ctx context.Context, q Querier, token string, now time.Time) error {
+// renewSession pushes token's expiry out to a full lifetime from now.
+// The token itself never changes, so the browser keeps the cookie value
+// it already holds and only its MaxAge is refreshed.
+func renewSession(ctx context.Context, q Querier, token string, lifetime time.Duration, now time.Time) error {
 	if _, err := q.ExecContext(ctx,
 		`UPDATE sessions SET expires_at = $1 WHERE token_hash = $2`,
-		now.Add(SessionLifetime), tokenHash(token),
+		now.Add(lifetime), tokenHash(token),
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("authn: renew session: %w", err)

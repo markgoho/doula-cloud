@@ -66,9 +66,11 @@ func SeedSession(t *testing.T, q authn.Querier, uid string) string {
 }
 
 // SeedSessionAt creates a session as though it had been minted at now,
-// so it expires authn.SessionLifetime after that. A now in the past is
-// how a test puts a session past half its life (to drive renewal) or
-// past its expiry (to drive a 401) without waiting or stubbing a clock.
+// so it expires authn.SessionLifetimeFor(uid) after that -- Staff's 12
+// hours, or 30 days for a Portal Account identifier (#618, ADR-0026). A
+// now in the past is how a test puts a session past half its life (to
+// drive renewal) or past its expiry (to drive a 401) without waiting or
+// stubbing a clock.
 //
 // The session carries a second factor. #606 made that the realistic
 // default the moment it made MFA mandatory for an Owner: this is "a

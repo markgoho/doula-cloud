@@ -34,11 +34,34 @@ import (
 // store, Verifier, and BearerToken.
 const SessionCookieName = "__session"
 
-// SessionLifetime is how long a newly minted or renewed session is valid
-// for. #138 fixes this at 12 hours for both populations. It is both the
+// SessionLifetime is how long a newly minted or renewed Staff session is
+// valid for. #138 fixed this at 12 hours; #618/ADR-0026 keeps it for
+// Staff deliberately -- they share a laptop at a birth centre and read
+// many people's health records, so the short session is the point, not
+// an inconsistency with the Client lifetime below. It is both the
 // session row's expiry window and the cookie's MaxAge, so the browser
 // and Postgres agree on when a session ends.
 const SessionLifetime = 12 * time.Hour
+
+// PortalSessionLifetime is how long a newly minted or renewed Client
+// portal session is valid for -- 30 days, rolling on every renewal
+// exactly as a Staff session is (#618, ADR-0026). A Client uses the
+// portal occasionally across a nine-month relationship, so a 12-hour
+// session would mean "check your email" at nearly every visit -- the
+// cost of a passwordless portal landing on the person least willing to
+// pay it.
+const PortalSessionLifetime = 30 * 24 * time.Hour
+
+// SessionLifetimeFor is how long a session minted or renewed for
+// identityUID is valid for, chosen from TierOf's namespace-prefix test
+// rather than a column on `sessions` (ADR-0026: "the prefix is the
+// namespace it was issued in", not a hint read alongside the value).
+func SessionLifetimeFor(identityUID string) time.Duration {
+	if TierOf(identityUID) == TierPortal {
+		return PortalSessionLifetime
+	}
+	return SessionLifetime
+}
 
 // msgInternalError is the body a caller sees when the failure is the
 // BFF's own, not theirs -- an unreachable database, not a bad
@@ -47,13 +70,14 @@ const msgInternalError = "internal error"
 
 // NewSessionCookie builds the *http.Cookie every session cookie -- newly
 // minted or renewed -- is sent as, wrapping the session's token with the
-// shared name, attributes, and SessionLifetime.
-func NewSessionCookie(token string) *http.Cookie {
+// shared name, attributes, and lifetime as MaxAge. lifetime comes from
+// SessionLifetimeFor, chosen per population (ADR-0026).
+func NewSessionCookie(token string, lifetime time.Duration) *http.Cookie {
 	return &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(SessionLifetime.Seconds()),
+		MaxAge:   int(lifetime.Seconds()),
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
@@ -175,7 +199,7 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 		return "", false, false
 	}
 
-	renewIfStale(w, r, db, cookie.Value, expiresAt, now)
+	renewIfStale(w, r, db, cookie.Value, uid, expiresAt, now)
 	return uid, secondFactor, true
 }
 
@@ -198,11 +222,12 @@ func idTokenCredential(w http.ResponseWriter, r *http.Request, verifier Verifier
 }
 
 // renewIfStale extends the session's expiry and re-sets the cookie when
-// it is already past half its SessionLifetime (#147). The token value
-// does not change, so this is an UPDATE of one row plus a fresh MaxAge
-// on the browser's copy -- no Bearer ID token is involved, which is what
-// keeps renewal working now that #151 has removed the Bearer path from
-// every route behind Begin.
+// it is already past half its lifetime (#147), the lifetime itself
+// chosen per population by SessionLifetimeFor (#618, ADR-0026). The
+// token value does not change, so this is an UPDATE of one row plus a
+// fresh MaxAge on the browser's copy -- no Bearer ID token is involved,
+// which is what keeps renewal working now that #151 has removed the
+// Bearer path from every route behind Begin.
 //
 // The UPDATE deliberately runs on the pool rather than the request's own
 // transaction. Renewal is about the credential, not about whatever the
@@ -213,24 +238,25 @@ func idTokenCredential(w http.ResponseWriter, r *http.Request, verifier Verifier
 // divergence this design exists to remove. A failed UPDATE leaves the
 // existing cookie in place: the session is still valid until its
 // current expiry, and the next request past half life tries again.
-func renewIfStale(w http.ResponseWriter, r *http.Request, q Querier, token string, expiresAt, now time.Time) {
-	if !pastHalfLife(expiresAt, now) {
+func renewIfStale(w http.ResponseWriter, r *http.Request, q Querier, token, identityUID string, expiresAt, now time.Time) {
+	lifetime := SessionLifetimeFor(identityUID)
+	if !pastHalfLife(expiresAt, now, lifetime) {
 		return
 	}
-	if err := renewSession(r.Context(), q, token, now); err != nil {
+	if err := renewSession(r.Context(), q, token, lifetime, now); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return
 	}
-	http.SetCookie(w, NewSessionCookie(token))
+	http.SetCookie(w, NewSessionCookie(token, lifetime))
 }
 
 // pastHalfLife reports whether a session expiring at expiresAt has less
-// than half of a full SessionLifetime left at now. It is written against
-// the remaining time rather than a stored issue time on purpose: renewal
+// than half of a full lifetime left at now. It is written against the
+// remaining time rather than a stored issue time on purpose: renewal
 // moves expires_at and nothing else, so a midpoint computed from a fixed
 // creation time would drift into the past and re-renew on every request.
-func pastHalfLife(expiresAt, now time.Time) bool {
-	return !now.Before(expiresAt.Add(-SessionLifetime / 2))
+func pastHalfLife(expiresAt, now time.Time, lifetime time.Duration) bool {
+	return !now.Before(expiresAt.Add(-lifetime / 2))
 }
 
 // VerifiedToken is the identity a Verifier extracts from a valid ID

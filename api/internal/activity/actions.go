@@ -34,6 +34,14 @@ type ClientAction string
 // it; the address itself is on portal_accounts, where it belongs.
 const ActionPortalSignInAddressChanged ClientAction = "portal_sign_in_address_changed"
 
+// ActionPortalSessionsEnded records a Client signing herself out of
+// every device from inside the portal (#618, ADR-0026). Always a
+// ClientActor: it is her own "sign out everywhere", not Staff's
+// administrative revoke (staffauth.EndSessionsHandler, which records
+// against "membership" instead). No diff: like the address change
+// above, there is nothing to say but who did it and when.
+const ActionPortalSessionsEnded ClientAction = "portal_sessions_ended"
+
 // SubjectClient is the subject_kind client/events.go's recordEvent writes
 // every create/update/erase event against (subject_id = client_id).
 // Exported for the same reason SubjectEngagement is: a caller building a
