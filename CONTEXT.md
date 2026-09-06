@@ -115,6 +115,7 @@ _Avoid_: Response, submission
 
 **Contract**:
 The signed agreement governing an Engagement.
+_Client says_: Contract — the noun itself does not diverge (ADR-0005). Each `contract_status` value has one fixed label, the same for every Client: `draft` → Being prepared (never reaches her — a Draft Contract 404s the client-portal read, same as one not yet sent), `sent` → Ready for your signature, `signed` → Signed, `voided` → No longer active. A voided Contract also carries a fixed terminal notice naming her Practice rather than the Staff `ContractStatus` component's bare "Voided" (NH-G5): "{Practice name} ended this Contract." It says nothing about an Invoice — voiding a Contract does not touch one, and a register label never claims a fact the model does not hold. Decided on [#212](https://github.com/markgoho/doula-cloud/issues/212).
 _Avoid_: Agreement
 
 **Invoice**:

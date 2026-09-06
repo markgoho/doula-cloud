@@ -2,13 +2,13 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 
 	/**
-	 * Shared status display for a Contract: the current status, a clear
-	 * terminal-state indicator once Voided, and (when the caller is Staff)
-	 * the Void action itself -- offered only on a Signed Contract, since
-	 * Void is a one-way transition into the terminal Voided state. Used by
-	 * both the Staff Engagement view and the Client-portal Contract view;
-	 * the Client-portal caller omits onVoid, so the button never renders
-	 * there.
+	 * Status display for a Contract on the Staff Engagement view: the raw
+	 * status, a clear terminal-state indicator once Voided, and the Void
+	 * action -- offered only on a Signed Contract, since Void is a one-way
+	 * transition into the terminal Voided state. The Client-portal Contract
+	 * view stopped using this component on #212 (NH-G5): a Client reads
+	 * `clientRegister.ts`'s own label and voided notice, never this
+	 * component's Staff wording.
 	 */
 	let {
 		status,

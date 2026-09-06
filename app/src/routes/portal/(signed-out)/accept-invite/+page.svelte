@@ -5,6 +5,7 @@
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { refusalErrors, refusalOrConfirmable, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
+	import { CARE_HEADING, NO_CARE_MESSAGE } from '#lib/clientRegister.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
@@ -90,9 +91,9 @@
 	{#if !inviteToken}
 		<Notice variant="error" message="Missing invite token" />
 	{:else if picker}
-		<h2>Choose an Engagement</h2>
+		<h2>{CARE_HEADING}</h2>
 		{#if picker.length === 0}
-			<p>You don't have an Engagement yet. Ask your Practice to set one up.</p>
+			<p>{NO_CARE_MESSAGE}</p>
 		{:else}
 			<ul>
 				{#each picker as engagement (engagement.engagementId)}

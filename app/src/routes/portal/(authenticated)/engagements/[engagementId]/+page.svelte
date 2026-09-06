@@ -17,6 +17,7 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { activityLedgerColumns, loadPortalActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import { engagementStatusLabel } from '#lib/clientRegister.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -68,7 +69,7 @@
 	 * "Due date" row reading "Not given" would tell a Client something is
 	 * missing from her own record rather than that nothing was ever due. */
 	function summaryItems(d: Detail): { label: string; value: string }[] {
-		const items = [{ label: 'Status', value: d.status }];
+		const items = [{ label: 'Status', value: engagementStatusLabel(d.status) }];
 		if (d.dueDate) {
 			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });
 		}
@@ -132,6 +133,6 @@
 	{summary}
 	{actions}
 	sections={detail ? [{ heading: 'Everything that has happened', content: activitySection }] : []}
-	loading={detail || error ? undefined : 'Loading your Engagement'}
+	loading={detail || error ? undefined : 'Loading your care'}
 	loadError={error || undefined}
 />
