@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 )
 
@@ -55,16 +54,18 @@ func QueuePaymentReceivedNotification(ctx context.Context, tx *sql.Tx, paymentID
 // since the two outbox tables, recipients, and copy are all unrelated).
 // outbox.ProcessPending owns the claim/retry/dead-letter machinery every
 // mail kind shares.
+//
+// Hand-written rather than built on outbox.MailWorker[R] (#839): it is
+// one of the three multi-recipient SendAll kinds, mailing every Owner
+// and Admin the Practice currently has rather than one fixed address a
+// Compose function could return. outbox.Mailer is still embedded, so no
+// field here redeclares Sender, Now, AppBaseURL, From or ReplyTo.
 type PaymentReceivedWorker struct {
-	Sender     mail.Sender
-	Now        func() time.Time
-	AppBaseURL string
-	From       string
-	ReplyTo    string
+	outbox.Mailer
 }
 
 func (w PaymentReceivedWorker) inner() outbox.Worker {
-	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "payment_received_outbox"}
+	return w.Worker("payment_received_outbox")
 }
 
 type paymentReceivedPendingRow struct {

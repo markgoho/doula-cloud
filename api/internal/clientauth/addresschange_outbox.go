@@ -6,36 +6,32 @@ import (
 	"fmt"
 	"time"
 
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 )
 
 // AddressChangeWorker sends due portal_address_change_outbox rows --
-// ADR-0010's outbox for #619's confirmation link. Unlike
-// MagicLinkWorker, it resolves no recipient at all: the address this
-// mail is going to is the one thing portal_accounts does not yet hold,
-// so the row carries it.
-type AddressChangeWorker struct {
-	Sender     mail.Sender
-	Now        func() time.Time
-	AppBaseURL string
-	From       string
-	ReplyTo    string
-}
+// ADR-0010's outbox for #619's confirmation link -- through the same
+// outbox.MailWorker loop as MagicLinkWorker. Unlike MagicLinkWorker, it
+// resolves no recipient at all: the address this mail is going to is the
+// one thing portal_accounts does not yet hold, so the row carries it.
+type AddressChangeWorker = outbox.MailWorker[addressChangeRow]
 
-func (w AddressChangeWorker) inner() outbox.Worker {
-	return outbox.Worker{
-		Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo,
+// NewAddressChangeWorker builds the sign-in-address confirmation outbox
+// worker around mailer.
+func NewAddressChangeWorker(mailer outbox.Mailer) AddressChangeWorker {
+	return AddressChangeWorker{
+		Mailer:          mailer,
 		Table:           "portal_address_change_outbox",
 		ClearOnTerminal: []string{"token"},
+		ClaimQuery:      addressChangeClaimQuery,
+		Scan:            scanAddressChangeRow,
+		Compose:         composeAddressChange(mailer),
 	}
 }
 
 type addressChangeRow struct {
-	id           string
-	attemptCount int
-	token        sql.NullString
-	toAddress    string
+	token     sql.NullString
+	toAddress string
 }
 
 // No join, unlike magicLinkClaimQuery: to_address is on the row itself.
@@ -46,29 +42,25 @@ const addressChangeClaimQuery = `SELECT id, attempt_count, token, to_address
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
 
-func scanAddressChangeRow(rows *sql.Rows) (addressChangeRow, error) {
+func scanAddressChangeRow(rows *sql.Rows) (outbox.RowMeta, addressChangeRow, error) {
+	var meta outbox.RowMeta
 	var r addressChangeRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.token, &r.toAddress)
-	return r, wrapOutboxErr(err)
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.token, &r.toAddress); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("clientauth: scan address change outbox row: %w", err)
+	}
+	return meta, r, nil
 }
 
-// ProcessPending sends every due portal_address_change_outbox row within tx.
-func (w AddressChangeWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), addressChangeClaimQuery, scanAddressChangeRow, w.send))
-}
-
-func (w AddressChangeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r addressChangeRow, now time.Time) error {
-	if !r.token.Valid || r.token.String == "" {
-		// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside queueAddressChangeMail
-		return wrapOutboxErr(inner.MarkDeadLetteredNow(ctx, tx, r.id, "outbox row carries no token"))
+func composeAddressChange(mailer outbox.Mailer) func(context.Context, *sql.Tx, addressChangeRow, time.Time) (string, string, string, error) {
+	return func(_ context.Context, _ *sql.Tx, r addressChangeRow, _ time.Time) (string, string, string, error) {
+		if !r.token.Valid || r.token.String == "" {
+			// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside queueAddressChangeMail
+			return "", "", "", &outbox.DeadLetterError{Reason: "outbox row carries no token"}
+		}
+		subject, text := addressChangeCopy(mailer.AppBaseURL, r.token.String)
+		return r.toAddress, subject, text, nil
 	}
-
-	subject, text := addressChangeCopy(w.AppBaseURL, r.token.String)
-	sendErr := w.Sender.Send(ctx, mail.Message{To: r.toAddress, From: w.From, ReplyTo: w.ReplyTo, Subject: subject, Text: text})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
 }
 
 // addressChangeCopy is the confirmation link's fixed, content-free copy

@@ -8,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -23,7 +24,7 @@ const (
 // stand-in AppBaseURL/From/ReplyTo -- every outbox test needs one, only
 // the injected Sender and (occasionally) Now vary.
 func newTestWorker(sender mail.Sender) billing.Worker {
-	return billing.Worker{Sender: sender, Now: time.Now, AppBaseURL: testLowCreditAppBaseURL, From: testLowCreditSenderAddr, ReplyTo: "support@b.test"}
+	return billing.Worker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testLowCreditAppBaseURL, From: testLowCreditSenderAddr, ReplyTo: "support@b.test"}}
 }
 
 // seedLowCreditOutboxRow inserts a pending low_credit_outbox row for

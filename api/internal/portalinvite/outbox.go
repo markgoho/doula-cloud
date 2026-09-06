@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 )
 
@@ -23,30 +22,27 @@ func inviteText(link string) string {
 		"If you weren't expecting this, you can safely ignore this email.\n"
 }
 
-// Worker sends due portal_invite_outbox rows -- the Cloud-Scheduler-driven
-// half of ADR-0010's outbox, mirroring push.Pusher's real/fake split via
-// the injected mail.Sender. Now is injectable so retry/dead-letter tests
-// don't depend on a real clock. outbox.ProcessPending owns the claim/
-// retry/dead-letter machinery every mail kind shares.
-type Worker struct {
-	Sender     mail.Sender
-	Now        func() time.Time
-	AppBaseURL string
-	From       string
-	ReplyTo    string
-}
+// Worker sends due portal_invite_outbox rows through outbox.MailWorker's
+// shared claim-scan-compose-send-mark loop -- this kind's own share is
+// only its table, claim query, row shape and Compose below.
+type Worker = outbox.MailWorker[pendingRow]
 
-func (w Worker) inner() outbox.Worker {
-	return outbox.Worker{Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo, Table: "portal_invite_outbox"}
+// NewWorker builds the Client portal invite outbox worker around mailer.
+func NewWorker(mailer outbox.Mailer) Worker {
+	return Worker{
+		Mailer:     mailer,
+		Table:      "portal_invite_outbox",
+		ClaimQuery: claimQuery,
+		Scan:       scanRow,
+		Compose:    compose(mailer),
+	}
 }
 
 type pendingRow struct {
-	id           string
-	attemptCount int
-	inviteToken  sql.NullString
-	identityUID  sql.NullString
-	// email is nullable since #396/ADR-0017 relaxed clients.email --
-	// a Practice may hold a Client with no address on file yet.
+	inviteToken sql.NullString
+	identityUID sql.NullString
+	// email is nullable since #396/ADR-0017 relaxed clients.email -- a
+	// Practice may hold a Client with no address on file yet.
 	email sql.NullString
 }
 
@@ -59,70 +55,43 @@ const claimQuery = `SELECT o.id, o.attempt_count, pu.invite_token, pu.identity_u
 	 LIMIT $1
 	 FOR UPDATE OF o SKIP LOCKED`
 
-func scanRow(rows *sql.Rows) (pendingRow, error) {
+func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
+	var meta outbox.RowMeta
 	var r pendingRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.inviteToken, &r.identityUID, &r.email)
-	return r, wrapOutboxErr(err)
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.inviteToken, &r.identityUID, &r.email); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("portalinvite: scan outbox row: %w", err)
+	}
+	return meta, r, nil
 }
 
-// wrapOutboxErr gives an error from the outbox package (a sibling
-// package, so wrapcheck treats its errors as external) this package's
-// own prefix, without outbox's own already-descriptive message.
-func wrapOutboxErr(err error) error {
-	if err == nil {
-		return nil
+// compose joins client_portal_users (and clients, for the recipient
+// address) to read the *current* invite_token and email at send time, so
+// a re-invite that rotated the token after this row was queued is never
+// mailed stale. A row whose invite was already accepted before send
+// resolves to ErrAlreadyDone -- the Client already has access. A row for
+// a Client with no email on file (ADR-0017) is a *DeadLetterError, not
+// scheduled for retry: nothing about waiting fixes a missing address; a
+// Staff member must add one and send a fresh invite.
+func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, time.Time) (string, string, string, error) {
+	return func(_ context.Context, _ *sql.Tx, r pendingRow, _ time.Time) (string, string, string, error) {
+		if r.identityUID.Valid {
+			return "", "", "", outbox.ErrAlreadyDone
+		}
+		if !r.email.Valid || r.email.String == "" {
+			return "", "", "", &outbox.DeadLetterError{Reason: "client has no email on file"}
+		}
+		link := mailer.AppBaseURL + "/portal/accept-invite?token=" + r.inviteToken.String
+		return r.email.String, inviteSubject, inviteText(link), nil
 	}
-	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
-	return fmt.Errorf("portalinvite: %w", err)
-}
-
-// ProcessPending sends every due portal_invite_outbox row within tx: it
-// joins client_portal_users (and clients, for the recipient address) to
-// read the *current* invite_token and email at send time, so a re-invite
-// that rotated the token after this row was queued is never mailed
-// stale. A row whose invite was already accepted before send is marked
-// sent without mailing anything -- the Client already has access.
-func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
-}
-
-func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
-	if r.identityUID.Valid {
-		// Already accepted -- through some other path -- before this row
-		// got sent. Nothing to deliver; record it sent so it never
-		// retries.
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-
-	if !r.email.Valid || r.email.String == "" {
-		// ADR-0017: clients.email is nullable now, and this row must
-		// refuse rather than mail a live token to an empty string.
-		// Dead-lettered outright, not scheduled for retry -- nothing
-		// about waiting fixes a missing address; a Staff member must add
-		// one and send a fresh invite.
-		return wrapOutboxErr(inner.MarkDeadLetteredNow(ctx, tx, r.id, "client has no email on file"))
-	}
-
-	link := w.AppBaseURL + "/portal/accept-invite?token=" + r.inviteToken.String
-	sendErr := w.Sender.Send(ctx, mail.Message{
-		To:      r.email.String,
-		From:    w.From,
-		ReplyTo: w.ReplyTo,
-		Subject: inviteSubject,
-		Text:    inviteText(link),
-	})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
 }
 
 // queueOutboxSend inserts a pending portal_invite_outbox row for
 // portalUserID, or -- if one is already pending (a re-invite) -- resets
 // its attempt_count and next_attempt_at so the worker retries
-// immediately. It never stores the invite_token itself; ProcessPending
-// reads that fresh from client_portal_users at send time, so a rotation
-// after this call is queued is always picked up, not mailed stale.
+// immediately. It never stores the invite_token itself; compose reads
+// that fresh from client_portal_users at send time, so a rotation after
+// this call is queued is always picked up, not mailed stale.
 func queueOutboxSend(ctx context.Context, tx *sql.Tx, portalUserID string) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO portal_invite_outbox (client_portal_user_id) VALUES ($1)

@@ -19,6 +19,7 @@ import (
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
@@ -43,44 +44,44 @@ const testWorkerReplyTo = "support@mg.example.test"
 // mail.FakeSender is never asserted on here, per #219's own package
 // covering send/retry/dead-letter behavior; these tests only need routes()
 // to compile and mount the route.
-var testWorker = portalinvite.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: "noreply@mg.example.test"}
+var testWorker = portalinvite.NewWorker(outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: "noreply@mg.example.test"})
 
 // testLowCreditWorker is every routes() test's stand-in for the
 // out-of-Credits outbox worker (#342), the billing package's counterpart
 // to testWorker above.
-var testLowCreditWorker = billing.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
+var testLowCreditWorker = billing.Worker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
 
 // testPayoutOutboxWorker is every routes() test's stand-in for the
 // payout-account-incomplete outbox worker (#343), the payments package's
 // counterpart to testLowCreditWorker above.
-var testPayoutOutboxWorker = payments.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
+var testPayoutOutboxWorker = payments.Worker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
 
 // testPaymentOutboxWorker is every routes() test's stand-in for the
 // payment-received outbox worker (#344), the payments package's
 // counterpart to testPayoutOutboxWorker above.
-var testPaymentOutboxWorker = payments.PaymentReceivedWorker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
+var testPaymentOutboxWorker = payments.PaymentReceivedWorker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
 
 // testSessionNoticeOutboxWorker is every routes() test's stand-in for the
 // new-sign-in/session-revoked outbox worker (#345), the sessionnotice
 // package's counterpart to testPaymentOutboxWorker above. No AppBaseURL:
 // sessionnotice.Worker has none, since neither notice's body links
 // anywhere.
-var testSessionNoticeOutboxWorker = sessionnotice.Worker{Sender: &mail.FakeSender{}, Now: time.Now, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
+var testSessionNoticeOutboxWorker = sessionnotice.NewWorker(outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, From: testWorkerFrom, ReplyTo: testWorkerReplyTo})
 
 // testStaffInviteOutboxWorker is every routes() test's stand-in for the
 // Staff invitation outbox worker (#339), the staffinvite package's
 // counterpart to testWorker above.
-var testStaffInviteOutboxWorker = staffinvite.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
+var testStaffInviteOutboxWorker = staffinvite.NewWorker(outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo})
 
 // testOfferOutboxWorker is every routes() test's stand-in for the Offer
 // outbox worker (#317), the offer package's counterpart to testWorker
 // above.
-var testOfferOutboxWorker = offer.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
+var testOfferOutboxWorker = offer.Worker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
 
 // testEngagementRequestOutboxWorker is every routes() test's stand-in for
 // the Engagement Request outbox worker (#398), the engagementrequest
 // package's counterpart to testOfferOutboxWorker above.
-var testEngagementRequestOutboxWorker = engagementrequest.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
+var testEngagementRequestOutboxWorker = engagementrequest.NewWorker(outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo})
 
 // testNudgeEnqueuer is every routes() test's stand-in for ADR-0013's
 // Cloud Tasks nudge -- its calls are never asserted on here, per

@@ -6,48 +6,32 @@ import (
 	"fmt"
 	"time"
 
-	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 )
 
-// wrapOutboxErr gives an error from the outbox package (a sibling
-// package, so wrapcheck treats its errors as external) this package's
-// own prefix -- portalinvite and authmail each keep the same small
-// helper rather than sharing one, since it does nothing but rename an
-// error.
-func wrapOutboxErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
-	return fmt.Errorf("clientauth: %w", err)
-}
-
-// MagicLinkWorker sends due portal_magic_link_outbox rows -- the
-// Cloud-Scheduler-driven half of ADR-0010's outbox for #617's sign-in
-// link. Unlike authmail.TokenMailWorker, the recipient address is
+// MagicLinkWorker sends due portal_magic_link_outbox rows through
+// outbox.MailWorker's shared claim-scan-compose-send-mark loop -- this
+// kind's own share is only its table, claim query, row shape and Compose
+// below. Unlike authmail.TokenMailWorker, the recipient address is
 // resolved with a plain join against portal_accounts rather than an
 // Admin SDK call: it is this product's own column, not Identity
 // Platform's.
-type MagicLinkWorker struct {
-	Sender     mail.Sender
-	Now        func() time.Time
-	AppBaseURL string
-	From       string
-	ReplyTo    string
-}
+type MagicLinkWorker = outbox.MailWorker[magicLinkRow]
 
-func (w MagicLinkWorker) inner() outbox.Worker {
-	return outbox.Worker{
-		Sender: w.Sender, Now: w.Now, From: w.From, ReplyTo: w.ReplyTo,
+// NewMagicLinkWorker builds the Client sign-in-link outbox worker around
+// mailer.
+func NewMagicLinkWorker(mailer outbox.Mailer) MagicLinkWorker {
+	return MagicLinkWorker{
+		Mailer:          mailer,
 		Table:           "portal_magic_link_outbox",
 		ClearOnTerminal: []string{"token"},
+		ClaimQuery:      magicLinkClaimQuery,
+		Scan:            scanMagicLinkRow,
+		Compose:         composeMagicLink(mailer),
 	}
 }
 
 type magicLinkRow struct {
-	id            string
-	attemptCount  int
 	token         sql.NullString
 	signInAddress string
 }
@@ -65,29 +49,25 @@ const magicLinkClaimQuery = `SELECT o.id, o.attempt_count, o.token, pa.sign_in_a
 	 LIMIT $1
 	 FOR UPDATE OF o SKIP LOCKED`
 
-func scanMagicLinkRow(rows *sql.Rows) (magicLinkRow, error) {
+func scanMagicLinkRow(rows *sql.Rows) (outbox.RowMeta, magicLinkRow, error) {
+	var meta outbox.RowMeta
 	var r magicLinkRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.token, &r.signInAddress)
-	return r, wrapOutboxErr(err)
+	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.token, &r.signInAddress); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, r, fmt.Errorf("clientauth: scan magic link outbox row: %w", err)
+	}
+	return meta, r, nil
 }
 
-// ProcessPending sends every due portal_magic_link_outbox row within tx.
-func (w MagicLinkWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), magicLinkClaimQuery, scanMagicLinkRow, w.send))
-}
-
-func (w MagicLinkWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r magicLinkRow, now time.Time) error {
-	if !r.token.Valid || r.token.String == "" {
-		// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside queueMagicLinkMail
-		return wrapOutboxErr(inner.MarkDeadLetteredNow(ctx, tx, r.id, "outbox row carries no token"))
+func composeMagicLink(mailer outbox.Mailer) func(context.Context, *sql.Tx, magicLinkRow, time.Time) (string, string, string, error) {
+	return func(_ context.Context, _ *sql.Tx, r magicLinkRow, _ time.Time) (string, string, string, error) {
+		if !r.token.Valid || r.token.String == "" {
+			// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside queueMagicLinkMail
+			return "", "", "", &outbox.DeadLetterError{Reason: "outbox row carries no token"}
+		}
+		subject, text := magicLinkCopy(mailer.AppBaseURL, r.token.String)
+		return r.signInAddress, subject, text, nil
 	}
-
-	subject, text := magicLinkCopy(w.AppBaseURL, r.token.String)
-	sendErr := w.Sender.Send(ctx, mail.Message{To: r.signInAddress, From: w.From, ReplyTo: w.ReplyTo, Subject: subject, Text: text})
-	if sendErr == nil {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
-	}
-	return wrapOutboxErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, sendErr, now))
 }
 
 // magicLinkCopy is the sign-in link's fixed, content-free copy (ADR-0009):

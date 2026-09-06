@@ -74,12 +74,12 @@ func TestWorker_ProcessPending_MailsSessionEvicted(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-evicted"
 	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "session_evicted", 0, time.Now().Add(-time.Minute), time.Now())
+	outboxID := seedOutboxRow(t, db, uid, "session_evicted", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
 
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testStatusSent {
 		t.Fatalf("status = %q, want %s", status, testStatusSent)
 	}

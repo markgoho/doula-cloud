@@ -155,70 +155,44 @@ func main() {
 	// voice.
 	supportReplyTo := "support@" + mailgunDomain
 
-	outboxWorker := portalinvite.Worker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: "noreply@" + mailgunDomain,
-	}
-	lowCreditOutboxWorker := billing.Worker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
-	payoutOutboxWorker := payments.Worker{
+	// #839: one Mailer built once, instead of the same five fields
+	// {Sender, Now, AppBaseURL, From, ReplyTo} copied into thirteen
+	// worker literals by hand. platformMailer is Platform voice
+	// (ADR-0009/ADR-0011); practiceVoiceMailer is the one derived copy,
+	// swapping in the Client portal invite's noreply@ ReplyTo -- the only
+	// kind that speaks Practice voice.
+	platformMailer := outbox.Mailer{
 		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
-	paymentOutboxWorker := payments.PaymentReceivedWorker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
-	sessionNoticeOutboxWorker := sessionnotice.Worker{
-		Sender: mailgunSender, Now: time.Now,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
-	staffInviteOutboxWorker := staffinvite.Worker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
-	offerOutboxWorker := offer.Worker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
-	engagementRequestOutboxWorker := engagementrequest.Worker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
+	practiceVoiceMailer := platformMailer
+	practiceVoiceMailer.ReplyTo = "noreply@" + mailgunDomain
+
+	outboxWorker := portalinvite.NewWorker(practiceVoiceMailer)
+	lowCreditOutboxWorker := billing.Worker{Mailer: platformMailer}
+	payoutOutboxWorker := payments.Worker{Mailer: platformMailer}
+	paymentOutboxWorker := payments.PaymentReceivedWorker{Mailer: platformMailer}
+	sessionNoticeOutboxWorker := sessionnotice.NewWorker(platformMailer)
+	staffInviteOutboxWorker := staffinvite.NewWorker(platformMailer)
+	offerOutboxWorker := offer.Worker{Mailer: platformMailer}
+	engagementRequestOutboxWorker := engagementrequest.NewWorker(platformMailer)
 	// #613: verification/reset mail resolves its recipient live via the
 	// Admin SDK (verifier also satisfies authn.AccountManager) rather
 	// than joining `staff`, per authmail's own package doc.
-	staffTokenMailOutboxWorker := authmail.TokenMailWorker{
-		Sender: mailgunSender, Accounts: verifier, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
-	staffEmailChangeOutboxWorker := authmail.EmailChangeWorker{
-		Sender: mailgunSender, Now: time.Now,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
+	staffTokenMailOutboxWorker := authmail.NewTokenMailWorker(platformMailer, verifier)
+	staffEmailChangeOutboxWorker := authmail.NewEmailChangeWorker(platformMailer)
 	// #615: the Owner-vouched recovery code's recipient (the vouching
 	// Owner) resolves live via the Admin SDK, same reasoning as
 	// staffTokenMailOutboxWorker above.
-	mfaRecoveryMailOutboxWorker := mfarecoverymail.Worker{
-		Sender: mailgunSender, Accounts: verifier, Now: time.Now,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
+	mfaRecoveryMailOutboxWorker := mfarecoverymail.NewWorker(platformMailer, verifier)
 	// #617: the sign-in link's recipient resolves with a plain join
 	// against portal_accounts, not the Admin SDK -- unlike
 	// staffTokenMailOutboxWorker above, this worker holds no Accounts.
-	portalMagicLinkOutboxWorker := clientauth.MagicLinkWorker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
+	portalMagicLinkOutboxWorker := clientauth.NewMagicLinkWorker(platformMailer)
 	// #619: the confirmation mail's recipient resolves to nothing at all
 	// -- the address is on the outbox row, because it is the one address
 	// portal_accounts does not yet hold.
-	portalAddressChangeOutboxWorker := clientauth.AddressChangeWorker{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
-		From: notificationsFrom, ReplyTo: supportReplyTo,
-	}
+	portalAddressChangeOutboxWorker := clientauth.NewAddressChangeWorker(platformMailer)
 
 	// #443. The HTTP client is shared by both and is deliberately
 	// short-timeout: a probe is a CDN fetch of a static file, and a

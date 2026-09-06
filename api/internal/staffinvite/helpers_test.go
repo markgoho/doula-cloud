@@ -48,25 +48,3 @@ func seedPracticeInvitation(t *testing.T, db *testdb.DB, practiceID, address str
 	}
 	return id
 }
-
-// setInvitationStatus updates invitationID's status, using the superuser
-// Admin connection -- how a test simulates an Invitation resolved (any
-// status other than pending) through some other path (#316's future
-// accept/revoke) before the worker gets to its outbox row.
-func setInvitationStatus(t *testing.T, db *testdb.DB, invitationID, status string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practice_invitations SET status = $1 WHERE id = $2`, status, invitationID); err != nil {
-		t.Fatalf("set invitation status: %v", err)
-	}
-}
-
-// setInvitationExpiresAt updates invitationID's expires_at, using the
-// superuser Admin connection -- how a test simulates an Invitation whose
-// window has lapsed without anything (no expiry sweep exists yet) ever
-// flipping its status column to 'expired'.
-func setInvitationExpiresAt(t *testing.T, db *testdb.DB, invitationID string, expiresAt time.Time) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practice_invitations SET expires_at = $1 WHERE id = $2`, expiresAt, invitationID); err != nil {
-		t.Fatalf("set invitation expires_at: %v", err)
-	}
-}

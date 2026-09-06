@@ -1,26 +1,25 @@
 package sessionnotice_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-const (
-	testStatusPending = "pending"
-	testStatusSent    = "sent"
-)
+const testStatusSent = "sent"
 
 // newTestWorker builds a sessionnotice.Worker around sender with this
-// file's stand-in From/ReplyTo -- every outbox test needs one, only the
-// injected Sender and (occasionally) Now vary.
+// file's stand-in From/ReplyTo. The Worker tests below are kept (rather
+// than moved to compose_test.go) because compose needs a live tx for its
+// own staffEmail lookup; skip/retry/dead-letter/suppression/
+// terminal-clear belong to outbox.MailWorker's own suite.
 func newTestWorker(sender mail.Sender) sessionnotice.Worker {
-	return sessionnotice.Worker{Sender: sender, Now: time.Now, From: "a@b.test", ReplyTo: "support@b.test"}
+	return sessionnotice.NewWorker(outbox.Mailer{Sender: sender, Now: time.Now, From: "a@b.test", ReplyTo: "support@b.test"})
 }
 
 // seedStaff inserts a Staff row for identityUID with a fixed email, using
@@ -39,13 +38,13 @@ func seedStaff(t *testing.T, db *testdb.DB, identityUID string) {
 // seedOutboxRow inserts an outbox row of kind for identityUID directly
 // (bypassing Queue*), for tests that need to control status,
 // attempt_count, next_attempt_at, or created_at precisely.
-func seedOutboxRow(t *testing.T, db *testdb.DB, identityUID, kind string, attemptCount int, nextAttemptAt, createdAt time.Time) string {
+func seedOutboxRow(t *testing.T, db *testdb.DB, identityUID, kind string, nextAttemptAt, createdAt time.Time) string {
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO session_notice_outbox (identity_uid, kind, attempt_count, next_attempt_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		identityUID, kind, attemptCount, nextAttemptAt, createdAt,
+		`INSERT INTO session_notice_outbox (identity_uid, kind, next_attempt_at, created_at)
+		 VALUES ($1, $2, $3, $4) RETURNING id`,
+		identityUID, kind, nextAttemptAt, createdAt,
 	).Scan(&id); err != nil {
 		t.Fatalf("seed session_notice_outbox row: %v", err)
 	}
@@ -73,14 +72,15 @@ func runWorker(t *testing.T, db *testdb.DB, w sessionnotice.Worker) {
 	}
 }
 
-func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int) {
+func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string) {
 	t.Helper()
+	var attemptCount int
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT status, attempt_count FROM session_notice_outbox WHERE id = $1`, id,
 	).Scan(&status, &attemptCount); err != nil {
 		t.Fatalf("query session_notice_outbox row: %v", err)
 	}
-	return status, attemptCount
+	return status
 }
 
 func countOutboxRows(t *testing.T, db *testdb.DB, identityUID, kind string) int {
@@ -128,7 +128,7 @@ func TestQueueNewSignInIfDue_SkipsWithinIdleWindow(t *testing.T) {
 	const uid = "staff-second-device-same-day"
 	seedStaff(t, db, uid)
 	now := time.Now()
-	seedOutboxRow(t, db, uid, "new_signin", 0, now, now.Add(-time.Hour))
+	seedOutboxRow(t, db, uid, "new_signin", now, now.Add(-time.Hour))
 
 	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
@@ -145,7 +145,7 @@ func TestQueueNewSignInIfDue_QueuesAgainAfterIdleWindow(t *testing.T) {
 	const uid = "staff-returns-after-gap"
 	seedStaff(t, db, uid)
 	now := time.Now()
-	seedOutboxRow(t, db, uid, "new_signin", 0, now, now.Add(-8*24*time.Hour))
+	seedOutboxRow(t, db, uid, "new_signin", now, now.Add(-8*24*time.Hour))
 
 	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
@@ -223,12 +223,12 @@ func TestWorker_ProcessPending_MailsNewSignInAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-signin"
 	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "new_signin", 0, time.Now().Add(-time.Minute), time.Now())
+	outboxID := seedOutboxRow(t, db, uid, "new_signin", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
 
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testStatusSent {
 		t.Fatalf("status = %q, want %s", status, testStatusSent)
 	}
@@ -248,12 +248,12 @@ func TestWorker_ProcessPending_MailsSessionRevoked(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-revoked"
 	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "session_revoked", 0, time.Now().Add(-time.Minute), time.Now())
+	outboxID := seedOutboxRow(t, db, uid, "session_revoked", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
 
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testStatusSent {
 		t.Fatalf("status = %q, want %s", status, testStatusSent)
 	}
@@ -266,73 +266,23 @@ func TestWorker_ProcessPending_MailsSessionRevoked(t *testing.T) {
 	}
 }
 
-func TestWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "staff-not-due"
-	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "new_signin", 0, time.Now().Add(time.Hour), time.Now())
-
-	sender := &mail.FakeSender{}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, _ := outboxRowState(t, db, outboxID)
-	if status != testStatusPending {
-		t.Fatalf("status = %q, want %s (not due yet)", status, testStatusPending)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no send for a not-yet-due row")
-	}
-}
-
 // TestWorker_ProcessPending_NoStaffMarksSentWithNoMail covers an
 // identity that queued a notice and was then removed from staff before
 // send -- there is nobody left to notify.
 func TestWorker_ProcessPending_NoStaffMarksSentWithNoMail(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-since-removed"
-	outboxID := seedOutboxRow(t, db, uid, "new_signin", 0, time.Now().Add(-time.Minute), time.Now())
+	outboxID := seedOutboxRow(t, db, uid, "new_signin", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
 
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testStatusSent {
 		t.Fatalf("status = %q, want %s", status, testStatusSent)
 	}
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("expected no mail sent for an identity with no staff row")
-	}
-}
-
-func TestWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "staff-retry"
-	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "new_signin", 0, time.Now().Add(-time.Minute), time.Now())
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, attemptCount := outboxRowState(t, db, outboxID)
-	if status != testStatusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want %s/1", status, attemptCount, testStatusPending)
-	}
-}
-
-func TestWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "staff-dead-letter"
-	seedStaff(t, db, uid)
-	// One attempt short of the schedule's length -- this failure is the
-	// last one before dead-letter.
-	outboxID := seedOutboxRow(t, db, uid, "new_signin", 4, time.Now().Add(-time.Minute), time.Now())
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runWorker(t, db, newTestWorker(sender))
-
-	status, attemptCount := outboxRowState(t, db, outboxID)
-	if status != "dead_lettered" || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
 	}
 }
 
@@ -391,12 +341,12 @@ func TestWorker_ProcessPending_MailsMFARecoveryCleared(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-mfa-cleared"
 	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "mfa_recovery_cleared", 0, time.Now().Add(-time.Minute), time.Now())
+	outboxID := seedOutboxRow(t, db, uid, "mfa_recovery_cleared", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
 
-	status, _ := outboxRowState(t, db, outboxID)
+	status := outboxRowState(t, db, outboxID)
 	if status != testStatusSent {
 		t.Fatalf("status = %q, want %s", status, testStatusSent)
 	}
