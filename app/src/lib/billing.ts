@@ -61,9 +61,12 @@ export function formatSignedQuantity(quantity: number): string {
 
 /** Exported for `billing/+page.ts` (#471), which needs the response's raw
  * status to distinguish a role refusal (403) from any other failure --
- * `loadBalance` below discards it. */
-export function billingPath(practiceId: string): string {
-	return `/api/practices/${practiceId}/billing`;
+ * `loadBalance` below discards it. `cursor` is for `loadLedgerPage`
+ * below -- the balance-and-ledger endpoint doubles as the ledger's own
+ * paged read, mirroring `practiceInvoicesPath`'s optional cursor. */
+export function billingPath(practiceId: string, cursor?: string): string {
+	const path = `/api/practices/${practiceId}/billing`;
+	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
 }
 
 /** Loads a Practice's current balance and ledger history. Throws with the
@@ -75,6 +78,22 @@ export async function loadBalance(fetcher: Fetcher, practiceId: string): Promise
 		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
+}
+
+/** Loads one page of the ledger, appended by `PaginatedList` as an
+ * Owner/Admin scrolls past the load's first page (#446, #853). The
+ * endpoint answers the whole `Balance` payload even for a paged
+ * request -- the balance itself is discarded here, the same as
+ * `+page.svelte`'s pre-#853 inline read did. Throws with the response
+ * body text on a non-2xx response, mirroring `loadBalance`'s
+ * error-surfacing convention. */
+export async function loadLedgerPage(fetcher: Fetcher, practiceId: string, cursor: string): Promise<LedgerPage> {
+	const response = await fetcher(billingPath(practiceId, cursor));
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	const loaded: Balance = await response.json();
+	return loaded.ledger;
 }
 
 /** Starts a credit purchase for `quantity` credits and returns the
