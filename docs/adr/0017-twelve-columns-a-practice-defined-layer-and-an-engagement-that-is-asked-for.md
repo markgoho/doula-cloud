@@ -742,3 +742,100 @@ the contractor's explain-only *Add a Client*. No portal screen among them.
 is *rendered on the Engagement page*; there is a Client detail page now, and the Engagement page
 carries a block. Both #252 and several tickets on the map name **ADR-0006** in their read criteria;
 substitute ADR-0008, which supersedes it in full.
+
+## Amendment: two gates on the edit path, and an unattached record can be absorbed
+
+Decided on [#727](https://github.com/markgoho/doula-cloud/issues/727) on 2026-09-05. It amends **The
+name rule is blocked at the act**, above, and nothing else in this document.
+
+### The rule was right and the mechanism was wrong
+
+That section says the match query re-runs on every edit and *the edit does not save* if the result
+would match a different Client. The sentence assumed a precise match. What was built is
+`FindMatches` — one query serving three callers, written for the search box: five keys joined by
+`OR`, and all three name columns matched by case-insensitive **substring**. `edit.go` sends the whole
+record on every save. So the guard fires on states this rule never meant:
+
+- Two Clients named Sarah at one Practice. Neither record takes a postal-code correction. Every save
+  is refused, and the only button offered is the override.
+- A Client named Ann collides with Joanna, Hannah and Deanna.
+- Two Clients who share a date of birth block each other's every edit.
+
+None of those is a name substitution. Substring recall is right for a search box and wrong for a
+gate, so it leaves the write paths altogether and stays where it belongs.
+
+The same query is what makes a Client saved with only a given name uncompletable. #466 removed
+[#497](https://github.com/markgoho/doula-cloud/issues/497)'s wait for four match keys, exactly as
+the free-save rule above demands. A doula then completes that record a week later, the added keys
+land on another doula's record of the same woman, and the only answer the product offers is *No, a
+different person* — which keeps two records of one woman forever, in a product whose whole duplicate
+story is that a duplicate can only be made deliberately.
+
+### One collision predicate
+
+Both write paths share one predicate, comparing trimmed and case-insensitively. Two Clients collide
+when any of these is true:
+
+- given name **and** family name are both exactly equal;
+- email is exactly equal;
+- phone is exactly equal;
+- date of birth is exactly equal **and** the two records share at least one whole name word across
+  any of their three name columns.
+
+A bare date-of-birth collision between two unrelated names is a coincidence, and it passes silently.
+Preferred name is never used for the exact-name test: two Clients can both be called Bex, and that is
+not the same woman. Two Clients may legitimately share a phone number — a mother and her daughter in
+one household — so a hit is a question, never an accusation.
+
+### The edit path has two gates
+
+The general rule above is unchanged and is what sorts a hit into one of them: **block when the
+flagged state is a mistake with a correct alternative; warn when it is legitimate and common.**
+
+**Gate one — substitution. Blocks.** It fires only when a name column changed in this edit **and**
+the resulting given and family name are exactly equal to another Client's. *Sara* corrected to
+*Sarah* still saves where Sarah Chen is on file, because *Sarah Beck* is not *Sarah Chen*. *Sarah
+Beck* renamed to *Nadia Haddad* is still refused where Nadia Haddad is on file. The one deliberate
+override survives, and its wording changes: on the edit path no second record is created, so a label
+that says one is being created is untrue.
+
+**Gate two — a possible duplicate. Asks.** It fires when gate one did not and the predicate hits.
+Nothing is written until it is answered, and it is a question page rather than a dismissible warning
+— the same shape intake already uses at save, for the same reason.
+
+### An unattached record can be absorbed
+
+Answering gate two with *this is her* means two rows must become one, which is the merge this
+document ruled out of scope. That ruling **narrows** here rather than reversing.
+
+A Client record is **attached** when it has an Engagement, an Engagement Request, a portal
+invitation, or a portal account. Messages, Contracts, Plan Instances, Visits and Invoices all hang
+off an `engagement_id`, so they follow the Engagement and are not a separate case.
+
+**Where the record being edited is unattached, it is absorbed into the matched record.** Nothing
+points at it, so nothing moves — which is why the no-delete reasoning above does not reach it: that
+reasoning is about an Engagement being a permanent record, and this row has none. Values fold in by
+the rule intake already uses: a non-blank value from the absorbed record wins, a blank never
+overwrites, and every change is listed before it is applied. Direction never depends on which record
+the staff member happens to have open — the unattached row is always the one absorbed, and where both
+are unattached the older row survives.
+
+**Where both records are attached, nothing is merged.** The screen says so in words and offers only
+the different-person answer. Two Engagement histories under one woman, two locked Credits, two portal
+accounts and two crypto-shredded `activity` histories are a feature of their own, and not what a
+doula holding a hospital referral needs. It is
+[#813](https://github.com/markgoho/doula-cloud/issues/813).
+
+### The absorbed row is a tombstone, never a delete
+
+[ADR-0027](0027-erasure-redacts-in-place-and-shreds-the-key.md) rules that a `clients` row keeps its
+id forever, and that holds here for its own reason: `activity` already holds links to it. The
+absorbed row keeps its id and gains a `merged_into` reference to the survivor. It leaves the Clients
+list, the search and the collision predicate, and its own URL redirects to the survivor.
+
+Absorbing is one act and it is recorded on **both** rows, per `CLAUDE.md`'s standing audit
+expectation: the survivor records what changed and where it came from, the absorbed row records where
+it went, and both name the staff member and the time. An erased Client is never offered as a merge
+target — ADR-0027 already refuses an edit to her.
+
+The build is [#814](https://github.com/markgoho/doula-cloud/issues/814).
