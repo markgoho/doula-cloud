@@ -14,7 +14,7 @@ import type { Contract } from '#lib/contract.js';
 import type { RouteFixture } from '../../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-const contract: Contract = {
+export const contract: Contract = {
 	engagementId: 'engagement-1',
 	status: 'sent',
 	prose: 'This Contract is between {{practice_name}} and {{client_name}} for {{scope_of_service}}.',
