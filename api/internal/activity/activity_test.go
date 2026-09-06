@@ -247,18 +247,19 @@ func TestStaffingActions_Sorted(t *testing.T) {
 	}
 }
 
-// TestScopeToPractice_LetsAWriteOutsideStaffauthMiddlewarePassRLS proves
+// TestRecord_ScopedToLetsAWriteOutsideStaffauthMiddlewarePassRLS proves
 // the landmine ADR-0022 names for a write site with no per-request
-// app.current_practice_id (a Client-portal or webhook path): without
-// ScopeToPractice, activity's own RLS policy refuses the INSERT.
-func TestScopeToPractice_LetsAWriteOutsideStaffauthMiddlewarePassRLS(t *testing.T) {
+// app.current_practice_id (a Client-portal or webhook path): a Record
+// call carrying activity.ScopedTo passes activity's own RLS policy,
+// where a plain Record call from the same session does not.
+func TestRecord_ScopedToLetsAWriteOutsideStaffauthMiddlewarePassRLS(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedPractice(t, db)
 	clientID := seedClient(t, db, practiceID)
 
 	// Proved in its own transaction: a failed statement aborts the rest
 	// of a Postgres transaction (SQLSTATE 25P02), so the RLS failure and
-	// the ScopeToPractice success below cannot share one tx.
+	// the ScopedTo success below cannot share one tx.
 	func() {
 		tx, err := db.App.BeginTx(t.Context(), nil)
 		if err != nil {
@@ -283,16 +284,13 @@ func TestScopeToPractice_LetsAWriteOutsideStaffauthMiddlewarePassRLS(t *testing.
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := activity.ScopeToPractice(t.Context(), tx, practiceID); err != nil {
-		t.Fatalf("ScopeToPractice: %v", err)
-	}
 	if err := activity.Record(t.Context(), tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
 		SubjectID:   clientID,
 		Action:      "contract_signed",
 		Actor:       activity.ClientActor(clientID),
-	}); err != nil {
-		t.Fatalf("Record after ScopeToPractice: %v", err)
+	}, activity.ScopedTo(practiceID)); err != nil {
+		t.Fatalf("Record with ScopedTo: %v", err)
 	}
 }

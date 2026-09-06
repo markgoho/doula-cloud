@@ -60,32 +60,46 @@ type Entry struct {
 	Actor       Actor
 }
 
-// ScopeToPractice sets app.current_practice_id on tx for the rest of the
-// transaction, the way staffauth.Middleware already does per request --
-// for a write site that runs outside it (a Client-portal or webhook
-// path, authenticated by app.current_client_id or by nothing at all) and
-// needs a Record call to pass activity's single RLS policy
-// (activity_practice_visibility, 00051_activity_log.sql), which compares
-// only against app.current_practice_id. ADR-0022's "fourth event table"
-// section names exactly this trap. Call it immediately before the Record
-// call that needs it, never earlier: it widens every practice_id-scoped
-// RLS read or write tx issues afterward to this Practice, so nothing but
-// the activity insert it exists for should run after it. Mirrors
-// payments.resolveInvoiceForEvent's existing set_config call for the
-// same reason on the invoice.paid webhook path.
-func ScopeToPractice(ctx context.Context, tx *sql.Tx, practiceID string) error {
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("activity: scope to practice: %w", err)
-	}
-	return nil
+// RecordOption configures a Record call. ScopedTo is the only one.
+type RecordOption func(*recordConfig)
+
+type recordConfig struct {
+	widenToPractice string
+}
+
+// ScopedTo widens app.current_practice_id to practiceID inside Record
+// itself, as its last statement before the INSERT -- for a write site
+// that runs outside staffauth.Middleware (a Client-portal or
+// unauthenticated-token path) and so needs the widening to pass
+// activity's single RLS policy (activity_practice_visibility,
+// 00051_activity_log.sql), which compares only against
+// app.current_practice_id. ADR-0022's "fourth event table" section names
+// exactly this trap. Folding the set_config into Record, after e's
+// arguments are already assembled and immediately before the insert,
+// means no statement can land between the widening and the write it
+// exists for -- there is no before-ordering for a caller to get wrong or
+// have to comment about. set_config's third argument is still
+// transaction-scoped, though: the widening outlives this call, so a
+// scoped Record must still be the last RLS-gated statement its caller
+// runs on tx before Commit. Mirrors payments.resolveInvoiceForEvent's
+// own set_config, which stays separate because it deliberately scopes
+// more than one statement on that webhook path.
+func ScopedTo(practiceID string) RecordOption {
+	return func(c *recordConfig) { c.widenToPractice = practiceID }
 }
 
 // Record writes one row of e's history, in the caller's own transaction
 // so the record and the change it describes either both land or neither
 // does -- CLAUDE.md's audit-trail expectation, answered where the change
-// happens.
-func Record(ctx context.Context, tx *sql.Tx, e Entry) error {
+// happens. Pass ScopedTo(practiceID) when tx has no per-request
+// app.current_practice_id already set (see ScopedTo's own doc comment);
+// every other caller passes no options.
+func Record(ctx context.Context, tx *sql.Tx, e Entry, opts ...RecordOption) error {
+	var cfg recordConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	var staffID, clientID sql.NullString
 	switch e.Actor.Kind {
 	case ActorStaff:
@@ -98,6 +112,13 @@ func Record(ctx context.Context, tx *sql.Tx, e Entry) error {
 	diff := e.Diff
 	if diff == nil {
 		diff = json.RawMessage("{}")
+	}
+
+	if cfg.widenToPractice != "" {
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, cfg.widenToPractice); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return fmt.Errorf("activity: scope to practice: %w", err)
+		}
 	}
 
 	_, err := tx.ExecContext(ctx,

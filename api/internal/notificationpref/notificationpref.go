@@ -153,8 +153,7 @@ func upsertPreference(ctx context.Context, tx *sql.Tx, identityUID, engagementID
 // contracts/sign.go's recordContractSigned: this handler runs behind
 // clientauth.Middleware, which sets only app.current_client_id, never
 // app.current_practice_id -- activity's RLS policy needs the latter, so
-// activity.ScopeToPractice sets it here, immediately before the one Record
-// call that needs it.
+// activity.ScopedTo widens it as part of the one Record call below.
 func recordPreferenceChange(ctx context.Context, tx *sql.Tx, engagementID, clientID string, enabled bool) error {
 	var practiceID string
 	if err := tx.QueryRowContext(ctx,
@@ -162,10 +161,6 @@ func recordPreferenceChange(ctx context.Context, tx *sql.Tx, engagementID, clien
 	).Scan(&practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed this row exists
 		return fmt.Errorf("notificationpref: resolve engagement for preference change: %w", err)
-	}
-	if err := activity.ScopeToPractice(ctx, tx, practiceID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("notificationpref: scope to practice for preference change: %w", err)
 	}
 
 	action := activity.ActionPushNotificationsDisabled
@@ -188,7 +183,7 @@ func recordPreferenceChange(ctx context.Context, tx *sql.Tx, engagementID, clien
 		Action:      string(action),
 		Diff:        diff,
 		Actor:       activity.ClientActor(clientID),
-	}); err != nil {
+	}, activity.ScopedTo(practiceID)); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("notificationpref: record preference change: %w", err)
 	}
