@@ -13,17 +13,26 @@ type FakeAccountLinkCall struct {
 	PracticeID string
 }
 
-// FakeCreateInvoiceCall records one CreateInvoice call -- every argument
-// the handler passed the port, so a test can assert the connected account
-// id, the Client's name/email (and nothing else, i.e. no clinical field),
-// and that Description was InvoiceLineItemDescription and nothing
-// request-supplied.
-type FakeCreateInvoiceCall struct {
+// FakeCreateCustomerCall records one CreateCustomer call -- the connected
+// account id and the Client's name/email, and nothing else, so a test can
+// assert that no clinical field ever reaches Stripe (#78's
+// no-PHI-to-Stripe rule).
+type FakeCreateCustomerCall struct {
 	AccountID     string
 	CustomerEmail string
 	CustomerName  string
-	Description   string
-	AmountCents   int64
+}
+
+// FakeCreateInvoiceCall records one CreateInvoice call -- every argument
+// the handler passed the port, so a test can assert the connected account
+// id, the Customer the handler resolved (#780: the mapped one, not a
+// fresh one), and that Description was InvoiceLineItemDescription and
+// nothing request-supplied.
+type FakeCreateInvoiceCall struct {
+	AccountID   string
+	CustomerID  string
+	Description string
+	AmountCents int64
 }
 
 // FakeCustomerCall records one Customer-scoped call -- which connected
@@ -49,11 +58,12 @@ type FakeClient struct {
 	// what reaches Stripe as the display name (#247), and that her
 	// declared website, industry and card-statement text reach it too
 	// (#442).
-	AccountProfiles    []AccountProfile
-	AccountLinkCalls   []FakeAccountLinkCall
-	RetrieveCalls      []string
-	CreateInvoiceCalls []FakeCreateInvoiceCall
-	FinalizeInvoiceIDs []string
+	AccountProfiles     []AccountProfile
+	AccountLinkCalls    []FakeAccountLinkCall
+	RetrieveCalls       []string
+	CreateCustomerCalls []FakeCreateCustomerCall
+	CreateInvoiceCalls  []FakeCreateInvoiceCall
+	FinalizeInvoiceIDs  []string
 	// DeleteCustomerCalls and RedactionJobCalls are #394's two erasure
 	// acts, recorded as (connected account, Customer) pairs so a test can
 	// prove erasure reached the right Customer on the right Practice's
@@ -74,6 +84,7 @@ type FakeClient struct {
 	CreateAccountErr     error
 	CreateAccountLinkErr error
 	RetrieveAccountErr   error
+	CreateCustomerErr    error
 	CreateInvoiceErr     error
 	DeleteCustomerErr    error
 	RedactionJobErr      error
@@ -126,25 +137,43 @@ func (f *FakeClient) RetrieveAccount(_ context.Context, accountID string) (Accou
 	return f.Statuses[accountID], nil
 }
 
-// CreateInvoice records the call -- accountID, customerEmail,
-// customerName, description, amountCents, exactly as PostInvoiceHandler
-// passed them -- and returns a deterministic fake invoice id, or
-// CreateInvoiceErr if a test set one.
-func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, string, error) {
+// CreateCustomer records the call -- accountID, customerEmail,
+// customerName, exactly as PostInvoiceHandler passed them -- and returns
+// a deterministic fake Customer id, or CreateCustomerErr if a test set
+// one. A test proves the one-Customer-per-(Client, account) rule by
+// counting the calls recorded here across two Invoices.
+func (f *FakeClient) CreateCustomer(_ context.Context, accountID, customerEmail, customerName string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.CreateInvoiceErr != nil {
-		return "", "", f.CreateInvoiceErr
+	if f.CreateCustomerErr != nil {
+		return "", f.CreateCustomerErr
 	}
-	f.CreateInvoiceCalls = append(f.CreateInvoiceCalls, FakeCreateInvoiceCall{
+	f.CreateCustomerCalls = append(f.CreateCustomerCalls, FakeCreateCustomerCall{
 		AccountID:     accountID,
 		CustomerEmail: customerEmail,
 		CustomerName:  customerName,
-		Description:   description,
-		AmountCents:   amountCents,
 	})
 	f.nextID++
-	return fmt.Sprintf("in_fake_%d", f.nextID), fmt.Sprintf("cus_fake_%d", f.nextID), nil
+	return fmt.Sprintf("cus_fake_%d", f.nextID), nil
+}
+
+// CreateInvoice records the call -- accountID, customerID, description,
+// amountCents, exactly as PostInvoiceHandler passed them -- and returns a
+// deterministic fake invoice id, or CreateInvoiceErr if a test set one.
+func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerID, description string, amountCents int64) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.CreateInvoiceErr != nil {
+		return "", f.CreateInvoiceErr
+	}
+	f.CreateInvoiceCalls = append(f.CreateInvoiceCalls, FakeCreateInvoiceCall{
+		AccountID:   accountID,
+		CustomerID:  customerID,
+		Description: description,
+		AmountCents: amountCents,
+	})
+	f.nextID++
+	return fmt.Sprintf("in_fake_%d", f.nextID), nil
 }
 
 // DeleteCustomer records the call, or returns DeleteCustomerErr if a test

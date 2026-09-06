@@ -248,33 +248,48 @@ func accountStatusFrom(acct *stripe.V2CoreAccount) AccountStatus {
 	return out
 }
 
-// CreateInvoice creates a draft Stripe Invoice on behalf of accountID's
-// connected account: a Customer (tagged with the Client's name/email,
-// nothing else -- no metadata, per #78's no-PHI-to-Stripe rule), a draft
-// Invoice billing that Customer via collection_method=send_invoice (so
-// Stripe emails it once finalized rather than auto-charging a saved card),
-// and a single InvoiceItem for amountCents described as description. Every
-// call is made with the Params.StripeAccount on-behalf-of header set to
-// accountID, per #78's ticket body ("using the Stripe-Account association,
-// not a separate OAuth token per Practice"), rather than a platform-level
-// call. Returns the draft Invoice's id -- FinalizeInvoice makes it
-// payable -- and the Customer's, the latter so the invoices row can
-// persist it: #394's erasure has to be able to find and delete every
-// Stripe Customer that was ever made for a Client, and before that
-// ticket nothing kept the id at all.
-func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customerEmail, customerName, description string, amountCents int64) (string, string, error) {
-	onBehalfOf := stripe.Params{StripeAccount: stripe.String(accountID)}
-
+// CreateCustomer creates a Stripe Customer on accountID's connected
+// account, tagged with the Client's name and email and nothing else -- no
+// metadata, per #78's no-PHI-to-Stripe rule. The call is made with the
+// Params.StripeAccount on-behalf-of header set to accountID, per #78's
+// ticket body ("using the Stripe-Account association, not a separate
+// OAuth token per Practice"), rather than as a platform-level call.
+//
+// PostInvoiceHandler reaches this only when client_stripe_customers holds
+// no Customer for that (Client, connected account) yet (#780). There is
+// no test_clock parameter here and there must never be one: a simulation
+// run writes the mapping row itself, so the product finds a Customer and
+// this is never called for that Client.
+func (c *StripeAPIClient) CreateCustomer(ctx context.Context, accountID, customerEmail, customerName string) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	cust, err := c.client.V1Customers.Create(ctx, &stripe.CustomerCreateParams{
-		Params: onBehalfOf,
+		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
 		Email:  stripe.String(customerEmail),
 		Name:   stripe.String(customerName),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return "", "", fmt.Errorf("payments: create stripe customer for invoice: %w", err)
+		return "", fmt.Errorf("payments: create stripe customer: %w", err)
 	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return cust.ID, nil
+}
+
+// CreateInvoice creates a draft Stripe Invoice on behalf of accountID's
+// connected account: a draft Invoice billing customerID via
+// collection_method=send_invoice (so Stripe emails it once finalized
+// rather than auto-charging a saved card), and a single InvoiceItem for
+// amountCents described as description. Every call is made with the
+// Params.StripeAccount on-behalf-of header set to accountID, per #78's
+// ticket body, rather than as a platform-level call. Returns the draft
+// Invoice's id -- FinalizeInvoice makes it payable.
+//
+// The Customer is the caller's to resolve (#780): it is created once per
+// (Client, connected account) and reused by every later Invoice, so a
+// Client's whole billing history sits under one Customer rather than one
+// per bill.
+func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customerID, description string, amountCents int64) (string, error) {
+	onBehalfOf := stripe.Params{StripeAccount: stripe.String(accountID)}
 
 	// DaysUntilDue is not a Doula Cloud payment-terms policy -- Stripe's
 	// API rejects collection_method=send_invoice without either
@@ -285,20 +300,20 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	inv, err := c.client.V1Invoices.Create(ctx, &stripe.InvoiceCreateParams{
 		Params:              onBehalfOf,
-		Customer:            stripe.String(cust.ID),
+		Customer:            stripe.String(customerID),
 		CollectionMethod:    stripe.String(string(stripe.InvoiceCollectionMethodSendInvoice)),
 		DaysUntilDue:        stripe.Int64(30),
 		StatementDescriptor: stripe.String(description),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return "", "", fmt.Errorf("payments: create stripe invoice: %w", err)
+		return "", fmt.Errorf("payments: create stripe invoice: %w", err)
 	}
 
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	_, err = c.client.V1InvoiceItems.Create(ctx, &stripe.InvoiceItemCreateParams{
 		Params:      onBehalfOf,
-		Customer:    stripe.String(cust.ID),
+		Customer:    stripe.String(customerID),
 		Invoice:     stripe.String(inv.ID),
 		Amount:      new(amountCents),
 		Currency:    stripe.String(string(stripe.CurrencyUSD)),
@@ -306,11 +321,11 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return "", "", fmt.Errorf("payments: create stripe invoice item: %w", err)
+		return "", fmt.Errorf("payments: create stripe invoice item: %w", err)
 	}
 
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return inv.ID, cust.ID, nil
+	return inv.ID, nil
 }
 
 // FinalizeInvoice finalizes invoiceID on accountID's connected account --
