@@ -54,22 +54,17 @@ func seedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID, origin s
 	}
 }
 
-// resolveReader begins a tx on db.App, scopes it to practiceID (the same
-// set_config staffauth.Middleware performs per request), and resolves a
-// Reader for staffID -- the one way to build a Reader (ResolveReader is
-// its sole constructor), so every gate test goes through the real DB. The
-// tx it returns is the one the reader was resolved on and stays open for
-// the rest of the test (a gate call needs the same app.current_practice_id
-// scoping CanAccessEngagement/CanAccessClient's own RLS-bound queries
-// rely on).
-func resolveReader(t *testing.T, db *testdb.DB, practiceID, staffID string) (staffauth.Reader, *sql.Tx) {
+// buildReader scopes a tx to practiceID (the same set_config
+// staffauth.Middleware performs per request) and builds a Reader for
+// staffID/roles/employmentType directly via staffauth.NewReader -- no
+// practice_memberships query, since Middleware already owns that
+// resolution in production. The tx stays open for the rest of the test
+// (a gate call needs the same app.current_practice_id scoping
+// CanAccessEngagement/CanAccessClient's own RLS-bound queries rely on).
+func buildReader(t *testing.T, db *testdb.DB, practiceID, staffID string, roles []string, employmentType string) (staffauth.Reader, *sql.Tx) {
 	t.Helper()
 	tx := beginScopedTx(t, db, practiceID)
-	reader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, staffID)
-	if err != nil {
-		t.Fatalf("ResolveReader: %v", err)
-	}
-	return reader, tx
+	return staffauth.NewReader(staffID, roles, employmentType), tx
 }
 
 func beginScopedTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
@@ -93,7 +88,7 @@ func TestCanAccessSubject_UnregisteredKindRefused(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Gate Unregistered Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-unregistered-owner", []string{ownerRole}, employeeType)
-	reader, tx := resolveReader(t, db, practiceID, ownerID)
+	reader, tx := buildReader(t, db, practiceID, ownerID, []string{ownerRole}, employeeType)
 
 	got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, "bogus", "00000000-0000-0000-0000-000000000000")
 	if err != nil {
@@ -110,7 +105,7 @@ func TestCanSeeAction_UnregisteredKindRefused(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Gate Unregistered Action Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-unregistered-action-owner", []string{ownerRole}, employeeType)
-	reader, _ := resolveReader(t, db, practiceID, ownerID)
+	reader, _ := buildReader(t, db, practiceID, ownerID, []string{ownerRole}, employeeType)
 
 	if activitygate.CanSeeAction(reader, "bogus", "anything_happened") {
 		t.Fatal("CanSeeAction(bogus) = true, want false for an unregistered subject kind")
@@ -133,17 +128,19 @@ func TestCanAccessSubject_Engagement(t *testing.T) {
 	seedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
 
 	cases := []struct {
-		name    string
-		staffID string
-		want    bool
+		name           string
+		staffID        string
+		roles          []string
+		employmentType string
+		want           bool
 	}{
-		{"owner reaches", ownerID, true},
-		{"unattached contractor refused", unattachedContractorID, false},
-		{"attached contractor reaches", attachedContractorID, true},
+		{"owner reaches", ownerID, []string{ownerRole}, employeeType, true},
+		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
+		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, tx := resolveReader(t, db, practiceID, tc.staffID)
+			reader, tx := buildReader(t, db, practiceID, tc.staffID, tc.roles, tc.employmentType)
 			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectEngagement, engagementID)
 			if err != nil {
 				t.Fatalf("CanAccessSubject: %v", err)
@@ -200,23 +197,25 @@ func TestCanSeeAction_Engagement(t *testing.T) {
 	contractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-canseeaction-contractor", []string{doulaRole}, contractorType)
 
 	cases := []struct {
-		name    string
-		staffID string
-		action  string
-		want    bool
+		name           string
+		staffID        string
+		roles          []string
+		employmentType string
+		action         string
+		want           bool
 	}{
-		{"owner sees invoice_paid", ownerID, invoicePaidAction, true},
-		{"owner sees contract_signed", ownerID, contractSignedAction, true},
-		{"employee denied invoice_paid", employeeID, invoicePaidAction, false},
-		{"employee denied contract_signed", employeeID, contractSignedAction, false},
-		{"employee sees visit_logged", employeeID, "visit_logged", true},
-		{"contractor denied invoice_paid", contractorID, invoicePaidAction, false},
-		{"contractor denied contract_signed", contractorID, contractSignedAction, false},
-		{"contractor sees offer_accepted", contractorID, "offer_accepted", true},
+		{"owner sees invoice_paid", ownerID, []string{ownerRole}, employeeType, invoicePaidAction, true},
+		{"owner sees contract_signed", ownerID, []string{ownerRole}, employeeType, contractSignedAction, true},
+		{"employee denied invoice_paid", employeeID, []string{doulaRole}, employeeType, invoicePaidAction, false},
+		{"employee denied contract_signed", employeeID, []string{doulaRole}, employeeType, contractSignedAction, false},
+		{"employee sees visit_logged", employeeID, []string{doulaRole}, employeeType, "visit_logged", true},
+		{"contractor denied invoice_paid", contractorID, []string{doulaRole}, contractorType, invoicePaidAction, false},
+		{"contractor denied contract_signed", contractorID, []string{doulaRole}, contractorType, contractSignedAction, false},
+		{"contractor sees offer_accepted", contractorID, []string{doulaRole}, contractorType, "offer_accepted", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, _ := resolveReader(t, db, practiceID, tc.staffID)
+			reader, _ := buildReader(t, db, practiceID, tc.staffID, tc.roles, tc.employmentType)
 			if got := activitygate.CanSeeAction(reader, activity.SubjectEngagement, tc.action); got != tc.want {
 				t.Fatalf("CanSeeAction(engagement, %q) = %v, want %v", tc.action, got, tc.want)
 			}
@@ -240,17 +239,19 @@ func TestCanAccessSubject_Client(t *testing.T) {
 	seedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
 
 	cases := []struct {
-		name    string
-		staffID string
-		want    bool
+		name           string
+		staffID        string
+		roles          []string
+		employmentType string
+		want           bool
 	}{
-		{"owner reaches", ownerID, true},
-		{"unattached contractor refused", unattachedContractorID, false},
-		{"attached contractor reaches", attachedContractorID, true},
+		{"owner reaches", ownerID, []string{ownerRole}, employeeType, true},
+		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
+		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, tx := resolveReader(t, db, practiceID, tc.staffID)
+			reader, tx := buildReader(t, db, practiceID, tc.staffID, tc.roles, tc.employmentType)
 			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectClient, clientID)
 			if err != nil {
 				t.Fatalf("CanAccessSubject: %v", err)
@@ -273,7 +274,7 @@ func TestCanAccessSubject_ClientFieldTemplateUnregistered(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Gate Client Field Template Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-cft-owner", []string{ownerRole}, employeeType)
-	reader, tx := resolveReader(t, db, practiceID, ownerID)
+	reader, tx := buildReader(t, db, practiceID, ownerID, []string{ownerRole}, employeeType)
 
 	got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, "client_field_template", practiceID)
 	if err != nil {
@@ -293,11 +294,11 @@ func TestBypasses(t *testing.T) {
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-bypasses-owner", []string{ownerRole}, employeeType)
 	employeeID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-bypasses-employee", []string{doulaRole}, employeeType)
 
-	ownerReader, _ := resolveReader(t, db, practiceID, ownerID)
+	ownerReader, _ := buildReader(t, db, practiceID, ownerID, []string{ownerRole}, employeeType)
 	if !activitygate.Bypasses(ownerReader) {
 		t.Fatal("Bypasses(owner) = false, want true")
 	}
-	employeeReader, _ := resolveReader(t, db, practiceID, employeeID)
+	employeeReader, _ := buildReader(t, db, practiceID, employeeID, []string{doulaRole}, employeeType)
 	if activitygate.Bypasses(employeeReader) {
 		t.Fatal("Bypasses(employee doula) = true, want false")
 	}

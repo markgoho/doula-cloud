@@ -34,7 +34,6 @@ const connectStatus = {
  * which endpoints behave differently from the happy path. */
 function fetcherFor(overrides: Record<string, Response> = {}) {
 	const answers: Record<string, Response> = {
-		session: jsonResponse(session),
 		offers: jsonResponse({ items: [openOffer, decidedOffer] }),
 		clients: jsonResponse({ items: [{ clientId: 'client-1' }], hasMore: false }),
 		staff: jsonResponse(roster),
@@ -93,14 +92,14 @@ describe('hasSecondary', () => {
 
 describe('loadPracticeLanding', () => {
 	it('keeps only the Offers still awaiting an answer', async () => {
-		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1');
+		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
 
 		expect(landing.openOffers).toEqual([openOffer]);
 		expect(landing.practiceName).toBe('Riverside Doula Collective');
 	});
 
 	it('counts the roster and the invitations that have expired', async () => {
-		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1');
+		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
 
 		expect(landing.roster).toEqual({ members: 2, pendingInvitations: 2, expiredInvitations: 1 });
 		expect(landing.credit).toEqual({ balance: 7 });
@@ -119,7 +118,8 @@ describe('loadPracticeLanding', () => {
 			fetcherFor({
 				'engagement-requests': jsonResponse({ items: [{ requestId: 'request-1' }], hasMore: true })
 			}),
-			'practice-1'
+			'practice-1',
+			session
 		);
 
 		expect(landing.requests).toEqual({ count: 1, hasMore: true });
@@ -128,16 +128,17 @@ describe('loadPracticeLanding', () => {
 	it('reports a Practice with no Clients as empty', async () => {
 		const landing = await loadPracticeLanding(
 			fetcherFor({ clients: jsonResponse({ items: [], hasMore: false }) }),
-			'practice-1'
+			'practice-1',
+			session
 		);
 
 		expect(landing.hasClients).toBe(false);
 	});
 
 	it('asks for no gated block on behalf of a Doula', async () => {
-		const fetcher = fetcherFor({ session: jsonResponse({ ...session, roles: ['doula'] }) });
+		const fetcher = fetcherFor();
 
-		const landing = await loadPracticeLanding(fetcher, 'practice-1');
+		const landing = await loadPracticeLanding(fetcher, 'practice-1', { ...session, roles: ['doula'] });
 
 		expect([landing.roster, landing.credit, landing.connect, landing.requests]).toEqual([
 			undefined,
@@ -146,7 +147,6 @@ describe('loadPracticeLanding', () => {
 			undefined
 		]);
 		expect(fetcher.mock.calls.map(([path]) => path)).toEqual([
-			'/api/practices/practice-1/session',
 			'/api/practices/practice-1/offers',
 			// `?all=true`, because the default list is Clients who have work
 			// and the question here is whether the Practice has any at all.
@@ -155,9 +155,9 @@ describe('loadPracticeLanding', () => {
 	});
 
 	it('asks for the roster and credits but not Connect on behalf of an Admin', async () => {
-		const fetcher = fetcherFor({ session: jsonResponse({ ...session, roles: ['admin'] }) });
+		const fetcher = fetcherFor();
 
-		const landing = await loadPracticeLanding(fetcher, 'practice-1');
+		const landing = await loadPracticeLanding(fetcher, 'practice-1', { ...session, roles: ['admin'] });
 
 		expect(landing.connect).toBeUndefined();
 		expect(landing.roster).not.toBeUndefined();
@@ -169,7 +169,8 @@ describe('loadPracticeLanding', () => {
 		async (endpoint) => {
 			const landing = await loadPracticeLanding(
 				fetcherFor({ [endpoint]: refusal('nope') }),
-				'practice-1'
+				'practice-1',
+				session
 			);
 
 			expect([landing.roster, landing.credit, landing.connect, landing.requests]).toContain(
@@ -179,14 +180,11 @@ describe('loadPracticeLanding', () => {
 		}
 	);
 
-	it.each([['session'], ['offers'], ['clients']])(
-		'fails the whole page when %s refuses',
-		async (endpoint) => {
-			const fetcher = fetcherFor({ [endpoint]: refusal('nope') });
+	it.each([['offers'], ['clients']])('fails the whole page when %s refuses', async (endpoint) => {
+		const fetcher = fetcherFor({ [endpoint]: refusal('nope') });
 
-			await expect(loadPracticeLanding(fetcher, 'practice-1')).rejects.toThrow('nope');
-		}
-	);
+		await expect(loadPracticeLanding(fetcher, 'practice-1', session)).rejects.toThrow('nope');
+	});
 });
 
 // #455's roll-up, cursor-paginated on its own -- mirrors

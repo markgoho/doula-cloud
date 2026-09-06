@@ -59,11 +59,13 @@ interface SetupOptions {
  * at an internal collaborator.
  */
 async function setup({ website = undeclared, roles = ['owner'], websiteOk = true, put }: SetupOptions = {}) {
+	// The Practice's name and the caller's roles come off page.data.session
+	// (#835), not a fetch this mock has to answer.
+	pageState.data = {
+		session: { practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles, isContractor: false }
+	};
 	const puts: Record<string, unknown>[] = [];
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
-		if (path.endsWith('/session')) {
-			return Promise.resolve(jsonResponse({ practiceName: 'Rochester Doulas', roles }));
-		}
 		if (init?.method === 'PUT') {
 			const body = JSON.parse(String(init.body)) as Record<string, unknown>;
 			puts.push(body);

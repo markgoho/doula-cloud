@@ -77,13 +77,13 @@ func CreateHandler() http.Handler {
 		// herself the reach an Offer exists to ask for. She gets the
 		// seam's accrued record instead, which is a record of work and
 		// never a key.
-		employmentType, err := callerEmploymentType(r.Context(), tx, practiceID, staffID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
+		reader, has := staffauth.ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if employmentType == employeeType {
+		if !reader.IsContractor() {
 			if err := staffauth.Grant(r.Context(), tx, engagementID, staffID, staffID, nil, nil); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)

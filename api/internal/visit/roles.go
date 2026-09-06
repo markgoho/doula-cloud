@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
@@ -17,28 +16,25 @@ import (
 // create or reassign a Visit.
 const doulaRole = "doula"
 
-// requireDoula resolves the caller's Staff/Practice ids and request-scoped
-// tx from context (set by staffauth.Middleware) and confirms the caller
+// requireDoula resolves the caller's Reader and request-scoped tx from
+// context (both set by staffauth.Middleware) and confirms the caller
 // holds the Doula role at that Practice, writing the appropriate error
-// response itself if not. The caller is guaranteed a practice_memberships
-// row by staffauth.Middleware, so staffauth.Roles's no-rows-is-an-error
-// shape is safe to use here (unlike for an arbitrary reassignment target,
-// see doulaMembership below).
+// response itself if not. Zero-query: the Reader already carries the
+// roles Middleware resolved for this request (unlike for an arbitrary
+// reassignment target, see doulaMembership below).
 func requireDoula(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, practiceID, ok = staffauth.RequireTx(w, r)
 	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 	if !ok {
 		return nil, "", false
 	}
-	staffID, _ := staffauth.StaffID(r.Context())
-
-	roles, err := staffauth.Roles(r.Context(), tx, practiceID, staffID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
+	reader, has := staffauth.ReaderFrom(r.Context())
+	if !has {
+		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
-	if !slices.Contains(roles, doulaRole) {
+	if !reader.Has(doulaRole) {
 		apierr.WriteError(w, "only a Staff member with the Doula role can do that", http.StatusForbidden)
 		return nil, "", false
 	}
@@ -96,21 +92,4 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 		return false, fmt.Errorf("visit: check granted attachment: %w", err)
 	}
 	return attached, nil
-}
-
-// callerEmploymentType reads the caller's own employment type at
-// practiceID. Unlike doulaMembership this is for the caller, whom
-// staffauth.Middleware already guarantees a membership for, so no rows is
-// an error rather than an expected outcome.
-func callerEmploymentType(ctx context.Context, tx *sql.Tx, practiceID, staffID string) (string, error) {
-	var employmentType string
-	err := tx.QueryRowContext(ctx,
-		`SELECT employment_type::text FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		practiceID, staffID,
-	).Scan(&employmentType)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return "", fmt.Errorf("visit: read caller employment type: %w", err)
-	}
-	return employmentType, nil
 }

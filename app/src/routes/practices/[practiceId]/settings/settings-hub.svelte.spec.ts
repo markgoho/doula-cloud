@@ -1,7 +1,6 @@
 import { page as testPage } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -19,17 +18,12 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
-const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
-
 async function setup(roles: string[] = []) {
-	apiFetchWithSession.mockResolvedValue(jsonResponse({ roles }));
+	pageState.data = {
+		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+	};
 	await render(Page, {});
 }
-
-beforeEach(() => {
-	apiFetchWithSession.mockReset();
-});
 
 describe('the Settings hub', () => {
 	it('lists every settings screen but MFA for a non-Owner', async () => {

@@ -41,7 +41,7 @@ type Rule struct {
 // Owner or Admin sees them, nobody else does, regardless of employment
 // type. "This ticket moves that rule, it does not change it" (#485).
 func bypassesRestriction(reader staffauth.Reader) bool {
-	return reader.Has("owner") || reader.Has("admin")
+	return reader.IsOwnerOrAdmin()
 }
 
 // registry is the one place a subject kind's Rule is stated -- AC6's

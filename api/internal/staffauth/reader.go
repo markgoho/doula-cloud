@@ -1,21 +1,27 @@
 package staffauth
 
-import (
-	"context"
-	"database/sql"
-	"fmt"
-	"slices"
-)
+import "slices"
 
 // Reader is an unforgeable claim of a caller's roles and employment type
-// for the current request. Construct one only via ResolveReader -- a
-// query function that wants ADR-0008-gated data takes a Reader parameter
-// instead of a bare context/tx, so calling it without having gone
-// through role resolution is a compile error, not a missed check.
+// at the Practice a request is scoped to. staffauth.Middleware is the
+// only production constructor: it runs the one practice_memberships
+// query a request needs and places the resulting Reader on the request
+// context, reached through ReaderFrom. NewReader exists alongside it so
+// a test can build a Reader for an arbitrary role/employment-type
+// combination directly, without seeding a Practice and a membership row
+// just to prove what one of Reader's own methods decides.
 type Reader struct {
 	staffID        string
 	roles          []string
 	employmentType string
+}
+
+// NewReader constructs a Reader directly from roles and employmentType,
+// with no database access -- the shape a test needs, not a handler.
+// staffauth.Middleware builds its own Reader the same way, from the one
+// row its request-scoped query already read.
+func NewReader(staffID string, roles []string, employmentType string) Reader {
+	return Reader{staffID: staffID, roles: roles, employmentType: employmentType}
 }
 
 // Has reports whether the Reader's caller holds role.
@@ -43,37 +49,21 @@ func (r Reader) IsContractor() bool {
 	return r.employmentType == "contractor"
 }
 
-// ResolveReader loads the caller's roles and employment_type for
-// practiceID/staffID -- the one place a Reader can be constructed. Must
-// run downstream of Middleware, which is what makes practiceID/staffID
-// trustworthy inputs here.
-func ResolveReader(ctx context.Context, tx *sql.Tx, practiceID, staffID string) (Reader, error) {
-	var rolesCSV, employmentType string
-	err := tx.QueryRowContext(ctx,
-		`SELECT array_to_string(roles, ','), employment_type::text FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		practiceID, staffID,
-	).Scan(&rolesCSV, &employmentType)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests -- Middleware already confirmed this membership exists
-	if err != nil {
-		return Reader{}, fmt.Errorf("staffauth: resolve reader: %w", err)
-	}
-	var roles []string
-	if rolesCSV != "" {
-		roles = splitCSV(rolesCSV)
-	}
-	return Reader{staffID: staffID, roles: roles, employmentType: employmentType}, nil
+// IsOwnerOrAdmin reports whether the Reader's caller holds the owner or
+// admin role -- ADR-0008's other ambient-reach population, alongside an
+// employee Doula. Replaces the "Has(owner) || Has(admin)" predicate that
+// used to be copied at each call site that needed it.
+func (r Reader) IsOwnerOrAdmin() bool {
+	return r.Has("owner") || r.Has("admin")
 }
 
-// splitCSV splits a comma-joined string, avoiding a strings import for
-// this single trivial use.
-func splitCSV(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i <= len(s); i++ {
-		if i == len(s) || s[i] == ',' {
-			out = append(out, s[start:i])
-			start = i + 1
-		}
-	}
-	return out
+// IsAmbientContractor reports whether the Reader's caller is a plain
+// contractor Doula -- employment_type contractor, holding neither the
+// owner nor admin role -- the population ADR-0008 confines to what she
+// is attached to, rather than granting the Practice-wide ambient reach an
+// owner, admin, or employee Doula all hold. Replaces the "contractor and
+// not owner and not admin" predicate that used to be copied at each call
+// site that needed it.
+func (r Reader) IsAmbientContractor() bool {
+	return r.IsContractor() && !r.IsOwnerOrAdmin()
 }

@@ -39,6 +39,17 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
+// `session` merges in from practices/[practiceId]/+layout.ts (#835) --
+// this route never reads it, but the generated `data` prop type requires
+// it, since SvelteKit really does merge ancestor layout data into it at
+// runtime.
+const sessionStub = {
+	practiceId,
+	practiceName: 'Riverside Doula Collective',
+	roles: ['owner'],
+	isContractor: false
+};
+
 async function setup(page: PracticeInvoicePage = data) {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
 	// its content floor stacks into below 46rem (#508) -- the same call the
@@ -46,7 +57,7 @@ async function setup(page: PracticeInvoicePage = data) {
 	// is asserted here; that it says the same thing in a narrow container
 	// is DataTable's own spec's job.
 	await testPage.viewport(1440, 900);
-	await render(Page, { params: fixture.params, data: page });
+	await render(Page, { params: fixture.params, data: { ...page, session: sessionStub } });
 }
 
 describe('the Practice-wide invoice list (#265)', () => {

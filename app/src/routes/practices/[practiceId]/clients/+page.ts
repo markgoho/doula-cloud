@@ -5,13 +5,21 @@
  * originates nothing at a Practice she contracts for -- and, if her list
  * is empty, an extra line points her to #501's explain-only door instead.
  *
- * The read itself, and its fall-back-on-failure posture, live in
- * #lib/practiceContractorGate.js -- shared with `clients/search/+page.ts`,
- * whose load this mirrors exactly.
+ * Reads the Membership `practices/[practiceId]/+layout.ts` already
+ * resolved (#835) through `parent()`, rather than a second
+ * `/api/practices/${practiceId}/session` fetch of its own -- the read
+ * `#lib/roles.js`'s predicates decide against is one query per
+ * navigation, not one per page.
  */
-import { loadContractorGate, type ContractorGate } from '#lib/practiceContractorGate.js';
+import { isAmbientContractor, isOwner } from '#lib/roles.js';
 import type { PageLoad } from './$types';
 
-export const load: PageLoad = async ({ params }): Promise<ContractorGate> => {
-	return loadContractorGate(params.practiceId);
+export interface ContractorGate {
+	isContractor: boolean;
+	isOwner: boolean;
+}
+
+export const load: PageLoad = async ({ parent }): Promise<ContractorGate> => {
+	const { session } = await parent();
+	return { isContractor: isAmbientContractor(session), isOwner: isOwner(session) };
 };

@@ -26,9 +26,10 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * the route reads `page.params.practiceId` inside its own functions
  * rather than at module scope, so the later write is seen. Same
  * installation, through the same `toPageState`, as
- * `route-continuum.svelte.spec.ts`. The fixture's own `respond` only
- * answers what a Doula role ever fetches (session/offers/clients/
- * awaiting-reply/activity/push-subscriptions) -- most of this file's own
+ * `route-continuum.svelte.spec.ts`. `pageData.session` carries the
+ * Membership `practices/[practiceId]/+layout.ts` resolves (#835); the
+ * fixture's own `respond` only answers what a Doula role ever fetches
+ * (offers/clients/awaiting-reply/activity/push-subscriptions) -- most of this file's own
  * tests default to `roles: ['owner']`, which reaches `staff`/`billing`/
  * `payments/connect`/`engagement-requests` the fixture holds no content
  * for, so `setup()`'s own answers stay this spec's for those cases (#596).
@@ -71,8 +72,10 @@ interface SetupOptions {
 }
 
 async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overrides = {} }: SetupOptions = {}) {
+	// The Membership (roles, practiceName) comes off page.data.session
+	// (#835), not a fetch this mock has to answer.
+	pageState.data = { session: { practiceId, practiceName, roles, isContractor: false } };
 	const answers: Record<string, Response> = {
-		session: jsonResponse({ practiceName, roles }),
 		// The declined Offer has no counterpart in the fixture, which
 		// answers `/offers` with only the still-open one -- so it is
 		// written as a spread onto that same Offer rather than a second
@@ -114,6 +117,10 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	registerPushSubscription.mockReset();
 	registerPushSubscription.mockResolvedValue(undefined);
+	// setup() overwrites pageState.data per test; reset it back to the
+	// fixture's own Doula session (#835) for the one test that bypasses
+	// setup() and reads straight off the fixture.
+	Object.assign(pageState, toPageState(fixture));
 });
 
 describe('the Practice landing page', () => {
@@ -260,7 +267,7 @@ describe('the Practice landing page', () => {
 	});
 
 	it('surfaces a failure of the critical path in place', async () => {
-		await setup({ overrides: { session: refusal('your session has expired') } });
+		await setup({ overrides: { offers: refusal('your session has expired') } });
 
 		await expect.element(testPage.getByText('your session has expired')).toBeVisible();
 	});

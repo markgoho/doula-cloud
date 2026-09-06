@@ -10,8 +10,9 @@
 	 * response's state to know which happened.
 	 *
 	 * Two button labels, not one, read from the signed-in Staff member's
-	 * own roles (the /session endpoint) -- the same UX-only mirror of the
-	 * BFF's role gate the billing and website settings screens already use.
+	 * own roles -- practices/[practiceId]/+layout.ts's already-resolved
+	 * Membership (#835), the same UX-only mirror of the BFF's role gate
+	 * the billing and website settings screens already use.
 	 * The Credit cost and balance-after preview is Owner/Admin only,
 	 * because reading the balance at all is (billing.GetBalanceHandler is
 	 * ownerAndAdmin-gated, ADR-0008): a Doula's screen never attempts the
@@ -31,8 +32,10 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import { loadBalance } from '#lib/billing.js';
 	import { displayName, loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
+	import type { PracticeSession } from '../../../../+layout.js';
 	import { requestEngagement, type NewEngagementRequest } from '#lib/engagementRequest.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -52,7 +55,9 @@
 	const noteId = 'engagement-request-note';
 
 	let detail = $state<ClientDetail | undefined>();
-	let roles = $state<string[]>([]);
+	// Resolved once by practices/[practiceId]/+layout.ts (#835), not a
+	// fetch of this page's own.
+	const session = $derived((page.data as { session: PracticeSession }).session);
 	let balance = $state<number | undefined>();
 	let loadError = $state('');
 
@@ -64,7 +69,7 @@
 	let isSubmitting = $state(false);
 	let hasNoCredits = $state(false);
 
-	const isApprover = $derived(roles.includes('owner') || roles.includes('admin'));
+	const isApprover = $derived(isOwnerOrAdmin(session));
 	// ADR-0017's second-live-Engagement warning, read from the Client detail
 	// already loaded rather than a separate call -- "warns, never refuses"
 	// at request time so the requester can reconsider before submitting.
@@ -163,12 +168,7 @@
 		restoreDraft();
 		try {
 			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
-			const sessionResponse = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
-			if (sessionResponse.ok) {
-				const body: { roles: string[] } = await sessionResponse.json();
-				roles = body.roles;
-			}
-			if (roles.includes('owner') || roles.includes('admin')) {
+			if (isApprover) {
 				const balancePage = await loadBalance(apiFetchWithSession, page.params.practiceId!);
 				balance = balancePage.balance;
 			}

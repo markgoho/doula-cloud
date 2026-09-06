@@ -30,9 +30,14 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/website',
-	respond: (path) => {
-		if (path.endsWith('/session')) return jsonResponse({ practiceName: 'Riverside Doula Collective', roles: ['owner'] });
-		return jsonResponse(website);
+	pageData: {
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['owner'],
+			isContractor: false
+		}
 	},
+	respond: () => jsonResponse(website),
 	readyText: 'Your website'
 };

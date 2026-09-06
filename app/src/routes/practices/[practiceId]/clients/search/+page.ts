@@ -6,13 +6,19 @@
  * intercepts ahead of that refusal rather than letting the search form
  * render and fail on submit.
  *
- * The read itself, and its fall-back-on-failure posture, live in
- * #lib/practiceContractorGate.js -- shared with `clients/+page.ts` (#539)
- * since #539 made this the second copy of the same session read.
+ * Reads the Membership `practices/[practiceId]/+layout.ts` already
+ * resolved (#835) through `parent()`, the same as `clients/+page.ts`
+ * (#539) -- one session read per navigation, not a second fetch here.
  */
-import { loadContractorGate, type ContractorGate } from '#lib/practiceContractorGate.js';
+import { isAmbientContractor, isOwner } from '#lib/roles.js';
 import type { PageLoad } from './$types';
 
-export const load: PageLoad = async ({ params }): Promise<ContractorGate> => {
-	return loadContractorGate(params.practiceId);
+export interface ContractorGate {
+	isContractor: boolean;
+	isOwner: boolean;
+}
+
+export const load: PageLoad = async ({ parent }): Promise<ContractorGate> => {
+	const { session } = await parent();
+	return { isContractor: isAmbientContractor(session), isOwner: isOwner(session) };
 };

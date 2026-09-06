@@ -2,7 +2,6 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { Balance } from '#lib/billing.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts. This
@@ -43,13 +42,12 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
-// None of this file's tests are about what an owner alone sees, so the
-// session read stays this spec's own -- the fixture's own `respond`
-// answers `/session` with `roles: ['owner']`, a variant these tests don't
-// need and must not invent by widening the fixture (#596).
+// The Owner-role gate itself comes off the fixture's own `pageData.session`
+// (#835) rather than a fetch this spec answers; apiFetchWithSession is
+// mocked only for the ledger's own reads (the "Load more" failure test
+// below).
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
-	apiFetchWithSession.mockResolvedValue(jsonResponse({ roles: [] }));
 	sessionStorage.clear();
 });
 
@@ -58,11 +56,24 @@ const { practiceId } = fixture.params;
 // screen's own return path is a plain string this route only echoes back.
 const approvalReturnPath = `/practices/${practiceId}/engagement-requests/request-1`;
 
+// The generated `data` prop merges practices/[practiceId]/+layout.ts's
+// `session` (#835) into +page.ts's own `Balance`, the way SvelteKit
+// really does at runtime -- rendering the component directly needs both,
+// even though this route reads `session` off the mocked `page.data`
+// (the fixture's own `pageData`) rather than this prop.
+const sessionStub = {
+	practiceId,
+	practiceName: 'Riverside Doula Collective',
+	roles: ['owner'],
+	isContractor: false
+};
+const dataWithSession = { ...data, session: sessionStub };
+
 describe('the way back to an approval an empty balance interrupted (#502)', () => {
 	it('offers the remembered approval screen', async () => {
 		sessionStorage.setItem('engagement-request-approval-return', approvalReturnPath);
 
-		await render(Page, { params: fixture.params, data });
+		await render(Page, { params: fixture.params, data: dataWithSession });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -74,7 +85,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 			throw new Error('site data blocked');
 		});
 
-		await render(Page, { params: fixture.params, data });
+		await render(Page, { params: fixture.params, data: dataWithSession });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -83,7 +94,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 	});
 
 	it('offers nothing to somebody who came here on her own', async () => {
-		await render(Page, { params: fixture.params, data });
+		await render(Page, { params: fixture.params, data: dataWithSession });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -96,7 +107,7 @@ describe('billing ledger', () => {
 		// DataTable's own content floor (#508) stacks it into a <dl> below
 		// 46rem, and this checks the <table> cells specifically.
 		await testPage.viewport(1440, 900);
-		await render(Page, { params: fixture.params, data });
+		await render(Page, { params: fixture.params, data: dataWithSession });
 
 		const header = testPage.getByRole('columnheader', { name: 'Quantity' });
 		const cell = testPage.getByRole('cell', { name: '+20' });
@@ -109,8 +120,8 @@ describe('billing ledger', () => {
 	// response, leaving "Load more" clickable again with no feedback --
 	// it must surface the failure instead, next to the existing rows.
 	it('surfaces a "Load more" failure instead of swallowing it', async () => {
-		const pagedData: Balance = {
-			...data,
+		const pagedData = {
+			...dataWithSession,
 			ledger: { ...data.ledger, hasMore: true, nextCursor: 'cursor-1' }
 		};
 		await render(Page, { params: fixture.params, data: pagedData });

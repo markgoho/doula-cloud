@@ -39,7 +39,6 @@ vi.mock('#lib/api.js', () => ({
 interface MockOptions {
 	status?: string;
 	roles?: string[];
-	sessionOk?: boolean;
 	requirementsDue?: string[];
 	/* What #440's endpoint reports. `own` is the default because it is the
 	   precondition every other assertion on this screen depends on --
@@ -54,15 +53,16 @@ interface MockOptions {
 function mockApi({
 	status = 'not_connected',
 	roles = [],
-	sessionOk = true,
 	requirementsDue = [],
 	websiteMode = 'own',
-	pageState = 'pending'
+	pageState: websitePageState = 'pending'
 }: MockOptions = {}) {
+	// The Membership (roles) comes off page.data.session (#835), not a
+	// fetch this mock has to answer.
+	pageState.data = {
+		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+	};
 	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path.endsWith('/session')) {
-			return Promise.resolve(jsonResponse({ roles }, sessionOk ? 200 : 401));
-		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(
 				jsonResponse({
@@ -72,7 +72,7 @@ function mockApi({
 					cancellationPolicy: '',
 					updatedBy: '',
 					updatedAt: '',
-					pageState: websiteMode === 'hosted' ? pageState : '',
+					pageState: websiteMode === 'hosted' ? websitePageState : '',
 					pageCheckedAt: '',
 					pageCheckDetail: '',
 					pageUrl: websiteMode === 'hosted' ? 'https://doula.cloud/p/rochester-doulas' : ''
@@ -130,13 +130,6 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 	});
 
-	it('falls back to no-Owner UI if the session roles fetch fails, even for an actual Owner', async () => {
-		mockApi({ status: 'not_connected', roles: [], sessionOk: false });
-		await render(Page, {});
-
-		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
-	});
 });
 
 describe('payments settings screen: the states Accounts v1 could not report', () => {

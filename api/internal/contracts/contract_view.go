@@ -75,7 +75,7 @@ func ReadContract(r staffauth.Reader, full ContractResponse) ContractView {
 		MergeFields:  full.MergeFields,
 		Values:       scopeValues,
 	}
-	if r.Has("owner") || r.Has("admin") {
+	if r.IsOwnerOrAdmin() {
 		return ContractFull{ContractScope: scope, MoneyValues: moneyValues}
 	}
 	return scope

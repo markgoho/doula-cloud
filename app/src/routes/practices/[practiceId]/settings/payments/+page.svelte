@@ -24,8 +24,10 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { isOwner } from '#lib/roles.js';
 	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
+	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -37,8 +39,12 @@
 	let status = $state<ConnectStatusResult | undefined>();
 	let website = $state<PracticeWebsite | undefined>();
 	let error = $state('');
-	let roles = $state<string[]>([]);
-	let isOwner = $derived(roles.includes('owner'));
+	// The connect button's enabled state mirrors the "owner"-role gating
+	// the billing page already uses -- server-side enforcement
+	// (RequireOwner) is what actually matters, this is UX only. Resolved
+	// once by practices/[practiceId]/+layout.ts (#835), not a fetch here.
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	let isPracticeOwner = $derived(isOwner(session));
 	let connectParameter = $derived(page.url.searchParams.get('connect'));
 
 	let connectError = $state('');
@@ -53,16 +59,6 @@
 			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
-			return;
-		}
-
-		// The connect button's enabled state mirrors the "owner"-role gating
-		// the billing page already uses -- server-side enforcement
-		// (RequireOwner) is what actually matters, this is UX only.
-		const sessionResponse = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
-		if (sessionResponse.ok) {
-			const body: { roles: string[] } = await sessionResponse.json();
-			roles = body.roles;
 		}
 	});
 
@@ -315,7 +311,7 @@
 
 {#snippet actions()}
 	{#if canConnect}
-		{#if isOwner}
+		{#if isPracticeOwner}
 			<Button
 				label={status!.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
 				onClick={handleConnect}

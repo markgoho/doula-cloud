@@ -130,33 +130,24 @@ func (g *GatedRouter) Routes() []GatedRoute {
 }
 
 // requireAnyRole 403s unless the caller holds at least one of roles (or
-// roles is AnyStaff). Must run downstream of Middleware.
+// roles is AnyStaff). Must run downstream of Middleware. Zero-query: it
+// reads the Reader Middleware already resolved rather than querying
+// practice_memberships again.
 func requireAnyRole(roles []string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(roles) == 1 && roles[0] == "*" {
 			h.ServeHTTP(w, r)
 			return
 		}
-		tx, has := Tx(r.Context())
+		reader, has := ReaderFrom(r.Context())
 		if !has {
-			// coverage:ignore reason: Middleware always sets a tx before this handler runs
+			// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		staffID, _ := StaffID(r.Context())
-		practiceID, _ := PracticeID(r.Context())
-
-		callerRoles, err := Roles(r.Context(), tx, practiceID, staffID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+		if slices.ContainsFunc(roles, reader.Has) {
+			h.ServeHTTP(w, r)
 			return
-		}
-		for _, want := range roles {
-			if slices.Contains(callerRoles, want) {
-				h.ServeHTTP(w, r)
-				return
-			}
 		}
 		apierr.WriteError(w, "not permitted to read this", http.StatusForbidden)
 	})

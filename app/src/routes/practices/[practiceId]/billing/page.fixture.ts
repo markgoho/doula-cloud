@@ -9,7 +9,6 @@
  * large realistic balance and the widest origin label rather than any
  * hostile string.
  */
-import { jsonResponse } from '#lib/testResponse.js';
 import type { Balance } from '#lib/billing.js';
 import type { RouteFixture } from '../../../routeFixture.js';
 import type { RouteParams as RouteParameters } from './$types';
@@ -33,9 +32,13 @@ export const fixture: RouteFixture<RouteParameters> = {
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/billing',
 	props: { data },
-	respond: (path) => {
-		if (path.endsWith('/session')) return jsonResponse({ roles: ['owner'] });
-		throw new Error(`billing fixture: unmatched fetch path ${path}`);
+	pageData: {
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['owner'],
+			isContractor: false
+		}
 	},
 	readyText: 'Billing'
 };

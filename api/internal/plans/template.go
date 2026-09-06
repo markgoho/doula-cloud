@@ -120,15 +120,13 @@ func PutTemplateHandler() http.Handler {
 		if !ok {
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
-
-		roles, err := staffauth.Roles(r.Context(), tx, practiceID, staffID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
+		reader, has := staffauth.ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if !hasOwnerRole(roles) {
+		if !hasOwnerRole(reader) {
 			apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
 			return
 		}
@@ -215,10 +213,9 @@ func normalizeFields(fields []Field) ([]Field, string) {
 	return out, ""
 }
 
-// hasOwnerRole reports whether roles (as returned by staffauth.Roles)
-// includes "owner".
-func hasOwnerRole(roles []string) bool {
-	return slices.Contains(roles, "owner")
+// hasOwnerRole reports whether reader holds the "owner" role.
+func hasOwnerRole(reader staffauth.Reader) bool {
+	return reader.Has("owner")
 }
 
 // fetchFields reads the field list stored for practiceID and planType,

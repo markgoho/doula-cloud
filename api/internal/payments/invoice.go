@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"time"
 
 	"doula-cloud/api/internal/activity"
@@ -85,13 +84,13 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 		if !connected {
-			isOwner, err := staffIsOwner(r.Context(), tx, practiceID)
-			if err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
+			reader, has := staffauth.ReaderFrom(r.Context())
+			if !has {
+				// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			writeJSON(w, http.StatusOK, PostInvoiceResponse{ConnectRequired: true, IsOwner: isOwner})
+			writeJSON(w, http.StatusOK, PostInvoiceResponse{ConnectRequired: true, IsOwner: reader.Has("owner")})
 			return
 		}
 
@@ -334,21 +333,6 @@ func fetchConnectAccount(ctx context.Context, tx *sql.Tx, practiceID string) (ac
 		return "", false, fmt.Errorf("payments: fetch connect account: %w", err)
 	}
 	return acct.String, acct.Valid, nil
-}
-
-// staffIsOwner reports whether the caller's membership at practiceID
-// holds the 'owner' role -- used only to pick which of the two gate
-// messages PostInvoiceHandler's response should drive the frontend to
-// show; the actual connect-initiation endpoint (PostConnectHandler)
-// enforces Owner-only server-side on its own.
-func staffIsOwner(ctx context.Context, tx *sql.Tx, practiceID string) (bool, error) {
-	staffID, _ := staffauth.StaffID(ctx)
-	roles, err := staffauth.Roles(ctx, tx, practiceID, staffID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("payments: check owner role: %w", err)
-	}
-	return slices.Contains(roles, "owner"), nil
 }
 
 // errClientNoEmail is fetchClientContact's refusal when the Engagement's
