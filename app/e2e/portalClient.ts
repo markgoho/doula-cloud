@@ -19,8 +19,32 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
  * portal now; every spec that needs a signed-in Client for some *other*
  * feature under test calls this rather than re-walking the mailbox
  * itself.
+ *
+ * Presses through #610's warning when it appears. Several specs drive
+ * the Staff half of a feature and then the Client half in the same
+ * browser context, so the Continue arrives carrying a live Staff
+ * session and the BFF refuses it once, exactly as it would for a doula
+ * who is also a Client. Pressing on is what she would do, and what the
+ * spec means; the warning itself is asserted where it is the subject,
+ * in client-portal-login.e2e.ts.
  */
 export async function signInPortalClient(page: Page, request: APIRequestContext, email: string): Promise<void> {
+	await openMagicLink(page, request, email);
+	await page.getByRole('button', { name: 'Continue' }).click();
+
+	const pressThrough = page.getByRole('button', { name: 'Continue and sign out' });
+	if (await pressThrough.isVisible()) await pressThrough.click();
+}
+
+/**
+ * Everything before the Continue press: request a link, drain the
+ * outbox, and walk the mailbox until the redeem page is open with the
+ * token in its URL. Split out of signInPortalClient for the one spec
+ * that is about what the press does rather than about being signed in
+ * afterwards -- #610's eviction warning, which is only visible between
+ * the first press and the second.
+ */
+export async function openMagicLink(page: Page, request: APIRequestContext, email: string): Promise<void> {
 	const requested = await request.post(`${API_URL}/api/portal/magic-link/request`, { data: { email } });
 	expect(requested.ok(), `magic-link request failed: ${requested.status()}`).toBe(true);
 
@@ -32,7 +56,6 @@ export async function signInPortalClient(page: Page, request: APIRequestContext,
 	await page.goto(`${MAILBOX_URL}/inbox/${encodeURIComponent(email)}`);
 	await page.getByRole('link', { name: 'Your Doula Cloud sign-in link' }).click();
 	await page.getByRole('link', { name: /\/portal\/sign-in\?token=/ }).click();
-	await page.getByRole('button', { name: 'Continue' }).click();
 }
 
 /**
