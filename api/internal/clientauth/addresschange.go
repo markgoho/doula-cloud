@@ -31,6 +31,14 @@ const AddressChangeLifetime = 24 * time.Hour
 // this route. Nothing about her own account is disclosed.
 const msgNotAPortalAccount = "this is not a portal account"
 
+// The two refusals a new address can draw, in GOV.UK's own wording
+// (ADR-0021): start with the field's noun, say what to do about it, and
+// never write "please", "valid", "invalid" or "required".
+const (
+	MsgAddressRequired  = "Enter your new sign-in address"
+	MsgAddressMalformed = "Enter an email address in the correct format, like name@example.com"
+)
+
 // RequestAddressChangeRequest is the body of a sign-in-address change
 // request: the new address to prove. Named `email` rather than
 // `newEmail` so portalAddressChangeRequestRules' JSONFieldRule can key
@@ -54,21 +62,9 @@ type RequestAddressChangeRequest struct {
 // nothing she could not have learned by asking for a sign-in link at it.
 func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req RequestAddressChangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		address := staffauth.NormalizeAddress(req.Email)
-		if address == "" {
-			apierr.WriteError(w, "email is required", http.StatusBadRequest)
-			return
-		}
-		if !looksLikeAddress(address) {
-			apierr.WriteError(w, "enter an email address in the correct format, like name@example.com", http.StatusBadRequest)
-			return
-		}
-
+		// Authenticate before reading a byte of the body, the order
+		// staffauth's own email-change handler keeps: an unauthenticated
+		// caller gets a 401, never a critique of the address she sent.
 		tx, uid, _, ok := authn.Begin(w, r, db)
 		if !ok {
 			return
@@ -94,6 +90,27 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		}
 		if !holds {
 			apierr.WriteError(w, msgNotAPortalAccount, http.StatusForbidden)
+			return
+		}
+
+		var req RequestAddressChangeRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		address := staffauth.NormalizeAddress(req.Email)
+		// Both refusals name the field they are about in Details
+		// (docs/api-design.md section 7), which is what lets the screen put
+		// the message above the input and give the error summary an entry
+		// that focuses it -- a bare message would leave both adrift.
+		if address == "" {
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgAddressRequired,
+				map[string]string{"email": MsgAddressRequired})
+			return
+		}
+		if !looksLikeAddress(address) {
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgAddressMalformed,
+				map[string]string{"email": MsgAddressMalformed})
 			return
 		}
 
@@ -294,9 +311,9 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 // It is one row today whatever this code does --
 // client_portal_users.identity_uid carries a UNIQUE constraint (00006),
 // which is the schema disagreeing with the ADR rather than this loop
-// being speculative. Written to the ADR because that is the rule, and
-// because a set of rows is what the query returns whichever way the
-// constraint goes.
+// being speculative. That disagreement is #819's to settle; written to
+// the ADR because that is the rule as it stands, and because a set of
+// rows is what the query returns whichever way #819 goes.
 type clientSubject struct {
 	clientID   string
 	practiceID string

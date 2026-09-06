@@ -12,11 +12,15 @@
 	 * collision surfaces on the confirmation screen instead, where she has
 	 * proved the mailbox and so learns nothing new.
 	 *
-	 * The success state replaces the form rather than sitting beside it.
-	 * GOV.UK's confirmation pattern: one thing has happened, and the next
-	 * act is in her inbox, not on this page. Leaving the form up would
-	 * invite a second submit that supersedes the link she is about to open.
+	 * The outcome is announced in place with a Notice and the form stays
+	 * where it is -- docs/design/govuk-alignment.md's second recorded
+	 * departure, "No confirmation pages". A second submit after that is
+	 * not a hazard to design around: asking again supersedes the first
+	 * link outright (authtoken.Mint deletes the prior token and the
+	 * companion row cascades with it), which is what she wants if she
+	 * mistyped the address.
 	 */
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
@@ -40,12 +44,12 @@
 
 	const fieldError = $derived(errors.find((error) => error.targetId === fieldId)?.message);
 
-	$effect(() => {
-		void loadCurrentAddress();
-	});
+	// onMount, not $effect: this reads once, and an effect would re-run
+	// every time it set `isLoaded` -- the sibling Notifications screen
+	// loads its own state the same way.
+	onMount(loadCurrentAddress);
 
 	async function loadCurrentAddress() {
-		if (isLoaded) return;
 		try {
 			const response = await apiFetchWithSession('/api/portal/session');
 			if (!response.ok) {
@@ -105,19 +109,13 @@
 </script>
 
 {#snippet intro()}
-	{#if sentTo}
-		<Text
-			text={`Open the link we sent to ${sentTo} to finish the change. Until you do, ${currentAddress} still signs you in.`}
-		/>
-	{:else}
-		<Text
-			text={`You sign in with ${currentAddress}. This is your own address, and it is separate from the contact details your Practice holds for you.`}
-		/>
-		<Text
-			text="We will send a link to the new address. Your current address keeps signing you in until you open it."
-			tone="variant"
-		/>
-	{/if}
+	<Text
+		text={`You sign in with ${currentAddress}. This is your own address, and it is separate from the contact details your Practice holds for you.`}
+	/>
+	<Text
+		text="We will send a link to the new address. Your current address keeps signing you in until you open it."
+		tone="variant"
+	/>
 {/snippet}
 
 {#snippet field()}
@@ -147,10 +145,12 @@
 {/snippet}
 
 {#snippet actions()}
+	<Button type="submit" label="Send the link" loading={isSubmitting} />
 	{#if sentTo}
-		<Notice variant="status" message="Check your email" />
-	{:else}
-		<Button type="submit" label="Send the link" loading={isSubmitting} />
+		<Notice
+			variant="status"
+			message={`Check your email. Open the link we sent to ${sentTo} to finish the change. Until you do, ${currentAddress} still signs you in.`}
+		/>
 	{/if}
 {/snippet}
 
@@ -166,7 +166,7 @@
 		title="Sign-in address"
 		serviceName={page.data.practiceName}
 		{intro}
-		fieldsets={sentTo ? [] : [{ content: field }]}
+		fieldsets={[{ content: field }]}
 		errorSummary={errors.length > 0 ? errorSummary : undefined}
 		{actions}
 		loading={isLoaded || loadError ? undefined : 'Loading your sign-in address'}

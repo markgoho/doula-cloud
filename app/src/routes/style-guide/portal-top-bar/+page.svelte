@@ -35,6 +35,7 @@
 		practiceName="Highland Midwifery &amp; Birth Support Collective of Western New York"
 		{navItems}
 		name="Anne-Marie Ochieng-Whitfield"
+		accountHref="#sign-in-address"
 		{signOut}
 	/>
 </stack-l>

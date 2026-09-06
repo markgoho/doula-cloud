@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -61,4 +62,57 @@ func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 	if signInAddress != "her-own@example.com" {
 		t.Fatalf("sign_in_address = %q, want it untouched by a contact-email edit", signInAddress)
 	}
+}
+
+// TestDetailHandler_ShowsHerOwnSignInAddressChange is the read side of
+// #619's activity record, and the one Client-authored row the
+// client-subject history has: her Practice must be able to answer "how
+// did this come to be?" and see her name against it, not a Staff
+// member's and not "Doula Cloud".
+//
+// The diff is written unsealed (ADR-0027 seals what changed, and this
+// row deliberately records no address at all -- ADR-0015 makes her login
+// hers, not the Practice's contact detail), so this also proves openDiff
+// passes a plaintext diff straight through rather than trying to unseal
+// it.
+func TestDetailHandler_ShowsHerOwnSignInAddressChange(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-reading-her-change"
+	practiceID := seedStaffWithMembership(t, db, identityUID)
+	clientID := seedClient(t, db, practiceID, "Margaretha", "contact@example.com")
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_client_id)
+		 VALUES ($1, 'client', $2, 'portal_sign_in_address_changed', '{}', 'client', $2)`,
+		practiceID, clientID,
+	); err != nil {
+		t.Fatalf("seed activity row: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/clients/"+clientID)
+	defer resp.Body.Close()
+	var out client.DetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+
+	for _, entry := range out.History {
+		if entry.ClientEvent == nil || entry.ClientEvent.EventType != "portal_sign_in_address_changed" {
+			continue
+		}
+		if entry.ClientEvent.ActorKind != "client" {
+			t.Fatalf("actorKind = %q, want client", entry.ClientEvent.ActorKind)
+		}
+		if entry.ClientEvent.ActorName == nil || *entry.ClientEvent.ActorName != "Margaretha" {
+			t.Fatalf("actorName = %v, want her own name", entry.ClientEvent.ActorName)
+		}
+		if string(entry.ClientEvent.Diff) != "{}" {
+			t.Fatalf("diff = %s, want an empty diff carrying neither address", entry.ClientEvent.Diff)
+		}
+		return
+	}
+	t.Fatalf("no sign-in-address change in history %+v", out.History)
 }

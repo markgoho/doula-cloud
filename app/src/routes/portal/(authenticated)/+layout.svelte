@@ -85,16 +85,6 @@
 				href: resolve('/portal/(authenticated)/engagements/[engagementId]/notifications', {
 					engagementId
 				})
-			},
-			// #619. In the bar rather than tucked behind an avatar menu:
-			// this is the only screen a Client has for anything about her
-			// own account, and a screen nobody can reach is a screen that
-			// does not exist.
-			{
-				label: 'Sign-in address',
-				href: resolve('/portal/(authenticated)/engagements/[engagementId]/sign-in-address', {
-					engagementId
-				})
 			}
 		];
 		return items.map((item) => ({ ...item, current: item.current ?? path.startsWith(item.href) }));
@@ -138,6 +128,9 @@
 	practiceName={detail?.practiceName ?? ''}
 	{navItems}
 	name={detail?.clientName ?? ''}
+	accountHref={resolve('/portal/(authenticated)/engagements/[engagementId]/sign-in-address', {
+		engagementId
+	})}
 	signOut={handleSignOut}
 />
 <main id="main" tabindex="-1">

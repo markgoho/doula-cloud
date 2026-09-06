@@ -19,10 +19,20 @@
 		practiceName: string;
 		navItems: NavItem[];
 		name: string;
+		/**
+		Where "Account" in the menu goes -- the Client portal's own account
+		screen (#619's sign-in address), the same slot the Staff bar already
+		fills. It belongs here rather than in `navItems`: the nav names the
+		care she is receiving, an account setting is not one of those, and
+		the measured floor below is what four destinations cost. Absent
+		means the menu shows Sign out alone, which is what the bar did
+		before there was such a screen.
+		*/
+		accountHref?: string;
 		signOut: () => Promise<SignOutOutcome>;
 	}
 
-	let { practiceName, navItems, name, signOut }: Properties = $props();
+	let { practiceName, navItems, name, accountHref, signOut }: Properties = $props();
 </script>
 
 <header>
@@ -35,7 +45,7 @@
 				{/each}
 			</nav>
 		</div>
-		<AvatarMenu {name} {signOut} />
+		<AvatarMenu {name} {accountHref} {signOut} />
 	</div>
 	<nav class="narrow" aria-label="Your care">
 		{#each navItems as item (item.href)}

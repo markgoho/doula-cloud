@@ -112,6 +112,24 @@ describe('Client portal authenticated layout', () => {
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeVisible();
 	});
 
+	/*
+	 * #619's screen is reached from the account menu, not the nav row. The
+	 * nav names the care she is receiving; where she signs in from is not
+	 * one of those, and the bar's measured content floor is what four
+	 * destinations beside the Practice's name cost. This asserts it is
+	 * reachable at all, which is the half a route with no affordance fails.
+	 */
+	it('offers her own account behind the menu, not as a sixth destination', async () => {
+		await setup();
+
+		await page.getByRole('button', { name: 'Your account, Tasha Bell' }).first().click();
+		const account = page.getByRole('link', { name: 'Account' }).first();
+		await expect.element(account).toBeVisible();
+		await expect
+			.element(account)
+			.toHaveAttribute('href', '/portal/engagements/engagement-1/sign-in-address');
+	});
+
 	it('consults the stored push preference once, wherever the Client happens to land', async () => {
 		await setup({ pathname: '/portal/engagements/engagement-1/contract' });
 

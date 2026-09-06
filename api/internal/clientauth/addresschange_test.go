@@ -18,6 +18,9 @@ import (
 const (
 	oldSignInAddress = "old@example.com"
 	newSignInAddress = "new@example.com"
+	// The request body's own field name, and the key a field-level
+	// refusal names in Details.
+	addressField = "email"
 )
 
 func newAddressChangeServer(db *testdb.DB) *httptest.Server {
@@ -124,20 +127,28 @@ func TestRequestAddressChangeHandler_OldAddressStillSignsIn(t *testing.T) {
 
 	identifier, _, session := seedSignedInClient(t, db, oldSignInAddress)
 
-	resp := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"new@example.com"}`)
+	resp := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"`+newSignInAddress+`"}`)
 	_ = resp.Body.Close()
 
-	oldResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"old@example.com"}`)
-	defer oldResp.Body.Close()
-	if countLiveMagicLinkTokens(t, db, identifier) != 1 {
-		t.Fatal("the old address stopped signing her in while the change was still pending")
+	// The unproved address first, and from zero: a sign-in request at it
+	// must mint nothing. Asking at the old address first would leave a
+	// live token behind, and Mint's own delete-then-insert plus the
+	// outbox's ON CONFLICT would keep the counts at one either way --
+	// the assertion would pass whether or not the new address wrongly
+	// matched.
+	newResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"`+newSignInAddress+`"}`)
+	defer newResp.Body.Close()
+	if got := countLiveMagicLinkTokens(t, db, identifier); got != 0 {
+		t.Fatalf("live sign-in tokens for the unproved new address = %d, want 0", got)
 	}
 
-	// And the new address signs nobody in yet.
-	newResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"new@example.com"}`)
-	defer newResp.Body.Close()
-	if countPendingMagicLinkMail(t, db, identifier) != 1 {
-		t.Fatal("the unproved new address minted a sign-in link of its own")
+	oldResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"`+oldSignInAddress+`"}`)
+	defer oldResp.Body.Close()
+	if got := countLiveMagicLinkTokens(t, db, identifier); got != 1 {
+		t.Fatalf("live sign-in tokens for the old address = %d, want 1 -- it stopped signing her in while the change was still pending", got)
+	}
+	if got := countPendingMagicLinkMail(t, db, identifier); got != 1 {
+		t.Fatalf("pending sign-in mail = %d, want 1", got)
 	}
 }
 
@@ -224,12 +235,17 @@ func TestRequestAddressChangeHandler_Refusals(t *testing.T) {
 		session string
 		body    string
 		want    int
+		// wantField is the field the refusal must name in Details
+		// (docs/api-design.md section 7) -- empty where the refusal is
+		// about the request as a whole and no control on the screen could
+		// carry it.
+		wantField string
 	}{
-		{"no session", "", `{"email":"new@example.com"}`, http.StatusUnauthorized},
-		{"invalid body", session, `not json`, http.StatusBadRequest},
-		{"empty address", session, `{"email":"  "}`, http.StatusBadRequest},
-		{"malformed address", session, `{"email":"new.example.com"}`, http.StatusBadRequest},
-		{"address is only an at sign", session, `{"email":"@"}`, http.StatusBadRequest},
+		{"no session", "", `{"email":"` + newSignInAddress + `"}`, http.StatusUnauthorized, ""},
+		{"invalid body", session, `not json`, http.StatusBadRequest, ""},
+		{"empty address", session, `{"email":"  "}`, http.StatusBadRequest, addressField},
+		{"malformed address", session, `{"email":"new.example.com"}`, http.StatusBadRequest, addressField},
+		{"address is only an at sign", session, `{"email":"@"}`, http.StatusBadRequest, addressField},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -237,6 +253,18 @@ func TestRequestAddressChangeHandler_Refusals(t *testing.T) {
 			defer resp.Body.Close()
 			if resp.StatusCode != tc.want {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
+			}
+			if tc.wantField == "" {
+				return
+			}
+			var body struct {
+				Details map[string]string `json:"details"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode refusal: %v", err)
+			}
+			if body.Details[tc.wantField] == "" {
+				t.Fatalf("details = %v, want a message against %q so the screen can put it on the field", body.Details, tc.wantField)
 			}
 		})
 	}

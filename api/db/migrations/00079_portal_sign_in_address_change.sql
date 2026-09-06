@@ -26,9 +26,12 @@ ALTER TYPE auth_token_purpose ADD VALUE 'client_sign_in_address_change';
 -- for this purpose first, so the address that token named goes with it
 -- and can never be spent by a link delivered on a late outbox retry.
 --
--- new_address is stored as she typed it, normalized only for the
--- uniqueness comparison portal_accounts_sign_in_address (00073) makes --
--- the same shape portal_accounts.sign_in_address itself keeps.
+-- new_address is stored normalized (lowercased and trimmed, by
+-- staffauth.NormalizeAddress at the handler), because it is what
+-- portal_accounts.sign_in_address is set to when the token is spent and
+-- portal_accounts_sign_in_address (00073) compares case-insensitively
+-- anyway -- storing two spellings of one address would only invite them
+-- to disagree.
 --
 -- No RLS, like auth_tokens (00061) itself: this row is read at spend
 -- time, which is unauthenticated -- establishing app.current_identity_uid
