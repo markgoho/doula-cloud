@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	isPushPermissionGranted,
 	portalNotificationPreferencePath,
 	portalPushSubscriptionsPath,
 	practicePushSubscriptionsPath,
@@ -87,5 +88,34 @@ describe('registerPushSubscriptionIfEnabled', () => {
 		await registerPushSubscriptionIfEnabled('/preference', '/subscribe', fetcher, register);
 
 		expect(register).not.toHaveBeenCalled();
+	});
+});
+
+describe('isPushPermissionGranted', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('is false when the Push/Notification APIs are unsupported', () => {
+		expect(isPushPermissionGranted()).toBe(false);
+	});
+
+	it('is false when this device has never been asked or has denied permission', () => {
+		vi.stubGlobal('Notification', { permission: 'default' });
+		vi.stubGlobal('navigator', { serviceWorker: {} });
+		vi.stubGlobal('PushManager', class {});
+
+		expect(isPushPermissionGranted()).toBe(false);
+
+		vi.stubGlobal('Notification', { permission: 'denied' });
+		expect(isPushPermissionGranted()).toBe(false);
+	});
+
+	it('is true only once permission is granted and Push is supported', () => {
+		vi.stubGlobal('Notification', { permission: 'granted' });
+		vi.stubGlobal('navigator', { serviceWorker: {} });
+		vi.stubGlobal('PushManager', class {});
+
+		expect(isPushPermissionGranted()).toBe(true);
 	});
 });

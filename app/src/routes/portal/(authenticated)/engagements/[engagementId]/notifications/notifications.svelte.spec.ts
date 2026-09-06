@@ -26,16 +26,20 @@ Object.assign(pageState, toPageState(fixture));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-// registerPushSubscription/unregisterPushSubscription touch the real
-// Service Worker/PushManager browser APIs (both are `v8 ignore`d in
-// pushRegistration.ts for exactly that reason) -- mocked here so this
-// spec proves what the route does with the durable preference, not
-// whether a headless browser happens to grant a subscription.
-const registerPushSubscription = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+// registerPushSubscription/unregisterPushSubscription/isPushPermissionGranted
+// touch the real Service Worker/PushManager/Notification browser APIs
+// (registerPushSubscription/unregisterPushSubscription are `v8 ignore`d in
+// pushRegistration.ts for exactly that reason) -- mocked here so this spec
+// proves what the route does with the durable preference and the
+// device-level signal, not whether a headless browser happens to grant a
+// subscription.
+const registerPushSubscription = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
 const unregisterPushSubscription = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const isPushPermissionGranted = vi.hoisted(() => vi.fn(() => true));
 vi.mock('#lib/pushRegistration.js', () => ({
 	registerPushSubscription,
 	unregisterPushSubscription,
+	isPushPermissionGranted,
 	portalPushSubscriptionsPath: (engagementId: string) =>
 		`/api/portal/engagements/${engagementId}/push-subscriptions`,
 	portalNotificationPreferencePath: (engagementId: string) =>
@@ -64,12 +68,18 @@ function mockApi({ loadResponse = jsonResponse({ enabled: false }), putResponse 
 
 const toggleButton = (label: string) => page.getByRole('button', { name: label });
 
+const DEVICE_BLOCKED_CAVEAT =
+	"Notifications are turned on, but this device is not receiving them. To fix this, allow notifications for this site in your browser's own settings.";
+
 const { engagementId } = fixture.params;
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	registerPushSubscription.mockClear();
+	registerPushSubscription.mockResolvedValue(true);
 	unregisterPushSubscription.mockClear();
+	isPushPermissionGranted.mockClear();
+	isPushPermissionGranted.mockReturnValue(true);
 });
 
 describe('the Client portal Notifications settings screen', () => {
@@ -103,6 +113,21 @@ describe('the Client portal Notifications settings screen', () => {
 		await expect.element(toggleButton('Turn off notifications')).toBeVisible();
 	});
 
+	// #715: the durable preference has no device dimension, so a device
+	// whose permission was revoked (or never worked) since it last turned
+	// notifications on needs its own, independent check on every mount --
+	// not only right after a toggle.
+	it('shows a device-level caveat when the preference is on but this device cannot receive pushes', async () => {
+		isPushPermissionGranted.mockReturnValue(false);
+		mockApi({ loadResponse: jsonResponse({ enabled: true }) });
+		await render(Page, {});
+
+		await expect.element(page.getByText(DEVICE_BLOCKED_CAVEAT)).toBeVisible();
+		await expect
+			.element(page.getByText('Notifications are currently on for this device.'))
+			.not.toBeInTheDocument();
+	});
+
 	// #303 AC3/AC4: turning it on persists the choice (so the next mount
 	// registers) and only then asks the browser to subscribe -- the
 	// explanation above has already been read by the time this fires.
@@ -125,6 +150,22 @@ describe('the Client portal Notifications settings screen', () => {
 		await expect
 			.element(page.getByRole('status'))
 			.toHaveTextContent('Notifications are on for this device.');
+	});
+
+	// #715 AC2: a failed subscribe attempt must never show the success
+	// notice -- the persistent status area's caveat is the only thing she
+	// sees, not a false "on for this device."
+	it('turns notifications on but the subscribe attempt fails: shows the caveat, not the success notice', async () => {
+		mockApi({ loadResponse: jsonResponse({ enabled: false }), putResponse: jsonResponse({ enabled: true }) });
+		registerPushSubscription.mockResolvedValue(false);
+		await render(Page, {});
+
+		await toggleButton('Turn on notifications').click();
+
+		await expect.element(page.getByText(DEVICE_BLOCKED_CAVEAT)).toBeVisible();
+		await expect
+			.element(page.getByText('Notifications are on for this device.'))
+			.not.toBeInTheDocument();
 	});
 
 	// #303 AC3/AC4: turning it off persists the mute first (the send-path
