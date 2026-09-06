@@ -94,10 +94,47 @@ export class PaginatedList<Item> {
 		this.#adopt(first);
 	}
 
+	/**
+	 * Adopts a page, but never exposes the shape `DataTable` cannot render
+	 * sanely: zero items with `hasMore: true` (#709). A per-viewer read
+	 * gate can filter a whole batch of rows out before any of them reach
+	 * the caller, so an endpoint is allowed to answer that way; this class
+	 * is what hides it, by holding `hasMore` at `false` until convergence
+	 * finds a page actually worth offering.
+	 */
 	#adopt(page: CursorPage<Item>): void {
-		this.items = page.items;
 		this.#cursor = page.nextCursor ?? '';
-		this.hasMore = page.hasMore;
+		if (page.items.length > 0 || !page.hasMore) {
+			this.items = page.items;
+			this.hasMore = page.hasMore;
+			return;
+		}
+		this.items = [];
+		this.hasMore = false;
+		void this.#converge(this.#generation);
+	}
+
+	/**
+	 * Silently pages past a run of zero-item/`hasMore: true` responses,
+	 * until one yields an item or the endpoint genuinely runs out, then
+	 * publishes that page. `loadMore` below has its own copy of the same
+	 * loop rather than calling this: it must keep the rows already on
+	 * screen while it runs, instead of blanking them to `[]` first.
+	 */
+	async #converge(generation: number): Promise<void> {
+		try {
+			let page: CursorPage<Item>;
+			do {
+				page = await this.#loadPage(this.#cursor);
+				if (generation !== this.#generation) return;
+				this.#cursor = page.nextCursor ?? '';
+			} while (page.items.length === 0 && page.hasMore);
+			this.items = page.items;
+			this.hasMore = page.hasMore;
+		} catch (error_) {
+			if (generation !== this.#generation) return;
+			this.loadMoreError = error_ instanceof Error ? error_.message : this.#failureMessage;
+		}
 	}
 
 	/**
@@ -131,6 +168,11 @@ export class PaginatedList<Item> {
 	 * Appends the next page. Does nothing when no page remains or one is
 	 * already in flight, so a double click is one request rather than two
 	 * that both append.
+	 *
+	 * Loops silently past a zero-item/`hasMore: true` response (#709)
+	 * rather than appending nothing and leaving `hasMore` true -- that
+	 * combination is exactly the empty-message-plus-Load-more
+	 * contradiction `DataTable` cannot render sanely.
 	 */
 	async loadMore(): Promise<void> {
 		if (!this.hasMore || this.isLoadingMore) return;
@@ -139,11 +181,14 @@ export class PaginatedList<Item> {
 		this.loadMoreError = '';
 		this.isLoadingMore = true;
 		try {
-			const next = await this.#loadPage(this.#cursor);
-			if (generation !== this.#generation) return;
+			let next: CursorPage<Item>;
+			do {
+				next = await this.#loadPage(this.#cursor);
+				if (generation !== this.#generation) return;
+				this.#cursor = next.nextCursor ?? '';
+				this.hasMore = next.hasMore;
+			} while (next.items.length === 0 && this.hasMore);
 			this.items = [...this.items, ...next.items];
-			this.#cursor = next.nextCursor ?? '';
-			this.hasMore = next.hasMore;
 		} catch (error_) {
 			if (generation !== this.#generation) return;
 			this.loadMoreError = error_ instanceof Error ? error_.message : this.#failureMessage;

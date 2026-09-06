@@ -266,4 +266,130 @@ describe('PaginatedList', () => {
 			expect(list.items).toEqual(['x', 'y']);
 		});
 	});
+
+	// #709: a per-viewer read gate can filter a whole page's rows out,
+	// so an endpoint may legitimately answer zero items with `hasMore:
+	// true`. Neither entry point -- the first page a route obtains, nor a
+	// subsequent page from `loadMore` -- may ever leave that shape sitting
+	// in `items`/`hasMore` for `DataTable` to render.
+	describe('converging past a zero-item page with more to come (#709)', () => {
+		describe('the first page', () => {
+			it('pages past an empty response and lands on the first non-empty one', async () => {
+				const loadPage = vi
+					.fn()
+					.mockResolvedValueOnce(page([], 'cursor-2'))
+					.mockResolvedValueOnce(page(['a'], 'cursor-3'));
+				const list = listOf(page([], 'cursor-1'), loadPage);
+
+				// Never exposed in between: the empty first page never sits
+				// alongside `hasMore: true`.
+				expect(list.items).toEqual([]);
+				expect(list.hasMore).toBe(false);
+
+				await vi.waitFor(() => expect(list.items).toEqual(['a']));
+
+				expect(list.hasMore).toBe(true);
+				expect(loadPage).toHaveBeenNthCalledWith(1, 'cursor-1');
+				expect(loadPage).toHaveBeenNthCalledWith(2, 'cursor-2');
+			});
+
+			it('lands on the genuinely-empty state once every page comes back empty', async () => {
+				const loadPage = vi
+					.fn()
+					.mockResolvedValueOnce(page([], 'cursor-2'))
+					.mockResolvedValueOnce(page([]));
+				const list = listOf(page([], 'cursor-1'), loadPage);
+
+				await vi.waitFor(() => expect(loadPage).toHaveBeenCalledTimes(2));
+
+				expect(list.items).toEqual([]);
+				expect(list.hasMore).toBe(false);
+			});
+
+			it('converges the same way when a route hands reset a fresh first page directly', async () => {
+				const loadPage = vi
+					.fn()
+					.mockResolvedValueOnce(page([], 'cursor-2'))
+					.mockResolvedValueOnce(page(['x'], 'cursor-3'));
+				const list = listOf(page(['seed']), loadPage);
+
+				list.reset(page([], 'cursor-1'));
+
+				await vi.waitFor(() => expect(list.items).toEqual(['x']));
+				expect(list.hasMore).toBe(true);
+			});
+
+			it("surfaces a thrown Error's own message on the failure text, not just loadMore's", async () => {
+				const loadPage = vi.fn().mockRejectedValue(new Error('The practice was not found'));
+				const list = listOf(page([], 'cursor-1'), loadPage);
+
+				await vi.waitFor(() => expect(list.loadMoreError).toBe('The practice was not found'));
+			});
+
+			it('drops a failure that arrives after the list moved on', async () => {
+				const held = Promise.withResolvers<CursorPage<string>>();
+				const loadPage = vi.fn().mockReturnValue(held.promise);
+				const list = listOf(page([], 'cursor-1'), loadPage);
+
+				list.abandon();
+				held.reject(new Error('stale failure'));
+				await vi.waitFor(() => expect(loadPage).toHaveBeenCalledTimes(1));
+
+				expect(list.loadMoreError).toBe('');
+			});
+
+			// So a rejected non-Error never renders an empty error box, the
+			// same guarantee loadMore's own catch makes.
+			it("falls back to the list's own failure message when something else is thrown", async () => {
+				const loadPage = vi.fn().mockRejectedValue('offline');
+				const list = listOf(page([], 'cursor-1'), loadPage);
+
+				await vi.waitFor(() => expect(list.loadMoreError).toBe('Failed to load more'));
+			});
+
+			it('drops a still-empty page that resolves after the list moved on', async () => {
+				const held = Promise.withResolvers<CursorPage<string>>();
+				const loadPage = vi.fn().mockReturnValue(held.promise);
+				const list = listOf(page([], 'cursor-1'), loadPage);
+
+				list.abandon();
+				held.resolve(page([], 'cursor-2'));
+				await vi.waitFor(() => expect(loadPage).toHaveBeenCalledTimes(1));
+
+				expect(list.items).toEqual([]);
+				expect(list.hasMore).toBe(false);
+			});
+		});
+
+		describe('loadMore', () => {
+			it('pages past an empty response and appends the first non-empty one', async () => {
+				const loadPage = vi
+					.fn()
+					.mockResolvedValueOnce(page([], 'cursor-2'))
+					.mockResolvedValueOnce(page(['b'], 'cursor-3'));
+				const list = listOf(page(['a'], 'cursor-1'), loadPage);
+
+				await list.loadMore();
+
+				expect(list.items).toEqual(['a', 'b']);
+				expect(list.hasMore).toBe(true);
+				expect(loadPage).toHaveBeenNthCalledWith(1, 'cursor-1');
+				expect(loadPage).toHaveBeenNthCalledWith(2, 'cursor-2');
+			});
+
+			it('exhausts a run of empty pages and stops offering more, without dropping existing rows', async () => {
+				const loadPage = vi
+					.fn()
+					.mockResolvedValueOnce(page([], 'cursor-2'))
+					.mockResolvedValueOnce(page([]));
+				const list = listOf(page(['a'], 'cursor-1'), loadPage);
+
+				await list.loadMore();
+
+				expect(list.items).toEqual(['a']);
+				expect(list.hasMore).toBe(false);
+				expect(loadPage).toHaveBeenCalledTimes(2);
+			});
+		});
+	});
 });
