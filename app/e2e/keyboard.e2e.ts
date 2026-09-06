@@ -175,8 +175,12 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	const { practiceId, clientId, staffHeaders } = seeded;
 
 	// The record the rename below collides with. Plain, no portal account:
-	// it exists only to be matched.
-	await seedClient(request, practiceId, staffHeaders, { givenName: 'Jane', familyName: 'Smith' });
+	// it exists only to be matched. Family name matches the seeded
+	// Client's own ("Client", from seedPortalClient) rather than an
+	// unrelated one: #814 narrowed the edit-path collision to an exact
+	// given-and-family match, so a rename that only retypes the given
+	// name needs the same family name here to still trigger it.
+	await seedClient(request, practiceId, staffHeaders, { givenName: 'Jane', familyName: 'Client' });
 
 	// #606: see the "Renata" walk above for why this is a cookie injection
 	// rather than signInByKeyboard for an enrolled Owner.
