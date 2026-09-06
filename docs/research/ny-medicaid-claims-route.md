@@ -88,8 +88,6 @@ The Service Center product itself is listed at "$0 / Start for Free*" with "Tran
 
 ## (c) Is a doula enrolled individually, or can an agency enroll as a group?
 
-## (c) Is a doula enrolled individually, or can an agency enroll as a group?
-
 **Both, and they are not alternatives — the group route requires the individual enrollment underneath it. Confirmed, and stated as a rule rather than inferred from other provider types.**
 
 Doula Policy Manual §4: "An individual doula or a doula-only group can enroll in the New York State Medicaid program as a doula services provider and bill Medicaid directly for doula services. A Medicaid-enrolled doula provider can also affiliate with a multi-professional group. Doula services may be provided through a Medicaid-enrolled individual provider, a doula-only group or a multi-professional group. **The individual doula in a doula-only group or multi-professional group must be enrolled as a Medicaid provider.** The New York State Medicaid-enrolled doula does not require supervision."
@@ -132,8 +130,6 @@ Four routes, evenly surveyed. All of them ultimately require the same two things
 **5. An outside billing service.** A human billing company takes the encounter data and does everything above on the provider's behalf, under its own Service Bureau ETIN with the doula's notarized Certification Statement on file (this is precisely the case the Service Bureau ETIN Application form describes). **Open to:** both. Cost is quote-only, and if it is a percentage of collections the 42 CFR 447.10(f) constraint in (a) applies to it directly.
 
 **Which route for whom, as a judgment (inference):** a solo doula's realistic options are ePACES or a clearinghouse. A fourteen-doula agency's realistic options are a clearinghouse, an outside billing service, or eXchange upload of files Doula Cloud generates. Direct EDI only makes sense if the vendor operates it for many Practices and amortizes the service bureau enrollment across them.
-
-## (e) Medicaid Managed Care
 
 ## (e) Medicaid Managed Care
 
