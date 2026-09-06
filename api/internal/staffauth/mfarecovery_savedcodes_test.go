@@ -62,7 +62,7 @@ func TestSignupHandler_MintsSavedCodesForFoundingOwner(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "Founding Practice", StaffName: "Founder", StaffEmail: "owner@example.com",
+		WorkState: "NY", PracticeName: "Founding Practice", StaffName: "Founder",
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {

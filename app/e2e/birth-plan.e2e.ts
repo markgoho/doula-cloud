@@ -33,7 +33,7 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${staffIdToken}` },
-		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', staffEmail , workState: 'NY' }
+		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', workState: 'NY' }
 	});
 	const signupBody = await signup.text();
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);

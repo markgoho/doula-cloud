@@ -33,12 +33,24 @@ const MsgNoMatchingStaffAccount = "no matching staff account"
 // (#745).
 const MsgAlreadyBelongsToPractice = "This account already belongs to a Practice. Log in instead."
 
+// MsgNoVerifiedAddress is what signup answers a caller whose ID token
+// carries no email claim. staff.email is the address the identity
+// authenticated with (#614), so an identity that reports no address has
+// nothing to put there -- the same reasoning, and the same 403, that
+// acceptInvite gives the invitee whose provider reports none.
+const MsgNoVerifiedAddress = "your account has no verified email address, so it cannot create a Practice"
+
 // SignupRequest is the body of a Practice-signup request: a new Practice,
 // created together with the Staff row for the person creating it.
+//
+// It deliberately carries no email address. staff.email comes off the
+// verified ID token (#614): it is what a later invitation to this
+// Practice is matched against and what #613's verification mail proves
+// control of, so it may not be self-asserted -- the same rule
+// resolveStaff already follows on the invitation-acceptance path.
 type SignupRequest struct {
 	PracticeName string `json:"practiceName"`
 	StaffName    string `json:"staffName"`
-	StaffEmail   string `json:"staffEmail"`
 	// WorkState is the US state this person works from, as a USPS
 	// two-letter abbreviation (#415). Required, because New York's sales
 	// tax on a Credit purchase is apportioned over where a Practice's
@@ -79,9 +91,8 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		}
 		req.PracticeName = strings.TrimSpace(req.PracticeName)
 		req.StaffName = strings.TrimSpace(req.StaffName)
-		req.StaffEmail = strings.TrimSpace(req.StaffEmail)
-		if req.PracticeName == "" || req.StaffName == "" || req.StaffEmail == "" {
-			apierr.WriteError(w, "practiceName, staffName, and staffEmail are required", http.StatusBadRequest)
+		if req.PracticeName == "" || req.StaffName == "" {
+			apierr.WriteError(w, "practiceName and staffName are required", http.StatusBadRequest)
 			return
 		}
 		workState, ok := NormalizeWorkState(req.WorkState)
@@ -91,7 +102,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		}
 		req.WorkState = workState
 
-		resp, status, msg := signup(r, tx, verified.UID, req)
+		resp, status, msg := signup(r, tx, verified, req)
 		if status != http.StatusCreated {
 			apierr.WriteError(w, msg, status)
 			return
@@ -125,8 +136,18 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 	})
 }
 
-func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) (SignupResponse, int, string) {
+func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req SignupRequest) (SignupResponse, int, string) {
 	ctx := r.Context()
+	identityUID := verified.UID
+
+	// The address is the token's, normalized exactly as acceptInvite
+	// normalizes the invited address, so the two bootstrap paths write
+	// one spelling of one address (#614). No claim, no Practice: this is
+	// checked before anything is written, so the refusal leaves no rows.
+	address := NormalizeAddress(verified.Email)
+	if address == "" {
+		return SignupResponse{}, http.StatusForbidden, MsgNoVerifiedAddress
+	}
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
@@ -179,7 +200,7 @@ func signup(r *http.Request, tx *sql.Tx, identityUID string, req SignupRequest) 
 	if !resuming {
 		err := tx.QueryRowContext(ctx,
 			`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, $4) RETURNING id`,
-			identityUID, req.StaffName, req.StaffEmail, req.WorkState,
+			identityUID, req.StaffName, address, req.WorkState,
 		).Scan(&staffID)
 		// Two signups for one identity racing each other, both past
 		// existingStaff before either inserted: the loser gets the same

@@ -40,7 +40,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 
 	const signup = await request.post(`${API_URL}/api/staff/signup`, {
 		headers: { Authorization: `Bearer ${ownerIdToken}` },
-		data: { practiceName: 'Rooted Birth Collective', staffName: 'Renata Vela', staffEmail: ownerEmail, workState: 'NY' }
+		data: { practiceName: 'Rooted Birth Collective', staffName: 'Renata Vela', workState: 'NY' }
 	});
 	expect(signup.ok(), `signup failed: ${signup.status()} ${await signup.text()}`).toBe(true);
 	const { practiceId } = await signup.json();

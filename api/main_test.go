@@ -314,7 +314,7 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	// test is about signup/session/landing wiring, so its fixture
 	// stands in for an already-enrolled Owner rather than exercising
 	// the gate a second time.
-	deps.Verifier = authntest.Verifier{UID: identityUID, SecondFactor: true}
+	deps.Verifier = authntest.Verifier{UID: identityUID, Email: "jamie@example.com", SecondFactor: true}
 	deps.DB = db.App
 	mux, _, _ := routes(deps)
 	srv := httptest.NewServer(mux)
@@ -324,7 +324,6 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 		WorkState:    "NY",
 		PracticeName: "Riverside Doulas",
 		StaffName:    "Jamie Owner",
-		StaffEmail:   "jamie@example.com",
 	})
 	signupReq, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader(signupBody))
 	signupReq.Header.Set("Authorization", "Bearer tok")
