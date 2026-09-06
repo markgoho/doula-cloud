@@ -21,6 +21,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import {
+		isPushPermissionGranted,
 		portalNotificationPreferencePath,
 		portalPushSubscriptionsPath,
 		registerPushSubscription,
@@ -31,12 +32,21 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
+	// The durable preference ("wants notifications") and this device's
+	// actual ability to receive a push are two separate facts (#715) --
+	// collapsed into one type rather than two booleans so "on but this
+	// device can't receive" is a state this type names, not an invariant
+	// two variables have to be kept in step to represent.
+	type NotificationStatus = 'off' | 'on' | 'blocked';
+
 	let isLoaded = $state(false);
 	let loadError = $state('');
-	let isEnabled = $state(false);
+	let notificationStatus: NotificationStatus = $state('off');
 	let isSaving = $state(false);
 	let saveError = $state('');
 	let savedNotice = $state('');
+
+	const isEnabled = $derived(notificationStatus !== 'off');
 
 	function preferenceURL(): string {
 		return portalNotificationPreferencePath(page.params.engagementId!);
@@ -49,7 +59,16 @@
 			return;
 		}
 		const data: { enabled: boolean } = await response.json();
-		isEnabled = data.enabled;
+		if (data.enabled) {
+			// A read of the device's current permission, never a subscribe
+			// attempt -- catches permission having been revoked since this
+			// device last subscribed, without the mere mount ever risking the
+			// browser's own permission prompt (see registerPushSubscriptionIfEnabled's
+			// doc comment for why that prompt is reserved for an explicit toggle).
+			notificationStatus = isPushPermissionGranted() ? 'on' : 'blocked';
+		} else {
+			notificationStatus = 'off';
+		}
 		isLoaded = true;
 	}
 
@@ -78,18 +97,19 @@
 				return;
 			}
 			const saved: { enabled: boolean } = await response.json();
-			isEnabled = saved.enabled;
 
 			const subscriptionsURL = portalPushSubscriptionsPath(page.params.engagementId!);
-			if (isEnabled) {
-				await registerPushSubscription(subscriptionsURL, apiFetchWithSession);
+			if (saved.enabled) {
+				const isSubscribed = await registerPushSubscription(subscriptionsURL, apiFetchWithSession);
+				notificationStatus = isSubscribed ? 'on' : 'blocked';
+				// A failed subscribe attempt must never claim success (#715) --
+				// the status snippet below shows the device-level caveat instead.
+				savedNotice = isSubscribed ? 'Notifications are on for this device.' : '';
 			} else {
 				await unregisterPushSubscription(subscriptionsURL, apiFetchWithSession);
+				notificationStatus = 'off';
+				savedNotice = 'Notifications are off.';
 			}
-
-			savedNotice = isEnabled
-				? 'Notifications are on for this device.'
-				: 'Notifications are off.';
 		} catch {
 			saveError = SERVICE_PROBLEM;
 		} finally {
@@ -106,9 +126,16 @@
 {/snippet}
 
 {#snippet status()}
-	<Text
-		text={isEnabled ? 'Notifications are currently on for this device.' : 'Notifications are currently off.'}
-	/>
+	{#if notificationStatus === 'off'}
+		<Text text="Notifications are currently off." />
+	{:else if notificationStatus === 'on'}
+		<Text text="Notifications are currently on for this device." />
+	{:else}
+		<Notice
+			variant="info"
+			message="Notifications are turned on, but this device is not receiving them. To fix this, allow notifications for this site in your browser's own settings."
+		/>
+	{/if}
 {/snippet}
 
 {#snippet actions()}

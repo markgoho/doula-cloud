@@ -64,14 +64,19 @@ export function portalNotificationPreferencePath(engagementId: string): string {
  * (no permission granted, headless/incognito browsers, no VAPID key
  * configured), and push notifications are an enhancement, not a
  * precondition for using the app -- any failure here is swallowed, never
- * surfaced to the caller or the page.
+ * thrown to the caller. The boolean return reports the outcome (#715) for
+ * a caller that needs to react to it -- the Notifications settings
+ * screen, which must not claim success when this resolves false;
+ * registerPushSubscriptionIfEnabled's own silent-by-design callers stay
+ * silent by simply not looking at it.
  */
 /* v8 ignore start -- requires the Service Worker/PushManager browser APIs, exercised by Playwright e2e not Vitest */
-export async function registerPushSubscription(subscribeURL: string, fetcher: Fetcher): Promise<void> {
+// eslint-disable-next-line unicorn/consistent-boolean-name -- an action verb, not a predicate; renaming would break every established call site for a name no clearer than this one
+export async function registerPushSubscription(subscribeURL: string, fetcher: Fetcher): Promise<boolean> {
 	try {
-		if (!('serviceWorker' in navigator) || !('PushManager' in globalThis)) return;
+		if (!('serviceWorker' in navigator) || !('PushManager' in globalThis)) return false;
 		const publicKey = vapidPublicKey();
-		if (!publicKey) return;
+		if (!publicKey) return false;
 
 		const registration = await navigator.serviceWorker.ready;
 		const subscription =
@@ -88,16 +93,36 @@ export async function registerPushSubscription(subscribeURL: string, fetcher: Fe
 			}));
 
 		const json = subscription.toJSON();
-		await fetcher(subscribeURL, {
+		const response = await fetcher(subscribeURL, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys })
 		});
+		return response.ok;
 	} catch {
 		// Best-effort registration -- see the doc comment above.
+		return false;
 	}
 }
 /* v8 ignore stop */
+
+/**
+ * Whether this device can receive a push right now, independently of the
+ * durable per-Engagement preference (#715): that preference carries no
+ * device dimension, so a Client who has switched browsers, denied the
+ * permission prompt, or revoked it since last granting it needs a
+ * device-local answer instead. A mere read of `Notification.permission` --
+ * never a subscribe attempt -- so calling this can never itself trigger
+ * the browser's own permission prompt.
+ */
+export function isPushPermissionGranted(): boolean {
+	return (
+		'Notification' in globalThis &&
+		'serviceWorker' in navigator &&
+		'PushManager' in globalThis &&
+		Notification.permission === 'granted'
+	);
+}
 
 /**
  * Consults preferenceURL before ever registering for push (#303 AC1/AC4):
@@ -118,7 +143,8 @@ export async function registerPushSubscriptionIfEnabled(
 	preferenceURL: string,
 	subscribeURL: string,
 	fetcher: Fetcher,
-	register: (subscribeURL: string, fetcher: Fetcher) => Promise<void> = registerPushSubscription
+	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors registerPushSubscription's own name, its default value
+	register: (subscribeURL: string, fetcher: Fetcher) => Promise<boolean> = registerPushSubscription
 ): Promise<void> {
 	let isEnabled = false;
 	try {
