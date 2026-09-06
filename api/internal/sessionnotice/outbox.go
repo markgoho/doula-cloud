@@ -61,7 +61,7 @@ const sessionEvictedSubject = "Doula Cloud: you were signed out in one browser"
 // Deliberately not sessionRevokedText: an eviction ends exactly one
 // session -- the one the browser she is standing at held -- and every
 // other device she is signed in from is untouched, which "all of your
-// sessions ... on every device" would misreport. See 00076 for the same
+// sessions ... on every device" would misreport. See 00077 for the same
 // reasoning at the schema.
 func sessionEvictedText() string {
 	return "Hello,\n\n" +
