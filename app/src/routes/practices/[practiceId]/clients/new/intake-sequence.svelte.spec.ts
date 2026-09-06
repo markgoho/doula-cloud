@@ -157,14 +157,15 @@ describe('the duplicate check', () => {
 
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
-		// GOV.UK asks for the message twice: once in the summary at the top
-		// of the page, and again against the group itself.
+		// GOV.UK asks for the message twice -- once in the summary at the
+		// top of the page, again against the group itself -- and the
+		// summary's entry links to the first control in the group.
 		await expect
-			.element(testPage.getByText('Choose whether this is the same person').first())
+			.element(testPage.getByRole('link', { name: 'Choose whether this is the same person' }))
+			.toHaveAttribute('href', '#intake-same-person-client-1');
+		await expect
+			.element(testPage.getByText('Choose whether this is the same person').last())
 			.toBeVisible();
-		expect(
-			await testPage.getByText('Choose whether this is the same person').elements()
-		).toHaveLength(2);
 	});
 
 	// ADR-0017's one deliberate override: it skips the match query
@@ -179,6 +180,11 @@ describe('the duplicate check', () => {
 
 		const [, init] = apiFetchWithSession.mock.calls[0];
 		expect(JSON.parse(init.body as string).override).toBe(true);
+		// The LAST call, not merely one of them: clearing the draft empties
+		// `matches`, and a reactive empty-matches guard on this page would
+		// fire on the way out and send a reader who had just saved to the
+		// summary instead of to the Client.
+		expect(goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/clients/client-9`);
 	});
 
 	it('reviews the changes before writing them to a Client already on file', async () => {

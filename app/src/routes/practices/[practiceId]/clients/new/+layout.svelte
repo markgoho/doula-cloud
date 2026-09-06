@@ -26,10 +26,10 @@
 	 * SvelteKit's own focus reset on navigation, and porting the
 	 * workaround would fight it.
 	 */
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
+	import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -44,18 +44,35 @@
 	 * editable before the save -- `name` is the given name, since that is
 	 * the one field search matches against all three name columns.
 	 */
-	function carried(key: string): string {
-		return page.url.searchParams.get(key)?.trim() ?? '';
+	function carried(): Partial<IntakeAnswers> {
+		const seeded: Partial<IntakeAnswers> = {};
+		for (const [parameter, key] of [
+			['name', 'givenName'],
+			['phone', 'phone'],
+			['email', 'email'],
+			['dateOfBirth', 'dateOfBirth']
+		] as const) {
+			const value = page.url.searchParams.get(parameter)?.trim();
+			// A key search did not carry is left off entirely. Seeding it as
+			// an empty string would be a value, and a value overwrites.
+			if (value) seeded[key] = value;
+		}
+		return seeded;
 	}
 
+	/*
+	 * `untrack`, because `start` READS the draft to decide whether to seed
+	 * it. Without this the effect depends on the given name, so it re-runs
+	 * on every keystroke -- and a reader who clears the given name to
+	 * retype it would have the draft re-seeded from a query string that is
+	 * no longer there. The Practice is the only thing this should react to.
+	 */
 	$effect(() => {
-		intakeDraft.start(practiceId, {
-			givenName: carried('name'),
-			phone: carried('phone'),
-			email: carried('email'),
-			dateOfBirth: carried('dateOfBirth')
+		void practiceId;
+		untrack(() => {
+			intakeDraft.start(practiceId, carried());
+			void intakeFlow.load(apiFetchWithSession, practiceId);
 		});
-		void intakeFlow.load(apiFetchWithSession, practiceId);
 	});
 </script>
 

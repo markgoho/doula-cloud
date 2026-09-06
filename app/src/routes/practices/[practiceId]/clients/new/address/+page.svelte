@@ -63,28 +63,32 @@
 
 		{#snippet content()}
 			<stack-l space="var(--space-5)">
-				<LabeledField id="intake-address-line-1" label="Address line 1">
-					{#snippet children({ id, describedBy })}
-						<TextInput
-							{id}
-							{describedBy}
-							value={intakeDraft.answers.addressLine1}
-							onInput={(value) => intakeDraft.update({ addressLine1: value })}
-							autocomplete="off"
-						/>
-					{/snippet}
-				</LabeledField>
-				<LabeledField id="intake-address-line-2" label="Address line 2 (optional)">
-					{#snippet children({ id, describedBy })}
-						<TextInput
-							{id}
-							{describedBy}
-							value={intakeDraft.answers.addressLine2}
-							onInput={(value) => intakeDraft.update({ addressLine2: value })}
-							autocomplete="off"
-						/>
-					{/snippet}
-				</LabeledField>
+				<div class="line">
+					<LabeledField id="intake-address-line-1" label="Address line 1">
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								value={intakeDraft.answers.addressLine1}
+								onInput={(value) => intakeDraft.update({ addressLine1: value })}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+				</div>
+				<div class="line">
+					<LabeledField id="intake-address-line-2" label="Address line 2 (optional)">
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								value={intakeDraft.answers.addressLine2}
+								onInput={(value) => intakeDraft.update({ addressLine2: value })}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+				</div>
 				<div class="town">
 					<LabeledField id="intake-address-locality" label="City">
 						{#snippet children({ id, describedBy })}
@@ -141,9 +145,23 @@
 		 * box that could hold a street name tells the reader the wrong
 		 * thing about what goes in it -- GOV.UK's Text input sizing rule.
 		 * `ch` tracks the font rather than a canvas measurement, and
-		 * `max-inline-size` rather than a width, so at 320px the box
+		 * `max-inline-size` rather than a width, so at 320px each box
 		 * shrinks with the column instead of overflowing it (ADR-0024).
+		 *
+		 * The `:global(input)` is what makes any of it visible.
+		 * `TextInput` sets no width of its own, so an <input> takes the
+		 * browser's default `size` -- about 208px -- whatever column it is
+		 * put in, and a 12ch wrapper around one would have been a box the
+		 * control painted straight out of. `Select` and `Textarea` both
+		 * stretch, so the three controls in one form do not agree; that is
+		 * app-wide, predates this ticket, and is its own.
 		 */
+		.line :global(input),
+		.town :global(input),
+		.short :global(input) {
+			inline-size: 100%;
+		}
+
 		.town {
 			max-inline-size: 24ch;
 		}

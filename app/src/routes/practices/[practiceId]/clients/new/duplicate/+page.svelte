@@ -23,6 +23,7 @@
 	 * Nothing has been saved when this page appears, which is why the
 	 * first line says so.
 	 */
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -42,6 +43,9 @@
 	import { JOURNEY, basePath, detailHref, knownAs, saveIntake } from '../intake.js';
 
 	const DIFFERENT_PERSON = 'different';
+	// Named rather than generated, so the error summary can point an
+	// entry at the first radio by id.
+	const ANSWER_NAME = 'intake-same-person';
 
 	const practiceId = $derived(page.params.practiceId ?? '');
 	const base = $derived(basePath(practiceId));
@@ -62,9 +66,16 @@
 	 * no matches in the draft: they live in memory and the 409 that
 	 * produced them is not repeated by a page load. The summary is where
 	 * the sequence was, so that is where they go.
+	 *
+	 * `onMount`, deliberately, not an `$effect`. Every way OFF this page
+	 * clears the draft, which empties `matches` -- so a reactive check
+	 * would fire on the way out and race the navigation it was reacting
+	 * to, sending a reader who had just saved to the summary instead of
+	 * to the Client. The question this asks is only ever about how the
+	 * page was ARRIVED at.
 	 */
-	$effect(() => {
-		if (intakeFlow.status === 'ready' && intakeDraft.matches.length === 0) {
+	onMount(() => {
+		if (intakeDraft.matches.length === 0) {
 			void goto(`${base}/check`);
 		}
 	});
@@ -97,7 +108,15 @@
 	async function handleContinue(event: SubmitEvent) {
 		event.preventDefault();
 		if (answer === '') {
-			errors = [{ message: 'Choose whether this is the same person' }];
+			// Linked to the first option, which is where GOV.UK's error
+			// summary sends a reader whose refusal belongs to a group: the
+			// first control in it, not the group itself.
+			errors = [
+				{
+					message: 'Choose whether this is the same person',
+					targetId: `${ANSWER_NAME}-${options[0]!.value}`
+				}
+			];
 			return;
 		}
 		errors = [];
@@ -198,6 +217,7 @@
 			{#snippet content()}
 				<stack-l space="var(--space-5)">
 					<RadioGroup
+						name={ANSWER_NAME}
 						{options}
 						value={answer}
 						onChange={(chosen) => (answer = chosen)}

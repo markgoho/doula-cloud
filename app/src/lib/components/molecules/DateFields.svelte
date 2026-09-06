@@ -148,21 +148,51 @@
 		 * the Templates guarantee a --form-max column and no field
 		 * widths. A month is two digits and a year is four, and GOV.UK
 		 * sizes them that way because a box that could hold a sentence
-		 * invites one. `ch` is the digit's own advance width, so this
-		 * tracks the font rather than a canvas measurement -- plus the
-		 * input's own horizontal padding and border on each side, which
-		 * is what the extra two characters cover.
+		 * invites one.
 		 *
-		 * `flex-basis`, not a fixed width: `cluster-l` wraps, so at 320px
-		 * with a large text size the three boxes drop onto their own
-		 * lines rather than overflowing (ADR-0024 rule 1).
+		 * `ch` is the advance width of a zero, so the number of digits is
+		 * written as digits and tracks the font rather than a canvas
+		 * measurement. `--space-6` is `TextInput`'s own `--space-3` of
+		 * horizontal padding on each side; without it the box is sized
+		 * for the text and the text has nowhere to sit. One character of
+		 * slack past the digits it holds, because `ch` measures a zero
+		 * and a 4 is wider -- "1988" clipped at an exact 4ch, which is
+		 * the kind of thing only the rendered page says. GOV.UK's own
+		 * two- and four-character widths are more generous still.
+		 *
+		 * `min-inline-size: 0` is what makes any of it apply. A flex
+		 * item's automatic minimum is its min-content, and an <input>'s
+		 * min-content is the browser's default `size` -- about 193px --
+		 * so every box rendered at the full column width until this was
+		 * added. Caught by looking at the rendered page: the 320px sweep
+		 * measures overflow, and three boxes that are each too WIDE for
+		 * their content still fit, one under the other.
+		 *
+		 * `cluster-l` still wraps, so at a large text size the three
+		 * boxes drop onto their own lines rather than overflowing
+		 * (ADR-0024 rule 1).
 		 */
 		.box {
-			flex: 0 1 4ch;
+			flex: 0 1 auto;
+			min-inline-size: 0;
+			inline-size: calc(3ch + var(--space-6));
 		}
 
 		.box.wide {
-			flex: 0 1 6ch;
+			inline-size: calc(5ch + var(--space-6));
+		}
+
+		/*
+		 * `TextInput` sets no width of its own, so an <input> takes the
+		 * browser's default `size` -- about 208px -- whatever column it is
+		 * put in. `Select` and `Textarea` both stretch, which is why the
+		 * three controls in one form do not agree; that is app-wide and is
+		 * its own ticket. Here the box is the width, and the input fills
+		 * it, so a two-character box holds a two-character control rather
+		 * than painting over its neighbour.
+		 */
+		.box :global(input) {
+			inline-size: 100%;
 		}
 	}
 </style>

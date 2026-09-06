@@ -45,6 +45,20 @@ describe('IntakeDraft', () => {
 		expect(draft.answers.givenName).toBe('Sara');
 	});
 
+	// The layout seeds from the query string on every render, and a reader
+	// who clears the given name to retype it flips `hasStarted` back to
+	// false -- so a seed carrying empty strings would wipe the phone,
+	// email and date of birth already typed on the pages after it.
+	it('never seeds a key the search did not carry', () => {
+		const draft = new IntakeDraft();
+		draft.start('p1', { givenName: 'Sarah', phone: '555-0100' });
+		draft.update({ givenName: '' });
+
+		draft.start('p1', {});
+
+		expect(draft.answers.phone).toBe('555-0100');
+	});
+
 	it('drops the draft when the Practice changes', () => {
 		const draft = new IntakeDraft();
 		draft.start('p1', { givenName: 'Sarah' });
@@ -80,14 +94,12 @@ describe('IntakeDraft', () => {
 		const draft = new IntakeDraft();
 		draft.start('p1', { givenName: 'Sarah' });
 		draft.visit('name');
-		draft.isReturningToCheck = true;
 		draft.matches = [];
 
 		draft.clear();
 
 		expect(draft.answers).toEqual(blankAnswers());
 		expect(draft.visitedSteps).toEqual([]);
-		expect(draft.isReturningToCheck).toBe(false);
 		expect(sessionStorage.getItem('doula-cloud:intake:p1')).toBeNull();
 	});
 

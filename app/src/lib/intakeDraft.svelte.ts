@@ -103,12 +103,6 @@ export class IntakeDraft {
 	 */
 	visitedSteps = $state<string[]>([]);
 	/**
-	 * Set while the reader is inside a Change link's round trip from
-	 * check-answers, so Continue returns there instead of walking the
-	 * rest of the sequence again.
-	 */
-	isReturningToCheck = $state(false);
-	/**
 	 * The matches a refused save named (#466's duplicate-check page).
 	 * Held here rather than in the page's own state because the page that
 	 * shows them is a route of its own, reached by navigation.
@@ -134,7 +128,6 @@ export class IntakeDraft {
 			this.practiceId = practiceId;
 			this.answers = readStored(practiceId) ?? blankAnswers();
 			this.visitedSteps = [];
-			this.isReturningToCheck = false;
 			this.matches = [];
 		}
 		if (!this.hasStarted) {
@@ -167,7 +160,6 @@ export class IntakeDraft {
 		clearStored(this.practiceId);
 		this.answers = blankAnswers();
 		this.visitedSteps = [];
-		this.isReturningToCheck = false;
 		this.matches = [];
 	}
 }
