@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail, HistoryEntry } from '#lib/clientDetail.js';
+import { formatActivityTimestamp } from '#lib/dates.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts. This
@@ -189,6 +190,14 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Jamie Doula' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Record created' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Sam Admin' })).toBeVisible();
+		// ADR-0022: the exact instant stays underneath the shared ledger's
+		// own relative-or-absolute display string.
+		await expect
+			.element(testPage.getByText(formatActivityTimestamp('2026-01-02T00:00:00Z')).first())
+			.toHaveAttribute('datetime', '2026-01-02T00:00:00Z');
+		await expect
+			.element(testPage.getByText(formatActivityTimestamp('2026-01-01T00:00:00Z')).first())
+			.toHaveAttribute('datetime', '2026-01-01T00:00:00Z');
 	});
 
 	it('says an erased record was erased, and that Stripe is not done yet (ADR-0027)', async () => {

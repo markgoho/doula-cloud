@@ -13,6 +13,7 @@
 		type HistoryEntry
 	} from '#lib/clientDetail.js';
 	import { kindLabel, withdrawRequest } from '#lib/engagementRequest.js';
+	import { formatActivityTimestamp } from '#lib/dates.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -116,8 +117,16 @@
 		}
 	}
 
+	// ADR-0022: the shared ledger's own relative-or-absolute display
+	// string, not this route's plain locale date -- the merged row union's
+	// own `at` also feeds the datetimeAccessor below, carrying the exact
+	// instant.
 	function historyWhen(entry: HistoryEntry): string {
-		return formattedDate(entry.at);
+		return formatActivityTimestamp(entry.at);
+	}
+
+	function historyAt(entry: HistoryEntry): string {
+		return entry.at;
 	}
 
 	// Best-effort, and deliberately not folded into the try/catch below:
@@ -339,9 +348,9 @@
 {#snippet historySection()}
 	<DataTable
 		columns={[
-			{ label: 'When', accessor: historyWhen },
-			{ label: 'Who', accessor: historyWho },
-			{ label: 'What', accessor: historyWhat }
+			{ label: 'When', accessor: historyWhen, variant: 'meta' as const, datetimeAccessor: historyAt },
+			{ label: 'What', accessor: historyWhat, variant: 'body' as const },
+			{ label: 'Who', accessor: historyWho, variant: 'muted' as const }
 		]}
 		rows={detail!.history}
 		hasMore={false}
