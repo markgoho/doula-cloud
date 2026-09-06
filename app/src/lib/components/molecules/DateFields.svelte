@@ -187,9 +187,9 @@
 		 * browser's default `size` -- about 208px -- whatever column it is
 		 * put in. `Select` and `Textarea` both stretch, which is why the
 		 * three controls in one form do not agree; that is app-wide and is
-		 * its own ticket. Here the box is the width, and the input fills
-		 * it, so a two-character box holds a two-character control rather
-		 * than painting over its neighbour.
+		 * #805, which takes this rule out when it lands. Here the box is
+		 * the width and the input fills it, so a two-character box holds a
+		 * two-character control rather than painting over its neighbour.
 		 */
 		.box :global(input) {
 			inline-size: 100%;

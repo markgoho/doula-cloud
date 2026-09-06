@@ -154,7 +154,8 @@
 		 * put in, and a 12ch wrapper around one would have been a box the
 		 * control painted straight out of. `Select` and `Textarea` both
 		 * stretch, so the three controls in one form do not agree; that is
-		 * app-wide, predates this ticket, and is its own.
+		 * app-wide, predates this ticket, and is #805, which removes this
+		 * rule when it lands.
 		 */
 		.line :global(input),
 		.town :global(input),
