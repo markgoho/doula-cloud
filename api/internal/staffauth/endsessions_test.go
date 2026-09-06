@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -14,15 +15,16 @@ import (
 func newEndSessionsServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("DELETE /practices/{practiceId}/staff/{staffId}/sessions",
-		staffauth.Middleware(db.App)(staffauth.EndSessionsHandler(&tasknudge.FakeEnqueuer{})))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), &tasknudge.FakeEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func deleteSessions(t *testing.T, srv *httptest.Server, session string, practiceID, staffID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
-		srv.URL+"/practices/"+practiceID+"/staff/"+staffID+"/sessions", nil)
+		srv.URL+"/api/practices/"+practiceID+"/staff/"+staffID+"/sessions", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -49,7 +51,7 @@ func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete,
-		srv.URL+"/practices/"+practiceID+"/staff/"+targetID+"/sessions", nil)
+		srv.URL+"/api/practices/"+practiceID+"/staff/"+targetID+"/sessions", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

@@ -37,6 +37,14 @@ const (
 // rather than defining a third copy.
 const MsgInternalError = "internal error"
 
+// PortalPopulation is the shared OpenGet reason for every Client-portal
+// read: ADR-0008's role table describes Staff at a Practice, and a Client
+// holds no Membership to check against, so there is nothing for a role
+// declaration to be about. Every package that mounts a portal GET reaches
+// for this one string rather than defining its own copy, so a reader
+// scanning any of them recognizes the same reason.
+const PortalPopulation = "clientauth.Middleware, not staffauth -- a Client holds no Membership, so ADR-0008's read table has nothing to say about this route"
+
 // ClientID returns the resolved Client id for the current request.
 func ClientID(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(clientIDKey).(string)

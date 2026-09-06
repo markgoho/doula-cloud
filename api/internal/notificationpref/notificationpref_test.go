@@ -8,20 +8,19 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/notificationpref"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newPortalServer mounts the same notification-preference routes main.go
-// wires up for the Client-portal population, behind clientauth.Middleware.
+// newPortalServer mounts this package's whole surface through
+// notificationpref.Mount, the same call main.go makes on the real
+// GatedRouter.
 func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /portal/engagements/{engagementId}/notification-preference",
-		clientauth.Middleware(db.App)(notificationpref.GetHandler()))
-	mux.Handle("PUT /portal/engagements/{engagementId}/notification-preference",
-		clientauth.Middleware(db.App)(notificationpref.SetHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	notificationpref.Mount(g, db.App)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -72,7 +71,7 @@ func TestGetHandler_NeverDecidedReportsDisabled(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedRequest(t, session, http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/notification-preference", nil)
+	resp := authedRequest(t, session, http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
@@ -95,7 +94,7 @@ func TestSetHandler_TurnsOnRecordsChoiceAndActivity(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := json.Marshal(notificationpref.SetRequest{Enabled: true})
-	resp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+engagementID+"/notification-preference", body)
+	resp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
@@ -126,11 +125,11 @@ func TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity(t *testing.T) {
 	defer srv.Close()
 
 	onBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: true})
-	onResp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+engagementID+"/notification-preference", onBody)
+	onResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", onBody)
 	_ = onResp.Body.Close()
 
 	offBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	offResp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+engagementID+"/notification-preference", offBody)
+	offResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", offBody)
 	if offResp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", offResp.StatusCode, http.StatusOK)
 	}
@@ -142,7 +141,7 @@ func TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity(t *testing.T) {
 		t.Fatalf("notification_preferences row = (muted=%v, found=%v), want (true, true)", muted, found)
 	}
 
-	getResp := authedRequest(t, session, http.MethodGet, srv.URL+"/portal/engagements/"+engagementID+"/notification-preference", nil)
+	getResp := authedRequest(t, session, http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", nil)
 	defer getResp.Body.Close()
 	if got := decodePreference(t, getResp); got.Enabled {
 		t.Fatalf("GET after turning off: Enabled = %v, want false", got.Enabled)
@@ -166,7 +165,7 @@ func TestSetHandler_InvalidJSONBody(t *testing.T) {
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+engagementID+"/notification-preference", []byte("not json"))
+	resp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementID+"/notification-preference", []byte("not json"))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -200,7 +199,7 @@ func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) 
 	defer srvB.Close()
 
 	body, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	resp := authedRequest(t, sessionB, http.MethodPut, srvB.URL+"/portal/engagements/"+engagementA+"/notification-preference", body)
+	resp := authedRequest(t, sessionB, http.MethodPut, srvB.URL+"/api/portal/engagements/"+engagementA+"/notification-preference", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d (Client B does not own Engagement A)", resp.StatusCode, http.StatusForbidden)
@@ -236,15 +235,15 @@ func TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected(t *test
 	// after muting one" would be indistinguishable from "never decided".
 	onBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: true})
 	for _, id := range []string{mutedEngagementID, otherEngagementID} {
-		resp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+id+"/notification-preference", onBody)
+		resp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+id+"/notification-preference", onBody)
 		_ = resp.Body.Close()
 	}
 
 	offBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	offResp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+mutedEngagementID+"/notification-preference", offBody)
+	offResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+mutedEngagementID+"/notification-preference", offBody)
 	_ = offResp.Body.Close()
 
-	otherResp := authedRequest(t, session, http.MethodGet, srv.URL+"/portal/engagements/"+otherEngagementID+"/notification-preference", nil)
+	otherResp := authedRequest(t, session, http.MethodGet, srv.URL+"/api/portal/engagements/"+otherEngagementID+"/notification-preference", nil)
 	defer otherResp.Body.Close()
 	if got := decodePreference(t, otherResp); !got.Enabled {
 		t.Fatalf("sibling Engagement's Enabled = %v, want true (explicitly on, unaffected by the other Engagement's mute)", got.Enabled)
@@ -292,7 +291,7 @@ func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *test
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
 	muteBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
-	muteResp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+engagementA+"/notification-preference", muteBody)
+	muteResp := authedRequest(t, session, http.MethodPut, srv.URL+"/api/portal/engagements/"+engagementA+"/notification-preference", muteBody)
 	_ = muteResp.Body.Close()
 
 	var endpointB string

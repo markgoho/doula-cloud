@@ -22,7 +22,7 @@ func TestAwaitingReplyHandler_EmptyPracticeHasNoEngagementsWaiting(t *testing.T)
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -58,7 +58,7 @@ func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	var got message.AwaitingReplyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -97,7 +97,7 @@ func TestAwaitingReplyHandler_ContractorSeesOnlyHerAttachedEngagements(t *testin
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer resp.Body.Close()
 	var got message.AwaitingReplyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -119,7 +119,7 @@ func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply?cursor=not!valid!base64!")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -147,7 +147,7 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer firstResp.Body.Close()
 	var first message.AwaitingReplyResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -158,7 +158,7 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second message.AwaitingReplyResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
@@ -205,7 +205,7 @@ func TestAwaitingReplyHandler_ContractorPaginatesAcrossPages(t *testing.T) {
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
 	defer firstResp.Body.Close()
 	var first message.AwaitingReplyResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -216,7 +216,7 @@ func TestAwaitingReplyHandler_ContractorPaginatesAcrossPages(t *testing.T) {
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second message.AwaitingReplyResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {

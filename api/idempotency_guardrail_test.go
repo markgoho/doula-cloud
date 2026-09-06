@@ -1,91 +1,58 @@
 package main
 
 import (
-	"os"
-	"regexp"
 	"strings"
 	"testing"
 )
 
-// gateWriteMutating finds every mutating (POST/PUT/PATCH/DELETE) route
-// registered straight through GatedRouter.Write, skipping
-// idempotency.Router.
+// TestRoutes_NoPracticeWriteBypassesIdempotencyRouter: every mutating
+// route mounted under /api/practices/{practiceId}/... must go through
+// idempotency.Router (ir.Replayable or ir.Exempt), which is what forces
+// an idempotency stance to be declared. GatedRouter.Write would mount it
+// just as well and ask for nothing.
 //
-// This regex used to look for mux.Handle, which routes_practice.go never
-// had access to in the first place -- that file has always taken
-// (g, ir, d) and no mux, so the check could not fail however wrong the
-// file got. Now that every other route file goes through the same router,
-// g.Write is the way a mutating route here would actually bypass its
-// idempotency stance, and the test has something real to catch.
-var gateWriteMutating = regexp.MustCompile(`g\.Write\(\s*"(POST|PUT|PATCH|DELETE) ([^"]+)"`)
+// #836 moved every feature's registration out of routes_practice.go into
+// that feature's own Mount, so a source scan of one file can no longer
+// see them all -- this walks the real registries routes() builds
+// instead: g.Routes() has every write regardless of which package
+// registered it, and ir.Routes() has only the ones that went through the
+// idempotency seam. A Practice-scoped write missing from the second is
+// the bypass.
+func TestRoutes_NoPracticeWriteBypassesIdempotencyRouter(t *testing.T) {
+	_, gRoutes, irRoutes := routes(testDeps())
 
-// TestRoutes_NoMutatingRouteInPracticeRoutesBypassesIdempotencyRouter:
-// every mutating route routes_practice.go registers must go through
-// idempotency.Router (ir.Replayable or ir.Exempt), which is what forces a
-// stance to be declared. GatedRouter.Write would mount it just as well
-// and ask for nothing, so a mutating route reaching for that verb in this
-// file is the bypass -- everywhere else in the package it is the ordinary
-// way to mount a write.
-func TestRoutes_NoMutatingRouteInPracticeRoutesBypassesIdempotencyRouter(t *testing.T) {
-	src := readSourceFile(t, "routes_practice.go")
+	declared := make(map[string]bool, len(irRoutes))
+	for _, route := range irRoutes {
+		declared[route.Pattern] = true
+	}
 
-	if matches := gateWriteMutating.FindAllStringSubmatch(src, -1); len(matches) > 0 {
-		for _, m := range matches {
-			t.Errorf("route %q %q is registered through g.Write in routes_practice.go, bypassing idempotency.Router -- register it through ir.Replayable or ir.Exempt instead", m[1], m[2])
+	found := 0
+	for _, route := range gRoutes {
+		if !route.Write || !strings.HasPrefix(route.Pattern, "/api/practices/{practiceId}") {
+			continue
+		}
+		found++
+		key := route.Method + " " + route.Pattern
+		if !declared[key] {
+			t.Errorf("route %q is a Practice-scoped write not registered through idempotency.Router -- register it through ir.Replayable or ir.Exempt instead", key)
 		}
 	}
-}
-
-// idempotencyRouterCall finds every ir.Replayable( or ir.Exempt( call in
-// this package's own source, so its own balanced-paren statement can be
-// checked for whether it actually wraps its handler in idempotency.Wrap.
-var idempotencyRouterCall = regexp.MustCompile(`ir\.(Replayable|Exempt)\(`)
-
-// TestRoutes_IdempotencyDeclarationMatchesItsHandlerChain proves the two
-// declaration methods aren't just self-reported labels: a route declared
-// through ir.Replayable actually carries idempotency.Wrap somewhere in
-// its handler chain, and a route declared through ir.Exempt does not.
-// idempotency.Router itself can't check this -- an http.Handler value
-// carries no way to ask "were you built with Wrap?" -- so this is the
-// belt to that braces, scanning routes_practice.go's own text the same
-// way TestRoutes_NoEngagementWriteBypassesTheAttachingWriteGate checks
-// staffauth.AttachingWrite.
-func TestRoutes_IdempotencyDeclarationMatchesItsHandlerChain(t *testing.T) {
-	src := readSourceFile(t, "routes_practice.go")
-
-	matches := idempotencyRouterCall.FindAllStringSubmatchIndex(src, -1)
-	if len(matches) == 0 {
-		t.Fatal("found zero ir.Replayable/ir.Exempt calls in routes_practice.go -- did the regex stop matching the source?")
-	}
-	for _, m := range matches {
-		method := src[m[2]:m[3]]
-		stmt := balancedParenStatement(src, m[0])
-		wrapped := strings.Contains(stmt, "idempotency.Wrap(")
-
-		switch method {
-		case "Replayable":
-			if !wrapped {
-				t.Errorf("ir.Replayable call does not contain idempotency.Wrap( in its handler chain: %s", stmt)
-			}
-		case "Exempt":
-			if wrapped {
-				t.Errorf("ir.Exempt call contains idempotency.Wrap( in its handler chain -- declare it Replayable instead: %s", stmt)
-			}
-		}
+	if found == 0 {
+		t.Fatal("found zero Practice-scoped writes in g.Routes() -- did registerPracticeRoutes stop wiring feature Mounts?")
 	}
 }
 
 // TestRoutes_EveryMutatingPracticeRouteHasIdempotencyDeclaration is the
 // idempotency-stance mirror of TestRoutes_EveryDeclaredGETHasRoleDeclaration,
 // run against the real registry routes() builds: every mutating route
-// registerPracticeRoutes registered through idempotency.Router is either
-// Replayable or carries a non-empty exemption reason.
-// idempotency.Router.Exempt already panics before an empty reason could
-// reach this table, so this test is the belt to that braces.
+// registered through idempotency.Router is either Replayable or carries a
+// non-empty exemption reason. idempotency.Router.Exempt already panics
+// before an empty reason could reach this table, so this test is the
+// belt to that braces.
 func TestRoutes_EveryMutatingPracticeRouteHasIdempotencyDeclaration(t *testing.T) {
 	_, _, registry := routes(testDeps())
 	if len(registry) == 0 {
-		t.Fatal("routes() registered zero mutating routes through idempotency.Router -- did registerPracticeRoutes stop wiring ir calls?")
+		t.Fatal("routes() registered zero mutating routes through idempotency.Router -- did registerPracticeRoutes stop wiring feature Mounts?")
 	}
 	for _, route := range registry {
 		if route.Replayable {
@@ -98,19 +65,4 @@ func TestRoutes_EveryMutatingPracticeRouteHasIdempotencyDeclaration(t *testing.T
 			t.Errorf("route %q has no idempotency declaration", route.Pattern)
 		}
 	}
-}
-
-// readSourceFile reads one file from this package's own directory --
-// mirrors packageSource's #nosec rationale in gate_guardrail_test.go: name
-// is a fixed literal this test passes, never attacker-controlled.
-func readSourceFile(t *testing.T, name string) string {
-	t.Helper()
-	// #nosec G304 -- name is a fixed literal this test itself passes, not
-	// attacker-controlled
-	src, err := os.ReadFile(name)
-	if err != nil {
-		// coverage:ignore reason: this package's own source file is always readable while its tests run
-		t.Fatalf("read %s: %v", name, err)
-	}
-	return string(src)
 }

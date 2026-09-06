@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -123,24 +124,24 @@ func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *str
 	return id
 }
 
-// newConnectServer mounts GetConnectStatusHandler the way main.go really
-// does -- through GatedRouter with the "owner" declaration, mirroring
-// PostConnectHandler's own Owner-only gate (#315; ADR-0008 has no read-
-// table row for Stripe Connect state yet, see #267).
+// newConnectServer mounts this package's whole surface through
+// payments.Mount, the same call main.go makes on the real GatedRouter and
+// idempotency.Router -- GetConnectStatusHandler's "owner" declaration
+// mirrors PostConnectHandler's own Owner-only gate (#315; ADR-0008 has no
+// read-table row for Stripe Connect state yet, see #267).
 func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/payments/connect",
-		staffauth.Middleware(db.App)(payments.PostConnectHandler(client)))
 	g := staffauth.NewGatedRouter(mux, db.App)
-	g.Get("/practices/{practiceId}/payments/connect", []string{"owner"}, payments.GetConnectStatusHandler(client))
+	ir := idempotency.NewRouter(g, db.App)
+	payments.Mount(g, ir, client)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func postConnect(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/practices/"+practiceID+"/payments/connect", bytes.NewBufferString(``))
+		srv.URL+"/api/practices/"+practiceID+"/payments/connect", bytes.NewBufferString(``))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -154,7 +155,7 @@ func postConnect(t *testing.T, srv *httptest.Server, session string, practiceID 
 
 func getConnectStatus(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/payments/connect", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/payments/connect", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

@@ -54,7 +54,7 @@ func (r Reader) IsContractor() bool {
 // employee Doula. Replaces the "Has(owner) || Has(admin)" predicate that
 // used to be copied at each call site that needed it.
 func (r Reader) IsOwnerOrAdmin() bool {
-	return r.Has("owner") || r.Has("admin")
+	return r.Has(roleOwner) || r.Has(roleAdmin)
 }
 
 // IsAmbientContractor reports whether the Reader's caller is a plain

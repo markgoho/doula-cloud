@@ -48,7 +48,7 @@ func seedNamedEngagement(t *testing.T, db *testdb.DB, practiceID, givenName, pre
 }
 
 func awaitingURL(srv *httptest.Server, practiceID string) string {
-	return srv.URL + "/practices/" + practiceID + "/contracts/awaiting-signature"
+	return srv.URL + "/api/practices/" + practiceID + "/contracts/awaiting-signature"
 }
 
 func getAwaiting(t *testing.T, session, url string) *http.Response {

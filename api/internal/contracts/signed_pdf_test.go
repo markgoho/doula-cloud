@@ -13,12 +13,16 @@ import (
 
 const signedPDFBytes = "%PDF-1.4 fake signed contract pdf"
 
-// TestGetSignedContractPDFHandler_Success proves Staff can retrieve the
-// stored Signed PDF for a signed Contract.
+// TestGetSignedContractPDFHandler_Success proves an Owner or Admin can
+// retrieve the stored Signed PDF for a signed Contract -- #836 mounted
+// this route through contracts.Mount's real OwnerAndAdmin declaration,
+// which the old test mux never enforced; a plain Doula 403s now (this
+// package carries no separate test for that 403, since gate_test.go-shaped
+// role coverage lives at the api/ package's own guardrail level).
 func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-success"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 	objectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, objectPath)
@@ -68,14 +72,14 @@ func TestGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	}
 }
 
-// TestGetSignedContractPDFHandler_CrossPracticeRejected proves a Staff
-// member at Practice A can't retrieve the Signed PDF for an Engagement at
+// TestGetSignedContractPDFHandler_CrossPracticeRejected proves an Owner
+// at Practice A can't retrieve the Signed PDF for an Engagement at
 // Practice B -- resolveContractRequest's requireEngagementAtPractice
 // check rejects it before the PDF lookup runs.
 func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-cross-practice"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	otherPracticeID := seedPractice(t, db, "Other Practice")
 	otherEngagementID := seedEngagement(t, db, otherPracticeID)
 	objectPath := contracts.SignedPDFObjectPath(otherEngagementID)
@@ -97,7 +101,7 @@ func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-not-signed"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
@@ -119,7 +123,7 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 func TestGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-missing-object"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID)
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 

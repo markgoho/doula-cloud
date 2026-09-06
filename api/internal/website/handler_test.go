@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -66,24 +67,23 @@ func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID, roles stri
 	}
 }
 
-// newServer mounts both routes the way main.go really does -- the GET
-// through GatedRouter with the AnyStaff declaration, the PUT behind
-// staffauth.Middleware -- so the Owner gate and the role gate are the
-// real ones and not a test's approximation.
+// newServer mounts this package's whole surface through website.Mount,
+// the same call main.go makes on the real GatedRouter and
+// idempotency.Router -- so the Owner gate and the role gate are the real
+// ones and not a test's approximation.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("PUT /practices/{practiceId}/website",
-		staffauth.Middleware(db.App)(website.PutHandler(&tasknudge.FakeEnqueuer{})))
 	g := staffauth.NewGatedRouter(mux, db.App)
-	g.Get("/practices/{practiceId}/website", staffauth.AnyStaff, website.GetHandler())
+	ir := idempotency.NewRouter(g, db.App)
+	website.Mount(g, ir, &tasknudge.FakeEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func putWebsite(t *testing.T, srv *httptest.Server, session, practiceID, body string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/practices/"+practiceID+"/website", bytes.NewBufferString(body))
+		srv.URL+"/api/practices/"+practiceID+"/website", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -98,7 +98,7 @@ func putWebsite(t *testing.T, srv *httptest.Server, session, practiceID, body st
 func getWebsite(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		srv.URL+"/practices/"+practiceID+"/website", nil)
+		srv.URL+"/api/practices/"+practiceID+"/website", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

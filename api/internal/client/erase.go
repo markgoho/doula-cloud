@@ -198,6 +198,11 @@ func EraseEligibilityHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireOwner(w, r)
 		if !ok {
+			// coverage:ignore reason: belt-and-braces -- client.Mount's own
+			// OwnerOnly declaration (g.Get) already refuses a non-owner caller
+			// before this handler runs, so !ok is unreachable through the real
+			// mount. EraseHandler's own RequireOwner above has no such mount-level
+			// gate (writes carry none, ADR-0008) and stays the real enforcement.
 			return
 		}
 		clientID := r.PathValue("clientId")

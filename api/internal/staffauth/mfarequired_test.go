@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -16,19 +18,15 @@ func newMFARequiredServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeA
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
-	// GatedRouter.Get applies both Middleware and the role check, the
-	// same as routes_practice.go's real registration -- a bare
-	// staffauth.Middleware wrap here would skip the owner-only gate
-	// entirely and let any Staff member read the impact count.
-	g.Get("/practices/{practiceId}/mfa-required/impact", []string{"owner"}, staffauth.GetMFAImpactHandler(accounts))
-	mux.Handle("PUT /practices/{practiceId}/mfa-required", staffauth.Middleware(db.App)(staffauth.PutMFARequiredHandler()))
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
 }
 
 func putMFARequired(t *testing.T, srv *httptest.Server, session, practiceID string, required bool, confirmed bool) *http.Response {
 	t.Helper()
 	body, _ := json.Marshal(map[string]bool{"required": required})
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/practices/"+practiceID+"/mfa-required", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/mfa-required", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -179,7 +177,7 @@ func TestPutMFARequiredHandler_MalformedBody(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/practices/"+practiceID+"/mfa-required", bytes.NewReader([]byte("not json")))
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/mfa-required", bytes.NewReader([]byte("not json")))
 	authntest.AddSessionCookie(req, seedSession(ownerUID))
 	req.Header.Set("X-Confirmed", "true")
 	resp, err := http.DefaultClient.Do(req)
@@ -200,7 +198,7 @@ func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/mfa-required/impact", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", nil)
 	authntest.AddSessionCookie(req, seedSession(doulaUID))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -239,7 +237,7 @@ func TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor(t *testing.T) {
 	srv, seedSession := newMFARequiredServer(t, db, accounts)
 	defer srv.Close()
 
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/practices/"+practiceID+"/mfa-required/impact", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/mfa-required/impact", nil)
 	authntest.AddSessionCookie(req, seedSession(ownerUID))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

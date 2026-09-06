@@ -7,14 +7,18 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newFinishEnrollmentServer(t *testing.T, db *testdb.DB, verifier authntest.Verifier) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/mfa", staffauth.FinishEnrollmentHandler(verifier, db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
@@ -25,7 +29,7 @@ func postFinishEnrollment(t *testing.T, srv *httptest.Server) *http.Response {
 
 func postFinishEnrollmentWithSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/mfa", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/mfa", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

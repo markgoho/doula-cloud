@@ -163,7 +163,7 @@ func TestAcceptHandler_EmployeeOfferCopiesNoFee(t *testing.T) {
 
 	// And the decided Offer reads back with the moment it was decided.
 	var listed offer.ListResponse
-	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", employeeSession, nil),
+	decode(t, do(t, http.MethodGet, f.srv+"/api/practices/"+f.practiceID+"/offers", employeeSession, nil),
 		http.StatusOK, &listed)
 	if len(listed.Items) != 1 || listed.Items[0].DecidedAt == nil {
 		t.Fatalf("offers = %+v, want one row carrying decidedAt", listed.Items)

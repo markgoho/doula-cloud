@@ -11,28 +11,31 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newPracticeInvoiceServer mounts GetPracticeInvoicesHandler alone, behind
-// the same staffauth.Middleware the real route uses. GatedRouter's mount
-// declares Owner/Admin too (asserted at api/gate_guardrail_test.go), but
-// the handler also calls staffauth.RequireOwnerOrAdmin itself -- the same
-// belt-and-braces engagementrequest.ListHandler uses -- so the denial is
-// provable here rather than only through the full route table.
+// newPracticeInvoiceServer mounts this package's whole surface through
+// payments.Mount, the same call main.go makes on the real GatedRouter.
+// GatedRouter's mount declares Owner/Admin (asserted at
+// api/gate_guardrail_test.go), and the handler also calls
+// staffauth.RequireOwnerOrAdmin itself -- the same belt-and-braces
+// engagementrequest.ListHandler uses -- so the denial is provable here
+// rather than only through the full route table.
 func newPracticeInvoiceServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/invoices",
-		staffauth.Middleware(db.App)(payments.GetPracticeInvoicesHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	payments.Mount(g, ir, payments.NewFakeClient())
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string, unpaidOnly bool) *http.Response {
 	t.Helper()
-	url := srv.URL + "/practices/" + practiceID + "/invoices"
+	url := srv.URL + "/api/practices/" + practiceID + "/invoices"
 	params := make([]string, 0, 2)
 	if unpaidOnly {
 		params = append(params, "unpaid=true")

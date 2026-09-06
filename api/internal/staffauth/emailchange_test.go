@@ -8,20 +8,24 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newChangeEmailServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeAccountManager, uid string) (*httptest.Server, string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("PUT /staff/email", staffauth.ChangeEmailHandler(accounts, db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func putEmail(t *testing.T, srv *httptest.Server, session, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/staff/email", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/staff/email", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

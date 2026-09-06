@@ -66,7 +66,7 @@ func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	var out engagementrequest.RequestResponse
 	decode(t, resp, http.StatusCreated, &out)
@@ -146,7 +146,7 @@ func TestWorker_RetriesThenDeadLettersOnSendFailure(t *testing.T) {
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/engagement-requests", session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate})
 	var out engagementrequest.RequestResponse
 	decode(t, resp, http.StatusCreated, &out)

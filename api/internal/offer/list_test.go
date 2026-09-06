@@ -16,7 +16,7 @@ func TestInboxHandler_ServesHerOwnOffersAndNobodyElses(t *testing.T) {
 	f.makeOffer(t, offerBody(otherID, 45000))
 
 	var listed offer.ListResponse
-	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
+	decode(t, do(t, http.MethodGet, f.srv+"/api/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
 		http.StatusOK, &listed)
 
 	if len(listed.Items) != 1 {
@@ -51,7 +51,7 @@ func TestInboxHandler_ExpiresOnTheWayPastAndShowsPastOffers(t *testing.T) {
 	expireOffer(t, f.db, stale)
 
 	var listed offer.ListResponse
-	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
+	decode(t, do(t, http.MethodGet, f.srv+"/api/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
 		http.StatusOK, &listed)
 
 	if len(listed.Items) != 1 || listed.Items[0].State != stateExpired {
@@ -88,7 +88,7 @@ func TestEngagementListHandler_NamesWhoWasAsked(t *testing.T) {
 func TestEngagementListHandler_RefusesBadEngagementID(t *testing.T) {
 	f := newFixture(t)
 	expectStatus(t, do(t, http.MethodGet,
-		f.srv+"/practices/"+f.practiceID+"/engagements/not-a-uuid/offers", f.ownerSession, nil),
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/not-a-uuid/offers", f.ownerSession, nil),
 		http.StatusBadRequest)
 }
 
@@ -104,7 +104,7 @@ func TestCompleteHandler_RunsTheCascade(t *testing.T) {
 	stillOpen := f.makeOffer(t, offerBody(secondID, 45000))
 
 	expectStatus(t, do(t, http.MethodPost,
-		f.srv+"/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/complete", f.ownerSession, nil),
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/complete", f.ownerSession, nil),
 		http.StatusOK)
 
 	state, decidedBy := offerState(t, f.db, stillOpen)
@@ -132,7 +132,7 @@ func TestCompleteHandler_RunsTheCascade(t *testing.T) {
 
 func TestCompleteHandler_RefusesUnknownEngagementAndNonPrivilegedCaller(t *testing.T) {
 	f := newFixture(t)
-	base := f.srv + "/practices/" + f.practiceID + "/engagements/"
+	base := f.srv + "/api/practices/" + f.practiceID + "/engagements/"
 
 	expectStatus(t, do(t, http.MethodPost, base+"11111111-1111-1111-1111-111111111111/complete", f.ownerSession, nil),
 		http.StatusNotFound)
@@ -150,7 +150,7 @@ func TestInboxHandler_LapsesTheClientFieldsOnATerminalOffer(t *testing.T) {
 	expectStatus(t, do(t, http.MethodPost, f.offerURL(offerID, "decline"), f.doulaSession, nil), http.StatusOK)
 
 	var listed offer.ListResponse
-	decode(t, do(t, http.MethodGet, f.srv+"/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
+	decode(t, do(t, http.MethodGet, f.srv+"/api/practices/"+f.practiceID+"/offers", f.doulaSession, nil),
 		http.StatusOK, &listed)
 
 	got := listed.Items[0]
@@ -173,11 +173,11 @@ func TestInboxHandler_PaginatesWithACursor(t *testing.T) {
 	for range 31 {
 		engagementID := seedEngagement(t, f.db, f.practiceID)
 		decode(t, do(t, http.MethodPost,
-			f.srv+"/practices/"+f.practiceID+"/engagements/"+engagementID+"/offers",
+			f.srv+"/api/practices/"+f.practiceID+"/engagements/"+engagementID+"/offers",
 			f.ownerSession, offerBody(f.doulaID, 45000)), http.StatusCreated, nil)
 	}
 
-	inboxURL := f.srv + "/practices/" + f.practiceID + "/offers"
+	inboxURL := f.srv + "/api/practices/" + f.practiceID + "/offers"
 	var first offer.ListResponse
 	decode(t, do(t, http.MethodGet, inboxURL, f.doulaSession, nil), http.StatusOK, &first)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
@@ -208,7 +208,7 @@ func TestListHandlers_RefuseAMalformedCursor(t *testing.T) {
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
 			expectStatus(t, do(t, http.MethodGet,
-				f.srv+"/practices/"+f.practiceID+"/offers?cursor="+url.QueryEscape(raw), f.doulaSession, nil),
+				f.srv+"/api/practices/"+f.practiceID+"/offers?cursor="+url.QueryEscape(raw), f.doulaSession, nil),
 				http.StatusBadRequest)
 		})
 	}

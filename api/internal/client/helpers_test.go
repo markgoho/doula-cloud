@@ -9,29 +9,25 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newServer mounts the same routes main.go wires up for this package,
-// behind staffauth.Middleware, and seeds a live session for uid --
-// returning the token its __session cookie carries, since #151 the
-// cookie is the only credential the middleware reads.
+// newServer mounts this package's whole surface through client.Mount --
+// the same call main.go makes on the real GatedRouter and
+// idempotency.Router -- and seeds a live session for uid, returning the
+// token its __session cookie carries, since #151 the cookie is the only
+// credential the middleware reads. tasknudge.NoOpEnqueuer{} stands in for
+// EraseHandler's nudge: no test in this package asserts on a tasknudge
+// enqueue, only on the erasure outbox rows EraseHandler writes directly.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(client.ListHandler()))
-	mux.Handle("GET /practices/{practiceId}/clients/search",
-		staffauth.Middleware(db.App)(client.SearchHandler()))
-	mux.Handle("POST /practices/{practiceId}/clients",
-		staffauth.Middleware(db.App)(client.CreateHandler()))
-	mux.Handle("GET /practices/{practiceId}/clients/{clientId}",
-		staffauth.Middleware(db.App)(client.DetailHandler()))
-	mux.Handle("PUT /practices/{practiceId}/clients/{clientId}",
-		staffauth.Middleware(db.App)(client.EditHandler()))
-	mux.Handle("POST /practices/{practiceId}/clients/{clientId}/merge",
-		staffauth.Middleware(db.App)(client.MergeHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	client.Mount(g, ir, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

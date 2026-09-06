@@ -22,7 +22,7 @@ func TestWithdrawHandler_RequesterWithdrawsOwnPendingRequest(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
 	var out engagementrequest.DecisionResponse
 	decode(t, resp, http.StatusOK, &out)
 	if out.State != "withdrawn" {
@@ -48,7 +48,7 @@ func TestWithdrawHandler_OnlyRequesterMayWithdraw(t *testing.T) {
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
 	expectStatus(t, resp, http.StatusForbidden)
 
 	row := readRequest(t, db, requestID)
@@ -69,10 +69,10 @@ func TestWithdrawHandler_OnlyPendingMayBeWithdrawn(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	first := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
+	first := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
 	expectStatus(t, first, http.StatusOK)
 
-	second := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
+	second := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/withdraw", session, nil)
 	expectStatus(t, second, http.StatusConflict)
 }
 
@@ -86,7 +86,7 @@ func TestWithdrawHandler_InvalidRequestIDRejected(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/not-a-uuid/withdraw", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/not-a-uuid/withdraw", session, nil)
 	expectStatus(t, resp, http.StatusBadRequest)
 }
 
@@ -99,6 +99,6 @@ func TestWithdrawHandler_NotFound(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	resp := do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/withdraw", session, nil)
+	resp := do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/00000000-0000-0000-0000-000000000000/withdraw", session, nil)
 	expectStatus(t, resp, http.StatusNotFound)
 }

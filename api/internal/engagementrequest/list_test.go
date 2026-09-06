@@ -12,7 +12,7 @@ import (
 // listURL is the inbox, addressed the way the screen addresses it: the
 // Practice and nothing else.
 func listURL(srvURL, practiceID string) string {
-	return srvURL + "/practices/" + practiceID + "/engagement-requests"
+	return srvURL + "/api/practices/" + practiceID + "/engagement-requests"
 }
 
 // TestListHandler_GathersEveryPendingRequestOldestFirst proves the inbox

@@ -12,6 +12,8 @@ import (
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -26,8 +28,8 @@ const (
 
 func newAddressChangeServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /portal/sign-in-address/request", clientauth.RequestAddressChangeHandler(db.App))
-	mux.Handle("POST /portal/sign-in-address", clientauth.SpendAddressChangeHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	clientauth.Mount(g, db.App, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
@@ -100,7 +102,7 @@ func TestRequestAddressChangeHandler_MailsTheNewAddressOnly(t *testing.T) {
 
 	identifier, _, session := seedSignedInClient(t, db, oldSignInAddress)
 
-	resp := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"New@Example.com"}`)
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"New@Example.com"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
@@ -128,7 +130,7 @@ func TestRequestAddressChangeHandler_OldAddressStillSignsIn(t *testing.T) {
 
 	identifier, _, session := seedSignedInClient(t, db, oldSignInAddress)
 
-	resp := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"`+newSignInAddress+`"}`)
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"`+newSignInAddress+`"}`)
 	_ = resp.Body.Close()
 
 	// The unproved address first, and from zero: a sign-in request at it
@@ -137,13 +139,13 @@ func TestRequestAddressChangeHandler_OldAddressStillSignsIn(t *testing.T) {
 	// outbox's ON CONFLICT would keep the counts at one either way --
 	// the assertion would pass whether or not the new address wrongly
 	// matched.
-	newResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"`+newSignInAddress+`"}`)
+	newResp := postJSON(t, linkSrv, "/api/portal/magic-link/request", `{"email":"`+newSignInAddress+`"}`)
 	defer newResp.Body.Close()
 	if got := countLiveMagicLinkTokens(t, db, identifier); got != 0 {
 		t.Fatalf("live sign-in tokens for the unproved new address = %d, want 0", got)
 	}
 
-	oldResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"`+oldSignInAddress+`"}`)
+	oldResp := postJSON(t, linkSrv, "/api/portal/magic-link/request", `{"email":"`+oldSignInAddress+`"}`)
 	defer oldResp.Body.Close()
 	if got := countLiveMagicLinkTokens(t, db, identifier); got != 1 {
 		t.Fatalf("live sign-in tokens for the old address = %d, want 1 -- it stopped signing her in while the change was still pending", got)
@@ -166,9 +168,9 @@ func TestRequestAddressChangeHandler_AddressInUseAnswersIdentically(t *testing.T
 	_, _, takenSession := seedSignedInClient(t, db, "second@example.com")
 	testdb.SeedPortalAccount(t, db, portalaccount.NewIdentifier(), "taken@example.com")
 
-	free := postAddressJSON(t, srv, "/portal/sign-in-address/request", freeSession, `{"email":"nobody@example.com"}`)
+	free := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", freeSession, `{"email":"nobody@example.com"}`)
 	defer free.Body.Close()
-	taken := postAddressJSON(t, srv, "/portal/sign-in-address/request", takenSession, `{"email":"taken@example.com"}`)
+	taken := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", takenSession, `{"email":"taken@example.com"}`)
 	defer taken.Body.Close()
 
 	if free.StatusCode != taken.StatusCode {
@@ -190,11 +192,11 @@ func TestRequestAddressChangeHandler_ReRequestRetiresTheFirstAddress(t *testing.
 
 	identifier, _, session := seedSignedInClient(t, db, oldSignInAddress)
 
-	first := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"first@example.com"}`)
+	first := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"first@example.com"}`)
 	_ = first.Body.Close()
 	firstToken, _ := pendingAddressChangeToken(t, db, identifier)
 
-	second := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"second@example.com"}`)
+	second := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"second@example.com"}`)
 	_ = second.Body.Close()
 
 	var live int
@@ -250,7 +252,7 @@ func TestRequestAddressChangeHandler_Refusals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := postAddressJSON(t, srv, "/portal/sign-in-address/request", tc.session, tc.body)
+			resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", tc.session, tc.body)
 			defer resp.Body.Close()
 			if resp.StatusCode != tc.want {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
@@ -281,7 +283,7 @@ func TestRequestAddressChangeHandler_StaffSessionRefused(t *testing.T) {
 
 	staffSession := authntest.SeedSession(t, db.App, "identity-platform-uid")
 
-	resp := postAddressJSON(t, srv, "/portal/sign-in-address/request", staffSession, `{"email":"new@example.com"}`)
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", staffSession, `{"email":"new@example.com"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
@@ -294,13 +296,13 @@ func TestSpendAddressChangeHandler_MovesTheAddressAndRecordsIt(t *testing.T) {
 	defer srv.Close()
 
 	identifier, clientID, session := seedSignedInClient(t, db, oldSignInAddress)
-	req := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"new@example.com"}`)
+	req := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"new@example.com"}`)
 	_ = req.Body.Close()
 	token, _ := pendingAddressChangeToken(t, db, identifier)
 
 	// No session cookie: the link is read in the new mailbox, possibly on
 	// a device she has never signed in on.
-	resp := postAddressJSON(t, srv, "/portal/sign-in-address", "", `{"token":"`+token+`"}`)
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -349,13 +351,13 @@ func TestSpendAddressChangeHandler_OldAddressStopsSigningIn(t *testing.T) {
 	defer linkSrv.Close()
 
 	identifier, _, session := seedSignedInClient(t, db, oldSignInAddress)
-	req := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"new@example.com"}`)
+	req := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"new@example.com"}`)
 	_ = req.Body.Close()
 	token, _ := pendingAddressChangeToken(t, db, identifier)
-	spend := postAddressJSON(t, srv, "/portal/sign-in-address", "", `{"token":"`+token+`"}`)
+	spend := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	_ = spend.Body.Close()
 
-	oldResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"old@example.com"}`)
+	oldResp := postJSON(t, linkSrv, "/api/portal/magic-link/request", `{"email":"old@example.com"}`)
 	defer oldResp.Body.Close()
 	if oldResp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d", oldResp.StatusCode, http.StatusAccepted)
@@ -364,7 +366,7 @@ func TestSpendAddressChangeHandler_OldAddressStopsSigningIn(t *testing.T) {
 		t.Fatalf("live sign-in tokens for the old address = %d, want 0", got)
 	}
 
-	newResp := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"new@example.com"}`)
+	newResp := postJSON(t, linkSrv, "/api/portal/magic-link/request", `{"email":"new@example.com"}`)
 	defer newResp.Body.Close()
 	if got := countLiveMagicLinkTokens(t, db, identifier); got != 1 {
 		t.Fatalf("live sign-in tokens for the new address = %d, want 1", got)
@@ -380,13 +382,13 @@ func TestSpendAddressChangeHandler_AddressTakenSinceTheLinkWasSent(t *testing.T)
 	defer srv.Close()
 
 	identifier, _, session := seedSignedInClient(t, db, oldSignInAddress)
-	req := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"contested@example.com"}`)
+	req := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"contested@example.com"}`)
 	_ = req.Body.Close()
 	token, _ := pendingAddressChangeToken(t, db, identifier)
 
 	testdb.SeedPortalAccount(t, db, portalaccount.NewIdentifier(), "contested@example.com")
 
-	resp := postAddressJSON(t, srv, "/portal/sign-in-address", "", `{"token":"`+token+`"}`)
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
@@ -414,10 +416,10 @@ func TestSpendAddressChangeHandler_Refusals(t *testing.T) {
 	defer srv.Close()
 
 	identifier, _, session := seedSignedInClient(t, db, oldSignInAddress)
-	req := postAddressJSON(t, srv, "/portal/sign-in-address/request", session, `{"email":"new@example.com"}`)
+	req := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"new@example.com"}`)
 	_ = req.Body.Close()
 	spent, _ := pendingAddressChangeToken(t, db, identifier)
-	first := postAddressJSON(t, srv, "/portal/sign-in-address", "", `{"token":"`+spent+`"}`)
+	first := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+spent+`"}`)
 	_ = first.Body.Close()
 
 	cases := []struct {
@@ -432,7 +434,7 @@ func TestSpendAddressChangeHandler_Refusals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := postAddressJSON(t, srv, "/portal/sign-in-address", "", tc.body)
+			resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", tc.body)
 			defer resp.Body.Close()
 			if resp.StatusCode != tc.want {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
@@ -452,7 +454,7 @@ func TestSpendAddressChangeHandler_MagicLinkTokenIsNotAConfirmation(t *testing.T
 	defer linkSrv.Close()
 
 	identifier, _, _ := seedSignedInClient(t, db, oldSignInAddress)
-	req := postJSON(t, linkSrv, "/portal/magic-link/request", `{"email":"old@example.com"}`)
+	req := postJSON(t, linkSrv, "/api/portal/magic-link/request", `{"email":"old@example.com"}`)
 	_ = req.Body.Close()
 
 	var token string
@@ -462,7 +464,7 @@ func TestSpendAddressChangeHandler_MagicLinkTokenIsNotAConfirmation(t *testing.T
 		t.Fatalf("read magic link token: %v", err)
 	}
 
-	resp := postAddressJSON(t, srv, "/portal/sign-in-address", "", `{"token":"`+token+`"}`)
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)

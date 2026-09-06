@@ -48,12 +48,12 @@ func newFixture(t *testing.T) fixture {
 
 // offersURL is the create/list URL for the fixture's Engagement.
 func (f fixture) offersURL() string {
-	return f.srv + "/practices/" + f.practiceID + "/engagements/" + f.engagementID + "/offers"
+	return f.srv + "/api/practices/" + f.practiceID + "/engagements/" + f.engagementID + "/offers"
 }
 
 // offerURL is one Offer's decision URL, for action.
 func (f fixture) offerURL(offerID, action string) string {
-	return f.srv + "/practices/" + f.practiceID + "/offers/" + offerID + "/" + action
+	return f.srv + "/api/practices/" + f.practiceID + "/offers/" + offerID + "/" + action
 }
 
 // makeOffer sends body as the Owner and returns the Offer id it created.
@@ -267,14 +267,14 @@ func TestCreateHandler_RefusesEmailTargetWhoAlreadyHoldsMembership(t *testing.T)
 func TestCreateHandler_RefusesCompletedOrMissingEngagement(t *testing.T) {
 	f := newFixture(t)
 	expectStatus(t, do(t, http.MethodPost,
-		f.srv+"/practices/"+f.practiceID+"/engagements/11111111-1111-1111-1111-111111111111/offers",
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/11111111-1111-1111-1111-111111111111/offers",
 		f.ownerSession, offerBody(f.doulaID, 45000)), http.StatusNotFound)
 	expectStatus(t, do(t, http.MethodPost,
-		f.srv+"/practices/"+f.practiceID+"/engagements/not-a-uuid/offers",
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/not-a-uuid/offers",
 		f.ownerSession, offerBody(f.doulaID, 45000)), http.StatusBadRequest)
 
 	expectStatus(t, do(t, http.MethodPost,
-		f.srv+"/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/complete",
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/complete",
 		f.ownerSession, nil), http.StatusOK)
 	expectStatus(t, do(t, http.MethodPost, f.offersURL(), f.ownerSession, offerBody(f.doulaID, 45000)),
 		http.StatusConflict)

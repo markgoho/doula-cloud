@@ -154,18 +154,18 @@ func routes(d Deps) (http.Handler, []staffauth.GatedRoute, []idempotency.Route) 
 	// idempotency.Router is registerPracticeRoutes' mirror of g for its
 	// mutating routes: Replayable or Exempt is the only way to register
 	// one, and Exempt refuses to register without a reason.
-	ir := idempotency.NewRouter(g)
+	ir := idempotency.NewRouter(g, d.DB)
 
 	// Every file takes g and nothing takes the mux. The last three mount
 	// outside staffauth.Middleware entirely -- a Client session, a
 	// scheduler, a webhook signature -- so there is no Membership for a
 	// role declaration to be about; their reads say so at the mount
 	// through g.OpenGet, and their writes go through g.Write, which asks
-	// for no declaration but does put them in the registry. Only
-	// registerPracticeRoutes takes ir: the review that added it (2026)
-	// scoped the idempotency-stance requirement to that file's mutating
-	// routes.
-	registerSessionRoutes(g, d)
+	// for no declaration but does put them in the registry.
+	// registerSessionRoutes and registerPracticeRoutes both take ir:
+	// staffauth.Mount, called from the former, registers its own
+	// Practice-scoped routes too (#836).
+	registerSessionRoutes(g, ir, d)
 	registerPracticeRoutes(g, ir, d)
 	registerPortalRoutes(g, d)
 	registerInternalRoutes(g, d)

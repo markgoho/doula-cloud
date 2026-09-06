@@ -8,21 +8,22 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newServer mounts the two routes registerPracticeRoutes wires up, behind
-// the same staffauth.Middleware.
+// newServer mounts this package's whole surface through mailsuppress.Mount,
+// the same call main.go makes on the real GatedRouter and
+// idempotency.Router.
 func newServer(t *testing.T, db *testdb.DB, uid string, clearer mailsuppress.BounceClearer) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/email-suppressions",
-		staffauth.Middleware(db.App)(mailsuppress.ListHandler()))
-	mux.Handle("POST /practices/{practiceId}/email-suppressions/clear",
-		staffauth.Middleware(db.App)(mailsuppress.ClearHandler(clearer)))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	mailsuppress.Mount(g, ir, clearer)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
@@ -70,7 +71,7 @@ func TestListHandler_ShowsThisPracticesSuppressedAddresses(t *testing.T) {
 	srv, session := newServer(t, db, "lister", &mail.FakeSender{})
 	defer srv.Close()
 
-	resp := request(t, session, http.MethodGet, srv.URL+"/practices/"+practiceID+"/email-suppressions", nil)
+	resp := request(t, session, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/email-suppressions", nil)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -113,7 +114,7 @@ func TestClearHandler_ClearsABounce(t *testing.T) {
 	srv, session := newServer(t, db, "clearer", clearer)
 	defer srv.Close()
 
-	resp := request(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
+	resp := request(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", resp.StatusCode)
@@ -144,7 +145,7 @@ func TestClearHandler_RefusesAComplaint(t *testing.T) {
 	srv, session := newServer(t, db, "clearer", clearer)
 	defer srv.Close()
 
-	resp := request(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
+	resp := request(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", resp.StatusCode)
@@ -170,7 +171,7 @@ func TestClearHandler_RefusesAnotherPracticesAddress(t *testing.T) {
 	srv, session := newServer(t, db, "outsider", clearer)
 	defer srv.Close()
 
-	resp := request(t, session, http.MethodPost, srv.URL+"/practices/"+mine+"/email-suppressions/clear", clearBody(t, testAddress))
+	resp := request(t, session, http.MethodPost, srv.URL+"/api/practices/"+mine+"/email-suppressions/clear", clearBody(t, testAddress))
 	defer func() { _ = resp.Body.Close() }()
 	// 404, not 403: a Practice must not learn from this endpoint that
 	// another Practice's Client is suppressed.
@@ -197,7 +198,7 @@ func TestClearHandler_UnsuppressedAddressIs404(t *testing.T) {
 	srv, session := newServer(t, db, "clearer", &mail.FakeSender{})
 	defer srv.Close()
 
-	resp := request(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
+	resp := request(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
@@ -217,7 +218,7 @@ func TestClearHandler_RefusesADoula(t *testing.T) {
 	srv, session := newServer(t, db, "doula-only", &mail.FakeSender{})
 	defer srv.Close()
 
-	resp := request(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
+	resp := request(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", resp.StatusCode)
@@ -240,7 +241,7 @@ func TestClearHandler_RejectsAMalformedBody(t *testing.T) {
 		{"blank address", clearBody(t, "   ")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := request(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/email-suppressions/clear", tc.body)
+			resp := request(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/email-suppressions/clear", tc.body)
 			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -263,7 +264,7 @@ func TestClearHandler_MailgunFailureIs502AndChangesNothing(t *testing.T) {
 	srv, session := newServer(t, db, "clearer", &mail.FakeSender{DeleteErr: errBoom})
 	defer srv.Close()
 
-	resp := request(t, session, http.MethodPost, srv.URL+"/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
+	resp := request(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/email-suppressions/clear", clearBody(t, testAddress))
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502", resp.StatusCode)

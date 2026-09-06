@@ -26,7 +26,7 @@ const (
 )
 
 func contractURL(srv *httptest.Server, practiceID, engagementID string) string {
-	return srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/contract"
+	return srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract"
 }
 
 func postContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {

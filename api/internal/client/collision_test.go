@@ -22,7 +22,7 @@ func TestEditHandler_CollisionPredicate_TwoSarahsPostalCodeSavesFreely(t *testin
 	srv, session := newServer(t, db, "staff-two-sarahs")
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: "Sarah", FamilyName: "Osei", AddressPostalCode: "14604"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -45,7 +45,7 @@ func TestEditHandler_CollisionPredicate_AnnDoesNotCollideWithSubstringCousins(t 
 	srv, session := newServer(t, db, "staff-ann")
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: "Ann", FamilyName: "Reyes", AddressLocality: "Rochester"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -67,7 +67,7 @@ func TestEditHandler_CollisionPredicate_SharedDateOfBirthNoNameWordSavesFreely(t
 	srv, session := newServer(t, db, "staff-shared-dob")
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: "Wren", FamilyName: testFletcher, DateOfBirth: "1990-05-01", Phone: "555-0199"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -87,7 +87,7 @@ func TestEditHandler_CollisionPredicate_SharedDateOfBirthWithNameWordAsks(t *tes
 	srv, session := newServer(t, db, "staff-dob-shared-word")
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: "Priya", FamilyName: testFletcher, DateOfBirth: "1990-05-01"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
@@ -115,7 +115,7 @@ func TestEditHandler_CollisionPredicate_ExactEmailAsksRegardlessOfName(t *testin
 	srv, session := newServer(t, db, "staff-exact-email")
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: "Wren", FamilyName: testFletcher, Email: "shared@example.com"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
@@ -136,7 +136,7 @@ func TestEditHandler_CollisionPredicate_CorrectingToExistingFirstNameSaves(t *te
 	srv, session := newServer(t, db, "staff-sara-to-sarah")
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: "Sarah", FamilyName: "Beck"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -158,7 +158,7 @@ func TestEditHandler_CollisionPredicate_SubstitutionBlocksWithSubstitutionFlag(t
 	srv, session := newServer(t, db, "staff-substitution")
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
 		client.EditRequest{Record: client.Record{GivenName: testNadia, FamilyName: testHaddad}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
@@ -195,7 +195,7 @@ func TestEditHandler_RefusesEditingAMergedRecord(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+absorbedID,
+	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID,
 		client.EditRequest{Record: client.Record{GivenName: "Absorbed", AddressLocality: "Rochester"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {

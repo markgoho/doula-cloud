@@ -8,26 +8,28 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newWorkStateHistoryServer mounts the reader the way routes_practice.go
-// really does -- through GatedRouter with the "owner","admin"
-// declaration -- because the Owner/Admin-vs-Doula boundary lives at that
-// mount and not inside the handler (#315).
+// newWorkStateHistoryServer mounts this package's whole surface through
+// staffauth.Mount, the same call main.go makes on the real GatedRouter --
+// because the Owner/Admin-vs-Doula boundary lives at that mount and not
+// inside the handler (#315).
 func newWorkStateHistoryServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
-	g.Get("/practices/{practiceId}/staff/{staffId}/work-state-history",
-		[]string{ownerRole, adminRole}, staffauth.ListWorkStateHistoryHandler())
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func getWorkStateHistory(t *testing.T, srv *httptest.Server, session, practiceID, staffID, query string) *http.Response {
 	t.Helper()
-	url := srv.URL + "/practices/" + practiceID + "/staff/" + staffID + "/work-state-history" + query
+	url := srv.URL + "/api/practices/" + practiceID + "/staff/" + staffID + "/work-state-history" + query
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)

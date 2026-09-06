@@ -9,35 +9,41 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newInviteServer mounts the Staff-side portal-invite route behind
-// staffauth.Middleware and seeds a live session for uid, returning the
+// newInviteServer mounts this package's whole surface through
+// portalinvite.Mount, the same call main.go makes on the real GatedRouter
+// and idempotency.Router, and seeds a live session for uid, returning the
 // token its __session cookie carries.
 func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(db.App)(portalinvite.InviteHandler(&tasknudge.FakeEnqueuer{})))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	portalinvite.Mount(g, ir, db.App, &tasknudge.FakeEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-// newAcceptServer mounts the Client-portal invitation-acceptance route.
-// Public and pre-account (#617): the invitation token itself is the whole
-// credential, so this reads no Bearer token and no session.
+// newAcceptServer mounts this package's whole surface, the same as
+// newInviteServer -- the Client-portal invitation-acceptance route is one
+// of them. Public and pre-account (#617): the invitation token itself is
+// the whole credential, so this reads no Bearer token and no session.
 func newAcceptServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /portal/accept-invite", portalinvite.AcceptInviteHandler(db.App, &tasknudge.FakeEnqueuer{}))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	portalinvite.Mount(g, ir, db.App, &tasknudge.FakeEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
 func postInvite(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
+	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, bytes.NewReader(nil))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
@@ -56,7 +62,7 @@ func postAccept(t *testing.T, srv *httptest.Server, body any) *http.Response {
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/portal/accept-invite", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/accept-invite", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

@@ -12,7 +12,7 @@ import (
 // detailURL is the approval screen's read, addressed the way the screen
 // addresses it: a Request id and nothing else.
 func detailURL(srvURL, practiceID, requestID string) string {
-	return srvURL + "/practices/" + practiceID + "/engagement-requests/" + requestID
+	return srvURL + "/api/practices/" + practiceID + "/engagement-requests/" + requestID
 }
 
 // TestDetailHandler_ReturnsEveryFactTheApprovalScreenShows proves the six
@@ -164,6 +164,6 @@ func TestDetailHandler_RefusesADecidedRequest(t *testing.T) {
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	expectStatus(t, do(t, srv.URL+"/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil), http.StatusOK)
+	expectStatus(t, do(t, srv.URL+"/api/practices/"+practiceID+"/engagement-requests/"+requestID+"/approve", session, nil), http.StatusOK)
 	expectStatus(t, get(t, detailURL(srv.URL, practiceID, requestID), session), http.StatusConflict)
 }

@@ -29,7 +29,7 @@ func TestPracticeHandler_SpansEverySubjectKindNewestFirst(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -73,7 +73,7 @@ func TestPracticeHandler_ResolvesActorNameForEveryActorKind(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -117,7 +117,7 @@ func TestPracticeHandler_BatchOverflowStillPaginatesCorrectly(t *testing.T) {
 	seen := 0
 	cursor := ""
 	for page := range 10 {
-		url := srv.URL + "/practices/" + practiceID + "/activity"
+		url := srv.URL + "/api/practices/" + practiceID + "/activity"
 		if cursor != "" {
 			url += "?cursor=" + cursor
 		}
@@ -153,7 +153,7 @@ func TestPracticeHandler_InvalidCursorRejected(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity?cursor=not!valid!base64!")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity?cursor=not!valid!base64!")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -172,7 +172,7 @@ func TestPracticeHandler_EmptyPracticeHasNoActivity(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -201,7 +201,7 @@ func TestPracticeHandler_UnregisteredSubjectKindNeverAppears(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -230,7 +230,7 @@ func TestPracticeHandler_MoneyTierAppliedPerRow(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity")
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer resp.Body.Close()
 	var got activityfeed.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
@@ -300,7 +300,7 @@ func TestPracticeHandler_ContractorPageBoundaryNeverLeaksForbiddenRows(t *testin
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
-	firstResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity")
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
 	defer firstResp.Body.Close()
 	var first activityfeed.ListResponse
 	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
@@ -311,7 +311,7 @@ func TestPracticeHandler_ContractorPageBoundaryNeverLeaksForbiddenRows(t *testin
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
 
-	secondResp := authedGet(t, session, srv.URL+"/practices/"+practiceID+"/activity?cursor="+*first.NextCursor)
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity?cursor="+*first.NextCursor)
 	defer secondResp.Body.Close()
 	var second activityfeed.ListResponse
 	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {

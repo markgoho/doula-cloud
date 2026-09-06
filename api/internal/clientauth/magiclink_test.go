@@ -10,20 +10,20 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newMagicLinkRequestServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /portal/magic-link/request", clientauth.RequestMagicLinkHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	clientauth.Mount(g, db.App, &tasknudge.FakeEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
 func newMagicLinkRedeemServer(db *testdb.DB) *httptest.Server {
-	mux := http.NewServeMux()
-	mux.Handle("POST /portal/magic-link", clientauth.RedeemMagicLinkHandler(db.App, &tasknudge.FakeEnqueuer{}))
-	return httptest.NewServer(mux)
+	return newMagicLinkRequestServer(db)
 }
 
 func postJSON(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
@@ -68,7 +68,7 @@ func TestRequestMagicLinkHandler_MissingEmail(t *testing.T) {
 	srv := newMagicLinkRequestServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/portal/magic-link/request", `{"email":""}`)
+	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":""}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -80,7 +80,7 @@ func TestRequestMagicLinkHandler_InvalidRequestBody(t *testing.T) {
 	srv := newMagicLinkRequestServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/portal/magic-link/request", `not json`)
+	resp := postJSON(t, srv, "/api/portal/magic-link/request", `not json`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -95,7 +95,7 @@ func TestRequestMagicLinkHandler_UnknownAddressStillAccepted(t *testing.T) {
 	srv := newMagicLinkRequestServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/portal/magic-link/request", `{"email":"nobody@example.com"}`)
+	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"nobody@example.com"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
@@ -118,7 +118,7 @@ func TestRequestMagicLinkHandler_KnownAddressQueuesLinkMail(t *testing.T) {
 	defer srv.Close()
 
 	// Case and whitespace should not matter -- the lookup normalizes both.
-	resp := postJSON(t, srv, "/portal/magic-link/request", `{"email":"  Known@Example.com  "}`)
+	resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"  Known@Example.com  "}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
@@ -144,7 +144,7 @@ func TestRequestMagicLinkHandler_ReRequestResetsTheSameRow(t *testing.T) {
 	defer srv.Close()
 
 	for range 2 {
-		resp := postJSON(t, srv, "/portal/magic-link/request", `{"email":"rerequest@example.com"}`)
+		resp := postJSON(t, srv, "/api/portal/magic-link/request", `{"email":"rerequest@example.com"}`)
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusAccepted {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
@@ -164,7 +164,7 @@ func TestRedeemMagicLinkHandler_MissingToken(t *testing.T) {
 	srv := newMagicLinkRedeemServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/portal/magic-link", `{"token":""}`)
+	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":""}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -176,7 +176,7 @@ func TestRedeemMagicLinkHandler_InvalidRequestBody(t *testing.T) {
 	srv := newMagicLinkRedeemServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/portal/magic-link", `not json`)
+	resp := postJSON(t, srv, "/api/portal/magic-link", `not json`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -188,7 +188,7 @@ func TestRedeemMagicLinkHandler_UnknownTokenInvalid(t *testing.T) {
 	srv := newMagicLinkRedeemServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/portal/magic-link", `{"token":"never-minted"}`)
+	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":"never-minted"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -208,7 +208,7 @@ func TestRedeemMagicLinkHandler_Success(t *testing.T) {
 	srv := newMagicLinkRedeemServer(db)
 	defer srv.Close()
 
-	resp := postJSON(t, srv, "/portal/magic-link", `{"token":"`+token+`"}`)
+	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":"`+token+`"}`)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
@@ -235,7 +235,7 @@ func TestRedeemMagicLinkHandler_Success(t *testing.T) {
 	}
 
 	// Single-use.
-	replay := postJSON(t, srv, "/portal/magic-link", `{"token":"`+token+`"}`)
+	replay := postJSON(t, srv, "/api/portal/magic-link", `{"token":"`+token+`"}`)
 	defer replay.Body.Close()
 	if replay.StatusCode != http.StatusBadRequest {
 		t.Fatalf("replay status = %d, want %d", replay.StatusCode, http.StatusBadRequest)
@@ -259,7 +259,7 @@ func TestRedeemMagicLinkHandler_SessionStoreFailureRollsBackTheSpend(t *testing.
 		t.Fatalf("drop sessions: %v", err)
 	}
 
-	resp := postJSON(t, srv, "/portal/magic-link", `{"token":"`+token+`"}`)
+	resp := postJSON(t, srv, "/api/portal/magic-link", `{"token":"`+token+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)

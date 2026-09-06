@@ -1,12 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
-	"net/http"
-
 	"doula-cloud/api/internal/activityfeed"
-	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientfieldtemplate"
@@ -26,371 +21,36 @@ import (
 	"doula-cloud/api/internal/website"
 )
 
-// ownerAndAdmin is the role declaration for every GatedRouter route
-// ADR-0008's read table admits to Owner and Admin only (Staff roster,
-// Credit balance and ledger, Contract's money-bearing Signed PDF and
-// Invoice history) -- named once so golangci-lint's package-wide goconst
-// check doesn't see four independent literals to flag.
-var ownerAndAdmin = []string{"owner", "admin"}
-
-// ownerOnly is the role declaration for a GatedRouter route only a
-// Practice Owner may read (Stripe Connect status, #606's MFA impact
-// count) -- named for the same goconst reason as ownerAndAdmin above.
-var ownerOnly = []string{"owner"}
-
-// practiceSessionResponse confirms to the frontend which Practice the
-// caller landed on -- and, as a side effect of running through
-// staffauth.Middleware, records it as the Staff member's last-used
-// Practice for their next login.
-//
-// IsContractor carries ADR-0008's employment-type axis alongside Roles.
-// It exists because #501's contractor Add-a-Client door needs to branch
-// on employment type before ever calling client.SearchHandler -- the same
-// UX-only mirror of a BFF role gate this endpoint's Roles field already
-// is for the Owner/Admin screens that read it.
-type practiceSessionResponse struct {
-	PracticeID   string   `json:"practiceId"`
-	PracticeName string   `json:"practiceName"`
-	Roles        []string `json:"roles"`
-	IsContractor bool     `json:"isContractor"`
-}
-
-func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
-	tx, _ := staffauth.Tx(r.Context())
-	practiceID, _ := staffauth.PracticeID(r.Context())
-
-	var name string
-	if err := tx.QueryRowContext(r.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&name); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-
-	reader, has := staffauth.ReaderFrom(r.Context())
-	if !has {
-		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-
-	resp := practiceSessionResponse{
-		PracticeID:   practiceID,
-		PracticeName: name,
-		Roles:        reader.Roles(),
-		IsContractor: reader.IsContractor(),
-	}
-	w.Header().Set("Content-Type", "application/json")
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Printf("practiceSessionHandler: encode response: %v", err)
-	}
-}
-
 // Everything under /api/practices: the Staff roster, billing, Stripe
 // Connect, the website answer, Clients, Engagements and their Visits,
 // Messages, Plans, Contracts, Invoices and Offers.
 //
-// Two thirds of the BFF's surface, and the file most feature work
-// touches. It is one file rather than several because the routes here
-// share ADR-0008's role vocabulary -- ownerAndAdmin below, AnyStaff, and
-// the attachment narrowing each handler does for itself -- and splitting
-// them further would scatter that without separating anything.
+// #836 collapsed this file from 41 individual registrations, each
+// hand-assembling staffauth.Middleware(d.DB)(...) and, where the route
+// mutates, idempotency.Wrap(...) in the right order, into one call per
+// feature package. Each package's own Mount now names only
+// Replayable-or-Exempt, attaching-or-not, and roles; idempotency.Router
+// applies Middleware and Wrap itself (see internal/idempotency/router.go).
+//
+// staffauth.Mount is not called from here: it registers its own
+// Practice-scoped routes alongside the pre-session ones it also owns
+// (sign-up, sign-in, invitation acceptance), so it is called once from
+// registerSessionRoutes instead -- see that file's own comment.
 func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d Deps) {
-	g.Get("/api/practices/{practiceId}/session", staffauth.AnyStaff, http.HandlerFunc(practiceSessionHandler))
-	// #486's practice-wide feed: every subject kind #485's registry knows,
-	// gated per row rather than by a role declaration here -- AnyStaff, the
-	// same as engagement.ListActivityHandler below, because the gate (not
-	// this mount) is what a reader may or may not see.
-	g.Get("/api/practices/{practiceId}/activity", staffauth.AnyStaff, activityfeed.PracticeHandler())
-	// Roles and employment type are edited together on one surface
-	// (RA-G2, #261) -- ADR-0008 makes them the two halves of what a
-	// person is at a Practice, so there is one endpoint, not two.
-	ir.Exempt("PATCH /api/practices/{practiceId}/staff/{staffId}/membership",
-		"PATCH replaces roles and employment type wholesale to the caller's given values, and records an audit event only for an axis that actually changed -- a repeated call with the same body is a no-op on both",
-		staffauth.Middleware(d.DB)(staffauth.UpdateMembershipHandler()))
-	// The route #291 found missing: without it a roster row nobody wants
-	// can never be taken off.
-	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/membership",
-		"delete; a retry after the first succeeds finds no membership row left and 404s instead of removing or recording removal twice",
-		staffauth.Middleware(d.DB)(staffauth.RemoveMembershipHandler()))
-	ir.Replayable("POST /api/practices/{practiceId}/staff/invitations",
-		staffauth.Middleware(d.DB)(idempotency.Wrap(staffauth.InviteHandler(d.NudgeEnqueuer))))
-	ir.Exempt("POST /api/practices/{practiceId}/staff/invitations/{invitationId}/revoke",
-		"state-guarded UPDATE ... WHERE status = 'pending'; a retry after the first commit affects zero rows and 404s instead of revoking twice",
-		staffauth.Middleware(d.DB)(staffauth.RevokeInvitationHandler()))
-	// Staff roster -- members and pending invitations both: Owner and
-	// Admin only (ADR-0008's read table) -- a Doula has no reason to see
-	// the full roster.
-	g.Get("/api/practices/{practiceId}/staff", ownerAndAdmin, staffauth.ListStaffHandler())
-	// The history behind one roster row's "Works from" value (#459). Same
-	// gate as the roster it hangs off, and the same rows 00043's existing
-	// policy already admits -- a reader, not a widening.
-	g.Get("/api/practices/{practiceId}/staff/{staffId}/work-state-history",
-		ownerAndAdmin, staffauth.ListWorkStateHistoryHandler())
-	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
-		"EndAllSessions ends whatever remains and no-ops once already ended, and QueueSessionRevoked's own ON CONFLICT ... WHERE status = 'pending' DO NOTHING dedupes the notification; a retry can't double-notify",
-		staffauth.Middleware(d.DB)(staffauth.EndSessionsHandler(d.NudgeEnqueuer)))
-	// #615: an Owner vouching for a locked-out colleague. Replayable, not
-	// Exempt -- unlike EndSessions, a bare retry here is not a no-op: it
-	// would invalidate the just-minted code (authtoken.MintCode's own
-	// re-request rule) and queue a second email before the Owner has
-	// necessarily read the first.
-	ir.Replayable("POST /api/practices/{practiceId}/staff/{staffId}/mfa-recovery/vouch",
-		staffauth.Middleware(d.DB)(idempotency.Wrap(staffauth.VouchHandler(d.Verifier, d.NudgeEnqueuer))))
-	// #606: the switch's pre-throw count -- how many Staff it will
-	// affect, read before an Owner ever calls the PUT below. Owner-only,
-	// the same population who may throw the switch at all.
-	g.Get("/api/practices/{practiceId}/mfa-required/impact", ownerOnly, staffauth.GetMFAImpactHandler(d.AccountManager))
-	// A retry with the same body reads the same current value and writes
-	// nothing new -- see PutMFARequiredHandler's own doc comment.
-	ir.Exempt("PUT /api/practices/{practiceId}/mfa-required",
-		"idempotent by construction: the handler reads the current value first and updates/records only when the given value actually differs from it",
-		staffauth.Middleware(d.DB)(staffauth.PutMFARequiredHandler()))
-	// Credit balance and ledger: Owner and Admin only (ADR-0008).
-	g.Get("/api/practices/{practiceId}/billing", ownerAndAdmin, billing.GetBalanceHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/billing/purchases",
-		"creates a Stripe Checkout Session URL only; the ledger is credited by the purchase webhook against the actual completed payment, so a duplicate call yields an extra unused Checkout Session, never a double charge or double credit",
-		staffauth.Middleware(d.DB)(billing.PostPurchaseHandler(d.StripeClient)))
-	ir.Exempt("POST /api/practices/{practiceId}/payments/connect",
-		"lazily creates the Stripe Connect account and reuses the stored account id on any retry, row-locked against a concurrent create; a duplicate call resumes the same account, not a second one",
-		staffauth.Middleware(d.DB)(payments.PostConnectHandler(d.PaymentsClient)))
-	// ADR-0008's read table has no row for Stripe Connect state; mirroring
-	// the write side's Owner-only gate (PostConnectHandler,
-	// staffauth.RequireOwner) is the narrowest defensible default until a
-	// real rule lands (#267 stays open for that rule).
-	g.Get("/api/practices/{practiceId}/payments/connect", ownerOnly, payments.GetConnectStatusHandler(d.PaymentsClient))
-	// The website a Practice declares to Stripe (#440). Read by every
-	// Staff member, because the payments screen has to tell a Doula who
-	// opens it what is outstanding rather than show her an empty panel,
-	// and nothing here is secret -- the whole point of the answer is that
-	// it is published. Written by an Owner alone (website.PutHandler).
-	g.Get("/api/practices/{practiceId}/website", staffauth.AnyStaff, website.GetHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/website",
-		"one declaration per Practice, replaced whole (PUT semantics) -- the handler's own doc comment already says re-sending the same body is safe -- and the rebuild nudge only fires when the page becomes newly stale",
-		staffauth.Middleware(d.DB)(website.PutHandler(d.NudgeEnqueuer)))
-	// Engagements, Visits, Messages, Plan Instances, and Contract scope
-	// are open to every Staff role at the mount; the employee/contractor
-	// split ADR-0008's read table draws inside that column is
-	// attachment-narrowing the handler itself enforces via
-	// staffauth.Reader.CanAccessEngagement, not a role declaration.
-	// The Client write surface (#397): search, lookup-before-insert
-	// create, the detail read, and edit. Saving or editing a Client is
-	// free and creates no Engagement -- that split off into a separate
-	// Engagement Request, built elsewhere. Role gating beyond "any Staff
-	// member" (the contractor create/search refusal, the attached-Clients
-	// narrowing on edit/detail) is enforced inside each handler via
-	// staffauth.Reader, the same pattern engagement.DetailHandler already
-	// uses for CanAccessEngagement.
-	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, client.ListHandler())
-	g.Get("/api/practices/{practiceId}/clients/search", staffauth.AnyStaff, client.SearchHandler())
-	ir.Replayable("POST /api/practices/{practiceId}/clients",
-		staffauth.Middleware(d.DB)(idempotency.Wrap(client.CreateHandler())))
-	g.Get("/api/practices/{practiceId}/clients/{clientId}", staffauth.AnyStaff, client.DetailHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/clients/{clientId}",
-		"PUT replaces the Client record wholesale; re-sending the same body is a no-op",
-		staffauth.Middleware(d.DB)(client.EditHandler()))
-	// ADR-0017's amendment (#814): gate two's "This is her". Sets
-	// merged_into on the absorbed row exactly once -- clients_update's
-	// own USING clause (00080, merged_into IS NULL) refuses a second
-	// write to an already-tombstoned row, so a retry after the first
-	// commit 409s instead of double-recording the absorb, the same shape
-	// EraseHandler's own exemption below already argues.
-	ir.Exempt("POST /api/practices/{practiceId}/clients/{clientId}/merge",
-		"setMergedInto writes merged_into on the absorbed row exactly once; clients_update's USING clause (merged_into IS NULL) refuses a second write to an already-tombstoned row, so a retry after the first commit 409s instead of absorbing it twice",
-		staffauth.Middleware(d.DB)(client.MergeHandler()))
-	// #691's precheck: the same unsettled-invoice fact the POST below
-	// 409s on, read ahead of time so an Owner never reaches that 409 by
-	// way of the confirmation screen. Owner-only, mirroring the POST's
-	// own gate, per the payments/connect precedent above.
-	g.Get("/api/practices/{practiceId}/clients/{clientId}/erasure", ownerOnly, client.EraseEligibilityHandler())
-	// #394's erasure, ADR-0027: the one act in the product that destroys
-	// a fact, so Owner-only (enforced inside the handler by
-	// staffauth.RequireOwner, the same seat as the MFA switch), and the
-	// one route here whose repeat is a mistake worth naming -- it locks
-	// the row FOR UPDATE and 409s on an erased_at that is already set,
-	// so a retry after the first commit refuses rather than erasing
-	// twice or double-calling Stripe.
-	ir.Exempt("POST /api/practices/{practiceId}/clients/{clientId}/erasure",
-		"erase() locks the clients row FOR UPDATE and refuses a row whose erased_at is already set; a retry after the first commit 409s instead of enqueuing a second set of Stripe and Identity Platform acts",
-		staffauth.Middleware(d.DB)(client.EraseHandler(d.NudgeEnqueuer)))
-	// ADR-0017's Engagement Request (#398): the ask for paid work with a
-	// Client, and the act that creates an Engagement. Request is any
-	// Staff member but a contractor Doula (enforced here and,
-	// independently, by engagement_requests_insert's RLS policy);
-	// approve/refuse are Owner/Admin, and so is the approval screen's own
-	// read (#502) -- the seat that decides is the seat that reads, and the
-	// balance the read carries is Owner/Admin-only on its own; withdraw is
-	// the requester alone, so it carries no role declaration.
-	ir.Replayable("POST /api/practices/{practiceId}/clients/{clientId}/engagement-requests",
-		staffauth.Middleware(d.DB)(idempotency.Wrap(engagementrequest.RequestHandler(d.DB, d.NudgeEnqueuer))))
-	// Where pending Requests gather (#503) -- the same Owner/Admin seat,
-	// registered before the {requestId} read so the two paths read in the
-	// order a person meets them.
-	g.Get("/api/practices/{practiceId}/engagement-requests", ownerAndAdmin, engagementrequest.ListHandler())
-	g.Get("/api/practices/{practiceId}/engagement-requests/{requestId}", ownerAndAdmin, engagementrequest.DetailHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/approve",
-		"approve() locks the Request FOR UPDATE and checks state = pending inside the same transaction; a retry after the first commit finds it already decided and 409s instead of creating a second Engagement or spending a second Credit",
-		staffauth.Middleware(d.DB)(engagementrequest.ApproveHandler(d.DB, d.NudgeEnqueuer)))
-	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/refuse",
-		"state-guarded UPDATE ... WHERE state = 'pending'; a retry after the first commit affects zero rows and 409s instead of refusing twice",
-		staffauth.Middleware(d.DB)(engagementrequest.RefuseHandler()))
-	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/withdraw",
-		"state-guarded UPDATE ... WHERE requested_by = $1 AND state = 'pending'; a retry after the first commit affects zero rows and 409s instead of withdrawing twice",
-		staffauth.Middleware(d.DB)(engagementrequest.WithdrawHandler()))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, engagement.DetailHandler())
-	// AnyStaff mirrors visit.ListHandler just below: the money filter
-	// (Owner/Admin see every entry, everyone else never sees a
-	// Contract-price or Invoice/payment one, per ADR-0008) runs inside
-	// the handler's own query, not at this mount seam.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/activity", staffauth.AnyStaff, engagement.ListActivityHandler())
-	// Completing an Engagement runs ADR-0008's cascade -- open Offers
-	// withdrawn, open attachments ended -- so it is one endpoint, not a
-	// generic status PATCH a caller could half-apply.
-	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/complete",
-		"documented idempotent by construction: re-running the completion cascade on an already-completed Engagement is a no-op that only closes anything a partial earlier run left behind",
-		staffauth.Middleware(d.DB)(engagement.CompleteHandler()))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, visit.ListHandler())
-	// staffauth.AttachingWrite is ADR-0008's write-side seam: every
-	// Engagement-scoped write below attaches the acting Doula, accrued,
-	// once it has succeeded. It is applied here rather than inside each
-	// handler so a new Engagement write cannot quietly fall off the list
-	// -- #231's whole argument against a second hand-maintained registry.
-	// Newly wrapped (2026 idempotency-stance review): CreateHandler is an
-	// unconditional INSERT with a fresh id each call and no uniqueness
-	// guard -- the same unguarded "create" shape as the six routes
-	// already wrapped below, so a double-click logged a Visit twice.
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(idempotency.Wrap(visit.CreateHandler()))))
-	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
-		"plain UPDATE staff_id = $1 WHERE id = $2; sets the assignment to the given value, so re-sending the same body is a no-op",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(visit.ReassignHandler())))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages", staffauth.AnyStaff, message.ListHandler())
-	// The Practice-wide "waiting on a reply" roll-up (#455): every
-	// Engagement whose thread's latest Message came from the Client, so a
-	// doula sees who is waiting without opening every Engagement in turn.
-	// AnyStaff, the same as the thread read above -- the contractor's
-	// attachment narrowing is enforced inside the handler's own query, not
-	// at this mount, mirroring message.ListHandler's own CanAccessEngagement
-	// narrowing rather than a role declaration.
-	g.Get("/api/practices/{practiceId}/messages/awaiting-reply", staffauth.AnyStaff, message.AwaitingReplyHandler())
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/messages",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(idempotency.Wrap(message.CreateHandler(d.Store, d.Pusher)))))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/messages/{messageId}/attachment", staffauth.AnyStaff, message.AttachmentHandler(d.Store))
-	// Plan Template and Contract Template: every Staff role (ADR-0008),
-	// no attachment narrowing -- a Template isn't Engagement-scoped.
-	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, plans.GetTemplateHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/plan-templates/{planType}",
-		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
-		staffauth.Middleware(d.DB)(plans.PutTemplateHandler()))
-	// ADR-0017's Client Field Template settings screen (#399): the field
-	// list an Owner or Admin defines for a Client's Practice-defined
-	// layer. Sibling of Plan Templates above -- read by any Staff member
-	// (the definitions carry nothing secret), written by an Owner or
-	// Admin alone (client_field_templates_insert/_update, 00050, enforce
-	// the same rule in RLS).
-	g.Get("/api/practices/{practiceId}/client-field-template", staffauth.AnyStaff, clientfieldtemplate.GetHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/client-field-template",
-		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
-		staffauth.Middleware(d.DB)(clientfieldtemplate.PutHandler()))
-	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		"guarded by plan_instances' unique constraint on (engagement_id, plan_type); a retry after the first succeeds hits the constraint and 409s rather than creating a duplicate Plan Instance",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(plans.PostInstanceHandler())))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}", staffauth.AnyStaff, plans.GetInstanceHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
-		"full-replace UPDATE of the Plan Instance's answers; re-sending the same body is a no-op",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(plans.PutInstanceHandler())))
-	g.Get("/api/practices/{practiceId}/contract-template", staffauth.AnyStaff, contracts.GetTemplateHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/contract-template",
-		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
-		staffauth.Middleware(d.DB)(contracts.PutTemplateHandler()))
-	// The Practice-wide "Contracts awaiting signature" roll-up (#426):
-	// every Draft or Sent Contract at the Practice in one read, so
-	// chasing signatures is one screen rather than every Engagement
-	// opened in turn (docs/journeys/non-doula-admin.md, DW-G5). Owner and
-	// Admin, the same declaration the credit balance and the
-	// Practice-wide Invoice list carry: this is the Practice's book of
-	// outstanding agreements, not a Doula's view of her own Engagements,
-	// so a contractor's attachment narrowing has nothing to narrow here.
-	g.Get("/api/practices/{practiceId}/contracts/awaiting-signature", ownerAndAdmin, contracts.AwaitingSignatureHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		"guarded by contracts' unique constraint on engagement_id; a retry after the first succeeds hits the constraint and 409s rather than creating a duplicate Contract",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(contracts.PostContractHandler())))
-	// Contract read is the sharpest #231 case: scope reaches every role
-	// (narrowed by attachment for a contractor, same as above), but money
-	// -- and Invoice history -- is Owner/Admin only, never a Doula's,
-	// employee or contractor (ADR-0008: "her own agreed fee only ...
-	// never the Practice's price"). GetContractHandler does the
-	// scope-vs-money split itself via staffauth.Reader +
-	// contracts.ContractScope/ContractFull; the mount stays AnyStaff so
-	// scope-only Doulas still reach it.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract", staffauth.AnyStaff, contracts.GetContractHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract",
-		"full-replace UPDATE of the Contract's merge field values; re-sending the same body is a no-op",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(contracts.PutContractHandler())))
-	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
-		"state-guarded (status != 'draft' -> 409); a retry after the first commit finds the Contract already sent and 409s instead of pushing the Client notification twice",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(contracts.PostSendContractHandler(d.Pusher))))
-	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
-		"state-guarded (status != 'signed' -> 409); a retry after the first commit 409s instead of voiding twice",
-		staffauth.Middleware(d.DB)(staffauth.AttachingWrite(contracts.PostVoidContractHandler())))
-	// The Signed PDF is a rendered, unredactable document -- it can't be
-	// split into scope/money views the way the JSON Contract read can, so
-	// it follows the money row: Owner/Admin only.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/pdf", ownerAndAdmin, contracts.GetSignedContractPDFHandler(d.Store))
-	// Newly wrapped (2026 idempotency-stance review): every call
-	// unconditionally calls Stripe CreateInvoice + FinalizeInvoice and
-	// inserts a new invoices row, with no dedup guard -- a double-click
-	// billed the Client twice. Money-creating, same as the six routes
-	// already wrapped below.
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices",
-		staffauth.Middleware(d.DB)(idempotency.Wrap(payments.PostInvoiceHandler(d.PaymentsClient))))
-	// Invoice history rides the same money row as Contract money -- see
-	// above. A contractor's own-fee narrowing (rather than an outright
-	// no) is #317's to build once the Offer/Attachment flow exists.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", ownerAndAdmin, payments.GetInvoicesHandler())
-	// The Practice-wide Invoice list (#265): every Invoice the Practice
-	// has billed, with the whole book's outstanding and paid totals, so
-	// "who owes us money" is one screen rather than every Engagement
-	// opened in turn. Same money row of ADR-0006's read table (carried
-	// forward by ADR-0008) as the per-Engagement history above, so the
-	// same Owner/Admin declaration. A contractor's own-fee narrowing has
-	// nothing to narrow here -- an aggregate of the Practice's whole book
-	// is not a view of her own Engagements -- so it stays where the
-	// per-Engagement Contract read already puts it.
-	g.Get("/api/practices/{practiceId}/invoices", ownerAndAdmin, payments.GetPracticeInvoicesHandler())
-	// ADR-0008's Offer flow (#317). The Practice side is Owner/Admin --
-	// making an Offer, taking it back, and reading who has been asked,
-	// which names people and so follows the Staff-roster row of the read
-	// table. The Doula side is her own inbox and her own decisions, so it
-	// is scoped to her staff_id in SQL rather than by a role declaration.
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/offers",
-		staffauth.Middleware(d.DB)(idempotency.Wrap(offer.CreateHandler(d.NudgeEnqueuer))))
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/offers", ownerAndAdmin, offer.EngagementListHandler())
-	g.Get("/api/practices/{practiceId}/offers", staffauth.AnyStaff, offer.InboxHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/offers/{offerId}/accept",
-		"state-guarded UPDATE ... WHERE state = 'offered'; a retry after the first commit affects zero rows and 409s instead of granting the attachment twice",
-		staffauth.Middleware(d.DB)(offer.AcceptHandler()))
-	ir.Exempt("POST /api/practices/{practiceId}/offers/{offerId}/decline",
-		"documented idempotent by design (#229): declining an already-declined Offer succeeds again rather than erroring",
-		staffauth.Middleware(d.DB)(offer.DeclineHandler()))
-	ir.Exempt("POST /api/practices/{practiceId}/offers/{offerId}/withdraw",
-		"state-guarded UPDATE ... WHERE state = 'offered'; a retry after the first commit affects zero rows and 409s instead of withdrawing twice",
-		staffauth.Middleware(d.DB)(offer.WithdrawHandler()))
-	ir.Exempt("POST /api/practices/{practiceId}/push-subscriptions",
-		"upsert; registering the same endpoint again is a no-op update, not a duplicate row",
-		staffauth.Middleware(d.DB)(pushsub.RegisterHandler()))
-	ir.Exempt("DELETE /api/practices/{practiceId}/push-subscriptions",
-		"delete; a retry after the first succeeds deletes nothing further",
-		staffauth.Middleware(d.DB)(pushsub.UnregisterHandler()))
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite",
-		staffauth.Middleware(d.DB)(idempotency.Wrap(portalinvite.InviteHandler(d.NudgeEnqueuer))))
-	// ADR-0029's suppression list, narrowed to the addresses this
-	// Practice is responsible for (#744). ownerAndAdmin rather than
-	// AnyStaff: the list is every Client and Staff address at the
-	// Practice whose mail is failing, which ADR-0008 keeps in the same
-	// hands as the roster it is drawn from.
-	g.Get("/api/practices/{practiceId}/email-suppressions", ownerAndAdmin, mailsuppress.ListHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/email-suppressions/clear",
-		"state-guarded UPDATE ... WHERE cleared_at IS NULL AND cause = 'bounce', and Mailgun's own DELETE answers 404 for an address already off its list; a retry after the first commit 404s instead of clearing twice",
-		staffauth.Middleware(d.DB)(mailsuppress.ClearHandler(d.BounceClearer)))
+	activityfeed.Mount(g)
+	billing.Mount(g, ir, d.StripeClient)
+	payments.Mount(g, ir, d.PaymentsClient)
+	website.Mount(g, ir, d.NudgeEnqueuer)
+	client.Mount(g, ir, d.NudgeEnqueuer)
+	engagementrequest.Mount(g, ir, d.DB, d.NudgeEnqueuer)
+	engagement.Mount(g, ir)
+	visit.Mount(g, ir)
+	message.Mount(g, ir, d.DB, d.Store, d.Pusher)
+	plans.Mount(g, ir, d.DB)
+	clientfieldtemplate.Mount(g, ir)
+	contracts.Mount(g, ir, d.DB, d.Store, d.Pusher)
+	offer.Mount(g, ir, d.DB, d.NudgeEnqueuer)
+	pushsub.Mount(g, ir, d.DB)
+	portalinvite.Mount(g, ir, d.DB, d.NudgeEnqueuer)
+	mailsuppress.Mount(g, ir, d.BounceClearer)
 }

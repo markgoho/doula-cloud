@@ -10,20 +10,24 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newRotateSavedCodesServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /staff/mfa-recovery/saved-codes/rotate", staffauth.RotateSavedCodesHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func postRotate(t *testing.T, srv *httptest.Server, session string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/staff/mfa-recovery/saved-codes/rotate", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/mfa-recovery/saved-codes/rotate", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -257,7 +261,7 @@ func TestRotateSavedCodesHandler_RevokesPriorBatch(t *testing.T) {
 	accounts.Seed(uid, uid+"@example.com", true)
 	spendSrv := newSpendServer(accounts, db)
 	defer spendSrv.Close()
-	spend := postJSONTo(t, spendSrv, "/staff/mfa-recovery/spend",
+	spend := postJSONTo(t, spendSrv, "/api/staff/mfa-recovery/spend",
 		`{"email":"`+uid+`@example.com","code":"`+firstBatch.Codes[0]+`"}`)
 	defer spend.Body.Close()
 	if spend.StatusCode != http.StatusBadRequest {

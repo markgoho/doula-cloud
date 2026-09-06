@@ -21,7 +21,7 @@ import (
 func postRedeem(t *testing.T, srv *httptest.Server, token, cookieToken string, confirmed bool) *http.Response {
 	t.Helper()
 	body := strings.NewReader(`{"token":"` + token + `"}`)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/portal/magic-link", body)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/magic-link", body)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

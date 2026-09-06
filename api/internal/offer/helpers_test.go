@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -34,28 +35,20 @@ const (
 	testAddress    = "renata@example.test"
 )
 
-// newServer mounts the same routes main.go wires up for this package,
-// behind staffauth.Middleware, and seeds a live session for uid --
-// returning the token its __session cookie carries.
+// newServer mounts this package's whole surface through offer.Mount --
+// the Practice side and the pre-account token-authenticated side both --
+// the same call main.go makes on the real GatedRouter and
+// idempotency.Router, plus engagement.Mount for the completion cascade a
+// handful of tests here drive to prove Offers get withdrawn by it. Seeds
+// a live session for uid, returning the token its __session cookie
+// carries.
 func newServer(t *testing.T, db *testdb.DB, uid string, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/offers",
-		staffauth.Middleware(db.App)(offer.CreateHandler(enq)))
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/offers",
-		staffauth.Middleware(db.App)(offer.EngagementListHandler()))
-	mux.Handle("GET /practices/{practiceId}/offers",
-		staffauth.Middleware(db.App)(offer.InboxHandler()))
-	mux.Handle("POST /practices/{practiceId}/offers/{offerId}/accept",
-		staffauth.Middleware(db.App)(offer.AcceptHandler()))
-	mux.Handle("POST /practices/{practiceId}/offers/{offerId}/decline",
-		staffauth.Middleware(db.App)(offer.DeclineHandler()))
-	mux.Handle("POST /practices/{practiceId}/offers/{offerId}/withdraw",
-		staffauth.Middleware(db.App)(offer.WithdrawHandler()))
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/complete",
-		staffauth.Middleware(db.App)(engagement.CompleteHandler()))
-	mux.Handle("GET /offers/{offerId}", offer.ReadHandler(db.App))
-	mux.Handle("POST /offers/{offerId}/decline", offer.DeclineByTokenHandler(db.App))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	offer.Mount(g, ir, db.App, enq)
+	engagement.Mount(g, ir)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

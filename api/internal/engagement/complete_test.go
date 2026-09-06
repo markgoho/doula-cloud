@@ -6,20 +6,15 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/engagement"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newCompleteServer mounts the completion route main.go wires up, on its
-// own mux -- the rest of this package's routes have nothing to do with
-// it.
+// newCompleteServer mounts this package's whole surface through
+// newServer -- the completion route is one of them -- and closes it on
+// t.Cleanup rather than making every caller defer srv.Close().
 func newCompleteServer(t *testing.T, db *testdb.DB) *httptest.Server {
 	t.Helper()
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/complete",
-		staffauth.Middleware(db.App)(engagement.CompleteHandler()))
-	srv := httptest.NewServer(mux)
+	srv, _ := newServer(t, db, "engagement-complete-mount")
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -28,7 +23,7 @@ func newCompleteServer(t *testing.T, db *testdb.DB) *httptest.Server {
 func completeAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID string) int {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/complete", nil)
+		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/complete", nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}

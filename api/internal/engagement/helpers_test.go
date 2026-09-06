@@ -7,23 +7,20 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newServer mounts the same routes main.go wires up for this package,
-// behind staffauth.Middleware, and seeds a live session for uid --
-// returning the token its __session cookie carries, since #151 the
-// cookie is the only credential the middleware reads. List and Create
-// moved to package client (#397); this package's own surface is now just
-// Engagement detail and completion.
+// newServer mounts this package's whole surface through engagement.Mount,
+// the same call main.go makes on the real GatedRouter and
+// idempotency.Router, and seeds a live session for uid.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}",
-		staffauth.Middleware(db.App)(engagement.DetailHandler()))
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/activity",
-		staffauth.Middleware(db.App)(engagement.ListActivityHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	engagement.Mount(g, ir)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

@@ -72,6 +72,54 @@ func SeedPortalAccount(t *testing.T, db *DB, identifier, signInAddress string) {
 	}
 }
 
+// SeedEngagement inserts a bare Client and an Engagement linking them to
+// practiceID, using the superuser Admin connection -- the minimum an
+// Engagement-scoped access check (staffauth.Reader.CanAccessEngagement,
+// activitygate's own Rules) needs to decide against. Collapses the
+// near-identical seedAccessEngagement/seedEngagement copies #706 found
+// duplicated in staffauth_test and activitygate_test.
+func SeedEngagement(t *testing.T, db *DB, practiceID string) (clientID, engagementID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'test-client@example.com') RETURNING id`,
+		practiceID,
+	).Scan(&clientID); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed client: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
+		clientID, practiceID,
+	).Scan(&engagementID); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed engagement: %v", err)
+	}
+	return clientID, engagementID
+}
+
+// SeedAttachment inserts an engagement_attachments row directly, using the
+// superuser Admin connection -- origin is "accrued" or "granted"
+// (ADR-0008), and ended sets ended_at to now() rather than leaving the
+// attachment open. attached_by is always staffID: no caller here needs to
+// distinguish an accrual from a grant by a different actor. Collapses the
+// identical seedAttachment copies #706 found duplicated in staffauth_test
+// and activitygate_test.
+func SeedAttachment(t *testing.T, db *DB, engagementID, staffID, origin string, ended bool) {
+	t.Helper()
+	endedAt := "NULL"
+	if ended {
+		endedAt = "now()"
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at)
+		 VALUES ($1, $2, $3::attachment_origin, $2, `+endedAt+`)`,
+		engagementID, staffID, origin,
+	); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed attachment (origin=%s, ended=%v): %v", origin, ended, err)
+	}
+}
+
 // AttachPortalUser links an already-seeded Portal Account (identifier) to
 // clientID via a new client_portal_users row, using the superuser Admin
 // connection. For the second (and later) client_portal_users row a

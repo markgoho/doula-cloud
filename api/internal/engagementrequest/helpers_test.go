@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -30,24 +31,15 @@ const (
 	testStateApproved  = "approved"
 )
 
-// newServer mounts the same routes main.go wires up for this package,
-// behind staffauth.Middleware, and seeds a live session for uid --
-// returning the token its __session cookie carries.
+// newServer mounts this package's whole surface through
+// engagementrequest.Mount, the same call main.go makes on the real
+// GatedRouter and idempotency.Router, and seeds a live session for uid.
 func newServer(t *testing.T, db *testdb.DB, uid string, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/engagement-requests",
-		staffauth.Middleware(db.App)(engagementrequest.ListHandler()))
-	mux.Handle("GET /practices/{practiceId}/engagement-requests/{requestId}",
-		staffauth.Middleware(db.App)(engagementrequest.DetailHandler()))
-	mux.Handle("POST /practices/{practiceId}/clients/{clientId}/engagement-requests",
-		staffauth.Middleware(db.App)(engagementrequest.RequestHandler(db.App, enq)))
-	mux.Handle("POST /practices/{practiceId}/engagement-requests/{requestId}/approve",
-		staffauth.Middleware(db.App)(engagementrequest.ApproveHandler(db.App, enq)))
-	mux.Handle("POST /practices/{practiceId}/engagement-requests/{requestId}/refuse",
-		staffauth.Middleware(db.App)(engagementrequest.RefuseHandler()))
-	mux.Handle("POST /practices/{practiceId}/engagement-requests/{requestId}/withdraw",
-		staffauth.Middleware(db.App)(engagementrequest.WithdrawHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	engagementrequest.Mount(g, ir, db.App, enq)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

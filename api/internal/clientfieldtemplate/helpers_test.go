@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientfieldtemplate"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -95,15 +96,14 @@ func lastAuditActor(t *testing.T, db *testdb.DB, practiceID string) string {
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/client-field-template",
-		staffauth.Middleware(db.App)(clientfieldtemplate.GetHandler()))
-	mux.Handle("PUT /practices/{practiceId}/client-field-template",
-		staffauth.Middleware(db.App)(clientfieldtemplate.PutHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	clientfieldtemplate.Mount(g, ir)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func templatePath(practiceID string) string {
-	return "/practices/" + practiceID + "/client-field-template"
+	return "/api/practices/" + practiceID + "/client-field-template"
 }
 
 func getTemplate(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {

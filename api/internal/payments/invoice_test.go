@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -108,17 +109,16 @@ func invoiceStatus(t *testing.T, db *testdb.DB, invoiceID string) string {
 func newInvoiceServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/contract/invoices",
-		staffauth.Middleware(db.App)(payments.PostInvoiceHandler(client)))
-	mux.Handle("GET /practices/{practiceId}/engagements/{engagementId}/contract/invoices",
-		staffauth.Middleware(db.App)(payments.GetInvoicesHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	payments.Mount(g, ir, client)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 func postInvoiceBody(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, body string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", bytes.NewBufferString(body))
+		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
@@ -142,7 +142,7 @@ func postInvoice(t *testing.T, srv *httptest.Server, session string, practiceID,
 
 func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, cursor string) *http.Response {
 	t.Helper()
-	url := srv.URL + "/practices/" + practiceID + "/engagements/" + engagementID + "/contract/invoices"
+	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract/invoices"
 	if cursor != "" {
 		url += "?cursor=" + cursor
 	}
@@ -578,7 +578,7 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-across-void"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	voidedContractID := seedContractWithStatus(t, db, engagementID, "voided")
 	currentContractID := seedContract(t, db, engagementID)
@@ -620,7 +620,7 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-paid-at"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid", "paid", 10000, time.Now())
@@ -653,7 +653,7 @@ func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 func TestGetInvoicesHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-malformed-engagement"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -672,7 +672,7 @@ func TestGetInvoicesHandler_MalformedEngagementIDReturns400(t *testing.T) {
 func TestGetInvoicesHandler_EngagementNotFoundReturns404(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-unknown-engagement"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -692,7 +692,7 @@ func TestGetInvoicesHandler_EngagementNotFoundReturns404(t *testing.T) {
 func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-no-contract"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 
@@ -720,7 +720,7 @@ func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-paginate"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedContract(t, db, engagementID)
 
@@ -778,7 +778,7 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 func TestGetInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-bad-cursor"
-	practiceID := seedMember(t, db, uid)
+	practiceID := seedOwner(t, db, uid)
 	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 

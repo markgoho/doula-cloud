@@ -17,7 +17,7 @@ import (
 
 func eraseEligibility(t *testing.T, session, baseURL, practiceID, clientID string) *http.Response {
 	t.Helper()
-	return authedGet(t, session, baseURL+"/practices/"+practiceID+"/clients/"+clientID+"/erasure")
+	return authedGet(t, session, baseURL+"/api/practices/"+practiceID+"/clients/"+clientID+"/erasure")
 }
 
 func decodeEligibility(t *testing.T, resp *http.Response) client.EraseEligibility {
@@ -39,7 +39,7 @@ func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
@@ -67,7 +67,7 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_open", "open", time.Hour)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_paid", "paid", time.Hour)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
@@ -112,7 +112,7 @@ func TestEraseEligibilityHandler_AlreadyErased(t *testing.T) {
 	practiceID, staffID := seedOwner(t, db, uid)
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	first := postErasure(t, session, srv, practiceID, clientID)
@@ -148,7 +148,7 @@ func TestEraseEligibilityHandler_RefusesEveryRoleButOwner(t *testing.T) {
 			staffID := testdb.SeedStaffAtPractice(t, db, practiceID, uid, roles, "employee")
 			clientID := seedFullClient(t, db, practiceID, staffID)
 
-			srv, session := newErasureServer(t, db, uid)
+			srv, session := newServer(t, db, uid)
 			defer srv.Close()
 
 			resp := eraseEligibility(t, session, srv.URL, practiceID, clientID)
@@ -171,7 +171,7 @@ func TestEraseEligibilityHandler_RefusesAnUnknownClient(t *testing.T) {
 	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "other-owner-eligibility", []string{ownerRole}, "employee")
 	otherClientID := seedFullClient(t, db, otherPracticeID, otherStaffID)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, otherClientID)
@@ -186,7 +186,7 @@ func TestEraseEligibilityHandler_RefusesAMalformedClientID(t *testing.T) {
 	const uid = "owner-eligibility-bad-id"
 	practiceID, _ := seedOwner(t, db, uid)
 
-	srv, session := newErasureServer(t, db, uid)
+	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
 	resp := eraseEligibility(t, session, srv.URL, practiceID, "not-a-uuid")

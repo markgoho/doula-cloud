@@ -19,15 +19,14 @@ const (
 	contractorType = "contractor"
 )
 
-// newServer mounts the same route main.go wires up for this package,
-// behind staffauth.Middleware, and seeds a live session for uid -- the
-// same shape engagement_test.newServer and portal_test.newServer already
-// use (see #706 for the standing duplication note).
+// newServer mounts this package's route through activityfeed.Mount, the
+// same call main.go makes on the real GatedRouter, and seeds a live
+// session for uid.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("GET /practices/{practiceId}/activity",
-		staffauth.Middleware(db.App)(activityfeed.PracticeHandler()))
+	g := staffauth.NewGatedRouter(mux, db.App)
+	activityfeed.Mount(g)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
