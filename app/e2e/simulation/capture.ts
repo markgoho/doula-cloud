@@ -47,6 +47,14 @@ export interface ObserveOptions {
 	// caller's one chance to have the persona name the wait in her own
 	// voice, exactly as README.md's performance section requires.
 	narrateWait?: (timingMs: number) => Promise<string> | string;
+	// 'required' (default): an outcome other than 'completed' must carry a
+	// Narrated line, exactly as README.md's two registers demand for a
+	// Persona. An Extra owes no Narrated register at any outcome
+	// (README.md, "Silence" -- extras.md carries Observed blocks only), so
+	// the orchestrator's Extra path sets this to 'forbidden': the
+	// friction/refused/stuck bands still apply to Timing and Outcome, but
+	// this module neither requires nor accepts a narrated line for them.
+	narration?: 'required' | 'forbidden';
 }
 
 // observedAct runs perform(), times it, screenshots the page, and turns
@@ -91,7 +99,11 @@ export async function observedAct(page: Page, spec: ActSpec, perform: () => Prom
 	const banded = applyPerformanceBand(entry);
 	entry = banded.entry;
 
-	if (requiresNarration(entry.outcome) && !entry.narrated) {
+	if (options.narration === 'forbidden') {
+		if (entry.narrated) {
+			return { ok: false, id: spec.id, note: `${spec.act}: an Extra's act must carry no Narrated line` };
+		}
+	} else if (requiresNarration(entry.outcome) && !entry.narrated) {
 		// Either perform() already knew the outcome and owed narration, or
 		// the band alone bumped a 'completed' act into friction -- the one
 		// case this module can still recover, by asking the caller to name
