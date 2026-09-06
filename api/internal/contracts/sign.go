@@ -130,8 +130,8 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 // Contract" is her act, never a system event), engagementID as
 // subject_id. This handler runs behind clientauth.Middleware, which sets
 // only app.current_client_id, never app.current_practice_id -- activity's
-// RLS policy needs the latter, so activity.ScopeToPractice sets it here,
-// immediately before the one Record call that needs it.
+// RLS policy needs the latter, so activity.ScopedTo widens it as part of
+// the one Record call below.
 func recordContractSigned(ctx context.Context, tx *sql.Tx, engagementID string) error {
 	var practiceID, clientID string
 	if err := tx.QueryRowContext(ctx,
@@ -140,17 +140,13 @@ func recordContractSigned(ctx context.Context, tx *sql.Tx, engagementID string) 
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("contracts: resolve engagement for contract signed: %w", err)
 	}
-	if err := activity.ScopeToPractice(ctx, tx, practiceID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("contracts: scope to practice for contract signed: %w", err)
-	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
 		SubjectID:   engagementID,
 		Action:      string(activity.ActionContractSigned),
 		Actor:       activity.ClientActor(clientID),
-	}); err != nil {
+	}, activity.ScopedTo(practiceID)); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("contracts: record contract signed: %w", err)
 	}

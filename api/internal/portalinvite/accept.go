@@ -76,17 +76,10 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return sessionmint.Result{IdentityUID: identifier, Body: result.AcceptInviteResponse}, nil
 		}
 
-		// activity.ScopeToPractice's contract is "nothing runs after it
-		// but the Record call it exists for" (see
-		// offer.recordPreAccountDecline): this must be the last write
-		// before Commit, which is why it runs as Finish -- after the
-		// mint, not inside step, which runs before eviction is even
-		// decided.
+		// This Record call is the last write before Commit, which is why
+		// it runs as Finish -- after the mint, not inside step, which
+		// runs before eviction is even decided.
 		finish := func(ctx context.Context, tx *sql.Tx) error {
-			if err := activity.ScopeToPractice(ctx, tx, result.practiceID); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				return fmt.Errorf("portalinvite: scope activity to practice: %w", err)
-			}
 			// #309: an accept that reuses an existing Portal Account
 			// (ADR-0015) records its own action -- no Portal Account came
 			// into being, an existing one gained reach into this
@@ -101,7 +94,7 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 				SubjectID:   engagementID,
 				Action:      string(action),
 				Actor:       activity.ClientActor(result.ClientID),
-			}); err != nil {
+			}, activity.ScopedTo(result.practiceID)); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				return fmt.Errorf("portalinvite: record activity: %w", err)
 			}
@@ -113,7 +106,7 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 }
 
 // acceptResult is acceptInvite's success value: the public response plus
-// the practiceID the handler needs for activity.ScopeToPractice, which
+// the practiceID the handler needs for activity.ScopedTo, which
 // portal_accounts and client_portal_users carry no column for.
 type acceptResult struct {
 	AcceptInviteResponse

@@ -95,10 +95,12 @@ func ActivityHandler() http.Handler {
 
 		// activity's own RLS policy compares against
 		// app.current_practice_id, which a Client-portal transaction never
-		// sets (clientauth.Middleware sets app.current_client_id instead) --
-		// see activity.ScopeToPractice's own doc comment for the landmine
-		// this avoids. Nothing but this read runs on tx afterward.
-		if err := activity.ScopeToPractice(r.Context(), tx, practiceID); err != nil {
+		// sets (clientauth.Middleware sets app.current_client_id instead).
+		// This is a read, not a call to activity.Record, so it sets the
+		// session variable itself here -- the same way
+		// payments.resolveInvoiceForEvent does for its own webhook path.
+		// Nothing but this read runs on tx afterward.
+		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
 			return

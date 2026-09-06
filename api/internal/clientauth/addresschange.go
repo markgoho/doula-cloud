@@ -326,11 +326,13 @@ type clientSubject struct {
 // caller; #618's sign-out-everywhere is its second, which is the bar
 // this codebase extracts a shared name at rather than duplicating.
 //
-// The two loops inside it are deliberately not one: activity.ScopeToPractice
-// widens every practice_id-scoped read the transaction makes afterwards,
-// so its own doc comment says nothing but the activity insert may follow
-// it. Every clients read this needs is therefore done first, and the
-// second loop does nothing but scope and record.
+// The two loops inside it are deliberately not one: each scoped Record
+// call below leaves app.current_practice_id widened to that subject's
+// Practice for the rest of tx (activity.ScopedTo's own doc comment), so
+// every clients read this needs -- each gated by app.current_client_id,
+// set per clientID as the loop goes -- must run first, in the first
+// loop, before the first Record call ever widens tx to one Practice.
+// The second loop then does nothing but call Record.
 func recordForEachClient(ctx context.Context, tx *sql.Tx, identifier string, action activity.ClientAction) error {
 	clientIDs, err := listPortalClientIDs(ctx, tx, identifier)
 	if err != nil {
@@ -356,17 +358,13 @@ func recordForEachClient(ctx context.Context, tx *sql.Tx, identifier string, act
 	}
 
 	for _, s := range subjects {
-		if err := activity.ScopeToPractice(ctx, tx, s.practiceID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return fmt.Errorf("clientauth: scope activity to practice: %w", err)
-		}
 		if err := activity.Record(ctx, tx, activity.Entry{
 			PracticeID:  s.practiceID,
 			SubjectKind: activity.SubjectClient,
 			SubjectID:   s.clientID,
 			Action:      string(action),
 			Actor:       activity.ClientActor(s.clientID),
-		}); err != nil {
+		}, activity.ScopedTo(s.practiceID)); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return fmt.Errorf("clientauth: record activity: %w", err)
 		}

@@ -128,8 +128,8 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 // and the Invitation it names remain the fuller audit answer, per this
 // file's existing doc comment. This handler runs on withTokenTx's own
 // db.BeginTx, outside staffauth.Middleware, so app.current_practice_id
-// is never set -- activity.ScopeToPractice sets it here, immediately
-// before the one Record call that needs it.
+// is never set -- activity.ScopedTo widens it as part of the Record
+// call below.
 func recordPreAccountDecline(ctx context.Context, tx *sql.Tx, offerID string) error {
 	// engagement_offers is read directly (engagement_offers_token_lookup,
 	// 00041), never joined to engagements: engagements carries only the
@@ -154,17 +154,13 @@ func recordPreAccountDecline(ctx context.Context, tx *sql.Tx, offerID string) er
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("offer: resolve practice for pre-account decline: %w", err)
 	}
-	if err := activity.ScopeToPractice(ctx, tx, practiceID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("offer: scope to practice for pre-account decline: %w", err)
-	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
 		SubjectID:   engagementID,
 		Action:      string(activity.ActionOfferDeclined),
 		Actor:       activity.SystemActor(),
-	}); err != nil {
+	}, activity.ScopedTo(practiceID)); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("offer: record pre-account decline: %w", err)
 	}
