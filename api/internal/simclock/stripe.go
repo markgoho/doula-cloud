@@ -2,6 +2,7 @@ package simclock
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -85,7 +86,7 @@ func (s *StripeAPI) AdvanceClock(ctx context.Context, accountID, clockID string,
 }
 
 // ClockStatus reports clockID's current status.
-func (s *StripeAPI) ClockStatus(ctx context.Context, accountID, clockID string) (string, error) {
+func (s *StripeAPI) ClockStatus(ctx context.Context, accountID, clockID string) (ClockStatus, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	clock, err := s.client.V1TestHelpersTestClocks.Retrieve(ctx, clockID, &stripe.TestHelpersTestClockRetrieveParams{
 		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
@@ -95,7 +96,30 @@ func (s *StripeAPI) ClockStatus(ctx context.Context, accountID, clockID string) 
 		return "", fmt.Errorf("simclock: stripe retrieve test clock: %w", err)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return string(clock.Status), nil
+	return ClockStatus(clock.Status), nil
+}
+
+// CustomerIsDeleted reports whether customerID no longer exists on
+// accountID. Stripe answers this two ways -- a Customer it still has a
+// record of comes back with deleted true, and one it has forgotten
+// entirely comes back as a 404 -- and both mean the same thing here.
+func (s *StripeAPI) CustomerIsDeleted(ctx context.Context, accountID, customerID string) (bool, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	cust, err := s.client.V1Customers.Retrieve(ctx, customerID, &stripe.CustomerRetrieveParams{
+		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		var stripeErr *stripe.Error
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if errors.As(err, &stripeErr) && stripeErr.Code == stripe.ErrorCodeResourceMissing {
+			return true, nil
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		return false, fmt.Errorf("simclock: stripe retrieve customer: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return cust.Deleted, nil
 }
 
 // CustomersOnClock lists every Customer Stripe reports as belonging to

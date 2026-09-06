@@ -11,12 +11,21 @@ import (
 
 const testRole = "app"
 
+// The argument fixtures the usage tests share: a surplus argument, a
+// plausible client id, a well-formed Connect account id, and a week.
+const (
+	extraArg     = "extra"
+	testClientID = "some-client"
+	testAccount  = "acct_ok"
+	testDelta    = "168h"
+)
+
 func TestRun_BadUsage(t *testing.T) {
 	cases := [][]string{
 		nil,
 		{modeInstall},
 		{"bogus", testRole},
-		{modeInstall, testRole, "extra"},
+		{modeInstall, testRole, extraArg},
 	}
 	for _, args := range cases {
 		if err := run(args); err == nil {
@@ -61,11 +70,11 @@ func TestWaitForConnection_TimesOutWhenUnreachable(t *testing.T) {
 func TestRun_BadAllocateAndAdvanceUsage(t *testing.T) {
 	cases := [][]string{
 		{modeAllocate},
-		{modeAllocate, "some-client"},
-		{modeAllocate, "some-client", "acct_ok", "extra"},
-		{modeAllocate, "some-client", "not-an-account"},
+		{modeAllocate, testClientID},
+		{modeAllocate, testClientID, testAccount, extraArg},
+		{modeAllocate, testClientID, "not-an-account"},
 		{modeAdvance},
-		{modeAdvance, "168h", "extra"},
+		{modeAdvance, testDelta, extraArg},
 		{modeAdvance, "a fortnight"},
 	}
 	for _, args := range cases {
@@ -82,8 +91,8 @@ func TestRun_MissingStripeKey(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
 	for _, args := range [][]string{
-		{modeAllocate, "some-client", "acct_ok"},
-		{modeAdvance, "168h"},
+		{modeAllocate, testClientID, testAccount},
+		{modeAdvance, testDelta},
 	} {
 		if err := run(args); err == nil {
 			t.Fatalf("run(%v): expected an error when STRIPE_API_KEY is unset, got nil", args)
@@ -98,8 +107,8 @@ func TestRun_MissingDatabaseURLForStripeModes(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
 	for _, args := range [][]string{
-		{modeAllocate, "some-client", "acct_ok"},
-		{modeAdvance, "168h"},
+		{modeAllocate, testClientID, testAccount},
+		{modeAdvance, testDelta},
 	} {
 		if err := run(args); err == nil {
 			t.Fatalf("run(%v): expected an error when DATABASE_URL is unset, got nil", args)

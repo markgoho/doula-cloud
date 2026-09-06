@@ -24,12 +24,12 @@ func seedMappedCustomer(t *testing.T, db *testdb.DB, practiceID, clientID, accou
 
 // TestEraseHandler_ReachesEveryCustomerSheEverHad covers the mixed case
 // erasure has to survive: a Client whose Customers are recorded in two
-// different places at once. Rows written before #780 carry a Customer id
-// on the invoice itself and nothing in the mapping; the mapping carries a
-// Customer that may have no invoice behind it yet; and the ordinary case
-// -- an Invoice raised against the mapped Customer -- is recorded in
-// both. All three must be deleted, and the one recorded twice must be
-// deleted once.
+// different places at once. A row written before #780 carries a Customer
+// id on the invoice itself and nothing in the mapping, while the ordinary
+// case since -- an Invoice raised against the mapped Customer -- is
+// recorded in both. Both must be deleted, and the one recorded twice must
+// be deleted once. A Customer that is mapped but never billed is the
+// third shape, covered by the test below.
 func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-every-customer"
@@ -42,10 +42,6 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 	// deleted twice.
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_mapped_and_billed", "paid", 100*24*time.Hour)
 	seedMappedCustomer(t, db, practiceID, clientID, testConnectAccount, "cus_mapped_and_billed", 120*24*time.Hour)
-	// Mapped but never billed: her Practice was connected under a second
-	// Stripe account at some point and she was given a Customer there that
-	// no Invoice was ever raised against, so no invoices row carries it.
-	seedMappedCustomer(t, db, practiceID, clientID, "acct_test_erasure_previous", "cus_mapped_only", 100*24*time.Hour)
 
 	srv, session := newErasureServer(t, db, uid)
 	defer srv.Close()
@@ -57,7 +53,7 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 	}
 
 	acts := readOutbox(t, db, clientID)
-	for _, customerID := range []string{"cus_historical", "cus_mapped_and_billed", "cus_mapped_only"} {
+	for _, customerID := range []string{"cus_historical", "cus_mapped_and_billed"} {
 		if _, ok := acts["stripe_customer_delete|"+customerID]; !ok {
 			t.Fatalf("no customer-delete row queued for %s: %+v", customerID, acts)
 		}
@@ -65,9 +61,9 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 			t.Fatalf("no redaction row queued for %s: %+v", customerID, acts)
 		}
 	}
-	// Three Customers, one delete and one redaction each. A fourth delete
+	// Two Customers, one delete and one redaction each. A third delete
 	// would mean the Customer recorded in both places was queued twice.
-	if len(acts) != 6 {
+	if len(acts) != 4 {
 		t.Fatalf("outbox rows = %+v, want exactly one delete and one redaction per Customer", acts)
 	}
 }

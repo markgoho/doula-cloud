@@ -37,8 +37,12 @@ type fakeStripe struct {
 	// StatusScript, keyed by clock id, is the sequence of statuses
 	// ClockStatus returns for that clock, one per call, the last repeating.
 	// Unset means ready at once.
-	StatusScript map[string][]string
+	StatusScript map[string][]simclock.ClockStatus
 	statusCalls  map[string]int
+
+	// Deleted, keyed by customer id, is what CustomerIsDeleted reports --
+	// how a test says a Customer was erased rather than left off a clock.
+	Deleted map[string]bool
 
 	// Order records every call in sequence, so a test can prove the
 	// advances were all issued before the first status read.
@@ -49,6 +53,7 @@ type fakeStripe struct {
 	AdvanceErr        error
 	StatusErr         error
 	ListErr           error
+	DeletedErr        error
 }
 
 // advance is one AdvanceClock call.
@@ -61,8 +66,9 @@ func newFakeStripe() *fakeStripe {
 	return &fakeStripe{
 		ClockLife:    30 * 24 * time.Hour,
 		Customers:    map[string][]string{},
-		StatusScript: map[string][]string{},
+		StatusScript: map[string][]simclock.ClockStatus{},
 		statusCalls:  map[string]int{},
+		Deleted:      map[string]bool{},
 	}
 }
 
@@ -102,7 +108,7 @@ func (f *fakeStripe) AdvanceClock(_ context.Context, _, clockID string, to time.
 	return nil
 }
 
-func (f *fakeStripe) ClockStatus(_ context.Context, _, clockID string) (string, error) {
+func (f *fakeStripe) ClockStatus(_ context.Context, _, clockID string) (simclock.ClockStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.StatusErr != nil {
@@ -119,6 +125,18 @@ func (f *fakeStripe) ClockStatus(_ context.Context, _, clockID string) (string, 
 		i = len(script) - 1
 	}
 	return script[i], nil
+}
+
+// CustomerIsDeleted reports what a test put in Deleted -- absent means
+// the Customer still exists, which is the drift case.
+func (f *fakeStripe) CustomerIsDeleted(_ context.Context, _, customerID string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.DeletedErr != nil {
+		return false, f.DeletedErr
+	}
+	f.Order = append(f.Order, "deleted?:"+customerID)
+	return f.Deleted[customerID], nil
 }
 
 func (f *fakeStripe) CustomersOnClock(_ context.Context, _, clockID string) ([]string, error) {
@@ -453,7 +471,7 @@ func TestAdvance_IssuesEveryAdvanceBeforeWaitingOnAny(t *testing.T) {
 	}
 	// The first clock takes two polls to land, so a wait that came before
 	// the second advance would be visible in the order below.
-	stripe.StatusScript["clock_1"] = []string{simclock.ClockAdvancing, simclock.ClockReady}
+	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockAdvancing, simclock.ClockReady}
 
 	if err := runner.Advance(ctx, time.Hour); err != nil {
 		t.Fatalf("Advance: %v", err)
@@ -489,7 +507,7 @@ func TestAdvance_WaitsUntilEveryClockIsReady(t *testing.T) {
 	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
 		t.Fatalf("Allocate: %v", err)
 	}
-	stripe.StatusScript["clock_1"] = []string{
+	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{
 		simclock.ClockAdvancing, simclock.ClockAdvancing, simclock.ClockReady,
 	}
 
@@ -520,10 +538,10 @@ func TestAdvance_StopsOnAClockThatFailed(t *testing.T) {
 	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
 		t.Fatalf("Allocate: %v", err)
 	}
-	stripe.StatusScript["clock_1"] = []string{simclock.ClockInternalFailure}
+	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockInternalFailure}
 
 	err := runner.Advance(ctx, time.Hour)
-	if err == nil || !strings.Contains(err.Error(), simclock.ClockInternalFailure) {
+	if err == nil || !strings.Contains(err.Error(), string(simclock.ClockInternalFailure)) {
 		t.Fatalf("Advance: got %v, want the failed status reported", err)
 	}
 }
@@ -540,7 +558,7 @@ func TestAdvance_GivesUpOnAClockThatNeverLands(t *testing.T) {
 	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
 		t.Fatalf("Allocate: %v", err)
 	}
-	stripe.StatusScript["clock_1"] = []string{simclock.ClockAdvancing}
+	stripe.StatusScript["clock_1"] = []simclock.ClockStatus{simclock.ClockAdvancing}
 
 	err := runner.Advance(ctx, time.Hour)
 	if err == nil || !strings.Contains(err.Error(), "still advancing") {
@@ -630,6 +648,13 @@ func TestAdvance_ReportsAStripeFailure(t *testing.T) {
 		"issuing the advance":   func(f *fakeStripe) { f.AdvanceErr = failing },
 		"reading the status":    func(f *fakeStripe) { f.StatusErr = failing },
 		"listing the customers": func(f *fakeStripe) { f.ListErr = failing },
+		// A Customer missing from its clock's list is what makes the run
+		// ask Stripe whether it was deleted, so this case has to make one
+		// missing before it can fail that read.
+		"checking whether a customer was deleted": func(f *fakeStripe) {
+			f.Customers["clock_1"] = nil
+			f.DeletedErr = failing
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx := t.Context()
@@ -715,7 +740,94 @@ func TestAdvance_UsesTheDefaultWaitWhenNoneIsSet(t *testing.T) {
 // the calls themselves are proved against the Sandbox.
 func TestNewStripeAPI_SatisfiesTheClockSurface(t *testing.T) {
 	var api simclock.StripeClocks = simclock.NewStripeAPI("sk_test_not_a_real_key")
-	if api == nil {
-		t.Fatal("NewStripeAPI returned nil")
+	if _, ok := api.(*simclock.StripeAPI); !ok {
+		t.Fatalf("NewStripeAPI returned %T, want *simclock.StripeAPI", api)
+	}
+}
+
+// TestAdvance_LeavesNothingMovedWhenStripeRefuses proves the ordering
+// that stops a failed jump becoming the very drift the jump exists to
+// prevent: the offset row moves only once every clock has landed, so a
+// Stripe refusal leaves both halves of the run where they were.
+func TestAdvance_LeavesNothingMovedWhenStripeRefuses(t *testing.T) {
+	ctx := t.Context()
+	db := migratedDB(t)
+	_, clientID := seedPracticeAndClient(t, db)
+
+	stripe := newFakeStripe()
+	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
+	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
+		t.Fatalf("Allocate: %v", err)
+	}
+	stripe.AdvanceErr = errors.New("stripe: fake failure")
+
+	if err := runner.Advance(ctx, time.Hour); err == nil {
+		t.Fatal("Advance: got nil, want the Stripe failure")
+	}
+
+	var deltaSeconds int64
+	if err := db.QueryRowContext(ctx,
+		`SELECT extract(epoch FROM delta)::bigint FROM sim.offset_row`).Scan(&deltaSeconds); err != nil {
+		t.Fatalf("read offset row: %v", err)
+	}
+	if deltaSeconds != 0 {
+		t.Fatalf("offset row delta = %ds, want it untouched by a failed advance", deltaSeconds)
+	}
+}
+
+// TestAdvance_AnErasedCustomerIsNotDrift proves the distinction the drift
+// guard has to make. Stripe omits a deleted Customer from a clock's list
+// exactly as it omits one that never had a clock, and erasure deletes
+// Customers -- so without this an erased Client would stop every jump
+// after her.
+func TestAdvance_AnErasedCustomerIsNotDrift(t *testing.T) {
+	ctx := t.Context()
+	db := migratedDB(t)
+	_, clientID := seedPracticeAndClient(t, db)
+
+	stripe := newFakeStripe()
+	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
+	customerID, _, err := runner.Allocate(ctx, clientID, testAccount)
+	if err != nil {
+		t.Fatalf("Allocate: %v", err)
+	}
+	// Erased: gone from the clock's list, and gone from Stripe.
+	stripe.Customers["clock_1"] = nil
+	stripe.Deleted[customerID] = true
+
+	if err := runner.Advance(ctx, time.Hour); err != nil {
+		t.Fatalf("Advance: %v", err)
+	}
+}
+
+// TestAdvance_StopsTheRunWhenTheProductMadeACustomerWithNoClock covers
+// the other half of the drift guard: a Customer the product made, because
+// a Client was invoiced before she was allocated one, has no clock at all
+// and is dated by real time from the first jump onwards.
+func TestAdvance_StopsTheRunWhenTheProductMadeACustomerWithNoClock(t *testing.T) {
+	ctx := t.Context()
+	db := migratedDB(t)
+	practiceID, clientID := seedPracticeAndClient(t, db)
+
+	stripe := newFakeStripe()
+	runner := simclock.Runner{DB: db, Stripe: stripe, PollInterval: time.Millisecond}
+	if _, _, err := runner.Allocate(ctx, clientID, testAccount); err != nil {
+		t.Fatalf("Allocate: %v", err)
+	}
+
+	// A second Client, whose mapping the product wrote when it raised her
+	// first Invoice -- so there is no clock behind it.
+	unallocated := seedClient(t, db, practiceID, "bea")
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO client_stripe_customers (practice_id, client_id, stripe_account_id, stripe_customer_id)
+		 VALUES ($1, $2, $3, $4)`,
+		practiceID, unallocated, testAccount, "cus_made_by_the_product",
+	); err != nil {
+		t.Fatalf("seed product-made customer: %v", err)
+	}
+
+	err := runner.Advance(ctx, time.Hour)
+	if err == nil || !strings.Contains(err.Error(), "cus_made_by_the_product") {
+		t.Fatalf("Advance: got %v, want the unclocked Customer named", err)
 	}
 }

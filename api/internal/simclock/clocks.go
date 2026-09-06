@@ -22,13 +22,19 @@ import (
 // above anything docs/simulation/calendar.md produces.
 const ClockCapacity = 3
 
-// Stripe's three test-clock statuses. Only ready means an advance has
-// finished; internal_failure is terminal and no further advance will
-// succeed on that clock.
+// ClockStatus is what Stripe reports a test clock is doing. It takes
+// exactly three values, so a status that is neither ready nor advancing
+// is terminal by elimination rather than by a list this code has to keep
+// in step with Stripe's.
+type ClockStatus string
+
+// Stripe's three test-clock statuses. Only ClockReady means an advance
+// has finished; ClockInternalFailure is terminal and no further advance
+// will succeed on that clock.
 const (
-	ClockReady           = "ready"
-	ClockAdvancing       = "advancing"
-	ClockInternalFailure = "internal_failure"
+	ClockReady           ClockStatus = "ready"
+	ClockAdvancing       ClockStatus = "advancing"
+	ClockInternalFailure ClockStatus = "internal_failure"
 )
 
 // Clock is one Stripe test clock a run holds: its id, and the real
@@ -65,12 +71,18 @@ type StripeClocks interface {
 	AdvanceClock(ctx context.Context, accountID, clockID string, to time.Time) error
 	// ClockStatus reports clockID's current status -- one of ClockReady,
 	// ClockAdvancing or ClockInternalFailure.
-	ClockStatus(ctx context.Context, accountID, clockID string) (string, error)
+	ClockStatus(ctx context.Context, accountID, clockID string) (ClockStatus, error)
 	// CustomersOnClock lists the ids of every Customer Stripe currently
 	// reports as belonging to clockID. A Customer a run allocated onto a
 	// clock and that is missing here has lost its clock, which is the
 	// drift Advance stops the run over.
 	CustomersOnClock(ctx context.Context, accountID, clockID string) ([]string, error)
+	// CustomerIsDeleted reports whether customerID no longer exists on
+	// accountID. Stripe omits a deleted Customer from a clock's list
+	// exactly as it omits one that never had a clock, and only the second
+	// is drift -- erasure deletes Customers, so without this an erased
+	// Client would stop every jump after her.
+	CustomerIsDeleted(ctx context.Context, accountID, customerID string) (bool, error)
 }
 
 // clockTablesSQL is the run's own record of the clocks it holds. It lives
@@ -374,11 +386,16 @@ type heldClock struct {
 //
 // In order: it refuses a delta that does not move forward; it refuses to
 // run at all when any held clock is past its recorded deletes_after, and
-// names them; it moves the offset row; it issues an advance to every
-// clock before waiting on any of them, because advances are
-// asynchronous; it waits until every clock reports ready; and then it
-// reads the Customers on each clock and refuses to let the run continue
-// if any Customer it is responsible for has lost its clock.
+// names them; it issues an advance to every clock before waiting on any
+// of them, because advances are asynchronous; it waits until every clock
+// reports ready; it checks for drift; and only then does it move the
+// offset row.
+//
+// The offset row moves last so that a Stripe failure -- a refused
+// advance, a clock that never lands -- leaves both halves of the run
+// where they were rather than the database ahead of Stripe. That is the
+// same drift, arrived at by failing instead of by design, and it is the
+// one ordering that cannot produce it.
 func (r Runner) Advance(ctx context.Context, delta time.Duration) error {
 	if delta <= 0 {
 		return fmt.Errorf("simclock: advance delta must move forward, got %s", delta)
@@ -393,11 +410,12 @@ func (r Runner) Advance(ctx context.Context, delta time.Duration) error {
 		return err
 	}
 
-	target, err := r.moveOffset(ctx, delta)
+	now, err := r.simNow(ctx)
 	if err != nil {
-		// coverage:ignore reason: DB write failure, not exercised by unit tests
+		// coverage:ignore reason: requires a database without the shim installed
 		return err
 	}
+	target := now.Add(delta)
 
 	// Every advance is issued before any is waited on: each takes roughly
 	// six seconds at Stripe, so issuing them in series and waiting in
@@ -411,7 +429,10 @@ func (r Runner) Advance(ctx context.Context, delta time.Duration) error {
 	if err := r.waitForReady(ctx, clocks); err != nil {
 		return err
 	}
-	return r.checkForDrift(ctx, clocks)
+	if err := r.checkForDrift(ctx, clocks); err != nil {
+		return err
+	}
+	return r.moveOffset(ctx, delta)
 }
 
 // heldClocks reads every clock the run holds. They survive a stop and
@@ -464,22 +485,17 @@ func refuseExpired(clocks []heldClock, now time.Time) error {
 		len(expired), strings.Join(expired, ", "))
 }
 
-// moveOffset shifts the offset row by delta and reports the simulated
-// instant that produces -- the one absolute target every clock is then
-// advanced to. Stripe's advance takes an absolute frozen time, not a
-// delta, so a clock created mid-run at a later frozen time still lands
-// exactly where every other clock lands.
-func (r Runner) moveOffset(ctx context.Context, delta time.Duration) (time.Time, error) {
-	var target time.Time
-	if err := r.DB.QueryRowContext(ctx,
-		`UPDATE sim.offset_row SET delta = delta + make_interval(secs => $1)
-		 RETURNING pg_catalog.now() + delta`,
+// moveOffset shifts the offset row by delta -- the database half of the
+// jump, run once every clock has already landed on the same instant.
+func (r Runner) moveOffset(ctx context.Context, delta time.Duration) error {
+	if _, err := r.DB.ExecContext(ctx,
+		`UPDATE sim.offset_row SET delta = delta + make_interval(secs => $1)`,
 		delta.Seconds(),
-	).Scan(&target); err != nil {
+	); err != nil {
 		// coverage:ignore reason: requires a database without the shim installed
-		return time.Time{}, fmt.Errorf("simclock: move offset row: %w", err)
+		return fmt.Errorf("simclock: move offset row: %w", err)
 	}
-	return target, nil
+	return nil
 }
 
 // waitForReady polls every clock until each reports ready. An advance is
@@ -523,33 +539,37 @@ func (r Runner) waitForReady(ctx context.Context, clocks []heldClock) error {
 	return nil
 }
 
-// checkForDrift stops the run when a Customer the run allocated onto a
-// clock is no longer on one. A Customer with a null test_clock is dated
+// checkForDrift stops the run when a Customer it is responsible for is
+// no longer on a test clock. A Customer with a null test_clock is dated
 // by real time while everything around it is dated by the run's, so every
 // date read off it afterwards is wrong in a way that reads as a product
-// defect. One list call per clock -- about eight reads for run one --
-// which is why this belongs here rather than as an obligation placed on
-// whatever calls Advance.
+// defect.
+//
+// Two things make a Customer suspect: Stripe no longer lists it on the
+// clock the run put it on, or the product made it -- a Client invoiced
+// before she was allocated one -- so it never had a clock at all. That is
+// one list call per clock, about eight reads for run one, and no read per
+// Customer while nothing is wrong.
+//
+// A suspect is only drift if it still exists. Stripe omits a *deleted*
+// Customer from a clock's list exactly as it omits an unclocked one, and
+// erasure deletes Customers, so an erased Client would otherwise make
+// every later jump refuse. Each suspect therefore costs one more read to
+// tell the two apart -- paid only when there is something to explain.
 func (r Runner) checkForDrift(ctx context.Context, clocks []heldClock) error {
+	suspects, err := r.suspectCustomers(ctx, clocks)
+	if err != nil {
+		return err
+	}
+
 	var adrift []string
-	for _, c := range clocks {
-		onClock, err := r.Stripe.CustomersOnClock(ctx, c.AccountID, c.ID)
+	for _, s := range suspects {
+		deleted, err := r.Stripe.CustomerIsDeleted(ctx, s.AccountID, s.CustomerID)
 		if err != nil {
-			return fmt.Errorf("simclock: list customers on clock %s: %w", c.ID, err)
+			return fmt.Errorf("simclock: check customer %s: %w", s.CustomerID, err)
 		}
-		still := make(map[string]bool, len(onClock))
-		for _, id := range onClock {
-			still[id] = true
-		}
-		recordedIDs, err := r.customersOn(ctx, c.ID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return err
-		}
-		for _, id := range recordedIDs {
-			if !still[id] {
-				adrift = append(adrift, id)
-			}
+		if !deleted {
+			adrift = append(adrift, s.CustomerID)
 		}
 	}
 	if len(adrift) == 0 {
@@ -558,6 +578,98 @@ func (r Runner) checkForDrift(ctx context.Context, clocks []heldClock) error {
 	sort.Strings(adrift)
 	return fmt.Errorf("simclock: %d customer(s) are no longer on a test clock: %s",
 		len(adrift), strings.Join(adrift, ", "))
+}
+
+// suspect is one Customer that may have drifted, and the connected
+// account to ask Stripe about it on.
+type suspect struct {
+	CustomerID string
+	AccountID  string
+}
+
+// suspectCustomers gathers every Customer that is not demonstrably on a
+// clock: the ones Stripe no longer lists on the clock the run put them
+// on, and the ones mapped on an account the run holds clocks for that the
+// run never put on a clock at all.
+func (r Runner) suspectCustomers(ctx context.Context, clocks []heldClock) ([]suspect, error) {
+	var out []suspect
+	for _, c := range clocks {
+		onClock, err := r.Stripe.CustomersOnClock(ctx, c.AccountID, c.ID)
+		if err != nil {
+			return nil, fmt.Errorf("simclock: list customers on clock %s: %w", c.ID, err)
+		}
+		still := make(map[string]bool, len(onClock))
+		for _, id := range onClock {
+			still[id] = true
+		}
+		recordedIDs, err := r.customersOn(ctx, c.ID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return nil, err
+		}
+		for _, id := range recordedIDs {
+			if !still[id] {
+				out = append(out, suspect{CustomerID: id, AccountID: c.AccountID})
+			}
+		}
+	}
+
+	unclocked, err := r.unclockedCustomers(ctx, clocks)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, err
+	}
+	return append(out, unclocked...), nil
+}
+
+// unclockedCustomers names any Customer mapped on an account the run
+// holds clocks for that the run never put on a clock. That is a Customer
+// the *product* made -- a Client invoiced before she was allocated one --
+// and it has a null test_clock by construction, so it drifts the moment
+// the run jumps. It is caught here rather than left to whoever calls
+// Advance, for the same reason the Stripe-side check is.
+func (r Runner) unclockedCustomers(ctx context.Context, clocks []heldClock) ([]suspect, error) {
+	accounts := make([]string, 0, len(clocks))
+	seen := map[string]bool{}
+	for _, c := range clocks {
+		if !seen[c.AccountID] {
+			seen[c.AccountID] = true
+			accounts = append(accounts, c.AccountID)
+		}
+	}
+	if len(accounts) == 0 {
+		// coverage:ignore reason: Advance returns before this on a run holding no clocks
+		return nil, nil
+	}
+
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT m.stripe_customer_id, m.stripe_account_id FROM client_stripe_customers m
+		  WHERE m.stripe_account_id = ANY($1)
+		    AND NOT EXISTS (
+		        SELECT 1 FROM sim.test_clock_customers cc
+		         WHERE cc.stripe_customer_id = m.stripe_customer_id)`,
+		accounts,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("simclock: list customers with no clock: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []suspect
+	for rows.Next() {
+		var s suspect
+		if err := rows.Scan(&s.CustomerID, &s.AccountID); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("simclock: scan customer with no clock: %w", err)
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("simclock: iterate customers with no clock: %w", err)
+	}
+	return out, nil
 }
 
 // customersOn lists the Customers the run put on clockID.
