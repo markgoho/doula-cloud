@@ -73,7 +73,7 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		resp, identifier, engagementID, status, code, msg := acceptInvite(r, tx, req.InviteToken)
+		resp, identifier, engagementID, reused, status, code, msg := acceptInvite(r, tx, req.InviteToken)
 		if status != http.StatusOK {
 			apierr.Write(w, status, code, msg, nil)
 			return
@@ -109,11 +109,18 @@ func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		// #309: an accept that reuses an existing Portal Account (ADR-0015)
+		// records its own action -- no Portal Account came into being, an
+		// existing one gained reach into this Practice.
+		action := activity.ActionPortalAccountProvisioned
+		if reused {
+			action = activity.ActionPortalAccountLinked
+		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
 			PracticeID:  resp.practiceID,
 			SubjectKind: activity.SubjectEngagement,
 			SubjectID:   engagementID,
-			Action:      string(activity.ActionPortalAccountProvisioned),
+			Action:      string(action),
 			Actor:       activity.ClientActor(resp.ClientID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -164,12 +171,12 @@ type acceptResult struct {
 // current_client_id is still set from the read above is invisible to
 // every SELECT policy and the UPDATE is refused with a bare RLS error,
 // no matter how correct the UPDATE policy's own WITH CHECK is.
-func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result acceptResult, identifier, engagementID string, status int, code apierr.Code, msg string) {
+func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result acceptResult, identifier, engagementID string, reused bool, status int, code apierr.Code, msg string) {
 	ctx := r.Context()
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.invite_token', $1, true)`, inviteToken); err != nil {
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	var clientID string
@@ -180,11 +187,11 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		inviteToken,
 	).Scan(&clientID, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return acceptResult{}, "", "", http.StatusNotFound, apierr.CodeNotFound, "invite not found or already accepted"
+		return acceptResult{}, "", "", false, http.StatusNotFound, apierr.CodeNotFound, "invite not found or already accepted"
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	// A pending row with no expiry can never be accepted -- the property
@@ -197,7 +204,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 	// (via apierr.WriteError) -- an explicit derivation, not a mistaken
 	// CodeInternal literal for what is an expected, not a server, failure.
 	if !expiresAt.Valid || !expiresAt.Time.After(time.Now()) {
-		return acceptResult{}, "", "", http.StatusGone, apierr.CodeForStatus(http.StatusGone), "this invitation has expired -- ask your practice to send a new one"
+		return acceptResult{}, "", "", false, http.StatusGone, apierr.CodeForStatus(http.StatusGone), "this invitation has expired -- ask your practice to send a new one"
 	}
 
 	// Opens clients_self_visibility (00009_messaging_client_portal_read.sql)
@@ -208,13 +215,13 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 	// above.
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	var email, practiceID string
 	if err := tx.QueryRowContext(ctx, `SELECT email, practice_id FROM clients WHERE id = $1`, clientID).Scan(&email, &practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientID came from a row this same tx just read
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	// The most recent Engagement is the one an activity entry names when a
@@ -225,12 +232,12 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		`SELECT id FROM engagements WHERE client_id = $1 ORDER BY created_at DESC LIMIT 1`, clientID,
 	).Scan(&engagementID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- InviteHandler's own door guarantees at least one Engagement exists
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_client_id', '', true)`); err != nil {
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	// The invitation is the single point where the Practice's contact
@@ -240,7 +247,19 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 	identifier = portalaccount.NewIdentifier()
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identifier); err != nil {
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+	}
+
+	// SAVEPOINT, mirroring website.upsertWithSlugRetry (00045): a unique
+	// violation on the INSERT below is an expected outcome this function
+	// keeps querying past, not a fatal error, and Postgres aborts an
+	// entire transaction on any unhandled error until it is rolled back
+	// to a savepoint (or the whole tx). Without this, the reuse lookup
+	// right after would itself fail with "current transaction is
+	// aborted".
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SAVEPOINT portal_account_insert`); err != nil {
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
 	signInAddress := staffauth.NormalizeAddress(email)
@@ -248,11 +267,51 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES ($1, $2)`,
 		identifier, signInAddress,
 	); err != nil {
-		if pgerr.IsUniqueViolation(err) {
-			return acceptResult{}, "", "", http.StatusConflict, apierr.CodeConflict, "a portal account already exists for this address"
+		if !pgerr.IsUniqueViolationOn(err, "portal_accounts_sign_in_address") {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 		}
+
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		if _, err := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT portal_account_insert`); err != nil {
+			return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		}
+
+		// ADR-0015: a Portal Account reaches many Clients, at most one per
+		// Practice. This address already has one -- reuse it rather than
+		// refuse the accept, unless it already reaches a Client at this
+		// same Practice (a second invitation from the same Practice for
+		// the same person, refused rather than silently merged).
+		// portal_account_reuse_for_accept (00081) is a SECURITY DEFINER
+		// function: this caller has no session context that would let any
+		// existing RLS policy answer either half of that question.
+		var conflictingClientID sql.NullString
+		if err := tx.QueryRowContext(ctx,
+			`SELECT identifier, conflicting_client_id FROM portal_account_reuse_for_accept($1, $2)`,
+			signInAddress, practiceID,
+		).Scan(&identifier, &conflictingClientID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests -- the INSERT above just proved a matching row exists
+			return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		}
+		if conflictingClientID.Valid {
+			return acceptResult{}, "", "", false, http.StatusConflict, apierr.CodeConflict, "you already have portal access at this practice -- sign in instead of accepting a new invitation"
+		}
+
+		// Re-point app.current_identity_uid at the Portal Account being
+		// reused: client_portal_users_accept_update's WITH CHECK (00026)
+		// requires the row's new identity_uid to equal this setting, and
+		// it was still holding the freshly minted (and now unused)
+		// identifier from above.
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identifier); err != nil {
+			return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		}
+		reused = true
+	} else {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		if _, err := tx.ExecContext(ctx, `RELEASE SAVEPOINT portal_account_insert`); err != nil {
+			return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		}
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -262,8 +321,8 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		identifier, inviteToken,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return acceptResult{}, "", "", http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
 	}
 
-	return acceptResult{AcceptInviteResponse: AcceptInviteResponse{ClientID: clientID}, practiceID: practiceID}, identifier, engagementID, http.StatusOK, "", ""
+	return acceptResult{AcceptInviteResponse: AcceptInviteResponse{ClientID: clientID}, practiceID: practiceID}, identifier, engagementID, reused, http.StatusOK, "", ""
 }

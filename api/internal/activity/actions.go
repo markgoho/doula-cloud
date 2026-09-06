@@ -95,6 +95,15 @@ const (
 	// since accepting her own invitation is the one path that reaches it.
 	ActionPortalAccountProvisioned EngagementAction = "portal_account_provisioned"
 
+	// ActionPortalAccountLinked records the other shape acceptInvite's
+	// accept can take (#309, ADR-0015): the caller already holds a
+	// Portal Account for this sign-in address, and accepting attaches
+	// this Engagement's Client to it rather than minting a new one.
+	// Distinct from ActionPortalAccountProvisioned because no Portal
+	// Account came into being here -- an existing one gained reach into
+	// a new Practice.
+	ActionPortalAccountLinked EngagementAction = "portal_account_linked"
+
 	// #303: a Client's own push-notification preference change, recorded
 	// against her Engagement (notificationpref's PUT handler). Neither
 	// action belongs in moneyActions or staffingActions below -- it is

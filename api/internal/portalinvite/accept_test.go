@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -226,18 +227,85 @@ func TestAcceptInviteHandler_TokenAlreadyClaimed(t *testing.T) {
 	}
 }
 
-// TestAcceptInviteHandler_SignInAddressAlreadyClaimed proves #309's
-// scenario in its new shape (see #616): a person who already holds a
-// Portal Account for a given sign-in address cannot get a second one for
-// the same address by accepting another invite -- caught on
-// portal_accounts.sign_in_address's unique index now that identity_uid is
-// a fresh identifier every time, never on identity_uid itself. Cased
-// differently to prove the index is case-insensitive, matching
-// practice_invitations_one_pending's shape.
-func TestAcceptInviteHandler_SignInAddressAlreadyClaimed(t *testing.T) {
+// TestAcceptInviteHandler_SignInAddressReused proves #309's scenario in
+// its #616 shape: a person who already holds a Portal Account for a
+// given sign-in address, accepting an invite at a *different* Practice,
+// attaches to that existing Portal Account rather than being refused --
+// ADR-0015's "a Portal Account reaches many Clients, at most one per
+// Practice". Cased differently to prove the reuse lookup is
+// case-insensitive, matching practice_invitations_one_pending's shape.
+func TestAcceptInviteHandler_SignInAddressReused(t *testing.T) {
 	db := testdb.New(t)
 	testdb.SeedPortalAccount(t, db, "portal_existing-account", "Invited@Example.com")
-	_, inviteToken := seedPendingPortalInvite(t, db) // invites "invited@example.com"
+	clientID, inviteToken := seedPendingPortalInvite(t, db) // invites "invited@example.com"
+
+	srv := newAcceptServer(db)
+	defer srv.Close()
+
+	resp := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want %d, body = %s", resp.StatusCode, http.StatusOK, body)
+	}
+
+	var identityUID string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID); err != nil {
+		t.Fatalf("query claimed row: %v", err)
+	}
+	if identityUID != "portal_existing-account" {
+		t.Fatalf("identity_uid = %q, want the existing Portal Account reused, not a fresh mint", identityUID)
+	}
+
+	var accountCount int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM portal_accounts WHERE lower(sign_in_address) = lower('invited@example.com')`).Scan(&accountCount); err != nil {
+		t.Fatalf("count portal accounts: %v", err)
+	}
+	if accountCount != 1 {
+		t.Fatalf("portal_accounts rows for this address = %d, want 1 (no second account minted)", accountCount)
+	}
+
+	// CLAUDE.md's audit-trail expectation: a reuse accept records its own
+	// action, distinct from a fresh mint's, since no Portal Account came
+	// into being here.
+	var engagementID, action string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM engagements WHERE client_id = $1`, clientID).Scan(&engagementID); err != nil {
+		t.Fatalf("query engagement: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT action FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 ORDER BY created_at DESC LIMIT 1`,
+		engagementID,
+	).Scan(&action); err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	if action != "portal_account_linked" {
+		t.Fatalf("activity action = %q, want %q", action, "portal_account_linked")
+	}
+}
+
+// TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict proves
+// ADR-0015's narrower rule: a Portal Account reaches at most one Client
+// *per Practice*. A person who already reaches a Client at the same
+// Practice this invite belongs to is refused, not silently merged into a
+// second Client record there.
+func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.T) {
+	db := testdb.New(t)
+	testdb.SeedPortalAccount(t, db, "portal_existing-account", "invited@example.com")
+	clientID, inviteToken := seedPendingPortalInvite(t, db) // invites "invited@example.com"
+
+	var practiceID string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT practice_id FROM clients WHERE id = $1`, clientID).Scan(&practiceID); err != nil {
+		t.Fatalf("query practice: %v", err)
+	}
+	// The same Portal Account already reaches a different Client at this
+	// same Practice -- e.g. a second, mistaken invite for the same person.
+	otherClientID, _ := seedClientEngagement(t, db, practiceID, "Other Client Record", "other@example.com")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, 'portal_existing-account')`, otherClientID,
+	); err != nil {
+		t.Fatalf("seed existing client_portal_users row: %v", err)
+	}
 
 	srv := newAcceptServer(db)
 	defer srv.Close()
@@ -247,5 +315,13 @@ func TestAcceptInviteHandler_SignInAddressAlreadyClaimed(t *testing.T) {
 
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+
+	var identityUID sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID); err != nil {
+		t.Fatalf("query pending row: %v", err)
+	}
+	if identityUID.Valid {
+		t.Fatalf("expected the pending row to remain unclaimed, got identity_uid %q", identityUID.String)
 	}
 }

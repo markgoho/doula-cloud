@@ -213,15 +213,14 @@ func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) 
 
 // TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected
 // proves #303's own AC: the preference carries an Engagement reference, so
-// muting one of a Client's Engagements never silences another. The AC's
-// own example is two Engagements at two different Practices, which is not
-// reachable through this handler alone -- client_portal_users.identity_uid
-// stays UNIQUE (00006_client_portal_users.sql), so one identity_uid cannot
-// yet resolve to a second Client record at a second Practice
-// (#309: "A person who already has a portal account cannot accept a
-// second invite"). This proves the same Engagement-scoping mechanism the
-// two-Practice case would exercise, using two Engagements on one Client at
-// one Practice instead.
+// muting one of a Client's Engagements never silences another. Two
+// Engagements on one Client at one Practice, rather than the AC's own
+// two-Practice example: this handler is scoped to one Engagement at a
+// time either way, so the same mechanism proves both shapes. The genuine
+// two-Practice case -- reachable now that #309 lifted
+// client_portal_users.identity_uid's UNIQUE constraint -- is
+// TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount
+// below.
 func TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-two-engagements"
@@ -249,5 +248,75 @@ func TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected(t *test
 	defer otherResp.Body.Close()
 	if got := decodePreference(t, otherResp); !got.Enabled {
 		t.Fatalf("sibling Engagement's Enabled = %v, want true (explicitly on, unaffected by the other Engagement's mute)", got.Enabled)
+	}
+}
+
+// TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount is
+// #309's own hand-off from this file's sibling-Engagement test above: with
+// client_portal_users.identity_uid no longer UNIQUE (#309), one Portal
+// Account can reach a Client at two different Practices (ADR-0015), and
+// this proves the genuine two-Practice case that test could only stand in
+// for -- muting one Practice's Engagement never silences the Portal
+// Account's push subscription at the other. No schema change needed:
+// push_subscriptions_for_message_recipient (00067) already scopes its
+// mute check to one engagement_id.
+func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-two-practices"
+
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	clientA, engagementA := seedClientEngagement(t, db, practiceA)
+	seedPortalUser(t, db, identityUID, clientA)
+
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	clientB, engagementB := seedClientEngagement(t, db, practiceB)
+	// The same Portal Account reaching a second Practice: a second
+	// client_portal_users row, not a second SeedPortalAccount call (the
+	// Portal Account itself already exists from clientA's seedPortalUser
+	// above).
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
+		identityUID, clientB,
+	); err != nil {
+		t.Fatalf("attach second client_portal_users row: %v", err)
+	}
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key) VALUES ('client', $1, 'https://push.example.com/a', 'p256dh-key', 'auth-key')`,
+		clientA,
+	); err != nil {
+		t.Fatalf("seed push subscription for Practice A: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key) VALUES ('client', $1, 'https://push.example.com/b', 'p256dh-key', 'auth-key')`,
+		clientB,
+	); err != nil {
+		t.Fatalf("seed push subscription for Practice B: %v", err)
+	}
+
+	srv, session := newPortalServer(t, db, identityUID)
+	defer srv.Close()
+	muteBody, _ := json.Marshal(notificationpref.SetRequest{Enabled: false})
+	muteResp := authedRequest(t, session, http.MethodPut, srv.URL+"/portal/engagements/"+engagementA+"/notification-preference", muteBody)
+	_ = muteResp.Body.Close()
+
+	var endpointB string
+	if err := db.App.QueryRowContext(t.Context(),
+		`SELECT endpoint FROM push_subscriptions_for_message_recipient($1, 'client')`, engagementB,
+	).Scan(&endpointB); err != nil {
+		t.Fatalf("query recipient subscriptions for Practice B's Engagement: %v", err)
+	}
+	if endpointB != "https://push.example.com/b" {
+		t.Fatalf("endpoint = %q, want Practice B's own subscription, unaffected by muting Practice A's Engagement", endpointB)
+	}
+
+	var countA int
+	if err := db.App.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM push_subscriptions_for_message_recipient($1, 'client')`, engagementA,
+	).Scan(&countA); err != nil {
+		t.Fatalf("query recipient subscriptions for Practice A's Engagement: %v", err)
+	}
+	if countA != 0 {
+		t.Fatalf("Practice A's Engagement returned %d subscriptions, want 0 (muted)", countA)
 	}
 }
