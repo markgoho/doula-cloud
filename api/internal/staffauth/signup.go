@@ -1,6 +1,7 @@
 package staffauth
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/pgerr"
+	"doula-cloud/api/internal/sessionmint"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // MsgInternalError is the response body for any failure the caller can't
@@ -78,7 +81,7 @@ type SignupResponse struct {
 // is known, so -- unlike Middleware -- it never sets
 // app.current_practice_id until the new Practice's id exists to set it
 // to.
-func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
+func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
 		if !ok {
@@ -109,37 +112,15 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB) http.Handler {
 		}
 		req.WorkState = workState
 
-		resp, status, msg := signup(r, tx, verified, req)
-		if status != http.StatusCreated {
-			apierr.WriteError(w, msg, status)
-			return
+		step := func(_ context.Context, tx *sql.Tx) (sessionmint.Result, error) {
+			resp, status, msg := signup(r, tx, verified, req)
+			if status != http.StatusCreated {
+				return sessionmint.Result{Refusal: &sessionmint.Refusal{Status: status, Message: msg}}, nil
+			}
+			return sessionmint.Result{IdentityUID: verified.UID, Body: resp, Status: http.StatusCreated}, nil
 		}
 
-		// Create the session before committing, so a failure rolls the
-		// new rows back instead of leaving them committed behind a
-		// response that reports failure (#145). uid is the identity
-		// authn.Begin already verified.
-		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, verified.SecondFactor, time.Now())
-		if err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		http.SetCookie(w, cookie)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		committed = sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
 	})
 }
 

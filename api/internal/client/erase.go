@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -551,15 +552,19 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 		return false, 0, nil
 	}
 
-	res, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE identity_uid = $1`, identityUID.String)
-	if err != nil {
+	// Counted before the delete, not read off RowsAffected: #837 routes
+	// this through authn.EndAllSessions (the same call
+	// clientauth.EndAllSessionsHandler uses), which reports no count of
+	// its own -- authn is one of #834's already-deep modules, kept as
+	// found.
+	var ended int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, identityUID.String).Scan(&ended); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, 0, fmt.Errorf("client: count portal sessions: %w", err)
+	}
+	if err := authn.EndAllSessions(ctx, tx, identityUID.String); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, 0, fmt.Errorf("client: end portal sessions: %w", err)
-	}
-	ended, err := res.RowsAffected()
-	if err != nil {
-		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
-		return false, 0, fmt.Errorf("client: count ended portal sessions: %w", err)
 	}
 
 	// The Portal Account itself (#616) is deleted here, synchronously,
@@ -582,7 +587,7 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, 0, fmt.Errorf("client: clear portal identity: %w", err)
 	}
-	return true, int(ended), nil
+	return true, ended, nil
 }
 
 // recordErasure writes the one activity row that outlives the shredding:

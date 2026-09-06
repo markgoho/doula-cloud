@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
-	"doula-cloud/api/internal/sessionevict"
+	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -158,67 +157,27 @@ func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
+		step := func(ctx context.Context, tx *sql.Tx) (sessionmint.Result, error) {
+			// #610/#837, after the spend and not before it: a token that
+			// is already burned or was never issued gets the 400 below,
+			// so a stranger following a dead link is never shown a
+			// warning about a session he is not going to displace. A
+			// refusal here rolls the transaction back, which un-spends
+			// the token -- so the confirmed retry redeems the same live
+			// link.
+			identifier, err := authtoken.Spend(ctx, tx, req.Token, authtoken.PurposeClientMagicLink, time.Now())
+			if errors.Is(err, authtoken.ErrInvalid) {
+				return sessionmint.Result{Refusal: &sessionmint.Refusal{
+					Status: http.StatusBadRequest, Message: "this link is invalid or has expired -- ask for a new one",
+				}}, nil
 			}
-		}()
-
-		now := time.Now()
-		identifier, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeClientMagicLink, now)
-		if errors.Is(err, authtoken.ErrInvalid) {
-			apierr.WriteError(w, "this link is invalid or has expired -- ask for a new one", http.StatusBadRequest)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return sessionmint.Result{}, fmt.Errorf("clientauth: spend magic link: %w", err)
+			}
+			return sessionmint.Result{IdentityUID: identifier, Body: redeemMagicLinkResponse{OK: true}}, nil
 		}
 
-		// #610, after the spend and not before it: a token that is
-		// already burned or was never issued gets the 400 above, so a
-		// stranger following a dead link is never shown a warning about
-		// a session he is not going to displace. The refusal below rolls
-		// this transaction back, which un-spends the token -- so the
-		// confirmed retry redeems the same live link.
-		evicted, ok := sessionevict.Apply(w, r, tx, authn.TierPortal, now)
-		if !ok {
-			return
-		}
-
-		// A Client never carries a second factor -- Identity Platform is
-		// Staff-only from here on (ADR-0026) -- so this is always false,
-		// unlike accept.go's own MintSession call.
-		cookie, err := authn.MintSession(r.Context(), tx, identifier, false, now)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		if evicted {
-			tasknudge.Fire(enq, tasknudge.SessionNotice)(r.Context())
-		}
-		http.SetCookie(w, cookie)
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(redeemMagicLinkResponse{OK: true}); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		sessionmint.IssueFromDB(w, r, db, enq, sessionmint.Portal(), step, nil)
 	})
 }

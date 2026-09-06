@@ -29,11 +29,18 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import { authRefusal, refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import {
+		authRefusal,
+		refusalErrors,
+		refusalOrConfirmable,
+		SERVICE_PROBLEM,
+		type FormError
+	} from '#lib/formErrors.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -105,7 +112,12 @@
 	// or nothing (a 404, meaning she is new here). Undefined until step one
 	// has run.
 	let existing = $state<SessionInfo | undefined>();
-	let step = $state<'identify' | 'accept'>('identify');
+	// #816: this multi-step form has no single Continue button to hang
+	// #610's cross-population warning on, so it hangs on step two's own
+	// final submit -- "Accept invite" is the deliberate press that mints a
+	// session, the same reasoning the sign-in page's Continue button uses.
+	let step = $state<'identify' | 'accept' | 'confirm-sign-out'>('identify');
+	let signOutWarning = $state<string | undefined>();
 	/*
 	 * No `if (!inviteToken)` guard in here any more: the markup refuses a
 	 * link with no token before it renders the first field, so this
@@ -206,6 +218,63 @@
 		element.focus();
 	}
 
+	/*
+	 * The POST every accept attempt runs, first unconfirmed and then --
+	 * if #816's cross-population check refuses it -- again with
+	 * X-Confirmed. Split out of handleAccept so the confirmed retry
+	 * re-runs exactly this.
+	 */
+	async function postAccept(isConfirmed: boolean) {
+		const idToken = await credential!.user.getIdToken();
+
+		// A plain, one-off fetch: this endpoint reads the Bearer token,
+		// not the session cookie, which is why the credential from step
+		// one is still in hand.
+		return fetch(`${apiBaseURL()}/api/staff/accept-invite`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${idToken}`,
+				...(isConfirmed && { 'X-Confirmed': 'true' })
+			},
+			body: JSON.stringify({
+				inviteToken,
+				// Empty on the existing-Staff branch, which the server
+				// already ignores there -- what she asserted before stands,
+				// and this screen never had a newer answer to offer.
+				name: existing ? '' : name,
+				workState: existing ? '' : workStateCode(workStateName_)
+			})
+		});
+	}
+
+	async function land() {
+		// AcceptInviteHandler already set the session cookie on its own
+		// response (#145) -- no separate exchange needed, just drop the
+		// JS SDK credential before the session probe reads the cookie.
+		await signOut(getFirebaseAuth());
+
+		const sessionResponse = await apiFetchWithSession('/api/staff/session');
+		if (!sessionResponse.ok) {
+			errors = await refusalErrors(sessionResponse);
+			return;
+		}
+		const session: SessionInfo = await sessionResponse.json();
+		const landing = decideLanding(session);
+		if (landing.type === 'redirect') {
+			await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
+		} else if (landing.type === 'no-practice') {
+			// Accepting an Invitation is what gives her a Membership, so
+			// arriving here with none means the acceptance reported
+			// success and left her with nothing. That is the same state
+			// #745's screen is for, and the same two ways on from it --
+			// not a picker with nothing in it.
+			await goto(resolve('/(signed-out)/no-practice'));
+		} else {
+			picker = landing.memberships;
+		}
+	}
+
 	async function handleAccept(event: SubmitEvent) {
 		event.preventDefault();
 		errors = [];
@@ -226,53 +295,25 @@
 
 		isSubmitting = true;
 		try {
-			const idToken = await credential!.user.getIdToken();
-
-			// A plain, one-off fetch: this endpoint reads the Bearer token,
-			// not the session cookie, which is why the credential from step
-			// one is still in hand.
-			const acceptResponse = await fetch(`${apiBaseURL()}/api/staff/accept-invite`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-				body: JSON.stringify({
-					inviteToken,
-					// Empty on the existing-Staff branch, which the server
-					// already ignores there -- what she asserted before stands,
-					// and this screen never had a newer answer to offer.
-					name: existing ? '' : name,
-					workState: existing ? '' : workStateCode(workStateName_)
-				})
-			});
+			const acceptResponse = await postAccept(false);
 			if (!acceptResponse.ok) {
-				errors = await refusalErrors(acceptResponse, acceptFieldIds);
+				// #816: a live portal session in this browser is not a form
+				// error -- nothing is wrong with what she typed, and the same
+				// submit sent again with X-Confirmed goes through. Keep the JS
+				// SDK signed in for that retry, the credential step one already
+				// produced.
+				const refusal = await refusalOrConfirmable(acceptResponse, acceptFieldIds);
+				if (refusal.kind === 'confirmable') {
+					signOutWarning = refusal.message;
+					step = 'confirm-sign-out';
+					return;
+				}
+				errors = refusal.errors;
 				await signOut(getFirebaseAuth());
 				return;
 			}
 
-			// AcceptInviteHandler already set the session cookie on its own
-			// response (#145) -- no separate exchange needed, just drop the
-			// JS SDK credential before the session probe reads the cookie.
-			await signOut(getFirebaseAuth());
-
-			const sessionResponse = await apiFetchWithSession('/api/staff/session');
-			if (!sessionResponse.ok) {
-				errors = await refusalErrors(sessionResponse);
-				return;
-			}
-			const session: SessionInfo = await sessionResponse.json();
-			const landing = decideLanding(session);
-			if (landing.type === 'redirect') {
-				await goto(resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
-			} else if (landing.type === 'no-practice') {
-				// Accepting an Invitation is what gives her a Membership, so
-				// arriving here with none means the acceptance reported
-				// success and left her with nothing. That is the same state
-				// #745's screen is for, and the same two ways on from it --
-				// not a picker with nothing in it.
-				await goto(resolve('/(signed-out)/no-practice'));
-			} else {
-				picker = landing.memberships;
-			}
+			await land();
 		} catch {
 			// A throw past validation is the network or the SDK, not an answer
 			// on this form, so the entry names no control.
@@ -280,6 +321,39 @@
 		} finally {
 			isSubmitting = false;
 		}
+	}
+
+	/*
+	 * #816's press-through: the same accept, sent again with X-Confirmed,
+	 * on the same credential step one already produced.
+	 */
+	async function handleConfirmSignOut() {
+		errors = [];
+		isSubmitting = true;
+		try {
+			const acceptResponse = await postAccept(true);
+			if (!acceptResponse.ok) {
+				errors = await refusalErrors(acceptResponse, acceptFieldIds);
+				step = 'accept';
+				await signOut(getFirebaseAuth());
+				return;
+			}
+			await land();
+		} catch {
+			errors = [{ message: SERVICE_PROBLEM }];
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	/*
+	 * Backing out of #816's warning. Nothing was minted, so she is back on
+	 * step two, still signed into the credential step one produced -- and
+	 * the portal session she chose to keep is untouched.
+	 */
+	function handleCancelSignOut() {
+		signOutWarning = undefined;
+		step = 'accept';
 	}
 </script>
 
@@ -349,6 +423,22 @@
 			/>
 			<Button type="submit" label="Continue" loading={isSubmitting} />
 		</form>
+	{:else if step === 'confirm-sign-out'}
+		<!--
+			#816: the warning goes on the button that acts, not on a screen
+			of its own -- see the sign-in page's own copy of this pattern.
+			Her form is already accepted, so there is nothing to re-render
+			here but the consequence and the two ways out of it.
+		-->
+		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
+		<WarningText message={signOutWarning ?? ''} />
+		<Button
+			type="button"
+			label="Continue and sign out"
+			loading={isSubmitting}
+			onClick={handleConfirmSignOut}
+		/>
+		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
 		<form onsubmit={handleAccept} novalidate>
 			<h2 tabindex="-1" {@attach focusOnAppearing}>

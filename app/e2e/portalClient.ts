@@ -28,13 +28,29 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
  * who is also a Client. Pressing on is what she would do, and what the
  * spec means; the warning itself is asserted where it is the subject,
  * in client-portal-login.e2e.ts.
+ *
+ * `waitFor`, not `isVisible`: the warning button only exists once the
+ * redeem POST has round-tripped and re-rendered the page, which takes
+ * longer than the moment `.click()` above resolves (a click resolves
+ * once the event dispatches, not once whatever it triggered finishes).
+ * `isVisible` checks the DOM once, synchronously, so it raced that
+ * round trip and read "not there yet" as "never coming" -- flaky in
+ * exactly the run where the fetch was slow enough to still be pending.
+ * `waitFor` polls until the button appears or this timeout elapses,
+ * which is the outcome for a browser with no Staff session to warn
+ * about at all.
  */
 export async function signInPortalClient(page: Page, request: APIRequestContext, email: string): Promise<void> {
 	await openMagicLink(page, request, email);
 	await page.getByRole('button', { name: 'Continue' }).click();
 
 	const pressThrough = page.getByRole('button', { name: 'Continue and sign out' });
-	if (await pressThrough.isVisible()) await pressThrough.click();
+	try {
+		await pressThrough.waitFor({ state: 'visible', timeout: 2000 });
+	} catch {
+		return;
+	}
+	await pressThrough.click();
 }
 
 /**

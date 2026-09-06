@@ -116,7 +116,15 @@ func TestCreateHandler_ConfirmedEvictsThePortalSession(t *testing.T) {
 
 // A live Staff session is not a cross-population eviction: signing in
 // again as yourself replaces your own session, which is what a
-// re-sign-in has always done and carries nothing to warn about.
+// re-sign-in has always done and carries nothing to warn about. It is
+// deliberately not ended either, even though it shares a tier with the
+// mint: sessionmint.Issue leaves a same-tier cookie alone by default
+// (see its own doc comment), because a browser can be a shared HTTP
+// client across two different people's sign-ins -- the exact case this
+// test drives, a different Staff member's still-live session -- and
+// deleting the first person's session out from under her because a
+// second person happened to sign in in the same browser is not this
+// endpoint's call to make.
 func TestCreateHandler_LiveStaffSessionSignsStraightThrough(t *testing.T) {
 	srv, db := newServer(t, authntest.Verifier{UID: staffUID})
 	defer srv.Close()

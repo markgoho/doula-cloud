@@ -212,6 +212,10 @@ The rejected alternative was real and was weighed: `__session` could carry **two
 
 One implementation note, so it is not rediscovered: `api/internal/sessionnotice` already sends "session revoked" and is the right sender for an evicted **Staff** session, but it resolves its recipient from `identity_uid` via the `staff` table, so it cannot notify an evicted **portal** session as written.
 
+**Amendment ([#816](https://github.com/markgoho/doula-cloud/issues/816), landed in [#837](https://github.com/markgoho/doula-cloud/issues/837)): the three Staff bootstrap paths get the same warning.** #610 wired the check into three seams with a single Continue press to hang it on; signup, invitation acceptance, and finishing TOTP enrolment are multi-step forms with no such button, so they were deliberately left out and filed as their own ticket. They now refuse an unconfirmed mint exactly as sign-in does, on the same `APIError.code`, with a press-through on each screen's own final submit -- the deliberate press that mints, the same reasoning as the Continue button. Enrolment's own seam was worse than the other two: it did not overwrite the browser's cookie, it unconditionally ended whatever session that cookie named, cross-population or not. It now runs the same tier-aware check as the other six.
+
+**A fourth case, not previously named here, is settled the same PR: a same-population replacement is no longer left to expire.** Every seam now ends whatever live session the browser's cookie names before minting the new one, silently when it shares a tier with the mint and after confirmation when it does not. This was already mfaenroll's own behaviour for its pre-enrolment session ("replace, don't leave in place"); the amendment generalises it to all seven mint seams rather than leaving it as one handler's private habit. The reason is the same one this section already gives for the cross-population case: the cookie is being overwritten either way, so a same-population row left behind is a token that still verifies, whether it is her own prior session or — a shared birth-centre laptop — a colleague's who forgot to sign out. It is not an eviction and queues no notice: nothing crosses a population, so there is nothing to disclose.
+
 ## Passkeys are deferred, on a dependency rather than a doubt
 
 Decided on [#171](https://github.com/markgoho/doula-cloud/issues/171); full research in `docs/research/passkeys-for-staff.md`.
@@ -248,6 +252,7 @@ Nothing else. **Session ownership is untouched**: the session is still a Postgre
 | MFA recovery: vouching, saved codes, the operator path | [#615](https://github.com/markgoho/doula-cloud/issues/615) |
 | Rate limiting, which gates every public link-request endpoint | [#602](https://github.com/markgoho/doula-cloud/issues/602) — landed |
 | `staffauth.signup` writes `staff.email` from the request body, not the verified token | [#614](https://github.com/markgoho/doula-cloud/issues/614) |
+| Session eviction on the three Staff bootstrap paths signup, accept-invite and finish-enrolment, and one deep `sessionmint` seam for all seven mint paths | [#816](https://github.com/markgoho/doula-cloud/issues/816), landed in [#837](https://github.com/markgoho/doula-cloud/issues/837) |
 
 ## What would reopen this
 

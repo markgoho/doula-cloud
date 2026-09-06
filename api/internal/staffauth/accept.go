@@ -5,12 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/sessionmint"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // AcceptInviteRequest is the body of a Staff invitation acceptance: the
@@ -55,7 +58,7 @@ type AcceptInviteResponse struct {
 // checked below -- so re-proving it with a mailed verification link
 // would be a second round-trip proving something already proven. No
 // verification mail is ever queued on this path.
-func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager, db *sql.DB) http.Handler {
+func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
 		if !ok {
@@ -81,58 +84,33 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 			return
 		}
 
-		resp, status, msg := acceptInvite(r.Context(), tx, verified, req)
-		if status != http.StatusOK {
-			// 410 is the one failure that wrote something: acceptInvite
-			// marks an Invitation it finds past its expiry, and that
-			// discovery is a fact worth keeping rather than rolling back
-			// with the acceptance that didn't happen.
-			if status == http.StatusGone {
-				if err := tx.Commit(); err != nil {
-					// coverage:ignore reason: DB commit failure, not exercised by unit tests
-					apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-					return
-				}
-				committed = true
+		step := func(ctx context.Context, tx *sql.Tx) (sessionmint.Result, error) {
+			resp, status, msg := acceptInvite(ctx, tx, verified, req)
+			if status != http.StatusOK {
+				// 410 is the one failure that wrote something:
+				// acceptInvite marks an Invitation it finds past its
+				// expiry, and that discovery is a fact worth keeping
+				// rather than rolling back with the acceptance that
+				// didn't happen.
+				return sessionmint.Result{Refusal: &sessionmint.Refusal{
+					Status: status, Message: msg, Keep: status == http.StatusGone,
+				}}, nil
 			}
-			apierr.WriteError(w, msg, status)
-			return
+
+			// Confirmed above: holding this Invitation's token already
+			// proves mailbox control. Done before the mint, on the same
+			// "external side effect that fails rolls everything back"
+			// reasoning as the mint itself -- a joined Membership sitting
+			// behind an account Identity Platform still calls unverified
+			// would leave #606's MFA gate with nothing to enroll against.
+			if err := accounts.SetEmailVerified(ctx, verified.UID); err != nil {
+				return sessionmint.Result{}, fmt.Errorf("staffauth: set email verified: %w", err)
+			}
+
+			return sessionmint.Result{IdentityUID: verified.UID, Body: resp}, nil
 		}
 
-		// Confirmed above: holding this Invitation's token already proves
-		// mailbox control. Done before MintSession, on the same "external
-		// side effect that fails rolls everything back" reasoning as the
-		// session mint below -- a joined Membership sitting behind an
-		// account Identity Platform still calls unverified would leave
-		// #606's MFA gate with nothing to enroll against.
-		if err := accounts.SetEmailVerified(r.Context(), verified.UID); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		// Mint the session before committing, so a failure rolls the new
-		// Membership back rather than leaving it behind a response that
-		// reports failure -- signup.go's reasoning (#145).
-		cookie, err := authn.MintSession(r.Context(), tx, verified.UID, verified.SecondFactor, time.Now())
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		committed = true
-
-		http.SetCookie(w, cookie)
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		committed = sessionmint.Issue(w, r, tx, enq, sessionmint.Staff(verified), step, nil)
 	})
 }
 

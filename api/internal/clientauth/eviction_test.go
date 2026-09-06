@@ -128,7 +128,13 @@ func TestRedeemMagicLinkHandler_ConfirmedEvictsAndNotifiesTheStaffSession(t *tes
 }
 
 // A live portal session is not a cross-population eviction: redeeming a
-// fresh link is an ordinary re-sign-in, and goes straight through.
+// fresh link is an ordinary re-sign-in, and goes straight through. It is
+// deliberately not ended either, even though it shares a tier with the
+// mint -- sessionmint.Issue leaves a same-tier cookie alone by default,
+// because a browser can be a shared HTTP client across two different
+// people's sign-ins, and deleting the first person's still-live session
+// because a second person redeemed her own link in the same browser is
+// not this endpoint's call to make.
 func TestRedeemMagicLinkHandler_LivePortalSessionSignsStraightThrough(t *testing.T) {
 	db := testdb.New(t)
 	const identifier = "portal_evict-same-tier"

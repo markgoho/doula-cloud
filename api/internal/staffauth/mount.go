@@ -103,7 +103,7 @@ var mfaRecoveryRotateRules = []ratelimit.Rule{
 // since there is no session yet for Middleware to establish).
 func Mount(g *GatedRouter, ir WriteRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) {
 	mountPracticeRoutes(g, ir, verifier, accounts, enq)
-	mountSessionRoutes(g, db, verifier, accounts)
+	mountSessionRoutes(g, db, verifier, accounts, enq)
 }
 
 // mountPracticeRoutes is the Practice-scoped half of Mount: Staff roster,
@@ -157,11 +157,11 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 // mountSessionRoutes is the pre-Practice half of Mount: sign-in, sign-up,
 // invitation acceptance, and the person-level facts (work state, email,
 // MFA) that #437 and #613 keep off any one Membership.
-func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager) {
+func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) {
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.
 	g.Write("POST /api/staff/signup",
-		ratelimit.Wrap(db, "staff_signup", bootstrapRules)(SignupHandler(verifier, db)))
+		ratelimit.Wrap(db, "staff_signup", bootstrapRules)(SignupHandler(verifier, db, enq)))
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.
 	g.OpenGet("/api/staff/session",
@@ -173,7 +173,7 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// either, which is what makes it self-edit-only by shape (#437).
 	g.Write("PUT /api/staff/work-state", UpdateWorkStateHandler(db))
 	g.Write("POST /api/staff/accept-invite",
-		ratelimit.Wrap(db, "staff_accept_invite", bootstrapRules)(AcceptInviteHandler(verifier, accounts, db)))
+		ratelimit.Wrap(db, "staff_accept_invite", bootstrapRules)(AcceptInviteHandler(verifier, accounts, db, enq)))
 	// #613: an email address, like a work state, is a fact about the
 	// person -- same "no {practiceId}, no staff id" shape as
 	// UpdateWorkStateHandler above. Not rate limited: gated by
@@ -224,7 +224,7 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// factor), the same "cached token reused, sign-in fires more than
 	// once" reasoning loginRules exists for.
 	g.Write("POST /api/staff/mfa",
-		ratelimit.Wrap(db, "staff_mfa_enroll", loginRules)(FinishEnrollmentHandler(verifier, db)))
+		ratelimit.Wrap(db, "staff_mfa_enroll", loginRules)(FinishEnrollmentHandler(verifier, db, enq)))
 	// Voluntary removal, guarded by RequireRecentAuth's step-up rather
 	// than by rate limiting -- the same reasoning verifyRequestRules
 	// gives for a low-risk, already-signed-in self-service action.
