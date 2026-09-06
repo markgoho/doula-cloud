@@ -71,7 +71,23 @@ async function setup(detail: Detail, activityResponse?: Response) {
 	// reads `page.params`, which the $app/state mock above supplies. Both
 	// come from the fixture, so the two cannot disagree about which
 	// Engagement this is (#596).
-	await render(Page, { data: detail, params: fixture.params });
+	//
+	// `session` merges in from practices/[practiceId]/+layout.ts (#835) --
+	// this route never reads it, but the generated `data` prop type
+	// requires it, since SvelteKit really does merge ancestor layout data
+	// into it at runtime.
+	await render(Page, {
+		data: {
+			...detail,
+			session: {
+				practiceId: fixture.params.practiceId,
+				practiceName: 'Riverside Doula Collective',
+				roles: [],
+				isContractor: false
+			}
+		},
+		params: fixture.params
+	});
 }
 
 describe('Staff Engagement detail summary', () => {

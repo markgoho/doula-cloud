@@ -2,16 +2,18 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { page } from '#lib/appState.svelte.js';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import {
 		practicePushSubscriptionsPath,
 		unregisterPushSubscription
 	} from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import type { PracticeOption } from '#lib/components/molecules/PracticeSwitcher.svelte';
 	import StaffTopBar, { type NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
+	import type { PracticeSession } from './[practiceId]/+layout.js';
 
 	let { children } = $props();
 
@@ -19,9 +21,15 @@
 	type StaffSession = { name: string; email: string; memberships: Membership[] };
 
 	let session = $state<StaffSession | undefined>();
-	let roles = $state<string[]>([]);
 
 	const practiceId = $derived(page.params.practiceId);
+
+	// What I am *here* -- resolved once by practices/[practiceId]/+layout.ts
+	// (#835) and read off page.data, never fetched again here. A role is
+	// held at a Practice, not by a person: the same account is an Owner at
+	// one agency and a contractor Doula at the next, which is why this is
+	// separate from the who-am-I session below.
+	const practiceSession = $derived((page.data as { session?: PracticeSession }).session);
 
 	onMount(async () => {
 		// Who am I: the name and email the avatar menu shows, and the
@@ -29,16 +37,6 @@
 		// the same endpoint login already calls to decide where to land.
 		const sessionResponse = await apiFetchWithSession('/api/staff/session');
 		if (sessionResponse.ok) session = await sessionResponse.json();
-
-		if (practiceId === undefined) return;
-
-		// What I am *here*. Separate from the above because a role is held at
-		// a Practice, not by a person: the same account is an Owner at one
-		// agency and a contractor Doula at the next.
-		const rolesResponse = await apiFetchWithSession(`/api/practices/${practiceId}/session`);
-		if (!rolesResponse.ok) return;
-		const body: { roles: string[] } = await rolesResponse.json();
-		roles = body.roles;
 	});
 
 	/*
@@ -49,7 +47,7 @@
 	 * promise the endpoint refuses. Same rule #423 applied to the landing
 	 * page's rail -- ask only for what the caller's role can be served.
 	 */
-	const isAdmin = $derived(roles.includes('owner') || roles.includes('admin'));
+	const isAdmin = $derived(practiceSession !== undefined && isOwnerOrAdmin(practiceSession));
 
 	const navItems = $derived.by((): NavItem[] => {
 		if (practiceId === undefined) return [];

@@ -41,7 +41,7 @@ type DecisionResponse struct {
 // herself (the solo-Practice case: an Owner or Admin who happens to work
 // under a contractor employment type stays admitted).
 func isContractorOriginator(reader staffauth.Reader) bool {
-	return reader.IsContractor() && !reader.Has("owner") && !reader.Has("admin")
+	return reader.IsAmbientContractor()
 }
 
 // mayApproveDirectly reports whether reader already holds approval
@@ -49,7 +49,7 @@ func isContractorOriginator(reader staffauth.Reader) bool {
 // authority, request and approval are one act", independent of
 // employment type.
 func mayApproveDirectly(reader staffauth.Reader) bool {
-	return reader.Has("owner") || reader.Has("admin")
+	return reader.IsOwnerOrAdmin()
 }
 
 // hasLiveEngagement reports whether clientID already holds an Engagement

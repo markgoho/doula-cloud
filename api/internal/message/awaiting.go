@@ -58,9 +58,9 @@ func AwaitingReplyHandler() http.Handler {
 		}
 
 		staffID, _ := staffauth.StaffID(r.Context())
-		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
+		reader, has := staffauth.ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
@@ -76,6 +76,7 @@ func AwaitingReplyHandler() http.Handler {
 		}
 
 		var items []AwaitingReplyItem
+		var err error
 		if reader.IsContractor() {
 			items, err = listAttachedAwaitingReply(r.Context(), tx, practiceID, staffID, after)
 		} else {

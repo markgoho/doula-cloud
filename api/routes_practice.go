@@ -57,7 +57,6 @@ type practiceSessionResponse struct {
 
 func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 	tx, _ := staffauth.Tx(r.Context())
-	staffID, _ := staffauth.StaffID(r.Context())
 	practiceID, _ := staffauth.PracticeID(r.Context())
 
 	var name string
@@ -67,9 +66,9 @@ func practiceSessionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
+	reader, has := staffauth.ReaderFrom(r.Context())
+	if !has {
+		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 		return
 	}

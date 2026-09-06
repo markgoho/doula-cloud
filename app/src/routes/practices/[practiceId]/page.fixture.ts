@@ -38,10 +38,10 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1',
+	pageData: {
+		session: { practiceId: 'practice-1', practiceName, roles: ['doula'], isContractor: false }
+	},
 	respond: (path) => {
-		if (path.endsWith('/session')) {
-			return jsonResponse({ practiceName, roles: ['doula'] });
-		}
 		if (path.includes('/offers')) {
 			return jsonResponse({ items: offers });
 		}

@@ -8,7 +8,6 @@
  * fixture answers as an Owner -- the widest of the two lists the hub
  * can show.
  */
-import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
@@ -17,6 +16,13 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings',
-	respond: () => jsonResponse({ roles: ['owner'] }),
+	pageData: {
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['owner'],
+			isContractor: false
+		}
+	},
 	readyText: 'Settings'
 };

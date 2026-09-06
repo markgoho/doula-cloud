@@ -2,7 +2,9 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import ClientFieldTemplateEditor from '#lib/components/organisms/ClientFieldTemplateEditor.svelte';
+	import type { PracticeSession } from '../../+layout.js';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -32,9 +34,10 @@
 	 * (#460's RequireOwnerOrAdmin) -- the same "load for everyone, gate the
 	 * write controls" split settings/payments/+page.svelte uses. Server-side
 	 * enforcement (RequireOwnerOrAdmin) is what actually holds the line;
-	 * this is UX only. */
-	let roles = $state<string[]>([]);
-	let isOwnerOrAdmin = $derived(roles.includes('owner') || roles.includes('admin'));
+	 * this is UX only. Resolved once by practices/[practiceId]/+layout.ts
+	 * (#835), not a fetch of this page's own. */
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
 
 	let countWarning = $derived(fieldCountWarning(fields));
 
@@ -47,13 +50,6 @@
 			existingIds = new Set(template.fields.map((f) => f.id));
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Client Field Template';
-			return;
-		}
-
-		const sessionResponse = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
-		if (sessionResponse.ok) {
-			const body: { roles: string[] } = await sessionResponse.json();
-			roles = body.roles;
 		}
 	}
 
@@ -101,7 +97,7 @@
 		<Notice variant="info" message={countWarning} />
 	{/if}
 
-	{#if isOwnerOrAdmin}
+	{#if isPracticeOwnerOrAdmin}
 		<ClientFieldTemplateEditor
 			{fields}
 			{existingIds}
@@ -129,7 +125,7 @@
 {/snippet}
 
 {#snippet actions()}
-	{#if isOwnerOrAdmin}
+	{#if isPracticeOwnerOrAdmin}
 		<Button label="Save" onClick={save} />
 	{/if}
 {/snippet}

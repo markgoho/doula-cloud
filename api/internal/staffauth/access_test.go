@@ -96,24 +96,23 @@ func TestReader_CanAccessEngagement(t *testing.T) {
 	}
 
 	cases := []struct {
-		name    string
-		staffID string
-		want    bool
+		name           string
+		staffID        string
+		roles          []string
+		employmentType string
+		want           bool
 	}{
-		{ownerRole, ownerID, true},
-		{adminRole, adminID, true},
-		{"employee doula, ambient", employeeID, true},
-		{"contractor, no attachment", unattachedContractorID, false},
-		{"contractor, accrued only", accruedContractorID, false},
-		{"contractor, granted but ended", endedContractorID, false},
-		{"contractor, granted and open", grantedContractorID, true},
+		{ownerRole, ownerID, []string{ownerRole}, employeeType, true},
+		{adminRole, adminID, []string{adminRole}, employeeType, true},
+		{"employee doula, ambient", employeeID, []string{doulaRole}, employeeType, true},
+		{"contractor, no attachment", unattachedContractorID, []string{doulaRole}, contractorType, false},
+		{"contractor, accrued only", accruedContractorID, []string{doulaRole}, contractorType, false},
+		{"contractor, granted but ended", endedContractorID, []string{doulaRole}, contractorType, false},
+		{"contractor, granted and open", grantedContractorID, []string{doulaRole}, contractorType, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, tc.staffID)
-			if err != nil {
-				t.Fatalf("ResolveReader: %v", err)
-			}
+			reader := staffauth.NewReader(tc.staffID, tc.roles, tc.employmentType)
 			got, err := reader.CanAccessEngagement(t.Context(), tx, engagementID)
 			if err != nil {
 				t.Fatalf("CanAccessEngagement: %v", err)
@@ -157,20 +156,19 @@ func TestReader_CanAccessClient(t *testing.T) {
 	}
 
 	cases := []struct {
-		name    string
-		staffID string
-		want    bool
+		name           string
+		staffID        string
+		roles          []string
+		employmentType string
+		want           bool
 	}{
-		{ownerRole, ownerID, true},
-		{"contractor, no attachment", unattachedContractorID, false},
-		{"contractor, granted and open", attachedContractorID, true},
+		{ownerRole, ownerID, []string{ownerRole}, employeeType, true},
+		{"contractor, no attachment", unattachedContractorID, []string{doulaRole}, contractorType, false},
+		{"contractor, granted and open", attachedContractorID, []string{doulaRole}, contractorType, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, tc.staffID)
-			if err != nil {
-				t.Fatalf("ResolveReader: %v", err)
-			}
+			reader := staffauth.NewReader(tc.staffID, tc.roles, tc.employmentType)
 			got, err := reader.CanAccessClient(t.Context(), tx, clientID)
 			if err != nil {
 				t.Fatalf("CanAccessClient: %v", err)
@@ -182,64 +180,56 @@ func TestReader_CanAccessClient(t *testing.T) {
 	}
 }
 
-// TestReader_IsContractor confirms the axis ResolveReader carries
-// besides roles: an employee reader (Owner and Admin included, #227's
-// "employee means inside the business") is not a contractor. It also
-// covers Reader.Roles() -- the accessor #501's practiceSessionHandler
-// reads to hand the frontend both axes off one Reader -- on both a
-// populated and an empty roles array, since ResolveReader only sets its
-// private slice when the DB's CSV is non-empty.
-func TestReader_IsContractor(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Employment Type Test Practice")
+// TestReader_RoleAndEmploymentTypePredicates confirms the axis a Reader
+// carries besides roles: an employee reader (Owner and Admin included,
+// #227's "employee means inside the business") is not a contractor, and
+// that
+// IsAmbientContractor/IsOwnerOrAdmin -- the two methods that replace the
+// predicate copies #835 found at nine call sites -- agree with Has and
+// IsContractor on every role/employment-type combination the codebase
+// cares about. Pure: staffauth.NewReader builds a Reader directly, no
+// database round trip needed to prove what Reader's own methods decide.
+func TestReader_RoleAndEmploymentTypePredicates(t *testing.T) {
+	cases := []struct {
+		name                  string
+		roles                 []string
+		employmentType        string
+		wantContractor        bool
+		wantOwnerOrAdmin      bool
+		wantAmbientContractor bool
+	}{
+		{"owner, employee", []string{ownerRole}, employeeType, false, true, false},
+		{"admin, employee", []string{adminRole}, employeeType, false, true, false},
+		{"employee doula, ambient", []string{doulaRole}, employeeType, false, false, false},
+		{"plain contractor doula", []string{doulaRole}, contractorType, true, false, true},
+		{"owner who also holds contractor employment type", []string{ownerRole}, contractorType, true, true, false},
+		{"admin who also holds contractor employment type", []string{adminRole, doulaRole}, contractorType, true, true, false},
+		{"zero-role employee", []string{}, employeeType, false, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := staffauth.NewReader("staff-id", tc.roles, tc.employmentType)
+			if got := reader.IsContractor(); got != tc.wantContractor {
+				t.Errorf("IsContractor() = %v, want %v", got, tc.wantContractor)
+			}
+			if got := reader.IsOwnerOrAdmin(); got != tc.wantOwnerOrAdmin {
+				t.Errorf("IsOwnerOrAdmin() = %v, want %v", got, tc.wantOwnerOrAdmin)
+			}
+			if got := reader.IsAmbientContractor(); got != tc.wantAmbientContractor {
+				t.Errorf("IsAmbientContractor() = %v, want %v", got, tc.wantAmbientContractor)
+			}
+		})
+	}
+}
 
-	employeeID := seedStaff(t, db, "employment-employee")
-	seedMembershipWithRoles(t, db, practiceID, employeeID, "{doula}")
-
-	contractorID := seedStaff(t, db, "employment-contractor")
-	seedContractorMembership(t, db, practiceID, contractorID)
-
-	zeroRoleID := seedStaff(t, db, "employment-zero-role")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{}', 'employee')`,
-		practiceID, zeroRoleID,
-	); err != nil {
-		t.Fatalf("seed zero-role membership: %v", err)
+// TestReader_Roles covers the accessor #501's practiceSessionHandler
+// reads to hand the frontend both axes off one Reader, on both a
+// populated and an empty roles slice -- nil in, "[]" out, never "null".
+func TestReader_Roles(t *testing.T) {
+	if roles := staffauth.NewReader("staff-id", []string{doulaRole}, employeeType).Roles(); len(roles) != 1 || roles[0] != doulaRole {
+		t.Fatalf("Roles() = %v, want [doula]", roles)
 	}
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
-
-	employeeReader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, employeeID)
-	if err != nil {
-		t.Fatalf("ResolveReader employee: %v", err)
-	}
-	if employeeReader.IsContractor() {
-		t.Fatal("employee reader reported IsContractor() = true")
-	}
-	if roles := employeeReader.Roles(); len(roles) != 1 || roles[0] != doulaRole {
-		t.Fatalf("employeeReader.Roles() = %v, want [doula]", roles)
-	}
-
-	contractorReader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, contractorID)
-	if err != nil {
-		t.Fatalf("ResolveReader contractor: %v", err)
-	}
-	if !contractorReader.IsContractor() {
-		t.Fatal("contractor reader reported IsContractor() = false")
-	}
-
-	zeroRoleReader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, zeroRoleID)
-	if err != nil {
-		t.Fatalf("ResolveReader zero-role: %v", err)
-	}
-	if roles := zeroRoleReader.Roles(); len(roles) != 0 {
-		t.Fatalf("zeroRoleReader.Roles() = %v, want empty", roles)
+	if roles := staffauth.NewReader("staff-id", nil, employeeType).Roles(); len(roles) != 0 {
+		t.Fatalf("Roles() = %v, want empty", roles)
 	}
 }

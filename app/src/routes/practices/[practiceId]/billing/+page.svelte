@@ -2,6 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { isOwner } from '#lib/roles.js';
 	import { PaginatedList, type CursorPage } from '#lib/paginatedList.svelte.js';
 	import {
 		billingPath,
@@ -11,6 +12,7 @@
 		type LedgerEntry
 	} from '#lib/billing.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
+	import type { PracticeSession } from '../+layout.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -38,8 +40,12 @@
 		failureMessage: 'Failed to load more ledger entries'
 	});
 
-	let roles = $state<string[]>([]);
-	let isOwner = $derived(roles.includes('owner'));
+	// Resolved once by practices/[practiceId]/+layout.ts (#835), not a
+	// second /session fetch here -- the buy-credits button's enabled state
+	// mirrors the "owner"-role gating the root Practice page already uses,
+	// server-side enforcement (RequireOwner) is what actually matters.
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	let isPracticeOwner = $derived(isOwner(session));
 	let checkoutStatus = $derived(page.url.searchParams.get('checkout'));
 
 	const columns = [
@@ -66,17 +72,8 @@
 	let purchaseError = $state('');
 	let isPurchasing = $state(false);
 
-	onMount(async () => {
+	onMount(() => {
 		approvalReturn = readApprovalReturn();
-		// The buy-credits button's enabled state mirrors the "owner"-role
-		// gating the root Practice page already uses -- server-side
-		// enforcement (RequireOwner) is what actually matters, this is UX
-		// only.
-		const sessionResponse = await apiFetchWithSession(`/api/practices/${page.params.practiceId}/session`);
-		if (sessionResponse.ok) {
-			const body: { roles: string[] } = await sessionResponse.json();
-			roles = body.roles;
-		}
 	});
 
 	// Throws on a refusal rather than returning it: PaginatedList catches,
@@ -156,7 +153,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button label="Buy credits" type="submit" disabled={!isOwner} loading={isPurchasing} />
+		<Button label="Buy credits" type="submit" disabled={!isPracticeOwner} loading={isPurchasing} />
 		{#if purchaseError}
 			<Notice message={purchaseError} variant="error" />
 		{/if}

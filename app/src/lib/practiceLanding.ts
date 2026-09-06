@@ -141,17 +141,6 @@ async function block<T>(load: () => Promise<T>): Promise<Block<T>> {
 	}
 }
 
-async function loadSession(
-	fetcher: Fetcher,
-	practiceId: string
-): Promise<{ practiceName: string; roles: string[] }> {
-	const response = await fetcher(`/api/practices/${practiceId}/session`);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.json();
-}
-
 async function readOpenOffers(fetcher: Fetcher, practiceId: string): Promise<Offer[]> {
 	const offers = await loadInbox(fetcher, practiceId);
 	return offers.filter((offer) => isOpen(offer));
@@ -202,15 +191,16 @@ async function loadRoster(fetcher: Fetcher, practiceId: string): Promise<RosterH
 /**
  * Loads everything the hub draws, in one call.
  *
- * The session comes first because its `roles` decide which of the other
- * requests are even allowed; the rest go together, so the hub costs two
- * round trips rather than five.
+ * `session` is `practices/[practiceId]/+layout.ts`'s already-resolved
+ * Membership (#835), not fetched again here -- its `roles` still decide
+ * which of the other requests are even allowed, so the hub costs one
+ * round trip rather than two.
  */
 export async function loadPracticeLanding(
 	fetcher: Fetcher,
-	practiceId: string
+	practiceId: string,
+	session: { practiceName: string; roles: string[] }
 ): Promise<PracticeLanding> {
-	const session = await loadSession(fetcher, practiceId);
 	const { roles } = session;
 
 	const [openOffers, hasClients, roster, credit, connect, requests] = await Promise.all([

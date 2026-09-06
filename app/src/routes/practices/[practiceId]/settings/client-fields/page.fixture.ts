@@ -55,9 +55,14 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/client-fields',
-	respond: (path) => {
-		if (path.endsWith('/session')) return jsonResponse({ roles: ['owner'] });
-		return jsonResponse(template);
+	pageData: {
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['owner'],
+			isContractor: false
+		}
 	},
+	respond: () => jsonResponse(template),
 	readyText: 'Client Fields'
 };

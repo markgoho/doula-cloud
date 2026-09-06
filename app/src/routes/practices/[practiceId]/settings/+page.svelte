@@ -11,37 +11,29 @@
 	 * a settings design. What each screen is called and how the group is
 	 * ordered belongs to whoever builds archetype F.
 	 */
-	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiFetchWithSession } from '#lib/api.js';
+	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
+	import type { PracticeSession } from '../+layout.js';
 
 	const practiceId = $derived(page.params.practiceId!);
 
 	// Multi-factor authentication (#606) is the first Owner-only entry
 	// this hub has ever needed to hide: its screen reads an Owner-only
 	// endpoint, so a Doula or Admin who followed the link would only meet
-	// a 403. The role comes from the same `/session` read payments' and
-	// website's own settings screens already use for the same gate.
-	let roles = $state<string[]>([]);
-	let isOwner = $derived(roles.includes('owner'));
+	// a 403. The Membership comes off practices/[practiceId]/+layout.ts's
+	// already-resolved read (#835), not a fetch of this page's own.
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	let isPracticeOwner = $derived(isOwner(session));
 	// Blocked email addresses (#744) is the second gated entry, and gated
 	// one notch wider: its list is every Client and Staff address at the
 	// Practice whose mail is failing, which ADR-0008 keeps in the same
 	// hands as the roster it is drawn from -- Owner or Admin, matching the
 	// endpoint's own `ownerAndAdmin` guard.
-	let isOwnerOrAdmin = $derived(isOwner || roles.includes('admin'));
-
-	onMount(async () => {
-		const response = await apiFetchWithSession(`/api/practices/${practiceId}/session`);
-		if (response.ok) {
-			const body: { roles: string[] } = await response.json();
-			roles = body.roles;
-		}
-	});
+	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
 
 	const settings = $derived([
 		{
@@ -69,7 +61,7 @@
 			description: 'The terms every Contract is written from.',
 			href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId })
 		},
-		...(isOwnerOrAdmin
+		...(isPracticeOwnerOrAdmin
 			? [
 					{
 						label: 'Blocked email addresses',
@@ -79,7 +71,7 @@
 					}
 				]
 			: []),
-		...(isOwner
+		...(isPracticeOwner
 			? [
 					{
 						label: 'Multi-factor authentication',

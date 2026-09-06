@@ -42,6 +42,11 @@ const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
 const { practiceId, clientId } = fixture.params;
+// The generated `data` prop merges practices/[practiceId]/+layout.ts's
+// `session` (#835) into +page.ts's own ContractorGate, the way SvelteKit
+// really does at runtime -- this route never reads it, but rendering the
+// component directly still needs the full merged shape.
+const sessionStub = { practiceId, practiceName: 'Riverside Doula Collective', roles: [], isContractor: false };
 // The Address DescriptionList row joins the same fields the same way the
 // route does -- an empty addressLine2 is filtered out rather than shown
 // as a bare comma.
@@ -127,7 +132,7 @@ async function setup({
 		}
 		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
 	});
-	return render(Page, { data: { isContractor, isOwner } });
+	return render(Page, { data: { isContractor, isOwner, session: sessionStub } });
 }
 
 describe('client detail hub', () => {
@@ -607,7 +612,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 				)
 			);
 		});
-		await render(Page, { data: { isContractor: false, isOwner: true } });
+		await render(Page, { data: { isContractor: false, isOwner: true, session: sessionStub } });
 
 		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
 		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();

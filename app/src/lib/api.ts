@@ -29,12 +29,14 @@ enrolment can send her back to the Practice she was trying to reach. The
 response body is cloned before this peeks at it, so a caller that goes
 on to read the same response (`apiErrorMessage`, say) still can.
 */
-// practices/+layout.svelte and the practice landing page each make several
-// of these calls on one navigation, sequentially, not just concurrently --
-// so `isRedirecting` alone (dedupes two calls in flight at once) is not
-// enough: a later call's refusal, discovered only after an earlier one's
-// own goto already landed on /mfa/enroll, must also check it isn't already
-// there before reading location.pathname, or it clobbers returnTo with
+// The practice landing page makes several of these calls on one
+// navigation (load(), loadActivity(), loadWaitingOnReply(), each awaited
+// in turn, and loadPracticeLanding's own internal Promise.all fan-out),
+// sequentially, not just concurrently -- so `isRedirecting` alone
+// (dedupes two calls in flight at once) is not enough: a later call's
+// refusal, discovered only after an earlier one's own goto already
+// landed on /mfa/enroll, must also check it isn't already there before
+// reading location.pathname, or it clobbers returnTo with
 // that path instead of falling through. A property on an object, not a
 // bare module-level variable, so setting it stays an assignment to that
 // object rather than a reassignment of the binding itself.
@@ -61,9 +63,13 @@ Reports whether response is #606's MFA-required refusal -- a 403
 carrying the machine-readable `MFA_REQUIRED` code, distinct from every
 other 403 (a role check, a missing membership) that must NOT redirect
 anywhere. Reads a clone so the original response body is still there for
-whatever the caller does with it afterward.
+whatever the caller does with it afterward. Exported for
+`practices/[practiceId]/+layout.ts` (#835/#748): that `load` uses
+`apiFetch`, not `apiFetchWithSession`, so it needs this same check
+itself before treating a 403 as a stale Membership rather than a live
+session barred from this one Practice.
 */
-async function isMFARequired(response: Response): Promise<boolean> {
+export async function isMFARequired(response: Response): Promise<boolean> {
 	if (response.status !== 403) return false;
 	try {
 		const body: unknown = await response.clone().json();

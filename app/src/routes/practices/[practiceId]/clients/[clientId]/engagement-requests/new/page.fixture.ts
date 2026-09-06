@@ -35,9 +35,14 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1', clientId: 'client-1' },
 	url: 'https://example.test/practices/practice-1/clients/client-1/engagement-requests/new',
-	respond: (path) => {
-		if (path.endsWith('/session')) return jsonResponse({ roles: ['doula'] });
-		return jsonResponse(detail);
+	pageData: {
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['doula'],
+			isContractor: false
+		}
 	},
+	respond: () => jsonResponse(detail),
 	readyText: 'Ask to start work with Persephone Ochieng-Whitfield'
 };

@@ -4,7 +4,10 @@
 // practice_memberships row for the :practiceId in the URL -- setting
 // app.current_practice_id on a request-scoped transaction only once all
 // of that has passed, so Postgres RLS enforces it for the rest of the
-// request.
+// request. The same query also reads that row's roles and employment
+// type, and Middleware builds this request's Reader from them and places
+// it on the context (ReaderFrom) -- the one practice_memberships read a
+// request needs for its own Membership, rather than a query per handler.
 package staffauth
 
 import (
@@ -14,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"github.com/google/uuid"
 
@@ -29,6 +31,7 @@ const (
 	staffIDKey    contextKey = "staffauth.staffID"
 	practiceIDKey contextKey = "staffauth.practiceID"
 	txKey         contextKey = "staffauth.tx"
+	readerKey     contextKey = "staffauth.reader"
 )
 
 // StaffID returns the resolved Staff id for the current request.
@@ -41,6 +44,19 @@ func StaffID(ctx context.Context) (string, bool) {
 func PracticeID(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(practiceIDKey).(string)
 	return id, ok
+}
+
+// ReaderFrom returns the Reader Middleware resolved for the current
+// request -- the caller's roles and employment type at the Practice in
+// the URL, loaded by the one practice_memberships query Middleware runs.
+// RequireOwner, RequireOwnerOrAdmin, visit.requireDoula, and every
+// handler that used to call the now-removed ResolveReader read it from
+// here instead, so a request resolves its Membership once rather than
+// once per handler. ok is false only if Middleware never ran ahead of
+// this handler.
+func ReaderFrom(ctx context.Context) (Reader, bool) {
+	reader, ok := ctx.Value(readerKey).(Reader)
+	return reader, ok
 }
 
 // Tx returns the request-scoped database transaction, with
@@ -130,7 +146,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			isMember, roles, requireMFA, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
+			isMember, roles, employmentType, requireMFA, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
@@ -140,6 +156,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				apierr.WriteError(w, "no membership at this practice", http.StatusForbidden)
 				return
 			}
+			reader := NewReader(staffID, roles, employmentType)
 
 			// #606: refuse a Practice-scoped request when the caller's
 			// Membership there holds Owner, or the Practice's own switch
@@ -150,7 +167,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			// the login screen, per credentialed-fetch's own contract),
 			// so it is a distinct, machine-readable 403 the app branches
 			// on to route into enrolment instead.
-			if !secondFactor && (slices.Contains(roles, "owner") || requireMFA) {
+			if !secondFactor && (reader.Has("owner") || requireMFA) {
 				writeMFARequired(w)
 				return
 			}
@@ -188,6 +205,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			ctx := context.WithValue(r.Context(), staffIDKey, staffID)
 			ctx = context.WithValue(ctx, practiceIDKey, practiceID)
 			ctx = context.WithValue(ctx, txKey, tx)
+			ctx = context.WithValue(ctx, readerKey, reader)
 			ctx = tasknudge.Begin(ctx)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -233,42 +251,44 @@ func setIdentityAndResolveStaff(ctx context.Context, tx *sql.Tx, identityUID str
 // app.current_staff_id -- the session variables practice/staff-tier RLS
 // reads for the rest of the request -- then checks whether staffID holds
 // a practice_memberships row for practiceID, and if so returns the roles
-// that row holds and whether practiceID has thrown its "require MFA for
-// all staff" switch (#606) -- one query, so the MFA gate costs no second
-// round trip. Both vars are set only here, after identity resolution has
-// already succeeded, so no RLS policy that reads them can be satisfied
-// before that check has passed.
-func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (isMember bool, roles []string, requireMFA bool, err error) {
+// and employment type that row holds and whether practiceID has thrown
+// its "require MFA for all staff" switch (#606) -- one query, so this is
+// also the one practice_memberships read a request needs: Middleware
+// builds this request's Reader from what it returns, rather than a
+// downstream handler querying the table again. Both session vars are set
+// only here, after identity resolution has already succeeded, so no RLS
+// policy that reads them can be satisfied before that check has passed.
+func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (isMember bool, roles []string, employmentType string, requireMFA bool, err error) {
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		return false, nil, false, fmt.Errorf("staffauth: set current practice id: %w", err)
+		return false, nil, "", false, fmt.Errorf("staffauth: set current practice id: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		return false, nil, false, fmt.Errorf("staffauth: set current staff id: %w", err)
+		return false, nil, "", false, fmt.Errorf("staffauth: set current staff id: %w", err)
 	}
 
-	var rolesText sql.NullString
+	var rolesText, employmentTypeText sql.NullString
 	scanErr := tx.QueryRowContext(ctx,
-		`SELECT array_to_string(pm.roles, ','), p.require_mfa_for_all_staff
+		`SELECT array_to_string(pm.roles, ','), pm.employment_type::text, p.require_mfa_for_all_staff
 		 FROM practices p
 		 LEFT JOIN practice_memberships pm ON pm.practice_id = p.id AND pm.staff_id = $2
 		 WHERE p.id = $1`,
 		practiceID, staffID,
-	).Scan(&rolesText, &requireMFA)
+	).Scan(&rolesText, &employmentTypeText, &requireMFA)
 	if errors.Is(scanErr, sql.ErrNoRows) {
 		// No such Practice at all -- same outward result as no membership.
-		return false, nil, false, nil
+		return false, nil, "", false, nil
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if scanErr != nil {
-		return false, nil, false, fmt.Errorf("staffauth: check practice membership: %w", scanErr)
+		return false, nil, "", false, fmt.Errorf("staffauth: check practice membership: %w", scanErr)
 	}
 	if !rolesText.Valid {
 		// The Practice exists but staffID holds no membership row there.
-		return false, nil, requireMFA, nil
+		return false, nil, "", requireMFA, nil
 	}
-	return true, splitRoles(rolesText.String), requireMFA, nil
+	return true, splitRoles(rolesText.String), employmentTypeText.String, requireMFA, nil
 }
 
 // codeMFARequired is the machine-readable APIError.Code the app's

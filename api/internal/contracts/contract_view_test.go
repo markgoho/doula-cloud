@@ -5,28 +5,7 @@ import (
 
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/testdb"
 )
-
-// contractReader resolves a staffauth.Reader for staffID at practiceID --
-// ReadContract takes a Reader, not a bare role list, so these tests build
-// one the same way a real handler does.
-func contractReader(t *testing.T, db *testdb.DB, practiceID, staffID string) staffauth.Reader {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
-	reader, err := staffauth.ResolveReader(t.Context(), tx, practiceID, staffID)
-	if err != nil {
-		t.Fatalf("ResolveReader: %v", err)
-	}
-	return reader
-}
 
 var viewFullProse = "Agreement for {{client_name}} at {{money_price}}, on-call terms {{scope_of_service}}."
 
@@ -48,14 +27,11 @@ func fullContractResponse() contracts.ContractResponse {
 // money row for both roles that hold it: ContractFull, with the
 // money-tagged merge field's value reachable.
 func TestReadContract_OwnerAndAdminGetMoney(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Contract View Test Practice")
-
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "view-owner", []string{"owner"}, "employee")
-	adminID := testdb.SeedStaffAtPractice(t, db, practiceID, "view-admin", []string{"admin"}, "employee")
-
-	for _, staffID := range []string{ownerID, adminID} {
-		reader := contractReader(t, db, practiceID, staffID)
+	readers := []staffauth.Reader{
+		staffauth.NewReader("view-owner", []string{"owner"}, "employee"),
+		staffauth.NewReader("view-admin", []string{"admin"}, "employee"),
+	}
+	for _, reader := range readers {
 		view := contracts.ReadContract(reader, fullContractResponse())
 		full, ok := view.(contracts.ContractFull)
 		if !ok {
@@ -78,11 +54,7 @@ func TestReadContract_OwnerAndAdminGetMoney(t *testing.T) {
 // holds for an employee Doula, who has full scope reach but ADR-0008
 // never gives Contract money.
 func TestReadContract_DoulaNeverGetsMoney(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Contract View Doula Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "view-doula", []string{doulaRole}, "employee")
-
-	reader := contractReader(t, db, practiceID, doulaID)
+	reader := staffauth.NewReader("view-doula", []string{doulaRole}, "employee")
 	view := contracts.ReadContract(reader, fullContractResponse())
 
 	scope, ok := view.(contracts.ContractScope)

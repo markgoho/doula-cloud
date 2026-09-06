@@ -17,9 +17,14 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/mfa',
-	respond: (path) => {
-		if (path.endsWith('/session')) return jsonResponse({ roles: ['owner'] });
-		return jsonResponse(impact);
+	pageData: {
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['owner'],
+			isContractor: false
+		}
 	},
+	respond: () => jsonResponse(impact),
 	readyText: 'Multi-factor authentication'
 };

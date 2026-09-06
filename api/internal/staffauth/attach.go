@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"slices"
 
 	"doula-cloud/api/internal/apierr"
 	"github.com/google/uuid"
@@ -59,20 +58,19 @@ func AttachingWrite(next http.Handler) http.Handler {
 			return
 		}
 		staffID, _ := StaffID(r.Context())
-		practiceID, _ := PracticeID(r.Context())
 		engagementID := r.PathValue("engagementId")
+		reader, has := ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
+			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 
 		// A malformed engagementId is left for the handler's own
 		// staffauth.ParseUUID to reject with its usual 400 -- querying an
 		// invalid UUID here would surface as a 500 instead, which is the
 		// wrong failure for a caller who simply typo'd a path segment.
 		if _, err := uuid.Parse(engagementID); err == nil {
-			reader, err := ResolveReader(r.Context(), tx, practiceID, staffID)
-			if err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-				return
-			}
 			canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -91,7 +89,7 @@ func AttachingWrite(next http.Handler) http.Handler {
 			return
 		}
 
-		if err := attachActor(r.Context(), tx, practiceID, engagementID, staffID); err != nil {
+		if err := attachActor(r.Context(), tx, engagementID, staffID, reader); err != nil {
 			// The response is already written, so this cannot become a 500.
 			// Rolling the transaction back instead is what keeps the
 			// database honest: Middleware's Commit then fails and the write
@@ -106,22 +104,19 @@ func AttachingWrite(next http.Handler) http.Handler {
 }
 
 // attachActor inserts the accrued attachment, or does nothing at all if
-// the caller is not a plain Doula. ON CONFLICT DO NOTHING is what makes
-// the seam safe to run on every Engagement-scoped write: an attachment
-// already open for this pair -- accrued from an earlier write, or granted
-// by an Offer or a Visit -- is left exactly as it is, so origin can only
-// ever travel accrued -> granted.
-func attachActor(ctx context.Context, tx *sql.Tx, practiceID, engagementID, staffID string) error {
+// the caller is not a plain Doula. reader is the caller's own Reader,
+// already resolved by Middleware -- attachActor makes no
+// practice_memberships query of its own. ON CONFLICT DO NOTHING is what
+// makes the seam safe to run on every Engagement-scoped write: an
+// attachment already open for this pair -- accrued from an earlier
+// write, or granted by an Offer or a Visit -- is left exactly as it is,
+// so origin can only ever travel accrued -> granted.
+func attachActor(ctx context.Context, tx *sql.Tx, engagementID, staffID string, reader Reader) error {
 	if engagementID == "" || staffID == "" {
 		// coverage:ignore reason: every route this wraps carries {engagementId} behind Middleware
 		return nil
 	}
-	roles, err := Roles(ctx, tx, practiceID, staffID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("staffauth: resolve actor roles: %w", err)
-	}
-	if !slices.Contains(roles, "doula") || slices.Contains(roles, "owner") || slices.Contains(roles, "admin") {
+	if !reader.Has("doula") || reader.IsOwnerOrAdmin() {
 		return nil
 	}
 

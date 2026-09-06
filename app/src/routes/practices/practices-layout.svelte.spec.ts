@@ -9,9 +9,13 @@ import Layout from './+layout.svelte';
 // Mutable rather than a fixed literal: the layout skips the push
 // unregister on a screen with no Practice in its route, and the nav marks
 // the current section off the pathname, so both need to move per test.
+// `data` carries what practices/[practiceId]/+layout.ts's `load` resolved
+// (#835) -- the roles that decide how many nav items there are, no
+// longer a second fetch this component makes itself.
 const pageState = vi.hoisted(() => ({
 	params: {} as { practiceId?: string },
-	url: new URL('http://localhost/practices/practice-1')
+	url: new URL('http://localhost/practices/practice-1'),
+	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
@@ -21,9 +25,9 @@ vi.mock('$app/navigation', () => ({ goto }));
 const signOutOfSession = vi.hoisted(() => vi.fn<() => Promise<SignOutOutcome>>());
 vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
 
-// Two reads: `/api/staff/session` for the person behind the avatar menu
-// and the Memberships behind the Practice switcher, and the Practice's own
-// session for the roles that decide how many nav items there are.
+// One read left in the component itself: `/api/staff/session` for the
+// person behind the avatar menu and the Memberships behind the Practice
+// switcher.
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetch, apiFetchWithSession }));
@@ -37,7 +41,7 @@ interface SetupOptions {
 	routeParameters?: { practiceId?: string };
 	pathname?: string;
 	roles?: string[];
-	sessionRefuses?: boolean;
+	hasPracticeSession?: boolean;
 	staffSessionRefuses?: boolean;
 	memberships?: { practiceId: string; practiceName: string; roles: string[] }[];
 }
@@ -47,7 +51,7 @@ async function setup({
 	routeParameters = { practiceId: 'practice-1' },
 	pathname = '/practices/practice-1',
 	roles = ['owner'],
-	sessionRefuses = false,
+	hasPracticeSession = true,
 	staffSessionRefuses = false,
 	memberships = ONE_MEMBERSHIP
 }: SetupOptions = {}) {
@@ -57,19 +61,22 @@ async function setup({
 	await page.viewport(1440, 900);
 	pageState.params = routeParameters;
 	pageState.url = new URL(`http://localhost${pathname}`);
+	pageState.data = hasPracticeSession
+		? {
+				session: {
+					practiceId: routeParameters.practiceId ?? '',
+					practiceName: 'Riverside Doula Collective',
+					roles,
+					isContractor: false
+				}
+			}
+		: {};
 	goto.mockReset();
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
 	apiFetchWithSession.mockReset();
-	apiFetchWithSession.mockImplementation((path: string) =>
-		Promise.resolve(
-			path === '/api/staff/session'
-				? jsonResponse(
-						{ name: 'Mark Goho', email: 'mark@example.test', memberships },
-						staffSessionRefuses ? 403 : 200
-					)
-				: jsonResponse({ roles }, sessionRefuses ? 403 : 200)
-		)
+	apiFetchWithSession.mockResolvedValue(
+		jsonResponse({ name: 'Mark Goho', email: 'mark@example.test', memberships }, staffSessionRefuses ? 403 : 200)
 	);
 	await render(Layout, {
 		children: createRawSnippet(() => ({ render: () => '<p>staff child content</p>' }))
@@ -171,8 +178,8 @@ describe('the nav', () => {
 		}
 	);
 
-	it('keeps the admin-only items hidden when the Practice session read refuses', async () => {
-		await setup({ sessionRefuses: true });
+	it('keeps the admin-only items hidden when no Practice session has resolved yet', async () => {
+		await setup({ hasPracticeSession: false });
 
 		await expect.element(page.getByRole('link', { name: 'Billing', exact: true })).not.toBeInTheDocument();
 	});

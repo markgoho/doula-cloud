@@ -24,7 +24,6 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 interface SetupOptions {
 	roles?: string[];
-	sessionOk?: boolean;
 	impact?: { required: boolean; withoutSecondFactor: number };
 	impactOk?: boolean;
 	putResponse?: () => Response;
@@ -33,20 +32,15 @@ interface SetupOptions {
 /*
  * One setup per test. It returns `puts` -- every body/headers pair the
  * screen sent to the PUT -- because "did she confirm, and what did she
- * ask for?" is the behaviour this screen exists to produce.
+ * ask for?" is the behaviour this screen exists to produce. The Membership
+ * (roles) comes off page.data.session (#835), set here rather than fetched.
  */
-async function setup({
-	roles = ['owner'],
-	sessionOk = true,
-	impact = fixtureImpact,
-	impactOk = true,
-	putResponse
-}: SetupOptions = {}) {
+async function setup({ roles = ['owner'], impact = fixtureImpact, impactOk = true, putResponse }: SetupOptions = {}) {
+	pageState.data = {
+		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+	};
 	const puts: { body: Record<string, unknown>; headers: Record<string, string> }[] = [];
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
-		if (path.endsWith('/session')) {
-			return Promise.resolve(jsonResponse({ roles }, sessionOk ? 200 : 500));
-		}
 		if (init?.method === 'PUT') {
 			puts.push({
 				body: JSON.parse(String(init.body)) as Record<string, unknown>,
@@ -160,12 +154,6 @@ describe('MFA settings screen', () => {
 		await expect
 			.element(testPage.getByText('Staff without a second factor can sign in without one again.'))
 			.toBeVisible();
-	});
-
-	it('shows a load error when the session cannot be read', async () => {
-		await setup({ sessionOk: false });
-
-		await expect.element(testPage.getByText('There is a problem with the service. Try again in a few minutes.')).toBeVisible();
 	});
 
 	it('shows a load error when the impact endpoint cannot be read', async () => {

@@ -22,7 +22,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { refusalMessage } from '#lib/formErrors.js';
+	import { isOwner as checkIsOwner } from '#lib/roles.js';
 	import {
 		loadMfaRequirementImpact,
 		setMfaRequired,
@@ -34,10 +34,12 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import type { PracticeSession } from '../../+layout.js';
 
-	let roles = $state<string[]>([]);
-	let isOwner = $derived(roles.includes('owner'));
-	let hasLoadedRoles = $state(false);
+	// The Membership comes off practices/[practiceId]/+layout.ts's
+	// already-resolved read (#835), not a fetch of this page's own.
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	let isOwner = $derived(checkIsOwner(session));
 
 	let impact = $state<MfaRequirementImpact | undefined>();
 	let loadError = $state('');
@@ -47,27 +49,10 @@
 	let isSubmitting = $state(false);
 
 	onMount(async () => {
-		try {
-			const sessionResponse = await apiFetchWithSession(
-				`/api/practices/${page.params.practiceId}/session`
-			);
-			if (!sessionResponse.ok) {
-				loadError = await refusalMessage(sessionResponse);
-				return;
-			}
-			const body: { roles: string[] } = await sessionResponse.json();
-			roles = body.roles;
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load this setting';
-			return;
-		} finally {
-			hasLoadedRoles = true;
-		}
-
 		// The impact endpoint is Owner-only server-side (unlike payments'
 		// and website's own status reads); asking a non-Owner for it would
 		// only earn a 403 she has no use for, so this never asks.
-		if (roles.includes('owner')) {
+		if (isOwner) {
 			await loadImpact();
 		}
 	});
@@ -137,11 +122,10 @@
 		impact === undefined ? '' : requireConsequence(impact.withoutSecondFactor)
 	);
 
-	// Truthy from mount until either an Owner's impact has loaded or a
-	// non-Owner's roles have (there is nothing further to load for her).
-	let loading = $derived(
-		!hasLoadedRoles || (isOwner && impact === undefined) ? 'Loading this setting' : undefined
-	);
+	// Truthy until an Owner's impact has loaded -- a non-Owner's roles are
+	// already known from page.data.session, so there is nothing further to
+	// load for her.
+	let loading = $derived(isOwner && impact === undefined ? 'Loading this setting' : undefined);
 </script>
 
 {#snippet intro()}

@@ -63,8 +63,12 @@ function mockFetches({
 	requestOutcome,
 	requestStatus = 201
 }: MockOptions = {}) {
+	// The Membership (roles) comes off page.data.session (#835), not a
+	// fetch this mock has to answer.
+	pageState.data = {
+		session: { practiceId, practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+	};
 	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path.endsWith('/session')) return Promise.resolve(jsonResponse({ roles }));
 		if (path.endsWith('/billing')) return Promise.resolve(jsonResponse({ balance, ledger: { items: [], hasMore: false } }));
 		if (path.endsWith('/engagement-requests')) {
 			return Promise.resolve(jsonResponse(requestOutcome ?? { requestId: 'request-1', state: 'pending' }, requestStatus));

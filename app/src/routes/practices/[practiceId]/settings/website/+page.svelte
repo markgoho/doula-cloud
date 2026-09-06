@@ -29,6 +29,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { isOwner } from '#lib/roles.js';
 	import {
 		loadWebsite,
 		saveWebsite,
@@ -36,6 +37,7 @@
 		MAX_FACT_LENGTH,
 		type PracticeWebsite
 	} from '#lib/website.js';
+	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -53,9 +55,14 @@
 	type Choice = '' | 'own' | 'hosted';
 
 	let current = $state<PracticeWebsite | undefined>();
-	let practiceName = $state('');
-	let roles = $state<string[]>([]);
-	let isOwner = $derived(roles.includes('owner'));
+	// Both come off practices/[practiceId]/+layout.ts's already-resolved
+	// read (#835), not a fetch this page makes itself: the Practice's
+	// name -- which the hosted page shows as the business name -- and the
+	// caller's roles, whose button-enabled state mirrors the payments
+	// screen's Owner gating.
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	let practiceName = $derived(session.practiceName);
+	let isPracticeOwner = $derived(isOwner(session));
 	let loadError = $state('');
 
 	/* 'answers' collects, 'review' shows the assembled page back to her,
@@ -89,19 +96,6 @@
 		if (current.mode !== 'undeclared') {
 			choice = current.mode;
 			step = 'saved';
-		}
-
-		/* One call for the Practice's name -- which the hosted page shows as
-		   the business name -- and for the caller's roles. The button's
-		   enabled state mirrors the payments screen's Owner gating;
-		   RequireOwner on the endpoint is what actually enforces it. */
-		const sessionResponse = await apiFetchWithSession(
-			`/api/practices/${page.params.practiceId}/session`
-		);
-		if (sessionResponse.ok) {
-			const body: { practiceName: string; roles: string[] } = await sessionResponse.json();
-			practiceName = body.practiceName;
-			roles = body.roles;
 		}
 	});
 
@@ -341,7 +335,7 @@
 		type="submit"
 		label={choice === 'hosted' ? 'Continue' : 'Save'}
 		loading={isSubmitting}
-		disabled={!isOwner}
+		disabled={!isPracticeOwner}
 	/>
 	{#if step === 'answers' && current && current.mode !== 'undeclared'}
 		<Button variant="secondary" label="Cancel" onClick={() => (step = 'saved')} />
@@ -359,7 +353,7 @@
 		</center-l>
 	</container-l>
 {:else if current}
-	{#if !isOwner}
+	{#if !isPracticeOwner}
 		<Notice
 			variant="status"
 			message="Only a Practice Owner can change this. Ask an Owner if it needs updating."
@@ -405,7 +399,7 @@
 					/>
 
 					<cluster-l space="var(--space-3)" align="center">
-						<Button label="Publish page" loading={isSubmitting} onClick={save} disabled={!isOwner} />
+						<Button label="Publish page" loading={isSubmitting} onClick={save} disabled={!isPracticeOwner} />
 						<Button variant="secondary" label="Back" onClick={() => (step = 'answers')} />
 					</cluster-l>
 				</stack-l>
@@ -462,7 +456,7 @@
 						/>
 					{/if}
 
-					{#if isOwner}
+					{#if isPracticeOwner}
 						<cluster-l space="var(--space-3)" align="center">
 							<Button
 								variant="secondary"

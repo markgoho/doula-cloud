@@ -29,6 +29,7 @@
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
+	import type { PracticeSession } from './+layout.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -63,9 +64,14 @@
 	});
 	let waitingOnReplyError = $state('');
 
+	// Resolved once by practices/[practiceId]/+layout.ts (#835), not a
+	// fetch of loadPracticeLanding's own -- the Membership its roles are
+	// read off.
+	const session = $derived((page.data as { session: PracticeSession }).session);
+
 	async function load() {
 		try {
-			landing = await loadPracticeLanding(apiFetchWithSession, page.params.practiceId!);
+			landing = await loadPracticeLanding(apiFetchWithSession, page.params.practiceId!, session);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load your Practice';
 		}

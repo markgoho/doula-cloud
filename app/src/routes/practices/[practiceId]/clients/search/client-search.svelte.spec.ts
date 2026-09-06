@@ -51,8 +51,18 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
+// The generated `data` prop merges practices/[practiceId]/+layout.ts's
+// `session` (#835) into +page.ts's own ContractorGate, the way SvelteKit
+// really does at runtime -- this route never reads it, but rendering the
+// component directly still needs the full merged shape.
 async function setup(isContractor = fixtureData.isContractor) {
-	await render(Page, { data: { isContractor, isOwner: false } });
+	await render(Page, {
+		data: {
+			isContractor,
+			isOwner: false,
+			session: { practiceId, practiceName: 'Riverside Doula Collective', roles: [], isContractor }
+		}
+	});
 }
 
 function requestUrl(callIndex = 0): string {

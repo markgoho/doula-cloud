@@ -17,7 +17,7 @@ import (
 // response an out-of-practice engagementID gets, so a contractor without
 // access can't distinguish "doesn't exist" from "not attached".
 func (r Reader) CanAccessEngagement(ctx context.Context, tx *sql.Tx, engagementID string) (bool, error) {
-	if r.Has("owner") || r.Has("admin") || !r.IsContractor() {
+	if !r.IsAmbientContractor() {
 		return true, nil
 	}
 
@@ -45,7 +45,7 @@ func (r Reader) CanAccessEngagement(ctx context.Context, tx *sql.Tx, engagementI
 // of that Client's Engagements -- the same "attached Clients" carve-out
 // ADR-0008 gives her everywhere else.
 func (r Reader) CanAccessClient(ctx context.Context, tx *sql.Tx, clientID string) (bool, error) {
-	if r.Has("owner") || r.Has("admin") || !r.IsContractor() {
+	if !r.IsAmbientContractor() {
 		return true, nil
 	}
 

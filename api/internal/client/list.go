@@ -134,9 +134,9 @@ func ListHandler() http.Handler {
 			return
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
-		reader, err := staffauth.ResolveReader(r.Context(), tx, practiceID, staffID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
+		reader, has := staffauth.ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
@@ -154,6 +154,7 @@ func ListHandler() http.Handler {
 		}
 
 		var list []ListItem
+		var err error
 		if reader.IsContractor() {
 			list, err = listAttachedClients(r.Context(), tx, practiceID, staffID, withWorkOnly, after)
 		} else {
@@ -467,7 +468,7 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEng
 		name := raw.doulaName.String
 		oe.DoulaName = &name
 	}
-	if reader.Has("owner") || reader.Has("admin") {
+	if reader.IsOwnerOrAdmin() {
 		if raw.invoiceStatus.Valid {
 			status := raw.invoiceStatus.String
 			oe.InvoiceStatus = &status
