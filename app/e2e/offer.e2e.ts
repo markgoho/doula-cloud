@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { seedEngagement } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { seedFoundingOwner } from './staffSignup';
 
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // Drives ADR-0008's Offer flow (#317) through the two screens it adds:
@@ -24,25 +24,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	request,
 	context
 }) => {
-	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
-	// millisecond-only uniqueness collides across parallel workers.
-	const email = `offer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-	const password = 'password123';
-
-	const signUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email, password, returnSecureToken: true } }
-	);
-	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken, localId } = await signUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', workState: 'NY' }
-	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId, staffId } = JSON.parse(signupBody);
+	const { idToken, localId, practiceId, staffId } = await seedFoundingOwner(request);
 
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment), including the

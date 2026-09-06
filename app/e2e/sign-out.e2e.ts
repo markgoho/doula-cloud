@@ -1,40 +1,16 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
-
-// The Firebase Auth emulator and the Go BFF -- both host processes -- see
-// e2e/global-setup.ts and e2e/stack.ts for how these get started.
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+import { seedFoundingOwner } from './staffSignup';
 
 test('a Staff member signs out and can no longer reach an authenticated screen', async ({
 	page,
 	request,
 	context
 }) => {
-	// The random suffix (not just Date.now(), millisecond-resolution) avoids
-	// EMAIL_EXISTS collisions with other *.e2e.ts files' own staff-<ts>@
-	// emails when Playwright's parallel workers start within the same
-	// millisecond of each other.
-	const email = `signout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-	const password = 'password123';
-
-	// Provision the account and Practice directly, the way signup would --
-	// this test is about *sign-out*, not re-proving signup.
-	const signUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email, password, returnSecureToken: true } }
-	);
-	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken, localId } = await signUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Lakeside Doulas', staffName: 'Robin Owner', workState: 'NY' }
+	const { idToken, localId, practiceId } = await seedFoundingOwner(request, {
+		practiceName: 'Lakeside Doulas',
+		staffName: 'Robin Owner'
 	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
 
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).
@@ -75,23 +51,10 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 // on the login screen like any other sign-out, not report an error --
 // the end-session endpoint is idempotent.
 test('a second tab signing out after the first shows no error', async ({ page, request, context }) => {
-	const email = `signout-twice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-	const password = 'password123';
-
-	const signUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email, password, returnSecureToken: true } }
-	);
-	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken, localId } = await signUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Hillcrest Doulas', staffName: 'Sam Owner', workState: 'NY' }
+	const { idToken, localId, practiceId } = await seedFoundingOwner(request, {
+		practiceName: 'Hillcrest Doulas',
+		staffName: 'Sam Owner'
 	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
 
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).
@@ -127,23 +90,10 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	request,
 	context
 }) => {
-	const email = `signout-second-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-	const password = 'password123';
-
-	const signUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email, password, returnSecureToken: true } }
-	);
-	expect(signUp.ok(), `signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken, localId } = await signUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Elm Street Doulas', staffName: 'Robin Owner', workState: 'NY' }
+	const { idToken, localId, practiceId } = await seedFoundingOwner(request, {
+		practiceName: 'Elm Street Doulas',
+		staffName: 'Robin Owner'
 	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
 
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).

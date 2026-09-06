@@ -1,8 +1,9 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
-import { signIn, sessionCookieFrom } from './auth';
-import { enrollSecondFactor, verifyEmail } from './mfa';
+import { sessionCookieFrom } from './auth';
+import { signInEnrolled } from './mfa';
 import { seedClientPortalUser, seedEngagement, readStaffInviteToken, MAILBOX_URL, WORKER_SECRET } from './stack';
+import { seedFoundingOwner } from './staffSignup';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -70,7 +71,6 @@ export interface SeededPortalClient {
 	clientId: string;
 	engagementId: string;
 	staffEmail: string;
-	staffIdToken: string;
 	staffHeaders: { Cookie: string };
 	clientEmail: string;
 }
@@ -215,15 +215,12 @@ export async function seedPortalClient(
 	// avoids EMAIL_EXISTS collisions with other *.e2e.ts files' emails when
 	// Playwright's parallel workers start within the same millisecond.
 	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const staffEmail = `staff-${unique}@example.com`;
 	const clientEmail = `client-${unique}@example.com`;
 
-	const staffSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: staffEmail, password: PORTAL_CLIENT_PASSWORD, returnSecureToken: true } }
-	);
-	expect(staffSignUp.ok(), `staffSignUp failed: ${staffSignUp.status()} ${await staffSignUp.text()}`).toBe(true);
-	const { idToken: rawIdToken, localId: staffUID } = await staffSignUp.json();
+	const { email: staffEmail, idToken, localId, practiceId, staffId } = await seedFoundingOwner(request, {
+		practiceName,
+		staffName: 'Alex Owner'
+	});
 
 	// #606: every Practice-scoped call this fixture and its callers go on
 	// to make -- including the createClient call right below -- runs
@@ -232,19 +229,7 @@ export async function seedPortalClient(
 	// switch. Enrolled here, once, the same way mfa-required.e2e.ts's own
 	// fixtures are, rather than leaving every one of this helper's six
 	// callers to rediscover the 403 on their own.
-	await verifyEmail(request, staffUID);
-	const staffIdToken = await enrollSecondFactor(request, rawIdToken);
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${staffIdToken}` },
-		data: { practiceName, staffName: 'Alex Owner', workState: 'NY' }
-	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId, staffId } = JSON.parse(signupBody);
-
-	// Everything after signup is cookie-authenticated (#151).
-	const staffHeaders = await signIn(request, API_URL, staffIdToken);
+	const staffHeaders = await signInEnrolled(request, idToken, localId);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
@@ -267,7 +252,6 @@ export async function seedPortalClient(
 		clientId,
 		engagementId,
 		staffEmail,
-		staffIdToken,
 		staffHeaders,
 		clientEmail
 	};
