@@ -15,15 +15,17 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// newErasureServer mounts the erasure endpoint alongside the two reads an
+// newErasureServer mounts the erasure endpoint alongside the reads an
 // erasure test needs to prove its effects -- the detail read (for the
-// redacted record and the unreadable history) and the edit (for the
-// post-erasure refusal).
+// redacted record and the unreadable history), the edit (for the
+// post-erasure refusal), and #691's eligibility precheck.
 func newErasureServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/clients/{clientId}/erasure",
 		staffauth.Middleware(db.App)(client.EraseHandler(tasknudge.NoOpEnqueuer{})))
+	mux.Handle("GET /practices/{practiceId}/clients/{clientId}/erasure",
+		staffauth.Middleware(db.App)(client.EraseEligibilityHandler()))
 	mux.Handle("GET /practices/{practiceId}/clients/{clientId}",
 		staffauth.Middleware(db.App)(client.DetailHandler()))
 	mux.Handle("PUT /practices/{practiceId}/clients/{clientId}",
@@ -215,8 +217,8 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 // TestEraseHandler_RefusesEveryRoleButOwner is the Owner-only criterion.
 func TestEraseHandler_RefusesEveryRoleButOwner(t *testing.T) {
 	for name, roles := range map[string][]string{
-		"admin": {"admin"},
-		"doula": {"doula"},
+		adminRole: {adminRole},
+		doulaRole: {doulaRole},
 	} {
 		t.Run(name, func(t *testing.T) {
 			db := testdb.New(t)

@@ -13,11 +13,14 @@
 		type HistoryEntry
 	} from '#lib/clientDetail.js';
 	import { kindLabel, withdrawRequest } from '#lib/engagementRequest.js';
+	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
+	import { formatAmount } from '#lib/invoice.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -31,6 +34,12 @@
 	// (#539) leaves it optional.
 	let { data }: { data?: PageProperties['data'] } = $props();
 	const isContractor = $derived(data?.isContractor ?? false);
+	// #691: erasure is Owner-only. This is a courtesy -- EraseHandler and
+	// EraseEligibilityHandler both enforce the real gate independently --
+	// so the worst a wrong read here costs is the control staying hidden
+	// from a genuine Owner for one page load, never a wider door than the
+	// server actually opens.
+	const isOwner = $derived(data?.isOwner ?? false);
 
 	let detail = $state<ClientDetail | undefined>();
 	let error = $state('');
@@ -45,6 +54,14 @@
 	let withdrawingRequestId = $state('');
 	let withdrawError = $state('');
 	let withdrawnConfirmation = $state('');
+
+	// #691: read once alongside the Client, Owner-only. Undefined while
+	// loading (or on a read failure) is treated the same as "not
+	// eligible yet" -- the erase control simply doesn't render rather
+	// than risk offering a confirmation the endpoint would 409 on.
+	let eligibility = $state<EraseEligibility | undefined>();
+	let isEraseConfirmOpen = $state(false);
+	let eraseError = $state('');
 
 	// Safe with detail undefined (loading): read by the title, the
 	// actions snippet and the sections array below, all of which are
@@ -173,12 +190,75 @@
 		}
 	}
 
+	// Best-effort, the same reasoning as loadStaffId above: an Owner is
+	// the only role that ever sees this read, and losing it costs one
+	// missing erase control for one page load, not a broken page. Not
+	// worth running for anyone else -- EraseEligibilityHandler is
+	// Owner-only and would only 403.
+	async function loadEligibility() {
+		try {
+			eligibility = await loadEraseEligibility(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
+		} catch {
+			// See above: the control simply doesn't render this time.
+		}
+	}
+
+	// Names what #691's precheck already found, in the same words a
+	// Practice would need to act on them -- amount, status, and when the
+	// invoice was raised -- rather than the bare id EraseHandler's own
+	// 409 names for a caller with no screen to render one.
+	function unsettledInvoicesMessage(invoices: UnsettledInvoice[]): string {
+		const list = invoices
+			.map((invoice) => `${formatAmount(invoice.amountCents)} (${invoice.status}) from ${formattedDate(invoice.createdAt)}`)
+			.join(', ');
+		return `${name}'s data can't be erased yet -- settle or void ${list} first.`;
+	}
+
+	// ADR-0027's own wording: what is destroyed, what survives, and the
+	// two things that do not happen at once. The Stripe sentence
+	// deliberately doesn't name one date -- ADR-0027's eligibility date is
+	// per Stripe Customer, and a fresh Customer is made per invoice, so
+	// two of her invoices months apart come due for redaction on two
+	// different dates; naming a single "90 days from her newest invoice"
+	// would be exactly the Client-wide date the ADR rejects. Names {name}
+	// throughout rather than "her" -- #463's voice rule, checked by
+	// copy.pronoun.usage.spec.ts.
+	function eraseConsequence(): string {
+		return `This permanently destroys ${name}'s identifying data: name, email, phone, address and date of birth. ${name}'s Engagements, Contracts, Invoices and Visits stay in the Practice's financial and clinical record. Stripe holds each Stripe payment record for 90 days from its own invoice before it can be redacted, so different invoices become eligible on different dates, and free text written by hand -- Messages, signed Contract wording, Plan Instance answers -- is never scrubbed. This cannot be undone.`;
+	}
+
+	// Re-fetches the Client rather than merging ErasureResponse's own
+	// fields into `detail` -- ErasureResponse carries only erasedAt and
+	// the Stripe date, not the redacted record, so a merge would leave
+	// her name, email, phone, address and date of birth reading
+	// pre-erasure until a manual reload, the exact fields this act just
+	// destroyed. Rethrows on failure so ConfirmDialog's own contract
+	// (left open on a rejected onConfirm) holds, and the 409 an
+	// already-erased race or a newly-opened invoice still returns renders
+	// through eraseError below rather than as raw response text.
+	async function handleErase() {
+		eraseError = '';
+		try {
+			await eraseClient(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
+			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
+		} catch (error_) {
+			eraseError = error_ instanceof Error ? error_.message : 'Failed to erase this Client';
+			throw error_;
+		}
+	}
+
 	onMount(async () => {
 		void loadStaffId();
 		try {
 			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Client';
+		}
+		// Already-erased is unconditional and needs no precheck of its own
+		// -- there is nothing left to settle, and the control never renders
+		// once detail.erasedAt is set regardless of what this read answers.
+		if (isOwner && !detail?.erasedAt) {
+			void loadEligibility();
 		}
 	});
 </script>
@@ -227,6 +307,36 @@
 						detail!.stripeRedactionEligibleAt
 					)} and have not been redacted yet."
 				/>
+			{/if}
+		{:else if isOwner && eligibility}
+			<!--
+				#691: an unsettled invoice blocks the confirmation from ever
+				opening, named the same way EraseHandler's own 409 would have --
+				so an Owner never reaches Erase only to see that 409 raw.
+			-->
+			{#if eligibility.unsettledInvoices.length > 0}
+				<Notice variant="info" message={unsettledInvoicesMessage(eligibility.unsettledInvoices)} />
+			{:else}
+				<!-- The trigger's own label stays generic ("this Client's") rather
+				     than repeating {name} -- ConfirmDialog's title and confirm
+				     button both name her, and an identical accessible name on
+				     both controls would make them indistinguishable by ear. -->
+				<Button
+					label="Erase this Client's data"
+					variant="destructive"
+					size="sm"
+					onClick={() => (isEraseConfirmOpen = true)}
+				/>
+				<ConfirmDialog
+					bind:open={isEraseConfirmOpen}
+					title="Erase {name}'s data"
+					consequence={eraseConsequence()}
+					confirmLabel="Erase {name}'s data"
+					onConfirm={handleErase}
+				/>
+			{/if}
+			{#if eraseError}
+				<Notice variant="error" message={eraseError} />
 			{/if}
 		{/if}
 
