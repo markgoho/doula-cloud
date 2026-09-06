@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import { isOwner } from '#lib/roles.js';
-	import { PaginatedList, type CursorPage } from '#lib/paginatedList.svelte.js';
+	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import {
-		billingPath,
 		formatSignedQuantity,
+		loadLedgerPage,
 		originLabel,
 		purchaseCredits,
 		type LedgerEntry
@@ -36,7 +36,7 @@
 	// would drop every page appended since.
 	const ledger = new PaginatedList<LedgerEntry>({
 		first: untrack(() => data.ledger),
-		loadPage: loadLedgerPage,
+		loadPage: (cursor) => loadLedgerPage(apiFetchWithSession, page.params.practiceId!, cursor),
 		failureMessage: 'Failed to load more ledger entries'
 	});
 
@@ -75,18 +75,6 @@
 	onMount(() => {
 		approvalReturn = readApprovalReturn();
 	});
-
-	// Throws on a refusal rather than returning it: PaginatedList catches,
-	// and the balance endpoint answers the whole payload, of which only
-	// the ledger pages.
-	async function loadLedgerPage(cursor: string): Promise<CursorPage<LedgerEntry>> {
-		const response = await apiFetchWithSession(
-			`${billingPath(page.params.practiceId!)}?cursor=${encodeURIComponent(cursor)}`
-		);
-		if (!response.ok) throw new Error(await apiErrorMessage(response));
-		const loaded: { ledger: CursorPage<LedgerEntry> } = await response.json();
-		return loaded.ledger;
-	}
 
 	async function handlePurchase(event: SubmitEvent) {
 		event.preventDefault();

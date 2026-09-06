@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { formatSignedQuantity, loadBalance, originLabel, purchaseCredits } from './billing.js';
+import { formatSignedQuantity, loadBalance, loadLedgerPage, originLabel, purchaseCredits } from './billing.js';
 import { jsonResponse } from './testResponse.js';
 
 describe('loadBalance', () => {
@@ -26,6 +26,28 @@ describe('loadBalance', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('forbidden', 403));
 
 		await expect(loadBalance(fetcher, 'practice-1')).rejects.toThrow('forbidden');
+	});
+});
+
+describe('loadLedgerPage', () => {
+	it('fetches the practice billing path with the cursor and returns the ledger page', async () => {
+		const ledger = {
+			items: [{ origin: 'purchase', quantity: 5, createdAt: '2026-08-16T00:00:00Z' }],
+			hasMore: true,
+			nextCursor: 'cursor-2'
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ balance: 8, ledger }));
+
+		const result = await loadLedgerPage(fetcher, 'practice-1', 'cursor-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/billing?cursor=cursor-1');
+		expect(result).toEqual(ledger);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('the practice is gone', 403));
+
+		await expect(loadLedgerPage(fetcher, 'practice-1', 'cursor-1')).rejects.toThrow('the practice is gone');
 	});
 });
 
