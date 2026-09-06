@@ -38,6 +38,10 @@
 		try {
 			const acceptResponse = await fetch(`${apiBaseURL()}/api/portal/accept-invite`, {
 				method: 'POST',
+				// See the sign-in page: #610 reads the __session cookie off
+				// this request, and a cross-origin request drops it without
+				// this.
+				credentials: 'include',
 				headers: {
 					'Content-Type': 'application/json',
 					...(signOutWarning && { 'X-Confirmed': 'true' })

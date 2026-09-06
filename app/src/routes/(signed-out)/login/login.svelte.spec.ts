@@ -299,16 +299,24 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
 
 	/*
 	 * Signs in far enough for the exchange to be refused, and hands back
-	 * the fetch mock so a test can change what the second press gets.
+	 * the fetch mock so a test can count the presses.
+	 *
+	 * The mock stands in for the BFF rather than answering blindly: it
+	 * refuses without `X-Confirmed` and mints with it, exactly as
+	 * `session.CreateHandler` does. So "she lands" is only reachable if
+	 * the page actually sent the confirmation, and no test has to reach
+	 * into the mock's call arguments to prove it.
 	 */
 	async function reachWarning() {
 		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 		signInWithEmailAndPassword.mockResolvedValue({
 			user: { getIdToken: () => Promise.resolve('id-token') }
 		});
-		const exchange = vi
-			.fn()
-			.mockResolvedValue(jsonResponse({ code: 'FAILED_PRECONDITION', message: WARNING }, 409));
+		const exchange = vi.fn(async (_url: string, init: RequestInit) =>
+			(init.headers as Record<string, string>)['X-Confirmed'] === 'true'
+				? jsonResponse({ ok: true })
+				: jsonResponse({ code: 'SESSION_EVICTION_UNCONFIRMED', message: WARNING }, 409)
+		);
 		vi.stubGlobal('fetch', exchange);
 
 		await render(Page, {});
@@ -330,23 +338,30 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
 		// went on to read a session that does not exist.
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
 		expect(exchange).toHaveBeenCalledTimes(1);
-		expect(exchange.mock.calls[0][1].headers['X-Confirmed']).toBeUndefined();
 	});
 
 	it('sends the same exchange again, confirmed, when she presses through', async () => {
 		const exchange = await reachWarning();
-		exchange.mockResolvedValue(jsonResponse({ ok: true }));
 		apiFetchWithSession.mockResolvedValue(
 			jsonResponse({ ...session, memberships: [firstMembership] })
 		);
 
 		await testPage.getByRole('button', { name: 'Continue and sign out' }).click();
 
+		// The stand-in BFF mints only for a confirmed exchange, so landing
+		// here is itself the proof that the second press carried it.
 		await vi.waitFor(() =>
 			expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`)
 		);
 		expect(exchange).toHaveBeenCalledTimes(2);
-		expect(exchange.mock.calls[1][1].headers['X-Confirmed']).toBe('true');
+	});
+
+	it('moves focus to the warning, since the button she pressed unmounted with the form', async () => {
+		await reachWarning();
+
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Before you continue' }))
+			.toHaveFocus();
 	});
 
 	it('keeps her portal session and sends her back to the form when she cancels', async () => {

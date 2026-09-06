@@ -315,11 +315,11 @@ describe('refusalOrConfirmable', () => {
 	 * by its prose: the page renders this as a warning above a
 	 * press-through button, never in the error summary.
 	 */
-	it('reads a 409 FAILED_PRECONDITION as something to press through', async () => {
+	it('reads a 409 SESSION_EVICTION_UNCONFIRMED as something to press through', async () => {
 		const refusal = await refusalOrConfirmable(
 			jsonResponse(
 				{
-					code: 'FAILED_PRECONDITION',
+					code: 'SESSION_EVICTION_UNCONFIRMED',
 					message: 'Continuing signs you out of your Practice in this browser.'
 				},
 				409
@@ -343,20 +343,37 @@ describe('refusalOrConfirmable', () => {
 		});
 	});
 
-	it('reads FAILED_PRECONDITION on any other status as an error', async () => {
+	it('reads the eviction code on any other status as an error', async () => {
 		const refusal = await refusalOrConfirmable(
-			jsonResponse({ code: 'FAILED_PRECONDITION', message: 'Add a website first' }, 400)
+			jsonResponse({ code: 'SESSION_EVICTION_UNCONFIRMED', message: 'Add a website first' }, 400)
 		);
 
 		expect(refusal).toEqual({ kind: 'errors', errors: [{ message: 'Add a website first' }] });
 	});
 
-	it('reads a 409 with no message at all as an error, never as an empty warning', async () => {
-		const refusal = await refusalOrConfirmable(jsonResponse({ code: 'FAILED_PRECONDITION' }, 409));
+	/*
+	 * The reason the eviction refusal got its own code rather than reusing
+	 * FAILED_PRECONDITION: three unrelated 409s already carry that one
+	 * (payments/connect, client/erase), and every one of them has to stay
+	 * an error rather than a button she can press through.
+	 */
+	it('reads a 409 FAILED_PRECONDITION as an error, not a press-through', async () => {
+		const refusal = await refusalOrConfirmable(
+			jsonResponse({ code: 'FAILED_PRECONDITION', message: 'Settle the open invoice first' }, 409)
+		);
 
 		expect(refusal).toEqual({
 			kind: 'errors',
-			errors: [{ message: '{"code":"FAILED_PRECONDITION"}' }]
+			errors: [{ message: 'Settle the open invoice first' }]
+		});
+	});
+
+	it('reads a 409 with no message at all as an error, never as an empty warning', async () => {
+		const refusal = await refusalOrConfirmable(jsonResponse({ code: 'SESSION_EVICTION_UNCONFIRMED' }, 409));
+
+		expect(refusal).toEqual({
+			kind: 'errors',
+			errors: [{ message: '{"code":"SESSION_EVICTION_UNCONFIRMED"}' }]
 		});
 	});
 

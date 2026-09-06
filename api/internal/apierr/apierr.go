@@ -31,6 +31,15 @@ const (
 	CodeInternal           Code = "INTERNAL_ERROR"
 	CodePayloadTooLarge    Code = "PAYLOAD_TOO_LARGE"
 	CodePaymentRequired    Code = "PAYMENT_REQUIRED"
+	// CodeSessionEvictionUnconfirmed is #610's press-through: the caller
+	// holds a live session in the other population, minting would end it,
+	// and the same request repeated with X-Confirmed goes through. Its
+	// own code rather than CodeFailedPrecondition, which three unrelated
+	// 409s already carry (payments/connect, client/erase): the frontend
+	// switches on this one to render a warning with a confirm button
+	// instead of an error, and matching a code three refusals share would
+	// make any of them look like a press-through.
+	CodeSessionEvictionUnconfirmed Code = "SESSION_EVICTION_UNCONFIRMED"
 )
 
 // APIError is docs/api-design.md section 7's structured error shape.

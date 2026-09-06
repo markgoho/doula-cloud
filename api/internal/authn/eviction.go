@@ -124,11 +124,12 @@ func EvictionWarning(tier Tier) string {
 }
 
 // EvictionUnconfirmed is the code an unconfirmed eviction is refused
-// with, so a caller tells this refusal apart from every other one this
-// endpoint writes by its code rather than by matching English prose
-// (#692's rule). 409 rather than 400: nothing about the request is
-// malformed, a condition outside it is unmet.
-const EvictionUnconfirmed = apierr.CodeFailedPrecondition
+// with, so a caller tells this refusal apart from every other one the
+// BFF writes by its code rather than by matching English prose (#692's
+// rule). 409 rather than 400: nothing about the request is malformed, a
+// condition outside it is unmet. See apierr.CodeSessionEvictionUnconfirmed
+// for why this is its own code and not FAILED_PRECONDITION.
+const EvictionUnconfirmed = apierr.CodeSessionEvictionUnconfirmed
 
 // RefuseUnconfirmed writes the 409 that asks for a deliberate press and
 // returns false, unless found is false or the caller already pressed it.

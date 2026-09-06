@@ -142,11 +142,15 @@ function toErrors(
  * the button rather than in the `ErrorSummary`, which is what the two
  * `kind`s here are for.
  *
- * Read off the BFF's `APIError.code`, never its prose (#692): the same
- * 409 could later carry a second meaning, and matching English is how
- * that becomes a silent bug. The words shown are still the BFF's own,
- * for the reason `refusalMessage` gives -- the server is the only thing
- * that knows which population she is about to leave.
+ * Read off the BFF's `APIError.code`, never its prose (#692), and off a
+ * code that means only this: `FAILED_PRECONDITION` already carries three
+ * unrelated 409s (payments/connect, client/erase), so matching it would
+ * make any of them render as a press-through the moment one reached one
+ * of these screens. `apierr.CodeSessionEvictionUnconfirmed` was added for
+ * that reason, per docs/api-design.md section 7's own rule. The words
+ * shown are still the BFF's own, for the reason `refusalMessage` gives --
+ * the server is the only thing that knows which population she is about
+ * to leave.
  */
 export type Refusal =
 	| { kind: 'confirmable'; message: string }
@@ -157,7 +161,7 @@ export async function refusalOrConfirmable(
 	fieldIds: Record<string, string> = {}
 ): Promise<Refusal> {
 	const parsed = await parseRefusal(response);
-	if (response.status === 409 && parsed?.code === 'FAILED_PRECONDITION' && parsed.message) {
+	if (response.status === 409 && parsed?.code === 'SESSION_EVICTION_UNCONFIRMED' && parsed.message) {
 		return { kind: 'confirmable', message: parsed.message };
 	}
 	return { kind: 'errors', errors: toErrors(parsed, fieldIds) };

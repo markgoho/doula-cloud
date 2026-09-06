@@ -38,6 +38,14 @@
 		try {
 			const response = await fetch(`${apiBaseURL()}/api/portal/magic-link`, {
 				method: 'POST',
+				// #610 reads the __session cookie off this request to decide
+				// whether continuing evicts a Practice session, and a
+				// cross-origin request drops it without this -- which would
+				// send the cookie nowhere and evict her with no warning at
+				// all. A no-op on the same origin, which is what production
+				// serves; the same reasoning the Staff login's own exchange
+				// gives.
+				credentials: 'include',
 				headers: {
 					'Content-Type': 'application/json',
 					// The BFF refuses the first press and answers with what it

@@ -204,12 +204,20 @@
 	}
 
 	/*
-	 * #610's press-through. The first exchange is refused when this
-	 * browser holds a live Client-portal session, because a browser holds
-	 * exactly one Doula Cloud session and minting this one would end that
-	 * one silently. She is told what it costs and sends the same exchange
-	 * again, this time carrying `X-Confirmed`.
+	 * Moves focus to #610's warning the moment it replaces the form.
+	 *
+	 * The button she just pressed unmounts with the form, so without this
+	 * a keyboard or screen reader user is left on `<body>`, tabbing
+	 * forward through a page she was never told had changed -- and here
+	 * the change is a consequence she is being asked to accept. The
+	 * heading takes tabindex="-1" so it can hold focus without joining
+	 * the tab order, the same GOV.UK pattern `/accept-invite`'s own
+	 * step-two heading uses.
 	 */
+	function focusOnAppearing(element: HTMLElement) {
+		element.focus();
+	}
+
 	/*
 	 * Backing out of #610's warning. The credential is discarded rather
 	 * than parked: nothing was minted, so the only way back in is to sign
@@ -224,6 +232,13 @@
 		await signOut(getFirebaseAuth());
 	}
 
+	/*
+	 * #610's press-through. The first exchange is refused when this
+	 * browser holds a live Client-portal session, because a browser holds
+	 * exactly one Doula Cloud session and minting this one would end that
+	 * one silently. She is told what it costs and sends the same exchange
+	 * again, this time carrying `X-Confirmed`.
+	 */
 	async function handleConfirmSignOut() {
 		errors = [];
 		isSubmitting = true;
@@ -366,6 +381,7 @@
 			it. "Cancel" is a real outcome: staying signed in to the portal
 			is a thing she may prefer once she knows the price.
 		-->
+		<h2 tabindex="-1" {@attach focusOnAppearing}>Before you continue</h2>
 		<WarningText message={signOutWarning ?? ''} />
 		<Button
 			type="button"
