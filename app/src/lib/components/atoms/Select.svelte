@@ -9,6 +9,14 @@
 		required?: boolean;
 		invalid?: boolean;
 		describedBy?: string;
+		/*
+		 * What was chosen, reported. `bind:value` remains how most callers
+		 * read this atom; a caller rendering one select per entry in a
+		 * loop -- a Practice's own field list (#466) -- has no separate
+		 * variable to bind each one to, and the callback is the same shape
+		 * `TextInput` and `Checkbox` already hand their callers.
+		 */
+		onChange?: (value: string) => void;
 	}
 
 	const uid = $props.id();
@@ -22,7 +30,8 @@
 		disabled = false,
 		required = false,
 		invalid = false,
-		describedBy
+		describedBy,
+		onChange
 	}: Properties = $props();
 </script>
 
@@ -30,6 +39,7 @@
 	{id}
 	{name}
 	bind:value
+	onchange={(event) => onChange?.(event.currentTarget.value)}
 	{disabled}
 	{required}
 	aria-invalid={invalid}

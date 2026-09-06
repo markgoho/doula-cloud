@@ -36,17 +36,15 @@ test('Add Client form and Visits section', async ({ page, request, context }) =>
 	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
-	// The three-page intake sequence (#497, ADR-0017): name, then contact,
-	// then date of birth, then the save.
+	// Intake is one question per route (#466, ADR-0017). Only the name is
+	// answered here: ADR-0017 makes the save free with a given name alone,
+	// and "Save and come back later" is the escape every question page
+	// offers, so this walks the shortest real path through the sequence.
 	await page.goto(`/practices/${practiceId}/clients/new`);
+	await expect(page.getByRole('heading', { level: 1, name: /name\?$/ })).toBeVisible();
 	await page.getByLabel('Given name').fill('Pat');
 	await page.getByLabel('Family name').fill('Client');
-	await page.getByRole('button', { name: "Add contact details" }).click();
-
-	await page.getByLabel('Email').fill(`client-${Date.now()}@example.com`);
-	await page.getByRole('button', { name: /Add Pat's date of birth/ }).click();
-
-	await page.getByRole('button', { name: /Save Pat's record/ }).click();
+	await page.getByRole('button', { name: 'Save and come back later' }).click();
 
 	// A brand-new Client with no prior match, so the save lands straight on
 	// her Client detail hub (#494), never through the match-review steps.

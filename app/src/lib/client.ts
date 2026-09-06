@@ -120,20 +120,30 @@ export interface ClientMatch extends ClientRecord {
 	engagements: EngagementSummary[];
 }
 
-/** The fields intake collects, across its three pages -- the four match
- * keys plus the two name columns that ride along with the given name
- * (ADR-0017: the name splits into three, only `givenName` required). No
- * address and no `fieldValues`: intake never asks for either, and
- * CreateHandler's `normalizeAndValidate` defaults an omitted
- * `fieldValues` to `{}` server-side, so leaving it off the wire is the
- * correct empty rather than a wipe. */
+/** The fields intake collects -- every structural column but `id`, which
+ * the endpoint mints, plus the Practice-defined layer. Widened on #466:
+ * intake used to ask six of ADR-0017's twelve columns and never reached
+ * the address or a Practice's own fields, so a record created through it
+ * could hold facts a record created any other way could not. The
+ * sequence now asks for all of them, and `CreateRequest` embeds
+ * `client.Record` whole, so the wire shape was never the constraint.
+ *
+ * `fieldValues` stays optional: `normalizeAndValidate` defaults an
+ * omitted one to `{}` server-side, so leaving it off is the correct
+ * empty rather than a wipe. */
 export interface ClientCreateFields {
 	givenName: string;
 	familyName: string;
 	preferredName: string;
 	email: string;
 	phone: string;
+	addressLine1?: string;
+	addressLine2?: string;
+	addressLocality?: string;
+	addressRegion?: string;
+	addressPostalCode?: string;
 	dateOfBirth: string;
+	fieldValues?: unknown;
 }
 
 /** The outcome of a create attempt: either it went through, or the match
