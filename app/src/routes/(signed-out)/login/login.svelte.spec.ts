@@ -287,3 +287,92 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
 	});
 });
+
+/*
+ * #610: a browser holds exactly one Doula Cloud session, so signing in
+ * here while the Client portal's session is live ends that one. The BFF
+ * refuses the first exchange and says what continuing costs; the page
+ * shows it and offers the press-through.
+ */
+describe('Staff login -- signing in over a live portal session (#610)', () => {
+	const WARNING = 'Continuing signs you out of the client portal in this browser.';
+
+	/*
+	 * Signs in far enough for the exchange to be refused, and hands back
+	 * the fetch mock so a test can count the presses.
+	 *
+	 * The mock stands in for the BFF rather than answering blindly: it
+	 * refuses without `X-Confirmed` and mints with it, exactly as
+	 * `session.CreateHandler` does. So "she lands" is only reachable if
+	 * the page actually sent the confirmation, and no test has to reach
+	 * into the mock's call arguments to prove it.
+	 */
+	async function reachWarning() {
+		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+		signInWithEmailAndPassword.mockResolvedValue({
+			user: { getIdToken: () => Promise.resolve('id-token') }
+		});
+		const exchange = vi.fn(async (_url: string, init: RequestInit) =>
+			(init.headers as Record<string, string>)['X-Confirmed'] === 'true'
+				? jsonResponse({ ok: true })
+				: jsonResponse({ code: 'SESSION_EVICTION_UNCONFIRMED', message: WARNING }, 409)
+		);
+		vi.stubGlobal('fetch', exchange);
+
+		await render(Page, {});
+		await testPage.getByLabelText('Email').fill('priya@example.com');
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Log in' }).click();
+
+		await expect.element(testPage.getByText(WARNING)).toBeVisible();
+		return exchange;
+	}
+
+	it('shows what continuing costs instead of signing her in', async () => {
+		const exchange = await reachWarning();
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Continue and sign out' }))
+			.toBeVisible();
+		// Refused, not failed: the first press minted nothing, and nothing
+		// went on to read a session that does not exist.
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		expect(exchange).toHaveBeenCalledTimes(1);
+	});
+
+	it('sends the same exchange again, confirmed, when she presses through', async () => {
+		const exchange = await reachWarning();
+		apiFetchWithSession.mockResolvedValue(
+			jsonResponse({ ...session, memberships: [firstMembership] })
+		);
+
+		await testPage.getByRole('button', { name: 'Continue and sign out' }).click();
+
+		// The stand-in BFF mints only for a confirmed exchange, so landing
+		// here is itself the proof that the second press carried it.
+		await vi.waitFor(() =>
+			expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`)
+		);
+		expect(exchange).toHaveBeenCalledTimes(2);
+	});
+
+	it('moves focus to the warning, since the button she pressed unmounted with the form', async () => {
+		await reachWarning();
+
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Before you continue' }))
+			.toHaveFocus();
+	});
+
+	it('keeps her portal session and sends her back to the form when she cancels', async () => {
+		const exchange = await reachWarning();
+
+		await testPage.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+		expect(testPage.getByText(WARNING).elements()).toHaveLength(0);
+		// Nothing further asked of the BFF, so the portal session stands.
+		expect(exchange).toHaveBeenCalledTimes(1);
+		expect(signOut).toHaveBeenCalled();
+	});
+});

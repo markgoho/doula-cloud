@@ -13,7 +13,9 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/portalaccount"
+	"doula-cloud/api/internal/sessionevict"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // AcceptInviteRequest is the body of an accept-invite request: the
@@ -40,7 +42,12 @@ type AcceptInviteResponse struct {
 // never an Identity Platform uid. Like clientauth.SessionHandler, this
 // runs before any Client is resolved, so it never sets
 // app.current_client_id.
-func AcceptInviteHandler(db *sql.DB) http.Handler {
+//
+// ADR-0026 makes the invitation the first magic link, so this is a
+// Client sign-in and #610's cross-population check applies here exactly
+// as it does to every later one -- enq is the nudge for the notice an
+// evicted Staff session queues.
+func AcceptInviteHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
@@ -72,12 +79,23 @@ func AcceptInviteHandler(db *sql.DB) http.Handler {
 			return
 		}
 
+		// #610, after acceptInvite and not before it: a dead or already
+		// claimed invitation is refused above, so nobody is warned about
+		// a session this token was never going to displace. The refusal
+		// rolls back the rows acceptInvite just wrote, and the confirmed
+		// retry writes them again.
+		now := time.Now()
+		evicted, ok := sessionevict.Apply(w, r, tx, authn.TierPortal, now)
+		if !ok {
+			return
+		}
+
 		// Create the session before committing, so a failure rolls the
 		// new rows back instead of leaving them committed behind a
 		// response that reports failure (#145). A Client never carries a
 		// second factor -- Identity Platform is Staff-only from here on
 		// (ADR-0026).
-		cookie, err := authn.MintSession(r.Context(), tx, identifier, false, time.Now())
+		cookie, err := authn.MintSession(r.Context(), tx, identifier, false, now)
 		if err != nil {
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
 			return
@@ -110,6 +128,9 @@ func AcceptInviteHandler(db *sql.DB) http.Handler {
 		}
 		committed = true
 
+		if evicted {
+			tasknudge.Fire(enq, tasknudge.SessionNotice)(r.Context())
+		}
 		http.SetCookie(w, cookie)
 
 		w.Header().Set("Content-Type", "application/json")

@@ -36,6 +36,7 @@ export const SERVICE_PROBLEM = 'There is a problem with the service. Try again i
  */
 interface ParsedRefusal {
 	message?: string;
+	code?: string;
 	details?: Record<string, string>;
 	text: string;
 }
@@ -51,6 +52,7 @@ async function parseRefusal(response: Response): Promise<ParsedRefusal | undefin
 		if (parsed !== null && typeof parsed === 'object') {
 			const message =
 				'message' in parsed && typeof parsed.message === 'string' ? parsed.message : undefined;
+			const code = 'code' in parsed && typeof parsed.code === 'string' ? parsed.code : undefined;
 			const rawDetails =
 				'details' in parsed && parsed.details !== null && typeof parsed.details === 'object'
 					? (parsed.details as Record<string, unknown>)
@@ -62,7 +64,12 @@ async function parseRefusal(response: Response): Promise<ParsedRefusal | undefin
 						)
 					)
 				: undefined;
-			return { message, details: details && Object.keys(details).length > 0 ? details : undefined, text };
+			return {
+				message,
+				code,
+				details: details && Object.keys(details).length > 0 ? details : undefined,
+				text
+			};
 		}
 	} catch {
 		// Not JSON -- most endpoints still write plain text (see api.ts).
@@ -104,7 +111,13 @@ export async function refusalErrors(
 	response: Response,
 	fieldIds: Record<string, string> = {}
 ): Promise<FormError[]> {
-	const parsed = await parseRefusal(response);
+	return toErrors(await parseRefusal(response), fieldIds);
+}
+
+function toErrors(
+	parsed: ParsedRefusal | undefined,
+	fieldIds: Record<string, string>
+): FormError[] {
 	if (parsed === undefined) return [{ message: SERVICE_PROBLEM }];
 
 	if (parsed.details) {
@@ -114,6 +127,44 @@ export async function refusalErrors(
 		}));
 	}
 	return [{ message: parsed.message ?? parsed.text }];
+}
+
+/*
+ * What a refused sign-in turned out to be: something to fix, or
+ * something to press through.
+ *
+ * Three screens sign a person in behind a Continue-style button, and all
+ * three can be refused by #610's cross-population check -- a browser
+ * holds exactly one Doula Cloud session, so signing into the second
+ * population evicts the first. That refusal is not a failure: nothing is
+ * wrong with what she submitted, and the same submit sent again with
+ * `X-Confirmed` goes through. It is announced as a `WarningText` above
+ * the button rather than in the `ErrorSummary`, which is what the two
+ * `kind`s here are for.
+ *
+ * Read off the BFF's `APIError.code`, never its prose (#692), and off a
+ * code that means only this: `FAILED_PRECONDITION` already carries three
+ * unrelated 409s (payments/connect, client/erase), so matching it would
+ * make any of them render as a press-through the moment one reached one
+ * of these screens. `apierr.CodeSessionEvictionUnconfirmed` was added for
+ * that reason, per docs/api-design.md section 7's own rule. The words
+ * shown are still the BFF's own, for the reason `refusalMessage` gives --
+ * the server is the only thing that knows which population she is about
+ * to leave.
+ */
+export type Refusal =
+	| { kind: 'confirmable'; message: string }
+	| { kind: 'errors'; errors: FormError[] };
+
+export async function refusalOrConfirmable(
+	response: Response,
+	fieldIds: Record<string, string> = {}
+): Promise<Refusal> {
+	const parsed = await parseRefusal(response);
+	if (response.status === 409 && parsed?.code === 'SESSION_EVICTION_UNCONFIRMED' && parsed.message) {
+		return { kind: 'confirmable', message: parsed.message };
+	}
+	return { kind: 'errors', errors: toErrors(parsed, fieldIds) };
 }
 
 /*

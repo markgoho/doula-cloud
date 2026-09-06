@@ -5,6 +5,7 @@ import {
 	passwordReauthRefusal,
 	refusalErrors,
 	refusalMessage,
+	refusalOrConfirmable,
 	SERVICE_PROBLEM,
 	totpCodeRefusal
 } from './formErrors.js';
@@ -305,5 +306,95 @@ describe('refusalErrors', () => {
 		);
 
 		expect(errors).toEqual([{ message: 'Enter an email address', targetId: undefined }]);
+	});
+});
+
+describe('refusalOrConfirmable', () => {
+	/*
+	 * #610's cross-population refusal, told apart by its code rather than
+	 * by its prose: the page renders this as a warning above a
+	 * press-through button, never in the error summary.
+	 */
+	it('reads a 409 SESSION_EVICTION_UNCONFIRMED as something to press through', async () => {
+		const refusal = await refusalOrConfirmable(
+			jsonResponse(
+				{
+					code: 'SESSION_EVICTION_UNCONFIRMED',
+					message: 'Continuing signs you out of your Practice in this browser.'
+				},
+				409
+			)
+		);
+
+		expect(refusal).toEqual({
+			kind: 'confirmable',
+			message: 'Continuing signs you out of your Practice in this browser.'
+		});
+	});
+
+	it('reads a 409 carrying any other code as an error', async () => {
+		const refusal = await refusalOrConfirmable(
+			jsonResponse({ code: 'CONFLICT', message: 'That address is already invited' }, 409)
+		);
+
+		expect(refusal).toEqual({
+			kind: 'errors',
+			errors: [{ message: 'That address is already invited' }]
+		});
+	});
+
+	it('reads the eviction code on any other status as an error', async () => {
+		const refusal = await refusalOrConfirmable(
+			jsonResponse({ code: 'SESSION_EVICTION_UNCONFIRMED', message: 'Add a website first' }, 400)
+		);
+
+		expect(refusal).toEqual({ kind: 'errors', errors: [{ message: 'Add a website first' }] });
+	});
+
+	/*
+	 * The reason the eviction refusal got its own code rather than reusing
+	 * FAILED_PRECONDITION: three unrelated 409s already carry that one
+	 * (payments/connect, client/erase), and every one of them has to stay
+	 * an error rather than a button she can press through.
+	 */
+	it('reads a 409 FAILED_PRECONDITION as an error, not a press-through', async () => {
+		const refusal = await refusalOrConfirmable(
+			jsonResponse({ code: 'FAILED_PRECONDITION', message: 'Settle the open invoice first' }, 409)
+		);
+
+		expect(refusal).toEqual({
+			kind: 'errors',
+			errors: [{ message: 'Settle the open invoice first' }]
+		});
+	});
+
+	it('reads a 409 with no message at all as an error, never as an empty warning', async () => {
+		const refusal = await refusalOrConfirmable(jsonResponse({ code: 'SESSION_EVICTION_UNCONFIRMED' }, 409));
+
+		expect(refusal).toEqual({
+			kind: 'errors',
+			errors: [{ message: '{"code":"SESSION_EVICTION_UNCONFIRMED"}' }]
+		});
+	});
+
+	it('maps details onto the route’s controls, same as refusalErrors', async () => {
+		const refusal = await refusalOrConfirmable(
+			jsonResponse(
+				{ code: 'INVALID_ARGUMENT', message: 'refused', details: { token: 'Enter the code' } },
+				400
+			),
+			{ token: 'token-field' }
+		);
+
+		expect(refusal).toEqual({
+			kind: 'errors',
+			errors: [{ message: 'Enter the code', targetId: 'token-field' }]
+		});
+	});
+
+	it('reports the service problem for a 5xx', async () => {
+		const refusal = await refusalOrConfirmable(jsonResponse('boom', 500));
+
+		expect(refusal).toEqual({ kind: 'errors', errors: [{ message: SERVICE_PROBLEM }] });
 	});
 });

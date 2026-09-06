@@ -3,10 +3,11 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, refusalOrConfirmable, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -16,6 +17,15 @@
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let picker = $state<Engagement[] | undefined>();
+
+	/*
+	 * #610: what the BFF said continuing costs, once it has refused an
+	 * unconfirmed press. ADR-0026 makes the invitation the first magic
+	 * link, so this button signs her in and can evict a live Practice
+	 * session exactly as a later sign-in link can. See the sign-in page's
+	 * own copy of this comment.
+	 */
+	let signOutWarning = $state<string | undefined>();
 
 	// #617, ADR-0026: a Client has no password, so accepting an invitation
 	// is nothing but pressing Continue -- there is no account-setup step.
@@ -28,11 +38,23 @@
 		try {
 			const acceptResponse = await fetch(`${apiBaseURL()}/api/portal/accept-invite`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				// See the sign-in page: #610 reads the __session cookie off
+				// this request, and a cross-origin request drops it without
+				// this.
+				credentials: 'include',
+				headers: {
+					'Content-Type': 'application/json',
+					...(signOutWarning && { 'X-Confirmed': 'true' })
+				},
 				body: JSON.stringify({ inviteToken })
 			});
 			if (!acceptResponse.ok) {
-				errors = await refusalErrors(acceptResponse);
+				const refusal = await refusalOrConfirmable(acceptResponse);
+				if (refusal.kind === 'confirmable') {
+					signOutWarning = refusal.message;
+				} else {
+					errors = refusal.errors;
+				}
 				return;
 			}
 
@@ -86,7 +108,16 @@
 			</ul>
 		{/if}
 	{:else}
-		<Button type="button" label="Continue" loading={isSubmitting} onClick={handleContinue} />
+		<!-- #610: see the sign-in page for why the warning sits on this button. -->
+		{#if signOutWarning}
+			<WarningText message={signOutWarning} />
+		{/if}
+		<Button
+			type="button"
+			label={signOutWarning ? 'Continue and sign out' : 'Continue'}
+			loading={isSubmitting}
+			onClick={handleContinue}
+		/>
 	{/if}
 {/snippet}
 

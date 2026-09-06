@@ -182,9 +182,9 @@ func TestCreateHandler_Success(t *testing.T) {
 // TestCreateHandler_QueuesNewSignInNoticeForStaff covers #345: a Staff
 // member signing in queues a new-sign-in notice.
 func TestCreateHandler_QueuesNewSignInNoticeForStaff(t *testing.T) {
-	srv, db := newServer(t, authntest.Verifier{UID: "staff-uid"})
+	srv, db := newServer(t, authntest.Verifier{UID: staffUID})
 	defer srv.Close()
-	seedStaff(t, db, "staff-uid")
+	seedStaff(t, db, staffUID)
 
 	resp := postCreate(t, srv, "good-token")
 	defer resp.Body.Close()
@@ -192,7 +192,7 @@ func TestCreateHandler_QueuesNewSignInNoticeForStaff(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	if got := countNewSignInNotices(t, db, "staff-uid"); got != 1 {
+	if got := countNewSignInNotices(t, db, staffUID); got != 1 {
 		t.Errorf("new-sign-in notices for a signing-in Staff member = %d, want 1", got)
 	}
 }

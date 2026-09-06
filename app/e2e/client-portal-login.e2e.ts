@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { seedPortalClient, signInPortalClient } from './portalClient';
+import { openMagicLink, seedPortalClient, signInPortalClient } from './portalClient';
+import { enterPracticeAsEnrolled } from './mfa';
+import { E2E_API_HOST, E2E_API_PORT } from './ports';
+
+const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 test('Client-portal login lands on their engagement-scoped URL', async ({ page, request }) => {
 	const practiceName = 'Riverside Doulas';
@@ -28,4 +32,47 @@ test('Client-portal login lands on their engagement-scoped URL', async ({ page, 
 	await reopened.goto(`/portal/engagements/${engagementId}`);
 	await expect(reopened).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 	await expect(reopened.locator('h1')).toHaveText(`Welcome to ${practiceName}`);
+});
+
+/*
+ * #610: a browser holds exactly one Doula Cloud session, so a doula who
+ * is also a Client cannot be signed into both at once. She is told what
+ * continuing costs before it happens, and the Practice session she
+ * leaves is deleted rather than left live behind a cookie she no longer
+ * holds.
+ */
+test('Signing into the portal over a live Staff session warns first, then evicts it', async ({
+	page,
+	context,
+	request
+}) => {
+	const { clientEmail, engagementId, practiceId, staffHeaders } = await seedPortalClient(
+		request,
+		'Riverside Doulas'
+	);
+
+	// The same browser that is about to redeem a sign-in link is already
+	// signed in to her Practice.
+	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+
+	await openMagicLink(page, request, clientEmail);
+	await page.getByRole('button', { name: 'Continue' }).click();
+
+	// Warned, not signed in: the link is not spent and the Practice
+	// session is untouched until she says so.
+	await expect(
+		page.getByText('Continuing signs you out of your Practice in this browser.')
+	).toBeVisible();
+	await expect(page).toHaveURL(/\/portal\/sign-in\?token=/);
+	const stillLive = await request.get(`${API_URL}/api/staff/session`, { headers: staffHeaders });
+	expect(stillLive.ok(), 'the refused sign-in ended the Staff session anyway').toBe(true);
+
+	await page.getByRole('button', { name: 'Continue and sign out' }).click();
+	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
+
+	// Deleted, not left to expire: presenting the evicted token again
+	// reaches nothing.
+	const evicted = await request.get(`${API_URL}/api/staff/session`, { headers: staffHeaders });
+	expect(evicted.status(), 'the evicted Staff session still verifies').toBe(401);
 });
