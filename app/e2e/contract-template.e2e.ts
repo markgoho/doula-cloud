@@ -1,9 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
-
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+import { seedFoundingOwner } from './staffSignup';
 
 // Exercises the settings screen from app/src/routes/practices/[practiceId]/settings/contract-template
 // end-to-end -- the pieces it's built from (contractTemplate.ts, ContractTemplateEditor.svelte) have
@@ -14,23 +11,7 @@ test('Practice Owner can view the seeded contract template and edit/save it', as
 	request,
 	context
 }) => {
-	const email = `contract-template-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-	const password = 'password123';
-
-	const signUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email, password, returnSecureToken: true } }
-	);
-	expect(signUp.ok()).toBe(true);
-	const { idToken, localId } = await signUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${idToken}` },
-		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', workState: 'NY' }
-	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
+	const { idToken, localId, practiceId } = await seedFoundingOwner(request);
 
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).

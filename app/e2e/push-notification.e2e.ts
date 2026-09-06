@@ -1,12 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { signInEnrolled } from './mfa';
 import { signInPortalClient } from './portalClient';
+import { seedFoundingOwner } from './staffSignup';
 
-// The Firebase Auth emulator and the Go BFF -- both host processes -- see
-// e2e/global-setup.ts and e2e/stack.ts for how these get started.
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // #61's e2e AC: simulate a push event end to end (push received -> service
@@ -27,30 +25,15 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	request,
 	context
 }) => {
-	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
+	// Random suffix, not just Date.now(): see staffSignup.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
-	const staffEmail = `staff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-	const password = 'password123';
 
 	// Provision a Practice + Staff (owner), a Client + Engagement at that
 	// Practice, and a Client-portal login -- the same setup
 	// client-portal-login.e2e.ts uses, since this test needs a real
 	// Engagement thread to push a Message into.
-	const staffSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: staffEmail, password, returnSecureToken: true } }
-	);
-	expect(staffSignUp.ok(), `staffSignUp failed: ${staffSignUp.status()} ${await staffSignUp.text()}`).toBe(true);
-	const { idToken: staffIdToken, localId: staffUID } = await staffSignUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${staffIdToken}` },
-		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', workState: 'NY' }
-	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
+	const { idToken: staffIdToken, localId: staffUID, practiceId } = await seedFoundingOwner(request);
 
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment), including the

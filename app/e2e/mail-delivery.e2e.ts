@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { MAILBOX_DOMAIN, MAILBOX_URL, WORKER_SECRET } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { seedFoundingOwner } from './staffSignup';
 
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // The one spec that walks mail as mail (#764, map #759). Every other
@@ -25,25 +25,15 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	context
 }) => {
 	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const ownerEmail = `owner-${unique}@${MAILBOX_DOMAIN}`;
 	const doulaEmail = `doula-${unique}@${MAILBOX_DOMAIN}`;
 	const complainerEmail = `complainer-${unique}@${MAILBOX_DOMAIN}`;
 	const password = 'password123';
 
 	// Fixture setup, not the seam under test (#207).
-	const ownerSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: ownerEmail, password, returnSecureToken: true } }
-	);
-	expect(ownerSignUp.ok(), `ownerSignUp failed: ${ownerSignUp.status()}`).toBe(true);
-	const { idToken: ownerIdToken, localId: ownerUID } = await ownerSignUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${ownerIdToken}` },
-		data: { practiceName: 'Rooted Birth Collective', staffName: 'Renata Vela', workState: 'NY' }
+	const { idToken: ownerIdToken, localId: ownerUID, practiceId } = await seedFoundingOwner(request, {
+		practiceName: 'Rooted Birth Collective',
+		staffName: 'Renata Vela'
 	});
-	expect(signup.ok(), `signup failed: ${signup.status()} ${await signup.text()}`).toBe(true);
-	const { practiceId } = await signup.json();
 
 	const ownerHeaders = await signInEnrolled(request, ownerIdToken, ownerUID);
 	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);

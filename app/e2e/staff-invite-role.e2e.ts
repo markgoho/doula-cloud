@@ -1,12 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
-import { readStaffInviteToken } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
-
-// The Firebase Auth emulator and the Go BFF -- both host processes -- see
-// e2e/global-setup.ts and e2e/stack.ts for how these get started.
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+import { readStaffInviteToken } from './stack';
+import { seedFoundingOwner } from './staffSignup';
 
 // Every other spec that signs in does so as the Owner signup itself creates,
 // who holds owner + office_manager + doula at once. This is the one spec
@@ -19,29 +14,15 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	request,
 	context
 }) => {
-	// Random suffix, not just Date.now(): see staff-login.e2e.ts for why
+	// Random suffix, not just Date.now(): see staffSignup.ts for why
 	// millisecond-only uniqueness collides across parallel workers.
 	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const ownerEmail = `owner-${unique}@example.com`;
 	const doulaEmail = `doula-${unique}@example.com`;
 	const password = 'password123';
 
 	// Fixture setup, not the seam under test (#207): the Owner side of this
 	// spec is provisioned the way every other spec provisions its Practice.
-	const ownerSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: ownerEmail, password, returnSecureToken: true } }
-	);
-	expect(ownerSignUp.ok(), `ownerSignUp failed: ${ownerSignUp.status()} ${await ownerSignUp.text()}`).toBe(true);
-	const { idToken: ownerIdToken, localId: ownerUID } = await ownerSignUp.json();
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${ownerIdToken}` },
-		data: { practiceName: 'Riverside Doulas', staffName: 'Jamie Owner', workState: 'NY' }
-	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
+	const { idToken: ownerIdToken, localId: ownerUID, practiceId } = await seedFoundingOwner(request);
 
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).

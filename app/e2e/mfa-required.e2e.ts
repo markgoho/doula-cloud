@@ -1,9 +1,10 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
+import { E2E_API_HOST, E2E_API_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
 import { signIn, sessionCookieFrom } from './auth';
 import { readStaffInviteToken } from './stack';
-import { enrollSecondFactor, verifyEmail } from './mfa';
+import { enrollSecondFactor, signInEnrolled } from './mfa';
 import { seedContractorDoula, PORTAL_CLIENT_PASSWORD } from './portalClient';
+import { seedFoundingOwner } from './staffSignup';
 
 // #606: TOTP MFA for Staff, required for Owners always, and raisable to
 // required-for-everyone per Practice by the mfa-required switch. The
@@ -14,44 +15,23 @@ import { seedContractorDoula, PORTAL_CLIENT_PASSWORD } from './portalClient';
 // (api/internal/staffauth/middleware.go) via direct API calls rather
 // than the product's own login/enrolment screens, which are separate
 // work landing on this branch at the same time as this file.
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 /**
- * Provisions a fresh Practice with an enrolled Owner: signs up, verifies
- * the email (mfaEnrollmentStart refuses an unverified one), enrols a
- * phone second factor, and signs in with the resulting claim-carrying
- * token so ownerHeaders can call any Practice-scoped route immediately --
- * an Owner is gated by #606 regardless of the Practice's own switch, so
- * every other seeding step in these specs (inviting Staff, throwing the
- * switch) needs this first.
+ * Provisions a fresh Practice with an enrolled Owner -- an Owner is
+ * gated by #606 regardless of the Practice's own switch, so every other
+ * seeding step in these specs (inviting Staff, throwing the switch)
+ * needs this first.
  */
 async function seedEnrolledOwner(
 	request: APIRequestContext,
 	practiceName: string
 ): Promise<{ practiceId: string; ownerEmail: string; ownerHeaders: { Cookie: string } }> {
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const ownerEmail = `owner-${unique}@example.com`;
-
-	const signUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: ownerEmail, password: PORTAL_CLIENT_PASSWORD, returnSecureToken: true } }
-	);
-	expect(signUp.ok(), `owner signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken, localId } = await signUp.json();
-
-	await verifyEmail(request, localId);
-	const enrolledIdToken = await enrollSecondFactor(request, idToken);
-
-	const signup = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${enrolledIdToken}` },
-		data: { practiceName, staffName: 'Riley Owner', workState: 'NY' }
+	const { email: ownerEmail, idToken, localId, practiceId } = await seedFoundingOwner(request, {
+		practiceName,
+		staffName: 'Riley Owner'
 	});
-	const signupBody = await signup.text();
-	expect(signup.ok(), `owner staff/signup failed: ${signup.status()} ${signupBody}`).toBe(true);
-	const { practiceId } = JSON.parse(signupBody);
-
-	const ownerHeaders = await signIn(request, API_URL, enrolledIdToken);
+	const ownerHeaders = await signInEnrolled(request, idToken, localId);
 	return { practiceId, ownerEmail, ownerHeaders };
 }
 
@@ -160,23 +140,10 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	// X signs up as Owner at Practice A -- unenrolled for now, since the
 	// point of this spec is what her session looks like before and after
 	// she gets a second factor, at both Practices at once.
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const xEmail = `split-owner-${unique}@example.com`;
-
-	const xSignUp = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email: xEmail, password: PORTAL_CLIENT_PASSWORD, returnSecureToken: true } }
-	);
-	expect(xSignUp.ok(), `X signUp failed: ${xSignUp.status()} ${await xSignUp.text()}`).toBe(true);
-	const { idToken: xIdToken } = await xSignUp.json();
-
-	const signupA = await request.post(`${API_URL}/api/staff/signup`, {
-		headers: { Authorization: `Bearer ${xIdToken}` },
-		data: { practiceName: 'Practice A', staffName: 'Sasha Owner', workState: 'NY' }
+	const { email: xEmail, idToken: xIdToken, practiceId: practiceIdA } = await seedFoundingOwner(request, {
+		practiceName: 'Practice A',
+		staffName: 'Sasha Owner'
 	});
-	const signupABody = await signupA.text();
-	expect(signupA.ok(), `Practice A signup failed: ${signupA.status()} ${signupABody}`).toBe(true);
-	const { practiceId: practiceIdA } = JSON.parse(signupABody);
 	const xHeadersAtA = await signIn(request, API_URL, xIdToken);
 
 	// Y signs up as Owner at Practice B, enrols (an Owner is always
