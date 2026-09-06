@@ -10,6 +10,18 @@ import (
 // fixtures, per golangci-lint's goconst check.
 const testSarah = "Sarah"
 
+// testHaddad, testNewEmail, testMaya and testStub are #814's own shared
+// fixtures crossing golangci-lint's goconst threshold across
+// collision_test.go, merge_test.go and handlers_test.go.
+const (
+	testHaddad   = "Haddad"
+	testNewEmail = "new@example.com"
+	testMaya     = "Maya"
+	testStub     = "Stub"
+	testNadia    = "Nadia"
+	testFletcher = "Fletcher"
+)
+
 func TestLegalName(t *testing.T) {
 	cases := []struct {
 		givenName, familyName, want string

@@ -298,14 +298,14 @@ func TestEditHandler_RefusesOnMatchWithDifferentClientAndOverrideProceeds(t *tes
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Nadia", FamilyName: "Haddad", Email: "nadia@example.com"}})
+		client.EditRequest{Record: client.Record{GivenName: testNadia, FamilyName: testHaddad, Email: "nadia@example.com"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
 	overridden := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Nadia", FamilyName: "Haddad", Email: "nadia@example.com"}, Override: true})
+		client.EditRequest{Record: client.Record{GivenName: testNadia, FamilyName: testHaddad, Email: "nadia@example.com"}, Override: true})
 	defer overridden.Body.Close()
 	if overridden.StatusCode != http.StatusOK {
 		t.Fatalf("overridden status = %d, want %d", overridden.StatusCode, http.StatusOK)
@@ -326,7 +326,7 @@ func TestEditHandler_ChangingEmailRevokesPendingInvite(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/practices/"+practiceID+"/clients/"+clientID,
-		client.EditRequest{Record: client.Record{GivenName: "Revoke Client", Email: "new@example.com"}})
+		client.EditRequest{Record: client.Record{GivenName: "Revoke Client", Email: testNewEmail}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)

@@ -190,6 +190,15 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	ir.Exempt("PUT /api/practices/{practiceId}/clients/{clientId}",
 		"PUT replaces the Client record wholesale; re-sending the same body is a no-op",
 		staffauth.Middleware(d.DB)(client.EditHandler()))
+	// ADR-0017's amendment (#814): gate two's "This is her". Sets
+	// merged_into on the absorbed row exactly once -- clients_update's
+	// own USING clause (00080, merged_into IS NULL) refuses a second
+	// write to an already-tombstoned row, so a retry after the first
+	// commit 409s instead of double-recording the absorb, the same shape
+	// EraseHandler's own exemption below already argues.
+	ir.Exempt("POST /api/practices/{practiceId}/clients/{clientId}/merge",
+		"setMergedInto writes merged_into on the absorbed row exactly once; clients_update's USING clause (merged_into IS NULL) refuses a second write to an already-tombstoned row, so a retry after the first commit 409s instead of absorbing it twice",
+		staffauth.Middleware(d.DB)(client.MergeHandler()))
 	// #691's precheck: the same unsettled-invoice fact the POST below
 	// 409s on, read ahead of time so an Owner never reaches that 409 by
 	// way of the confirmation screen. Owner-only, mirroring the POST's

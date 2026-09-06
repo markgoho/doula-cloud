@@ -37,7 +37,11 @@ type CreateResponse struct {
 // contractor originates no Client at a Practice she does not belong to
 // (ADR-0017); the clients_insert RLS policy enforces the same rule
 // independently, so this check exists only to hand back a distinguishable
-// error instead of a bare policy-denied failure. Must be mounted behind
+// error instead of a bare policy-denied failure. The lookup runs
+// FindCollisions -- ADR-0017's amendment's exact-key predicate, not
+// substring recall -- since nothing about this record exists yet to
+// substitute a name on; any hit is a possible-duplicate question, which
+// intake's own duplicate screen already answers. Must be mounted behind
 // staffauth.Middleware.
 func CreateHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,13 +72,17 @@ func CreateHandler() http.Handler {
 		}
 
 		if !req.Override {
-			matches, err := FindMatches(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, "")
+			collisions, err := FindCollisions(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, "")
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if len(matches) > 0 {
+			if len(collisions) > 0 {
+				matches := make([]Match, len(collisions))
+				for i, c := range collisions {
+					matches[i] = c.Match
+				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
 				// coverage:ignore reason: response encoding failure, not exercised by unit tests
