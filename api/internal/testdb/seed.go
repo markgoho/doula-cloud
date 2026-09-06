@@ -71,3 +71,21 @@ func SeedPortalAccount(t *testing.T, db *DB, identifier, signInAddress string) {
 		t.Fatalf("testdb: seed portal account %q: %v", identifier, err)
 	}
 }
+
+// AttachPortalUser links an already-seeded Portal Account (identifier) to
+// clientID via a new client_portal_users row, using the superuser Admin
+// connection. For the second (and later) client_portal_users row a
+// multi-Practice Portal Account holds (#309, ADR-0015) -- the first row
+// is SeedPortalAccount's own caller's job, since that call also mints the
+// Portal Account itself and a second SeedPortalAccount call for the same
+// identifier would collide on portal_accounts' own primary key.
+func AttachPortalUser(t *testing.T, db *DB, identifier, clientID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
+		identifier, clientID,
+	); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: attach portal user %q to client %q: %v", identifier, clientID, err)
+	}
+}

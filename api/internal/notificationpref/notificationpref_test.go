@@ -274,12 +274,7 @@ func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *test
 	// client_portal_users row, not a second SeedPortalAccount call (the
 	// Portal Account itself already exists from clientA's seedPortalUser
 	// above).
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		identityUID, clientB,
-	); err != nil {
-		t.Fatalf("attach second client_portal_users row: %v", err)
-	}
+	testdb.AttachPortalUser(t, db, identityUID, clientB)
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key) VALUES ('client', $1, 'https://push.example.com/a', 'p256dh-key', 'auth-key')`,

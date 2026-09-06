@@ -185,12 +185,7 @@ func TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices(t *tes
 	// The same Portal Account reaching a second Practice (#309): a second
 	// client_portal_users row, not a second seedPortalUser call -- the
 	// Portal Account itself already exists from clientA's call above.
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		identityUID, clientB,
-	); err != nil {
-		t.Fatalf("attach second client_portal_users row: %v", err)
-	}
+	testdb.AttachPortalUser(t, db, identityUID, clientB)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()

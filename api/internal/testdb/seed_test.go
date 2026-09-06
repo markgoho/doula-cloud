@@ -80,3 +80,32 @@ func TestSeedPortalAccount(t *testing.T) {
 		t.Fatalf("sign_in_address = %q, want %q", signInAddress, "seed-test@example.com")
 	}
 }
+
+// TestAttachPortalUser proves the client_portal_users row lands pointed
+// at the given Portal Account and Client -- the shape a multi-Practice
+// Portal Account's second (and later) row takes (#309, ADR-0015).
+func TestAttachPortalUser(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Attach Test Practice")
+	testdb.SeedPortalAccount(t, db, "portal_attach-test", "attach-test@example.com")
+
+	var clientID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Attach Test Client', 'client@example.com') RETURNING id`,
+		practiceID,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+
+	testdb.AttachPortalUser(t, db, "portal_attach-test", clientID)
+
+	var identityUID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID,
+	).Scan(&identityUID); err != nil {
+		t.Fatalf("read attached client_portal_users row: %v", err)
+	}
+	if identityUID != "portal_attach-test" {
+		t.Fatalf("identity_uid = %q, want %q", identityUID, "portal_attach-test")
+	}
+}
