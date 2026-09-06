@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 
 async function setup(isContractor = fixtureData.isContractor) {
-	await render(Page, { data: { isContractor } });
+	await render(Page, { data: { isContractor, isOwner: false } });
 }
 
 function requestUrl(callIndex = 0): string {

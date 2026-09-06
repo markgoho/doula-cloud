@@ -190,6 +190,11 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	ir.Exempt("PUT /api/practices/{practiceId}/clients/{clientId}",
 		"PUT replaces the Client record wholesale; re-sending the same body is a no-op",
 		staffauth.Middleware(d.DB)(client.EditHandler()))
+	// #691's precheck: the same unsettled-invoice fact the POST below
+	// 409s on, read ahead of time so an Owner never reaches that 409 by
+	// way of the confirmation screen. Owner-only, mirroring the POST's
+	// own gate, per the payments/connect precedent above.
+	g.Get("/api/practices/{practiceId}/clients/{clientId}/erasure", ownerOnly, client.EraseEligibilityHandler())
 	// #394's erasure, ADR-0027: the one act in the product that destroys
 	// a fact, so Owner-only (enforced inside the handler by
 	// staffauth.RequireOwner, the same seat as the MFA switch), and the

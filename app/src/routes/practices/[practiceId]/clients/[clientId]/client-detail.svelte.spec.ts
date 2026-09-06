@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail, HistoryEntry } from '#lib/clientDetail.js';
+import type { EraseEligibility } from '#lib/clientErasure.js';
 import { formatActivityTimestamp } from '#lib/dates.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
@@ -73,30 +74,56 @@ interface SetupOptions {
 	 * so existing tests, which render the route directly without going
 	 * through SvelteKit's load cycle, keep seeing "Start new work with". */
 	isContractor?: boolean;
+	/** `+page.ts`'s isOwner (#691) -- defaults to false so existing tests
+	 * keep seeing no erase control. */
+	isOwner?: boolean;
+	/** `EraseEligibilityHandler`'s own response, read only when isOwner --
+	 * defaults to nothing standing in the way. */
+	eligibility?: EraseEligibility;
+	/** Makes the eligibility read itself refuse, rather than answer --
+	 * a 403 a stale page still let through. */
+	eligibilityStatus?: number;
+	/** `EraseHandler`'s own response to a POST -- read only once the
+	 * confirmation is submitted. */
+	eraseResponse?: unknown;
+	eraseStatus?: number;
 }
 
-// Two endpoints now share one mocked fetcher (#504's session read joins
-// the existing detail read), so setup() dispatches on the path and hands
-// back a fresh Response per call -- one shared Response object would have
-// its body consumed by the first .json()/.text() and throw on the second.
+// Three endpoints now share one mocked fetcher (#504's session read and
+// #691's eligibility/erase reads join the existing detail read), so
+// setup() dispatches on the path (and, for the shared erasure path, the
+// method) and hands back a fresh Response per call -- one shared Response
+// object would have its body consumed by the first .json()/.text() and
+// throw on the second.
 async function setup({
 	overrides = {},
 	sessionStaffId = 'nobody',
 	sessionOk = true,
 	sessionThrows = false,
-	isContractor = false
+	isContractor = false,
+	isOwner = false,
+	eligibility = { unsettledInvoices: [] },
+	eligibilityStatus = 200,
+	eraseResponse = { erasedAt: '2026-04-01T00:00:00Z', stripeCustomersQueued: 0, portalAccountQueued: false },
+	eraseStatus = 200
 }: SetupOptions = {}) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
 	// 46rem, and this file's assertions are about the <table> specifically.
 	await testPage.viewport(1440, 900);
-	apiFetchWithSession.mockImplementation((path: string) => {
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
 		if (path === '/api/staff/session') {
 			if (sessionThrows) return Promise.reject(new Error('network down'));
 			return Promise.resolve(sessionOk ? jsonResponse({ staffId: sessionStaffId }) : jsonResponse('signed out', 401));
 		}
+		if (path === `/api/practices/${practiceId}/clients/${clientId}/erasure`) {
+			if (init?.method === 'POST') {
+				return Promise.resolve(jsonResponse(eraseResponse, eraseStatus));
+			}
+			return Promise.resolve(jsonResponse(eligibility, eligibilityStatus));
+		}
 		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
 	});
-	return render(Page, { data: { isContractor } });
+	return render(Page, { data: { isContractor, isOwner } });
 }
 
 describe('client detail hub', () => {
@@ -474,5 +501,140 @@ describe('the pending-request block: Withdraw (#504)', () => {
 		await expect
 			.element(testPage.getByText('Postpartum Engagement requested by Alejandra Mendoza-Riquelme'))
 			.toBeVisible();
+	});
+});
+
+describe('erasing a Client (#691, ADR-0027)', () => {
+	it('shows no erase control to a non-Owner', async () => {
+		await setup({ isOwner: false });
+
+		await expect
+			.element(testPage.getByRole('button', { name: "Erase this Client's data" }))
+			.not.toBeInTheDocument();
+	});
+
+	it('offers Erase to an Owner once the precheck clears', async () => {
+		await setup({ isOwner: true });
+
+		await expect
+			.element(testPage.getByRole('button', { name: "Erase this Client's data" }))
+			.toBeVisible();
+	});
+
+	it('shows no erase control when the precheck itself refuses', async () => {
+		await setup({ isOwner: true, eligibilityStatus: 403 });
+
+		await expect
+			.element(testPage.getByRole('button', { name: "Erase this Client's data" }))
+			.not.toBeInTheDocument();
+	});
+
+	it('runs no precheck for a Client already erased -- there is nothing left to settle', async () => {
+		await setup({ isOwner: true, overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
+
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
+			`/api/practices/${practiceId}/clients/${clientId}/erasure`
+		);
+	});
+
+	it('opens a confirmation naming the Client, what is destroyed, what is kept, and what is deferred', async () => {
+		await setup({ isOwner: true });
+
+		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();
+
+		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
+		await expect.element(dialog).toBeVisible();
+		await expect.element(dialog.getByText(/identifying data/)).toBeVisible();
+		await expect.element(dialog.getByText(/financial and clinical record/)).toBeVisible();
+		await expect.element(dialog.getByText(/90 days/)).toBeVisible();
+		await expect.element(dialog.getByText(/never scrubbed/)).toBeVisible();
+	});
+
+	it("blocks the confirmation while an invoice is unsettled, naming it instead of the endpoint's 409", async () => {
+		await setup({
+			isOwner: true,
+			eligibility: {
+				unsettledInvoices: [
+					{ invoiceId: 'invoice-1', status: 'open', amountCents: 150_000, currency: 'usd', createdAt: '2027-01-05T00:00:00Z' }
+				]
+			}
+		});
+
+		await expect
+			.element(testPage.getByRole('button', { name: "Erase this Client's data" }))
+			.not.toBeInTheDocument();
+		await expect.element(testPage.getByText(/\$1,500\.00 \(open\) from/)).toBeVisible();
+	});
+
+	// Bypasses the shared setup() to prove the screen re-reads the Client
+	// rather than merging ErasureResponse's own two fields -- a real
+	// server redacts givenName/email too, and only a re-fetch (not a
+	// partial merge) can make those disappear without a manual reload.
+	it('runs the erasure on confirm and reflects the redacted record without a reload', async () => {
+		let isErased = false;
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (path === '/api/staff/session') return Promise.resolve(jsonResponse({ staffId: 'nobody' }));
+			if (path === `/api/practices/${practiceId}/clients/${clientId}/erasure`) {
+				if (init?.method === 'POST') {
+					isErased = true;
+					return Promise.resolve(
+						jsonResponse({
+							erasedAt: '2026-04-01T00:00:00Z',
+							stripeRedactionEligibleAt: '2026-07-01T00:00:00Z',
+							stripeCustomersQueued: 1,
+							portalAccountQueued: false
+						})
+					);
+				}
+				return Promise.resolve(jsonResponse({ unsettledInvoices: [] }));
+			}
+			return Promise.resolve(
+				jsonResponse(
+					isErased
+						? { ...baseDetail, givenName: 'Erased Client', familyName: '', email: '', erasedAt: '2026-04-01T00:00:00Z', stripeRedactionEligibleAt: '2026-07-01T00:00:00Z' }
+						: baseDetail
+				)
+			);
+		});
+		await render(Page, { data: { isContractor: false, isOwner: true } });
+
+		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
+		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();
+		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
+		await dialog.getByRole('button', { name: `Erase ${fixture.readyText}'s data` }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(`/api/practices/${practiceId}/clients/${clientId}/erasure`, {
+			method: 'POST'
+		});
+		await expect
+			.element(testPage.getByText(/This client's data was erased on request/))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText(/Payment records at Stripe are redactable from/))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: "Erase this Client's data" }))
+			.not.toBeInTheDocument();
+		// The redacted record itself, not only the erasure notices -- her
+		// pre-erasure email is gone without a manual reload.
+		await expect.element(testPage.getByText(baseDetail.email)).not.toBeInTheDocument();
+	});
+
+	it("renders a 409 (a race on an unsettled invoice, or already erased) through the existing error notice, never raw response text", async () => {
+		await setup({
+			isOwner: true,
+			eraseResponse: "this client's data has already been erased",
+			eraseStatus: 409
+		});
+
+		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();
+		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
+		await dialog.getByRole('button', { name: `Erase ${fixture.readyText}'s data` }).click();
+
+		await expect
+			.element(testPage.getByText("this client's data has already been erased"))
+			.toBeVisible();
+		// ConfirmDialog's own contract: left open on a rejected onConfirm.
+		await expect.element(dialog).toBeVisible();
 	});
 });

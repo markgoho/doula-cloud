@@ -27,7 +27,15 @@ describe('loadContractorGate (#501, #539)', () => {
 			'/api/practices/practice-1/session',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		expect(result).toEqual({ isContractor: false });
+		expect(result).toEqual({ isContractor: false, isOwner: false });
+	});
+
+	it('flags an employee Owner (#691)', async () => {
+		setup(200, { roles: ['owner'], isContractor: false });
+
+		const result = await loadContractorGate('practice-1');
+
+		expect(result).toEqual({ isContractor: false, isOwner: true });
 	});
 
 	it('flags a contractor Doula holding no owner or admin role', async () => {
@@ -35,15 +43,15 @@ describe('loadContractorGate (#501, #539)', () => {
 
 		const result = await loadContractorGate('practice-1');
 
-		expect(result).toEqual({ isContractor: true });
+		expect(result).toEqual({ isContractor: true, isOwner: false });
 	});
 
-	it("clears a solo Practice's owner-contractor (ADR-0017)", async () => {
+	it("clears a solo Practice's owner-contractor (ADR-0017) and flags her isOwner", async () => {
 		setup(200, { roles: ['owner', 'doula'], isContractor: true });
 
 		const result = await loadContractorGate('practice-1');
 
-		expect(result).toEqual({ isContractor: false });
+		expect(result).toEqual({ isContractor: false, isOwner: true });
 	});
 
 	it('clears an admin who also carries a contractor membership', async () => {
@@ -51,18 +59,18 @@ describe('loadContractorGate (#501, #539)', () => {
 
 		const result = await loadContractorGate('practice-1');
 
-		expect(result).toEqual({ isContractor: false });
+		expect(result).toEqual({ isContractor: false, isOwner: false });
 	});
 
-	it('falls back to isContractor: false when the session read fails', async () => {
+	it('falls back to isContractor: false, isOwner: false when the session read fails', async () => {
 		setup(500, 'boom');
 
 		const result = await loadContractorGate('practice-1');
 
-		expect(result).toEqual({ isContractor: false });
+		expect(result).toEqual({ isContractor: false, isOwner: false });
 	});
 
-	it('falls back to isContractor: false on a network failure', async () => {
+	it('falls back to isContractor: false, isOwner: false on a network failure', async () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () => {
@@ -72,6 +80,6 @@ describe('loadContractorGate (#501, #539)', () => {
 
 		const result = await loadContractorGate('practice-1');
 
-		expect(result).toEqual({ isContractor: false });
+		expect(result).toEqual({ isContractor: false, isOwner: false });
 	});
 });

@@ -75,7 +75,7 @@ async function setup(response?: Response, isContractor = false) {
 	} else {
 		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 	}
-	await render(Page, { data: { isContractor } });
+	await render(Page, { data: { isContractor, isOwner: false } });
 }
 
 describe('clients list screen', () => {

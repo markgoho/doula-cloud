@@ -11,6 +11,10 @@
  * Editing her is *not* gated the same way -- ADR-0017's write table
  * gives a contractor Edit on her attached Clients -- so this page's own
  * "Edit" link stays unconditional.
+ *
+ * The same read also answers #691's isOwner: the erase control is
+ * Owner-only, and this is the practice session `loadContractorGate`
+ * already fetches, so a second role check costs no extra round trip.
  */
 import { loadContractorGate, type ContractorGate } from '#lib/practiceContractorGate.js';
 import type { PageLoad } from './$types';

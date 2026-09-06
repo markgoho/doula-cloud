@@ -95,34 +95,28 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		var erasedAt sql.NullTime
-		err := tx.QueryRowContext(r.Context(),
-			`SELECT erased_at FROM clients WHERE id = $1 AND practice_id = $2 FOR UPDATE`,
-			clientID, practiceID,
-		).Scan(&erasedAt)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "client not found", http.StatusNotFound)
+		erasedAt, ok := lookupErasedAt(w, r, tx, clientID, practiceID, true)
+		if !ok {
 			return
 		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if erasedAt.Valid {
+		if erasedAt != nil {
 			apierr.WriteError(w, "this client's data has already been erased", http.StatusConflict)
 			return
 		}
 
-		unsettled, err := unsettledInvoices(r.Context(), tx, clientID)
+		unsettled, err := unsettledInvoiceSummaries(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if len(unsettled) > 0 {
+			ids := make([]string, len(unsettled))
+			for i, s := range unsettled {
+				ids[i] = s.stripeInvoiceID
+			}
 			apierr.WriteError(w,
-				"cannot erase a client with unsettled invoices: settle or void "+strings.Join(unsettled, ", ")+" first",
+				"cannot erase a client with unsettled invoices: settle or void "+strings.Join(ids, ", ")+" first",
 				http.StatusConflict)
 			return
 		}
@@ -135,6 +129,89 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.ClientErasure))
+
+		w.Header().Set("Content-Type", "application/json")
+		// coverage:ignore reason: response encoding failure, not exercised by unit tests
+		if err := json.NewEncoder(w).Encode(out); err != nil {
+			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		}
+	})
+}
+
+// lookupErasedAt reads clientID's erased_at, scoped to practiceID, and
+// writes the response itself on a miss or a query failure -- the same
+// ok-bool idiom staffauth.RequireOwner uses, so a caller just does
+// `if !ok { return }`. forUpdate locks the row: EraseHandler needs the
+// lock before it acts on what it reads; EraseEligibilityHandler's
+// precheck acts on nothing, so it reads plain. Shared so the two
+// handlers' identical not-found/error handling lives in one place.
+func lookupErasedAt(w http.ResponseWriter, r *http.Request, tx *sql.Tx, clientID, practiceID string, forUpdate bool) (erasedAt *time.Time, ok bool) {
+	query := `SELECT erased_at FROM clients WHERE id = $1 AND practice_id = $2`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+	var nullable sql.NullTime
+	err := tx.QueryRowContext(r.Context(), query, clientID, practiceID).Scan(&nullable)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "client not found", http.StatusNotFound)
+		return nil, false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		return nil, false
+	}
+	if !nullable.Valid {
+		return nil, true
+	}
+	return &nullable.Time, true
+}
+
+// EraseEligibility is what an Owner reads before she ever reaches #691's
+// confirmation step: whether this Client is already erased, and -- if
+// not -- the same unsettled-invoice fact EraseHandler's own 409 would
+// otherwise be the only way to learn. UnsettledInvoices is always a
+// (possibly empty) slice, never nil, so the frontend can check its
+// length without a null guard.
+type EraseEligibility struct {
+	ErasedAt          *time.Time                `json:"erasedAt,omitempty"`
+	UnsettledInvoices []UnsettledInvoiceSummary `json:"unsettledInvoices"`
+}
+
+// EraseEligibilityHandler answers #691's precheck: can this Client be
+// erased right now, and if not, which invoices are in the way. Gated the
+// same as EraseHandler itself (Owner-only) -- the invoice amounts it
+// names are exactly what ADR-0008's read table reserves for Owner and
+// Admin, and this is a precheck of an Owner-only act, not a wider read.
+// Must be mounted behind staffauth.Middleware.
+func EraseEligibilityHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, practiceID, ok := staffauth.RequireOwner(w, r)
+		if !ok {
+			return
+		}
+		clientID := r.PathValue("clientId")
+		if !staffauth.ParseUUID(w, "client", clientID) {
+			return
+		}
+
+		erasedAt, ok := lookupErasedAt(w, r, tx, clientID, practiceID, false)
+		if !ok {
+			return
+		}
+
+		out := EraseEligibility{UnsettledInvoices: []UnsettledInvoiceSummary{}}
+		if erasedAt != nil {
+			out.ErasedAt = erasedAt
+		} else {
+			unsettled, err := unsettledInvoiceSummaries(r.Context(), tx, clientID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			out.UnsettledInvoices = unsettled
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		// coverage:ignore reason: response encoding failure, not exercised by unit tests
@@ -255,14 +332,36 @@ func redactContractMergeFields(ctx context.Context, tx *sql.Tx, clientID string)
 	return int(n), nil
 }
 
-// unsettledInvoices names every invoice of hers that is neither paid,
-// void nor uncollectible. Stripe cannot redact a transaction that is not
-// in a terminal state, and the Practice cannot collect on one whose
-// Customer has been deleted -- so an unsettled invoice refuses the whole
-// act rather than being quietly skipped.
-func unsettledInvoices(ctx context.Context, tx *sql.Tx, clientID string) ([]string, error) {
+// UnsettledInvoiceSummary is one invoice standing between a Client and
+// her own erasure -- what #691's eligibility read names so an Owner sees
+// which invoices to settle or void before she ever reaches the
+// confirmation, rather than only learning it from a failed erasure's
+// 409. It carries no more than payments.InvoiceView already exposes
+// elsewhere: this is a courtesy read ahead of an Owner-only act, not a
+// second Invoice history view.
+type UnsettledInvoiceSummary struct {
+	InvoiceID   string    `json:"invoiceId"`
+	Status      string    `json:"status"`
+	AmountCents int64     `json:"amountCents"`
+	Currency    string    `json:"currency"`
+	CreatedAt   time.Time `json:"createdAt"`
+	// stripeInvoiceID is what EraseHandler's own 409 message names --
+	// unexported so it never reaches the eligibility read's JSON, which
+	// names invoices by InvoiceID (payments.InvoiceView's own id) instead.
+	stripeInvoiceID string
+}
+
+// unsettledInvoiceSummaries names every invoice of hers that is neither
+// paid, void nor uncollectible. Stripe cannot redact a transaction that
+// is not in a terminal state, and the Practice cannot collect on one
+// whose Customer has been deleted -- so an unsettled invoice refuses the
+// whole act rather than being quietly skipped. Shared by EraseHandler's
+// own 409 (stripeInvoiceID joined into its message) and the eligibility
+// read below, so the fact named ahead of time is exactly the fact the
+// endpoint itself checks.
+func unsettledInvoiceSummaries(ctx context.Context, tx *sql.Tx, clientID string) ([]UnsettledInvoiceSummary, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT i.stripe_invoice_id FROM invoices i
+		`SELECT i.id, i.stripe_invoice_id, i.status, i.amount_cents, i.currency, i.created_at FROM invoices i
 		  JOIN contracts ct ON ct.id = i.contract_id
 		  JOIN engagements e ON e.id = ct.engagement_id
 		 WHERE e.client_id = $1 AND i.status IN ('draft', 'open')
@@ -275,20 +374,24 @@ func unsettledInvoices(ctx context.Context, tx *sql.Tx, clientID string) ([]stri
 	}
 	defer func() { _ = rows.Close() }()
 
-	var ids []string
+	// Initialized empty, not nil: EraseEligibilityHandler encodes this
+	// straight into its own UnsettledInvoices field, and a Client with no
+	// invoices at all must still read as "unsettledInvoices": [] rather
+	// than null -- one shape for the frontend to check .length on, not two.
+	out := []UnsettledInvoiceSummary{}
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var s UnsettledInvoiceSummary
+		if err := rows.Scan(&s.InvoiceID, &s.stripeInvoiceID, &s.Status, &s.AmountCents, &s.Currency, &s.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan unsettled invoice: %w", err)
 		}
-		ids = append(ids, id)
+		out = append(out, s)
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
 		return nil, fmt.Errorf("client: iterate unsettled invoices: %w", err)
 	}
-	return ids, nil
+	return out, nil
 }
 
 // stripeCustomer is one Stripe Customer of hers and the date its own
