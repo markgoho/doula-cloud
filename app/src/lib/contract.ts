@@ -6,6 +6,8 @@
  * section, decoupled from SvelteKit and the DOM so it can be
  * unit-tested directly -- mirrors planInstance.ts.
  */
+import type { Fetcher } from './fetcher.js';
+
 import { MERGE_FIELDS } from './contractTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 
@@ -16,10 +18,6 @@ export interface Contract {
 	mergeFields: string[];
 	values: Record<string, string>;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported -- see
- * planInstance.ts's Fetcher for why. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /** Maps a merge field key (e.g. "client_name") to its display label (e.g.
  * "Client name"), sourced from contractTemplate.ts's MERGE_FIELDS list.

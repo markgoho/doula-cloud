@@ -5,6 +5,8 @@
  * api/internal/payments/connect.go's doc comments.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './api.js';
 
 export type ConnectStatus =
@@ -33,11 +35,6 @@ export interface ConnectStatusResult {
 	 * backend sends an empty list rather than omitting it. */
 	requirementsDue: string[];
 }
-
-/** A minimal fetch-shaped function, injected rather than imported, so load
- * can be unit-tested without mocking the global fetch or SvelteKit's `$app`
- * modules -- mirrors billing.ts's Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function connectPath(practiceId: string): string {
 	return `/api/practices/${practiceId}/payments/connect`;

@@ -10,6 +10,8 @@
  * their own.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './api.js';
 import { formatActivityTimestamp } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
@@ -32,10 +34,6 @@ export interface ActivityEntry {
 	actorName: string;
 	createdAt: string;
 }
-
-/** A fetch-shaped function, the same seam engagementDetail.ts's own
- * loaders take. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 /**
  * "The event as body text" (brief.md's #433 amendment): a raw action

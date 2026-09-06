@@ -3,7 +3,19 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
-	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
+	import {
+		endSessions,
+		loadStaff,
+		loadWorkStateHistory as fetchWorkStateHistory,
+		removeMember,
+		revokeInvitation,
+		updateMembership,
+		type InvitationSummary,
+		type StaffSummary,
+		type WorkStateChange,
+		type WorkStateHistory
+	} from '#lib/staff.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -17,29 +29,6 @@
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 
-	type StaffSummary = {
-		staffId: string;
-		name: string;
-		email: string;
-		roles: string[];
-		employmentType: 'employee' | 'contractor';
-		workState: string;
-		workStateReportedAt: string;
-	};
-
-	type InvitationSummary = {
-		invitationId: string;
-		address: string;
-		roles: string[];
-		employmentType: 'employee' | 'contractor';
-		expiresAt: string;
-		expired: boolean;
-		deliveryFailed: boolean;
-	};
-
-	type InvitationPage = { items: InvitationSummary[]; nextCursor?: string; hasMore: boolean };
-	type Roster = { members: StaffSummary[]; invitations: InvitationPage };
-
 	let members = $state<StaffSummary[]>([]);
 	// Only the Invitations grow: the Members roster stays whole (#446 --
 	// it is bounded, unlike the Invitation history), so it needs no cursor
@@ -47,7 +36,7 @@
 	const invitations = new PaginatedList<InvitationSummary>({
 		first: { items: [], hasMore: false },
 		loadPage: async (cursor) => {
-			const roster = await loadRosterPage(cursor);
+			const roster = await loadStaff(apiFetchWithSession, page.params.practiceId!, cursor);
 			return roster.invitations;
 		},
 		failureMessage: 'Failed to load more invitations'
@@ -72,19 +61,6 @@
 	// one row per person and would otherwise grow with every correction
 	// anybody has ever made, which is the one thing this screen must not
 	// do.
-	type WorkStateChange = {
-		eventId: string;
-		previousWorkState?: string;
-		workState: string;
-		createdAt: string;
-	};
-	type WorkStateHistory = {
-		memberSince: string;
-		items: WorkStateChange[];
-		nextCursor?: string;
-		hasMore: boolean;
-	};
-
 	let histories = $state<Record<string, WorkStateHistory>>({});
 	// Who has been asked for already: it stops a second open from asking
 	// again, because an append-only trail that was right a second ago is
@@ -136,21 +112,9 @@
 		}
 	];
 
-	// Throws on a refusal rather than returning it, so PaginatedList can
-	// catch it. The endpoint answers the whole roster on every page; only
-	// its invitations half pages.
-	async function loadRosterPage(cursor: string): Promise<Roster> {
-		const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-		const response = await apiFetchWithSession(
-			`/api/practices/${page.params.practiceId}/staff${query}`
-		);
-		if (!response.ok) throw new Error(await apiErrorMessage(response));
-		return (await response.json()) as Roster;
-	}
-
 	async function loadRoster() {
 		try {
-			const roster = await loadRosterPage('');
+			const roster = await loadStaff(apiFetchWithSession, page.params.practiceId!);
 			members = roster.members;
 			invitations.reset(roster.invitations);
 			isLoaded = true;
@@ -167,15 +131,12 @@
 		historyError[staffId] = '';
 		historyLoading[staffId] = true;
 		try {
-			const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-			const response = await apiFetchWithSession(
-				`/api/practices/${page.params.practiceId}/staff/${staffId}/work-state-history${query}`
+			const loaded = await fetchWorkStateHistory(
+				apiFetchWithSession,
+				page.params.practiceId!,
+				staffId,
+				cursor
 			);
-			if (!response.ok) {
-				historyError[staffId] = await apiErrorMessage(response);
-				return;
-			}
-			const loaded: WorkStateHistory = await response.json();
 			const existing = cursor ? (histories[staffId]?.items ?? []) : [];
 			histories[staffId] = { ...loaded, items: [...existing, ...loaded.items] };
 		} catch (error_) {
@@ -229,14 +190,7 @@
 		endSessionsDone[staffId] = false;
 		endingSessionsFor[staffId] = true;
 		try {
-			const response = await apiFetchWithSession(
-				`/api/practices/${page.params.practiceId}/staff/${staffId}/sessions`,
-				{ method: 'DELETE', headers: { 'X-Confirmed': 'true' } }
-			);
-			if (!response.ok) {
-				endSessionsError[staffId] = await apiErrorMessage(response);
-				return;
-			}
+			await endSessions(apiFetchWithSession, page.params.practiceId!, staffId);
 			endSessionsDone[staffId] = true;
 		} catch (error_) {
 			endSessionsError[staffId] =
@@ -258,18 +212,13 @@
 		editError = '';
 		isSavingEdit = true;
 		try {
-			const response = await apiFetchWithSession(
-				`/api/practices/${page.params.practiceId}/staff/${editingStaffId}/membership`,
-				{
-					method: 'PATCH',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ roles: editRoles, employmentType: editEmploymentType })
-				}
+			await updateMembership(
+				apiFetchWithSession,
+				page.params.practiceId!,
+				editingStaffId,
+				editRoles,
+				editEmploymentType
 			);
-			if (!response.ok) {
-				editError = await apiErrorMessage(response);
-				return;
-			}
 			editingStaffId = '';
 			await loadRoster();
 		} catch (error_) {
@@ -284,14 +233,7 @@
 	async function handleRemoveMembership(staffId: string) {
 		removeError[staffId] = '';
 		try {
-			const response = await apiFetchWithSession(
-				`/api/practices/${page.params.practiceId}/staff/${staffId}/membership`,
-				{ method: 'DELETE', headers: { 'X-Confirmed': 'true' } }
-			);
-			if (!response.ok) {
-				removeError[staffId] = await apiErrorMessage(response);
-				return;
-			}
+			await removeMember(apiFetchWithSession, page.params.practiceId!, staffId);
 			await loadRoster();
 		} catch (error_) {
 			removeError[staffId] =
@@ -302,14 +244,7 @@
 	async function handleRevoke(invitationId: string) {
 		revokeError[invitationId] = '';
 		try {
-			const response = await apiFetchWithSession(
-				`/api/practices/${page.params.practiceId}/staff/invitations/${invitationId}/revoke`,
-				{ method: 'POST', headers: { 'X-Confirmed': 'true' } }
-			);
-			if (!response.ok) {
-				revokeError[invitationId] = await apiErrorMessage(response);
-				return;
-			}
+			await revokeInvitation(apiFetchWithSession, page.params.practiceId!, invitationId);
 			await loadRoster();
 		} catch (error_) {
 			revokeError[invitationId] =

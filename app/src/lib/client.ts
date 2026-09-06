@@ -5,6 +5,8 @@
  * the DOM so it can be unit-tested directly -- mirrors invoice.ts.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import type { ClientRecord, EngagementSummary } from './clientDetail.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 
@@ -69,10 +71,6 @@ export interface ClientListPage {
 	nextCursor?: string;
 	hasMore: boolean;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported -- see
- * invoice.ts's Fetcher for why. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function clientsPath(practiceId: string): string {
 	return `/api/practices/${practiceId}/clients`;

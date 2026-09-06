@@ -9,8 +9,7 @@ vi.mock('firebase/auth', () => ({ signOut }));
 const getFirebaseAuth = vi.fn(() => 'the-auth-instance');
 vi.mock('./firebase.js', () => ({ getFirebaseAuth }));
 
-const { apiBaseURL, apiErrorMessage, apiFetch, apiFetchWithSession, probeSession } =
-	await import('./api');
+const { apiBaseURL, apiFetch, apiFetchWithSession, probeSession } = await import('./api');
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
@@ -257,19 +256,7 @@ describe('probeSession', () => {
 	});
 });
 
-describe('apiErrorMessage', () => {
-	it('extracts message from an APIError JSON body', async () => {
-		const response = Response.json({ code: 'CONFLICT', message: 'already invited' });
-		await expect(apiErrorMessage(response)).resolves.toBe('already invited');
-	});
-
-	it('returns the raw body for a plain-text error', async () => {
-		const response = new Response('only a Practice Owner can do that');
-		await expect(apiErrorMessage(response)).resolves.toBe('only a Practice Owner can do that');
-	});
-
-	it('returns the raw body for JSON with no message field', async () => {
-		const response = Response.json({ code: 'CONFLICT' });
-		await expect(apiErrorMessage(response)).resolves.toBe('{"code":"CONFLICT"}');
-	});
-});
+// apiErrorMessage's own cases live in formErrors.spec.ts now (#840) --
+// api.ts only re-exports it (see apiErrorMessage.ts's doc comment for
+// why its definition lives there), so a second describe block here would
+// be the second reader of the envelope the issue existed to remove.

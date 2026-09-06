@@ -9,6 +9,8 @@
  * saying why. See api/internal/website for the server's own reasoning.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './api.js';
 
 /** `undeclared` is a Practice that has not answered yet. It is a shape
@@ -102,11 +104,6 @@ export class WebsiteValidationError extends Error {
 		this.fieldErrors = fieldErrors;
 	}
 }
-
-/** A minimal fetch-shaped function, injected rather than imported, so
- * these can be unit-tested without mocking the global fetch or
- * SvelteKit's `$app` modules -- mirrors payments.ts's Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function websitePath(practiceId: string): string {
 	return `/api/practices/${practiceId}/website`;

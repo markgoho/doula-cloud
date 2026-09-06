@@ -6,6 +6,8 @@
  * SvelteKit and the DOM so it can be unit-tested directly.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 /** The field-type palette from ADR-0001 -- the only kinds of field a Plan
@@ -44,12 +46,6 @@ export interface Template {
 	planType: string;
 	fields: Field[];
 }
-
-/** A minimal fetch-shaped function, injected rather than imported, so
- * load/save can be unit-tested without mocking the global fetch or
- * SvelteKit's `$app` modules -- the route wires this to `#lib/api.js`'s
- * `apiFetchWithSession`. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function templatePath(practiceId: string, planType: string): string {
 	return `/api/practices/${practiceId}/plan-templates/${planType}`;

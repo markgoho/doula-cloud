@@ -15,11 +15,11 @@
  * added under it.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { loadTemplate, type Field } from './clientFieldTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { intakeSections, intakeStepList, type IntakeSection, type IntakeStep } from './intakeJourney.js';
-
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 async function loadPracticeName(fetcher: Fetcher, practiceId: string): Promise<string> {
 	const response = await fetcher(`/api/practices/${practiceId}/session`);

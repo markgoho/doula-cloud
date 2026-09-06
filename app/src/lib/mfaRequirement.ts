@@ -14,12 +14,9 @@
  * that glob, which is where an identifier that happens to collide with
  * banned prose belongs anyway.
  */
-import { refusalMessage } from './formErrors.js';
+import type { Fetcher } from './fetcher.js';
 
-/** A minimal fetch-shaped function, injected rather than imported, so these
- * can be unit-tested without mocking `#lib/api.js` -- mirrors payments.ts's
- * and website.ts's own Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
+import { refusalMessage } from './formErrors.js';
 
 export interface MfaRequirementImpact {
 	/**

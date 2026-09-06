@@ -7,6 +7,8 @@
  * directly -- mirrors planTemplate.ts.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 /** The merge-field placeholders a Contract Template's prose may contain --
@@ -26,11 +28,6 @@ export const MERGE_FIELDS = [
 export interface ContractTemplate {
 	prose: string;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported, so
- * load/save can be unit-tested without mocking the global fetch or
- * SvelteKit's `$app` modules -- mirrors planTemplate.ts's Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function templatePath(practiceId: string): string {
 	return `/api/practices/${practiceId}/contract-template`;

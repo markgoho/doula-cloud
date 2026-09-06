@@ -5,6 +5,8 @@
  * the DOM, the same seam clientDetail.ts and engagementRequest.ts use.
  */
 
+import type { Fetcher } from './fetcher.js';
+
 import { apiErrorMessage } from './apiErrorMessage.js';
 
 /** One of a Client's still-draft-or-open invoices, blocking her erasure
@@ -42,10 +44,6 @@ export interface ErasureOutcome {
 	stripeCustomersQueued: number;
 	portalAccountQueued: boolean;
 }
-
-/** A minimal fetch-shaped function, injected rather than imported --
- * mirrors client.ts's Fetcher. */
-export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
 function erasurePath(practiceId: string, clientId: string): string {
 	return `/api/practices/${practiceId}/clients/${clientId}/erasure`;

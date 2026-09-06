@@ -14,10 +14,10 @@
 import { isOpen, loadInbox, type Offer } from './offer.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { loadPendingRequests } from './engagementRequest.js';
-export type { Fetcher } from './offer.js';
+export type { Fetcher } from './fetcher.js';
 import { loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
-import type { Fetcher } from './offer.js';
+import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
 /*
