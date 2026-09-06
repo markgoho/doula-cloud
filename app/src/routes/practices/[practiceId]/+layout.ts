@@ -1,6 +1,6 @@
 import { redirect, error } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
-import { apiFetch, apiErrorMessage } from '#lib/api.js';
+import { apiFetch, apiErrorMessage, isMFARequired } from '#lib/api.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
 import type { LayoutLoad } from './$types';
 
@@ -27,20 +27,31 @@ export interface PracticeSession {
  * not `apiFetchWithSession`: that helper's 401 handling calls `goto()`,
  * the wrong tool mid-`load` (#471's rule).
  *
- * #748: a 403 or 404 here means this session no longer belongs to this
- * Practice -- either she was removed from it, or her Staff row is gone
- * entirely. Either way `/api/staff/session` is what says where she
- * belongs now, decided through `decideLanding` -- the same function `/`
- * uses -- so this is the one place that decision lives, not a copy per
- * route: a Practice she still belongs to (another Membership, or the
- * same one back if this read raced a write) is where she lands, and
- * `/no-practice` is the fallback only once there truly is nowhere else.
+ * #606: a 403 carrying `{code: "MFA_REQUIRED"}` is a live session barred
+ * from *this* Practice only, not a stale Membership -- it routes to
+ * enrolment instead, the same as `apiFetchWithSession` does for every
+ * other fetch, carrying `returnTo` so enrolment can send her back here.
+ * `apiFetch`, not `apiFetchWithSession`, does not run this check itself,
+ * so this `load` runs it before the stale-Membership branch below can
+ * misread an MFA refusal as one.
+ *
+ * #748: any other 403, or a 404, here means this session no longer
+ * belongs to this Practice -- either she was removed from it, or her
+ * Staff row is gone entirely. Either way `/api/staff/session` is what
+ * says where she belongs now, decided through `decideLanding` -- the
+ * same function `/` uses -- so this is the one place that decision
+ * lives, not a copy per route: a Practice she still belongs to (another
+ * Membership, or the same one back if this read raced a write) is where
+ * she lands, and `/no-practice` is the fallback only once there truly is
+ * nowhere else.
  */
-export const load: LayoutLoad = async ({ params }): Promise<{ session: PracticeSession }> => {
+export const load: LayoutLoad = async ({ params, url }): Promise<{ session: PracticeSession }> => {
 	const response = await apiFetch(`/api/practices/${params.practiceId}/session`);
 
 	if (response.status === 401) {
 		redirect(303, `${resolve('/(signed-out)/login')}?sessionEnded=true`);
+	} else if (await isMFARequired(response)) {
+		redirect(303, `${resolve('/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`);
 	} else if (response.status === 403 || response.status === 404) {
 		await redirectAwayFromStalePractice();
 	} else if (!response.ok) {

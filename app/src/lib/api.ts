@@ -63,9 +63,13 @@ Reports whether response is #606's MFA-required refusal -- a 403
 carrying the machine-readable `MFA_REQUIRED` code, distinct from every
 other 403 (a role check, a missing membership) that must NOT redirect
 anywhere. Reads a clone so the original response body is still there for
-whatever the caller does with it afterward.
+whatever the caller does with it afterward. Exported for
+`practices/[practiceId]/+layout.ts` (#835/#748): that `load` uses
+`apiFetch`, not `apiFetchWithSession`, so it needs this same check
+itself before treating a 403 as a stale Membership rather than a live
+session barred from this one Practice.
 */
-async function isMFARequired(response: Response): Promise<boolean> {
+export async function isMFARequired(response: Response): Promise<boolean> {
 	if (response.status !== 403) return false;
 	try {
 		const body: unknown = await response.clone().json();
