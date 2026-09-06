@@ -270,10 +270,8 @@ func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusConflict)
 	}
-	// CONFLICT is what an already-erased Client is: the resource is
-	// already in the state the caller asked for. Asserted here so it
-	// stays the chosen code rather than collapsing back onto whatever
-	// the unsettled-invoice refusal happens to return.
+	// The code, not the prose, is what tells this refusal from the
+	// unsettled-invoice one -- see EraseHandler's own doc comment.
 	if got := readAPIError(t, second); got.Code != string(apierr.CodeConflict) {
 		t.Fatalf("second code = %q, want %q", got.Code, apierr.CodeConflict)
 	}

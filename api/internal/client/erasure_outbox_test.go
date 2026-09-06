@@ -327,10 +327,9 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 			if resp.StatusCode != http.StatusConflict {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 			}
-			// Nothing about the Client conflicts -- a precondition on
-			// her invoices is unmet -- so this refusal is told apart
-			// from "already erased" by its code, not by its prose. The
-			// message still has to name the invoice standing in the way.
+			// The code, not the prose, is what tells this refusal from
+			// "already erased" -- see EraseHandler's own doc comment.
+			// The message still has to name the blocking invoice.
 			got := readAPIError(t, resp)
 			if got.Code != string(apierr.CodeFailedPrecondition) {
 				t.Fatalf("code = %q, want %q", got.Code, apierr.CodeFailedPrecondition)

@@ -284,10 +284,9 @@ func outboxStatus(t *testing.T, db *testdb.DB, outboxID string) (status, lastErr
 	return status, lastError
 }
 
-// readAPIError decodes one docs/api-design.md section 7 error envelope.
-// A test that reads only the status cannot tell two refusals of the same
-// status apart -- which is exactly what #692 makes the erasure endpoint
-// say in its code field, so the assertion has to read the body.
+// readAPIError decodes one docs/api-design.md section 7 error envelope,
+// for the assertions that have to read a refusal's code rather than only
+// its status.
 func readAPIError(t *testing.T, resp *http.Response) apierr.APIError {
 	t.Helper()
 	var out apierr.APIError
