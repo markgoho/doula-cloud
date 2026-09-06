@@ -102,6 +102,11 @@ type Deps struct {
 	MFARecoveryMailWorker   mfarecoverymail.Worker
 	// PortalMagicLinkWorker is #617's sign-in-link outbox.
 	PortalMagicLinkWorker clientauth.MagicLinkWorker
+	// PortalAddressChangeWorker is #619's sign-in-address confirmation
+	// outbox -- a second worker rather than a mode of the one above,
+	// because its recipient is the address the row carries, never the one
+	// portal_accounts holds.
+	PortalAddressChangeWorker clientauth.AddressChangeWorker
 	// ClientErasureWorker is the one worker here that sends no mail: it
 	// carries out the Stripe and Identity Platform half of a Client
 	// erasure (#394, ADR-0027).

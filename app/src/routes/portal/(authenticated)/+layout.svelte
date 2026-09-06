@@ -128,6 +128,9 @@
 	practiceName={detail?.practiceName ?? ''}
 	{navItems}
 	name={detail?.clientName ?? ''}
+	accountHref={resolve('/portal/(authenticated)/engagements/[engagementId]/sign-in-address', {
+		engagementId
+	})}
 	signOut={handleSignOut}
 />
 <main id="main" tabindex="-1">

@@ -26,6 +26,7 @@ var wantOutboxPaths = []string{
 	"/api/internal/notifications/process-outbox",
 	"/api/internal/notifications/process-payment-outbox",
 	"/api/internal/notifications/process-payout-outbox",
+	portalAddressChangeOutboxPath,
 	portalMagicLinkOutboxPath,
 	"/api/internal/notifications/process-session-notice-outbox",
 	staffEmailChangeOutboxPath,
@@ -92,8 +93,9 @@ func TestOutboxRegistrations_NudgeTargetsAreDistinct(t *testing.T) {
 
 // TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged pins #613's
 // decision that its two outboxes ride ADR-0010's plain delay, and #617's
-// own magic-link outbox joining them for the same reason, rather than
-// letting some other later outbox quietly join by leaving Nudge blank.
+// magic-link and #619's address-confirmation outboxes joining them for
+// the same reason, rather than letting some other later outbox quietly
+// join by leaving Nudge blank.
 func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 	var unnudged []string
 	for _, reg := range outboxRegistrations(testDeps()) {
@@ -103,7 +105,7 @@ func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 	}
 	sort.Strings(unnudged)
 
-	want := []string{staffEmailChangeOutboxPath, staffTokenMailOutboxPath, portalMagicLinkOutboxPath}
+	want := []string{staffEmailChangeOutboxPath, staffTokenMailOutboxPath, portalMagicLinkOutboxPath, portalAddressChangeOutboxPath}
 	sort.Strings(want)
 	if !reflect.DeepEqual(unnudged, want) {
 		t.Errorf("un-nudged outboxes = %v, want %v", unnudged, want)

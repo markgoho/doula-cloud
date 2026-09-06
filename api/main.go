@@ -212,6 +212,13 @@ func main() {
 		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
+	// #619: the confirmation mail's recipient resolves to nothing at all
+	// -- the address is on the outbox row, because it is the one address
+	// portal_accounts does not yet hold.
+	portalAddressChangeOutboxWorker := clientauth.AddressChangeWorker{
+		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		From: notificationsFrom, ReplyTo: supportReplyTo,
+	}
 
 	// #443. The HTTP client is shared by both and is deliberately
 	// short-timeout: a probe is a CDN fetch of a static file, and a
@@ -277,6 +284,8 @@ func main() {
 		StaffEmailChangeWorker:  staffEmailChangeOutboxWorker,
 		MFARecoveryMailWorker:   mfaRecoveryMailOutboxWorker,
 		PortalMagicLinkWorker:   portalMagicLinkOutboxWorker,
+
+		PortalAddressChangeWorker: portalAddressChangeOutboxWorker,
 		// The real payments.Client, passed in structurally: client
 		// declares its own narrow StripeEraser rather than importing
 		// payments (which already imports client), so this assignment is

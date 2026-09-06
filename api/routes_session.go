@@ -200,6 +200,21 @@ var resetRequestRules = []ratelimit.Rule{
 	ratelimit.IPRule(20, time.Hour),
 }
 
+// portalAddressChangeRequestRules limits #619's sign-in-address change
+// request. Three dimensions rather than resetRequestRules' two, because
+// this endpoint is not the same shape as the ones that set sizes: it is
+// gated by a live session already (SessionCookieRule, like
+// verifyRequestRules), *and* it is the one endpoint in the product that
+// mails an address the caller chose rather than one the product already
+// holds -- so JSONFieldRule bounds the caller who would use it to mail
+// somebody else's inbox repeatedly, and IPRule bounds volume across many
+// addresses.
+var portalAddressChangeRequestRules = []ratelimit.Rule{
+	ratelimit.SessionCookieRule(5, time.Hour),
+	ratelimit.JSONFieldRule("email", 5, time.Hour),
+	ratelimit.IPRule(20, time.Hour),
+}
+
 // tokenSpendRules limits both #613 pre-account spend endpoints
 // (verify-email, password-reset): neither carries a Bearer token or a
 // session, only the link's own token, so HashedJSONFieldRule's digest is

@@ -240,7 +240,10 @@ func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event
 		if actorName.Valid {
 			e.ActorName = &actorName.String
 		}
-		// coverage:ignore reason: every client event today is written by a Staff actor (recordEvent always calls activity.StaffActor); a Client-authored client_event has no code path yet, per ADR-0022's actor_kind='client' case
+		// The Client-authored case ADR-0022's actor_kind='client' names:
+		// #619's sign-in-address change is written by
+		// clientauth.recordAddressChange with a ClientActor, so this row
+		// carries her own name rather than a Staff member's.
 		if actorClientGivenName.Valid {
 			name := PreferredName(actorClientGivenName.String, actorClientPreferredName.String)
 			e.ActorName = &name
