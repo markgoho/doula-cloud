@@ -19,8 +19,32 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
+const goto = vi.hoisted(() => vi.fn());
+const invalidateAll = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
+
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+vi.mock('#lib/api.js', () => ({
+	apiFetchWithSession,
+	apiFetch: vi.fn(),
+	apiErrorMessage: (response: Response) => response.text()
+}));
+
+// Push unregister is #618's own borrowing of signOut.ts's bounded
+// best-effort pattern -- mocked rather than exercised, the same as the
+// portal layout's own sign-out spec: it is fire-and-forget by design,
+// and the Service Worker/Push APIs it drives have nothing to do with
+// this screen's own behaviour.
+const unregisterPushSubscription = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('#lib/pushRegistration.js', () => ({
+	unregisterPushSubscription,
+	portalPushSubscriptionsPath: (engagementId: string) =>
+		`/api/portal/engagements/${engagementId}/push-subscriptions`
+}));
+vi.mock('#lib/signOut.js', () => ({
+	bestEffort: (work: () => Promise<void>) => work(),
+	UNREGISTER_TIMEOUT_MS: 3000
+}));
 
 // The address the fixture says signs her in today, so the spec asserts
 // on the same screen the sweep measures.
@@ -36,11 +60,27 @@ interface SetupOptions {
 	What POST /api/portal/sign-in-address/request answers.
 	*/
 	request?: Response | Error;
+	/**
+	What DELETE /api/portal/sessions (#618's sign-out-everywhere) answers.
+	*/
+	signOutEverywhere?: Response | Error;
 }
 
-async function setup({ load, request = jsonResponse({}, 202) }: SetupOptions = {}) {
+async function setup({
+	load,
+	request = jsonResponse({}, 202),
+	signOutEverywhere = jsonResponse('', 204)
+}: SetupOptions = {}) {
 	apiFetchWithSession.mockReset();
-	apiFetchWithSession.mockImplementation((path: string) => {
+	goto.mockReset();
+	invalidateAll.mockReset();
+	unregisterPushSubscription.mockClear();
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		if (init?.method === 'DELETE') {
+			return signOutEverywhere instanceof Error
+				? Promise.reject(signOutEverywhere)
+				: Promise.resolve(signOutEverywhere);
+		}
 		if (path !== '/api/portal/session') {
 			return request instanceof Error ? Promise.reject(request) : Promise.resolve(request);
 		}
@@ -52,6 +92,9 @@ async function setup({ load, request = jsonResponse({}, 202) }: SetupOptions = {
 
 const field = () => page.getByLabelText('New sign-in address');
 const submit = () => page.getByRole('button', { name: 'Send the link' });
+const signOutEverywhereButton = () => page.getByRole('button', { name: 'Sign out of every device' });
+const signOutEverywhereDialog = () =>
+	page.getByRole('dialog', { name: 'Sign out of every device' });
 
 describe('the Client-portal sign-in address screen', () => {
 	it('shows the address that signs her in today', async () => {
@@ -146,5 +189,58 @@ describe('the Client-portal sign-in address screen', () => {
 		await submit().click();
 
 		await expect.element(page.getByText(/problem with the service/)).toBeVisible();
+	});
+});
+
+// #618, ADR-0026: her own "sign out everywhere", a separate fieldset on
+// the same screen from the address change above.
+describe('the Client-portal sign-out-everywhere control', () => {
+	it('asks for confirmation before signing out of every device', async () => {
+		await setup();
+
+		await signOutEverywhereButton().click();
+
+		await expect.element(signOutEverywhereDialog()).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
+			'/api/portal/sessions',
+			expect.anything()
+		);
+	});
+
+	it('takes this device off push, signs out of every device, and returns to the login screen', async () => {
+		await setup();
+
+		await signOutEverywhereButton().click();
+		await signOutEverywhereDialog().getByRole('button', { name: 'Sign out of every device' }).click();
+
+		expect(unregisterPushSubscription).toHaveBeenCalledWith(
+			'/api/portal/engagements/engagement-1/push-subscriptions',
+			expect.anything()
+		);
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/sessions', { method: 'DELETE' });
+		// #487: a Back press to this exact URL must not reuse the
+		// still-signed-in load result instead of re-checking the session.
+		expect(invalidateAll).toHaveBeenCalled();
+		expect(goto).toHaveBeenCalledWith('/portal/login');
+	});
+
+	it('reports a failed sign-out-everywhere in place, without navigating away', async () => {
+		await setup({ signOutEverywhere: jsonResponse('Sign-out failed', 500) });
+
+		await signOutEverywhereButton().click();
+		await signOutEverywhereDialog().getByRole('button', { name: 'Sign out of every device' }).click();
+
+		await expect.element(page.getByText('Sign-out failed')).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('reports a thrown sign-out-everywhere in place', async () => {
+		await setup({ signOutEverywhere: new Error('offline') });
+
+		await signOutEverywhereButton().click();
+		await signOutEverywhereDialog().getByRole('button', { name: 'Sign out of every device' }).click();
+
+		await expect.element(page.getByText('offline')).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
 	});
 });

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -213,7 +214,7 @@ func TestRedeemMagicLinkHandler_Success(t *testing.T) {
 	}
 	var foundCookie bool
 	for _, c := range resp.Cookies() {
-		if c.Name == "__session" {
+		if c.Name == authn.SessionCookieName {
 			foundCookie = true
 			if c.Value == "" {
 				t.Fatal("cookie value is empty")

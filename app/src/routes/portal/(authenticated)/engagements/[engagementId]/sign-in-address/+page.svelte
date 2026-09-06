@@ -21,13 +21,18 @@
 	 * mistyped the address.
 	 */
 	import { onMount } from 'svelte';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { portalPushSubscriptionsPath, unregisterPushSubscription } from '#lib/pushRegistration.js';
+	import { bestEffort, UNREGISTER_TIMEOUT_MS } from '#lib/signOut.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
@@ -41,6 +46,13 @@
 	let errors = $state<FormError[]>([]);
 	let isSubmitting = $state(false);
 	let sentTo = $state('');
+
+	// #618, ADR-0026: her own "sign out everywhere", a separate action
+	// from the address change above -- its own fieldset, its own
+	// confirmation, no relation to the form's submit.
+	let isSignOutEverywhereDialogOpen = $state(false);
+	let isSigningOutEverywhere = $state(false);
+	let signOutEverywhereError = $state('');
 
 	const fieldError = $derived(errors.find((error) => error.targetId === fieldId)?.message);
 
@@ -106,6 +118,44 @@
 			isSubmitting = false;
 		}
 	}
+
+	// Ends every session on every device, this one included (#618) -- so
+	// a successful call lands her back on the login screen rather than
+	// leaving this page rendered behind a cookie that no longer verifies.
+	//
+	// Takes this device off push first, the same order and the same
+	// bounded best-effort signOut.ts's own signOutOfSession uses for
+	// ordinary sign-out, and for the same reason: the unregister endpoint
+	// authenticates by the session this call is about to end, so run
+	// second and it 401s, leaving whoever picks this device up later
+	// reading her pushes on the lock screen.
+	async function handleSignOutEverywhere() {
+		signOutEverywhereError = '';
+		isSigningOutEverywhere = true;
+		try {
+			await bestEffort(
+				() => unregisterPushSubscription(portalPushSubscriptionsPath(page.params.engagementId!), apiFetch),
+				UNREGISTER_TIMEOUT_MS
+			);
+			const response = await apiFetchWithSession('/api/portal/sessions', { method: 'DELETE' });
+			if (!response.ok) {
+				signOutEverywhereError = await apiErrorMessage(response);
+				return;
+			}
+			// engagements/[engagementId]/+layout.ts's load result is keyed
+			// on params alone, so a Back press to this exact URL would
+			// otherwise reuse the still-signed-in load instead of
+			// re-checking the session (#487) -- the same reason the portal
+			// layout's own sign-out invalidates before it navigates.
+			await invalidateAll();
+			await goto(resolve('/portal/(signed-out)/login'));
+		} catch (error_) {
+			signOutEverywhereError =
+				error_ instanceof Error ? error_.message : 'Failed to sign out of every device';
+		} finally {
+			isSigningOutEverywhere = false;
+		}
+	}
 </script>
 
 {#snippet intro()}
@@ -140,6 +190,30 @@
 	</LabeledField>
 {/snippet}
 
+{#snippet signOutEverywhere()}
+	<Text
+		text="This ends every session on every device, including this one. You will need to sign in again afterwards."
+		tone="variant"
+	/>
+	<Button
+		type="button"
+		label="Sign out of every device"
+		variant="destructive"
+		loading={isSigningOutEverywhere}
+		onClick={() => (isSignOutEverywhereDialogOpen = true)}
+	/>
+	<ConfirmDialog
+		bind:open={isSignOutEverywhereDialogOpen}
+		title="Sign out of every device"
+		consequence="You are signed out on every device immediately, including this one."
+		confirmLabel="Sign out of every device"
+		onConfirm={handleSignOutEverywhere}
+	/>
+	{#if signOutEverywhereError}
+		<Notice variant="error" message={signOutEverywhereError} />
+	{/if}
+{/snippet}
+
 {#snippet errorSummary()}
 	<ErrorSummary {errors} />
 {/snippet}
@@ -166,7 +240,7 @@
 		title="Sign-in address"
 		serviceName={page.data.practiceName}
 		{intro}
-		fieldsets={[{ content: field }]}
+		fieldsets={[{ content: field }, { legend: 'Sign out of every device', content: signOutEverywhere }]}
 		errorSummary={errors.length > 0 ? errorSummary : undefined}
 		{actions}
 		loading={isLoaded || loadError ? undefined : 'Loading your sign-in address'}

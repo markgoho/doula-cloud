@@ -27,10 +27,12 @@ import (
 // BearerToken, don't have to import authn for it.
 const CookieName = authn.SessionCookieName
 
-// Lifetime is how long a newly created or renewed session is valid for
-// -- see authn.SessionLifetime, which owns the value. Exported so tests
-// can assert a cookie's MaxAge against this constant instead of a
-// repeated literal.
+// Lifetime is how long a newly created or renewed Staff session is valid
+// for -- see authn.SessionLifetime, which owns the value. CreateHandler
+// below is Staff-only (Client sign-in mints through portalinvite and
+// clientauth instead, at authn.PortalSessionLifetime -- #618, ADR-0026),
+// so this alias is sound for it. Exported so tests can assert a cookie's
+// MaxAge against this constant instead of a repeated literal.
 const Lifetime = authn.SessionLifetime
 
 // MsgInternalError is the body a caller sees for a failure that carries
@@ -123,7 +125,9 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 // already ended or expired, it still clears the cookie and reports
 // success. It ends only the session in this browser -- the same person's
 // sessions elsewhere are separate rows and are untouched; ending every
-// session for a person is a separate administrative action (#154).
+// session for a person is a distinct action, whether an Owner's
+// administrative revoke (#154, staffauth.EndSessionsHandler) or a
+// Client's own self-service (#618, clientauth.EndAllSessionsHandler).
 func EndHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if cookie, err := r.Cookie(CookieName); err == nil {

@@ -58,6 +58,13 @@ func registerPortalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// like staffauth.SessionHandler below -- there is no bootstrap window
 	// here for an attacker to spend.
 	g.OpenGet("/api/portal/session", portalPopulation, clientauth.SessionHandler(d.DB))
+	// #618, ADR-0026: her own "sign out everywhere", reusing
+	// authn.EndAllSessions the same way staffauth.EndSessionsHandler's
+	// Owner-driven revoke already does. Naturally idempotent -- ending
+	// zero sessions is as much a success as ending several -- so this
+	// carries no Idempotency-Key handling, and is gated by the live
+	// session it gets to act on rather than by a rate limit.
+	g.Write("DELETE /api/portal/sessions", clientauth.EndAllSessionsHandler(d.DB))
 	g.OpenGet("/api/portal/engagements/{engagementId}", portalPopulation,
 		clientauth.Middleware(d.DB)(portal.DetailHandler()))
 	// #486 AC4/AC5: the same record-scoped ledger the staff Engagement page

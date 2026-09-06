@@ -78,9 +78,11 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		// The target Staff member should hear that this happened (#345),
-		// regardless of who took the action -- there is no self-service
-		// "sign out everywhere" yet, so today that is always this Owner,
-		// not the target.
+		// regardless of who took the action -- there is no Staff
+		// self-service "sign out everywhere" built (#618 built the
+		// Client population's own, clientauth.EndAllSessionsHandler;
+		// Staff's own is simply not built), so today the actor here is
+		// always this Owner, not the target.
 		if err := sessionnotice.QueueSessionRevoked(r.Context(), tx, identityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
