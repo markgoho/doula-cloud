@@ -52,7 +52,9 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	// Scoped to #main: the shell's own nav carries a same-named "Contract"
 	// link too.
 	await clientPage.locator('#main').getByRole('link', { name: 'Contract' }).click();
-	await expect(clientPage.getByText('Status: sent')).toBeVisible();
+	// #212: the Client register's own label, not the Staff ContractStatus
+	// component's raw "Status: sent".
+	await expect(clientPage.getByText('Ready for your signature')).toBeVisible();
 	await clientPage.getByRole('button', { name: 'I agree to sign electronically, continue' }).click();
 	await clientPage.getByLabel('Full legal name').fill('Pat Client');
 	await clientPage
@@ -65,7 +67,10 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 		clientPage.getByRole('button', { name: 'Sign' }).click()
 	]);
 	expect(signResponse.ok(), `sign failed: ${signResponse.status()}`).toBe(true);
-	await expect(clientPage.getByText('Status: signed')).toBeVisible();
+	// #212: the Client register's label -- "Signed" reads the same as the
+	// raw enum value here, but it comes from clientRegister.ts rather than
+	// the Staff ContractStatus component's "Status: signed".
+	await expect(clientPage.getByText('Signed', { exact: true })).toBeVisible();
 	await clientContext.close();
 
 	// The Signed PDF comes back on the Practice side's own endpoint

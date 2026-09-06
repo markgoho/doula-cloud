@@ -4,8 +4,8 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClientContract, signContract, type Contract } from '#lib/contract.js';
+	import { contractStatusLabel, contractVoidedNotice } from '#lib/clientRegister.js';
 	import ContractView from '#lib/components/molecules/ContractView.svelte';
-	import ContractStatus from '#lib/components/molecules/ContractStatus.svelte';
 	import SignContract from '#lib/components/organisms/SignContract.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -40,10 +40,18 @@
 {:else if contract === undefined}
 	<Text text="Loading..." />
 {:else if contract === null}
-	<Text text="No Contract has been sent for this Engagement yet." />
+	<Text text="No Contract has been sent for your care yet." />
 {:else}
 	<Heading level={1} text="Contract" />
-	<ContractStatus status={contract.status} />
+	<!--
+		NH-G5 (#212): a Client label, not the Staff `ContractStatus`
+		component's bare enum -- `clientRegister.ts` is the one place that
+		decides both the status label and the voided notice's wording.
+	-->
+	<Text text={contractStatusLabel(contract.status)} />
+	{#if contract.status === 'voided'}
+		<p role="status">{contractVoidedNotice(page.data.practiceName)}</p>
+	{/if}
 	<ContractView prose={contract.prose} values={contract.values} />
 	{#if contract.status === 'sent'}
 		<SignContract onSign={handleSign} />

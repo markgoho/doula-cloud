@@ -77,7 +77,11 @@ describe('Client portal Engagement hub', () => {
 
 		await render(Hub);
 
-		await expect.element(page.getByText(detail.status)).toBeVisible();
+		// #212: the register's own label ("Ongoing" for `active`), not the
+		// raw enum value -- this is also this suite's own assertion for
+		// #212's AC4 (the portal shows the register's word for a status
+		// value).
+		await expect.element(page.getByText('Ongoing')).toBeVisible();
 		await expect.element(page.getByText(/due date/i)).not.toBeInTheDocument();
 	});
 });

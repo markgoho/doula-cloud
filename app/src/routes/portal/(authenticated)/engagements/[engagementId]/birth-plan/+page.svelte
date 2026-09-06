@@ -37,7 +37,7 @@
 {:else if instance === undefined}
 	<div class="no-print"><Text text="Loading..." /></div>
 {:else if instance === null}
-	<div class="no-print"><Text text="No Birth Plan has been created for this Engagement yet." /></div>
+	<div class="no-print"><Text text="No Birth Plan has been created for your care yet." /></div>
 {:else}
 	<Heading level={1} text="Birth Plan" />
 	<div class="no-print"><Button label="Print" onClick={() => print()} /></div>

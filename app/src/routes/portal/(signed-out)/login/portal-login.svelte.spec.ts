@@ -72,9 +72,9 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 
 		await render(Page, {});
 
-		await expect
-			.element(testPage.getByRole('heading', { name: 'Choose an Engagement' }))
-			.toBeVisible();
+		// #212: the register's heading ("Your care"), not the team's "Choose
+		// an Engagement".
+		await expect.element(testPage.getByRole('heading', { name: 'Your care' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: secondEngagement.practiceName }))
 			.toBeVisible();
