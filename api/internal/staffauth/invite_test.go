@@ -374,7 +374,7 @@ func TestRevokeInvitationHandler_RequiresConfirmation(t *testing.T) {
 	).Scan(&status); err != nil {
 		t.Fatalf("read invitation: %v", err)
 	}
-	if status != "pending" {
+	if status != statusPending {
 		t.Fatalf("status = %q, want the unconfirmed request to have revoked nothing", status)
 	}
 }
