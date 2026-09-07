@@ -10,8 +10,8 @@
 Doula Cloud's permission model checks who you are when you try to **change**
 something and almost never when you try to **look** at something. `RequireOwner`
 (`api/internal/staffauth/roles.go:63`) is the only role gate in the codebase, and
-it sits on write handlers — invite, role assignment, session revocation, credit
-purchase, Stripe Connect. `staffauth.Middleware` confirms only that a membership
+it sits on write handlers — invite, role assignment, session revocation,
+Stripe Connect. `staffauth.Middleware` confirms only that a membership
 exists; it never reads what roles that membership holds. Every `GET` behind it is
 therefore open to any Staff member of the Practice.
 
@@ -19,9 +19,10 @@ Drafting the practice-side journey maps turned that up three times in one pass: 
 Admin reads every filled Care Plan (`plans/template.go`), a Doula reads any
 Engagement's Contract amount and Invoice history for Clients who are not hers, and
 any Staff member reads the Practice's credit balance and purchase ledger
-(`billing/balance.go:86`) while buying credits is correctly Owner-gated
-(`billing/purchase.go:33`). Those are not three defects. They are one unwritten
-rule, and this ADR writes it.
+(`billing/balance.go:86`) while buying credits is gated to an Owner or an
+Admin (`billing/purchase.go:33`, corrected from Owner-only by
+[ADR-0017](0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md)).
+Those are not three defects. They are one unwritten rule, and this ADR writes it.
 
 ## Read follows the role
 
@@ -111,9 +112,11 @@ a contractor too. Folding them into one array would allow a membership holding
 `{contractor}` and nothing else, which means nothing. Employment type is a separate
 attribute of a membership, with values `employee` and `contractor`.
 
-Credits stay owned by the **Practice**, and only an Owner buys them, whatever a
-Doula's employment type. The contractor case does not change that: the Owner takes
-the Engagement and offers it on. What a credit is actually spent on is still open
+Credits stay owned by the **Practice**, and an Owner or an Admin buys them
+([ADR-0017](0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md)
+corrected this from Owner-only), whatever a Doula's employment type. The
+contractor case does not change that: the Owner or Admin takes the Engagement
+and offers it on. What a credit is actually spent on is still open
 in code — `billing/billing.go:7` records that the consume path is unwired — and
 that question belongs to the contractor Doula's journey map, not here.
 

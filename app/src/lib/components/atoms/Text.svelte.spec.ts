@@ -57,4 +57,16 @@ describe('Text.svelte', () => {
 
 		expect(container.querySelector('p.measure')).toBeVisible();
 	});
+
+	it('carries an id when one is given, for a control to reference via aria-describedby (#257)', async () => {
+		const { container } = await setup({ id: 'buy-credits-help' });
+
+		expect(container.querySelector('p#buy-credits-help')).toBeVisible();
+	});
+
+	it('carries no id when none is given', async () => {
+		const { container } = await setup();
+
+		expect(container.querySelector('p')?.id).toBe('');
+	});
 });

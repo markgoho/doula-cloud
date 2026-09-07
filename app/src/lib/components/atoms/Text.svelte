@@ -20,14 +20,21 @@
 		 * wider than --measure -- a lede, an intro.
 		 */
 		measure?: boolean;
+		/**
+		 * Lets a caller join this paragraph to a control's `aria-describedby`
+		 * (#257) -- e.g. explaining why a disabled button is disabled.
+		 * Undefined by default: most callers render standalone prose no
+		 * control needs to reference.
+		 */
+		id?: string;
 	}
 
-	let { text, step = 'body', tone = 'default', measure = false }: Properties = $props();
+	let { text, step = 'body', tone = 'default', measure = false, id }: Properties = $props();
 
 	const classes = $derived(`step-${step} tone-${tone}${measure ? ' measure' : ''}`);
 </script>
 
-<p class={classes}>{text}</p>
+<p {id} class={classes}>{text}</p>
 
 <style>
 	@layer components {

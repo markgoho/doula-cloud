@@ -112,8 +112,8 @@ export async function loadLedgerPage(fetcher: Fetcher, practiceId: string, curso
 /** Starts a credit purchase for `quantity` credits and returns the
  * Stripe-hosted Checkout URL the caller's browser must navigate to (#110).
  * Throws with the response body text on a non-2xx response -- e.g. a
- * non-Owner attempting the request, which the backend's `RequireOwner`
- * rejects. */
+ * Doula attempting the request, which the backend's `RequireOwnerOrAdmin`
+ * rejects (#257). */
 export async function purchaseCredits(
 	fetcher: Fetcher,
 	practiceId: string,
