@@ -68,7 +68,10 @@
 	 */
 	let approvalReturn = $state('');
 
-	let quantity = $state(1);
+	// Defaults to 5, not 1: no minimum purchase, but the common case lands
+	// nearer Stripe's 3.2% effective rate than the 4.4% a single Credit
+	// pays (#286, decided on #429).
+	let quantity = $state(5);
 	let purchaseError = $state('');
 	let isPurchasing = $state(false);
 
@@ -92,6 +95,9 @@
 </script>
 
 {#snippet intro()}
+	<Text
+		text="One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care."
+	/>
 	<Text text={`Credit balance: ${data.balance}`} />
 {/snippet}
 
