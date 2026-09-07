@@ -99,6 +99,22 @@ describe('signing up when the account half-landed (#745)', () => {
 	});
 });
 
+describe('the roles statement (#290)', () => {
+	it('names Owner, Admin and Doula before any submit, on first paint', async () => {
+		await render(Page, {});
+
+		await expect
+			.element(
+				testPage.getByText(
+					"This account will hold every role — Owner, Admin and Doula — because a Practice's founder is usually its only Doula and needs to hold their own Visits. Anyone you invite later holds only the roles you choose for them. Roles are shown and changed on your Practice's staff roster."
+				)
+			)
+			.toBeVisible();
+		// First paint, not a response to submitting -- nothing has fetched yet.
+		expect(globalFetch).not.toHaveBeenCalled();
+	});
+});
+
 describe('the address the Practice is created with (#614)', () => {
 	it('sends no address in the body, leaving the ID token as the only copy', async () => {
 		await render(Page, {});
