@@ -1,10 +1,22 @@
 <script lang="ts">
 	import type { HTMLSelectAttributes } from 'svelte/elements';
+	import type { LabeledValue } from '#lib/roles.js';
 
 	interface Properties {
 		id?: string;
 		name?: string;
-		options: string[];
+		/*
+		 * A bare string is both the stored value and the word shown for it,
+		 * which is what every caller before the Practice-wide schedule
+		 * (#263) needed. That screen's Doula filter is the first caller
+		 * where the two differ: it stores a staff id and shows a person's
+		 * name, and two Doulas at the same agency can share a name, so
+		 * keying the option on the word would silently narrow to the wrong
+		 * person. `LabeledValue` is `roles.ts`'s existing name for that
+		 * pair -- the shape `RadioGroup` and the Roles checkboxes already
+		 * take their options in -- rather than a second one invented here.
+		 */
+		options: readonly (string | LabeledValue)[];
 		value?: string;
 		placeholder?: string;
 		disabled?: boolean;
@@ -47,6 +59,12 @@
 		onChange,
 		autocomplete
 	}: Properties = $props();
+
+	/* One shape for the markup below, so the `{#each}` has no branch of its
+	   own: a bare string is the pair whose value and label are the same. */
+	const entries = $derived(
+		options.map((option) => (typeof option === 'string' ? { value: option, label: option } : option))
+	);
 </script>
 
 <select
@@ -68,8 +86,8 @@
 	     (Svelte's own each-block diffing internals, not app code) -- the
 	     <option> line itself is fully exercised by "renders an option for
 	     each entry in options" in Select.svelte.spec.ts -->
-	{#each options as option (option)}
-		<option value={option}>{option}</option>
+	{#each entries as option (option.value)}
+		<option value={option.value}>{option.label}</option>
 	{/each}
 	<!-- v8 ignore stop -->
 </select>
