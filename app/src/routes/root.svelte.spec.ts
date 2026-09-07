@@ -40,12 +40,17 @@ describe('/+page.svelte', () => {
 	// with no Membership never reaches it, because `+page.ts` redirects
 	// her to `/no-practice` first. `root-load.spec.ts` covers that.
 
-	it("lists a signed-in Client-portal visitor's several Engagements", async () => {
+	// #312: the portal root lists every Engagement her Portal Account
+	// reaches, across every Practice, past and present -- so this fixture
+	// deliberately carries one `completed` Engagement, at a different
+	// Practice from the `active` one, rather than two Engagements in the
+	// same status.
+	it("lists a signed-in Client-portal visitor's several Engagements, across Practices and statuses", async () => {
 		const data: RootLanding = {
 			type: 'portal-picker',
 			engagements: [
 				{ engagementId: 'engagement-1', practiceName: 'Riverside Doulas', status: 'active' },
-				{ engagementId: 'engagement-2', practiceName: 'Hilltop Doulas', status: 'active' }
+				{ engagementId: 'engagement-2', practiceName: 'Hilltop Doulas', status: 'completed' }
 			]
 		};
 		await render(Page, { params: fixture.params, data });
@@ -54,6 +59,14 @@ describe('/+page.svelte', () => {
 		await expect.element(link).toBeVisible();
 		expect(link.element()).toHaveAttribute('href', '/portal/engagements/engagement-1');
 		await expect.element(testPage.getByRole('link', { name: 'Hilltop Doulas' })).toBeVisible();
+
+		// The Client register's fixed labels (ADR-0015), not the raw
+		// `active`/`completed` enum values -- a `completed` Engagement
+		// stays listed and reads honestly as "Care ended" rather than
+		// dropping off the list or reading as a raw status a Client has no
+		// register entry for.
+		await expect.element(testPage.getByText('Ongoing')).toBeVisible();
+		await expect.element(testPage.getByText('Care ended')).toBeVisible();
 	});
 
 	it('tells a Client-portal visitor with no Engagement yet to ask her Practice, rather than showing an empty list', async () => {
@@ -61,7 +74,7 @@ describe('/+page.svelte', () => {
 		await render(Page, { params: fixture.params, data });
 
 		await expect
-			.element(testPage.getByText("You don't have an Engagement yet. Ask your Practice to set one up."))
+			.element(testPage.getByText("You don't have care set up yet. Ask your Practice to set it up."))
 			.toBeVisible();
 	});
 });
