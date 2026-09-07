@@ -23,6 +23,11 @@ const (
 	// package-wide, not just within one file.
 	testPriceValue     = "$1,200"
 	testScopeOfService = "12 prenatal visits"
+	// testClientName is SeedEngagement's default Client given name
+	// (testdb.SeedNamedEngagement's own "Test Client" argument), and
+	// therefore the value resolveMergeFieldValues resolves client_name to
+	// for every Contract seeded through the default SeedEngagement.
+	testClientName = "Test Client"
 )
 
 func contractURL(srv *httptest.Server, practiceID, engagementID string) string {
@@ -197,14 +202,14 @@ func TestPostContractHandler_Success(t *testing.T) {
 	if len(out.MergeFields) != 2 || out.MergeFields[0] != clientNameKey || out.MergeFields[1] != priceKey {
 		t.Fatalf("mergeFields = %v, want [client_name price]", out.MergeFields)
 	}
-	if len(out.Values) != 1 || out.Values[clientNameKey] != "Test Client" {
+	if len(out.Values) != 1 || out.Values[clientNameKey] != testClientName {
 		t.Fatalf("values = %+v, want client_name prefilled from the Engagement's Client", out.Values)
 	}
 }
 
 // TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty proves
-// prefillClientName's other branch: a Template whose prose never asks
-// for client_name gets no prefill at all.
+// resolveMergeFieldValues's other branch: a Template whose prose never
+// asks for client_name or practice_name gets no prefill at all.
 func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-no-client-name-field"
@@ -224,6 +229,73 @@ func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
 	}
 	if len(out.Values) != 0 {
 		t.Fatalf("values = %+v, want empty -- no client_name field to prefill", out.Values)
+	}
+}
+
+// TestPostContractHandler_ResolvesPracticeName proves #258's AC: prose
+// containing the Practice-name placeholder returns that placeholder
+// already filled with the Practice's own name.
+func TestPostContractHandler_ResolvesPracticeName(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "post-resolves-practice-name"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, "This agreement is between {{practice_name}} and {{client_name}} for doula services.")
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Values["practice_name"] != "Test Practice" {
+		t.Fatalf("values[practice_name] = %q, want %q", out.Values["practice_name"], "Test Practice")
+	}
+	if out.Values[clientNameKey] != testClientName {
+		t.Fatalf("values[client_name] = %q, want %q -- still resolved alongside practice_name", out.Values[clientNameKey], testClientName)
+	}
+}
+
+// TestPutContractHandler_OverwrittenResolvedValueSurvivesReload proves a
+// resolved value is a normal Draft value: Staff may overwrite it through
+// the existing full-replacement update, and the overwritten value
+// survives a reload rather than reverting to the resolved one.
+func TestPutContractHandler_OverwrittenResolvedValueSurvivesReload(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "put-overwrite-resolved"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, "This agreement is between {{practice_name}} and {{client_name}} for doula services.")
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	createResp := postContract(t, srv, session, practiceID, engagementID)
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d", createResp.StatusCode, http.StatusCreated)
+	}
+
+	const overwrittenPracticeName = "Overwritten Practice Name"
+	putResp := putContract(t, srv, session, practiceID, engagementID,
+		contracts.MergeFieldValues{"practice_name": overwrittenPracticeName, clientNameKey: testClientName})
+	defer putResp.Body.Close()
+	if putResp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT status = %d, want %d", putResp.StatusCode, http.StatusOK)
+	}
+
+	getResp := getContract(t, srv, session, practiceID, engagementID)
+	defer getResp.Body.Close()
+	var getOut contracts.ContractResponse
+	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if getOut.Values["practice_name"] != overwrittenPracticeName {
+		t.Fatalf("values[practice_name] after reload = %q, want %q", getOut.Values["practice_name"], overwrittenPracticeName)
 	}
 }
 

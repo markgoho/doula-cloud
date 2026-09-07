@@ -187,7 +187,8 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	const uid = "send-success"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	seedContractWithValues(t, db, engagementID,
+		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 	testdb.SeedPendingPortalInvite(t, db, clientID)
 
@@ -256,7 +257,8 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	const uid = "send-no-subscription"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	seedContractWithValues(t, db, engagementID,
+		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 	testdb.SeedPortalUser(t, db, "send-no-subscription-portal", clientID)
 
 	pusher := push.NewFakePusher()
@@ -285,7 +287,8 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 	const uid = "send-push-fails"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	seedContractWithValues(t, db, engagementID,
+		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
 	testdb.SeedPendingPortalInvite(t, db, clientID)
 
@@ -302,5 +305,101 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 	}
 	if calls := pusher.Calls(); len(calls) != 1 {
 		t.Fatalf("Pusher.Send call count = %d, want 1 (still attempted): %+v", len(calls), calls)
+	}
+}
+
+// TestPostSendContractHandler_BlankMergeFieldRejected proves #258's
+// completeness precondition: Send refuses 409 FAILED_PRECONDITION when a
+// merge field parsed out of the prose has no value at all, before any
+// write -- the Contract stays a draft, no contract-sent activity entry
+// is written, and no push fires. mergeFieldProse parses two keys and
+// neither is filled, so the refusal names both, not just the first.
+func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "send-blank-merge-field"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Never Filled Client", "never-filled@example.com")
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	testdb.SeedPendingPortalInvite(t, db, clientID)
+
+	pusher := push.NewFakePusher()
+	srv, session := newContractServerWithPusher(t, db, uid, pusher)
+	defer srv.Close()
+
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	var out apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Code != string(apierr.CodeFailedPrecondition) {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
+	}
+	if _, ok := out.Details[clientNameKey]; !ok {
+		t.Fatalf("details = %+v, want an entry for %q", out.Details, clientNameKey)
+	}
+	if _, ok := out.Details[priceKey]; !ok {
+		t.Fatalf("details = %+v, want an entry for %q", out.Details, priceKey)
+	}
+
+	getResp := getContract(t, srv, session, practiceID, engagementID)
+	defer getResp.Body.Close()
+	var getOut contracts.ContractResponse
+	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if getOut.Status != statusDraft {
+		t.Fatalf("status after refused Send = %q, want draft (unchanged)", getOut.Status)
+	}
+	if calls := pusher.Calls(); len(calls) != 0 {
+		t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
+	}
+	var activityCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`,
+		engagementID,
+	).Scan(&activityCount); err != nil {
+		t.Fatalf("count activity rows: %v", err)
+	}
+	if activityCount != 0 {
+		t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
+	}
+}
+
+// TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected proves a
+// value that is only whitespace counts as missing, the same as an empty
+// string or an absent key, and that a Contract with one filled key and
+// one blank key is refused naming only the blank one.
+func TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "send-whitespace-merge-field"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Whitespace Client", "whitespace@example.com")
+	seedContractWithValues(t, db, engagementID,
+		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "   "})
+	testdb.SeedPendingPortalInvite(t, db, clientID)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	var out apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if _, ok := out.Details[priceKey]; !ok {
+		t.Fatalf("details = %+v, want an entry for %q", out.Details, priceKey)
+	}
+	if _, ok := out.Details[clientNameKey]; ok {
+		t.Fatalf("details = %+v, want no entry for the filled %q", out.Details, clientNameKey)
 	}
 }

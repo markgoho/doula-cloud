@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
@@ -15,6 +16,20 @@ import (
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 )
+
+// msgIncompleteMergeFields is what a Staff member sees when Send is
+// refused because the Contract still has a merge field with no value
+// (#258): a blank in a legal document is exactly the defect this ticket
+// exists for, so every key parsed out of the prose is required -- there
+// is no optional merge field. Details carries every missing key at once
+// (docs/api-design.md section 7), not only the first, keyed by
+// msgMergeFieldValueRequired so a caller can list them without a second
+// round trip.
+const msgIncompleteMergeFields = "every merge field must have a value before this contract can be sent"
+
+// msgMergeFieldValueRequired is the per-key Details message
+// msgIncompleteMergeFields carries for each missing merge field key.
+const msgMergeFieldValueRequired = "enter a value for this field"
 
 // msgNoPortalInvite is what a Staff member sees when Send is refused
 // because the Engagement's Client has never been sent a portal invite
@@ -81,6 +96,16 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
+		mergeFields := extractMergeFields(prose)
+		if missing := missingMergeFieldKeys(mergeFields, values); len(missing) > 0 {
+			details := make(map[string]string, len(missing))
+			for _, key := range missing {
+				details[key] = msgMergeFieldValueRequired
+			}
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgIncompleteMergeFields, details)
+			return
+		}
+
 		if _, err := tx.ExecContext(r.Context(),
 			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
 			string(StatusSent), id,
@@ -109,7 +134,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			EngagementID: engagementID,
 			Status:       string(StatusSent),
 			Prose:        prose,
-			MergeFields:  extractMergeFields(prose),
+			MergeFields:  mergeFields,
 			Values:       values.nonEmpty(),
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
@@ -194,4 +219,19 @@ func notifyClient(ctx context.Context, tx *sql.Tx, pusher push.Pusher, engagemen
 			log.Printf("contracts: notify client: send push: %v", err)
 		}
 	}
+}
+
+// missingMergeFieldKeys reports every key in mergeFields whose entry in
+// values is absent, empty, or whitespace-only, in prose order -- #258's
+// Send precondition. Every parsed key is required; there is no optional
+// merge field, so a key with no entry at all in values counts as missing
+// the same as one mapped to "" or "   ".
+func missingMergeFieldKeys(mergeFields []string, values MergeFieldValues) []string {
+	var missing []string
+	for _, key := range mergeFields {
+		if strings.TrimSpace(values[key]) == "" {
+			missing = append(missing, key)
+		}
+	}
+	return missing
 }

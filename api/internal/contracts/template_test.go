@@ -54,6 +54,28 @@ func seedContract(t *testing.T, db *testdb.DB, engagementID, status, prose strin
 	}
 }
 
+// seedContractWithValues seeds a 'draft' Contract row, at mergeFieldProse
+// (every caller's own prose), with an explicit merge field Values map,
+// for a test that sends the seeded Contract through
+// PostSendContractHandler -- #258's completeness check refuses a Draft
+// whose values are still at seedContract's default `{}`, so a caller
+// proving Send succeeds needs every key mergeFieldProse parses filled
+// in. Always 'draft': every caller here is proving something about
+// Send, which only ever accepts a Draft in the first place.
+func seedContractWithValues(t *testing.T, db *testdb.DB, engagementID string, values contracts.MergeFieldValues) {
+	t.Helper()
+	valuesJSON, err := json.Marshal(values)
+	if err != nil {
+		t.Fatalf("marshal values: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO contracts (engagement_id, status, prose, merge_field_values) VALUES ($1, 'draft'::contract_status, $2, $3)`,
+		engagementID, mergeFieldProse, valuesJSON,
+	); err != nil {
+		t.Fatalf("seed contract: %v", err)
+	}
+}
+
 // seedSignedContract seeds a 'signed' Contract row directly (prose fixed
 // at mergeFieldProse, the same prose every caller needs), with
 // signed_pdf_object_path set -- exercising GetSignedContractPDFHandler /

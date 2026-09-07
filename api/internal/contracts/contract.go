@@ -106,7 +106,7 @@ func PostContractHandler() http.Handler {
 		}
 
 		mergeFields := extractMergeFields(prose)
-		values, err := prefillClientName(r.Context(), tx, engagementID, mergeFields)
+		values, err := resolveMergeFieldValues(r.Context(), tx, engagementID, mergeFields)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -313,33 +313,57 @@ func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, pr
 	return id, prose, status, values, nil
 }
 
-// clientNameMergeKey is the one merge field this package resolves for
-// the caller rather than leaving blank for Staff to type -- per
-// ADR-0017, client_name stays exactly as it is and resolves to the
-// legal name.
-const clientNameMergeKey = "client_name"
+// clientNameMergeKey and practiceNameMergeKey are the merge fields this
+// package resolves for the caller rather than leaving blank for Staff to
+// type -- per #258's brief, the resolvable set today is exactly these
+// two: the Practice name and the Client's legal name (ADR-0017:
+// client_name always resolves to the legal name, never the preferred
+// one). Every other merge field -- engagement dates, price, scope of
+// service, or any ad hoc token a Practice Owner wrote into its own
+// prose -- has no column backing it and stays blank for Staff to fill
+// in via PutContractHandler. Do not add columns to grow this set; #258
+// deliberately scoped it to data the product already holds.
+const (
+	clientNameMergeKey   = "client_name"
+	practiceNameMergeKey = "practice_name"
+)
 
-// prefillClientName returns Draft Values with client_name already filled
-// in from the Engagement's Client, using client.LegalName -- the
-// document name a Contract reads, per ADR-0017's read table -- when the
-// Template's prose actually asks for it. Every other merge field is left
-// for Staff to fill in via PutContractHandler, exactly as before.
-func prefillClientName(ctx context.Context, tx *sql.Tx, engagementID string, mergeFields []string) (MergeFieldValues, error) {
-	if !slices.Contains(mergeFields, clientNameMergeKey) {
+// resolveMergeFieldValues returns Draft Values with every merge field in
+// the resolvable set (clientNameMergeKey, practiceNameMergeKey) already
+// filled in, for whichever of those two the Template's prose actually
+// asks for -- one query against the Engagement, its Client and its
+// Practice, rather than one query per resolvable field. Every other
+// merge field is left for Staff to fill in via PutContractHandler,
+// exactly as before.
+func resolveMergeFieldValues(ctx context.Context, tx *sql.Tx, engagementID string, mergeFields []string) (MergeFieldValues, error) {
+	wantsClientName := slices.Contains(mergeFields, clientNameMergeKey)
+	wantsPracticeName := slices.Contains(mergeFields, practiceNameMergeKey)
+	if !wantsClientName && !wantsPracticeName {
 		return MergeFieldValues{}, nil
 	}
 
-	var givenName string
+	var givenName, practiceName string
 	var familyName sql.NullString
 	if err := tx.QueryRowContext(ctx,
-		`SELECT c.given_name, c.family_name FROM clients c
-		 JOIN engagements e ON e.client_id = c.id WHERE e.id = $1`,
+		`SELECT c.given_name, c.family_name, p.name
+		 FROM engagements e
+		 JOIN clients c ON c.id = e.client_id
+		 JOIN practices p ON p.id = e.practice_id
+		 WHERE e.id = $1`,
 		engagementID,
-	).Scan(&givenName, &familyName); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement (and therefore its Client) exists
-		return nil, fmt.Errorf("contracts: prefill client name: %w", err)
+	).Scan(&givenName, &familyName, &practiceName); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement (and therefore its Client and Practice) exists
+		return nil, fmt.Errorf("contracts: resolve merge field values: %w", err)
 	}
-	return MergeFieldValues{clientNameMergeKey: client.LegalName(givenName, familyName.String)}, nil
+
+	values := MergeFieldValues{}
+	if wantsClientName {
+		values[clientNameMergeKey] = client.LegalName(givenName, familyName.String)
+	}
+	if wantsPracticeName {
+		values[practiceNameMergeKey] = practiceName
+	}
+	return values, nil
 }
 
 // validateMergeFieldValues checks each entry in values against

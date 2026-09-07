@@ -9,6 +9,7 @@ import {
 	loadContract,
 	loadPracticeAwaitingContracts,
 	mergeFieldLabel,
+	missingMergeFieldKeys,
 	practiceAwaitingContractsPath,
 	saveContractValues,
 	sendContract,
@@ -51,6 +52,26 @@ describe('loadContract', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('server error', 500));
 
 		await expect(loadContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('server error');
+	});
+
+	// #258: an Owner/Admin reader's GET response splits money-tagged merge
+	// fields into a separate moneyValues field (ADR-0008), so the Staff
+	// Engagement page and its Send-completeness check would otherwise read
+	// a filled money field as missing.
+	it('folds moneyValues into values for an Owner/Admin reader', async () => {
+		const contract = {
+			engagementId: 'eng-1',
+			status: 'draft',
+			prose: 'Agreement for {{client_name}} at {{money_price}}.',
+			mergeFields: ['client_name', 'money_price'],
+			values: { client_name: 'Jamie' },
+			moneyValues: { money_price: '$1,200' }
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
+
+		const result = await loadContract(fetcher, 'practice-1', 'eng-1');
+
+		expect(result?.values).toEqual({ client_name: 'Jamie', money_price: '$1,200' });
 	});
 });
 
@@ -299,6 +320,33 @@ describe('setMergeFieldValue', () => {
 	it('overwrites an existing value for the same key', () => {
 		const result = setMergeFieldValue({ client_name: 'Jamie' }, 'client_name', 'Alex');
 		expect(result).toEqual({ client_name: 'Alex' });
+	});
+});
+
+describe('missingMergeFieldKeys', () => {
+	it('returns an empty array when every merge field has a value', () => {
+		const result = missingMergeFieldKeys(['client_name', 'price'], { client_name: 'Jamie', price: '$1,200' });
+		expect(result).toEqual([]);
+	});
+
+	it('names a key with no entry at all in values', () => {
+		const result = missingMergeFieldKeys(['client_name', 'price'], { client_name: 'Jamie' });
+		expect(result).toEqual(['price']);
+	});
+
+	it('names a key mapped to an empty string', () => {
+		const result = missingMergeFieldKeys(['client_name'], { client_name: '' });
+		expect(result).toEqual(['client_name']);
+	});
+
+	it('names a key mapped to a whitespace-only string', () => {
+		const result = missingMergeFieldKeys(['client_name'], { client_name: ' '.repeat(3) });
+		expect(result).toEqual(['client_name']);
+	});
+
+	it('names every missing key, not only the first', () => {
+		const result = missingMergeFieldKeys(['practice_name', 'client_name', 'price'], { client_name: 'Jamie' });
+		expect(result).toEqual(['practice_name', 'price']);
 	});
 });
 
