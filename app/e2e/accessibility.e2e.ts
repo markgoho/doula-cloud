@@ -436,6 +436,25 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 		contract.ok(),
 		`create contract failed: ${contract.status()} ${await contract.text()}`
 	).toBe(true);
+	// #258: Send now refuses a Contract with any blank merge field.
+	// practice_name and client_name are already resolved by creation; the
+	// default seeded template's other merge fields (scope_of_service, the
+	// two engagement dates, price) have no such column backing them, so
+	// they're filled in by hand before Send.
+	const { values } = await contract.json();
+	const filled = await request.put(`${engagementURL}/contract`, {
+		headers: staffHeaders,
+		data: {
+			values: {
+				...values,
+				scope_of_service: '12 prenatal visits',
+				engagement_start_date: '2027-01-01',
+				engagement_end_date: '2027-06-01',
+				price: '$1,200'
+			}
+		}
+	});
+	expect(filled.ok(), `fill contract values failed: ${filled.status()} ${await filled.text()}`).toBe(true);
 	const sent = await request.post(`${engagementURL}/contract/send`, { headers: staffHeaders });
 	expect(sent.ok(), `send contract failed: ${sent.status()} ${await sent.text()}`).toBe(true);
 
