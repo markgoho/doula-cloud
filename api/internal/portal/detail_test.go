@@ -108,9 +108,14 @@ func TestDetailHandler_Success(t *testing.T) {
 	if out.Status != status {
 		t.Fatalf("status = %q, want %q", out.Status, status)
 	}
-	// #505: the portal reads the Engagement's due date, not when it was created.
+	// #505: the portal reads the Engagement's due date.
 	if out.DueDate == nil || *out.DueDate != "2027-06-15" {
 		t.Fatalf("dueDate = %v, want %q", out.DueDate, "2027-06-15")
+	}
+	// #310: when the Engagement began, back on this DTO for the chrome's
+	// switcher label.
+	if out.CreatedAt.IsZero() {
+		t.Fatalf("createdAt = %v, want a non-zero time", out.CreatedAt)
 	}
 }
 

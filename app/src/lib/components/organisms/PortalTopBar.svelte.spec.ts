@@ -12,13 +12,22 @@ const NAV_ITEMS = [
 	{ label: 'Contract', href: '/contract', current: false }
 ];
 
-async function setup({ practiceName = 'Riverside Doula Collective' } = {}) {
+async function setup({
+	practiceName = 'Riverside Doula Collective',
+	switcherLabel = 'Riverside Doula Collective, started Mar 12, 2026'
+} = {}) {
 	// Pinned rather than left to the runner's default: the nav renders twice
 	// with one copy display:none, so which one is visible is a fact about
 	// the viewport and should be stated by the test.
 	await page.viewport(1440, 900);
 	const signOut = vi.fn<() => Promise<SignOutOutcome>>().mockResolvedValue({ ok: true });
-	await render(PortalTopBar, { practiceName, navItems: NAV_ITEMS, name: 'Tasha Bell', signOut });
+	await render(PortalTopBar, {
+		practiceName,
+		switcherLabel,
+		navItems: NAV_ITEMS,
+		name: 'Tasha Bell',
+		signOut
+	});
 	return { signOut };
 }
 
@@ -39,6 +48,31 @@ describe('PortalTopBar', () => {
 		await setup();
 
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeVisible();
+	});
+
+	/*
+	 * #310: the persistent, always-present way to the portal root -- a
+	 * real link, not a modal or a dropdown that reimplements navigation.
+	 * Its accessible name is `switcherLabel`, not "Your care": that text
+	 * already names the nav item pointing at the hub, and two links with
+	 * the same accessible name and different destinations on one screen
+	 * would be a WCAG 2.4.4 failure.
+	 */
+	it('links the Practice name to the portal root', async () => {
+		await setup();
+
+		const link = page.getByRole('link', { name: 'Riverside Doula Collective, started Mar 12, 2026' });
+		await expect.element(link).toBeVisible();
+		expect(link.element()).toHaveAttribute('href', '/');
+	});
+
+	it("does not reuse \"Your care\" as the portal-root link's own name", async () => {
+		await setup();
+
+		await expect.element(page.getByRole('link', { name: 'Your care', exact: true })).toHaveAttribute(
+			'href',
+			'/care'
+		);
 	});
 
 	it('marks where the person is with more than colour', async () => {

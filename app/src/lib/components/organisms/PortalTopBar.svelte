@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import AvatarMenu from '#lib/components/molecules/AvatarMenu.svelte';
 	import type { NavItem } from './StaffTopBar.svelte';
@@ -9,7 +10,13 @@
 	 * answer: the Practice's name is the portal's identity rather than
 	 * `Doula Cloud`, because a Client's relationship is with her doula's
 	 * practice and not with the software it runs on. There is no Practice
-	 * switcher -- a Client belongs to exactly one Practice.
+	 * switcher -- a Client's own Client record belongs to exactly one
+	 * Practice, so there is nothing to pick between the way Staff picks a
+	 * Practice. What the Practice name is instead (#310) is a plain link
+	 * to the portal root, the address a Client whose Portal Account
+	 * reaches more than one Client (ADR-0015, one per Practice) uses to
+	 * move between her Engagements -- a real address, not a dropdown that
+	 * reimplements navigation.
 	 *
 	 * Narrow, the four nav items become a full-width second row rather than
 	 * a hamburger: four items need no container, so the portal does not
@@ -17,6 +24,16 @@
 	 */
 	interface Properties {
 		practiceName: string;
+		/**
+		 * The accessible name for the portal-root link above, built by
+		 * `clientRegister.ts`'s `engagementLabel` from the same
+		 * Practice name plus when this Engagement began -- the one function
+		 * the root list and the login/accept-invite choosers also read
+		 * (#310), so all of them agree. Kept off the visible text: the
+		 * bar's own content floor (#564) is measured against `practiceName`
+		 * alone, and adding visible text here would need a fresh measurement.
+		 */
+		switcherLabel: string;
 		navItems: NavItem[];
 		name: string;
 		/**
@@ -32,13 +49,13 @@
 		signOut: () => Promise<SignOutOutcome>;
 	}
 
-	let { practiceName, navItems, name, accountHref, signOut }: Properties = $props();
+	let { practiceName, switcherLabel, navItems, name, accountHref, signOut }: Properties = $props();
 </script>
 
 <header>
 	<div class="bar">
 		<div class="brand-and-nav">
-			<p class="practice">{practiceName}</p>
+			<Link href={resolve('/')} label={practiceName} ariaLabel={switcherLabel} variant="brand" />
 			<nav class="wide" aria-label="Your care">
 				{#each navItems as item (item.href)}
 					<Link href={item.href} label={item.label} variant="nav" current={item.current} />
@@ -90,14 +107,6 @@
 			align-items: center;
 			gap: var(--space-10);
 			block-size: 100%;
-		}
-
-		.practice {
-			margin: 0;
-			color: var(--color-on-surface);
-			font-family: var(--font-family-base);
-			font-size: var(--text-subheading-size);
-			font-weight: var(--font-weight-semibold);
 		}
 
 		nav {

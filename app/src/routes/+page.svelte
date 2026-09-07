@@ -3,17 +3,17 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
-	import { CARE_HEADING, NO_CARE_MESSAGE, engagementStatusLabel } from '#lib/clientRegister.js';
+	import { CARE_HEADING, NO_CARE_MESSAGE, engagementLabel, engagementStatusLabel } from '#lib/clientRegister.js';
 	import type { PageProps as PageProperties } from './$types';
 
 	let { data }: PageProperties = $props();
 
 	// Mirrors StepRail's own id-per-row join (#464): the status text sits
-	// beside the link rather than inside its accessible name, so two
-	// Engagements at the same Practice (#310's own labelling problem, not
-	// this one) still read as two distinct links, and a keyboard or
-	// screen-reader user still hears the status without it being read as
-	// part of "go to this Practice".
+	// beside the link rather than inside its accessible name, so a
+	// keyboard or screen-reader user still hears the status without it
+	// being read as part of the link's own name. Telling two Engagements
+	// at the same Practice apart is the link's own name's job instead
+	// (#310): engagementLabel folds in when each began.
 	function statusId(engagementId: string) {
 		return `engagement-status-${engagementId}`;
 	}
@@ -64,7 +64,7 @@
 						href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
 							engagementId: engagement.engagementId
 						})}
-						label={engagement.practiceName}
+						label={engagementLabel(engagement)}
 						describedBy={statusId(engagement.engagementId)}
 					/>
 					<p class="status" id={statusId(engagement.engagementId)}>

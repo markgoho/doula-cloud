@@ -15,6 +15,8 @@
  * API DTO keeps sending the raw enum.
  */
 
+import { formatInstant } from './dates.js';
+
 /** `engagement_status` has three values today (ADR-0015 superseded
  * ADR-0005's four-value set when `postpartum` left the column). One
  * fixed label per value, the same for every Client. */
@@ -65,3 +67,24 @@ export function contractVoidedNotice(practiceName: string): string {
  * replaces every "You don't have an Engagement yet" paragraph beside it. */
 export const CARE_HEADING = 'Your care';
 export const NO_CARE_MESSAGE = "You don't have care set up yet. Ask your Practice to set it up.";
+
+/**
+ * The one label a Client reads for an Engagement wherever more than one of
+ * hers might sit side by side: the portal root's list, and the authenticated
+ * chrome's own way back to it (#310). Naming by Practice alone stopped being
+ * enough once ADR-0015 let two Engagements share a Practice, so the label
+ * also carries when this one began -- CONTEXT.md's register addition for
+ * #310, and the one fact that distinguishes them honestly for every Client,
+ * including one whose care ended in loss (unlike a due date or a birth
+ * outcome, both staff-only or absent). Deliberately narrow: the input type
+ * only has room for what the register allows, so a caller cannot pass a
+ * staff-only fact in even by accident.
+ */
+export interface EngagementLabelInput {
+	practiceName: string;
+	createdAt: string;
+}
+
+export function engagementLabel(engagement: EngagementLabelInput): string {
+	return `${engagement.practiceName}, started ${formatInstant(engagement.createdAt)}`;
+}
