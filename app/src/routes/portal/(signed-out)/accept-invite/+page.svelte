@@ -3,7 +3,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, refusalOrConfirmable, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import { CARE_HEADING, NO_CARE_MESSAGE } from '#lib/clientRegister.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -15,8 +16,7 @@
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let picker = $state<Engagement[] | undefined>();
 
 	/*
@@ -34,9 +34,7 @@
 	// page, the same GET-then-POST shape #617's own sign-in link uses
 	// (#610 hangs its cross-tier eviction warning on this same button).
 	async function handleContinue() {
-		errors = [];
-		isSubmitting = true;
-		try {
+		await submission.run(async () => {
 			const acceptResponse = await fetch(`${apiBaseURL()}/api/portal/accept-invite`, {
 				method: 'POST',
 				// See the sign-in page: #610 reads the __session cookie off
@@ -53,18 +51,16 @@
 				const refusal = await refusalOrConfirmable(acceptResponse);
 				if (refusal.kind === 'confirmable') {
 					signOutWarning = refusal.message;
-				} else {
-					errors = refusal.errors;
+					return;
 				}
-				return;
+				return refusal.errors;
 			}
 
 			// AcceptInviteHandler already set the session cookie on its own
 			// response (#145).
 			const sessionResponse = await apiFetchWithSession('/api/portal/session');
 			if (!sessionResponse.ok) {
-				errors = await refusalErrors(sessionResponse);
-				return;
+				return await refusalErrors(sessionResponse);
 			}
 			const session: PortalSessionInfo = await sessionResponse.json();
 			const landing = decidePortalLanding(session);
@@ -75,16 +71,12 @@
 			} else {
 				picker = landing.engagements;
 			}
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -116,7 +108,7 @@
 		<Button
 			type="button"
 			label={signOutWarning ? 'Continue and sign out' : 'Continue'}
-			loading={isSubmitting}
+			loading={submission.isSubmitting}
 			onClick={handleContinue}
 		/>
 	{/if}
@@ -124,6 +116,6 @@
 
 <EntryPage
 	title="Accept your portal invite"
-	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

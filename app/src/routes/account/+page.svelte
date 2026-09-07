@@ -46,6 +46,7 @@
 		SERVICE_PROBLEM,
 		totpCodeRefusal
 	} from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -57,7 +58,6 @@
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import type { FormError } from '#lib/formErrors.js';
 	import { loadAccountSession } from './session.svelte.js';
 
 	const workStateId = 'account-work-state';
@@ -74,9 +74,8 @@
 	let hasSecondFactor = $state(false);
 	let isLoaded = $state(false);
 	let loadError = $state('');
-	let saveError = $state<FormError[]>([]);
+	const saveSubmission = new FormSubmission();
 	let savedState = $state('');
-	let isSaving = $state(false);
 
 	const mfaPasswordId = 'account-mfa-password';
 	const mfaCodeId = 'account-mfa-code';
@@ -87,8 +86,7 @@
 	let mfaStep = $state<'idle' | 'password' | 'code'>('idle');
 	let mfaPassword = $state('');
 	let mfaCode = $state('');
-	let mfaErrors = $state<FormError[]>([]);
-	let isMfaBusy = $state(false);
+	const mfaSubmission = new FormSubmission();
 
 	/*
 	 * The in-progress reauthentication Identity Platform is waiting on,
@@ -97,10 +95,6 @@
 	 * Same shape as the login screen's own `mfaResolver`.
 	 */
 	let mfaResolver: MultiFactorResolver | undefined;
-
-	function mfaErrorFor(targetId: string): string | undefined {
-		return mfaErrors.find((entry) => entry.targetId === targetId)?.message;
-	}
 
 	// #613: no verified-email flag is exposed here, so this is offered
 	// unconditionally rather than only when unverified -- harmless either
@@ -178,17 +172,14 @@
 	 */
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		saveError = [];
 		savedState = '';
 
-		// The one question this page asks. Nothing else on it is editable.
-		if (selectedState === '') {
-			saveError = [{ message: 'Choose the state you work from', targetId: workStateId }];
-			return;
-		}
+		await saveSubmission.run(async () => {
+			// The one question this page asks. Nothing else on it is editable.
+			if (selectedState === '') {
+				return [{ message: 'Choose the state you work from', targetId: workStateId }];
+			}
 
-		isSaving = true;
-		try {
 			/*
 			 * Sent every time, including when the state has not changed.
 			 * Saying "yes, still New York, as of today" is a real thing to
@@ -210,32 +201,25 @@
 				body: JSON.stringify({ workState: workStateCode(selectedState) })
 			});
 			if (!response.ok) {
-				saveError = await refusalErrors(response, { workState: workStateId });
-				return;
+				return await refusalErrors(response, { workState: workStateId });
 			}
 
 			const saved: { workState: string; workStateReportedAt: string } = await response.json();
 			reportedAt = saved.workStateReportedAt;
 			selectedState = workStateName(saved.workState);
 			savedState = selectedState;
-		} catch {
-			// A throw here is the network, not her answer, so no field is
-			// named.
-			saveError = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSaving = false;
-		}
+		}, orServiceProblem);
 	}
 
 	function beginMfaRemoval() {
-		mfaErrors = [];
+		mfaSubmission.errors = [];
 		mfaPassword = '';
 		mfaCode = '';
 		mfaStep = 'password';
 	}
 
 	function cancelMfaRemoval() {
-		mfaErrors = [];
+		mfaSubmission.errors = [];
 		mfaPassword = '';
 		mfaCode = '';
 		mfaStep = 'idle';
@@ -274,58 +258,46 @@
 		}
 
 		await signOut(getFirebaseAuth());
-		mfaErrors = [{ message: await refusalMessage(response) }];
+		mfaSubmission.errors = [{ message: await refusalMessage(response) }];
 		return false;
 	}
 
 	async function handleMfaPasswordSubmit() {
-		mfaErrors = [];
-
-		if (mfaPassword === '') {
-			mfaErrors = [{ message: 'Enter your password', targetId: mfaPasswordId }];
-			return;
-		}
-
-		isMfaBusy = true;
-		try {
-			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, mfaPassword);
-			const didRemove = await didRemoveSecondFactor(credential.user);
-			if (!didRemove) mfaStep = 'password';
-		} catch (error_) {
-			if (isMultiFactorAuthRequired(error_)) {
-				// Expected for an identity that already holds the factor
-				// she is trying to remove: Identity Platform challenges the
-				// second factor on every sign-in once one is enrolled.
-				mfaResolver = getMultiFactorResolver(getFirebaseAuth(), error_ as MultiFactorError);
-				mfaCode = '';
-				mfaStep = 'code';
-				return;
+		await mfaSubmission.run(async () => {
+			if (mfaPassword === '') {
+				return [{ message: 'Enter your password', targetId: mfaPasswordId }];
 			}
-			mfaErrors = [passwordReauthRefusal(error_, mfaPasswordId)];
-		} finally {
-			isMfaBusy = false;
-		}
+
+			try {
+				const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, mfaPassword);
+				const didRemove = await didRemoveSecondFactor(credential.user);
+				if (!didRemove) mfaStep = 'password';
+			} catch (error_) {
+				if (isMultiFactorAuthRequired(error_)) {
+					// Expected for an identity that already holds the factor
+					// she is trying to remove: Identity Platform challenges the
+					// second factor on every sign-in once one is enrolled.
+					mfaResolver = getMultiFactorResolver(getFirebaseAuth(), error_ as MultiFactorError);
+					mfaCode = '';
+					mfaStep = 'code';
+					return;
+				}
+				throw error_;
+			}
+		}, (refusal) => (Array.isArray(refusal) ? refusal : [passwordReauthRefusal(refusal, mfaPasswordId)]));
 	}
 
 	async function handleMfaCodeSubmit() {
-		mfaErrors = [];
+		await mfaSubmission.run(async () => {
+			if (mfaCode.trim() === '') {
+				return [{ message: 'Enter the 6-digit code from your authenticator app', targetId: mfaCodeId }];
+			}
 
-		if (mfaCode.trim() === '') {
-			mfaErrors = [{ message: 'Enter the 6-digit code from your authenticator app', targetId: mfaCodeId }];
-			return;
-		}
-
-		isMfaBusy = true;
-		try {
 			const assertion = TotpMultiFactorGenerator.assertionForSignIn(mfaResolver!.hints[0].uid, mfaCode);
 			const credential = await mfaResolver!.resolveSignIn(assertion);
 			const didRemove = await didRemoveSecondFactor(credential.user);
 			if (!didRemove) mfaStep = 'password';
-		} catch (error_) {
-			mfaErrors = [totpCodeRefusal(error_, mfaCodeId)];
-		} finally {
-			isMfaBusy = false;
-		}
+		}, (refusal) => (Array.isArray(refusal) ? refusal : [totpCodeRefusal(refusal, mfaCodeId)]));
 	}
 </script>
 
@@ -356,7 +328,7 @@
 	<WorkStateField
 		id={workStateId}
 		bind:value={selectedState}
-		error={saveError.find((entry) => entry.targetId === workStateId)?.message}
+		error={saveSubmission.errorFor(workStateId)}
 	/>
 	<!--
 		Saving the same state again is a re-assertion, not a no-op -- see
@@ -383,7 +355,7 @@
 			<Button type="button" variant="destructive" label="Remove" onClick={beginMfaRemoval} />
 		{:else if mfaStep === 'password'}
 			<Text text="Confirm your password to remove two-factor authentication." />
-			<LabeledField id={mfaPasswordId} label="Password" error={mfaErrorFor(mfaPasswordId)}>
+			<LabeledField id={mfaPasswordId} label="Password" error={mfaSubmission.errorFor(mfaPasswordId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -397,12 +369,12 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="button" variant="destructive" label="Continue" loading={isMfaBusy} onClick={handleMfaPasswordSubmit} />
-			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={isMfaBusy} />
+			<Button type="button" variant="destructive" label="Continue" loading={mfaSubmission.isSubmitting} onClick={handleMfaPasswordSubmit} />
+			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={mfaSubmission.isSubmitting} />
 		{:else}
-			<TotpCodeField id={mfaCodeId} value={mfaCode} onInput={(value) => (mfaCode = value)} error={mfaErrorFor(mfaCodeId)} />
-			<Button type="button" variant="destructive" label="Remove" loading={isMfaBusy} onClick={handleMfaCodeSubmit} />
-			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={isMfaBusy} />
+			<TotpCodeField id={mfaCodeId} value={mfaCode} onInput={(value) => (mfaCode = value)} error={mfaSubmission.errorFor(mfaCodeId)} />
+			<Button type="button" variant="destructive" label="Remove" loading={mfaSubmission.isSubmitting} onClick={handleMfaCodeSubmit} />
+			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={mfaSubmission.isSubmitting} />
 		{/if}
 	{:else}
 		<Text text="Not turned on." />
@@ -423,17 +395,17 @@
 		service-level failure (the network, the DELETE call itself) names no
 		field, so it is the one case shown here.
 	-->
-	{#if mfaErrors.length > 0 && !mfaErrors[0].targetId}
-		<Notice variant="error" message={mfaErrors[0].message} />
+	{#if mfaSubmission.errors.length > 0 && !mfaSubmission.errors[0].targetId}
+		<Notice variant="error" message={mfaSubmission.errors[0].message} />
 	{/if}
 {/snippet}
 
 {#snippet errorSummary()}
-	<ErrorSummary errors={saveError} />
+	<ErrorSummary errors={saveSubmission.errors} />
 {/snippet}
 
 {#snippet actions()}
-	<Button type="submit" label="Save work state" loading={isSaving} />
+	<Button type="submit" label="Save work state" loading={saveSubmission.isSubmitting} />
 	<!--
 		Confirmation sits where she just was -- immediately under the Save
 		button she pressed, not in a banner at the top of a page she would
@@ -484,7 +456,7 @@
 					{ legend: 'Two-factor authentication', content: mfaSection }
 				]
 			: []}
-		errorSummary={saveError.length > 0 ? errorSummary : undefined}
+		errorSummary={saveSubmission.errors.length > 0 ? errorSummary : undefined}
 		{actions}
 		loading={isLoaded || loadError ? undefined : 'Loading your account'}
 		{loadError}

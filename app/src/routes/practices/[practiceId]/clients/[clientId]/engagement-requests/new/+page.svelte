@@ -47,7 +47,7 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const KIND_NAME = 'engagement-request-kind';
 	const kindFieldId = `${KIND_NAME}-birth`;
@@ -65,8 +65,7 @@
 	let dueDate = $state('');
 	let note = $state('');
 
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let hasNoCredits = $state(false);
 
 	const isApprover = $derived(isOwnerOrAdmin(session));
@@ -160,10 +159,6 @@
 		return found;
 	}
 
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
-
 	onMount(async () => {
 		restoreDraft();
 		try {
@@ -179,21 +174,16 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
 		hasNoCredits = false;
 
-		const refusals = findRefusals();
-		if (refusals.length > 0) {
-			errors = refusals;
-			return;
-		}
+		await submission.run(async () => {
+			const refusals = findRefusals();
+			if (refusals.length > 0) return refusals;
 
-		// Safe: findRefusals above already refused an empty kind, so a
-		// refusals.length === 0 reader always has one of the two values.
-		const request: NewEngagementRequest = { kind: kind as 'birth' | 'postpartum', dueDate, note };
+			// Safe: findRefusals above already refused an empty kind, so a
+			// refusals.length === 0 reader always has one of the two values.
+			const request: NewEngagementRequest = { kind: kind as 'birth' | 'postpartum', dueDate, note };
 
-		isSubmitting = true;
-		try {
 			const result = await requestEngagement(
 				apiFetchWithSession,
 				page.params.practiceId!,
@@ -207,16 +197,12 @@
 			}
 			clearDraft();
 			await goto(detailHref());
-		} catch (error_) {
-			errors = [{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orThrownMessage);
 	}
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary errors={errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet formIntro()}
@@ -248,7 +234,7 @@
 	<RadioGroup
 		legend="Kind of work"
 		name={KIND_NAME}
-		error={errorFor(kindFieldId)}
+		error={submission.errorFor(kindFieldId)}
 		options={[
 			{ value: 'birth', label: 'Birth' },
 			{ value: 'postpartum', label: 'Postpartum' }
@@ -260,7 +246,7 @@
 		id={dueDateId}
 		label="Due date"
 		hint={isDueDateRequired ? undefined : 'Optional for postpartum work'}
-		error={errorFor(dueDateId)}
+		error={submission.errorFor(dueDateId)}
 	>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
@@ -282,7 +268,7 @@
 {/snippet}
 
 {#snippet formActions()}
-	<Button type="submit" label={submitLabel || 'Continue'} loading={isSubmitting} />
+	<Button type="submit" label={submitLabel || 'Continue'} loading={submission.isSubmitting} />
 	<Link href={detailHref()} label="Cancel" variant="secondary" />
 {/snippet}
 
@@ -291,7 +277,7 @@
 		title={submitLabel || 'Start new work'}
 		intro={hasIntroContent ? formIntro : undefined}
 		fieldsets={detail ? [{ content: requestFields }] : []}
-		errorSummary={errors.length > 0 ? errorSummary : undefined}
+		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		actions={formActions}
 		loading={detail || loadError ? undefined : 'Loading the Client'}
 		loadError={loadError || undefined}

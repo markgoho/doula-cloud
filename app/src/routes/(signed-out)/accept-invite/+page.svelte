@@ -29,13 +29,8 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import {
-		authRefusal,
-		refusalErrors,
-		refusalOrConfirmable,
-		SERVICE_PROBLEM,
-		type FormError
-	} from '#lib/formErrors.js';
+	import { authRefusal, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -76,17 +71,12 @@
 	let name = $state('');
 	let workStateName_ = $state('');
 	/*
-	 * One array for both steps: they never render at the same time, and
-	 * each handler clears it before it starts, so an entry can only ever
-	 * describe the form on screen.
+	 * One `FormSubmission` for both steps: they never render at the same
+	 * time, and `run` resets `errors` before each starts, so an entry can
+	 * only ever describe the form on screen.
 	 */
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let picker = $state<Membership[] | undefined>();
-
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
 
 	/*
 	 * The credential from step one, kept in memory across the two steps.
@@ -127,26 +117,21 @@
 	 */
 	async function handleIdentify(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
 
-		const refusals: FormError[] = [];
-		if (email.trim() === '')
-			refusals.push({ message: 'Enter your email address', targetId: emailId });
-		if (password === '') {
-			refusals.push({ message: 'Enter your password', targetId: passwordId });
-		} else if (mode === 'signup' && password.length < 6) {
-			// Only on the signup branch: an existing account's password is
-			// whatever it already is, and refusing a short one here would
-			// lock out anyone who set one before the rule existed.
-			refusals.push({ message: 'Password must be 6 characters or more', targetId: passwordId });
-		}
-		if (refusals.length > 0) {
-			errors = refusals;
-			return;
-		}
+		await submission.run(async () => {
+			const refusals: FormError[] = [];
+			if (email.trim() === '')
+				refusals.push({ message: 'Enter your email address', targetId: emailId });
+			if (password === '') {
+				refusals.push({ message: 'Enter your password', targetId: passwordId });
+			} else if (mode === 'signup' && password.length < 6) {
+				// Only on the signup branch: an existing account's password is
+				// whatever it already is, and refusing a short one here would
+				// lock out anyone who set one before the rule existed.
+				refusals.push({ message: 'Password must be 6 characters or more', targetId: passwordId });
+			}
+			if (refusals.length > 0) return refusals;
 
-		isSubmitting = true;
-		try {
 			credential =
 				mode === 'signup'
 					? await createUserWithEmailAndPassword(getFirebaseAuth(), email, password)
@@ -164,9 +149,9 @@
 				headers: { Authorization: `Bearer ${idToken}` }
 			});
 			if (!exchangeResponse.ok) {
-				errors = await refusalErrors(exchangeResponse);
+				const refusal = await refusalErrors(exchangeResponse);
 				await signOut(getFirebaseAuth());
-				return;
+				return refusal;
 			}
 
 			/*
@@ -187,21 +172,21 @@
 				// and step two is the two questions only she can answer.
 				existing = undefined;
 			} else {
-				errors = await refusalErrors(sessionResponse);
+				const refusal = await refusalErrors(sessionResponse);
 				await signOut(getFirebaseAuth());
-				return;
+				return refusal;
 			}
 			step = 'accept';
-		} catch (error_) {
-			// Identity Platform's own words name a product and carry a banned
-			// adjective. `authRefusal` covers both modes this form handles --
-			// "already has an account" on the signup branch is the one it was
-			// worth mapping, since this screen offers the other branch right
-			// underneath (#467).
-			errors = [authRefusal(error_, { emailId, passwordId })];
-		} finally {
-			isSubmitting = false;
-		}
+		}, mapIdentifyRefusal);
+	}
+
+	// Identity Platform's own words name a product and carry a banned
+	// adjective. `authRefusal` covers both modes this form handles --
+	// "already has an account" on the signup branch is the one it was worth
+	// mapping, since this screen offers the other branch right underneath
+	// (#467). The client-side check's own array passes straight through.
+	function mapIdentifyRefusal(refusal: unknown): FormError[] {
+		return Array.isArray(refusal) ? refusal : [authRefusal(refusal, { emailId, passwordId })];
 	}
 
 	/*
@@ -248,7 +233,7 @@
 		});
 	}
 
-	async function land() {
+	async function land(): Promise<FormError[] | undefined> {
 		// AcceptInviteHandler already set the session cookie on its own
 		// response (#145) -- no separate exchange needed, just drop the
 		// JS SDK credential before the session probe reads the cookie.
@@ -256,8 +241,7 @@
 
 		const sessionResponse = await apiFetchWithSession('/api/staff/session');
 		if (!sessionResponse.ok) {
-			errors = await refusalErrors(sessionResponse);
-			return;
+			return await refusalErrors(sessionResponse);
 		}
 		const session: SessionInfo = await sessionResponse.json();
 		const landing = decideLanding(session);
@@ -273,28 +257,24 @@
 		} else {
 			picker = landing.memberships;
 		}
+		return undefined;
 	}
 
 	async function handleAccept(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
 		picker = undefined;
 
-		// Nothing to check on the existing-Staff branch: it asks no
-		// questions, it only shows what she already asserted.
-		if (!existing) {
-			const refusals: FormError[] = [];
-			if (name.trim() === '') refusals.push({ message: 'Enter your name', targetId: nameId });
-			if (workStateName_ === '')
-				refusals.push({ message: 'Choose the state you work from', targetId: workStateId });
-			if (refusals.length > 0) {
-				errors = refusals;
-				return;
+		await submission.run(async () => {
+			// Nothing to check on the existing-Staff branch: it asks no
+			// questions, it only shows what she already asserted.
+			if (!existing) {
+				const refusals: FormError[] = [];
+				if (name.trim() === '') refusals.push({ message: 'Enter your name', targetId: nameId });
+				if (workStateName_ === '')
+					refusals.push({ message: 'Choose the state you work from', targetId: workStateId });
+				if (refusals.length > 0) return refusals;
 			}
-		}
 
-		isSubmitting = true;
-		try {
 			const acceptResponse = await postAccept(false);
 			if (!acceptResponse.ok) {
 				// #816: a live portal session in this browser is not a form
@@ -308,19 +288,12 @@
 					step = 'confirm-sign-out';
 					return;
 				}
-				errors = refusal.errors;
 				await signOut(getFirebaseAuth());
-				return;
+				return refusal.errors;
 			}
 
-			await land();
-		} catch {
-			// A throw past validation is the network or the SDK, not an answer
-			// on this form, so the entry names no control.
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+			return await land();
+		}, orServiceProblem);
 	}
 
 	/*
@@ -328,22 +301,16 @@
 	 * on the same credential step one already produced.
 	 */
 	async function handleConfirmSignOut() {
-		errors = [];
-		isSubmitting = true;
-		try {
+		await submission.run(async () => {
 			const acceptResponse = await postAccept(true);
 			if (!acceptResponse.ok) {
-				errors = await refusalErrors(acceptResponse, acceptFieldIds);
+				const refusal = await refusalErrors(acceptResponse, acceptFieldIds);
 				step = 'accept';
 				await signOut(getFirebaseAuth());
-				return;
+				return refusal;
 			}
-			await land();
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+			return await land();
+		}, orServiceProblem);
 	}
 
 	/*
@@ -364,7 +331,7 @@
 		the two forms is on screen: they never render together, and each
 		handler clears the array before it runs.
 	-->
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -380,7 +347,7 @@
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
 		<form onsubmit={handleIdentify} novalidate>
 			<Text text="First, sign in or create an account with the address your invite was sent to." />
-			<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -398,7 +365,7 @@
 				id={passwordId}
 				label="Password"
 				hint={passwordHint}
-				error={errorFor(passwordId)}
+				error={submission.errorFor(passwordId)}
 			>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
@@ -421,7 +388,7 @@
 				value={mode}
 				onChange={(value) => (mode = value)}
 			/>
-			<Button type="submit" label="Continue" loading={isSubmitting} />
+			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</form>
 	{:else if step === 'confirm-sign-out'}
 		<!--
@@ -435,7 +402,7 @@
 		<Button
 			type="button"
 			label="Continue and sign out"
-			loading={isSubmitting}
+			loading={submission.isSubmitting}
 			onClick={handleConfirmSignOut}
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
@@ -466,7 +433,7 @@
 				-->
 				<Link href={resolve('/account')} label="Change where you work" variant="secondary" />
 			{:else}
-				<LabeledField id={nameId} label="Your name" error={errorFor(nameId)}>
+				<LabeledField id={nameId} label="Your name" error={submission.errorFor(nameId)}>
 					{#snippet children({ id, describedBy, invalid })}
 						<TextInput
 							{id}
@@ -482,11 +449,11 @@
 				<WorkStateField
 					id={workStateId}
 					bind:value={workStateName_}
-					error={errorFor(workStateId)}
+					error={submission.errorFor(workStateId)}
 				/>
 			{/if}
 
-			<Button type="submit" label="Accept invite" loading={isSubmitting} />
+			<Button type="submit" label="Accept invite" loading={submission.isSubmitting} />
 		</form>
 	{/if}
 
@@ -507,6 +474,6 @@
 
 <EntryPage
 	title="Accept your Staff invite"
-	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

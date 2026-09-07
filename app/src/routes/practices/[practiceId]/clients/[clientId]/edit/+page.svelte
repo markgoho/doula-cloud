@@ -40,7 +40,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
-	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
 	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 
 	const givenNameId = 'client-edit-given-name';
@@ -71,8 +71,7 @@
 	let dateOfBirth = $state('');
 	let fieldValues = $state<unknown>();
 
-	let saveErrors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let matches = $state<CollisionMatch[]>([]);
 	let isConflictOpen = $state(false);
 
@@ -93,10 +92,6 @@
 			practiceId: page.params.practiceId!,
 			clientId: page.params.clientId!
 		});
-	}
-
-	function errorFor(targetId: string): string | undefined {
-		return saveErrors.find((entry) => entry.targetId === targetId)?.message;
 	}
 
 	function matchNames(): string {
@@ -155,17 +150,12 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		saveErrors = [];
 		matches = [];
 
-		const refusals = findRefusals();
-		if (refusals.length > 0) {
-			saveErrors = refusals;
-			return;
-		}
+		await submission.run(async () => {
+			const refusals = findRefusals();
+			if (refusals.length > 0) return refusals;
 
-		isSubmitting = true;
-		try {
 			const result = await editClient(
 				apiFetchWithSession,
 				page.params.practiceId!,
@@ -190,11 +180,7 @@
 				return;
 			}
 			await goto(detailHref());
-		} catch (error_) {
-			saveErrors = [{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orThrownMessage);
 	}
 
 	// The single deliberate override -- ConfirmDialog's onConfirm, reached
@@ -214,13 +200,13 @@
 				true
 			);
 			if (result.conflict) {
-				saveErrors = [{ message: 'The Client record could not be saved.' }];
+				submission.errors = [{ message: 'The Client record could not be saved.' }];
 				throw new Error('client edit: unexpected conflict with override set');
 			}
 			await goto(detailHref());
 		} catch (error_) {
-			if (saveErrors.length === 0) {
-				saveErrors = [{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }];
+			if (submission.errors.length === 0) {
+				submission.errors = orThrownMessage(error_);
 			}
 			throw error_;
 		}
@@ -232,7 +218,7 @@
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary errors={saveErrors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet structuralFields()}
@@ -240,7 +226,7 @@
 		autocomplete="off" throughout (#469): this asks about the Client,
 		not the signed-in Staff member's own saved details.
 	-->
-	<LabeledField id={givenNameId} label="Given name" error={errorFor(givenNameId)}>
+	<LabeledField id={givenNameId} label="Given name" error={submission.errorFor(givenNameId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput {id} {describedBy} {invalid} value={givenName} onInput={(v) => (givenName = v)} required autocomplete="off" />
 		{/snippet}
@@ -308,7 +294,7 @@
 {/snippet}
 
 {#snippet formActions()}
-	<Button type="submit" label="Save" loading={isSubmitting} />
+	<Button type="submit" label="Save" loading={submission.isSubmitting} />
 	<Link href={detailHref()} label="Cancel" variant="secondary" />
 {/snippet}
 
@@ -316,7 +302,7 @@
 	<FormPage
 		title={detail ? `Edit ${displayName(detail)}` : 'Edit Client'}
 		fieldsets={detail ? [{ content: structuralFields }] : []}
-		errorSummary={saveErrors.length > 0 ? errorSummary : undefined}
+		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		actions={formActions}
 		loading={detail || loadError ? undefined : 'Loading the Client'}
 		loadError={loadError || undefined}

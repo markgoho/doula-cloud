@@ -17,7 +17,7 @@
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import { journeySteps } from '#lib/intakeJourney.js';
-	import type { FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { givenNameRefusal, JOURNEY, basePath, knownAs, saveIntake } from '../intake.js';
 
 	/*
@@ -36,15 +36,14 @@
 
 	const lastStep = $derived(intakeFlow.steps.at(-1));
 
-	let errors = $state<FormError[]>([]);
-	let isSaving = $state(false);
+	const submission = new FormSubmission();
 
 	async function handleSave() {
-		errors = givenNameRefusal('the-summary');
-		if (errors.length > 0) return;
-		isSaving = true;
-		errors = (await saveIntake(practiceId, false)) ?? [];
-		isSaving = false;
+		await submission.run(async () => {
+			const nameRefusal = givenNameRefusal('the-summary');
+			if (nameRefusal.length > 0) return nameRefusal;
+			return await saveIntake(practiceId, false);
+		}, orServiceProblem);
 	}
 </script>
 
@@ -57,12 +56,12 @@
 	isWide={rowCount >= WIDE_FROM_ROWS}
 >
 	{#snippet errorSummary()}
-		{#if errors.length > 0}
-			<ErrorSummary {errors} />
+		{#if submission.errors.length > 0}
+			<ErrorSummary errors={submission.errors} />
 		{/if}
 	{/snippet}
 
 	{#snippet actions()}
-		<Button label="Save this Client" loading={isSaving} onClick={handleSave} />
+		<Button label="Save this Client" loading={submission.isSubmitting} onClick={handleSave} />
 	{/snippet}
 </CheckAnswers>

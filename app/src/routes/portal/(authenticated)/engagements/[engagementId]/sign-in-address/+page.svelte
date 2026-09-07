@@ -25,7 +25,8 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { apiErrorMessage, apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { portalPushSubscriptionsPath, unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { bestEffort, UNREGISTER_TIMEOUT_MS } from '#lib/signOut.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -43,8 +44,7 @@
 	let isLoaded = $state(false);
 	let loadError = $state('');
 	let newAddress = $state('');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let sentTo = $state('');
 
 	// #618, ADR-0026: her own "sign out everywhere", a separate action
@@ -54,7 +54,7 @@
 	let isSigningOutEverywhere = $state(false);
 	let signOutEverywhereError = $state('');
 
-	const fieldError = $derived(errors.find((error) => error.targetId === fieldId)?.message);
+	const fieldError = $derived(submission.errorFor(fieldId));
 
 	// onMount, not $effect: this reads once, and an effect would re-run
 	// every time it set `isLoaded` -- the sibling Notifications screen
@@ -92,31 +92,22 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
+		await submission.run(async () => {
+			const problem = localError(newAddress);
+			if (problem) {
+				return [{ message: problem, targetId: fieldId }];
+			}
 
-		const problem = localError(newAddress);
-		if (problem) {
-			errors = [{ message: problem, targetId: fieldId }];
-			return;
-		}
-
-		isSubmitting = true;
-		try {
 			const response = await apiFetchWithSession('/api/portal/sign-in-address/request', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email: newAddress.trim() })
 			});
 			if (!response.ok) {
-				errors = await refusalErrors(response, { email: fieldId });
-				return;
+				return await refusalErrors(response, { email: fieldId });
 			}
 			sentTo = newAddress.trim();
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 
 	// Ends every session on every device, this one included (#618) -- so
@@ -215,11 +206,11 @@
 {/snippet}
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet actions()}
-	<Button type="submit" label="Send the link" loading={isSubmitting} />
+	<Button type="submit" label="Send the link" loading={submission.isSubmitting} />
 	{#if sentTo}
 		<Notice
 			variant="status"
@@ -241,7 +232,7 @@
 		serviceName={page.data.practiceName}
 		{intro}
 		fieldsets={[{ content: field }, { legend: 'Sign out of every device', content: signOutEverywhere }]}
-		errorSummary={errors.length > 0 ? errorSummary : undefined}
+		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		{actions}
 		loading={isLoaded || loadError ? undefined : 'Loading your sign-in address'}
 		{loadError}

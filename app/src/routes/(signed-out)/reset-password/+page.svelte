@@ -2,7 +2,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL } from '#lib/api.js';
-	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -16,45 +17,35 @@
 	const passwordId = 'reset-password-new';
 
 	let newPassword = $state('');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let hasSucceeded = $state(false);
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
-		if (!token) {
-			errors = [{ message: 'This link has expired or was already used -- ask for a new one.' }];
-			return;
-		}
-		if (newPassword.length < 6) {
-			errors = [{ message: 'Enter a password of at least 6 characters', targetId: passwordId }];
-			return;
-		}
+		await submission.run(async () => {
+			if (!token) {
+				return [{ message: 'This link has expired or was already used -- ask for a new one.' }];
+			}
+			if (newPassword.length < 6) {
+				return [{ message: 'Enter a password of at least 6 characters', targetId: passwordId }];
+			}
 
-		isSubmitting = true;
-		try {
 			const response = await fetch(`${apiBaseURL()}/api/staff/password-reset`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ token, newPassword })
 			});
 			if (!response.ok) {
-				errors = await refusalErrors(response, { newPassword: passwordId });
-				return;
+				return await refusalErrors(response, { newPassword: passwordId });
 			}
 			hasSucceeded = true;
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 </script>
 
-<PageTitle page="Reset your password" isError={errors.length > 0} />
+<PageTitle page="Reset your password" isError={submission.errors.length > 0} />
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={submission.errors} />
 
 <Heading level={1} variant="page" text="Reset your password" />
 
@@ -66,11 +57,7 @@
 	<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
 {:else}
 	<form onsubmit={handleSubmit} novalidate>
-		<LabeledField
-			id={passwordId}
-			label="New password"
-			error={errors.find((entry) => entry.targetId === passwordId)?.message}
-		>
+		<LabeledField id={passwordId} label="New password" error={submission.errorFor(passwordId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -84,6 +71,6 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button type="submit" label="Reset password" loading={isSubmitting} />
+		<Button type="submit" label="Reset password" loading={submission.isSubmitting} />
 	</form>
 {/if}

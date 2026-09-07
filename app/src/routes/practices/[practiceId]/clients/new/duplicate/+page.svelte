@@ -36,7 +36,7 @@
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import { journeySteps } from '#lib/intakeJourney.js';
@@ -59,17 +59,16 @@
 	const changes = $derived(reviewing ? proposedChanges(intakeDraft.answers, reviewing) : []);
 
 	let answer = $state('');
-	let errors = $state<FormError[]>([]);
+	const submission = new FormSubmission();
 	/*
 	 * The refusal that belongs to the radio group, separate from
-	 * `errors`. GOV.UK asks for a field's message twice -- in the summary
-	 * and again against the control -- but a whole-submission refusal (a
-	 * 5xx, a dropped connection) belongs only in the summary, because
-	 * there is no control it is about. One list could not tell them
-	 * apart.
+	 * `submission.errors`. GOV.UK asks for a field's message twice -- in
+	 * the summary and again against the control -- but a whole-submission
+	 * refusal (a 5xx, a dropped connection) belongs only in the summary,
+	 * because there is no control it is about. One list could not tell
+	 * them apart.
 	 */
 	let answerError = $state<string | undefined>();
-	let isSaving = $state(false);
 
 	/*
 	 * A reader who reloads this page, or reaches it from a bookmark, has
@@ -121,39 +120,34 @@
 
 	async function handleContinue(event: SubmitEvent) {
 		event.preventDefault();
-		if (answer === '') {
-			// Linked to the first option, which is where GOV.UK's error
-			// summary sends a reader whose refusal belongs to a group: the
-			// first control in it, not the group itself. The same words
-			// appear against the group through `answerError`.
-			answerError = 'Choose whether this is the same person';
-			errors = [{ message: answerError, targetId: `${ANSWER_NAME}-${options[0]!.value}` }];
-			return;
-		}
-		answerError = undefined;
-		errors = [];
-		if (answer === DIFFERENT_PERSON) {
-			isSaving = true;
-			errors = (await saveIntake(practiceId, true)) ?? [];
-			isSaving = false;
-			return;
-		}
-		const match = intakeDraft.matches.find((entry) => entry.id === answer);
-		// Nothing typed differs from what is on file, so there is nothing
-		// to confirm and nothing to write. Straight to the record.
-		if (match && proposedChanges(intakeDraft.answers, match).length === 0) {
-			intakeDraft.clear();
-			await goto(detailHref(practiceId, answer));
-			return;
-		}
-		await goto(`${base}/duplicate?match=${encodeURIComponent(answer)}`);
+		await submission.run(async () => {
+			if (answer === '') {
+				// Linked to the first option, which is where GOV.UK's error
+				// summary sends a reader whose refusal belongs to a group: the
+				// first control in it, not the group itself. The same words
+				// appear against the group through `answerError`.
+				answerError = 'Choose whether this is the same person';
+				return [{ message: answerError, targetId: `${ANSWER_NAME}-${options[0]!.value}` }];
+			}
+			answerError = undefined;
+			if (answer === DIFFERENT_PERSON) {
+				return await saveIntake(practiceId, true);
+			}
+			const match = intakeDraft.matches.find((entry) => entry.id === answer);
+			// Nothing typed differs from what is on file, so there is nothing
+			// to confirm and nothing to write. Straight to the record.
+			if (match && proposedChanges(intakeDraft.answers, match).length === 0) {
+				intakeDraft.clear();
+				await goto(detailHref(practiceId, answer));
+				return;
+			}
+			await goto(`${base}/duplicate?match=${encodeURIComponent(answer)}`);
+		}, orThrownMessage);
 	}
 
 	async function handleSaveChanges() {
 		if (!reviewing) return;
-		errors = [];
-		isSaving = true;
-		try {
+		await submission.run(async () => {
 			const result = await editClient(
 				apiFetchWithSession,
 				practiceId,
@@ -164,19 +158,12 @@
 			// `override` is set, so `edit.go` runs no match query and a
 			// conflict here would mean something else refused the write.
 			if (result.conflict) {
-				errors = [{ message: 'The Client record could not be saved.' }];
-				return;
+				return [{ message: 'The Client record could not be saved.' }];
 			}
 			const clientId = reviewing.id;
 			intakeDraft.clear();
 			await goto(detailHref(practiceId, clientId));
-		} catch (error) {
-			errors = [
-				{ message: error instanceof Error && error.message ? error.message : SERVICE_PROBLEM }
-			];
-		} finally {
-			isSaving = false;
-		}
+		}, orThrownMessage);
 	}
 </script>
 
@@ -189,8 +176,8 @@
 		hint="No new record is created. The record already on file is kept and updated."
 	>
 		{#snippet errorSummary()}
-			{#if errors.length > 0}
-				<ErrorSummary {errors} />
+			{#if submission.errors.length > 0}
+				<ErrorSummary errors={submission.errors} />
 			{/if}
 		{/snippet}
 
@@ -206,7 +193,7 @@
 		{#snippet actions()}
 			<Button
 				label="Save changes to this record"
-				loading={isSaving}
+				loading={submission.isSubmitting}
 				onClick={handleSaveChanges}
 			/>
 		{/snippet}
@@ -221,8 +208,8 @@
 			hint="Nothing has been saved yet. What was typed matches a Client this Practice already has."
 		>
 			{#snippet errorSummary()}
-				{#if errors.length > 0}
-					<ErrorSummary {errors} />
+				{#if submission.errors.length > 0}
+					<ErrorSummary errors={submission.errors} />
 				{/if}
 			{/snippet}
 
@@ -244,7 +231,7 @@
 			{/snippet}
 
 			{#snippet actions()}
-				<Button type="submit" label="Continue" loading={isSaving} />
+				<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 			{/snippet}
 		</QuestionPage>
 	</form>

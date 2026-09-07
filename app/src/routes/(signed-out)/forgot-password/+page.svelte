@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { apiBaseURL } from '#lib/api.js';
-	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -12,20 +13,16 @@
 	const emailId = 'forgot-password-email';
 
 	let email = $state('');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let hasSubmitted = $state(false);
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
-		if (email.trim() === '') {
-			errors = [{ message: 'Enter your email address', targetId: emailId }];
-			return;
-		}
+		await submission.run(async () => {
+			if (email.trim() === '') {
+				return [{ message: 'Enter your email address', targetId: emailId }];
+			}
 
-		isSubmitting = true;
-		try {
 			const response = await fetch(`${apiBaseURL()}/api/staff/password-reset/request`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -34,21 +31,16 @@
 			// #168/#613: same response whether or not the address names an
 			// account, so this only reads whether the request itself failed.
 			if (!response.ok) {
-				errors = await refusalErrors(response, { email: emailId });
-				return;
+				return await refusalErrors(response, { email: emailId });
 			}
 			hasSubmitted = true;
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 </script>
 
-<PageTitle page="Forgot your password?" isError={errors.length > 0} />
+<PageTitle page="Forgot your password?" isError={submission.errors.length > 0} />
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={submission.errors} />
 
 <Heading level={1} variant="page" text="Forgot your password?" />
 
@@ -59,11 +51,7 @@
 	/>
 {:else}
 	<form onsubmit={handleSubmit} novalidate>
-		<LabeledField
-			id={emailId}
-			label="Email"
-			error={errors.find((entry) => entry.targetId === emailId)?.message}
-		>
+		<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -77,6 +65,6 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button type="submit" label="Send reset link" loading={isSubmitting} />
+		<Button type="submit" label="Send reset link" loading={submission.isSubmitting} />
 	</form>
 {/if}

@@ -8,7 +8,8 @@
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
-	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const emailId = 'invite-email';
 	const rolesFieldId = 'invite-roles';
@@ -19,13 +20,8 @@
 	let email = $state('');
 	let roles = $state<string[]>(['doula']);
 	let employmentType = $state<'employee' | 'contractor'>('employee');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let invitedAddress = $state('');
-
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
 
 	/*
 	 * "Select", not "Choose", for a checkbox group -- GOV.UK's own verb for
@@ -44,17 +40,14 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
 		invitedAddress = '';
 
-		const refusals = findRefusals();
-		if (refusals.length > 0) {
-			errors = refusals;
-			return;
-		}
+		await submission.run(async () => {
+			const refusals = findRefusals();
+			if (refusals.length > 0) {
+				return refusals;
+			}
 
-		isSubmitting = true;
-		try {
 			const response = await apiFetchWithSession(
 				`/api/practices/${page.params.practiceId}/staff/invitations`,
 				{
@@ -64,28 +57,21 @@
 				}
 			);
 			if (!response.ok) {
-				errors = await refusalErrors(response, inviteFieldIds);
-				return;
+				return await refusalErrors(response, inviteFieldIds);
 			}
 
 			invitedAddress = email;
 			email = '';
 			roles = ['doula'];
 			employmentType = 'employee';
-		} catch {
-			// A throw here is the network, not the Invitation: nothing on this
-			// page is what went wrong, so the entry carries no target.
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 </script>
 
 <!-- No name field: the Invitation carries an address and a Membership,
      and the person names herself when she accepts. -->
 {#snippet who()}
-	<LabeledField id={emailId} label="Their email" error={errorFor(emailId)}>
+	<LabeledField id={emailId} label="Their email" error={submission.errorFor(emailId)}>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
 				{id}
@@ -105,18 +91,18 @@
 		{roles}
 		{employmentType}
 		{rolesFieldId}
-		rolesError={errorFor(rolesFieldId)}
+		rolesError={submission.errorFor(rolesFieldId)}
 		onRolesChange={(next) => (roles = next)}
 		onEmploymentTypeChange={(next) => (employmentType = next)}
 	/>
 {/snippet}
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet actions()}
-	<Button type="submit" label="Send invite" loading={isSubmitting} />
+	<Button type="submit" label="Send invite" loading={submission.isSubmitting} />
 	<!-- The accept link is not shown here and never reaches this response:
 	     it goes to the invited address only, so accepting is proof she
 	     controls that mailbox.
@@ -149,7 +135,7 @@
 	<FormPage
 		title="Invite a Staff member"
 		fieldsets={[{ content: who }, { content: membership }]}
-		errorSummary={errors.length > 0 ? errorSummary : undefined}
+		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		{actions}
 	/>
 </form>
