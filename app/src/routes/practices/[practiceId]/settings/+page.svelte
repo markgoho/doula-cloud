@@ -90,6 +90,15 @@
 						label: "Export this Practice's data",
 						description: 'Every record this Practice holds, as one ZIP of spreadsheet-ready files.',
 						href: `${apiBaseURL()}/api/practices/${practiceId}/export`
+					},
+					// #871: the same seat as export and erasure. Export is the
+					// stated prerequisite in product terms, which is why this
+					// entry sits directly beneath it rather than first in the
+					// Owner-only group.
+					{
+						label: 'Delete this Practice',
+						description: 'Start or restore the 30-day countdown that ends in every Client being erased.',
+						href: resolve('/practices/[practiceId]/settings/delete', { practiceId })
 					}
 				]
 			: [])

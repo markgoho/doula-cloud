@@ -18,6 +18,7 @@ import (
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/sitebuild"
@@ -111,6 +112,9 @@ type Deps struct {
 	// carries out the Stripe and Identity Platform half of a Client
 	// erasure (#394, ADR-0027).
 	ClientErasureWorker client.ErasureWorker
+	// PracticeDeletionWorker is #871's day-23 reminder and day-30
+	// finalization for a Practice deleting itself.
+	PracticeDeletionWorker practicedeletion.Worker
 
 	NudgeEnqueuer   tasknudge.Enqueuer
 	ExpectedOrigins []string

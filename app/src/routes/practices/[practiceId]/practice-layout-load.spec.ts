@@ -142,6 +142,61 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
 	});
 
+	// #871: a live Membership at a Practice mid-deletion is not a
+	// refusal -- .../session succeeds and carries the flag, and this
+	// `load` sends every role to the one screen the lockout still lets
+	// her reach, rather than falling through to #748's stale-Membership
+	// handling below.
+	it('redirects to settings/delete when the session response carries pendingDeletion: true', async () => {
+		const { load } = await import('./+layout.js');
+		setup({
+			'/api/practices/practice-1/session': {
+				status: 200,
+				body: {
+					practiceName: 'Riverside Doula Collective',
+					roles: ['owner'],
+					isContractor: false,
+					pendingDeletion: true
+				}
+			}
+		});
+
+		await expect(load(loadArguments)).rejects.toMatchObject({
+			status: 303,
+			location: '/practices/practice-1/settings/delete'
+		});
+	});
+
+	it('does not redirect when already on settings/delete, returning the Membership so that screen can render', async () => {
+		const { load } = await import('./+layout.js');
+		setup({
+			'/api/practices/practice-1/session': {
+				status: 200,
+				body: {
+					practiceName: 'Riverside Doula Collective',
+					roles: ['owner'],
+					isContractor: false,
+					pendingDeletion: true
+				}
+			}
+		});
+
+		const result = await load({
+			...loadArguments,
+			url: new URL('https://example.test/practices/practice-1/settings/delete')
+		});
+
+		expect(result).toEqual({
+			session: {
+				practiceId: 'practice-1',
+				practiceName: 'Riverside Doula Collective',
+				roles: ['owner'],
+				isContractor: false,
+				pendingDeletion: true
+			}
+		});
+	});
+
 	it('throws with the response status on any other failure', async () => {
 		const { load } = await import('./+layout.js');
 		setup({ '/api/practices/practice-1/session': { status: 500, body: 'boom' } });

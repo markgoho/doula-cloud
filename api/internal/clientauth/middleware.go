@@ -178,9 +178,22 @@ func setClientAndCheckEngagement(ctx context.Context, tx *sql.Tx, clientID, enga
 		return false, fmt.Errorf("clientauth: set current client id: %w", err)
 	}
 
+	// #871: a Practice pending deletion or already deleted admits no
+	// Client login at all, decision 3's "No Staff or Client login
+	// succeeds against a Practice pending deletion" -- unlike
+	// staffauth.Middleware's own gate, there is no Owner exemption here:
+	// a Client has nothing to restore. Joined into the ownership check
+	// itself, rather than a second query, so a locked Practice reads
+	// exactly like "engagement not linked to this client" -- there is no
+	// separate UI this population needs to route into.
 	var exists bool
 	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM engagements WHERE id = $1 AND client_id = $2)`,
+		`SELECT EXISTS(
+			SELECT 1 FROM engagements e
+			JOIN practices p ON p.id = e.practice_id
+			WHERE e.id = $1 AND e.client_id = $2
+			  AND p.deletion_requested_at IS NULL AND p.deleted_at IS NULL
+		 )`,
 		engagementID, clientID,
 	).Scan(&exists)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests

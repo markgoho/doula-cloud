@@ -356,6 +356,16 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request, conte
 			h1: 'Client Fields'
 		},
 		{
+			// #871: postdates the #405 survey the same way website/client-fields
+			// do -- archetype F by shape. Nothing pending on this seeded
+			// Practice, so this scans the ordinary "ready to delete" state,
+			// not the locked one.
+			key: 'practices/[practiceId]/settings/delete',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/delete`,
+			h1: 'Delete this Practice'
+		},
+		{
 			// Scoped to the person, not this Practice (#437), so it sits
 			// outside the practiceId group every other route above is under
 			// -- the one route in this loop not built from `practiceId`. Now

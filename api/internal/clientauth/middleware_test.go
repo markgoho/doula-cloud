@@ -202,3 +202,34 @@ func TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices(t *tes
 		t.Fatalf("X-Client-Id = %q, want %q", got, clientB)
 	}
 }
+
+// TestMiddleware_PendingDeletionLockout is #871's decision 3 on the
+// Client population: "No Staff or Client login succeeds against a
+// Practice pending deletion" -- unlike staffauth.Middleware, there is no
+// Owner-shaped exemption to test here, since a Client has nothing to
+// restore.
+func TestMiddleware_PendingDeletionLockout(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-pending-deletion"
+	_, engagementID := seedClientWithEngagement(t, db, identityUID)
+
+	var practiceID string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT practice_id FROM engagements WHERE id = $1`, engagementID).Scan(&practiceID); err != nil {
+		t.Fatalf("read practice id: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() + interval '30 days' WHERE id = $1`,
+		practiceID,
+	); err != nil {
+		t.Fatalf("mark pending deletion: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := get(t, pingURL(srv, engagementID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusForbidden)
+}

@@ -28,6 +28,7 @@ var wantOutboxPaths = []string{
 	"/api/internal/notifications/process-payout-outbox",
 	portalAddressChangeOutboxPath,
 	portalMagicLinkOutboxPath,
+	practiceDeletionOutboxPath,
 	"/api/internal/notifications/process-session-notice-outbox",
 	staffEmailChangeOutboxPath,
 	"/api/internal/notifications/process-staff-invite-outbox",
@@ -92,10 +93,11 @@ func TestOutboxRegistrations_NudgeTargetsAreDistinct(t *testing.T) {
 }
 
 // TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged pins #613's
-// decision that its two outboxes ride ADR-0010's plain delay, and #617's
+// decision that its two outboxes ride ADR-0010's plain delay, #617's
 // magic-link and #619's address-confirmation outboxes joining them for
-// the same reason, rather than letting some other later outbox quietly
-// join by leaving Nudge blank.
+// the same reason, and #871's Practice-deletion outbox joining them
+// because both its acts are inherently weeks out, rather than letting
+// some other later outbox quietly join by leaving Nudge blank.
 func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 	var unnudged []string
 	for _, reg := range outboxRegistrations(testDeps()) {
@@ -105,7 +107,11 @@ func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 	}
 	sort.Strings(unnudged)
 
-	want := []string{staffEmailChangeOutboxPath, staffTokenMailOutboxPath, portalMagicLinkOutboxPath, portalAddressChangeOutboxPath}
+	want := []string{
+		staffEmailChangeOutboxPath, staffTokenMailOutboxPath,
+		portalMagicLinkOutboxPath, portalAddressChangeOutboxPath,
+		practiceDeletionOutboxPath,
+	}
 	sort.Strings(want)
 	if !reflect.DeepEqual(unnudged, want) {
 		t.Errorf("un-nudged outboxes = %v, want %v", unnudged, want)

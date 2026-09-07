@@ -17,7 +17,22 @@ export interface PracticeSession {
 	practiceName: string;
 	roles: string[];
 	isContractor: boolean;
+	// #871: optional, not carried by every route fixture's `pageData.session`
+	// -- true only while this Practice is between initiate and finalize.
+	// settings/delete reads it to tell a non-Owner why she landed here,
+	// rather than the generic "Only a Practice Owner..." notice every
+	// other Owner-only setting shows.
+	pendingDeletion?: boolean;
 }
+
+// The one route the deletion lockout leaves open regardless of role
+// (staffauth.Middleware's isPracticeSessionRoute) -- this load redirects
+// straight there once pendingDeletion comes back true, so an Owner lands
+// on the restore screen and every other role lands on that same screen's
+// own "Only a Practice Owner..." notice, instead of every other route
+// under this Practice refusing one 403 at a time.
+const deleteSettingsPath = (practiceId: string) =>
+	resolve('/practices/[practiceId]/settings/delete', { practiceId });
 
 /**
  * Loads through SvelteKit's `load`, not the app's usual onMount-fetch,
@@ -34,6 +49,15 @@ export interface PracticeSession {
  * `apiFetch`, not `apiFetchWithSession`, does not run this check itself,
  * so this `load` runs it before the stale-Membership branch below can
  * misread an MFA refusal as one.
+ *
+ * #871: `pendingDeletion` on a successful response is a live Membership
+ * at a Practice mid-deletion, not a refusal at all -- `.../session` is
+ * the one route `staffauth.Middleware` leaves open to every role while
+ * a Practice is locked, precisely so this `load` can read the flag and
+ * send everyone to `settings/delete`: an Owner to the restore screen,
+ * everyone else to that same screen's own locked notice (`pendingDeletion`
+ * rides along on the returned session for exactly that), rather than
+ * each of this Practice's other routes refusing her one 403 at a time.
  *
  * #748: any other 403, or a 404, here means this session no longer
  * belongs to this Practice -- either she was removed from it, or her
@@ -58,14 +82,24 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 		error(response.status, await apiErrorMessage(response));
 	}
 
-	const body: { practiceName: string; roles: string[]; isContractor: boolean } =
-		await response.json();
+	const body: {
+		practiceName: string;
+		roles: string[];
+		isContractor: boolean;
+		pendingDeletion: boolean;
+	} = await response.json();
+
+	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
+		redirect(303, deleteSettingsPath(params.practiceId));
+	}
+
 	return {
 		session: {
 			practiceId: params.practiceId,
 			practiceName: body.practiceName,
 			roles: body.roles,
-			isContractor: body.isContractor
+			isContractor: body.isContractor,
+			pendingDeletion: body.pendingDeletion
 		}
 	};
 };

@@ -30,6 +30,7 @@ import (
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/sitebuild"
@@ -193,6 +194,10 @@ func main() {
 	// -- the address is on the outbox row, because it is the one address
 	// portal_accounts does not yet hold.
 	portalAddressChangeOutboxWorker := clientauth.NewAddressChangeWorker(platformMailer)
+	// #871: the day-23 reminder mails every current Owner, Platform
+	// voice, the same voice every other Practice-wide Notification here
+	// speaks.
+	practiceDeletionOutboxWorker := practicedeletion.Worker{Mailer: platformMailer}
 
 	// #443. The HTTP client is shared by both and is deliberately
 	// short-timeout: a probe is a CDN fetch of a static file, and a
@@ -270,6 +275,7 @@ func main() {
 			Stripe: paymentsClient,
 			Now:    time.Now,
 		},
+		PracticeDeletionWorker: practiceDeletionOutboxWorker,
 
 		ExpectedOrigins: resolveExpectedOrigins(),
 	}
