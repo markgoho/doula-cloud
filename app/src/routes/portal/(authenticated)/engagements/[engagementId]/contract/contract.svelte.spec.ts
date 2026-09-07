@@ -60,3 +60,52 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 		expect(page.getByRole('button', { name: /sign/i }).elements()).toHaveLength(0);
 	});
 });
+
+// #302: the Client is offered her copy from the same page she signed on,
+// once she has signed. `respond` (a spread over `contract`, per this
+// route's own convention above) answers the initial load; the pdf path is
+// a second fetch this route's own handler makes only once the download
+// button is clicked.
+describe('Client-portal signed Contract download (#302)', () => {
+	it('offers no download before the Contract has been signed', async () => {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+
+		await render(Page);
+
+		await expect.element(page.getByText('Ready for your signature')).toBeVisible();
+		expect(page.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
+	});
+
+	it('offers a download of the signed Contract once signed, reachable by keyboard and naming the PDF', async () => {
+		apiFetchWithSession.mockImplementation((path: string) =>
+			Promise.resolve(
+				path.endsWith('/pdf')
+					? new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 })
+					: jsonResponse({ ...contract, status: 'signed' })
+			)
+		);
+
+		await render(Page);
+		const download = page.getByRole('button', { name: 'Download signed Contract (PDF)' });
+		await expect.element(download).toBeVisible();
+
+		await download.click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/engagements/engagement-1/contract/pdf');
+	});
+
+	it('reports a failed PDF fetch in words rather than swallowing it (#305 is what fails this locally/in CI)', async () => {
+		apiFetchWithSession.mockImplementation((path: string) =>
+			Promise.resolve(
+				path.endsWith('/pdf')
+					? new Response('signed PDF not found', { status: 500 })
+					: jsonResponse({ ...contract, status: 'signed' })
+			)
+		);
+
+		await render(Page);
+		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('signed PDF not found');
+	});
+});

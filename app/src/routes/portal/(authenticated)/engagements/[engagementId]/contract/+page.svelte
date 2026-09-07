@@ -3,18 +3,27 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { loadClientContract, signContract, type Contract } from '#lib/contract.js';
+	import {
+		loadClientContract,
+		signContract,
+		downloadClientSignedContractPdf,
+		type Contract
+	} from '#lib/contract.js';
+	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { contractStatusLabel, contractVoidedNotice } from '#lib/clientRegister.js';
 	import ContractView from '#lib/components/molecules/ContractView.svelte';
 	import SignContract from '#lib/components/organisms/SignContract.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Button from '#lib/components/atoms/Button.svelte';
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	let contract = $state<Contract | null | undefined>();
 	let error = $state('');
+	let isDownloadingPdf = $state(false);
+	let downloadError = $state('');
 
 	onMount(async () => {
 		try {
@@ -26,6 +35,23 @@
 
 	async function handleSign(fullLegalName: string, isAttestation: boolean) {
 		contract = await signContract(apiFetchWithSession, page.params.engagementId!, fullLegalName, isAttestation);
+	}
+
+	// #302: a fetch that fails here (#305 is the one still live in
+	// local/CI) is reported in words rather than swallowed -- the anchor
+	// triggerBlobDownload creates never reaches the DOM tree, so there's
+	// no href for a screen reader or a failed navigation to fall back on.
+	async function handleDownloadSignedContractPdf() {
+		downloadError = '';
+		isDownloadingPdf = true;
+		try {
+			const blob = await downloadClientSignedContractPdf(apiFetchWithSession, page.params.engagementId!);
+			triggerBlobDownload(blob, 'signed-contract.pdf');
+		} catch (error_) {
+			downloadError = error_ instanceof Error ? error_.message : 'Failed to download signed Contract';
+		} finally {
+			isDownloadingPdf = false;
+		}
 	}
 </script>
 
@@ -55,5 +81,17 @@
 	<ContractView prose={contract.prose} values={contract.values} />
 	{#if contract.status === 'sent'}
 		<SignContract onSign={handleSign} />
+	{/if}
+	{#if contract.status === 'signed'}
+		<Button
+			label="Download signed Contract (PDF)"
+			icon="file-text"
+			variant="secondary"
+			onClick={handleDownloadSignedContractPdf}
+			loading={isDownloadingPdf}
+		/>
+		{#if downloadError}
+			<p role="alert">{downloadError}</p>
+		{/if}
 	{/if}
 {/if}

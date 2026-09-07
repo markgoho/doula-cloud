@@ -4,6 +4,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { SectionState } from '#lib/sectionState.svelte.js';
+	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
 		createVisit,
 		downloadAttachment,
@@ -39,9 +40,11 @@
 		saveContractValues,
 		sendContract,
 		voidContract,
+		downloadSignedContractPdf,
 		setMergeFieldValue,
 		type Contract
 	} from '#lib/contract.js';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
@@ -74,6 +77,12 @@
 	// lands.
 	let { data }: PageProperties = $props();
 	const detail = $derived(data);
+
+	// The Contract's PDF download is Owner/Admin only (ADR-0008's money
+	// row, matching the endpoint's own OwnerAndAdmin gate) -- this drawing
+	// decision is not the gate: contract.ts's downloadSignedContractPdf
+	// hits the real endpoint, which refuses any other role on its own.
+	const isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(data.session));
 
 	// The reference every read on this page is about. Derived rather than
 	// captured, so a client-side navigation to a sibling Engagement is
@@ -378,6 +387,19 @@
 			page.params.practiceId!,
 			page.params.engagementId!
 		);
+	}
+
+	// Same shape as handleVoidContract above -- ContractStatus.svelte
+	// awaits this itself and shows whatever it throws (#302). Until #305
+	// lands this 500s in local/CI, which is exactly what that display is
+	// for.
+	async function handleDownloadSignedContractPdf() {
+		const blob = await downloadSignedContractPdf(
+			apiFetchWithSession,
+			page.params.practiceId!,
+			page.params.engagementId!
+		);
+		triggerBlobDownload(blob, 'signed-contract.pdf');
 	}
 
 	async function loadInvoicesSection() {
@@ -723,7 +745,11 @@
 
 	{#if isContractLoaded}
 		{#if contract}
-			<ContractStatus status={contract.status} onVoid={handleVoidContract} />
+			<ContractStatus
+				status={contract.status}
+				onVoid={handleVoidContract}
+				onDownloadPdf={isPracticeOwnerOrAdmin ? handleDownloadSignedContractPdf : undefined}
+			/>
 			<ContractForm
 				mergeFields={contract.mergeFields}
 				values={contract.values}

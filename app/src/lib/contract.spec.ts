@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	createContract,
+	downloadClientSignedContractPdf,
+	downloadSignedContractPdf,
 	fillProse,
 	loadClientContract,
 	loadContract,
@@ -12,6 +14,10 @@ import {
 	voidContract
 } from './contract.js';
 import { jsonResponse } from './testResponse.js';
+
+function blobResponse(): Response {
+	return new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });
+}
 
 describe('loadContract', () => {
 	it('fetches the practice+engagement contract path and returns the decoded contract', async () => {
@@ -179,6 +185,44 @@ describe('loadClientContract', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('server error', 500));
 
 		await expect(loadClientContract(fetcher, 'eng-1')).rejects.toThrow('server error');
+	});
+});
+
+describe('downloadClientSignedContractPdf', () => {
+	it('fetches the portal engagement contract pdf path and returns a Blob', async () => {
+		const fetcher = vi.fn().mockResolvedValue(blobResponse());
+
+		const blob = await downloadClientSignedContractPdf(fetcher, 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/portal/engagements/eng-1/contract/pdf');
+		expect(blob).toBeInstanceOf(Blob);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('no signed contract found for this engagement', 404));
+
+		await expect(downloadClientSignedContractPdf(fetcher, 'eng-1')).rejects.toThrow(
+			'no signed contract found for this engagement'
+		);
+	});
+});
+
+describe('downloadSignedContractPdf', () => {
+	it('fetches the practice+engagement contract pdf path and returns a Blob', async () => {
+		const fetcher = vi.fn().mockResolvedValue(blobResponse());
+
+		const blob = await downloadSignedContractPdf(fetcher, 'practice-1', 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/pdf');
+		expect(blob).toBeInstanceOf(Blob);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('signed PDF not found', 404));
+
+		await expect(downloadSignedContractPdf(fetcher, 'practice-1', 'eng-1')).rejects.toThrow(
+			'signed PDF not found'
+		);
 	});
 });
 

@@ -6,10 +6,11 @@ import ContractStatus from './ContractStatus.svelte';
 interface SetupOptions {
 	status?: string;
 	onVoid?: () => Promise<void>;
+	onDownloadPdf?: () => Promise<void>;
 }
 
-async function setup({ status = 'draft', onVoid }: SetupOptions = {}) {
-	await render(ContractStatus, { status, onVoid });
+async function setup({ status = 'draft', onVoid, onDownloadPdf }: SetupOptions = {}) {
+	await render(ContractStatus, { status, onVoid, onDownloadPdf });
 }
 
 describe('ContractStatus.svelte', () => {
@@ -80,5 +81,64 @@ describe('ContractStatus.svelte', () => {
 		await page.getByRole('button', { name: 'Void Contract' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to void contract');
+	});
+
+	it('offers no PDF download when there is no onDownloadPdf callback (a role the endpoint refuses)', async () => {
+		await setup({ status: 'signed', onVoid: vi.fn() });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('offers no PDF download on a draft or sent Contract even with onDownloadPdf', async () => {
+		await setup({ status: 'sent', onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('offers no PDF download on a voided Contract even with onDownloadPdf', async () => {
+		await setup({ status: 'voided', onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('offers the PDF download on a signed Contract when onDownloadPdf is provided', async () => {
+		await setup({ status: 'signed', onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeInTheDocument();
+	});
+
+	it('calls onDownloadPdf when the download action is clicked', async () => {
+		const onDownloadPdf = vi.fn().mockResolvedValue(undefined);
+		await setup({ status: 'signed', onDownloadPdf });
+
+		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
+
+		expect(onDownloadPdf).toHaveBeenCalledOnce();
+	});
+
+	it('shows an error message if onDownloadPdf rejects', async () => {
+		const onDownloadPdf = vi.fn().mockRejectedValue(new Error('signed PDF not found'));
+		await setup({ status: 'signed', onDownloadPdf });
+
+		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('signed PDF not found');
+	});
+
+	it('shows a fallback error message if onDownloadPdf rejects with a non-Error value', async () => {
+		const onDownloadPdf = vi.fn().mockRejectedValue('boom');
+		await setup({ status: 'signed', onDownloadPdf });
+
+		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to download signed Contract');
 	});
 });

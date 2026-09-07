@@ -86,6 +86,35 @@ export async function loadContract(
 	return response.json();
 }
 
+/** Downloads the Signed PDF for engagementId's Contract from the
+ * Client-portal route (#302) -- a Blob, not JSON, so the caller turns it
+ * into an object URL and drives the browser's own download, mirroring
+ * engagementDetail.ts's downloadAttachment. Throws with the response
+ * body text on a non-2xx response (e.g. not yet signed). */
+export async function downloadClientSignedContractPdf(fetcher: Fetcher, engagementId: string): Promise<Blob> {
+	const response = await fetcher(`${clientContractPath(engagementId)}/pdf`);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.blob();
+}
+
+/** Downloads the Signed PDF for engagementId's Contract from the Practice
+ * route (#302), Owner/Admin only per ADR-0008's money row -- mirrors
+ * downloadClientSignedContractPdf above. Throws with the response body
+ * text on a non-2xx response. */
+export async function downloadSignedContractPdf(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<Blob> {
+	const response = await fetcher(`${contractPath(practiceId, engagementId)}/pdf`);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.blob();
+}
+
 /** Creates the Draft Contract for engagementId, snapshotting the
  * Practice's current Contract Template prose server-side. Throws with the
  * response body text on a non-2xx response (e.g. the Practice has no
