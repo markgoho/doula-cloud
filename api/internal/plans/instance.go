@@ -68,7 +68,7 @@ func PostInstanceHandler() http.Handler {
 		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
@@ -79,7 +79,7 @@ func PostInstanceHandler() http.Handler {
 		fieldsJSON, err := json.Marshal(fields)
 		if err != nil {
 			// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -92,17 +92,12 @@ func PostInstanceHandler() http.Handler {
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: Answers{}}
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(out); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusCreated, out)
 	})
 }
 
@@ -120,13 +115,13 @@ func GetInstanceHandler() http.Handler {
 		reader, has := staffauth.ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
@@ -141,16 +136,12 @@ func GetInstanceHandler() http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers.nonEmpty()}
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(out); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
 
@@ -172,13 +163,12 @@ func PutInstanceHandler() http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		var req PutInstanceRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		req.Answers = req.Answers.nonEmpty()
@@ -191,7 +181,7 @@ func PutInstanceHandler() http.Handler {
 		answersJSON, err := json.Marshal(req.Answers)
 		if err != nil {
 			// coverage:ignore reason: Answers always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -200,7 +190,7 @@ func PutInstanceHandler() http.Handler {
 			answersJSON, engagementID, planType,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
@@ -208,7 +198,7 @@ func PutInstanceHandler() http.Handler {
 		diff, err := json.Marshal(map[string]string{"planType": planType})
 		if err != nil {
 			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
@@ -220,16 +210,12 @@ func PutInstanceHandler() http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers}
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(out); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
 

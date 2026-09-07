@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -50,14 +49,13 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		var req SignContractRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		req.FullLegalName = strings.TrimSpace(req.FullLegalName)
@@ -73,7 +71,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if status != statusSent {
@@ -84,12 +82,12 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		pdfBytes, err := renderContractPDF(fillProse(prose, values))
 		if err != nil {
 			// coverage:ignore reason: renderContractPDF only fails on an internal fpdf encoding error, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		objectPath := SignedPDFObjectPath(engagementID)
 		if err := store.Put(r.Context(), objectPath, contentTypePDF, bytes.NewReader(pdfBytes)); err != nil {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -101,16 +99,15 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			statusSigned, req.FullLegalName, req.Attestation, clientip.From(r), objectPath, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordContractSigned(r.Context(), tx, engagementID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		out := ContractResponse{
 			EngagementID: engagementID,
 			Status:       statusSigned,
@@ -118,10 +115,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			MergeFields:  extractMergeFields(prose),
 			Values:       values.nonEmpty(),
 		}
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(out); err != nil {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
 

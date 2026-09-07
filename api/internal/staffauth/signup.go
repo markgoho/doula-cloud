@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -16,12 +15,6 @@ import (
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
 )
-
-// MsgInternalError is the response body for any failure the caller can't
-// act on (a DB error, an encoding error) -- exported so every handler and
-// the middleware, in this package and in main, share one literal instead
-// of duplicating it per call site.
-const MsgInternalError = "internal error"
 
 // MsgNoMatchingStaffAccount is what a caller whose identity resolves to
 // no staff row gets back -- shared across every route that reads or
@@ -95,8 +88,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		}()
 
 		var req SignupRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		req.PracticeName = strings.TrimSpace(req.PracticeName)
@@ -139,7 +131,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// Signup is answered against what the identity already holds (#745),
@@ -175,7 +167,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	var practiceID string
 	if err := tx.QueryRowContext(ctx, `INSERT INTO practices (name) VALUES ($1) RETURNING id`, req.PracticeName).Scan(&practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// staff_self_visibility (00002) only admits the caller's own row while
@@ -202,13 +194,13 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+			return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 	}
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// #613/#169: self-signup sends an email-verification link through
@@ -224,11 +216,11 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		verifyToken, err := authtoken.Mint(ctx, tx, identityUID, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+			return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		if err := authmail.QueueTokenMail(ctx, tx, identityUID, authmail.KindEmailVerification, verifyToken); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+			return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 	}
 
@@ -240,7 +232,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		practiceID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -248,7 +240,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		practiceID, staffID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// The founding Owner's Membership gets the same 'joined' record every
@@ -260,7 +252,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		Roles: "{owner,admin,doula}", EmploymentType: "employee", ActorStaffID: staffID,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// The founding Owner is, by construction, this brand-new Practice's
@@ -269,7 +261,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	// signup is that event too, not only a later promotion.
 	if err := reconcileSavedCodes(ctx, tx, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// The first thing ever known about where this person works (#415).
@@ -284,7 +276,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	// and the event log cannot disagree (#745).
 	if err := recordSignupPerson(ctx, tx, staffID, req, resumeWorkState, resuming); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -292,7 +284,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		practiceID, defaultCarePlanFields, defaultBirthPlanFields,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -300,7 +292,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		practiceID, defaultContractTemplateProse,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SignupResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return SignupResponse{StaffID: staffID, PracticeID: practiceID}, http.StatusCreated, ""

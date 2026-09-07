@@ -1,7 +1,6 @@
 package message
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -23,7 +22,7 @@ func ClientListHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
@@ -41,7 +40,7 @@ func ClientListHandler() http.Handler {
 		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -51,11 +50,7 @@ func ClientListHandler() http.Handler {
 			resp.NextCursor = &next
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -75,14 +70,14 @@ func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		clientID, _ := clientauth.ClientID(r.Context())
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
 		messageID := uuid.NewString()
-		body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, clientauth.MsgInternalError)
+		body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, apierr.MsgInternalError)
 		if !ok {
 			return
 		}
@@ -90,11 +85,11 @@ func ClientCreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http
 		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeClient, clientID, body, attachment)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeClient)
-		writeCreated(w, item, clientauth.MsgInternalError)
+		writeCreated(w, item)
 	})
 }

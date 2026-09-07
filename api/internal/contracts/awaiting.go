@@ -3,7 +3,6 @@ package contracts
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -20,12 +19,9 @@ import (
 // not a report somebody scrolls.
 const awaitingPageSize = 30
 
-// The messages the roll-up returns, named because the screen renders them
-// and the tests assert them.
-const (
-	MsgInvalidCursor = "invalid cursor"
-	MsgInternalError = "internal error"
-)
+// MsgInvalidCursor is the roll-up's own refusal message; the screen
+// renders it and the tests assert it.
+const MsgInvalidCursor = "invalid cursor"
 
 // AwaitingItem is one row of the "Contracts awaiting signature" list: the
 // Engagement the Contract hangs off, the Client whose signature is
@@ -100,7 +96,7 @@ func AwaitingSignatureHandler() http.Handler {
 		list, err := listAwaiting(r.Context(), tx, practiceID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -115,11 +111,7 @@ func AwaitingSignatureHandler() http.Handler {
 			resp.NextCursor = &next
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			// coverage:ignore reason: response encoding failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 

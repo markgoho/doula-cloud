@@ -3,7 +3,6 @@ package clientauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -40,8 +39,7 @@ type RequestMagicLinkRequest struct {
 func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req RequestMagicLinkRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		address := staffauth.NormalizeAddress(req.Email)
@@ -53,7 +51,7 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -66,7 +64,7 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 		identifier, found, err := findPortalAccountByAddress(r.Context(), tx, address)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
@@ -80,18 +78,18 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 		token, err := authtoken.Mint(r.Context(), tx, identifier, authtoken.PurposeClientMagicLink, MagicLinkLifetime, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := queueMagicLinkMail(r.Context(), tx, identifier, token); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -147,8 +145,7 @@ type redeemMagicLinkResponse struct {
 func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req RedeemMagicLinkRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		req.Token = strings.TrimSpace(req.Token)

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -74,8 +73,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		actorStaffID, _ := StaffID(r.Context())
 
 		var req InviteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		address := NormalizeAddress(req.Email)
@@ -95,12 +93,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.StaffInvite))
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, status, resp)
 	})
 }
 
@@ -114,7 +107,7 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 	alreadyMember, err := AddressHoldsMembership(ctx, tx, practiceID, address)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if alreadyMember {
 		return InviteResponse{}, http.StatusConflict, "that address already holds a membership at this practice"
@@ -123,7 +116,7 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 	invitationID, token, expiresAt, rotating, err := MintInvitation(ctx, tx, practiceID, actorStaffID, address, invited.rolesLiteral, invited.employmentType)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	status := http.StatusCreated
 	if rotating {
@@ -132,7 +125,7 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 
 	if err := staffinvite.Queue(ctx, tx, invitationID, token); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return InviteResponse{InvitationID: invitationID, ExpiresAt: expiresAt.UTC().Format(time.RFC3339)}, status, ""
@@ -241,13 +234,13 @@ func RevokeInvitationHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {

@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -152,8 +151,7 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 		}()
 
 		var req UpdateWorkStateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -174,16 +172,12 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -201,7 +195,7 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 func updateWorkState(ctx context.Context, tx *sql.Tx, identityUID, workState string) (WorkStateResponse, int, string) {
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return WorkStateResponse{}, http.StatusInternalServerError, MsgInternalError
+		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	var staffID, previous string
@@ -213,7 +207,7 @@ func updateWorkState(ctx context.Context, tx *sql.Tx, identityUID, workState str
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return WorkStateResponse{}, http.StatusInternalServerError, MsgInternalError
+		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// work_state_reported_at moves in the same statement as the value, so
@@ -226,12 +220,12 @@ func updateWorkState(ctx context.Context, tx *sql.Tx, identityUID, workState str
 		workState, staffID,
 	).Scan(&reportedAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return WorkStateResponse{}, http.StatusInternalServerError, MsgInternalError
+		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if err := RecordWorkStateChange(ctx, tx, staffID, previous, workState, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return WorkStateResponse{}, http.StatusInternalServerError, MsgInternalError
+		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return WorkStateResponse{WorkState: workState, WorkStateReportedAt: reportedAt}, http.StatusOK, ""

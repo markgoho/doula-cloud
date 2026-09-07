@@ -18,15 +18,11 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/http"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // Lifetime is how long an Offer stays open after it is sent -- 7 days,
@@ -154,14 +150,4 @@ func decodeCursor(s string) (cursor, error) {
 		return cursor{}, fmt.Errorf("offer: decode cursor: %w", err)
 	}
 	return cursor{offeredAt: c.At, offerID: c.ID}, nil
-}
-
-// writeJSON encodes a 200 response body, the one shape every handler in
-// this package shares.
-func writeJSON(w http.ResponseWriter, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-	}
 }

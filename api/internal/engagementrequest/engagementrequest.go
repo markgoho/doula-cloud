@@ -10,11 +10,8 @@ package engagementrequest
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"net/http"
 
-	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -66,16 +63,4 @@ func hasLiveEngagement(ctx context.Context, tx *sql.Tx, clientID string) (bool, 
 		return false, fmt.Errorf("engagementrequest: check live engagement: %w", err)
 	}
 	return has, nil
-}
-
-// writeJSON encodes v as the response body under status. The header must
-// be set before WriteHeader, so this is the one place in the package that
-// writes the status line -- callers never call w.WriteHeader themselves.
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-	}
 }

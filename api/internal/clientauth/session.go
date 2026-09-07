@@ -3,7 +3,6 @@ package clientauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -55,11 +54,7 @@ func SessionHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -69,7 +64,7 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 	clientID, found, err := setIdentityAndResolveClient(ctx, tx, identityUID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if !found {
 		return SessionResponse{}, http.StatusNotFound, "no matching client account"
@@ -81,13 +76,13 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 	// this can set it unconditionally right after identity resolution.
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	engagements, err := listEngagements(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// Read through portal_accounts_signin_lookup (00074), the same
@@ -97,7 +92,7 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 	var signInAddress string
 	if err := tx.QueryRowContext(ctx, `SELECT sign_in_address FROM portal_accounts WHERE identifier = $1`, identityUID).Scan(&signInAddress); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return SessionResponse{ClientID: clientID, SignInAddress: signInAddress, Engagements: engagements}, http.StatusOK, ""

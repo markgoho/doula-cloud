@@ -3,7 +3,6 @@ package activityfeed
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -51,7 +50,7 @@ func PracticeHandler() http.Handler {
 		reader, has := staffauth.ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -68,15 +67,11 @@ func PracticeHandler() http.Handler {
 		resp, err := fetchPage(r.Context(), tx, reader, practiceID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 

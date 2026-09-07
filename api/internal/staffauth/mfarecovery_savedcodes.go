@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -201,7 +200,7 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 		// as the two unauthenticated/internal MFA-recovery handlers.
 		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -213,14 +212,14 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		sole, err := isSoleOwnerAnywhere(r.Context(), tx, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !sole {
@@ -233,7 +232,7 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 			staffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -242,7 +241,7 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 			code, err := mintOneSavedCode(r.Context(), tx, staffID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			codes = append(codes, code)
@@ -250,15 +249,11 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(RotateSavedCodesResponse{Codes: codes}); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, RotateSavedCodesResponse{Codes: codes})
 	})
 }

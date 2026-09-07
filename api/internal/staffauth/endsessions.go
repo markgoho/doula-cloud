@@ -50,13 +50,13 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := endAllSessionsAndNotify(r.Context(), tx, identityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -73,7 +73,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 			Actor:       activity.StaffActor(actorStaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -85,7 +85,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		// always this Owner, not the target.
 		if err := sessionnotice.QueueSessionRevoked(r.Context(), tx, identityUID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.SessionNotice))

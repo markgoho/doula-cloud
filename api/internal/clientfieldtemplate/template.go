@@ -63,15 +63,11 @@ func GetHandler() http.Handler {
 		fields, err := FetchFields(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(TemplateResponse{Fields: fields}); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{Fields: fields})
 	})
 }
 
@@ -90,15 +86,14 @@ func PutHandler() http.Handler {
 		staffID, _ := staffauth.StaffID(r.Context())
 
 		var req TemplateResponse
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
 		previous, err := FetchFields(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -110,15 +105,11 @@ func PutHandler() http.Handler {
 
 		if err := saveFields(r.Context(), tx, practiceID, staffID, previous, fields); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(TemplateResponse{Fields: fields}); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{Fields: fields})
 	})
 }
 

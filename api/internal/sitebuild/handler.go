@@ -4,13 +4,10 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
-	"doula-cloud/api/internal/apierr"
 	"net/http"
-)
 
-// MsgInternalError is this package's response body for a failure the
-// caller can't act on.
-const MsgInternalError = "internal error"
+	"doula-cloud/api/internal/apierr"
+)
 
 // VerifyHandler is the internal endpoint that probes every published
 // page and records whether it resolved.
@@ -47,7 +44,7 @@ func internalHandler(db *sql.DB, secret string, run func(context.Context, *sql.T
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -61,19 +58,19 @@ func internalHandler(db *sql.DB, secret string, run func(context.Context, *sql.T
 		if _, err := tx.ExecContext(r.Context(),
 			`SELECT set_config('app.site_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := run(r.Context(), tx); err != nil {
 			// coverage:ignore reason: the verifier's only failure mode is a DB error, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

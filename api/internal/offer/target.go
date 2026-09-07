@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -78,7 +79,7 @@ func resolveStaffTarget(ctx context.Context, tx *sql.Tx, practiceID, staffID str
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return offerTarget{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return offerTarget{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if !isDoula {
 		return offerTarget{}, http.StatusBadRequest, "staff member does not hold the Doula role at this practice"
@@ -110,7 +111,7 @@ func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 	alreadyMember, err := staffauth.AddressHoldsMembership(ctx, tx, practiceID, address)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return offerTarget{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return offerTarget{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if alreadyMember {
 		return offerTarget{}, http.StatusConflict, "that address already holds a membership at this practice -- offer the work to that staff member instead"
@@ -119,7 +120,7 @@ func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 	invitationID, token, _, rotated, err := staffauth.MintInvitation(ctx, tx, practiceID, actorStaffID, address, "{"+doulaRole+"}", employmentType)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return offerTarget{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return offerTarget{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	// Minting rotates the token, which silently breaks the link in every
 	// email already sent against this Invitation -- including another
@@ -136,7 +137,7 @@ func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 	code, err := newAccessCode()
 	if err != nil {
 		// coverage:ignore reason: crypto/rand failure, not exercised by unit tests
-		return offerTarget{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return offerTarget{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return offerTarget{
@@ -162,7 +163,7 @@ func reissueOpenOffers(ctx context.Context, tx *sql.Tx, invitationID, token stri
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return http.StatusInternalServerError, staffauth.MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -171,24 +172,24 @@ func reissueOpenOffers(ctx context.Context, tx *sql.Tx, invitationID, token stri
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return http.StatusInternalServerError, staffauth.MsgInternalError
+			return http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		offerIDs = append(offerIDs, id)
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return http.StatusInternalServerError, staffauth.MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if err := rows.Close(); err != nil {
 		// coverage:ignore reason: DB row close failure, not exercised by unit tests
-		return http.StatusInternalServerError, staffauth.MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	for _, offerID := range offerIDs {
 		code, err := newAccessCode()
 		if err != nil {
 			// coverage:ignore reason: crypto/rand failure, not exercised by unit tests
-			return http.StatusInternalServerError, staffauth.MsgInternalError
+			return http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		// access_code_attempts resets with the code: the guesses spent
 		// against a code nobody can use any more are not held against the
@@ -200,11 +201,11 @@ func reissueOpenOffers(ctx context.Context, tx *sql.Tx, invitationID, token stri
 			staffauth.TokenDigest(code), offerID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return http.StatusInternalServerError, staffauth.MsgInternalError
+			return http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		if err := queue(ctx, tx, offerID, token, code); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return http.StatusInternalServerError, staffauth.MsgInternalError
+			return http.StatusInternalServerError, apierr.MsgInternalError
 		}
 	}
 	return http.StatusOK, ""

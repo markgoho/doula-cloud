@@ -29,14 +29,6 @@ const (
 	txKey           contextKey = "clientauth.tx"
 )
 
-// MsgInternalError is the response body for any failure the caller can't
-// act on (a DB error, an encoding failure) -- deliberately vague so it
-// never leaks internals. Defined here rather than reused from staffauth
-// so the Client-portal population doesn't depend on the Staff-auth
-// package for something population-agnostic; portal reuses this one
-// rather than defining a third copy.
-const MsgInternalError = "internal error"
-
 // PortalPopulation is the shared OpenGet reason for every Client-portal
 // read: ADR-0008's role table describes Staff at a Practice, and a Client
 // holds no Membership to check against, so there is nothing for a role
@@ -106,7 +98,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			clientID, owns, err := resolveOwningClient(r.Context(), tx, uid, engagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !owns {

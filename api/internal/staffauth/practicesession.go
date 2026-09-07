@@ -1,8 +1,6 @@
 package staffauth
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
@@ -37,14 +35,14 @@ func PracticeSessionHandler() http.Handler {
 		var name string
 		if err := tx.QueryRowContext(r.Context(), `SELECT name FROM practices WHERE id = $1`, practiceID).Scan(&name); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		reader, has := ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -54,10 +52,6 @@ func PracticeSessionHandler() http.Handler {
 			Roles:        reader.Roles(),
 			IsContractor: reader.IsContractor(),
 		}
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			log.Printf("PracticeSessionHandler: encode response: %v", err)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }

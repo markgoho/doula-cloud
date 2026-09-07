@@ -63,7 +63,7 @@ func InboxHandler() http.Handler {
 
 		if err := expireOpen(r.Context(), tx, byStaffID, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -83,10 +83,10 @@ func InboxHandler() http.Handler {
 			staffID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, page)
+		apierr.WriteJSON(w, http.StatusOK, page)
 	})
 }
 
@@ -108,7 +108,7 @@ func EngagementListHandler() http.Handler {
 		}
 		if err := expireOpen(r.Context(), tx, byEngagementID, engagementID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -133,10 +133,10 @@ func EngagementListHandler() http.Handler {
 			engagementID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, page)
+		apierr.WriteJSON(w, http.StatusOK, page)
 	})
 }
 

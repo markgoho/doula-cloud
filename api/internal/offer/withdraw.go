@@ -33,7 +33,7 @@ func WithdrawHandler() http.Handler {
 
 		if err := expireOpen(r.Context(), tx, byID, offerID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -51,7 +51,7 @@ func WithdrawHandler() http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
@@ -62,11 +62,11 @@ func WithdrawHandler() http.Handler {
 			Actor:       activity.StaffActor(actorStaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		writeJSON(w, DecisionResponse{OfferID: offerID, State: "withdrawn"})
+		apierr.WriteJSON(w, http.StatusOK, DecisionResponse{OfferID: offerID, State: "withdrawn"})
 	})
 }
 

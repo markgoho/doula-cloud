@@ -14,10 +14,10 @@ package pushsub
 
 import (
 	"database/sql"
-	"doula-cloud/api/internal/apierr"
-	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"doula-cloud/api/internal/apierr"
 )
 
 // SubscribeRequest is the body of a register-push-subscription request,
@@ -35,8 +35,7 @@ type SubscribeRequest struct {
 // error response and returns ok=false on failure.
 func decodeSubscribeRequest(w http.ResponseWriter, r *http.Request) (SubscribeRequest, bool) {
 	var req SubscribeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+	if !apierr.DecodeJSON(w, r, &req) {
 		return SubscribeRequest{}, false
 	}
 	if req.Endpoint == "" || req.Keys.P256dh == "" || req.Keys.Auth == "" {

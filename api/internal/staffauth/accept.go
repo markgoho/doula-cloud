@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -72,8 +71,7 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 		}()
 
 		var req AcceptInviteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		req.InviteToken = strings.TrimSpace(req.InviteToken)
@@ -148,11 +146,11 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	digest := TokenDigest(req.InviteToken)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.invite_token_digest', $1, true)`, digest); err != nil {
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, verified.UID); err != nil {
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	var inv invitation
@@ -167,7 +165,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// An address mismatch is deliberately the same 403 whether the caller
@@ -188,13 +186,13 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		// window.
 		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, inv.practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+			return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE practice_invitations SET status = 'expired' WHERE id = $1`, inv.id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+			return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		return AcceptInviteResponse{}, http.StatusGone, "this invitation has expired -- ask for a new one"
 	}
@@ -206,7 +204,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, inv.practiceID); err != nil {
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// A membership already at this Practice is a 409, not the 500 an
@@ -217,7 +215,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	alreadyMember, err := AddressHoldsMembership(ctx, tx, inv.practiceID, address)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if alreadyMember {
 		return AcceptInviteResponse{}, http.StatusConflict, "you already hold a membership at this practice"
@@ -229,7 +227,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		inv.practiceID, staffID, "{"+inv.roles+"}", inv.employmentType,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if err := RecordMembershipEvent(ctx, tx, MembershipEvent{
@@ -241,7 +239,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		ActorStaffID:   staffID,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// #615's AC: a fresh Membership can make the new Staff member a sole
@@ -250,7 +248,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	// covers both without this handler having to decide which applies.
 	if err := reconcileOwnersAtPractice(ctx, tx, inv.practiceID, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// Only a person this acceptance created gets a work-state event: for
@@ -262,7 +260,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	if newWorkState != "" {
 		if err := RecordFirstWorkStateAssertion(ctx, tx, staffID, newWorkState, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+			return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 	}
 
@@ -273,7 +271,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		staffID, inv.id,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// An Offer mailed to this address (#317) named the Invitation, not a
@@ -288,7 +286,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		staffID, inv.id,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, MsgInternalError
+		return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return AcceptInviteResponse{StaffID: staffID, PracticeID: inv.practiceID}, http.StatusOK, ""
@@ -310,7 +308,7 @@ func resolveStaff(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", "", http.StatusInternalServerError, MsgInternalError
+		return "", "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if name == "" {
@@ -333,7 +331,7 @@ func resolveStaff(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		verified.UID, name, address, normalized,
 	).Scan(&staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", "", http.StatusInternalServerError, MsgInternalError
+		return "", "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	return staffID, normalized, http.StatusOK, ""
 }

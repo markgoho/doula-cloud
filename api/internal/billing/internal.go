@@ -3,7 +3,6 @@ package billing
 import (
 	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -50,8 +49,7 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 		}
 
 		var req RefundRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		if !staffauth.ParseUUID(w, "practice", req.PracticeID) {
@@ -76,7 +74,7 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -94,7 +92,7 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 			`SELECT set_config('app.current_practice_id', $1, true)`, req.PracticeID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -104,22 +102,18 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 			return
 		}
 		if err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(receipt); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, receipt)
 	})
 }
 
@@ -136,7 +130,7 @@ func DormantPracticesHandler(db *sql.DB, secret string) http.Handler {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
@@ -144,15 +138,11 @@ func DormantPracticesHandler(db *sql.DB, secret string) http.Handler {
 		dormant, err := DormantPractices(r.Context(), tx, time.Now().AddDate(-DormancyNoticeYears, 0, 0))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(dormant); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, dormant)
 	})
 }
 
@@ -180,8 +170,7 @@ func FoundingGrantHandler(db *sql.DB, secret string) http.Handler {
 		}
 
 		var req FoundingGrantRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		if !staffauth.ParseUUID(w, "practice", req.PracticeID) {
@@ -191,7 +180,7 @@ func FoundingGrantHandler(db *sql.DB, secret string) http.Handler {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -208,7 +197,7 @@ func FoundingGrantHandler(db *sql.DB, secret string) http.Handler {
 			`SELECT set_config('app.current_practice_id', $1, true)`, req.PracticeID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -223,21 +212,17 @@ func FoundingGrantHandler(db *sql.DB, secret string) http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB failure inside FoundingGrant, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(receipt); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, receipt)
 	})
 }

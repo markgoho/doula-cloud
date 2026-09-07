@@ -4,17 +4,10 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
-	"doula-cloud/api/internal/apierr"
 	"net/http"
-)
 
-// MsgInternalError is the body a caller sees for a failure that carries
-// no more specific detail. Defined here rather than borrowed from
-// staffauth so this package can serve every outbox regardless of whether
-// staffauth already imports that outbox's own package (staffinvite,
-// sessionnotice) -- an import cycle this package, importing neither,
-// never risks.
-const MsgInternalError = "internal error"
+	"doula-cloud/api/internal/apierr"
+)
 
 // Processor is what ProcessHandler needs from an outbox's Worker: the
 // method every one of them already exposes.
@@ -46,7 +39,7 @@ func ProcessHandler(db *sql.DB, worker Processor, secret, door string) http.Hand
 		}
 
 		if err := runOutbox(r.Context(), db, worker, door); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusOK)

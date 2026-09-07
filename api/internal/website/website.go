@@ -62,7 +62,6 @@ const (
 	MsgDescriptionNeeded = "Enter a description of what your Practice offers"
 	MsgPolicyNeeded      = "Enter your cancellation or refund policy"
 	MsgTooLong           = "Shorten this to 500 characters or fewer"
-	MsgInternalError     = "internal error"
 )
 
 // Request is the whole body of a website declaration. A PUT rather than

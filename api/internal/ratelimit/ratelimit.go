@@ -26,11 +26,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 )
 
-// msgInternalError is the response body for a failure the caller can't
-// act on -- deliberately vague, this package's own copy per this repo's
-// convention (see portalinvite/errors.go).
-const msgInternalError = "internal error"
-
 // Rule is one dimension a request is checked and counted against,
 // independently of every other Rule passed to Wrap alongside it. An
 // endpoint combines more than one so that evading any single dimension --
@@ -81,7 +76,7 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 				count, windowStart, err := touch(r.Context(), db, bucketKey(endpoint, rule.Dimension, key), rule.Window)
 				if err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 					return
 				}
 

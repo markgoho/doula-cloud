@@ -1,7 +1,6 @@
 package mailsuppress
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -41,7 +40,7 @@ func ListHandler() http.Handler {
 		items, err := List(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -55,11 +54,7 @@ func ListHandler() http.Handler {
 			})
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			log.Printf("mailsuppress.ListHandler: encode response: %v", err)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -87,8 +82,7 @@ func ClearHandler(clearer BounceClearer) http.Handler {
 		staffID, _ := staffauth.StaffID(r.Context())
 
 		var req clearRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		address := Normalize(req.Address)
@@ -103,7 +97,7 @@ func ClearHandler(clearer BounceClearer) http.Handler {
 		attached, err := AttachedToPractice(r.Context(), tx, practiceID, address)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !attached {

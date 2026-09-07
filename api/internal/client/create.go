@@ -54,7 +54,7 @@ func CreateHandler() http.Handler {
 		reader, has := staffauth.ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if reader.IsAmbientContractor() {
@@ -63,8 +63,7 @@ func CreateHandler() http.Handler {
 		}
 
 		var req CreateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		if !normalizeAndValidate(w, &req.Record) {
@@ -75,7 +74,7 @@ func CreateHandler() http.Handler {
 			collisions, err := FindCollisions(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, "")
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if len(collisions) > 0 {
@@ -83,12 +82,7 @@ func CreateHandler() http.Handler {
 				for i, c := range collisions {
 					matches[i] = c.Match
 				}
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusConflict)
-				// coverage:ignore reason: response encoding failure, not exercised by unit tests
-				if err := json.NewEncoder(w).Encode(CreateResponse{Matches: matches}); err != nil {
-					apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-				}
+				apierr.WriteJSON(w, http.StatusConflict, CreateResponse{Matches: matches})
 				return
 			}
 		}
@@ -96,7 +90,7 @@ func CreateHandler() http.Handler {
 		req.ID = uuid.NewString()
 		if err := insertClient(r.Context(), tx, practiceID, req.Record); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		// Her key is made in the same transaction that makes her, so a
@@ -105,21 +99,16 @@ func CreateHandler() http.Handler {
 		// seals the created diff under it.
 		if err := clientkey.Ensure(r.Context(), tx, practiceID, req.ID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordEvent(r.Context(), tx, practiceID, req.ID, eventCreated, createdDiff(req.Record), staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(req.Record); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusCreated, req.Record)
 	})
 }
 

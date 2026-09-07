@@ -64,7 +64,7 @@ func ApproveHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		if warning {
 			resp.Warning = liveEngagementWarning
 		}
-		writeJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -88,20 +88,20 @@ func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tas
 		_ = tx.Rollback()
 		if notifyCheckErr != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if shouldNotify {
 			if err := billing.QueueOutOfCreditsNotification(r.Context(), db, practiceID, enq); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
 		apierr.WriteError(w, "no credits remaining, ask a practice owner or admin to buy more", http.StatusPaymentRequired)
 	default:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 	}
 }
 

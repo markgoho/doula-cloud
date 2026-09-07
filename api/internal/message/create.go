@@ -3,7 +3,6 @@ package message
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -75,12 +74,12 @@ func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handl
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		messageID := uuid.NewString()
-		body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, staffauth.MsgInternalError)
+		body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, apierr.MsgInternalError)
 		if !ok {
 			return
 		}
@@ -88,12 +87,12 @@ func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handl
 		item, err := insertMessage(r.Context(), tx, messageID, engagementID, senderTypeStaff, staffID, body, attachment)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		notifyRecipient(r.Context(), tx, pusher, engagementID, senderTypeStaff)
-		writeCreated(w, item, staffauth.MsgInternalError)
+		writeCreated(w, item)
 	})
 }
 
@@ -219,8 +218,7 @@ func validateAndStoreAttachment(w http.ResponseWriter, r *http.Request, store ob
 // ok=false on failure.
 func decodeCreateRequest(w http.ResponseWriter, r *http.Request) (CreateRequest, bool) {
 	var req CreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+	if !apierr.DecodeJSON(w, r, &req) {
 		return CreateRequest{}, false
 	}
 	req.Body = strings.TrimSpace(req.Body)
@@ -233,13 +231,8 @@ func decodeCreateRequest(w http.ResponseWriter, r *http.Request) (CreateRequest,
 
 // writeCreated writes item as a 201 JSON response, shared by CreateHandler
 // and ClientCreateHandler.
-func writeCreated(w http.ResponseWriter, item Message, internalErrorMsg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(item); err != nil {
-		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
-	}
+func writeCreated(w http.ResponseWriter, item Message) {
+	apierr.WriteJSON(w, http.StatusCreated, item)
 }
 
 // insertMessage writes a Message row from the calling Staff or Client

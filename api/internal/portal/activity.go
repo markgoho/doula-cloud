@@ -3,7 +3,6 @@ package portal
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -81,7 +80,7 @@ func ActivityHandler() http.Handler {
 		tx, ok := clientauth.Tx(r.Context())
 		if !ok {
 			// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
@@ -89,7 +88,7 @@ func ActivityHandler() http.Handler {
 		practiceID, err := engagementPracticeID(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed this row exists
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -102,7 +101,7 @@ func ActivityHandler() http.Handler {
 		// Nothing but this read runs on tx afterward.
 		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -119,16 +118,12 @@ func ActivityHandler() http.Handler {
 		resp, err := activityfeed.ListForSubject(r.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, staffingActionsNotIn, after, activityPageSize)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		redactStaffActorNames(resp.Items)
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 

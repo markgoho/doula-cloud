@@ -10,7 +10,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
-	"doula-cloud/api/internal/staffauth"
 )
 
 // SignedPDFObjectPath is the deterministic object-store key for a
@@ -35,7 +34,7 @@ func GetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
 		if !ok {
 			return
 		}
-		serveSignedPDF(w, r, tx, store, engagementID, staffauth.MsgInternalError)
+		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)
 	})
 }
 
@@ -48,11 +47,11 @@ func ClientGetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handl
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
-		serveSignedPDF(w, r, tx, store, engagementID, clientauth.MsgInternalError)
+		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)
 	})
 }
 

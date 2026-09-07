@@ -2,7 +2,6 @@ package contracts
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -24,7 +23,7 @@ func ClientGetContractHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
@@ -36,11 +35,10 @@ func ClientGetContractHandler() http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		out := ContractResponse{
 			EngagementID: engagementID,
 			Status:       status,
@@ -48,9 +46,6 @@ func ClientGetContractHandler() http.Handler {
 			MergeFields:  extractMergeFields(prose),
 			Values:       values.nonEmpty(),
 		}
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(out); err != nil {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }

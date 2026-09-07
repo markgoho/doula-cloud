@@ -1,9 +1,13 @@
+// Package portalinvite issues and accepts a Client-portal invitation: the
+// provisioning path 00006_client_portal_users.sql's RLS and
+// clientauth.Middleware assumed but never got, per #90. Mirrors
+// staffauth's invite/accept shape, applied to client_portal_users instead
+// of staff.
 package portalinvite
 
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -64,7 +68,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -82,17 +86,12 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.PortalInvite))
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, status, resp)
 	})
 }
 
@@ -137,17 +136,17 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 			newID, clientID, inviteToken, expiresAt,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 		}
 		if err := queueOutboxSend(ctx, tx, newID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 		}
 		return InviteResponse{ClientPortalUserID: newID, InviteToken: inviteToken}, http.StatusCreated, "", ""
 
 	case err != nil:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 
 	case identityUID.Valid:
 		return InviteResponse{}, http.StatusConflict, apierr.CodeConflict, "this client already has portal access"
@@ -159,11 +158,11 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 			inviteToken, expiresAt, existingID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 		}
 		if err := queueOutboxSend(ctx, tx, existingID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, MsgInternalError
+			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 		}
 		return InviteResponse{ClientPortalUserID: existingID, InviteToken: inviteToken}, http.StatusOK, "", ""
 	}

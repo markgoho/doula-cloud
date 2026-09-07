@@ -24,14 +24,14 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	practiceID, _ = PracticeID(r.Context())
 	reader, has := ReaderFrom(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	if !reader.Has(roleOwner) {
@@ -51,14 +51,14 @@ func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, pr
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	practiceID, _ = PracticeID(r.Context())
 	reader, has := ReaderFrom(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	if !reader.IsOwnerOrAdmin() {

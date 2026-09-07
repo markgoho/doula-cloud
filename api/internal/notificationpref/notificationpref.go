@@ -40,7 +40,7 @@ func GetHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())
@@ -49,7 +49,7 @@ func GetHandler() http.Handler {
 		enabled, err := readEnabled(r.Context(), tx, identityUID, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -70,7 +70,7 @@ func SetHandler() http.Handler {
 		tx, has := clientauth.Tx(r.Context())
 		// coverage:ignore reason: clientauth.Middleware always sets a tx before this handler runs
 		if !has {
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		identityUID, _ := clientauth.IdentityUID(r.Context())
@@ -78,19 +78,18 @@ func SetHandler() http.Handler {
 		clientID, _ := clientauth.ClientID(r.Context())
 
 		var req SetRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
 		if err := upsertPreference(r.Context(), tx, identityUID, engagementID, !req.Enabled); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordPreferenceChange(r.Context(), tx, engagementID, clientID, req.Enabled); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -100,11 +99,7 @@ func SetHandler() http.Handler {
 
 // writeResponse encodes a PreferenceResponse, shared by both handlers.
 func writeResponse(w http.ResponseWriter, enabled bool) {
-	w.Header().Set("Content-Type", "application/json")
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(PreferenceResponse{Enabled: enabled}); err != nil {
-		apierr.WriteError(w, clientauth.MsgInternalError, http.StatusInternalServerError)
-	}
+	apierr.WriteJSON(w, http.StatusOK, PreferenceResponse{Enabled: enabled})
 }
 
 // readEnabled reads identityUID/engagementID's push preference. No row at

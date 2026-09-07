@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -67,8 +66,7 @@ func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 		}()
 
 		var req ChangeEmailRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		newAddress := NormalizeAddress(req.NewEmail)
@@ -85,7 +83,7 @@ func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -101,7 +99,7 @@ func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager, uid, newAddress string) (int, string) {
 	current, err := accounts.GetAccount(ctx, uid)
 	if err != nil {
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	oldAddress := NormalizeAddress(current.Email)
 
@@ -111,12 +109,12 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 			// coverage:ignore reason: see above -- unreachable without a real Admin SDK error
 			return http.StatusConflict, "that email address is already in use"
 		}
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, uid); err != nil {
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// staff_self_update (00044) is the same self-only, pre-Practice
@@ -124,12 +122,12 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 	res, err := tx.ExecContext(ctx, `UPDATE staff SET email = $1 WHERE identity_uid = $2`, newAddress, uid)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	rows, err := res.RowsAffected()
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if rows == 0 {
 		return http.StatusNotFound, MsgNoMatchingStaffAccount
@@ -137,7 +135,7 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 
 	if err := authmail.QueueEmailChangeNotice(ctx, tx, uid, oldAddress); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// The new address just lost its verified flag above, so it gets the
@@ -147,11 +145,11 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 	verifyToken, err := authtoken.Mint(ctx, tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if err := authmail.QueueTokenMail(ctx, tx, uid, authmail.KindEmailVerification, verifyToken); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return http.StatusInternalServerError, MsgInternalError
+		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return http.StatusNoContent, ""

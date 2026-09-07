@@ -2,7 +2,6 @@ package visit
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -47,13 +46,12 @@ func ReassignHandler() http.Handler {
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		var req ReassignRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		if !staffauth.ParseUUID(w, "staff", req.StaffID) {
@@ -63,7 +61,7 @@ func ReassignHandler() http.Handler {
 		hasMembership, isDoula, employmentType, err := doulaMembership(r.Context(), tx, practiceID, req.StaffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !hasMembership {
@@ -82,7 +80,7 @@ func ReassignHandler() http.Handler {
 			attached, err := hasGrantedAttachment(r.Context(), tx, engagementID, req.StaffID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !attached {
@@ -101,13 +99,13 @@ func ReassignHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
@@ -123,7 +121,7 @@ func ReassignHandler() http.Handler {
 			Actor:       activity.StaffActor(reassignerStaffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -138,15 +136,11 @@ func ReassignHandler() http.Handler {
 			actorStaffID, _ := staffauth.StaffID(r.Context())
 			if err := staffauth.Grant(r.Context(), tx, engagementID, req.StaffID, actorStaffID, nil, nil); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(ReassignResponse{VisitID: visitID, StaffID: req.StaffID}); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: req.StaffID})
 	})
 }

@@ -2,7 +2,6 @@ package billing
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
@@ -40,8 +39,7 @@ func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 		}
 
 		var req PurchaseRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		if req.Quantity < 1 {
@@ -55,7 +53,7 @@ func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 		// race-prevention shape as ConsumeCredit's practice lock.
 		if _, err := tx.ExecContext(r.Context(), `SELECT id FROM practices WHERE id = $1 FOR UPDATE`, practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -64,21 +62,21 @@ func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 			`SELECT stripe_customer_id FROM practices WHERE id = $1`, practiceID,
 		).Scan(&customerID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if !customerID.Valid {
 			id, err := stripeClient.CreateCustomer(r.Context(), practiceID)
 			if err != nil {
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if _, err := tx.ExecContext(r.Context(),
 				`UPDATE practices SET stripe_customer_id = $1 WHERE id = $2`, id, practiceID,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			customerID = sql.NullString{String: id, Valid: true}
@@ -97,7 +95,7 @@ func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 			 WHERE pm.practice_id = $1`, practiceID,
 		).Scan(&newYorkStaff, &totalStaff); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -109,14 +107,10 @@ func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 			TotalStaff:   totalStaff,
 		})
 		if err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(PurchaseResponse{CheckoutURL: checkoutURL}); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, PurchaseResponse{CheckoutURL: checkoutURL})
 	})
 }

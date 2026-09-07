@@ -343,7 +343,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		defer resp.Body.Close()
 		assertStatus(t, resp, http.StatusForbidden)
 
-		var body staffauth.APIError
+		var body apierr.APIError
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}

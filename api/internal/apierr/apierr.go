@@ -9,6 +9,7 @@ package apierr
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -40,6 +41,14 @@ const (
 	// instead of an error, and matching a code three refusals share would
 	// make any of them look like a press-through.
 	CodeSessionEvictionUnconfirmed Code = "SESSION_EVICTION_UNCONFIRMED"
+	// CodeMFARequired is #606's Practice-scoped boundary refusal: a live,
+	// valid session that may not enter this Practice without a second
+	// factor. Its own code, not CodeForbidden, so the app's credentialed
+	// fetch can route into enrolment rather than treating this as an
+	// ended session (#606's AC: "distinguishable from an ended session
+	// ... does not send the browser to the login screen"). #842 moves it
+	// here from staffauth's own local APIError copy.
+	CodeMFARequired Code = "MFA_REQUIRED"
 )
 
 // APIError is docs/api-design.md section 7's structured error shape.
@@ -49,16 +58,69 @@ type APIError struct {
 	Details map[string]string `json:"details,omitempty"`
 }
 
+// MsgInternalError is the body a caller sees for a failure that carries no
+// more specific detail -- a DB error, an encoding error, anything the
+// caller can't act on. #842 collapses thirteen per-package copies of this
+// same literal (staffauth, clientauth, session, contracts, portalinvite,
+// sitebuild, outbox, website, sessionmint, idempotency, ratelimit,
+// sessionevict, authn) into this one, since every copy already agreed on
+// the wording.
+const MsgInternalError = "internal error"
+
+// MaxRequestBodyBytes bounds how much of a request body DecodeJSON reads
+// before giving up, via http.MaxBytesReader. #842 picks 1 MiB: it's what
+// every already-guarded site (payments/billing webhook verification,
+// portalinvite's Mailgun webhook) agreed on before this package existed,
+// and no plain JSON decode site needs more -- the one body that
+// legitimately runs larger, message's attachment upload, is multipart
+// and bypasses DecodeJSON entirely (see its own package for why).
+const MaxRequestBodyBytes = 1 << 20 // 1 MiB
+
+// WriteJSON sends status with body v as JSON, the one success-body writer
+// for every handler in api/internal -- the counterpart Write is for a
+// refusal. #842 replaces four packages' own writeJSON (engagementrequest,
+// offer, payments/invoice, website), each identical but for whether it
+// also tried, uselessly, to answer an encode failure with a second
+// response after the header was already sent.
+func WriteJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	// coverage:ignore reason: response encoding failure, not exercised by unit tests
+	_ = json.NewEncoder(w).Encode(v)
+}
+
 // Write sends status with body {code, message, details} as JSON. details
 // is nil for the large majority of call sites, which have nothing
 // field-specific to say; #529 does not build new plumbing to populate it
 // everywhere, only where a caller already has field-level information on
 // hand.
 func Write(w http.ResponseWriter, status int, code Code, message string, details map[string]string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	_ = json.NewEncoder(w).Encode(APIError{Code: string(code), Message: message, Details: details})
+	WriteJSON(w, status, APIError{Code: string(code), Message: message, Details: details})
+}
+
+// DecodeJSON decodes r.Body into v, first wrapping it in
+// http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes) so an oversized
+// body can't be read at all. A body over the cap gets its own refusal
+// (413, CodePayloadTooLarge) rather than being folded into the generic
+// 400 -- message/create.go's multipart path already drew this line for
+// the same *http.MaxBytesError, and the app can only tell "too much" from
+// "garbage" if the two arrive under different codes. Any other decode
+// failure (malformed JSON, wrong shape) writes the section 7 refusal
+// (400, "invalid request body" -- the one message every site that
+// hand-wrote this already agreed on). Either way it returns false; the
+// caller's only remaining job is to return when DecodeJSON does.
+func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			Write(w, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "request body exceeds 1 MiB", nil)
+			return false
+		}
+		WriteError(w, "invalid request body", http.StatusBadRequest)
+		return false
+	}
+	return true
 }
 
 // WriteError is Write with its code chosen from status via CodeForStatus,

@@ -102,11 +102,11 @@ func DetailHandler() http.Handler {
 			return
 		case err != nil:
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		writeJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 

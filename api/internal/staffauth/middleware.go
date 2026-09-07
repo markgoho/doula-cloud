@@ -13,7 +13,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -77,7 +76,7 @@ func RequireTx(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID s
 	tx, has := Tx(r.Context())
 	if !has {
 		// coverage:ignore reason: Middleware always sets a tx before this handler runs
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	practiceID, _ = PracticeID(r.Context())
@@ -138,7 +137,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !found {
@@ -149,7 +148,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			isMember, roles, employmentType, requireMFA, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !isMember {
@@ -198,7 +197,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				         THEN now() ELSE last_active_at END
 				 WHERE id = $2`, practiceID, staffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 
@@ -291,28 +290,9 @@ func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, pra
 	return true, splitRoles(rolesText.String), employmentTypeText.String, requireMFA, nil
 }
 
-// codeMFARequired is the machine-readable APIError.Code the app's
-// credentialed fetch reads to route into enrolment rather than treating
-// this as an ended session (#606's AC: "distinguishable from an ended
-// session ... does not send the browser to the login screen").
-const codeMFARequired = "MFA_REQUIRED"
-
-// APIError is docs/api-design.md section 7's structured error shape,
-// this package's own copy per this repo's convention (see
-// portalinvite/errors.go, ratelimit.go).
-type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
 // writeMFARequired writes the Practice-scoped boundary's MFA refusal: a
 // live, valid session that may not enter this Practice without a second
 // factor. 403, not 401 -- the session itself is fine.
 func writeMFARequired(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusForbidden)
-	_ = json.NewEncoder(w).Encode(APIError{
-		Code:    codeMFARequired,
-		Message: "this Practice requires a second sign-in factor",
-	})
+	apierr.Write(w, http.StatusForbidden, apierr.CodeMFARequired, "this Practice requires a second sign-in factor", nil)
 }

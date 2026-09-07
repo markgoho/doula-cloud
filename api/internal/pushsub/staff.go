@@ -33,7 +33,7 @@ func RegisterHandler() http.Handler {
 
 		if err := upsertSubscription(r, tx, ownerTypeStaff, staffID, req); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -59,7 +59,7 @@ func UnregisterHandler() http.Handler {
 
 		if err := deleteSubscription(r, tx, ownerTypeStaff, staffID, endpoint); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

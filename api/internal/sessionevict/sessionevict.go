@@ -24,10 +24,6 @@ import (
 	"doula-cloud/api/internal/sessionnotice"
 )
 
-// msgInternalError is the body a caller sees when the failure is the
-// BFF's own -- an unreachable database, not a bad credential.
-const msgInternalError = "internal error"
-
 // Apply refuses, or evicts, the live session in the population other
 // than minting.
 //
@@ -48,7 +44,7 @@ func Apply(w http.ResponseWriter, r *http.Request, tx *sql.Tx, minting authn.Tie
 	ev, found, err := authn.EvictionFor(r.Context(), tx, r, minting, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false, false
 	}
 	if !authn.RefuseUnconfirmed(w, r, ev, found) {
@@ -63,13 +59,13 @@ func Apply(w http.ResponseWriter, r *http.Request, tx *sql.Tx, minting authn.Tie
 	// verifies (#610's own AC).
 	if err := authn.EndSession(r.Context(), tx, ev.Token); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false, false
 	}
 	queued, err = sessionnotice.QueueSessionEvicted(r.Context(), tx, ev)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false, false
 	}
 	return queued, true

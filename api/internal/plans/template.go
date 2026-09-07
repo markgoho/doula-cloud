@@ -94,7 +94,7 @@ func GetTemplateHandler() http.Handler {
 		fields, found, err := fetchFields(r.Context(), tx, practiceID, planType)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
@@ -102,11 +102,7 @@ func GetTemplateHandler() http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(TemplateResponse{PlanType: planType, Fields: fields}); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{PlanType: planType, Fields: fields})
 	})
 }
 
@@ -123,7 +119,7 @@ func PutTemplateHandler() http.Handler {
 		reader, has := staffauth.ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !hasOwnerRole(reader) {
@@ -137,8 +133,7 @@ func PutTemplateHandler() http.Handler {
 		}
 
 		var req TemplateResponse
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -151,7 +146,7 @@ func PutTemplateHandler() http.Handler {
 		fieldsJSON, err := json.Marshal(fields)
 		if err != nil {
 			// coverage:ignore reason: Field always marshals cleanly, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -161,15 +156,11 @@ func PutTemplateHandler() http.Handler {
 			practiceID, planType, fieldsJSON,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(TemplateResponse{PlanType: planType, Fields: fields}); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, TemplateResponse{PlanType: planType, Fields: fields})
 	})
 }
 
