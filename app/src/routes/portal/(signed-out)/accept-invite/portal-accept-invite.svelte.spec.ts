@@ -96,6 +96,28 @@ describe('Accepting a portal invitation over a live Staff session (#610)', () =>
 		expect(accept).toHaveBeenCalledTimes(2);
 	});
 
+	// #312, ADR-0015: accepting a second Practice's invite through an
+	// existing Portal Account (#309) is exactly how a person ends up with
+	// several Engagements here. The app root is the address she can
+	// return to for the same list -- this screen renders no picker of its
+	// own any more.
+	it('sends her to the portal root, not a picker of its own, when she holds several Engagements', async () => {
+		const accept = await reachWarning();
+		apiFetchWithSession.mockResolvedValue(
+			jsonResponse({
+				engagements: [
+					{ engagementId: 'engagement-1', practiceName: 'Bright Beginnings' },
+					{ engagementId: 'engagement-2', practiceName: 'Hilltop Doulas' }
+				]
+			})
+		);
+
+		await testPage.getByRole('button', { name: 'Continue and sign out' }).click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
+		expect(accept).toHaveBeenCalledTimes(2);
+	});
+
 	it('reads an ordinary refusal as an error, not as something to press through', async () => {
 		vi.stubGlobal(
 			'fetch',

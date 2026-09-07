@@ -131,6 +131,61 @@ func TestRLS_EngagementsClientVisibilityIsScopedToCurrentClient(t *testing.T) {
 	}
 }
 
+// TestRLS_EngagementsIdentityVisibilityScopesAcrossPracticesNotJustClients
+// proves engagements_identity_visibility (00082, #312): with neither
+// app.current_practice_id nor app.current_client_id set, an identity sees
+// every Engagement any of its Clients holds, across every Practice -- and
+// nothing another identity's Client holds, even at the same Practice.
+func TestRLS_EngagementsIdentityVisibilityScopesAcrossPracticesNotJustClients(t *testing.T) {
+	db := testdb.New(t)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	clientA, engagementA := testdb.SeedEngagementInStatus(t, db, practiceA, "Camille at A", "camille-a@example.com", "active")
+	clientB, engagementB := testdb.SeedEngagementInStatus(t, db, practiceB, "Camille at B", "camille-b@example.com", "active")
+	_, engagementOther := testdb.SeedEngagementInStatus(t, db, practiceA, "Someone Else", "someone-else@example.com", "active")
+	const identityUID = "identity-visibility-uid"
+	testdb.SeedPortalUser(t, db, identityUID, clientA)
+	testdb.AttachPortalUser(t, db, identityUID, clientB)
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
+		t.Fatalf("set_config identity: %v", err)
+	}
+
+	var visibleIDs []string
+	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM engagements`)
+	if err != nil {
+		t.Fatalf("query engagements: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		visibleIDs = append(visibleIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate rows: %v", err)
+	}
+
+	if len(visibleIDs) != 2 {
+		t.Fatalf("visible engagements = %v, want exactly %q and %q", visibleIDs, engagementA, engagementB)
+	}
+	found := map[string]bool{visibleIDs[0]: true, visibleIDs[1]: true}
+	if !found[engagementA] || !found[engagementB] {
+		t.Fatalf("visible engagements = %v, want %q and %q", visibleIDs, engagementA, engagementB)
+	}
+	if found[engagementOther] {
+		t.Fatalf("another identity's Engagement at the same Practice leaked into this identity's context")
+	}
+}
+
 // TestRLS_StaffSelfVisibilityHiddenDuringClientPortalContext proves the
 // 00006 widening of staff_self_visibility: a person whose identity_uid
 // happens to match both a staff row and a client_portal_users row must

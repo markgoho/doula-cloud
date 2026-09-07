@@ -3,9 +3,20 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
+	import { CARE_HEADING, NO_CARE_MESSAGE, engagementStatusLabel } from '#lib/clientRegister.js';
 	import type { PageProps as PageProperties } from './$types';
 
 	let { data }: PageProperties = $props();
+
+	// Mirrors StepRail's own id-per-row join (#464): the status text sits
+	// beside the link rather than inside its accessible name, so two
+	// Engagements at the same Practice (#310's own labelling problem, not
+	// this one) still read as two distinct links, and a keyboard or
+	// screen-reader user still hears the status without it being read as
+	// part of "go to this Practice".
+	function statusId(engagementId: string) {
+		return `engagement-status-${engagementId}`;
+	}
 </script>
 
 <PageTitle page="Home" />
@@ -35,10 +46,17 @@
 		{/each}
 	</ul>
 {:else}
-	<Heading level={1} text="Choose an Engagement" />
+	<Heading level={1} text={CARE_HEADING} />
 	{#if data.engagements.length === 0}
-		<p>You don't have an Engagement yet. Ask your Practice to set one up.</p>
+		<p>{NO_CARE_MESSAGE}</p>
 	{:else}
+		<!--
+			#312: every Engagement her Portal Account reaches, across every
+			Practice, past and present -- a completed one stays listed and
+			stays openable (ADR-0015). `+page.ts` already redirects straight
+			through when there is only one, so this only ever renders with
+			two or more.
+		-->
 		<ul>
 			{#each data.engagements as engagement (engagement.engagementId)}
 				<li>
@@ -47,9 +65,23 @@
 							engagementId: engagement.engagementId
 						})}
 						label={engagement.practiceName}
+						describedBy={statusId(engagement.engagementId)}
 					/>
+					<p class="status" id={statusId(engagement.engagementId)}>
+						{engagementStatusLabel(engagement.status)}
+					</p>
 				</li>
 			{/each}
 		</ul>
 	{/if}
 {/if}
+
+<style>
+	@layer components {
+		.status {
+			margin: 0 0 var(--space-3);
+			color: var(--color-on-surface-muted);
+			font-size: var(--text-body-sm-size);
+		}
+	}
+</style>

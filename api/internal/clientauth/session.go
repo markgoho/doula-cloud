@@ -22,10 +22,10 @@ type EngagementSummary struct {
 
 // SessionResponse is what the frontend needs to decide where to land a
 // Client-portal user after login: straight to their only Engagement, or a
-// picker if they somehow have more than one (a Client can, in principle,
-// have Engagements at more than one Practice over time).
+// picker otherwise -- #312: a Portal Account reaches many Clients, at
+// most one per Practice (ADR-0015), so there is no single "the" Client to
+// report here any more, only the Engagements those Clients hold.
 type SessionResponse struct {
-	ClientID string `json:"clientId"`
 	// SignInAddress is the address her Portal Account signs in with
 	// today (#619): the change screen has to show her which mailbox that
 	// is before asking for a new one, and this is the only read that
@@ -35,11 +35,13 @@ type SessionResponse struct {
 	Engagements   []EngagementSummary `json:"engagements"`
 }
 
-// SessionHandler resolves the verified caller to a Client (via
-// client_portal_users) and reports their Engagements. It runs before any
-// Engagement is chosen, so -- like clientauth.Middleware before it checks
-// Engagement ownership -- it only ever sets app.current_identity_uid and
-// then app.current_client_id, never anything scoped by :engagementId.
+// SessionHandler resolves the verified caller's identity and reports every
+// Engagement it reaches, across every Client and Practice (ADR-0015: one
+// Portal Account, many Clients). It runs before any Engagement is chosen,
+// so -- like clientauth.Middleware before it checks Engagement ownership --
+// it only ever sets app.current_identity_uid, and #312 deliberately never
+// sets app.current_client_id here: that variable would narrow the read to
+// one Client, which is the bug this handler exists to not have.
 func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, uid, _, ok := authn.Begin(w, r, db)
@@ -61,7 +63,7 @@ func SessionHandler(db *sql.DB) http.Handler {
 func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, int, string) {
 	ctx := r.Context()
 
-	clientID, found, err := setIdentityAndResolveClient(ctx, tx, identityUID)
+	found, err := setIdentityAndCheckClient(ctx, tx, identityUID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
@@ -70,16 +72,12 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 		return SessionResponse{}, http.StatusNotFound, "no matching client account"
 	}
 
-	// The Client's own Engagements are always visible to them, so -- unlike
-	// clientauth.Middleware, which only sets app.current_client_id once
-	// it's confirmed a specific :engagementId belongs to the caller --
-	// this can set it unconditionally right after identity resolution.
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
-	}
-
-	engagements, err := listEngagements(ctx, tx, clientID)
+	// Deliberately never sets app.current_client_id: #312's identity-tier
+	// policy, engagements_identity_visibility (00082), only matches while
+	// that variable is unset, and it is what makes this list span every
+	// Client her Portal Account reaches -- one per Practice (ADR-0015) --
+	// rather than whichever single row a resolver picked first.
+	engagements, err := listEngagementsForIdentity(ctx, tx)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
@@ -95,17 +93,39 @@ func session(r *http.Request, tx *sql.Tx, identityUID string) (SessionResponse, 
 		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
-	return SessionResponse{ClientID: clientID, SignInAddress: signInAddress, Engagements: engagements}, http.StatusOK, ""
+	return SessionResponse{SignInAddress: signInAddress, Engagements: engagements}, http.StatusOK, ""
 }
 
-func listEngagements(ctx context.Context, tx *sql.Tx, clientID string) ([]EngagementSummary, error) {
+// setIdentityAndCheckClient sets app.current_identity_uid -- the session
+// variable client_portal_users' self-visibility RLS policy reads -- then
+// reports whether identityUID reaches any Client at all. It deliberately
+// stops there rather than resolving a single client_id: #312, a Portal
+// Account can reach many Clients, one per Practice (ADR-0015), and this
+// endpoint has no single Engagement addressed yet to narrow to one.
+func setIdentityAndCheckClient(ctx context.Context, tx *sql.Tx, identityUID string) (bool, error) {
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
+		return false, fmt.Errorf("clientauth: set current identity uid: %w", err)
+	}
+
+	var found bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM client_portal_users WHERE identity_uid = $1)`, identityUID).Scan(&found); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("clientauth: check client account: %w", err)
+	}
+	return found, nil
+}
+
+// listEngagementsForIdentity reads every Engagement app.current_identity_uid
+// reaches, across every Practice, relying entirely on
+// engagements_identity_visibility (00082) to scope the rows -- there is no
+// WHERE clause of its own to get wrong.
+func listEngagementsForIdentity(ctx context.Context, tx *sql.Tx) ([]EngagementSummary, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT e.id, p.name, e.status
 		 FROM engagements e
 		 JOIN practices p ON p.id = e.practice_id
-		 WHERE e.client_id = $1
 		 ORDER BY e.created_at`,
-		clientID,
 	)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {

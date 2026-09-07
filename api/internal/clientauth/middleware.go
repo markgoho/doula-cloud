@@ -10,7 +10,6 @@ package clientauth
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -168,28 +167,6 @@ func resolveOwningClient(ctx context.Context, tx *sql.Tx, identityUID, engagemen
 		}
 	}
 	return "", false, nil
-}
-
-// setIdentityAndResolveClient sets app.current_identity_uid -- the
-// session variable client_portal_users' self-visibility RLS policy
-// reads, since app.current_client_id isn't known yet -- then looks up
-// identityUID in client_portal_users.
-func setIdentityAndResolveClient(ctx context.Context, tx *sql.Tx, identityUID string) (string, bool, error) {
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return "", false, fmt.Errorf("clientauth: set current identity uid: %w", err)
-	}
-
-	var clientID string
-	err := tx.QueryRowContext(ctx, `SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identityUID).Scan(&clientID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return "", false, fmt.Errorf("clientauth: resolve client: %w", err)
-	}
-	return clientID, true, nil
 }
 
 // setClientAndCheckEngagement sets app.current_client_id -- the session
