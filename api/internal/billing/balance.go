@@ -167,10 +167,10 @@ func GetBalanceHandler(client StripeClient) http.Handler {
 		}
 
 		var price *CreditPrice
-		if unitAmountCents, currency, err := client.CreditPrice(r.Context()); err != nil {
+		if creditPrice, err := client.CreditPrice(r.Context()); err != nil {
 			log.Printf("billing: read credit price: %v", err)
 		} else {
-			price = &CreditPrice{UnitAmountCents: unitAmountCents, Currency: currency}
+			price = &creditPrice
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, BalanceResponse{Balance: balance, Ledger: ledger, Price: price})

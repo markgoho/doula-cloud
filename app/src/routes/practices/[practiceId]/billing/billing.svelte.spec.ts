@@ -69,6 +69,13 @@ const sessionStub = {
 };
 const dataWithSession = { ...data, session: sessionStub };
 
+// SIFERS setup() for the price describe block below (#285) -- the rest of
+// this file's describe blocks predate that convention and repeat the same
+// render() call inline; left as-is rather than retrofitted here.
+async function renderBilling(overrides: Partial<typeof dataWithSession> = {}) {
+	await render(Page, { params: fixture.params, data: { ...dataWithSession, ...overrides } });
+}
+
 describe('the way back to an approval an empty balance interrupted (#502)', () => {
 	it('offers the remembered approval screen', async () => {
 		sessionStorage.setItem('engagement-request-approval-return', approvalReturnPath);
@@ -124,7 +131,7 @@ describe('what a Credit buys (#286)', () => {
 
 describe('what a Credit costs (#285)', () => {
 	it('states the unit price and the subtotal for the default quantity', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect.element(testPage.getByText('$20.00')).toBeVisible();
 		await expect.element(testPage.getByText('$100.00')).toBeVisible();
@@ -134,7 +141,7 @@ describe('what a Credit costs (#285)', () => {
 	});
 
 	it('tracks the subtotal as the quantity changes', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await testPage.getByLabelText('Quantity').fill('3');
 
@@ -142,9 +149,7 @@ describe('what a Credit costs (#285)', () => {
 	});
 
 	it('says the price is unavailable, and still renders the balance and buy form, when Stripe could not be read', async () => {
-		const priceUnavailableData = { ...dataWithSession, price: undefined };
-
-		await render(Page, { params: fixture.params, data: priceUnavailableData });
+		await renderBilling({ price: undefined });
 
 		await expect.element(testPage.getByText('Credit price is unavailable right now.')).toBeVisible();
 		await expect.element(testPage.getByText(`Credit balance: ${data.balance}`)).toBeVisible();

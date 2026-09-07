@@ -59,15 +59,15 @@ func NewFakeStripeClient() *FakeStripeClient {
 	return &FakeStripeClient{CreditPriceUnitAmountCents: fakeCreditPriceUnitAmountCents, CreditPriceCurrency: "usd"}
 }
 
-// CreditPrice returns CreditPriceUnitAmountCents and CreditPriceCurrency,
-// or CreditPriceErr if a test set one.
-func (f *FakeStripeClient) CreditPrice(_ context.Context) (int64, string, error) {
+// CreditPrice returns a CreditPrice built from CreditPriceUnitAmountCents
+// and CreditPriceCurrency, or CreditPriceErr if a test set one.
+func (f *FakeStripeClient) CreditPrice(_ context.Context) (CreditPrice, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.CreditPriceErr != nil {
-		return 0, "", f.CreditPriceErr
+		return CreditPrice{}, f.CreditPriceErr
 	}
-	return f.CreditPriceUnitAmountCents, f.CreditPriceCurrency, nil
+	return CreditPrice{UnitAmountCents: f.CreditPriceUnitAmountCents, Currency: f.CreditPriceCurrency}, nil
 }
 
 // CreateCustomer returns a deterministic fake Stripe Customer id, or

@@ -1,9 +1,10 @@
 /**
- * The one money formatter for `app/` (#285): nothing here formats
- * currency today, and the Billing screen, the marketing site (#284) and a
- * future invoice screen all want the same rendering of the same shape --
- * a Stripe-style minor-unit integer plus an ISO 4217 currency code, never
- * a float and never a pre-formatted string.
+ * The one money formatter for `app/` (#285). `invoice.ts`'s `formatAmount`
+ * and `offer.ts`'s `formatFee` each held their own copy of this same
+ * cents-to-currency-string conversion, hardcoded to USD and 'en-US' --
+ * both now delegate here, and the Billing screen and a future marketing
+ * surface (#284) read the same currency code Stripe itself returns rather
+ * than assuming USD.
  */
 
 /**

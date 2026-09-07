@@ -10,6 +10,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { formatMoney } from './money.js';
 
 export interface Invoice {
 	id: string;
@@ -129,9 +130,11 @@ export async function createInvoice(
 /** Formats amountCents as a USD currency string (e.g. "$150.00") for
  * display -- the only place cents-to-dollars conversion happens on read;
  * write-side conversion (dollars the Staff typed -> cents the BFF stores)
- * lives in InvoiceSection.svelte, next to the input it converts. */
+ * lives in InvoiceSection.svelte, next to the input it converts. Delegates
+ * to money.ts's shared formatMoney (#285) rather than its own copy of the
+ * same conversion. */
 export function formatAmount(amountCents: number): string {
-	return (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+	return formatMoney(amountCents, 'USD');
 }
 
 /** The Stripe Invoice statuses the BFF stores verbatim, in the words a

@@ -14,6 +14,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { formatMoney } from './money.js';
 
 /** One Offer as either side reads it. targetName/targetAddress are filled
  * only on the Practice-side read: her own inbox does not need to tell her
@@ -210,7 +211,7 @@ export function formatFee(amountCents: number | undefined): string {
 	if (amountCents === undefined) {
 		return 'No per-Engagement fee';
 	}
-	return (amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+	return formatMoney(amountCents, 'USD');
 }
 
 /**
