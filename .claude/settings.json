@@ -72,6 +72,13 @@
             "statusMessage": "Removing worktrees whose work has landed",
             "timeout": 60,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/testdb-reap.ts\"",
+            "statusMessage": "Reaping orphaned testcontainers Postgres containers",
+            "timeout": 30,
+            "async": true
           }
         ]
       }
