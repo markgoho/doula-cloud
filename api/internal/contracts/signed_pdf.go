@@ -79,6 +79,10 @@ func serveSignedPDF(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store ob
 	}
 
 	obj, err := store.Get(r.Context(), objectPath)
+	if errors.Is(err, objectstore.ErrNotFound) {
+		apierr.WriteError(w, "signed PDF not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return

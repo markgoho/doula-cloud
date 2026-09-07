@@ -20,5 +20,9 @@ type ObjectStore interface {
 	// overwriting any existing object there.
 	Put(ctx context.Context, path, contentType string, r io.Reader) error
 	// Get opens a reader for path's contents. Callers must Close it.
+	// Implementations must return an error matching ErrNotFound (via
+	// errors.Is) when path doesn't exist, so a caller can distinguish a
+	// missing object from a genuine storage failure without caring which
+	// implementation is wired in (#305).
 	Get(ctx context.Context, path string) (io.ReadCloser, error)
 }

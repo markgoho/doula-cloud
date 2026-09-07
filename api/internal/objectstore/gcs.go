@@ -2,6 +2,7 @@ package objectstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -46,15 +47,39 @@ func (s *GCSStore) Put(ctx context.Context, path, contentType string, r io.Reade
 	return nil
 }
 
-// Get opens a reader for path's contents. Callers must Close it.
+// Get opens a reader for path's contents. Callers must Close it. Returns
+// an error matching ErrNotFound (via errors.Is) when path doesn't exist,
+// the same sentinel MemoryStore.Get returns, so a caller can branch on
+// "not found" without caring which ObjectStore implementation is wired
+// in.
 func (s *GCSStore) Get(ctx context.Context, path string) (io.ReadCloser, error) {
 	// coverage:ignore reason: requires a real GCS bucket and network access, not exercised by unit tests
 	r, err := s.client.Bucket(s.bucket).Object(path).NewReader(ctx)
 	// coverage:ignore reason: requires a real GCS bucket and network access, not exercised by unit tests
 	if err != nil {
 		// coverage:ignore reason: requires a real GCS bucket and network access, not exercised by unit tests
-		return nil, fmt.Errorf("objectstore: get %s: %w", path, err)
+		return nil, wrapGetError(path, err)
 	}
 	// coverage:ignore reason: requires a real GCS bucket and network access, not exercised by unit tests
 	return r, nil
+}
+
+// wrapGetError maps the GCS client's own not-found sentinel
+// (storage.ErrObjectNotExist) onto ErrNotFound. Pulled out of Get so its
+// mapping logic is testable without a real GCS bucket -- fed a canned
+// error instead of one from the network.
+//
+// #305: app/e2e/message-attachment.e2e.ts's "attachment object is
+// missing from the store" spec drives this against the local e2e stack's
+// fake-gcs-server (see docs/testing.md) and confirms it does return
+// storage.ErrObjectNotExist for a missing object -- but that is the
+// emulator, not real GCS. Whether real GCS agrees stays unverified: no
+// test anywhere in this repo reaches a real bucket. If the two ever
+// disagree, a missing object would 404 against the emulator and 500
+// against production.
+func wrapGetError(path string, err error) error {
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		return fmt.Errorf("objectstore: get %s: %w", path, ErrNotFound)
+	}
+	return fmt.Errorf("objectstore: get %s: %w", path, err)
 }

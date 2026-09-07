@@ -116,11 +116,13 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	}
 }
 
-// TestGetSignedContractPDFHandler_MissingObjectIsInternalError proves a
+// TestGetSignedContractPDFHandler_MissingObjectReturnsNotFound proves a
 // signed row whose signed_pdf_object_path points at nothing in the store
 // (should never happen given Sign's atomic write, but defensively
-// checked) 500s rather than serving a broken response.
-func TestGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) {
+// checked) 404s -- ObjectStore.ErrNotFound now distinguishes this from a
+// genuine storage-layer failure, which stays a 500 (see
+// TestGetSignedContractPDFHandler_StoreGetFailureReturns500).
+func TestGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-missing-object"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
@@ -128,6 +130,27 @@ func TestGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) 
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 
 	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContractPDF(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestGetSignedContractPDFHandler_StoreGetFailureReturns500 proves a
+// genuine ObjectStore failure (a GCS outage, not a missing object) still
+// 500s.
+func TestGetSignedContractPDFHandler_StoreGetFailureReturns500(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-pdf-store-failure"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
+
+	srv, session := newContractServerWithStore(t, db, uid, failingStore{})
 	defer srv.Close()
 
 	resp := getContractPDF(t, srv, session, practiceID, engagementID)
@@ -233,10 +256,10 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	}
 }
 
-// TestClientGetSignedContractPDFHandler_MissingObjectIsInternalError
+// TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound
 // mirrors the Staff-side defensive check for a signed row whose stored
 // path resolves to nothing in the ObjectStore.
-func TestClientGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) {
+func TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-get-pdf-missing-object"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
@@ -250,7 +273,7 @@ func TestClientGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testi
 	resp := getClientContractPDF(t, srv, session, engagementID)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
 }

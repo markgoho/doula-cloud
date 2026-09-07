@@ -112,6 +112,10 @@ func serveAttachment(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store o
 	}
 
 	obj, err := store.Get(r.Context(), objectPath.String)
+	if errors.Is(err, objectstore.ErrNotFound) {
+		apierr.WriteError(w, "attachment not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
 		return
