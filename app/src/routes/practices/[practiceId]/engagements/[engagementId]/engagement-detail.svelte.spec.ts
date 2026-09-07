@@ -517,6 +517,36 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 				.elements()
 		).toHaveLength(0);
 	});
+
+	it('disables "Send portal invite" and states the reason once the Client has no email on file', async () => {
+		await setup({ ...fixtureDetail, clientHasEmail: false });
+
+		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).toBeDisabled();
+		await expect
+			.element(testPage.getByText(/no email on file, so the client cannot be invited yet/i))
+			.toBeVisible();
+	});
+
+	it('lifts the Contract section\'s block in one click once a portal invite is sent, without a reload', async () => {
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftContract));
+			if (path.endsWith('/portal-invite') && init?.method === 'POST') {
+				return Promise.resolve(jsonResponse({ inviteToken: 'a-fresh-token' }));
+			}
+			return respond(path);
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, session: sessionFor() },
+			params: fixture.params
+		});
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
+
+		await testPage.getByRole('button', { name: 'Send portal invite' }).click();
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
+	});
 });
 
 describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', () => {

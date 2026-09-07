@@ -842,11 +842,13 @@
 		"Portal invite" summary row above already says "Accepted", so
 		hiding this action here states the same fact rather than a second,
 		clickable copy of it. A Client with no email keeps the button
-		(rather than hiding it too) but disabled, since the summary row's
-		own "no email on file" qualifier is the visible reason -- the same
-		"disabled control, reason stated where the reader already is"
-		shape settings/website's Publish page action uses for its own
-		Owner-only gate.
+		(rather than hiding it too) but disabled -- the summary row's own
+		"no email on file" qualifier is the visible reason for a sighted
+		reader, and describedBy joins the same words to this button's own
+		accessible name, the same pattern "View Client" above uses to name
+		whose record it opens, so a screen-reader user who lands on this
+		button without passing through the summary row first still hears
+		why it refuses.
 	-->
 	{#if !hasAcceptedPortalAccess}
 		<Button
@@ -854,7 +856,13 @@
 			onClick={handleSendPortalInvite}
 			loading={isSendingPortalInvite}
 			disabled={!hasClientEmailOnFile}
+			describedBy={hasClientEmailOnFile ? undefined : 'send-portal-invite-no-email'}
 		/>
+		{#if !hasClientEmailOnFile}
+			<span class="visually-hidden" id="send-portal-invite-no-email"
+				>This Client has no email address on file</span
+			>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -1068,7 +1076,7 @@
 				-->
 				{#if hasNeverInvitedClient}
 					<Notice
-						variant="status"
+						variant="info"
 						message="Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists."
 					/>
 					<Button label="Send Contract" disabled loading={isContractBusy} />
