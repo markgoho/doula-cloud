@@ -139,6 +139,17 @@
 
 	let copy = $derived(status === undefined ? undefined : statusCopy[status.status]);
 
+	/* How many things Stripe is still waiting on, said to the person
+	   reading it. The Owner is the one Stripe will ask, so hers is second
+	   person; the Admin is reading the state of the Practice's account,
+	   which is not an errand she can run. */
+	function requirementsSentence(count: number, isOwner: boolean): string {
+		const detail = count === 1 ? '1 more detail' : `${count} more details`;
+		return isOwner
+			? `Stripe needs ${detail} from you.`
+			: `Stripe needs ${detail} from a Practice Owner.`;
+	}
+
 	let canStartOnboarding = $derived(
 		copy?.onboarding === 'always' ||
 			(copy?.onboarding === 'if-outstanding' && (status?.requirementsDue.length ?? 0) > 0)
@@ -268,12 +279,16 @@
 		machine-readable field paths ("configuration.merchant.mcc"), which
 		name nothing an Owner recognizes. The place those get asked in words
 		is Stripe's hosted form, which the button below opens; the paths stay
-		in the database for the audit trail. -->
+		in the database for the audit trail.
+
+		"from you" is only true of the Owner: she is the one Stripe will ask,
+		and PostConnectHandler refuses anybody else. An Admin reads the same
+		count as a fact about the Practice's account rather than as an errand
+		of her own -- the same reason the branch below tells her who connects
+		Stripe instead of handing her the checklist. -->
 		{#if status!.requirementsDue.length > 0}
 			<Text
-				text={status!.requirementsDue.length === 1
-					? 'Stripe needs 1 more detail from you.'
-					: `Stripe needs ${status!.requirementsDue.length} more details from you.`}
+				text={requirementsSentence(status!.requirementsDue.length, isPracticeOwner)}
 			/>
 		{/if}
 
