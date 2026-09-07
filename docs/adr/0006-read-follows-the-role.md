@@ -62,6 +62,17 @@ Changing the roster stays Owner-only. A Doula keeps `✗` because no journey has
 given her a reason to need it, not because reading it would harm anyone; if one does,
 this is a cheap cell to move.
 
+**And an Admin may record a Visit.** That follows from the paragraph above rather
+than adding to it — the roster is hers precisely so she can pick a Doula, and the
+picking is the point. It is stated here because
+[#274](https://github.com/markgoho/doula-cloud/issues/274) asked for it in so many
+words after finding the opposite in the code: the Visit writes were gated on the
+Doula role, so the screen offered the assignment to the one person whose job the
+glossary says it is and the API then refused her. The rule in full — who may log a
+Visit for herself, who may name a colleague, and who may set a Visit's date — is a
+write rule, so it lives in ADR-0008's write table with the rest of them, and
+[#268](https://github.com/markgoho/doula-cloud/issues/268) put it there.
+
 Templates are readable by everyone because a Template holds no person's
 information: it is the Practice's own blank stationery, and only the Owner may
 edit it. Gating the read protects nothing and costs a rule to test.

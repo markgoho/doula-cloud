@@ -246,7 +246,7 @@ func TestPracticeSchedule_RefusesMalformedNarrowing(t *testing.T) {
 			fromParameter: {f.base.Format(time.RFC3339)},
 			toParameter:   {f.base.Add(-time.Hour).Format(time.RFC3339)},
 		}},
-		{"non-uuid staffId", url.Values{staffParameter: {"not-a-uuid"}}},
+		{"non-uuid staffId", url.Values{staffParameter: {notAUUID}}},
 		{"undecodable cursor", url.Values{"cursor": {"not!valid!base64!"}}},
 	}
 	for _, tc := range cases {

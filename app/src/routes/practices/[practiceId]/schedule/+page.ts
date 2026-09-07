@@ -2,7 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { apiFetch, apiErrorMessage } from '#lib/api.js';
 import { isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
-import { loadStaff } from '#lib/staff.js';
+import { doulaOptions, loadDoulas } from '#lib/staff.js';
 import {
 	practiceSchedulePath,
 	scheduleFiltersFromParameters,
@@ -66,13 +66,13 @@ export const load: PageLoad = async ({ params, url, parent }): Promise<ScheduleP
 
 /**
  * The Staff roster, reduced to the people a Visit can be assigned to.
- * `requireDoula` gates every Visit write on the BFF, so a Staff member
- * without the doula role can never appear on a schedule row and would
- * only ever narrow the list to nothing.
+ * A Visit can only ever be assigned to a holder of the doula role
+ * (api/internal/visit's `requireEligibleAssignee`), so anybody else would
+ * never appear on a schedule row and would only narrow the list to
+ * nothing. `staff.ts` owns both the read and the reduction now (#268) --
+ * this screen's filter and the Engagement page's Visit pickers offer the
+ * same people, from the same one function.
  */
 async function loadDoulaOptions(practiceId: string): Promise<LabeledValue[]> {
-	const roster = await loadStaff(apiFetch, practiceId);
-	return roster.members
-		.filter((member) => member.roles.includes('doula'))
-		.map((member) => ({ value: member.staffId, label: member.name }));
+	return doulaOptions(await loadDoulas(apiFetch, practiceId));
 }

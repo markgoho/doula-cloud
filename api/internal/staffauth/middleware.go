@@ -49,7 +49,7 @@ func PracticeID(ctx context.Context) (string, bool) {
 // ReaderFrom returns the Reader Middleware resolved for the current
 // request -- the caller's roles and employment type at the Practice in
 // the URL, loaded by the one practice_memberships query Middleware runs.
-// RequireOwner, RequireOwnerOrAdmin, visit.requireDoula, and every
+// RequireOwner, RequireOwnerOrAdmin, visit.requireVisitWrite, and every
 // handler that used to call the now-removed ResolveReader read it from
 // here instead, so a request resolves its Membership once rather than
 // once per handler. ok is false only if Middleware never ran ahead of

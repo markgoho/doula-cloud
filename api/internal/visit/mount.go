@@ -5,7 +5,11 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// Mount registers the Visit list and its four writes. All four carry
+// Mount registers the Visit list and its four writes. None of the four
+// declares a role of its own beyond attaching=true: reaching the
+// Engagement is AttachingWrite's CanAccessEngagement check, and who a
+// Visit may be assigned to is decided per act inside the handler (#268,
+// see assignee in roles.go) rather than per endpoint. All four carry
 // attaching=true: staffauth.AttachingWrite is ADR-0008's write-side seam,
 // attaching the acting Doula to the Engagement once the write succeeds.
 // CreateHandler was newly wrapped Replayable in the 2026 idempotency-stance
@@ -15,20 +19,23 @@ import (
 // reason: each is a plain "set this field to the given value" UPDATE, so
 // re-sending an identical body is already a no-op.
 //
-// NotesHandler is the one write here mounted with no role declaration of
-// its own beyond attaching=true -- unlike Create/Reassign/Schedule, which
-// each call requireDoula, it reaches staffauth.RequireTx directly, so the
-// only gate on it is AttachingWrite's own CanAccessEngagement check, the
-// same one ADR-0008's read table already applies. See notes.go's own doc
-// comment for why.
+// NotesHandler and ScheduleHandler both edit a field on a Visit that
+// already exists, and neither asserts a role: the only gate on either is
+// AttachingWrite's own CanAccessEngagement check, the same one ADR-0008's
+// read table already applies. See notes.go's own doc comment for the
+// argument, and schedule.go's for why #268 brought Schedule in line with
+// it -- gating a reschedule on the Doula role refused the Admin whose job
+// scheduling is.
 //
-// CreateHandler's own Replayable classification re-checked for #250's new
-// scheduledAt field: idempotency.Wrap keys purely on the Idempotency-Key
-// header plus practiceID/staffID (idempotency.go's lookup/save), and
-// replays whatever status/body the first call produced without ever
-// re-reading the second call's body. Adding a field to CreateRequest
-// changes nothing that decision depends on -- Replayable stays correct
-// for the same reason it was correct before this field existed.
+// CreateHandler's own Replayable classification re-checked for #250's
+// scheduledAt field and again for #268's staffId: idempotency.Wrap keys
+// purely on the Idempotency-Key header plus practiceID/staffID
+// (idempotency.go's lookup/save), and replays whatever status/body the
+// first call produced without ever re-reading the second call's body.
+// Adding a field to CreateRequest changes nothing that decision depends
+// on -- and because the stored body is replayed verbatim, a retry of a
+// create that named a colleague answers with that same colleague rather
+// than re-deciding who the Visit is for.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	// The Practice-wide schedule (#263): every scheduled Visit at the
 	// Practice in one read, soonest first, rather than one Engagement page

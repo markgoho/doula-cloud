@@ -29,14 +29,15 @@ type NotesResponse struct {
 	Notes   string `json:"notes"`
 }
 
-// NotesHandler writes a Visit's free-text notes (#251). Unlike
-// CreateHandler, ReassignHandler and ScheduleHandler -- each Doula-role
-// gated via requireDoula -- this uses staffauth.RequireTx directly: the
-// triage brief's read rule is "any Staff member who may read a Visit may
-// also write its notes" (ADR-0006/ADR-0008's Visits row), which is wider
-// than the Doula-only business rule the other three writes carry. The
-// narrowing that rule still needs -- a contractor Doula reaches only an
-// Engagement she holds a granted attachment on -- comes from
+// NotesHandler writes a Visit's free-text notes (#251), on the rule
+// ADR-0006/ADR-0008's Visits row already states: any Staff member who may
+// read a Visit may also write its notes. ScheduleHandler now shares that
+// rule (#268); only CreateHandler and ReassignHandler ask anything more,
+// and what they ask is about whose name goes on the Visit rather than
+// about who is writing (see assignee in roles.go).
+//
+// The narrowing this rule still needs -- a contractor Doula reaches only
+// an Engagement she holds a granted attachment on -- comes from
 // staffauth.AttachingWrite (mounted in mount.go with attaching=true), the
 // exact seam ADR-0008's write table already reuses for this Engagement.
 // Must be mounted behind staffauth.Middleware.

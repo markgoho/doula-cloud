@@ -2,6 +2,7 @@ package visit
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -23,11 +24,17 @@ type ReassignResponse struct {
 
 // ReassignHandler reassigns a Visit's staff_id to a different Doula at the
 // same Practice -- coverage/handoff is just editing that field, no
-// separate coverage entity. Must be mounted behind staffauth.Middleware;
-// the caller must hold the Doula role at the current Practice.
+// separate coverage entity. Must be mounted behind staffauth.Middleware.
+//
+// Naming somebody else here is the same act CreateHandler performs at
+// creation time, held to the same two rules: `assignee` decides whether
+// this caller may name that person (an Owner or an Admin may; a plain
+// Doula may only ever name herself), and `requireEligibleAssignee`
+// decides whether that person may be named.
 func ReassignHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := requireDoula(w, r)
+		c, ok := requireVisitWrite(w, r)
+		// coverage:ignore reason: requireVisitWrite only reports false when staffauth.Middleware left no tx or no Reader on context, which cannot happen behind it
 		if !ok {
 			return
 		}
@@ -40,7 +47,7 @@ func ReassignHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "visit", visitID) {
 			return
 		}
-		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
+		if err := requireEngagementAtPractice(r.Context(), c.tx, engagementID, c.practiceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
@@ -57,45 +64,26 @@ func ReassignHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "staff", req.StaffID) {
 			return
 		}
-
-		hasMembership, isDoula, employmentType, err := doulaMembership(r.Context(), tx, practiceID, req.StaffID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		staffID, isSelf, ok := assignee(w, c, &req.StaffID)
+		if !ok {
 			return
 		}
-		if !hasMembership {
-			apierr.WriteError(w, "staff member not found at this practice", http.StatusBadRequest)
-			return
-		}
-		if !isDoula {
-			apierr.WriteError(w, "staff member does not hold the Doula role at this practice", http.StatusBadRequest)
-			return
-		}
-		// A contractor is put on a birth by her own acceptance of an Offer
-		// and by nothing else (CONTEXT.md's Attachment entry), so handing
-		// her a Visit is refused unless she already holds the attachment
-		// that says she agreed.
-		if employmentType != employeeType {
-			attached, err := hasGrantedAttachment(r.Context(), tx, engagementID, req.StaffID)
-			if err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		isEmployee := !c.reader.IsContractor()
+		if !isSelf {
+			employmentType, eligible := requireEligibleAssignee(w, r, c, engagementID, staffID)
+			if !eligible {
 				return
 			}
-			if !attached {
-				apierr.WriteError(w, "that contractor has not accepted an offer on this engagement", http.StatusBadRequest)
-				return
-			}
+			isEmployee = employmentType == employeeType
 		}
 
 		// engagement_id is filtered explicitly, on top of the RLS scoping
 		// staffauth.Middleware already set up on tx, so a Visit can't be
 		// reassigned via an engagementId/visitId pair that don't actually
 		// belong together.
-		result, err := tx.ExecContext(r.Context(),
+		result, err := c.tx.ExecContext(r.Context(),
 			`UPDATE visits SET staff_id = $1 WHERE id = $2 AND engagement_id = $3`,
-			req.StaffID, visitID, engagementID,
+			staffID, visitID, engagementID,
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -112,13 +100,22 @@ func ReassignHandler() http.Handler {
 			apierr.WriteError(w, "visit not found", http.StatusNotFound)
 			return
 		}
-		reassignerStaffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
+		// See CreateHandler's own diff comment: who the Visit was put on
+		// rides every entry, so "who acted, who it went to, and when" is
+		// readable off one row.
+		diff, err := json.Marshal(map[string]string{"assignedStaffId": staffID})
+		if err != nil {
+			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if err := activity.Record(r.Context(), c.tx, activity.Entry{
+			PracticeID:  c.practiceID,
 			SubjectKind: activity.SubjectEngagement,
 			SubjectID:   engagementID,
 			Action:      string(activity.ActionVisitReassigned),
-			Actor:       activity.StaffActor(reassignerStaffID),
+			Diff:        diff,
+			Actor:       activity.StaffActor(c.staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -132,15 +129,14 @@ func ReassignHandler() http.Handler {
 		// person who did the handing, not the person handed to. A
 		// contractor needs none: the check above already proved she holds
 		// the one her own acceptance opened.
-		if employmentType == employeeType {
-			actorStaffID, _ := staffauth.StaffID(r.Context())
-			if err := staffauth.Grant(r.Context(), tx, engagementID, req.StaffID, actorStaffID, nil, nil); err != nil {
+		if isEmployee {
+			if err := staffauth.Grant(r.Context(), c.tx, engagementID, staffID, c.staffID, nil, nil); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: req.StaffID})
+		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: staffID})
 	})
 }

@@ -9,6 +9,7 @@
 import type { Fetcher } from './fetcher.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import type { CursorPage } from './paginatedList.svelte.js';
+import type { LabeledValue } from './roles.js';
 
 /** One row of the Members table -- mirrors the Go BFF's staff roster
  * response (api/internal/staffauth). */
@@ -174,4 +175,74 @@ export async function endSessions(
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
+}
+
+/**
+ * A Staff member a Visit can be assigned to: who she is, what she is
+ * called, and what she is to the business.
+ *
+ * Narrower than `StaffSummary` on purpose -- three screens pick a person
+ * off the roster (the Practice-wide schedule's filter, the Offers section,
+ * and the Engagement page's Visit pickers), and none of them has any use
+ * for her sign-in address or her work state.
+ */
+export interface Doula {
+	staffId: string;
+	name: string;
+	employmentType: string;
+}
+
+/**
+ * The Staff roster reduced to the people a Visit can be put on: the
+ * holders of the Doula role.
+ *
+ * The filter is the roster's, not the caller's -- a Staff member without
+ * the Doula role can never be named on a Visit (api/internal/visit's
+ * `requireEligibleAssignee` refuses her), so offering her in a picker
+ * would be offering a choice the BFF will reject.
+ *
+ * Throws with the response body text on a non-2xx response, the same as
+ * `loadStaff`, which it is one line on top of. `GET .../staff` is
+ * Owner/Admin, so a plain Doula's call throws -- see `loadDoulasOrNone`
+ * for the screens that read that as "not for you" rather than as a
+ * failure.
+ */
+export async function loadDoulas(fetcher: Fetcher, practiceId: string): Promise<Doula[]> {
+	const roster = await loadStaff(fetcher, practiceId);
+	return roster.members
+		.filter((member) => member.roles.includes('doula'))
+		.map(({ staffId, name, employmentType }) => ({ staffId, name, employmentType }));
+}
+
+/**
+ * `loadDoulas`, with a refusal answered as an absence rather than a throw.
+ *
+ * `undefined` means "this reader may not be offered a colleague to pick",
+ * which is a different thing from `[]`, a Practice with no Doulas on its
+ * roster yet. A screen renders the picker for the second and leaves it out
+ * entirely for the first: showing a reader a control the BFF will refuse
+ * is the defect [#274](https://github.com/markgoho/doula-cloud/issues/274)
+ * recorded, and an error banner about a roster she was never entitled to
+ * read would only be noise on her own screen.
+ *
+ * Returning `undefined` rather than throwing says "not for you" in the
+ * type, which a bare `catch {}` at each call site could not.
+ */
+export async function loadDoulasOrNone(
+	fetcher: Fetcher,
+	practiceId: string
+): Promise<Doula[] | undefined> {
+	try {
+		return await loadDoulas(fetcher, practiceId);
+	} catch {
+		return undefined;
+	}
+}
+
+/** The same people as `Select` options -- the staff id stored, the name
+ * shown. Two Doulas at one agency can share a name, so the option is
+ * always keyed on her id and never on the word (see `Select`'s own
+ * `LabeledValue` comment). */
+export function doulaOptions(doulas: readonly Doula[]): LabeledValue[] {
+	return doulas.map((doula) => ({ value: doula.staffId, label: doula.name }));
 }

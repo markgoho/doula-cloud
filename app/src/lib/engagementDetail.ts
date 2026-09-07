@@ -106,12 +106,6 @@ export interface MessageReference {
 	attachmentContentType?: string;
 }
 
-export interface Doula {
-	staffId: string;
-	name: string;
-	employmentType: string;
-}
-
 export function engagementURL({ practiceId, engagementId }: EngagementReference): string {
 	return `/api/practices/${practiceId}/engagements/${engagementId}`;
 }
@@ -220,18 +214,32 @@ export async function sendPortalInvite(
 	return (await response.json()) as { inviteToken: string };
 }
 
-/** Adds a Visit to this Engagement, optionally scheduled (#250). The
- * caller reloads the list itself -- this only reports whether the add
- * succeeded. */
+/**
+ * Adds a Visit to this Engagement: for a named colleague (#268), and
+ * optionally scheduled (#250). The caller reloads the list itself -- this
+ * only reports whether the add succeeded.
+ *
+ * `staffId` undefined means "for me", which is what a Doula logging her
+ * own Visit sends and what this route did before the field existed.
+ * `JSON.stringify` drops an undefined value, so an omitted assignee
+ * reaches the BFF as an absent key rather than as an explicit null -- the
+ * two mean the same thing there, but the absent key is the one the
+ * pre-#268 request already sent.
+ *
+ * Who may name somebody else is the BFF's rule, not this function's: it
+ * sends what it is given and reports the refusal. See
+ * `api/internal/visit/roles.go`.
+ */
 export async function createVisit(
 	fetcher: Fetcher,
 	reference: EngagementReference,
-	scheduledAt?: string
+	scheduledAt?: string,
+	staffId?: string
 ): Promise<void> {
 	const response = await fetcher(visitsURL(reference), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ scheduledAt })
+		body: JSON.stringify({ scheduledAt, staffId })
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
 }
@@ -370,47 +378,33 @@ export async function loadAttachmentPreviews(
 	return loaded;
 }
 
-/** What the Offers section needs, or `undefined` when the caller may not
- * read it. */
-export interface OffersSection {
-	offers: unknown[];
-	doulas: Doula[];
-}
-
 /**
- * The Offers section: who has been offered this Engagement, and which
- * Doulas could be.
+ * Who has been offered this Engagement, or `undefined` when the caller may
+ * not read that at all.
  *
- * Two reads, both Owner/Admin, and `undefined` if either refuses. That is
- * the section's actual rule and it was buried in a bare `catch {}` in the
- * route: a Doula may not read who else was offered her work, so the
- * section is left out rather than shown broken. Returning `undefined`
- * rather than throwing says "not for you" in the type, which an empty
- * catch could not.
+ * A Doula may not read who else was offered her work, and that rule was
+ * buried in a bare `catch {}` in the route: returning `undefined` rather
+ * than throwing says "not for you" in the type, so the section is left out
+ * rather than shown broken.
+ *
+ * The Doulas the section offers are no longer read here (#268). They come
+ * from `staff.ts`'s `loadDoulasOrNone`, which the page fetches once and
+ * hands to the Offers section and to the Visit pickers alike -- the same
+ * roster, one request, and one place that decides what a refusal means.
  *
  * `loadOffers` is injected rather than imported so this module does not
  * depend on `offer.ts` for one call -- and so a test can drive the refusal
  * without standing up that module too.
  */
-export async function loadOffersSection(
+export async function loadEngagementOffersOrNone(
 	fetcher: Fetcher,
 	reference: EngagementReference,
 	loadOffers: (fetcher: Fetcher, practiceId: string, engagementId: string) => Promise<unknown[]>
-): Promise<OffersSection | undefined> {
+): Promise<unknown[] | undefined> {
 	try {
-		const offers = await loadOffers(fetcher, reference.practiceId, reference.engagementId);
-		const response = await fetcher(`/api/practices/${reference.practiceId}/staff`);
-		if (!response.ok) return undefined;
-		const roster = (await response.json()) as { members: (Doula & { roles: string[] })[] };
-		return {
-			offers,
-			doulas: roster.members
-				.filter((member) => member.roles.includes('doula'))
-				.map(({ staffId, name, employmentType }) => ({ staffId, name, employmentType }))
-		};
+		return await loadOffers(fetcher, reference.practiceId, reference.engagementId);
 	} catch {
 		// Not permitted to read who was offered this work -- see above.
 		return undefined;
 	}
 }
-

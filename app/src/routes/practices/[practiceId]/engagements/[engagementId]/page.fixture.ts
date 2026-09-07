@@ -19,6 +19,53 @@ import Page from './+page.svelte';
 
 const clientName = 'Anne-Marie Ochieng-Whitfield';
 
+/*
+ * A roster the size of the pilot's own agency -- fourteen Doulas, plus a
+ * bookkeeper who holds no Doula role and so never belongs in a Visit
+ * picker. The names are long and double-barrelled on purpose: the two
+ * Visit pickers (#268) are `<select>`s inside a `DataTable` row-actions
+ * cell, and the continuum sweep renders this fixture from 320px up
+ * (ADR-0024, ADR-0025), so the widest realistic name is what the check
+ * has to survive.
+ */
+const doulaNames = [
+	'Anne-Marie Ochieng-Whitfield',
+	'Jordan Reyes',
+	'Priyanka Venkataraman-Solberg',
+	'Guadalupe Fernández-Castellanos',
+	'Nkechi Adaeze Onyekwere-Balogun',
+	'Siobhán Ní Mhurchadha-Kavanagh',
+	'Maria Aparecida do Nascimento',
+	'Tuiasosopo Faamausili-Leota',
+	'Beatrix Vandenberghe-Koopmans',
+	'Aleksandra Wiśniewska-Rutkowski',
+	'Chidinma Oluwaseun Adeyemi-Cole',
+	'Rosalind Featherstonehaugh-Payne',
+	'Xiomara Delgado-Villanueva',
+	'Kanyakumari Balasubramanian'
+];
+
+const roster = [
+	...doulaNames.map((name, index) => ({
+		staffId: `staff-${index + 1}`,
+		name,
+		email: `doula-${index + 1}@example.test`,
+		roles: index === 0 ? ['owner', 'doula'] : ['doula'],
+		employmentType: index % 3 === 0 ? 'contractor' : 'employee',
+		workState: 'NY',
+		workStateReportedAt: '2026-01-01T00:00:00Z'
+	})),
+	{
+		staffId: 'staff-bookkeeper',
+		name: 'Winifred Abernathy-Castellano',
+		email: 'books@example.test',
+		roles: ['admin'],
+		employmentType: 'employee',
+		workState: 'NY',
+		workStateReportedAt: '2026-01-01T00:00:00Z'
+	}
+];
+
 export const detail = {
 	engagementId: 'engagement-1',
 	clientId: 'client-1',
@@ -41,7 +88,21 @@ export const fixture: RouteFixture<RouteParameters> = {
 	// rather than through the cascade below. The route's `respond` still
 	// answers it, harmlessly, for the same reason the URL builders stayed
 	// exported: nothing else has to change if it ever moves back.
-	props: { data: detail },
+	// #268: the page reads `data.session` to decide which Visit controls a
+	// reader can complete, so the fixture carries the Membership
+	// practices/[practiceId]/+layout.ts merges in -- an Owner who is also a
+	// Doula, the role that sees every control this route draws.
+	props: {
+		data: {
+			...detail,
+			session: {
+				practiceId: 'practice-1',
+				practiceName: 'Riverside Doula Collective',
+				roles: ['owner', 'doula'],
+				isContractor: false
+			}
+		}
+	},
 	respond: (path) => {
 		if (/\/engagements\/engagement-1$/.test(path)) return jsonResponse(detail);
 		if (path.includes('/visits')) {
@@ -66,7 +127,7 @@ export const fixture: RouteFixture<RouteParameters> = {
 		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: [] });
 		if (path.endsWith('/contract')) return jsonResponse('not found', 404);
 		if (path.endsWith('/offers')) return jsonResponse({ items: [] });
-		if (path.endsWith('/staff')) return jsonResponse({ members: [], invitations: { items: [] } });
+		if (path.endsWith('/staff')) return jsonResponse({ members: roster, invitations: { items: [] } });
 		// #486: the same ledger treatment, last in this page's own sections.
 		if (path.includes('/activity')) {
 			return jsonResponse({
