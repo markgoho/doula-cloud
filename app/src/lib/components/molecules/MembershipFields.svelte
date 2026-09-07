@@ -2,6 +2,7 @@
 	import LabeledField from './LabeledField.svelte';
 	import RadioGroup from './RadioGroup.svelte';
 	import Checkbox from '../atoms/Checkbox.svelte';
+	import { ROLE_LABELS } from '#lib/roles.js';
 
 	// The two halves of a Membership, edited together: ADR-0008 makes
 	// roles what a person does at a Practice and employment type what she
@@ -43,11 +44,7 @@
 
 	const rolesErrorId = $props.id();
 
-	const roleOptions: { value: string; label: string }[] = [
-		{ value: 'owner', label: 'Owner' },
-		{ value: 'admin', label: 'Admin' },
-		{ value: 'doula', label: 'Doula' }
-	];
+	const roleOptions = ROLE_LABELS;
 
 	const employmentOptions: { value: 'employee' | 'contractor'; label: string }[] = [
 		{ value: 'employee', label: 'Employee' },

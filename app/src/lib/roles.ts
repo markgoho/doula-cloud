@@ -13,6 +13,19 @@ export interface RoleSession {
 }
 
 /**
+ * The three stored role values paired with the words the product shows for
+ * them -- the one place they are named, so a screen never spells out
+ * `owner`, `admin` or `doula` itself (#290). `MembershipFields` renders
+ * these as its Roles checkboxes; the signup screen reads the same array to
+ * name the roles it grants (#262 covers the roster and Invitation list).
+ */
+export const ROLE_LABELS: readonly { value: string; label: string }[] = [
+	{ value: 'owner', label: 'Owner' },
+	{ value: 'admin', label: 'Admin' },
+	{ value: 'doula', label: 'Doula' }
+];
+
+/**
  * Whether the session's caller holds the 'owner' role.
  */
 export function isOwner(session: Pick<RoleSession, 'roles'>): boolean {

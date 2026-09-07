@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isOwner, isOwnerOrAdmin, isAmbientContractor, type RoleSession } from './roles';
+import { isOwner, isOwnerOrAdmin, isAmbientContractor, ROLE_LABELS, type RoleSession } from './roles';
 
 function session(roles: string[], isContractor = false): RoleSession {
 	return { roles, isContractor };
@@ -60,5 +60,15 @@ describe('isAmbientContractor', () => {
 
 	it('is true for a contractor with no roles at all -- holding neither owner nor admin', () => {
 		expect(isAmbientContractor(session([], true))).toBe(true);
+	});
+});
+
+describe('ROLE_LABELS', () => {
+	it('names all three stored role values, owner first', () => {
+		expect(ROLE_LABELS).toEqual([
+			{ value: 'owner', label: 'Owner' },
+			{ value: 'admin', label: 'Admin' },
+			{ value: 'doula', label: 'Doula' }
+		]);
 	});
 });

@@ -16,16 +16,24 @@
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { authRefusal, isEmailAlreadyInUse, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import { workStateCode } from '#lib/workStates.js';
+	import { ROLE_LABELS } from '#lib/roles.js';
 
 	const practiceNameId = 'signup-practice-name';
 	const staffNameId = 'signup-staff-name';
 	const workStateId = 'signup-work-state';
 	const emailId = 'signup-email';
 	const passwordId = 'signup-password';
+
+	// #290: read off ROLE_LABELS -- the same source MembershipFields draws
+	// its checkboxes from -- rather than spelling the three words out here
+	// a second time.
+	const roleLabels = ROLE_LABELS.map((role) => role.label);
+	const roleNames = `${roleLabels.slice(0, -1).join(', ')} and ${roleLabels.at(-1)}`;
 
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- POST /api/staff/signup's body, right below.
@@ -328,6 +336,15 @@
 				/>
 			{/snippet}
 		</LabeledField>
+		<!--
+			#290: stated on the screen itself, before the point of no return,
+			GOV.UK's rule for a consequence a person can still act on --
+			never content that only arrives after the POST this button sends.
+		-->
+		<Notice
+			variant="info"
+			message={`This account will hold every role — ${roleNames} — because a Practice's founder is usually its only Doula and needs to hold their own Visits. Anyone you invite later holds only the roles you choose for them. Roles are shown and changed on your Practice's staff roster.`}
+		/>
 		<Button type="submit" label="Create Practice" loading={submission.isSubmitting} />
 	</form>
 	{/if}
