@@ -18,14 +18,18 @@ import (
 const pageSize = 30
 
 // Visit is one row of a Visit list: who it's assigned to, when it was
-// created, and when it is scheduled (#250) -- nullable, since a Visit may
-// carry no scheduled instant at all.
+// created, when it is scheduled (#250), and its own free-text notes
+// (#251) -- both nullable, since a Visit may carry no scheduled instant
+// and no notes have ever been written against it. Staff-only: no
+// Client-facing read path exists for a Visit at all (#251's own AC), so
+// there is nothing to gate Notes out of yet.
 type Visit struct {
 	VisitID     string     `json:"visitId"`
 	StaffID     string     `json:"staffId"`
 	StaffName   string     `json:"staffName"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	ScheduledAt *time.Time `json:"scheduledAt,omitempty"`
+	Notes       *string    `json:"notes,omitempty"`
 }
 
 // ListResponse is the standard cursor-pagination envelope from
@@ -122,7 +126,7 @@ func ListHandler() http.Handler {
 // scoping staffauth.Middleware already set up on tx -- the app layer's own
 // filter, so a bug in either one alone can't leak rows.
 func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor) ([]Visit, error) {
-	query := `SELECT v.id, s.id, s.name, v.created_at, v.scheduled_at
+	query := `SELECT v.id, s.id, s.name, v.created_at, v.scheduled_at, v.notes
 		 FROM visits v
 		 JOIN staff s ON s.id = v.staff_id
 		 WHERE v.engagement_id = $1`
@@ -146,12 +150,16 @@ func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pag
 	for rows.Next() {
 		var v Visit
 		var scheduledAt sql.NullTime
-		if err := rows.Scan(&v.VisitID, &v.StaffID, &v.StaffName, &v.CreatedAt, &scheduledAt); err != nil {
+		var notes sql.NullString
+		if err := rows.Scan(&v.VisitID, &v.StaffID, &v.StaffName, &v.CreatedAt, &scheduledAt, &notes); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan visit row: %w", err)
 		}
 		if scheduledAt.Valid {
 			v.ScheduledAt = &scheduledAt.Time
+		}
+		if notes.Valid {
+			v.Notes = &notes.String
 		}
 		list = append(list, v)
 	}

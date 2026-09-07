@@ -165,7 +165,7 @@ Their [component list](https://design-system.service.gov.uk/components/) against
 | [Tag](https://design-system.service.gov.uk/components/tag/) | `atoms/Badge.svelte` | Aligned; walked 2026-08-30 |
 | [Task list](https://design-system.service.gov.uk/components/task-list/) | Not adopted; see the note on multiple tasks below | Considered |
 | [Text input](https://design-system.service.gov.uk/components/text-input/) | `atoms/TextInput.svelte` | Aligned; walked 2026-08-30 |
-| [Textarea](https://design-system.service.gov.uk/components/textarea/) | Five raw `<textarea>` elements and no atom | Open -- [#468](https://github.com/markgoho/doula-cloud/issues/468) |
+| [Textarea](https://design-system.service.gov.uk/components/textarea/) | `atoms/Textarea.svelte` | Aligned -- built by [#468](https://github.com/markgoho/doula-cloud/issues/468); this row was left `Open` after that ticket closed. Walked 2026-09-07 on the Engagement page's Visits notes control ([#251](https://github.com/markgoho/doula-cloud/issues/251)), confirmed at 320px by the route continuum sweep (ADR-0025) since that page's own fixture now carries a long note |
 | [Warning text](https://design-system.service.gov.uk/components/warning-text/) | `atoms/WarningText.svelte` -- `Notice.svelte:7` stayed `error \| status \| info` and did not grow a fourth variant, since it announces what happened, not what is about to | Aligned -- [#473](https://github.com/markgoho/doula-cloud/issues/473); walked 2026-08-30 |
 
 ## Where we depart on purpose

@@ -55,6 +55,11 @@ export interface Visit {
 	/** When the Visit itself happens, distinct from createdAt (#250) --
 	 * absent for a Visit not yet scheduled. */
 	scheduledAt?: string;
+	/** Free-text notes any Staff member who may read this Visit may also
+	 * write (#251). `undefined` for a Visit that has never had notes
+	 * written -- distinct from `''`, a Visit whose notes were written and
+	 * then deliberately cleared. */
+	notes?: string;
 }
 
 /**
@@ -212,6 +217,26 @@ export async function scheduleVisit(
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ scheduledAt })
+	});
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+}
+
+/**
+ * Sets or clears visitId's own notes (#251). An empty string clears them
+ * to the empty state, distinct from a Visit that has never had notes
+ * written -- there is no way to send this route back to "never written",
+ * matching notes.go's own NotesRequest doc comment.
+ */
+export async function saveVisitNotes(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	visitId: string,
+	notes: string
+): Promise<void> {
+	const response = await fetcher(`${visitsURL(reference)}/${visitId}/notes`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ notes })
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
 }

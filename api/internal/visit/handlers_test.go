@@ -2,8 +2,10 @@ package visit_test
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -1118,6 +1120,385 @@ func TestScheduleHandler_RefusesAnUnattachedContractor(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestListHandler_ReturnsNotes proves list.Visit round-trips notes (#251):
+// present for a Visit that has had them written, absent for one that has
+// not.
+func TestListHandler_ReturnsNotes(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-notes"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	withNotes := seedVisitWithNotes(t, db, engagementID, staffID, "Client seemed anxious about the birth plan.")
+	withoutNotes := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	var listResp visit.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]visit.Visit{}
+	for _, v := range listResp.Items {
+		byID[v.VisitID] = v
+	}
+	if got := byID[withNotes].Notes; got == nil || *got != "Client seemed anxious about the birth plan." {
+		t.Fatalf("notes = %v, want the seeded text", got)
+	}
+	if got := byID[withoutNotes].Notes; got != nil {
+		t.Fatalf("notes = %v, want nil for a Visit that has never had notes written", got)
+	}
+}
+
+func TestNotesHandler_SetsNotes(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-writing-notes"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	const notes = "Talked through the birth plan; she wants a low-intervention birth."
+	body, err := json.Marshal(visit.NotesRequest{Notes: new(notes)})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out visit.NotesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.VisitID != visitID || out.Notes != notes {
+		t.Fatalf("unexpected response: %+v", out)
+	}
+
+	var storedNotes sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT notes FROM visits WHERE id = $1`, visitID).Scan(&storedNotes); err != nil {
+		t.Fatalf("read stored notes: %v", err)
+	}
+	if !storedNotes.Valid || storedNotes.String != notes {
+		t.Fatalf("stored notes = %+v, want %q", storedNotes, notes)
+	}
+
+	var actorStaffID string
+	var diffJSON []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT actor_staff_id::text, diff FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'visit_notes_edited'`,
+		engagementID,
+	).Scan(&actorStaffID, &diffJSON); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	if actorStaffID != staffID {
+		t.Fatalf("activity actor = %q, want %q", actorStaffID, staffID)
+	}
+	var diff struct {
+		VisitID  string `json:"visitId"`
+		HadNotes bool   `json:"hadNotes"`
+		HasNotes bool   `json:"hasNotes"`
+	}
+	if err := json.Unmarshal(diffJSON, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if diff.VisitID != visitID {
+		t.Fatalf("diff.visitId = %q, want %q", diff.VisitID, visitID)
+	}
+	if diff.HadNotes {
+		t.Fatalf("diff.hadNotes = true, want false (this Visit had no prior notes)")
+	}
+	if !diff.HasNotes {
+		t.Fatalf("diff.hasNotes = false, want true")
+	}
+	if strings.Contains(string(diffJSON), notes) {
+		t.Fatalf("diff = %s, must not carry the notes text itself", diffJSON)
+	}
+}
+
+// TestNotesHandler_ChangesThenClearsNotes proves NotesHandler is a plain
+// "set to the given value" write in both directions, and that clearing
+// notes stores the empty string rather than NULL -- distinguishable from
+// a Visit that has never had notes written (TestListHandler_ReturnsNotes).
+func TestNotesHandler_ChangesThenClearsNotes(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-editing-notes"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisitWithNotes(t, db, engagementID, staffID, "First note.")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	const changedTo = "Second, longer note after a follow-up call."
+	changeBody, err := json.Marshal(visit.NotesRequest{Notes: new(changedTo)})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	changeResp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", changeBody)
+	defer changeResp.Body.Close()
+	if changeResp.StatusCode != http.StatusOK {
+		t.Fatalf("change status = %d, want %d", changeResp.StatusCode, http.StatusOK)
+	}
+
+	clearBody, err := json.Marshal(visit.NotesRequest{Notes: new("")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	clearResp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", clearBody)
+	defer clearResp.Body.Close()
+	if clearResp.StatusCode != http.StatusOK {
+		t.Fatalf("clear status = %d, want %d", clearResp.StatusCode, http.StatusOK)
+	}
+	var out visit.NotesResponse
+	if err := json.NewDecoder(clearResp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Notes != "" {
+		t.Fatalf("Notes = %q, want empty after clearing", out.Notes)
+	}
+
+	var storedNotes sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT notes FROM visits WHERE id = $1`, visitID).Scan(&storedNotes); err != nil {
+		t.Fatalf("read stored notes: %v", err)
+	}
+	if !storedNotes.Valid || storedNotes.String != "" {
+		t.Fatalf("stored notes = %+v, want a valid empty string (cleared, not never-written)", storedNotes)
+	}
+
+	// The clear's own activity row -- newest of the two this test made.
+	var diffJSON []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'visit_notes_edited'
+		  ORDER BY created_at DESC LIMIT 1`,
+		engagementID,
+	).Scan(&diffJSON); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	var diff struct {
+		HadNotes bool `json:"hadNotes"`
+		HasNotes bool `json:"hasNotes"`
+	}
+	if err := json.Unmarshal(diffJSON, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if !diff.HadNotes {
+		t.Fatalf("diff.hadNotes = false, want true (this Visit had a prior note)")
+	}
+	if diff.HasNotes {
+		t.Fatalf("diff.hasNotes = true, want false after clearing")
+	}
+}
+
+// TestNotesHandler_AllowedForNonDoulaCaller is the deliberate contrast
+// with TestScheduleHandler_ForbiddenForNonDoulaCaller and
+// TestReassignHandler_ForbiddenForNonDoulaCaller: the triage brief's read
+// rule is "any Staff member who may read a Visit may also write its
+// notes", so an Admin -- who holds no Doula role at all -- succeeds here
+// where the sibling writes refuse her.
+func TestNotesHandler_AllowedForNonDoulaCaller(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-writing-notes", []string{adminRole}, "employee")
+	doulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-notes-bystander", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, doulaStaffID)
+
+	srv, session := newServer(t, db, "admin-writing-notes")
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: new("Admin recorded this on the Doula's behalf.")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestNotesHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-notes-wrong-practice"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	otherPracticeID, otherStaffID := testdb.SeedStaffAtNewPractice(t, db, "doula-notes-elsewhere", []string{doulaRole}, "employee")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
+	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID+"/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestNotesHandler_VisitNotFound(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-notes-missing-visit"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestNotesHandler_MissingNotesRejected(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-notes-missing-field"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: nil})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestNotesHandler_InvalidBody(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-notes-bad-body"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", []byte("not json"))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestNotesHandler_InvalidEngagementID(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-notes-bad-engagement-id"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestNotesHandler_InvalidVisitID(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-notes-bad-visit-id"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+// staffauth.AttachingWrite's own CanAccessEngagement precheck 404s an
+// unattached contractor before NotesHandler's own body ever runs, the same
+// shape TestScheduleHandler_RefusesAnUnattachedContractor proves for
+// schedule -- proving the read-parity rule holds even though NotesHandler
+// calls no requireDoula of its own.
+func TestNotesHandler_RefusesAnUnattachedContractor(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-notes", []string{doulaRole}, "employee")
+	contractorUID := "contractor-unattached-notes"
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestNotesHandler_AllowsAnAttachedContractor is the other half: a
+// contractor with an open, granted attachment reaches the write even
+// though she is not the Visit's own assigned staff_id -- "any Staff
+// member who may read a Visit may also write its notes" holds for her
+// too.
+func TestNotesHandler_AllowsAnAttachedContractor(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-notes-2", []string{doulaRole}, "employee")
+	contractorUID := "contractor-attached-notes"
+	contractorStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, contractorStaffID)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.NotesRequest{Notes: new("Contractor's own observation from the Visit.")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
 

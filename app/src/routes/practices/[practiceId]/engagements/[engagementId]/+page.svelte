@@ -13,6 +13,7 @@
 		loadOffersSection as loadOffers,
 		loadVisitsPage,
 		reassignVisit,
+		saveVisitNotes,
 		scheduleVisit,
 		sendMessage,
 		sendPortalInvite,
@@ -59,6 +60,7 @@
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	type Detail = {
@@ -145,6 +147,14 @@
 	// disturbs another's.
 	let scheduleValue = $state<Record<string, string>>({});
 	let scheduleSections = $state<Record<string, SectionState<void>>>({});
+
+	// #251: a per-row notes control, the same per-row-state shape schedule
+	// and reassign already established just above. notesValue holds a
+	// draft only once a row's own field has been touched -- until then the
+	// field's own value falls back to the Visit's current notes (see
+	// visitActions below), so editing one row never disturbs another's.
+	let notesValue = $state<Record<string, string>>({});
+	let notesSections = $state<Record<string, SectionState<void>>>({});
 
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
@@ -526,6 +536,23 @@
 		}
 	}
 
+	// #251: the field's own current draft, or "" for a fresh visit not yet
+	// touched -- saveVisitNotes always sends a string, never undefined,
+	// since a Textarea has no separate "unset" state the way an empty
+	// datetime-local control does.
+	async function handleSaveNotes(visitId: string, event: SubmitEvent) {
+		event.preventDefault();
+		const section = (notesSections[visitId] ??= new SectionState<void>(undefined));
+		const wasSaved = await section.mutate(
+			() => saveVisitNotes(apiFetchWithSession, reference, visitId, notesValue[visitId] ?? ''),
+			'Failed to save Visit notes'
+		);
+		if (wasSaved) {
+			delete notesValue[visitId];
+			await loadVisits();
+		}
+	}
+
 	// Reuses loadMessagesPage rather than re-fetching by hand: the query
 	// string and the newest-first-to-oldest-first reversal are exactly the
 	// same read, just prepended instead of replacing.
@@ -663,6 +690,35 @@
 	{#if scheduleSections[visit.visitId]?.error}
 		<Notice variant="error" message={scheduleSections[visit.visitId]!.error} />
 	{/if}
+
+	<!--
+		#251: any Staff member who may read this Visit may also write its
+		notes -- there is no Doula-only restriction on this form the way
+		reassign and schedule carry, matching the read rule.
+	-->
+	<form onsubmit={(event) => handleSaveNotes(visit.visitId, event)}>
+		<LabeledField id={`notes-visit-${visit.visitId}`} label="Notes">
+			{#snippet children({ id, describedBy, invalid })}
+				<Textarea
+					{id}
+					{describedBy}
+					{invalid}
+					value={notesValue[visit.visitId] ?? visit.notes ?? ''}
+					onInput={(value) => (notesValue[visit.visitId] = value)}
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button
+			label="Save notes"
+			type="submit"
+			size="sm"
+			variant="secondary"
+			describedBy="visit-{visit.visitId}-name"
+		/>
+	</form>
+	{#if notesSections[visit.visitId]?.error}
+		<Notice variant="error" message={notesSections[visit.visitId]!.error} />
+	{/if}
 {/snippet}
 
 {#snippet visitsSection()}
@@ -689,7 +745,8 @@
 	<DataTable
 		columns={[
 			{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
-			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) }
+			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
+			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.' }
 		]}
 		rows={visits.items}
 		rowActions={{ label: 'Actions', content: visitActions }}

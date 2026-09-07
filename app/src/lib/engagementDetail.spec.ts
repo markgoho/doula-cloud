@@ -12,6 +12,7 @@ import {
 	messagesURL,
 	portalInviteURL,
 	reassignVisit,
+	saveVisitNotes,
 	scheduleVisit,
 	sendMessage,
 	sendPortalInvite,
@@ -293,6 +294,38 @@ describe('scheduleVisit', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
 
 		await expect(scheduleVisit(fetcher, reference, 'visit-1', '2027-03-15T14:30:00Z')).rejects.toThrow('nope');
+	});
+});
+
+describe('saveVisitNotes', () => {
+	it('patches the Visit with its new notes', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await saveVisitNotes(fetcher, reference, 'visit-1', 'Client seemed anxious about the birth plan.');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits/visit-1/notes`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ notes: 'Client seemed anxious about the birth plan.' })
+		});
+	});
+
+	it('clears notes to the empty string', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await saveVisitNotes(fetcher, reference, 'visit-1', '');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits/visit-1/notes`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ notes: '' })
+		});
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(saveVisitNotes(fetcher, reference, 'visit-1', 'text')).rejects.toThrow('nope');
 	});
 });
 
