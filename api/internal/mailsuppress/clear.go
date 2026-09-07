@@ -129,7 +129,7 @@ type RowsQuerier interface {
 func AttachedToPractice(ctx context.Context, q Querier, practiceID, address string) (bool, error) {
 	var one int
 	err := q.QueryRowContext(ctx,
-		`SELECT 1 FROM (`+practiceAddressesSQL+`) a WHERE a.address = $2`,
+		`SELECT 1 FROM (`+PracticeAddressesSQL+`) a WHERE a.address = $2`,
 		practiceID, Normalize(address),
 	).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -142,11 +142,14 @@ func AttachedToPractice(ctx context.Context, q Querier, practiceID, address stri
 	return true, nil
 }
 
-// practiceAddressesSQL is the one definition of "an address this
+// PracticeAddressesSQL is the one definition of "an address this
 // Practice is responsible for", written once so List and
 // AttachedToPractice cannot drift into disagreeing about who may see an
-// address and who may clear it.
-const practiceAddressesSQL = `
+// address and who may clear it. Exported so export.entities' own
+// email_suppression.csv query restates this same three-way union rather
+// than growing a second, independently-maintained definition of the
+// same fact.
+const PracticeAddressesSQL = `
 	SELECT lower(c.email) AS address
 	  FROM clients c
 	 WHERE c.practice_id = $1 AND c.email IS NOT NULL
@@ -163,6 +166,6 @@ const practiceAddressesSQL = `
 const practiceAddressSQL = `
 	SELECT es.address, es.cause, es.created_at
 	  FROM email_suppressions es
-	  JOIN (` + practiceAddressesSQL + `) a ON a.address = es.address
+	  JOIN (` + PracticeAddressesSQL + `) a ON a.address = es.address
 	 WHERE es.cleared_at IS NULL
 	 ORDER BY es.created_at`

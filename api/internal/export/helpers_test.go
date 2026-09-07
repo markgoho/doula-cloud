@@ -20,20 +20,25 @@ import (
 const (
 	ownerRole = "owner"
 	doulaRole = "doula"
+	adminRole = "admin"
 )
 
-// newServer mounts export.Mount alongside client.Mount -- the latter
-// only so TestHandler_SealedActivityDiffIsNeverDecrypted can put a real
+// newMux mounts export.Mount alongside client.Mount -- the latter only so
+// TestHandler_ErasedClientExportsRedactedWithSealedDiff can put a real
 // edit through EditHandler and get back a genuinely sealed diff, the
 // same reason client_test's own newServer exists.
-func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
+func newMux(db *testdb.DB) *http.ServeMux {
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	client.Mount(g, ir, tasknudge.NoOpEnqueuer{})
 	export.Mount(g)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return mux
+}
+
+func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
+	t.Helper()
+	return httptest.NewServer(newMux(db)), authntest.SeedSession(t, db.App, uid)
 }
 
 func authedGet(t *testing.T, session, url string) *http.Response {

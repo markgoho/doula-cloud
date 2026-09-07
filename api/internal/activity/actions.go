@@ -50,6 +50,14 @@ const ActionPortalSessionsEnded ClientAction = "portal_sessions_ended"
 // can't drift apart.
 const SubjectClient = "client"
 
+// SubjectPractice is the subject_kind a write site records against a
+// Practice's own id: staffauth's PutMFARequiredHandler (the "require MFA
+// for all staff" switch) and export.Handler (#288's whole-Practice
+// export) both write against it. Exported for the same reason
+// SubjectClient is -- a second write site is exactly the drift this
+// prevents.
+const SubjectPractice = "practice"
+
 // SystemActorName is what ActorSystem renders as -- ADR-0022: "Doula
 // Cloud", never "System". Every reader that resolves an activity row's
 // actor to a display name falls back to this constant for actor_kind =

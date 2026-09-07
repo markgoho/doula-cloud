@@ -30,12 +30,18 @@ type exportScope struct {
 // gate and its handler's own gate are two different lines of defense.
 //
 // The Activity row is written first, in the same transaction as every
-// read that follows: if any read fails partway through the stream, the
-// whole transaction -- audit row included -- never commits, because
-// staffauth.Middleware only commits once this handler returns
-// (middleware.go's own comment explains why). A partial export is
-// therefore never a *recorded* export; the client sees a truncated
-// archive it can't open, which is the honest failure signal.
+// read that follows. A DB failure partway through (any entity's own
+// query) leaves that transaction aborted, so staffauth.Middleware's own
+// tx.Commit() -- which only runs once this handler returns -- reports
+// sql.ErrTxCommitRollback and the audit row never lands, Postgres having
+// already rolled the whole transaction back on the first failed
+// statement. A response-streaming failure (the client disconnects, the
+// connection breaks) is a different case: every DB statement up to that
+// point still succeeded, so the transaction is healthy and the Activity
+// row does commit -- the export genuinely ran against the data, even
+// though she never received the whole archive. Either way, logging and
+// stopping is all a handler can do once the response is partway
+// written: there is no refusal left to send.
 //
 // Must be mounted behind staffauth.Middleware.
 func Handler() http.Handler {
@@ -66,7 +72,7 @@ func Handler() http.Handler {
 		diff, _ := json.Marshal(exportScope{Entities: names})
 		if err := activity.Record(r.Context(), tx, activity.Entry{
 			PracticeID:  practiceID,
-			SubjectKind: subjectPractice,
+			SubjectKind: activity.SubjectPractice,
 			SubjectID:   practiceID,
 			Action:      actionPracticeDataExported,
 			Diff:        diff,
@@ -77,12 +83,13 @@ func Handler() http.Handler {
 			return
 		}
 
-		filename := fmt.Sprintf("%s export %s.zip", practiceName, time.Now().UTC().Format("2006-01-02"))
+		now := time.Now().UTC()
+		filename := fmt.Sprintf("%s export %s.zip", practiceName, now.Format("2006-01-02"))
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 
 		zw := zip.NewWriter(w)
-		if err := writeReadme(r.Context(), tx, zw, practiceName, staffID, entities); err != nil {
+		if err := writeReadme(r.Context(), tx, w, zw, practiceName, staffID, now, entities); err != nil {
 			// coverage:ignore reason: DB query failure or response streaming failure, not exercised by unit tests
 			log.Printf("export: readme: %v", err)
 			return

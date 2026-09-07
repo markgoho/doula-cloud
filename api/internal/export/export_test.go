@@ -75,27 +75,35 @@ func TestHandler_OwnerGetsHerWholeArchive(t *testing.T) {
 }
 
 // TestHandler_RefusesEveryRoleButOwner is the second acceptance
-// criterion: a non-Owner Staff member of the same Practice is refused
-// at the API with a coded error.
+// criterion: a non-Owner Staff member of the same Practice is refused at
+// the API with a coded error. Table-driven over both non-Owner roles,
+// the same shape client.TestEraseHandler_RefusesEveryRoleButOwner uses
+// for the same reasoning -- Admin is the near-miss role most other
+// Practice-wide reads admit (staffauth.OwnerAndAdmin), so it gets its
+// own row rather than trusting doulaRole alone to stand in for it.
 func TestHandler_RefusesEveryRoleButOwner(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-export-refused"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	for _, role := range []string{doulaRole, adminRole} {
+		t.Run(role, func(t *testing.T) {
+			db := testdb.New(t)
+			const uid = "staff-export-refused"
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{role}, "employee")
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+			srv, session := newServer(t, db, uid)
+			defer srv.Close()
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/export")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	var apiErr apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&apiErr); err != nil {
-		t.Fatalf("decode error body: %v", err)
-	}
-	if apiErr.Code != string(apierr.CodeForbidden) {
-		t.Fatalf("code = %q, want %q", apiErr.Code, apierr.CodeForbidden)
+			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/export")
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			}
+			var apiErr apierr.APIError
+			if err := json.NewDecoder(resp.Body).Decode(&apiErr); err != nil {
+				t.Fatalf("decode error body: %v", err)
+			}
+			if apiErr.Code != string(apierr.CodeForbidden) {
+				t.Fatalf("code = %q, want %q", apiErr.Code, apierr.CodeForbidden)
+			}
+		})
 	}
 }
 
