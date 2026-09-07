@@ -61,3 +61,18 @@ func seedScheduledVisit(t *testing.T, db *testdb.DB, engagementID, staffID strin
 	}
 	return visitID
 }
+
+// seedVisitWithNotes is seedVisit plus an already-written notes value, for
+// a test that needs to prove NotesHandler changes or clears an existing
+// value rather than only ever setting one from nothing (#251).
+func seedVisitWithNotes(t *testing.T, db *testdb.DB, engagementID, staffID, notes string) (visitID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO visits (engagement_id, staff_id, notes) VALUES ($1, $2, $3) RETURNING id`,
+		engagementID, staffID, notes,
+	).Scan(&visitID); err != nil {
+		t.Fatalf("seed visit with notes: %v", err)
+	}
+	return visitID
+}

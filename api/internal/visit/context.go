@@ -1,6 +1,6 @@
 // Package visit holds the Staff-side BFF handlers for Visit: list, create,
-// reassign, and schedule. All four rely on staffauth.Middleware having
-// already resolved the caller's Staff/Practice ids and opened a
+// reassign, schedule, and notes. All five rely on staffauth.Middleware
+// having already resolved the caller's Staff/Practice ids and opened a
 // request-scoped *sql.Tx with app.current_practice_id set, the same way
 // the engagement package's handlers do.
 package visit

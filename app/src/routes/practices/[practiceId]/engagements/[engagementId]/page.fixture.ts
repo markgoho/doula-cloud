@@ -48,7 +48,9 @@ export const fixture: RouteFixture<RouteParameters> = {
 						staffId: 'staff-1',
 						staffName: 'Anne-Marie Ochieng-Whitfield',
 						createdAt: '2026-08-05T00:00:00Z',
-						scheduledAt: '2027-03-15T14:30:00Z'
+						scheduledAt: '2027-03-15T14:30:00Z',
+						notes:
+							'She asked a lot of questions about pain management options and wants to keep her options open rather than commit to an unmedicated birth ahead of time. Her partner is nervous about the hospital transfer distance and would like a practice run of the drive before the due date. Follow up next visit on the birth plan draft she is writing.'
 					},
 					{ visitId: 'visit-2', staffId: 'staff-2', staffName: 'Jordan Reyes', createdAt: '2026-08-06T00:00:00Z' }
 				],

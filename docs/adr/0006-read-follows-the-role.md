@@ -72,6 +72,14 @@ drawing a line between the office and the birth room — and it is settled the o
 way: one Practice is one team, and splitting the two plan types would add a rule
 the pilot agency never asked for.
 
+A Visit's own free-text notes ([#251](https://github.com/markgoho/doula-cloud/issues/251))
+fall under the "Engagements, Visits, Messages" row above (and its five-column
+successor in ADR-0008), and are staff-only in the same sense the Care Plan is: not
+the Client, and not excluding an Admin. Any Staff member who may read a Visit at
+all may also write its notes — there is no narrower write role the way create,
+reassign and schedule each carry, since notes is a record of what was observed,
+not who covers the birth.
+
 Every **employed** Doula reads every Engagement at the Practice. The pilot is one
 agency of fourteen doulas who cover for each other, not fourteen solo practices
 sharing a login; a doula picking up a birth at 3am must read the plan of a Client

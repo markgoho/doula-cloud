@@ -252,6 +252,50 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 	});
 });
 
+// #251: a Visit's own free-text notes, staff-writable in place.
+describe('the Visits section notes control (#251)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it("shows a Visit's own notes, and the empty-state text for one that has never had any", async () => {
+		await renderWithFixtureResponder();
+
+		// `exact` matters here: the row's own notes control (visitActions)
+		// carries this same text as its Textarea's current value, which
+		// widens the Actions cell's own accessible name to a longer string
+		// that contains this one as a substring -- an inexact or regex
+		// match would resolve both cells and violate strict mode.
+		await expect
+			.element(
+				testPage.getByRole('cell', {
+					name: 'She asked a lot of questions about pain management options and wants to keep her options open rather than commit to an unmedicated birth ahead of time. Her partner is nervous about the hospital transfer distance and would like a practice run of the drive before the due date. Follow up next visit on the birth plan draft she is writing.',
+					exact: true
+				})
+			)
+			.toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'No notes yet.', exact: true })).toBeVisible();
+	});
+
+	it('saves a Visit without notes from its own row control', async () => {
+		const requests: { path: string; body: unknown }[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'PATCH' || !path.endsWith('/notes')) return;
+			requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+			return Promise.resolve(jsonResponse({ visitId: 'visit-2', notes: 'First check-in went well.' }));
+		});
+
+		// Jordan Reyes is visit-2, the fixture's row with no prior notes.
+		const field = testPage.getByLabelText('Notes').nth(1);
+		await field.fill('First check-in went well.');
+		await testPage.getByRole('button', { name: 'Save notes' }).nth(1).click();
+
+		await expect.poll(() => requests).toHaveLength(1);
+		expect(requests[0]!.path).toContain('/visits/visit-2/notes');
+		expect(requests[0]!.body).toEqual({ notes: 'First check-in went well.' });
+	});
+});
+
 // #841: each SectionState is its own instance, so one section's failure
 // must not touch another's -- proved here rather than by the default
 // "everything answers 403" mock every other test in this file uses, since

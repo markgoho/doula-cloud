@@ -106,6 +106,14 @@ const (
 
 	ActionPlanInstanceEdited EngagementAction = "plan_instance_edited"
 
+	// ActionVisitNotesEdited records a Visit's free-text notes being
+	// written or re-written (#251) -- staff-only content (ADR-0006), but
+	// the action itself is not: deliberately absent from staffingActions
+	// below, the same footing ActionPlanInstanceEdited already stands on.
+	// A Client may see that her Visit's notes were updated; she does not
+	// see what they say, since Diff never carries the text (see notes.go).
+	ActionVisitNotesEdited EngagementAction = "visit_notes_edited"
+
 	// ActionBirthPlanAcknowledged records a Client confirming she has
 	// read her Birth Plan (#301, v1: acknowledgement only -- she cannot
 	// edit a field or suggest a change). Always a ClientActor: it is her
