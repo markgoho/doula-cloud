@@ -293,6 +293,35 @@ func SeedPortalUser(t *testing.T, db *DB, identityUID, clientID string) {
 	AttachPortalUser(t, db, identityUID, clientID)
 }
 
+// SeedPendingPortalInvite inserts a client_portal_users row for clientID
+// with no identity_uid, plus its portal_invite_outbox row (default status
+// 'pending') -- mirroring what portalinvite.invite() leaves behind right
+// after a Staff member sends an invite (#255): "invited, not yet
+// accepted". The outbox row matters, not just the client_portal_users
+// one -- PortalInviteStatus reads a portal user row with no outbox row
+// at all the same as "never invited" (see its own doc comment), so a
+// fixture missing it would silently fail any Send-precondition test that
+// wants a genuinely pending invite. Returns the client_portal_users row's
+// id.
+func SeedPendingPortalInvite(t *testing.T, db *DB, clientID string) (clientPortalUserID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+		clientID,
+	).Scan(&clientPortalUserID); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed pending portal invite for client %q: %v", clientID, err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO portal_invite_outbox (client_portal_user_id) VALUES ($1)`,
+		clientPortalUserID,
+	); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed portal invite outbox for client %q: %v", clientID, err)
+	}
+	return clientPortalUserID
+}
+
 // SeedPushSubscription inserts a push_subscriptions row for
 // ownerType/ownerID, using the superuser Admin connection. p256dh_key and
 // auth_key are fixed placeholder values -- no caller asserts on them,

@@ -498,7 +498,7 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 			return nil, fmt.Errorf("client: scan list item: %w", err)
 		}
 		item.Name = PreferredName(givenName, preferredName.String)
-		item.PortalInviteStatus = portalInviteStatus(hasPortalUser, accepted, outboxStatus)
+		item.PortalInviteStatus = PortalInviteStatus(hasPortalUser, accepted, outboxStatus)
 		if pendingKinds.Valid {
 			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")
 		}
@@ -512,9 +512,13 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 	return list, nil
 }
 
-// portalInviteStatus derives ListItem.PortalInviteStatus, mirroring the
-// pre-#397 engagement.portalInviteStatus logic exactly.
-func portalInviteStatus(hasPortalUser, accepted bool, outboxStatus sql.NullString) *string {
+// PortalInviteStatus derives ListItem.PortalInviteStatus, mirroring the
+// pre-#397 engagement.portalInviteStatus logic exactly. Exported (#255)
+// so FetchPortalInviteState below -- the single-Client read
+// engagement.DetailHandler and any other caller needing one Client's
+// state use -- computes the same word this list does, rather than
+// forking the derivation a second time.
+func PortalInviteStatus(hasPortalUser, accepted bool, outboxStatus sql.NullString) *string {
 	if !hasPortalUser {
 		return nil
 	}

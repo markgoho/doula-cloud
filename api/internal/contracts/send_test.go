@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/push"
@@ -115,11 +117,71 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 	}
 }
 
+// TestPostSendContractHandler_NoPortalInvite proves the #255 precondition:
+// Send refuses with 409 FAILED_PRECONDITION when the Engagement's Client
+// has never been sent a portal invite, before any write -- the Contract
+// stays a draft, no contract-sent activity entry is written, and no push
+// fires.
+func TestPostSendContractHandler_NoPortalInvite(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "send-no-portal-invite"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Never Invited Client", "never-invited@example.com")
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/no-invite-recipient")
+
+	pusher := push.NewFakePusher()
+	srv, session := newContractServerWithPusher(t, db, uid, pusher)
+	defer srv.Close()
+
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	var out apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Code != string(apierr.CodeFailedPrecondition) {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
+	}
+	if !strings.Contains(out.Message, "invited") {
+		t.Fatalf("message = %q, want it to name the missing invite", out.Message)
+	}
+
+	getResp := getContract(t, srv, session, practiceID, engagementID)
+	defer getResp.Body.Close()
+	var getOut contracts.ContractResponse
+	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if getOut.Status != statusDraft {
+		t.Fatalf("status after refused Send = %q, want draft (unchanged)", getOut.Status)
+	}
+	if calls := pusher.Calls(); len(calls) != 0 {
+		t.Fatalf("Pusher.Send call count = %d, want 0 (refused before any write)", len(calls))
+	}
+	var activityCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'contract_sent'`,
+		engagementID,
+	).Scan(&activityCount); err != nil {
+		t.Fatalf("count activity rows: %v", err)
+	}
+	if activityCount != 0 {
+		t.Fatalf("contract_sent activity rows = %d, want 0 (refused before any write)", activityCount)
+	}
+}
+
 // TestPostSendContractHandler_Success proves the draft -> sent transition,
 // that the response reflects the new status while keeping the Contract's
 // prose/mergeFields/values intact, and that it triggers exactly one
 // Pusher.Send call to the Client's registered subscription with a
-// body-free payload (just the Engagement id -- no Contract content).
+// body-free payload (just the Engagement id -- no Contract content). The
+// Client holds a pending (not yet accepted) portal invite -- #255's own
+// AC that Send succeeds before acceptance, not only after it.
 func TestPostSendContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-success"
@@ -127,6 +189,7 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
+	testdb.SeedPendingPortalInvite(t, db, clientID)
 
 	pusher := push.NewFakePusher()
 	srv, session := newContractServerWithPusher(t, db, uid, pusher)
@@ -184,13 +247,17 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 
 // TestPostSendContractHandler_NoSubscriptionNoPush proves Send still
 // succeeds when the Client has no registered push subscription -- push
-// delivery is best-effort, not part of Send's own success criteria.
+// delivery is best-effort, not part of Send's own success criteria. Its
+// Client has an accepted portal invite -- #255's own AC that Send
+// succeeds for a Client who has already accepted, not only a pending one
+// (TestPostSendContractHandler_Success covers the pending case).
 func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-no-subscription"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	testdb.SeedPortalUser(t, db, "send-no-subscription-portal", clientID)
 
 	pusher := push.NewFakePusher()
 	srv, session := newContractServerWithPusher(t, db, uid, pusher)
@@ -220,6 +287,7 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
+	testdb.SeedPendingPortalInvite(t, db, clientID)
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")

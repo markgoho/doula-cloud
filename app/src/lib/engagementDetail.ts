@@ -50,6 +50,18 @@ export interface EngagementSummary {
 	 * her role or the current status admits no move. The hub renders
 	 * exactly these, never a hand-copied role table of its own. */
 	statusMoves: string[];
+	/** The Client's portal-invite state (#255), using the same
+	 * derivation the Clients list's own ClientListItem.portalInviteStatus
+	 * carries -- absent when she has never been invited. */
+	clientPortalInviteStatus?: string;
+	/** Mirrors ClientListItem.emailSuppressed (#785, ADR-0029): whether
+	 * the Client's address is currently suppressed. */
+	clientEmailSuppressed?: boolean;
+	/** Whether the Client has an email address on file at all -- absent
+	 * on an older cached response, which reads as "has one" (the
+	 * pre-#255 assumption). A Client with none cannot be invited to the
+	 * portal at all. */
+	clientHasEmail?: boolean;
 }
 
 /** ADR-0015's six named reasons a completed Engagement may carry, in the

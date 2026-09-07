@@ -23,6 +23,12 @@
 		type OffersSection,
 		type Visit
 	} from '#lib/engagementDetail.js';
+	import {
+		hasAcceptedPortalInvite,
+		hasNeverBeenInvited,
+		portalInviteStatusText,
+		type PortalInviteSubject
+	} from '#lib/portalInvite.js';
 	import type { PageProps as PageProperties } from './$types';
 	import { formatCalendarDay, formatInstant, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import { activityLedgerColumns, loadEngagementActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
@@ -77,6 +83,11 @@
 		createdAt: string;
 		dueDate?: string;
 		statusMoves: string[];
+		// #255: the Client's portal-invite state, mirroring
+		// engagementDetail.ts's own EngagementSummary fields.
+		clientPortalInviteStatus?: string;
+		clientEmailSuppressed?: boolean;
+		clientHasEmail?: boolean;
 	};
 
 	// The Engagement comes from +page.ts's load now, not an onMount fetch
@@ -204,6 +215,23 @@
 	const portalInviteLink = $derived(portalInvite.value);
 	const portalInviteError = $derived(portalInvite.error);
 	const isSendingPortalInvite = $derived(portalInvite.isBusy);
+
+	// #255: once a portal invite send succeeds, this overlays the
+	// load-time read the same way statusOverride (#253, below) does --
+	// so the Contract section's block lifts and the "Send portal invite"
+	// action's own visibility updates without a reload. 'pending' is the
+	// outbox row's own default status (portalinvite.invite()), so this
+	// is exactly what a fresh send actually leaves behind.
+	let clientPortalOverride = $state<PortalInviteSubject | undefined>();
+	const clientPortalState = $derived<PortalInviteSubject>(
+		clientPortalOverride ?? {
+			portalInviteStatus: detail?.clientPortalInviteStatus,
+			emailSuppressed: detail?.clientEmailSuppressed
+		}
+	);
+	const hasNeverInvitedClient = $derived(hasNeverBeenInvited(clientPortalState));
+	const hasAcceptedPortalAccess = $derived(hasAcceptedPortalInvite(clientPortalState));
+	const hasClientEmailOnFile = $derived(detail?.clientHasEmail ?? true);
 
 	let reassignStaffId = $state<Record<string, string>>({});
 	// One SectionState per Visit row, created the first time that row is
@@ -335,17 +363,40 @@
 	 * the portal's own answer to the same null (#505). `Created` stays: on
 	 * this page it is a fact for the Staff working the Engagement, not one
 	 * the record's own subject didn't ask for -- the same "how did this
-	 * come to be" the repo asks every feature to answer. */
-	function summaryItems(d: Detail, status: string): { label: string; value: string }[] {
+	 * come to be" the repo asks every feature to answer.
+	 *
+	 * "Portal invite" (#255) states the Client's portal-invite state as
+	 * standing information, not only as feedback after a Send -- the same
+	 * word the Clients list column carries, via portalInviteStatusText,
+	 * so the two screens never drift into two vocabularies. */
+	function summaryItems(
+		d: Detail,
+		status: string,
+		portalState: PortalInviteSubject,
+		hasClientEmail: boolean
+	): { label: string; value: string }[] {
 		const items = [
 			{ label: 'Client', value: d.clientName },
 			{ label: 'Status', value: status },
+			{ label: 'Portal invite', value: portalInviteSummaryText(portalState, hasClientEmail) },
 			{ label: 'Created', value: new Date(d.createdAt).toLocaleDateString() }
 		];
 		if (d.dueDate) {
 			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });
 		}
 		return items;
+	}
+
+	/** portalInviteStatusText's own word, plus the one qualifier that word
+	 * alone can't carry: a Client with no email address on file cannot be
+	 * invited at all (#255), which "Never invited" alone would read as
+	 * merely "not invited yet". */
+	function portalInviteSummaryText(portalState: PortalInviteSubject, hasClientEmail: boolean): string {
+		const text = portalInviteStatusText(portalState);
+		if (!hasClientEmail && !portalState.portalInviteStatus) {
+			return `${text} — no email on file, so the Client cannot be invited yet`;
+		}
+		return text;
 	}
 
 	async function loadVisits() {
@@ -585,6 +636,10 @@
 	async function handleSendPortalInvite() {
 		await portalInvite.mutate(async () => {
 			const created = await sendPortalInvite(apiFetchWithSession, reference);
+			// #255: a fresh invite is always pending, never suppressed --
+			// lifts the Contract section's block and hides this action's
+			// own visibility question ("never invited") right away.
+			clientPortalOverride = { portalInviteStatus: 'pending', emailSuppressed: false };
 			return `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
 		}, 'Failed to send portal invite');
 	}
@@ -685,7 +740,7 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
-		<DescriptionList items={summaryItems(detail!, displayStatus)} />
+		<DescriptionList items={summaryItems(detail!, displayStatus, clientPortalState, hasClientEmailOnFile)} />
 
 		<!--
 			#253: exactly the moves ADR-0015's role table admits from the
@@ -782,7 +837,25 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button label="Send portal invite" onClick={handleSendPortalInvite} loading={isSendingPortalInvite} />
+	<!--
+		#255: an accepted Client is never offered a second invite -- the
+		"Portal invite" summary row above already says "Accepted", so
+		hiding this action here states the same fact rather than a second,
+		clickable copy of it. A Client with no email keeps the button
+		(rather than hiding it too) but disabled, since the summary row's
+		own "no email on file" qualifier is the visible reason -- the same
+		"disabled control, reason stated where the reader already is"
+		shape settings/website's Publish page action uses for its own
+		Owner-only gate.
+	-->
+	{#if !hasAcceptedPortalAccess}
+		<Button
+			label="Send portal invite"
+			onClick={handleSendPortalInvite}
+			loading={isSendingPortalInvite}
+			disabled={!hasClientEmailOnFile}
+		/>
+	{/if}
 {/snippet}
 
 {#snippet visitActions(visit: Visit)}
@@ -980,7 +1053,28 @@
 			/>
 			{#if contract.status === 'draft'}
 				<Button label="Save Contract" onClick={handleSaveContract} loading={isContractBusy} variant="secondary" />
-				<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
+				<!--
+					#255: a Contract sent to a never-invited Client would land
+					in 'sent' with nothing able to move it back out -- reachable
+					only through the portal, which is reachable only by
+					accepting an invite. The precondition is the same one
+					PostSendContractHandler enforces server-side; this only
+					prevents the situation rather than reporting the refusal
+					after the click (block over warn). The Notice names the
+					ordering and the way out -- sending the portal invite,
+					this same page's own header action -- removable in one
+					click, which is what lifts the block without a reload
+					(clientPortalOverride above).
+				-->
+				{#if hasNeverInvitedClient}
+					<Notice
+						variant="status"
+						message="Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists."
+					/>
+					<Button label="Send Contract" disabled loading={isContractBusy} />
+				{:else}
+					<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
+				{/if}
 			{/if}
 		{:else}
 			<Button label="Create Draft Contract" onClick={handleCreateContract} loading={isContractBusy} />
