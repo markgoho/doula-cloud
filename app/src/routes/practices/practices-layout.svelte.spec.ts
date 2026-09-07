@@ -148,7 +148,7 @@ describe('Staff authenticated layout', () => {
 });
 
 describe('the nav', () => {
-	it.each(['Overview', 'Clients', 'Invoices', 'Billing', 'Staff', 'Offers', 'Settings'])(
+	it.each(['Overview', 'Clients', 'Invoices', 'Contracts', 'Billing', 'Staff', 'Offers', 'Settings'])(
 		'offers %s to an Owner',
 		async (label) => {
 			await setup({ roles: ['owner'] });
@@ -159,11 +159,12 @@ describe('the nav', () => {
 
 	/*
 	 * The drawing (#431) shows an Owner's bar. `GET .../invoices`,
-	 * `GET .../billing` and `GET .../staff` are all `ownerAndAdmin` on the
-	 * BFF, so offering a Doula those three would be a promise the endpoint
-	 * refuses -- the same rule #423 applied to the landing page's rail.
+	 * `GET .../contracts/awaiting-signature`, `GET .../billing` and
+	 * `GET .../staff` are all `ownerAndAdmin` on the BFF, so offering a
+	 * Doula those four would be a promise the endpoint refuses -- the same
+	 * rule #423 applied to the landing page's rail.
 	 */
-	it.each(['Invoices', 'Billing', 'Staff'])('hides %s from a Doula', async (label) => {
+	it.each(['Invoices', 'Contracts', 'Billing', 'Staff'])('hides %s from a Doula', async (label) => {
 		await setup({ roles: ['doula'] });
 
 		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
