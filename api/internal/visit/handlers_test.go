@@ -752,7 +752,7 @@ func TestCreateHandler_WithScheduledAt(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.ScheduledAt == nil || *out.ScheduledAt != scheduledAt {
+	if out.ScheduledAt == nil || !out.ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
 		t.Fatalf("ScheduledAt = %v, want %q", out.ScheduledAt, scheduledAt)
 	}
 
@@ -855,20 +855,34 @@ func TestScheduleHandler_SetsScheduledAt(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.VisitID != visitID || out.ScheduledAt == nil || *out.ScheduledAt != scheduledAt {
+	if out.VisitID != visitID || out.ScheduledAt == nil || !out.ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
 		t.Fatalf("unexpected response: %+v", out)
 	}
 
 	var actorStaffID string
+	var diffJSON []byte
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id::text FROM activity
+		`SELECT actor_staff_id::text, diff FROM activity
 		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'visit_scheduled'`,
 		engagementID,
-	).Scan(&actorStaffID); err != nil {
+	).Scan(&actorStaffID, &diffJSON); err != nil {
 		t.Fatalf("read activity row: %v", err)
 	}
 	if actorStaffID != staffID {
 		t.Fatalf("activity actor = %q, want %q", actorStaffID, staffID)
+	}
+	var diff struct {
+		Before *string `json:"scheduledAtBefore"`
+		After  *string `json:"scheduledAtAfter"`
+	}
+	if err := json.Unmarshal(diffJSON, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if diff.Before != nil {
+		t.Fatalf("diff.scheduledAtBefore = %v, want nil (this Visit had no prior schedule)", diff.Before)
+	}
+	if diff.After == nil || !parseRFC3339(t, *diff.After).Equal(parseRFC3339(t, scheduledAt)) {
+		t.Fatalf("diff.scheduledAtAfter = %v, want %q", diff.After, scheduledAt)
 	}
 }
 
@@ -911,6 +925,32 @@ func TestScheduleHandler_ChangesThenClearsScheduledAt(t *testing.T) {
 	}
 	if out.ScheduledAt != nil {
 		t.Fatalf("ScheduledAt = %v, want nil after clearing", out.ScheduledAt)
+	}
+
+	// The clear's own activity row -- newest of the two this test made --
+	// records the direction covered above (nothing -> a value)'s
+	// counterpart: a value -> nothing.
+	var diffJSON []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'visit_scheduled'
+		  ORDER BY created_at DESC LIMIT 1`,
+		engagementID,
+	).Scan(&diffJSON); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	var diff struct {
+		Before *string `json:"scheduledAtBefore"`
+		After  *string `json:"scheduledAtAfter"`
+	}
+	if err := json.Unmarshal(diffJSON, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if diff.Before == nil || !parseRFC3339(t, *diff.Before).Equal(parseRFC3339(t, changedTo)) {
+		t.Fatalf("diff.scheduledAtBefore = %v, want %q", diff.Before, changedTo)
+	}
+	if diff.After != nil {
+		t.Fatalf("diff.scheduledAtAfter = %v, want nil", diff.After)
 	}
 }
 

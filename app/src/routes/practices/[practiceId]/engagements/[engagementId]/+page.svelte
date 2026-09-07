@@ -99,6 +99,9 @@
 	const visitsCreate = new SectionState<void>(undefined);
 	const visitsError = $derived(visitsLoad.error || visitsCreate.error);
 	const isCreatingVisit = $derived(visitsCreate.isBusy);
+	// #250: optional at creation, the same as it is afterward -- a Doula
+	// logging a meeting that already happened leaves this blank.
+	let newVisitScheduledAt = $state('');
 
 	// #486 AC4: the same record-scoped ledger the practice-wide feed reuses,
 	// through engagement.ListActivityHandler (unchanged by #486) --
@@ -458,8 +461,13 @@
 		}, 'Failed to send portal invite');
 	}
 
-	async function handleCreateVisit() {
-		if (await visitsCreate.mutate(() => createVisit(apiFetchWithSession, reference), 'Failed to add Visit')) {
+	async function handleCreateVisit(event: SubmitEvent) {
+		event.preventDefault();
+		const scheduledAt = newVisitScheduledAt ? new Date(newVisitScheduledAt).toISOString() : undefined;
+		if (
+			await visitsCreate.mutate(() => createVisit(apiFetchWithSession, reference, scheduledAt), 'Failed to add Visit')
+		) {
+			newVisitScheduledAt = '';
 			await loadVisits();
 		}
 	}
@@ -636,7 +644,21 @@
 {/snippet}
 
 {#snippet visitsSection()}
-	<Button label="Add a Visit" onClick={handleCreateVisit} loading={isCreatingVisit} />
+	<form onsubmit={handleCreateVisit}>
+		<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="datetime-local"
+					value={newVisitScheduledAt}
+					onInput={(value) => (newVisitScheduledAt = value)}
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
+	</form>
 
 	{#if visitsError}
 		<Notice variant="error" message={visitsError} />

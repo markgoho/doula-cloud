@@ -222,14 +222,33 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		});
 
 		// Jordan Reyes is visit-2, the fixture's unscheduled row (#250) --
-		// its own field is scoped by that row's unique label id.
-		const field = testPage.getByLabelText('Scheduled date and time').nth(1);
+		// its own field is scoped by that row's unique label id. `exact`
+		// excludes the "Add a Visit" form's own field just above the
+		// table, whose label ("...(optional)") contains this one's as a
+		// substring.
+		const field = testPage.getByLabelText('Scheduled date and time', { exact: true }).nth(1);
 		await field.fill('2027-04-01T09:00');
 		await testPage.getByRole('button', { name: 'Update schedule' }).nth(1).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.path).toContain('/visits/visit-2/schedule');
 		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-04-01T09:00').toISOString() });
+	});
+
+	it('creates a Visit already scheduled from the Add a Visit form', async () => {
+		const requests: { path: string; body: unknown }[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'POST' || !path.endsWith('/visits')) return;
+			requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+			return Promise.resolve(jsonResponse({ visitId: 'visit-3', staffId: 'staff-1' }, 201));
+		});
+
+		await testPage.getByLabelText('Scheduled date and time (optional)').fill('2027-05-20T10:15');
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+
+		await expect.poll(() => requests).toHaveLength(1);
+		expect(requests[0]!.path).toContain('/visits');
+		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-05-20T10:15').toISOString() });
 	});
 });
 

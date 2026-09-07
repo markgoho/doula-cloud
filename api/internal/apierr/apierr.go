@@ -111,17 +111,7 @@ func Write(w http.ResponseWriter, status int, code Code, message string, details
 // hand-wrote this already agreed on). Either way it returns false; the
 // caller's only remaining job is to return when DecodeJSON does.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			Write(w, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "request body exceeds 1 MiB", nil)
-			return false
-		}
-		WriteError(w, "invalid request body", http.StatusBadRequest)
-		return false
-	}
-	return true
+	return decodeJSON(w, r, v, false)
 }
 
 // DecodeJSONOptional is DecodeJSON for a write whose body itself is
@@ -134,9 +124,17 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 // way DecodeJSON does, since a body that *was* sent is still held to the
 // same shape.
 func DecodeJSONOptional(w http.ResponseWriter, r *http.Request, v any) bool {
+	return decodeJSON(w, r, v, true)
+}
+
+// decodeJSON is the one place the two public decoders' shared body lives,
+// so DecodeJSONOptional's empty-body allowance can't drift from
+// DecodeJSON's own decode/error handling by being a second hand-copy of
+// it.
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any, allowEmpty bool) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		if errors.Is(err, io.EOF) {
+		if allowEmpty && errors.Is(err, io.EOF) {
 			return true
 		}
 		var tooLarge *http.MaxBytesError

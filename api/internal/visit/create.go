@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,16 +17,25 @@ import (
 // only thing POST .../visits ever took no body for. ScheduledAt is a
 // pointer so an absent key, an explicit `null`, and no body at all (see
 // apierr.DecodeJSONOptional) all mean the same thing: this Visit is not
-// yet scheduled.
+// yet scheduled. A *string here, not a *time.Time: a malformed value
+// (json.Unmarshal failing straight into a time.Time) would otherwise
+// surface as DecodeJSONOptional's generic "invalid request body" 400
+// rather than parseScheduledAt's own "scheduledAt must be an RFC3339
+// timestamp" -- deliberately narrower than CreateResponse/list.Visit's
+// *time.Time below, which have no such format-message to lose.
 type CreateRequest struct {
 	ScheduledAt *string `json:"scheduledAt"`
 }
 
-// CreateResponse identifies the Visit row created.
+// CreateResponse identifies the Visit row created. ScheduledAt is
+// *time.Time, matching list.Visit's own field -- encoding/json already
+// marshals it to RFC3339(Nano), so what this write echoes back is the
+// exact value list.ListHandler would read for the same row, with no
+// second hand-formatted copy to drift out of sync with it.
 type CreateResponse struct {
-	VisitID     string  `json:"visitId"`
-	StaffID     string  `json:"staffId"`
-	ScheduledAt *string `json:"scheduledAt,omitempty"`
+	VisitID     string     `json:"visitId"`
+	StaffID     string     `json:"staffId"`
+	ScheduledAt *time.Time `json:"scheduledAt,omitempty"`
 }
 
 // CreateHandler creates a Visit under an Engagement, assigned to the
@@ -112,7 +122,7 @@ func CreateHandler() http.Handler {
 		apierr.WriteJSON(w, http.StatusCreated, CreateResponse{
 			VisitID:     visitID,
 			StaffID:     staffID,
-			ScheduledAt: formatScheduledAt(scheduledAt),
+			ScheduledAt: scheduledAt,
 		})
 	})
 }

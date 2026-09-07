@@ -14,6 +14,14 @@ import (
 // joins ReassignHandler as Exempt for the same reason: each is a plain
 // "set this field to the given value" UPDATE, so re-sending an identical
 // body is already a no-op.
+//
+// CreateHandler's own Replayable classification re-checked for #250's new
+// scheduledAt field: idempotency.Wrap keys purely on the Idempotency-Key
+// header plus practiceID/staffID (idempotency.go's lookup/save), and
+// replays whatever status/body the first call produced without ever
+// re-reading the second call's body. Adding a field to CreateRequest
+// changes nothing that decision depends on -- Replayable stays correct
+// for the same reason it was correct before this field existed.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, ListHandler())
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits", true, CreateHandler())

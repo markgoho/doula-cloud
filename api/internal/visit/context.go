@@ -55,14 +55,3 @@ func parseScheduledAt(w http.ResponseWriter, raw *string) (scheduledAt *time.Tim
 	}
 	return &parsed, true
 }
-
-// formatScheduledAt is parseScheduledAt's inverse for a response body --
-// nil in, nil out; a value formats back to the same RFC3339 shape the
-// request accepted.
-func formatScheduledAt(scheduledAt *time.Time) *string {
-	if scheduledAt == nil {
-		return nil
-	}
-	formatted := scheduledAt.Format(time.RFC3339)
-	return &formatted
-}
