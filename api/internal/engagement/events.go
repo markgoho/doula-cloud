@@ -7,7 +7,7 @@ import (
 )
 
 // statusEvent is one row TransitionHandler writes to engagement_events
-// (00087) -- ADR-0015's audit table, shaped on
+// (00090) -- ADR-0015's audit table, shaped on
 // practice_membership_events (00039): both sides of the fact that
 // changed, plus a nullable actor. actorStaffID is a pointer rather than
 // a bare string because a future automation this table anticipates (the

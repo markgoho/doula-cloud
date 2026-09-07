@@ -263,7 +263,7 @@ func TestRLS_ClientsUpdateFollowsSelectScope(t *testing.T) {
 }
 
 // TestEngagementsCompletedHasReason_CHECKRejectsNullReason proves
-// engagements_completed_has_reason (00087) is a real database CHECK, not
+// engagements_completed_has_reason (00090) is a real database CHECK, not
 // only TransitionHandler's own guard: a direct UPDATE to 'completed'
 // with no ending_reason is rejected by Postgres itself, superuser
 // connection and all -- a CHECK applies regardless of role or RLS.
@@ -286,7 +286,7 @@ func TestEngagementsCompletedHasReason_CHECKRejectsNullReason(t *testing.T) {
 }
 
 // TestRLS_EngagementEventsScopedToPractice proves
-// engagement_events_practice_visibility (00087) narrows to rows for
+// engagement_events_practice_visibility (00090) narrows to rows for
 // app.current_practice_id, the same shape
 // TestRLS_EngagementsVisibilityIsScopedToCurrentPractice proves for
 // engagements itself.

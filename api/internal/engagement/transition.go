@@ -107,7 +107,7 @@ type engagementStatusRow struct {
 // engagements.status now.
 //
 // Every legal move writes an engagement_events row (ADR-0015's audit
-// table, staff-only, never portal-readable -- see 00087's RLS policy).
+// table, staff-only, never portal-readable -- see 00090's RLS policy).
 // Two of the four moves also write the (portal-visible-by-default)
 // activity ledger, matching what #476's vocabulary already reserves for
 // them: intake -> active writes ActionCarePhaseChanged, and reaching
