@@ -515,7 +515,7 @@ human walks, once, when the code changes.
 Decided with the above. Checkout, the Account Link and the hosted invoice
 are Stripe's own pages: their DOM is not ours, it changes without notice,
 and a spec over it would assert Stripe's markup rather than our product.
-The parts we own — the Billing screen, the Payments settings screen, the
+The parts we own — the Credits screen, the Getting paid settings screen, the
 Invoice section — are covered up to the redirect and from the redirect
 back. What happens in between is walked by hand, per the run logs in
 `docs/test-plans/`.

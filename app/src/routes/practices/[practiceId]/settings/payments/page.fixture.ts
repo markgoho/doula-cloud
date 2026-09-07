@@ -50,5 +50,5 @@ export const fixture: RouteFixture = {
 		if (path.endsWith('/website')) return jsonResponse(website);
 		return jsonResponse(status);
 	},
-	readyText: 'Payments'
+	readyText: 'Getting paid'
 };

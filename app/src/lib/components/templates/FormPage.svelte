@@ -48,6 +48,13 @@
 		 * Client portal passes its Practice's name (#431, #487).
 		 */
 		serviceName?: string;
+		/**
+		 * A screen's fixed purpose sentence, not its data -- so it renders
+		 * beside the title in all three states (loaded, `loading`,
+		 * `loadError`), not only once the fieldsets do. #256 needed a
+		 * Getting-paid screen to say what it is for before its Stripe
+		 * Connect status has resolved.
+		 */
 		intro?: Snippet;
 		fieldsets: Fieldset[];
 		/**
@@ -94,11 +101,17 @@
 		{#if loadError}
 			<stack-l space="var(--space-7)">
 				<Heading level={1} variant="page" text={title} />
+				{#if intro}
+					<div class="intro">{@render intro()}</div>
+				{/if}
 				<Notice variant="error" message={loadError} />
 			</stack-l>
 		{:else if loading}
 			<stack-l space="var(--space-7)">
 				<Heading level={1} variant="page" text={title} />
+				{#if intro}
+					<div class="intro">{@render intro()}</div>
+				{/if}
 				<Skeleton variant="text" lines={4} label={loading} />
 			</stack-l>
 		{:else}

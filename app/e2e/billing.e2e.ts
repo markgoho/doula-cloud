@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
 
-// Exercises the Billing screen from app/src/routes/practices/[practiceId]/billing end-to-end --
+// Exercises the Credits screen from app/src/routes/practices/[practiceId]/billing end-to-end --
 // billing.ts has its own Vitest coverage, but this is the only test that renders the actual route
 // and hits the real API, proving the signup-bonus grant (#74) surfaces through GetBalanceHandler
 // (#75) and the page.
@@ -15,7 +15,7 @@ test('Staff member can view the signup-bonus balance and ledger history', async 
 	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
-	await page.getByRole('link', { name: 'Billing' }).click();
+	await page.getByRole('link', { name: 'Credits' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/billing$`));
 
 	// A brand-new Practice's balance is the +3 signup_bonus grant from

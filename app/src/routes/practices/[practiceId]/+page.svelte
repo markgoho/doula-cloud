@@ -293,7 +293,7 @@
 						href={resolve('/practices/[practiceId]/settings/payments', {
 							practiceId: page.params.practiceId!
 						})}
-						label="Payment settings"
+						label="Getting paid"
 						variant="secondary"
 					/>
 				</cluster-l>

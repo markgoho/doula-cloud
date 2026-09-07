@@ -117,9 +117,24 @@
 </script>
 
 {#snippet intro()}
+	<!--
+		#256: this screen used to say only "Credit balance: {n}", nothing
+		naming who a Credit is bought from or what one costs -- so an Owner
+		could not tell it apart from Getting paid (Stripe Connect, a
+		different counterparty entirely) without opening both. The three
+		sentences below state that in CONTEXT.md's own words: Credit ("a
+		unit of Doula Cloud's own billing... one costs $20.00") and
+		Connected account ("so Clients can pay that Practice directly").
+		"Stripe account" itself is on that entry's own _Avoid_ list, so the
+		cross-reference says "connects Stripe", matching the button and
+		status copy on that screen.
+	-->
+	<Text text="Practices buy Credits from Doula Cloud." />
 	<Text
 		text="One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care."
 	/>
+	<Text text="One Credit costs $20.00." />
+	<Text text="Getting paid is a separate screen, where this Practice connects Stripe so its Clients can pay it directly." />
 	<Text text={`Credit balance: ${data.balance}`} />
 {/snippet}
 
@@ -178,7 +193,13 @@
 				tone="variant"
 			/>
 		{:else}
-			<Text text="Credit price is unavailable right now." step="body-sm" tone="variant" />
+			<!--
+				#256's intro above now states the ordinary $20.00 price as a
+				fixed fact, so this sentence is scoped to what is actually
+				missing -- today's checkout total from Stripe -- rather than
+				repeating "price" and reading as a contradiction of it.
+			-->
+			<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
 		{/if}
 
 		<Button
@@ -206,4 +227,4 @@
 	</form>
 {/snippet}
 
-<ListPage title="Billing" {intro} {content} />
+<ListPage title="Credits" {intro} {content} />

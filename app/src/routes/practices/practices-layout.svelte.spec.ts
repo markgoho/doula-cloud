@@ -154,7 +154,7 @@ describe('the nav', () => {
 		'Schedule',
 		'Invoices',
 		'Contracts',
-		'Billing',
+		'Credits',
 		'Staff',
 		'Offers',
 		'Settings'
@@ -174,7 +174,7 @@ describe('the nav', () => {
 	 * Doula those four would be a promise the endpoint refuses -- the same
 	 * rule #423 applied to the landing page's rail.
 	 */
-	it.each(['Invoices', 'Contracts', 'Billing', 'Staff'])('hides %s from a Doula', async (label) => {
+	it.each(['Invoices', 'Contracts', 'Credits', 'Staff'])('hides %s from a Doula', async (label) => {
 		await setup({ roles: ['doula'] });
 
 		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
@@ -192,7 +192,7 @@ describe('the nav', () => {
 	it('keeps the admin-only items hidden when no Practice session has resolved yet', async () => {
 		await setup({ hasPracticeSession: false });
 
-		await expect.element(page.getByRole('link', { name: 'Billing', exact: true })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Credits', exact: true })).not.toBeInTheDocument();
 	});
 
 	it('marks the current section, and marks it with more than colour', async () => {
