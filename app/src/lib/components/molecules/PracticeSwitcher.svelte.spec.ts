@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import PracticeSwitcher, { rolesLabel, type PracticeOption } from './PracticeSwitcher.svelte';
+import PracticeSwitcher, { type PracticeOption } from './PracticeSwitcher.svelte';
 
 const RIVERSIDE: PracticeOption = {
 	practiceId: 'p1',
@@ -30,18 +30,8 @@ async function setup({
 	return { trigger: page.getByRole('button', { name: /Riverside Doula Collective/ }) };
 }
 
-describe('rolesLabel', () => {
-	it.each([
-		[['owner', 'admin'], 'Owner, Admin'],
-		[['doula'], 'Doula'],
-		// A role the BFF grows before this map catches up still prints,
-		// rather than vanishing from a person's own list of what she is.
-		[['midwife'], 'Midwife'],
-		[[], '']
-	])('writes %s as "%s"', (roles, expected) => {
-		expect(rolesLabel(roles)).toBe(expected);
-	});
-});
+// `rolesLabel` itself now lives in `#lib/roles.js` and is tested there
+// (#262); the switcher only spends it.
 
 describe('PracticeSwitcher', () => {
 	it('names the Practice a person is looking at', async () => {

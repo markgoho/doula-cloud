@@ -23,7 +23,10 @@
 		 */
 		legend?: string;
 		name?: string;
-		options: Option<T>[];
+		/* `readonly`: the group only reads its options, and a caller
+		   handing it a shared constant (`EMPLOYMENT_TYPE_LABELS`, #262)
+		   should not have to copy the array to pass it. */
+		options: readonly Option<T>[];
 		value: T;
 		onChange: (value: T) => void;
 		/*

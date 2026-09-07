@@ -10,27 +10,13 @@
 		roles: string[];
 		href: string;
 	}
-
-	// ADR-0008's three roles, title-cased for reading. A role the BFF grows
-	// later and this map has not caught up with still prints, capitalised,
-	// rather than disappearing from a person's own list of what she is.
-	const ROLE_LABELS: Record<string, string> = {
-		owner: 'Owner',
-		admin: 'Admin',
-		doula: 'Doula'
-	};
-
-	export function rolesLabel(roles: string[]): string {
-		return roles
-			.map((role) => ROLE_LABELS[role] ?? role.charAt(0).toLocaleUpperCase() + role.slice(1))
-			.join(', ');
-	}
 </script>
 
 <script lang="ts">
 	import Icon from '#lib/components/atoms/Icon.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import MenuButton from './MenuButton.svelte';
+	import { rolesLabel } from '#lib/roles.js';
 
 	/*
 	 * Which Practice the person is looking at, and the way to the others

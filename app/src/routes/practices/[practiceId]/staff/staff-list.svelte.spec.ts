@@ -234,9 +234,9 @@ describe('staff screen', () => {
 			.element(testPage.getByRole('cell', { name: ownerMember.name, exact: true }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: ownerMember.email })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'owner, admin' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Owner, Admin' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'no roles yet' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'contractor' }).first()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Contractor' }).first()).toBeVisible();
 	});
 
 	// #261: a pending invitation must be tellable apart from a member who
@@ -296,9 +296,9 @@ describe('staff screen', () => {
 		// Membership -- both halves, from one save.
 		await expect.element(testPage.getByRole('group', { name: 'Roles' })).not.toBeInTheDocument();
 		await expect
-			.element(testPage.getByRole('cell', { name: 'owner, admin, doula' }))
+			.element(testPage.getByRole('cell', { name: 'Owner, Admin, Doula' }))
 			.toBeVisible();
-		const contractorCells = testPage.getByRole('cell', { name: 'contractor' });
+		const contractorCells = testPage.getByRole('cell', { name: 'Contractor' });
 		await expect.element(contractorCells.first()).toBeVisible();
 		expect(contractorCells.elements()).toHaveLength(3);
 	});
@@ -323,7 +323,7 @@ describe('staff screen', () => {
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
 		await expect.element(testPage.getByRole('group', { name: 'Roles' })).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('cell', { name: 'owner, admin' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Owner, Admin' })).toBeVisible();
 	});
 
 	it('removes a revoked invitation from the pending group', async () => {

@@ -2,7 +2,7 @@
 	import LabeledField from './LabeledField.svelte';
 	import RadioGroup from './RadioGroup.svelte';
 	import Checkbox from '../atoms/Checkbox.svelte';
-	import { ROLE_LABELS } from '#lib/roles.js';
+	import { ROLE_LABELS, EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '#lib/roles.js';
 
 	// The two halves of a Membership, edited together: ADR-0008 makes
 	// roles what a person does at a Practice and employment type what she
@@ -12,9 +12,9 @@
 	// the two screens must not drift apart.
 	interface Properties {
 		roles: string[];
-		employmentType: 'employee' | 'contractor';
+		employmentType: EmploymentType;
 		onRolesChange: (roles: string[]) => void;
-		onEmploymentTypeChange: (employmentType: 'employee' | 'contractor') => void;
+		onEmploymentTypeChange: (employmentType: EmploymentType) => void;
 		/**
 		 * A refusal that belongs to the Roles group rather than to any one
 		 * checkbox in it -- "Select at least one role" (#467). It renders
@@ -46,10 +46,7 @@
 
 	const roleOptions = ROLE_LABELS;
 
-	const employmentOptions: { value: 'employee' | 'contractor'; label: string }[] = [
-		{ value: 'employee', label: 'Employee' },
-		{ value: 'contractor', label: 'Contractor' }
-	];
+	const employmentOptions = EMPLOYMENT_TYPE_LABELS;
 
 	function toggleRole(role: string, isChecked: boolean) {
 		// Order follows roleOptions rather than the click order, so the
