@@ -10,7 +10,7 @@ import Page from './+page.svelte';
 // clients-list.svelte.spec.ts's own reason for the same line). #486's own
 // DataTable assertions below need the real table-view/record-view switch.
 import '#lib/styles/app.css';
-import { toPageState } from '../../../../routeFixture.js';
+import { toApiResponder, toPageState } from '../../../../routeFixture.js';
 import { detail as fixtureDetail, fixture } from './page.fixture.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -158,5 +158,47 @@ describe('the Activity ledger section (#486)', () => {
 		await setup(fixtureDetail, jsonResponse('nope', 403));
 
 		await expect.element(testPage.getByText('nope')).toBeVisible();
+	});
+});
+
+// #841: each SectionState is its own instance, so one section's failure
+// must not touch another's -- proved here rather than by the default
+// "everything answers 403" mock every other test in this file uses, since
+// that shows every section failing at once, not one failing independently.
+describe('a section fails on its own, independent of the others (#841)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it("shows the Contract section's own failure while Visits still renders its fixture row", async () => {
+		await testPage.viewport(1440, 900);
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string) =>
+			path.endsWith('/contract') ? Promise.resolve(jsonResponse('contract is down', 500)) : respond(path)
+		);
+
+		await render(Page, {
+			data: {
+				...fixtureDetail,
+				session: {
+					practiceId: fixture.params.practiceId,
+					practiceName: 'Riverside Doula Collective',
+					roles: [],
+					isContractor: false
+				}
+			},
+			params: fixture.params
+		});
+
+		await expect.element(testPage.getByText('contract is down')).toBeVisible();
+		// Scoped to the Visits section by its own label: the fixture's
+		// Visit's staffName also appears in the reassign row's
+		// visually-hidden name and, once Activity's own fixture entry
+		// loads, in that section too -- an unscoped query is ambiguous.
+		await expect
+			.element(
+				testPage.getByLabelText('Visits').getByRole('cell', { name: 'Anne-Marie Ochieng-Whitfield', exact: true })
+			)
+			.toBeVisible();
 	});
 });
