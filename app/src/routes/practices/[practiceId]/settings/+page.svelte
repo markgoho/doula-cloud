@@ -37,11 +37,19 @@
 	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
 
 	const settings = $derived([
-		{
-			label: 'Payments',
-			description: 'How this Practice gets paid, and what Stripe still wants from it.',
-			href: resolve('/practices/[practiceId]/settings/payments', { practiceId })
-		},
+		// Payments (#267) is gated the same notch as blocked addresses, and
+		// for the same reason: its screen reads an Owner-or-Admin endpoint,
+		// so a Doula who followed the link would meet a screen with nothing
+		// on it. It stays first in the list for whoever does see it.
+		...(isPracticeOwnerOrAdmin
+			? [
+					{
+						label: 'Payments',
+						description: 'How this Practice gets paid, and what Stripe still wants from it.',
+						href: resolve('/practices/[practiceId]/settings/payments', { practiceId })
+					}
+				]
+			: []),
 		{
 			label: 'Website',
 			description: 'The address a Client arrives from.',

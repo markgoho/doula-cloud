@@ -62,7 +62,18 @@ function mockApi({
 	pageState.data = {
 		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
 	};
+	// The real gate is Owner-or-Admin (#267), so the mock answers the way
+	// the BFF does rather than 200 unconditionally: a Doula who somehow
+	// reached the request would get the shared refusal, which is exactly
+	// what the screen must never render. The Doula test asserts the request
+	// is never made at all, so this branch is a tripwire -- if the guard
+	// regresses, the 403 body appears on screen and the test fails loudly
+	// rather than passing on a fabricated 200.
+	const isOwnerOrAdmin = roles.includes('owner') || roles.includes('admin');
 	apiFetchWithSession.mockImplementation((path: string) => {
+		if (!isOwnerOrAdmin) {
+			return Promise.resolve(new Response('not permitted to read this', { status: 403 }));
+		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(
 				jsonResponse({
@@ -105,11 +116,30 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
 	});
 
-	it('tells a non-Owner to ask an Owner instead of showing a button', async () => {
+	// #267 split the old single "non-Owner" test in two, because the two
+	// populations it covered no longer see the same screen: an Admin reads
+	// the status and is told who connects it, a Doula reads nothing at all.
+	it('shows an Admin the status and who connects it, with no button', async () => {
+		mockApi({ status: 'not_connected', roles: ['admin'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Not connected')).toBeVisible();
+		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+	});
+
+	it('asks the BFF nothing for a Doula, and never prints its refusal', async () => {
 		mockApi({ status: 'not_connected', roles: ['doula'] });
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Only a Practice Owner or Admin can see how this Practice gets paid.'))
+			.toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		await expect.element(testPage.getByText('not permitted to read this')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Stripe Connect status:')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Loading your Stripe Connect status')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 	});
 
