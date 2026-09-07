@@ -370,7 +370,13 @@
 	// absent assignee means "me". An Owner or Admin who is not a Doula has
 	// no self to log, so for her the picker is the only way in.
 	const canLogOwnVisit = $derived(isDoula(data.session));
-	const isOffersVisible = $derived(offersState.value !== undefined && canAssignVisits);
+	// The Offers section turns on the Offers read alone, not on the roster.
+	// The two happen to be the same pair of roles today (both Owner and
+	// Admin), so tying Offers to `canAssignVisits` looked free -- but it
+	// makes an unrelated roster outage take the Offers section down with
+	// it, and it re-decides who may see Offers in a place that is not
+	// about Offers. Each section answers for its own read.
+	const isOffersVisible = $derived(offersState.value !== undefined);
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -634,11 +640,18 @@
 		await offersState.load(() => loadOffers(apiFetchWithSession, reference, loadEngagementOffers), '');
 	}
 
-	// Silent for the same reason the Offers load is: a refused roster read
-	// is this reader's role, not a failure, and loadDoulasOrNone already
-	// answers it with `undefined` rather than a throw.
+	// Silent about a *refusal*, and only about a refusal: a roster read
+	// this reader's role does not admit her to is her role, not a failure,
+	// and loadDoulasOrNone answers it with `undefined` rather than a
+	// throw. Anything else -- a 500, a dropped connection -- it rethrows,
+	// and rosterState.error carries it to the Notice above the Visits
+	// table, because the alternative is an Owner watching every
+	// assign-shaped control on this page vanish with no reason given.
 	async function loadRoster() {
-		await rosterState.load(() => loadDoulasOrNone(apiFetchWithSession, reference.practiceId), '');
+		await rosterState.load(
+			() => loadDoulasOrNone(apiFetchWithSession, reference.practiceId),
+			'We could not load the Practice roster, so there is nobody to pick from. Try again.'
+		);
 	}
 
 	async function handleCreateOffer(offer: NewOffer) {
@@ -1060,6 +1073,10 @@
 			</LabeledField>
 			<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
 		</form>
+	{/if}
+
+	{#if rosterState.error}
+		<Notice variant="error" message={rosterState.error} />
 	{/if}
 
 	{#if visitsError}

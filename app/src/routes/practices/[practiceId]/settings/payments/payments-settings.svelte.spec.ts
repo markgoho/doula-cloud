@@ -127,6 +127,23 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
 		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+		// The checklist is written in the second person to whoever will sit
+		// through Stripe's form -- "have your phone and your bank details
+		// with you", "your date of birth". None of that is the Admin's to
+		// do, and asserting only the sentence above would pass on a screen
+		// that told her to go and find her Social Security number.
+		await expect.element(testPage.getByText('What Stripe will ask you for')).not.toBeInTheDocument();
+	});
+
+	// The blocked states used to show an Admin nothing at all: the sentence
+	// lived beside the button, under a condition that is false whenever the
+	// Owner still has the website question to answer.
+	it('tells an Admin who connects Stripe even while the website question blocks it', async () => {
+		mockApi({ status: 'not_connected', roles: ['admin'], websiteMode: 'undeclared' });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Answer the website question' })).not.toBeInTheDocument();
 	});
 
 	it('asks the BFF nothing for a Doula, and never prints its refusal', async () => {

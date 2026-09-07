@@ -203,7 +203,8 @@ func PostConnectHandler(client Client) http.Handler {
 // ADR-0008's read table gives Stripe Connect state to an Owner and an
 // Admin, and to no Doula of either employment type (#267) -- enforced by
 // the staffauth.OwnerAndAdmin role declaration on this route's
-// GatedRouter mount, not inside this handler. A Practice with no stored account id is reported
+// GatedRouter mount, not inside this handler. A Practice with no stored
+// account id is reported
 // not_connected without any Stripe call; otherwise status is read live
 // via an on-demand Account retrieve (#79's ticket body: this is
 // deliberately not backed by the webhook-synced columns on practices).

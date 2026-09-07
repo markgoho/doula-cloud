@@ -112,10 +112,14 @@ export function canReadRoster(roles: string[]): boolean {
 	return roles.includes('owner') || roles.includes('admin');
 }
 
-/** `GET .../payments/connect` is Owner-only -- narrower than the roster,
- * which is why the two gates are separate rather than one `isAdmin`. */
+/** `GET .../payments/connect` is Owner-or-Admin, the same pair as the
+ * roster (#267): ADR-0008's read table gives Stripe Connect state to the
+ * Admin for the reason it already gives her Invoice history -- this is
+ * the state of the rail those Invoices are paid on. Kept as its own
+ * function rather than folded into `canReadRoster` because the two
+ * answer about different endpoints, and one of them may narrow again. */
 export function canReadConnect(roles: string[]): boolean {
-	return roles.includes('owner');
+	return roles.includes('owner') || roles.includes('admin');
 }
 
 /** Whether `OverviewHub`'s optional `secondary` region has anything in

@@ -57,7 +57,7 @@ function fetcherFor(overrides: Record<string, Response> = {}) {
 describe('role gates', () => {
 	it.each([
 		[['owner'], true, true],
-		[['admin'], true, false],
+		[['admin'], true, true],
 		[['doula'], false, false],
 		[[], false, false]
 	])('%s reads the roster: %s, Connect: %s', (roles, roster_, connect) => {
@@ -154,12 +154,15 @@ describe('loadPracticeLanding', () => {
 		]);
 	});
 
-	it('asks for the roster and credits but not Connect on behalf of an Admin', async () => {
+	// #267 moved Connect onto ADR-0008's Owner-and-Admin row, beside the
+	// Invoice history it is the payment rail for, so the Admin's Overview
+	// carries the same three blocks the Owner's does.
+	it('asks for the roster, credits and Connect on behalf of an Admin', async () => {
 		const fetcher = fetcherFor();
 
 		const landing = await loadPracticeLanding(fetcher, 'practice-1', { ...session, roles: ['admin'] });
 
-		expect(landing.connect).toBeUndefined();
+		expect(landing.connect).not.toBeUndefined();
 		expect(landing.roster).not.toBeUndefined();
 		expect(landing.credit).not.toBeUndefined();
 	});

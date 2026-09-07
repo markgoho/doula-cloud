@@ -219,11 +219,15 @@ describe('the Practice landing page', () => {
 		await expect.element(testPage.getByText('Could not load pending requests just now.')).toBeVisible();
 	});
 
-	it('shows an Admin no Stripe block, because that endpoint would refuse her', async () => {
+	// #267 gave Stripe Connect state to the Admin as well as the Owner --
+	// ADR-0008's read table puts it beside the Invoice history it is the
+	// payment rail for -- so her Overview carries the block the endpoint
+	// now answers for her.
+	it('shows an Admin the Stripe block, the same as the Owner', async () => {
 		await setup({ roles: ['admin'] });
 
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
-		expect(testPage.getByRole('heading', { name: 'Getting paid' }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('heading', { name: 'Getting paid' })).toBeVisible();
 	});
 
 	it('shows a Doula her Offers and no rail at all', async () => {

@@ -39,6 +39,12 @@ recorded Payment — all without Dee ever opening a Care Plan or logging a Visit
   client-side. Neither `office_manager` nor `doula` is read anywhere. Dee is therefore
   indistinguishable from any other non-owner Staff member today. That is a first-order
   finding for the practice-side test plan, not a naming quibble.
+  **Partly overtaken by the code.** `admin` is read now: ADR-0008's read table is
+  enforced at the mount seam through `staffauth.OwnerAndAdmin`, and
+  [#267](https://github.com/markgoho/doula-cloud/issues/267) put `GET
+  .../payments/connect` there — so Dee reads a Practice's Stripe Connect state. Only
+  the *write* in `payments/connect.go` is still Owner-only. The sentence above is kept
+  as the finding that was made, not as a description of trunk.
 - **Admin is the settled word** (CONTEXT.md), and the code has not caught up: the enum
   value is still `office_manager`, and the Staff list renders roles as raw strings
   (`member.roles.join(', ')`), so Dee shows up on screen as `office_manager`. Journey
