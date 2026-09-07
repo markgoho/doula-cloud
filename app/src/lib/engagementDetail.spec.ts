@@ -12,6 +12,7 @@ import {
 	messagesURL,
 	portalInviteURL,
 	reassignVisit,
+	scheduleVisit,
 	sendMessage,
 	sendPortalInvite,
 	visitsURL,
@@ -232,18 +233,66 @@ describe('sendPortalInvite', () => {
 });
 
 describe('createVisit', () => {
-	it('posts to the Visits endpoint', async () => {
+	it('posts to the Visits endpoint with no scheduledAt', async () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
 
 		await createVisit(fetcher, reference);
 
-		expect(fetcher).toHaveBeenCalledWith(`${base}/visits`, { method: 'POST' });
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ scheduledAt: undefined })
+		});
+	});
+
+	it('posts the given scheduledAt', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await createVisit(fetcher, reference, '2027-03-15T14:30:00Z');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ scheduledAt: '2027-03-15T14:30:00Z' })
+		});
 	});
 
 	it('throws a refusal', async () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
 
 		await expect(createVisit(fetcher, reference)).rejects.toThrow('nope');
+	});
+});
+
+describe('scheduleVisit', () => {
+	it('patches the Visit with the new scheduledAt', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await scheduleVisit(fetcher, reference, 'visit-1', '2027-03-15T14:30:00Z');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits/visit-1/schedule`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ scheduledAt: '2027-03-15T14:30:00Z' })
+		});
+	});
+
+	it('clears scheduledAt when given undefined', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await scheduleVisit(fetcher, reference, 'visit-1', undefined);
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits/visit-1/schedule`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ scheduledAt: undefined })
+		});
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(scheduleVisit(fetcher, reference, 'visit-1', '2027-03-15T14:30:00Z')).rejects.toThrow('nope');
 	});
 });
 

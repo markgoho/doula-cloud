@@ -10,6 +10,7 @@ package apierr
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 )
 
@@ -112,6 +113,32 @@ func Write(w http.ResponseWriter, status int, code Code, message string, details
 func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			Write(w, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "request body exceeds 1 MiB", nil)
+			return false
+		}
+		WriteError(w, "invalid request body", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+// DecodeJSONOptional is DecodeJSON for a write whose body itself is
+// optional -- visit.CreateHandler's own case (#250): a Visit may be
+// created with no scheduled instant at all, and that request has always
+// sent no body, so demanding one now would break every caller that still
+// sends none. An empty body (io.EOF on the first token) leaves v at its
+// zero value and reports success; any other decode failure -- a
+// malformed body, one that trips the 1 MiB cap -- refuses exactly the
+// way DecodeJSON does, since a body that *was* sent is still held to the
+// same shape.
+func DecodeJSONOptional(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		if errors.Is(err, io.EOF) {
+			return true
+		}
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			Write(w, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "request body exceeds 1 MiB", nil)

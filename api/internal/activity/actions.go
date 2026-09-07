@@ -93,6 +93,17 @@ const (
 	ActionVisitLogged     EngagementAction = "visit_logged"
 	ActionVisitReassigned EngagementAction = "visit_reassigned"
 
+	// ActionVisitScheduled records a Visit's scheduled date/time being
+	// set, changed or cleared (#250) -- its own action, distinct from
+	// ActionVisitLogged (the row being typed) and ActionVisitReassigned
+	// (which Doula covers it). Deliberately absent from staffingActions
+	// below: unlike a reassignment, which names which Doula covers a
+	// Visit (a Practice roster fact), when a Visit happens is a fact
+	// about a Client's own care, the same footing ActionVisitLogged
+	// already stands on -- neither is excluded from her own portal
+	// ledger.
+	ActionVisitScheduled EngagementAction = "visit_scheduled"
+
 	ActionPlanInstanceEdited EngagementAction = "plan_instance_edited"
 
 	// ActionBirthPlanAcknowledged records a Client confirming she has

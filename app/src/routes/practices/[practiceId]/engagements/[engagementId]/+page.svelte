@@ -12,13 +12,14 @@
 		loadOffersSection as loadOffers,
 		loadVisitsPage,
 		reassignVisit,
+		scheduleVisit,
 		sendMessage,
 		sendPortalInvite,
 		type OffersSection,
 		type Visit
 	} from '#lib/engagementDetail.js';
 	import type { PageProps as PageProperties } from './$types';
-	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { formatCalendarDay, formatInstant, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import { activityLedgerColumns, loadEngagementActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
@@ -123,6 +124,15 @@
 	// at once must not share one error or one busy flag, which is exactly
 	// what a single SectionState would do.
 	let reassignSections = $state<Record<string, SectionState<void>>>({});
+
+	// #250: a per-row schedule control, the same per-row-state shape
+	// reassign already established just above. scheduleValue holds a
+	// draft only once a row's own field has been touched -- until then
+	// the field's own value falls back to the Visit's current
+	// scheduledAt (see scheduleAction below), so editing one row never
+	// disturbs another's.
+	let scheduleValue = $state<Record<string, string>>({});
+	let scheduleSections = $state<Record<string, SectionState<void>>>({});
 
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
@@ -467,6 +477,25 @@
 		}
 	}
 
+	// #250: an empty control clears the schedule -- `datetime-local`
+	// reports "" the same way whether the field was never touched or was
+	// deliberately emptied, and `undefined` is scheduleVisit's own way of
+	// saying "clear it" (engagementDetail.ts).
+	async function handleSchedule(visitId: string, event: SubmitEvent) {
+		event.preventDefault();
+		const section = (scheduleSections[visitId] ??= new SectionState<void>(undefined));
+		const raw = scheduleValue[visitId] ?? '';
+		const scheduledAt = raw ? new Date(raw).toISOString() : undefined;
+		const wasScheduled = await section.mutate(
+			() => scheduleVisit(apiFetchWithSession, reference, visitId, scheduledAt),
+			'Failed to update Visit schedule'
+		);
+		if (wasScheduled) {
+			delete scheduleValue[visitId];
+			await loadVisits();
+		}
+	}
+
 	// Reuses loadMessagesPage rather than re-fetching by hand: the query
 	// string and the newest-first-to-oldest-first reversal are exactly the
 	// same read, just prepended instead of replacing.
@@ -546,7 +575,10 @@
 	<Button label="Send portal invite" onClick={handleSendPortalInvite} loading={isSendingPortalInvite} />
 {/snippet}
 
-{#snippet reassignAction(visit: Visit)}
+{#snippet visitActions(visit: Visit)}
+	<span class="visually-hidden" id="visit-{visit.visitId}-name"
+		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt)}</span
+	>
 	<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
 		<LabeledField id={`reassign-staff-${visit.visitId}`} label="Reassign to Staff id">
 			{#snippet children({ id, describedBy, invalid })}
@@ -565,14 +597,41 @@
 			type="submit"
 			size="sm"
 			variant="secondary"
-			describedBy="visit-{visit.visitId}-reassign-name"
+			describedBy="visit-{visit.visitId}-name"
 		/>
-		<span class="visually-hidden" id="visit-{visit.visitId}-reassign-name"
-			>{visit.staffName}, {new Date(visit.createdAt).toLocaleDateString()}</span
-		>
 	</form>
 	{#if reassignSections[visit.visitId]?.error}
 		<Notice variant="error" message={reassignSections[visit.visitId]!.error} />
+	{/if}
+
+	<!--
+		#250: an empty value clears the schedule -- there is no separate
+		"Clear" control, since emptying the field the datetime picker
+		already offers is the plainer way to ask for the same thing.
+	-->
+	<form onsubmit={(event) => handleSchedule(visit.visitId, event)}>
+		<LabeledField id={`schedule-visit-${visit.visitId}`} label="Scheduled date and time">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="datetime-local"
+					value={scheduleValue[visit.visitId] ?? toDatetimeLocalValue(visit.scheduledAt)}
+					onInput={(value) => (scheduleValue[visit.visitId] = value)}
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button
+			label="Update schedule"
+			type="submit"
+			size="sm"
+			variant="secondary"
+			describedBy="visit-{visit.visitId}-name"
+		/>
+	</form>
+	{#if scheduleSections[visit.visitId]?.error}
+		<Notice variant="error" message={scheduleSections[visit.visitId]!.error} />
 	{/if}
 {/snippet}
 
@@ -586,10 +645,10 @@
 	<DataTable
 		columns={[
 			{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
-			{ label: 'Date', accessor: (visit: Visit) => new Date(visit.createdAt).toLocaleDateString() }
+			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) }
 		]}
 		rows={visits.items}
-		rowActions={{ label: 'Reassign', content: reassignAction }}
+		rowActions={{ label: 'Actions', content: visitActions }}
 		hasMore={visits.hasMore}
 		onLoadMore={() => visits.loadMore()}
 		isLoadingMore={visits.isLoadingMore}

@@ -77,6 +77,42 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
 	return `${day} ${month} ${year}, ${formatClock(date)}`;
 }
 
+/**
+ * A Visit's own Date column and per-row summary (#250): "Not yet
+ * scheduled" -- plain text, so it is readable at 320px and announced to a
+ * screen reader the same as any other cell -- when `value` is absent, or
+ * the same day-and-clock treatment `formatActivityTimestamp`'s absolute
+ * branch already uses (`formatClock`, this file's own) otherwise. Not
+ * relative-under-a-week like that function's own recent-past branches: a
+ * Visit's scheduled instant is as often ahead as behind, and "in 3 days"
+ * reads oddly beside "Yesterday" for a thing that has not happened yet.
+ */
+export function formatScheduledVisit(value: string | undefined): string {
+	if (!value) return 'Not yet scheduled';
+	const date = new Date(value);
+	const day = date.getDate();
+	const month = date.toLocaleDateString('en-US', { month: 'short' });
+	const year = date.getFullYear();
+	return `${day} ${month} ${year}, ${formatClock(date)}`;
+}
+
+/**
+ * `<input type="datetime-local">`'s own value shape ("YYYY-MM-DDTHH:mm",
+ * local time, no offset) from an ISO instant -- the inverse of what that
+ * control hands back on input, so a Visit's existing scheduled value
+ * (#250) can prefill the field it is being changed through. `""` for
+ * `undefined`/`null`, the value an empty control itself reports.
+ */
+export function toDatetimeLocalValue(value: string | undefined): string {
+	if (!value) return '';
+	const date = new Date(value);
+	return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())}T${padTwoDigits(date.getHours())}:${padTwoDigits(date.getMinutes())}`;
+}
+
+function padTwoDigits(n: number): string {
+	return n.toString().padStart(2, '0');
+}
+
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;

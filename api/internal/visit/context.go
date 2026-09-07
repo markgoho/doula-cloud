@@ -1,14 +1,18 @@
 // Package visit holds the Staff-side BFF handlers for Visit: list, create,
-// and reassign. All three rely on staffauth.Middleware having already
-// resolved the caller's Staff/Practice ids and opened a request-scoped
-// *sql.Tx with app.current_practice_id set, the same way the engagement
-// package's handlers do.
+// reassign, and schedule. All four rely on staffauth.Middleware having
+// already resolved the caller's Staff/Practice ids and opened a
+// request-scoped *sql.Tx with app.current_practice_id set, the same way
+// the engagement package's handlers do.
 package visit
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
+	"time"
+
+	"doula-cloud/api/internal/apierr"
 )
 
 // requireEngagementAtPractice confirms engagementID exists and belongs to
@@ -31,4 +35,34 @@ func requireEngagementAtPractice(ctx context.Context, tx *sql.Tx, engagementID, 
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// parseScheduledAt turns a request's optional RFC3339 scheduledAt string
+// into a *time.Time, shared by CreateHandler and ScheduleHandler so the
+// two writes agree on the one format a caller may send. raw == nil (the
+// field absent, explicitly null, or the whole body absent) means
+// unscheduled and returns (nil, true) -- not an error. A raw value that
+// fails to parse writes its own 400 and returns ok=false, the caller's
+// signal to return without doing anything else.
+func parseScheduledAt(w http.ResponseWriter, raw *string) (scheduledAt *time.Time, ok bool) {
+	if raw == nil {
+		return nil, true
+	}
+	parsed, err := time.Parse(time.RFC3339, *raw)
+	if err != nil {
+		apierr.WriteError(w, "scheduledAt must be an RFC3339 timestamp", http.StatusBadRequest)
+		return nil, false
+	}
+	return &parsed, true
+}
+
+// formatScheduledAt is parseScheduledAt's inverse for a response body --
+// nil in, nil out; a value formats back to the same RFC3339 shape the
+// request accepted.
+func formatScheduledAt(scheduledAt *time.Time) *string {
+	if scheduledAt == nil {
+		return nil
+	}
+	formatted := scheduledAt.Format(time.RFC3339)
+	return &formatted
 }

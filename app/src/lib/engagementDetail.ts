@@ -52,6 +52,9 @@ export interface Visit {
 	staffId: string;
 	staffName: string;
 	createdAt: string;
+	/** When the Visit itself happens, distinct from createdAt (#250) --
+	 * absent for a Visit not yet scheduled. */
+	scheduledAt?: string;
 }
 
 /**
@@ -161,10 +164,19 @@ export async function sendPortalInvite(
 	return (await response.json()) as { inviteToken: string };
 }
 
-/** Adds a Visit to this Engagement. The caller reloads the list itself --
- * this only reports whether the add succeeded. */
-export async function createVisit(fetcher: Fetcher, reference: EngagementReference): Promise<void> {
-	const response = await fetcher(visitsURL(reference), { method: 'POST' });
+/** Adds a Visit to this Engagement, optionally scheduled (#250). The
+ * caller reloads the list itself -- this only reports whether the add
+ * succeeded. */
+export async function createVisit(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	scheduledAt?: string
+): Promise<void> {
+	const response = await fetcher(visitsURL(reference), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ scheduledAt })
+	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
 }
 
@@ -181,6 +193,25 @@ export async function reassignVisit(
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ staffId })
+	});
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+}
+
+/**
+ * Sets, changes or clears visitId's own scheduled instant (#250) --
+ * scheduledAt === undefined clears it, the same way an empty
+ * `datetime-local` control reports itself.
+ */
+export async function scheduleVisit(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	visitId: string,
+	scheduledAt: string | undefined
+): Promise<void> {
+	const response = await fetcher(`${visitsURL(reference)}/${visitId}/schedule`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ scheduledAt })
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
 }

@@ -12,10 +12,20 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
+// CreateRequest carries the Visit's scheduled instant, optionally -- the
+// only thing POST .../visits ever took no body for. ScheduledAt is a
+// pointer so an absent key, an explicit `null`, and no body at all (see
+// apierr.DecodeJSONOptional) all mean the same thing: this Visit is not
+// yet scheduled.
+type CreateRequest struct {
+	ScheduledAt *string `json:"scheduledAt"`
+}
+
 // CreateResponse identifies the Visit row created.
 type CreateResponse struct {
-	VisitID string `json:"visitId"`
-	StaffID string `json:"staffId"`
+	VisitID     string  `json:"visitId"`
+	StaffID     string  `json:"staffId"`
+	ScheduledAt *string `json:"scheduledAt,omitempty"`
 }
 
 // CreateHandler creates a Visit under an Engagement, assigned to the
@@ -43,10 +53,19 @@ func CreateHandler() http.Handler {
 			return
 		}
 
+		var req CreateRequest
+		if !apierr.DecodeJSONOptional(w, r, &req) {
+			return
+		}
+		scheduledAt, ok := parseScheduledAt(w, req.ScheduledAt)
+		if !ok {
+			return
+		}
+
 		visitID := uuid.NewString()
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO visits (id, engagement_id, staff_id) VALUES ($1, $2, $3)`,
-			visitID, engagementID, staffID,
+			`INSERT INTO visits (id, engagement_id, staff_id, scheduled_at) VALUES ($1, $2, $3, $4)`,
+			visitID, engagementID, staffID, scheduledAt,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -90,6 +109,10 @@ func CreateHandler() http.Handler {
 			}
 		}
 
-		apierr.WriteJSON(w, http.StatusCreated, CreateResponse{VisitID: visitID, StaffID: staffID})
+		apierr.WriteJSON(w, http.StatusCreated, CreateResponse{
+			VisitID:     visitID,
+			StaffID:     staffID,
+			ScheduledAt: formatScheduledAt(scheduledAt),
+		})
 	})
 }

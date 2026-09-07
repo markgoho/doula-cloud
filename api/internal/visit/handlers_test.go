@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
@@ -724,4 +725,367 @@ func TestCreateHandler_RefusesAnUnattachedContractor(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
+}
+
+// #250: POST .../visits now accepts an optional scheduledAt, and a Visit
+// created with one carries it into both the create response and the list.
+func TestCreateHandler_WithScheduledAt(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-creating-scheduled"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	const scheduledAt = "2027-03-15T14:30:00Z"
+	body, err := json.Marshal(visit.CreateRequest{ScheduledAt: new(scheduledAt)})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out visit.CreateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ScheduledAt == nil || *out.ScheduledAt != scheduledAt {
+		t.Fatalf("ScheduledAt = %v, want %q", out.ScheduledAt, scheduledAt)
+	}
+
+	listResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer listResp.Body.Close()
+	var list visit.ListResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(list.Items) != 1 || list.Items[0].ScheduledAt == nil || !list.Items[0].ScheduledAt.Equal(parseRFC3339(t, scheduledAt)) {
+		t.Fatalf("list = %+v, want one Visit scheduled at %q", list.Items, scheduledAt)
+	}
+}
+
+// A Visit created with no body at all -- POST's long-standing shape --
+// stays valid and unscheduled.
+func TestCreateHandler_NoBodyStaysUnscheduled(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-creating-unscheduled"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out visit.CreateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ScheduledAt != nil {
+		t.Fatalf("ScheduledAt = %v, want nil", out.ScheduledAt)
+	}
+}
+
+func TestCreateHandler_InvalidScheduledAt(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-creating-bad-schedule"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.CreateRequest{ScheduledAt: new("not-a-timestamp")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+// A malformed body -- not merely an unparsable scheduledAt value, but
+// invalid JSON altogether -- still refuses, even though POST's body is
+// otherwise optional (apierr.DecodeJSONOptional).
+func TestCreateHandler_InvalidBody(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-creating-bad-body"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", []byte("not json"))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestScheduleHandler_SetsScheduledAt(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-scheduling"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	const scheduledAt = "2027-04-01T09:00:00Z"
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new(scheduledAt)})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out visit.ScheduleResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.VisitID != visitID || out.ScheduledAt == nil || *out.ScheduledAt != scheduledAt {
+		t.Fatalf("unexpected response: %+v", out)
+	}
+
+	var actorStaffID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT actor_staff_id::text FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'visit_scheduled'`,
+		engagementID,
+	).Scan(&actorStaffID); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	if actorStaffID != staffID {
+		t.Fatalf("activity actor = %q, want %q", actorStaffID, staffID)
+	}
+}
+
+// Changing an already-scheduled Visit's instant, then clearing it, proves
+// ScheduleHandler is a plain "set to the given value" write in both
+// directions -- not only nothing -> a value.
+func TestScheduleHandler_ChangesThenClearsScheduledAt(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-rescheduling"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2027, 1, 1, 8, 0, 0, 0, time.UTC))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	const changedTo = "2027-01-02T08:00:00Z"
+	changeBody, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new(changedTo)})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	changeResp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", changeBody)
+	defer changeResp.Body.Close()
+	if changeResp.StatusCode != http.StatusOK {
+		t.Fatalf("change status = %d, want %d", changeResp.StatusCode, http.StatusOK)
+	}
+
+	clearBody, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: nil})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	clearResp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", clearBody)
+	defer clearResp.Body.Close()
+	if clearResp.StatusCode != http.StatusOK {
+		t.Fatalf("clear status = %d, want %d", clearResp.StatusCode, http.StatusOK)
+	}
+	var out visit.ScheduleResponse
+	if err := json.NewDecoder(clearResp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ScheduledAt != nil {
+		t.Fatalf("ScheduledAt = %v, want nil after clearing", out.ScheduledAt)
+	}
+}
+
+func TestScheduleHandler_InvalidFormat(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-scheduling-bad-format"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("not-a-timestamp")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestScheduleHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-scheduling", []string{adminRole}, "employee")
+	doulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-schedule-bystander", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, doulaStaffID)
+
+	srv, session := newServer(t, db, "admin-scheduling")
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestScheduleHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-schedule-wrong-practice"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	otherPracticeID, otherStaffID := testdb.SeedStaffAtNewPractice(t, db, "doula-schedule-elsewhere", []string{doulaRole}, "employee")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
+	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID+"/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestScheduleHandler_VisitNotFound(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-schedule-missing-visit"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestScheduleHandler_InvalidBody(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-schedule-bad-body"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", []byte("not json"))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestScheduleHandler_InvalidEngagementID(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-schedule-bad-engagement-id"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestScheduleHandler_InvalidVisitID(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-schedule-bad-visit-id"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+// staffauth.AttachingWrite's own CanAccessEngagement precheck 404s an
+// unattached contractor before ScheduleHandler's own body ever runs, the
+// same shape TestCreateHandler_RefusesAnUnattachedContractor proves for
+// create.
+func TestScheduleHandler_RefusesAnUnattachedContractor(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-schedule", []string{doulaRole}, "employee")
+	contractorUID := "contractor-unattached-schedule"
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func parseRFC3339(t *testing.T, s string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("parse %q: %v", s, err)
+	}
+	return parsed
 }

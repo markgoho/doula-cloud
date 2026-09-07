@@ -163,8 +163,9 @@ func entities() []entity {
 		{
 			file:        "visit.csv",
 			description: "Every recorded Visit a Staff member paid against an Engagement.",
-			header:      []string{"id", colEngagementID, colStaffID, colCreatedAt},
-			query: `SELECT v.id::text, v.engagement_id::text, v.staff_id::text, v.created_at::text
+			header:      []string{"id", colEngagementID, colStaffID, colCreatedAt, "scheduled_at"},
+			query: `SELECT v.id::text, v.engagement_id::text, v.staff_id::text, v.created_at::text,
+			               v.scheduled_at::text
 			          FROM visits v
 			          JOIN engagements e ON e.id = v.engagement_id
 			         WHERE e.practice_id = $1

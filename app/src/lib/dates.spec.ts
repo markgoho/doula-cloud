@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatActivityTimestamp, formatCalendarDay, formatInstant } from './dates.js';
+import {
+	formatActivityTimestamp,
+	formatCalendarDay,
+	formatInstant,
+	formatScheduledVisit,
+	toDatetimeLocalValue
+} from './dates.js';
 
 describe('the instant / calendar-day distinction', () => {
 	// The one that matters: a due date is a calendar day, so it must read
@@ -53,5 +59,34 @@ describe('formatActivityTimestamp (ADR-0022)', () => {
 		['7+ days ago is the absolute date', local(2026, 7, 31, 20, 0), '31 Jul 2026, 8:00pm']
 	])('%s', (_name, iso, want) => {
 		expect(formatActivityTimestamp(iso, now)).toBe(want);
+	});
+});
+
+// #250: a Visit's own Date column and per-row summary.
+describe('formatScheduledVisit', () => {
+	it.each([
+		[undefined, 'Not yet scheduled'],
+		['', 'Not yet scheduled']
+	])('%s reads as "Not yet scheduled"', (value, want) => {
+		expect(formatScheduledVisit(value)).toBe(want);
+	});
+
+	it('reads a scheduled instant as a day and a 12-hour clock, in the reader own zone', () => {
+		const iso = local(2027, 3, 15, 14, 30);
+		const expected = new Date(iso);
+		expect(formatScheduledVisit(iso)).toBe(
+			`${expected.getDate()} ${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getFullYear()}, ${expected.getHours() % 12 === 0 ? 12 : expected.getHours() % 12}:${expected.getMinutes().toString().padStart(2, '0')}${expected.getHours() < 12 ? 'am' : 'pm'}`
+		);
+	});
+});
+
+describe('toDatetimeLocalValue', () => {
+	it.each([[undefined], ['']])('%s round-trips to an empty control value', (value) => {
+		expect(toDatetimeLocalValue(value)).toBe('');
+	});
+
+	it('renders local date/time parts an <input type="datetime-local"> accepts back', () => {
+		const iso = local(2027, 3, 5, 9, 5);
+		expect(toDatetimeLocalValue(iso)).toBe('2027-03-05T09:05');
 	});
 });
