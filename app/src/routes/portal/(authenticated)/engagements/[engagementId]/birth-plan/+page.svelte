@@ -63,12 +63,12 @@
 	<div class="no-print">
 		<Button label="Print" onClick={() => print()} />
 		{#if instance.clientAcknowledgedAt}
-			<p role="status">You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}.</p>
+			<Notice variant="status" message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}." />
 		{:else}
 			<Button label="I've read this" onClick={handleAcknowledge} loading={isAcknowledging} />
 		{/if}
 		{#if acknowledgeError}
-			<p role="alert">{acknowledgeError}</p>
+			<Notice variant="error" message={acknowledgeError} />
 		{/if}
 	</div>
 	<BirthPlanView fields={instance.fields} answers={instance.answers} />

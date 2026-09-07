@@ -94,6 +94,16 @@ func ClientAcknowledgeBirthPlanHandler() http.Handler {
 			return
 		}
 
+		// acknowledge_birth_plan returning NULL (its own ownership check
+		// failed, zero rows updated) would make this an activity row for
+		// a write that didn't happen -- but clientauth.Middleware already
+		// proved this same engagementID belongs to this Client, on this
+		// same tx, moments before fetchInstance ran above, and no handler
+		// ever deletes a plan_instances row or reassigns an Engagement's
+		// client_id. Not defended against here for that reason (CLAUDE.md:
+		// don't validate against a state the code's own invariants rule
+		// out) -- the function's own check is defense-in-depth for a
+		// future bug in that boundary, not a case this handler expects.
 		if err := recordBirthPlanAcknowledged(r.Context(), tx, engagementID, clientID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
