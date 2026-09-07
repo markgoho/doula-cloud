@@ -328,7 +328,7 @@ everything; the Offer settles her claim and nothing else
 ([#229](https://github.com/markgoho/doula-cloud/issues/229),
 [#230](https://github.com/markgoho/doula-cloud/issues/230)).
 
-**Stripe Connect state was added later**, on [#267](https://github.com/markgoho/doula-cloud/issues/267), and it is a placement rather than a new argument. The row sits with Invoice history and the Credit ledger because it is the same kind of fact: the state of the rail those Invoices are paid on. `CONTEXT.md` defines an Admin as covering the business side of a Practice — Clients, Contracts, Invoices and scheduling — so an Admin who cannot see that Stripe is refusing payouts cannot do the job the glossary gives her, which is the reason ADR-0006 already used to widen the roster cell to Admin. A Doula keeps ✗ under the same standard the table applies everywhere else: no journey has given her a reason to need it, and the three walks that raised this filed her seeing it as the gap. What the row covers is the status enum, the two capability flags, and the count of what Stripe is still waiting on — never the values behind them, which live at Stripe and never reach Doula Cloud. Reading widens to Admin; starting or resuming hosted onboarding stays the Owner's alone.
+**Stripe Connect state was added later**, on [#267](https://github.com/markgoho/doula-cloud/issues/267), and it is a placement rather than a new argument. The row sits with Invoice history and the Credit ledger because it is the same kind of fact: the state of the rail those Invoices are paid on. `CONTEXT.md` defines an Admin as covering the business side of a Practice — Clients, Contracts, Invoices and scheduling — so an Admin who cannot see that Stripe is refusing payouts cannot do the job the glossary gives her, which is the reason ADR-0006 already used to widen the roster cell to Admin. A Doula keeps ✗ under the same standard the table applies everywhere else: no journey has given her a reason to need it, and the three walks that raised this filed her seeing it as the gap. What the row covers is the status enum, the two capability flags, and Stripe's own machine-readable list of the field paths it is still waiting on (`configuration.merchant.mcc` and the like) — the DTO ships the paths, and the screen renders only how many there are, because a path names nothing a person recognizes. Never the values behind them: those live at Stripe and never reach Doula Cloud. Reading widens to Admin; starting or resuming hosted onboarding stays the Owner's alone.
 
 ## The write table — new content; ADR-0006 covered reads only
 
@@ -346,7 +346,7 @@ Visit she writes.
 
 | | Owner | Admin | Doula (employee) | Doula (contractor) |
 | --- | --- | --- | --- | --- |
-| Log a Visit for **herself** — create with no assignee | ✓ if she also holds the Doula role | ✓ if she also holds the Doula role | ✓ | ✓, on her attached Engagements |
+| Log a Visit for **herself** — create with no assignee, or reassign an existing Visit to her own id | ✓ if she also holds the Doula role | ✓ if she also holds the Doula role | ✓ | ✓, on her attached Engagements |
 | Name a **colleague** on a Visit — at create, and at reassign | ✓ | ✓ | ✗ | ✗ |
 | Set or clear a Visit's **date**, and write its **notes** | ✓ | ✓ | ✓ | ✓, on her attached Engagements |
 
@@ -366,6 +366,15 @@ Three things this settles, none of them a new argument:
 - **An Owner or Admin who is not a Doula has no self to log**, so a create with no
   assignee is a refusal for her rather than a silent self-assignment. She names
   somebody, or she writes nothing.
+- **"Herself" is the same rule at both moments.** Row one covers a reassign whose
+  `staffId` is the caller's own id, not only a create with the field left out —
+  `assignee` (`api/internal/visit/roles.go`) takes the self path on either, so a
+  plain Doula may take a Visit at her Practice onto herself without holding the
+  Owner-or-Admin cell row two needs. That is deliberate: taking work on is not the
+  act row two guards, which is putting work on somebody else. Reaching the
+  Engagement at all is still `AttachingWrite`'s check, and the Doula role is still
+  required, so what she can do to herself here is exactly what she could already do
+  by creating a Visit.
 
 Setting a Visit's date carries no Doula requirement of its own, for the same reason
 its notes never did: both edit a Visit that already exists, and the only gate either

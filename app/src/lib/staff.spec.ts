@@ -241,6 +241,30 @@ describe('loadDoulas', () => {
 
 		expect(await loadDoulasOrNone(fetcher, 'practice-1')).toBeUndefined();
 	});
+
+	it('answers undefined when the session has expired', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('sign in again', 401));
+
+		expect(await loadDoulasOrNone(fetcher, 'practice-1')).toBeUndefined();
+	});
+
+	// The line between "not yours" and "broken". A 500 answered as
+	// `undefined` would take the Add-a-Visit form and both pickers off an
+	// Owner's screen and tell her nothing, which reads as a permission she
+	// has lost rather than as an outage.
+	it('throws rather than hides when the roster read fails', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('the database is down', 500));
+
+		await expect(loadDoulasOrNone(fetcher, 'practice-1')).rejects.toThrow('the database is down');
+	});
+
+	// A dropped connection rejects with a TypeError carrying no status at
+	// all, which is the case a bare `catch {}` used to swallow.
+	it('throws when the roster read never reaches the BFF', async () => {
+		const fetcher = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+		await expect(loadDoulasOrNone(fetcher, 'practice-1')).rejects.toThrow('Failed to fetch');
+	});
 });
 
 describe('doulaOptions', () => {

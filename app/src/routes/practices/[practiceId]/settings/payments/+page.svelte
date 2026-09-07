@@ -277,7 +277,19 @@
 			/>
 		{/if}
 
-		{#if canStartOnboarding && !hasDeclaredWebsite}
+		{#if canStartOnboarding && !isPracticeOwner}
+			<!--
+				Everything below this branch is written to the person who will
+				sit through Stripe's form: "have your phone and your bank
+				details with you", "your date of birth", "answer the website
+				question". None of it is the Admin's to do -- PostConnectHandler
+				is Owner-only (staffauth.RequireOwner) -- so she gets the one
+				sentence that is true for her instead of a checklist she cannot
+				act on. #267 gave her the *state* of the rail her Invoices are
+				paid on, not the Owner's half-finished errand.
+			-->
+			<Text text="Ask a Practice Owner to connect Stripe." />
+		{:else if canStartOnboarding && !hasDeclaredWebsite}
 			<!--
 				Block, do not warn. A disabled button with a tooltip would leave
 				her guessing what unlocks it; this names the missing thing and
@@ -336,18 +348,23 @@
 {/snippet}
 
 {#snippet actions()}
-	{#if canConnect}
-		{#if isPracticeOwner}
-			<Button
-				label={status!.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
-				onClick={handleConnect}
-				loading={isConnecting}
-			/>
-			{#if connectError}
-				<Notice variant="error" message={connectError} />
-			{/if}
-		{:else}
-			<Text text="Ask a Practice Owner to connect Stripe." />
+	<!--
+		The Owner's half only. "Ask a Practice Owner to connect Stripe."
+		used to live here as the `{:else}`, which meant an Admin saw it in
+		exactly one of the four onboarding states and nothing at all in the
+		three blocked ones. It now sits in `body`, on `canStartOnboarding`
+		alone, so she is told the same thing whatever is holding the Owner
+		up -- and it is written once rather than in two regions that could
+		disagree.
+	-->
+	{#if canConnect && isPracticeOwner}
+		<Button
+			label={status!.status === 'not_connected' ? 'Connect Stripe' : 'Continue Stripe onboarding'}
+			onClick={handleConnect}
+			loading={isConnecting}
+		/>
+		{#if connectError}
+			<Notice variant="error" message={connectError} />
 		{/if}
 	{/if}
 {/snippet}

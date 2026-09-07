@@ -79,6 +79,13 @@ handlers). Neither `office_manager` nor `doula` is read anywhere. **Dee is
 indistinguishable from any other non-owner Staff member.** The Admin role grants
 nothing and withholds nothing.
 
+> **Partly overtaken by the code.** The pain point above records the walk as it
+> happened. `admin` is read on trunk now — ADR-0008's read table is enforced at the
+> `staffauth.GatedRouter` mount seam, and [#267](https://github.com/markgoho/doula-cloud/issues/267)
+> moved `GET .../payments/connect` onto `staffauth.OwnerAndAdmin`, so Dee sees this
+> Practice's Stripe Connect state. Only the write in `payments/connect.go` stays
+> Owner-only.
+
 - **3.1** — Land on `/practices/[practiceId]` and see the non-owner tiles:
   Clients, Billing **and Payments**. Payments sits outside
   `{#if roles.includes('owner')}` (**RA-G9**, found by

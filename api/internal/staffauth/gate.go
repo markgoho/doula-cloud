@@ -47,14 +47,17 @@ const (
 // OwnerAndAdmin is the role declaration for every GatedRouter route
 // ADR-0008's read table admits to Owner and Admin only (Staff roster,
 // Credit balance and ledger, Contract's money-bearing Signed PDF and
-// Invoice history). Moved here from routes_practice.go by #836: a
+// Invoice history, and Stripe Connect state -- #267 put the last of
+// those here, beside the Invoice history it is the payment rail for).
+// Moved here from routes_practice.go by #836: a
 // feature Mount declares its own role table, and this vocabulary belongs
 // to ADR-0008, not to main.
 var OwnerAndAdmin = []string{roleOwner, roleAdmin}
 
 // OwnerOnly is the role declaration for a GatedRouter route only a
-// Practice Owner may read (Stripe Connect status, #606's MFA impact
-// count).
+// Practice Owner may read (#606's MFA impact count). Stripe Connect
+// status used to be the other member and no longer is: #267 gave it to
+// the Admin as well, so it reads through OwnerAndAdmin above.
 var OwnerOnly = []string{roleOwner}
 
 // GatedRouter closes GET registration until a route explicitly declares

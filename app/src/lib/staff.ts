@@ -51,7 +51,9 @@ function staffPath(practiceId: string): string {
 /** Loads the roster: every Member, and one page of pending Invitations.
  * `cursor` is the empty string for the first page, matching
  * `PaginatedList`'s own convention. Throws with the response body text on
- * a non-2xx response. */
+ * a non-2xx response, carrying the status as the Error's `cause` so a
+ * caller can tell a refusal apart from a failure -- see
+ * `loadDoulasOrNone`, the one caller that needs to. */
 export async function loadStaff(
 	fetcher: Fetcher,
 	practiceId: string,
@@ -60,7 +62,7 @@ export async function loadStaff(
 	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
 	const response = await fetcher(`${staffPath(practiceId)}${query}`);
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw new Error(await apiErrorMessage(response), { cause: response.status });
 	}
 	return response.json();
 }
@@ -215,7 +217,8 @@ export async function loadDoulas(fetcher: Fetcher, practiceId: string): Promise<
 }
 
 /**
- * `loadDoulas`, with a refusal answered as an absence rather than a throw.
+ * `loadDoulas`, with a *refusal* answered as an absence rather than a
+ * throw -- and with every other failure still thrown.
  *
  * `undefined` means "this reader may not be offered a colleague to pick",
  * which is a different thing from `[]`, a Practice with no Doulas on its
@@ -227,6 +230,16 @@ export async function loadDoulas(fetcher: Fetcher, practiceId: string): Promise<
  *
  * Returning `undefined` rather than throwing says "not for you" in the
  * type, which a bare `catch {}` at each call site could not.
+ *
+ * Only 401 and 403 are that absence. A 500, a timeout, or a dropped
+ * connection is an outage, and answering one with `undefined` would
+ * render an outage as a permission boundary: an Owner would watch the
+ * Add-a-Visit form, both Visit pickers and the Offers section disappear
+ * with nothing on screen saying why, and reloading would be the only way
+ * to find out it was never about her role. A screen reports a failure
+ * rather than hiding itself (CLAUDE.md's Accessibility and Security
+ * expectations; ADR-0021), so anything else is rethrown for the caller
+ * to show.
  */
 export async function loadDoulasOrNone(
 	fetcher: Fetcher,
@@ -234,9 +247,24 @@ export async function loadDoulasOrNone(
 ): Promise<Doula[] | undefined> {
 	try {
 		return await loadDoulas(fetcher, practiceId);
-	} catch {
-		return undefined;
+	} catch (error) {
+		if (isRosterRefusal(error)) {
+			return undefined;
+		}
+		throw error;
 	}
+}
+
+/** Whether a thrown roster error is the BFF saying "not yours" -- the 401
+ * or 403 `loadStaff` attaches as the Error's `cause` -- rather than
+ * something having gone wrong.
+ *
+ * Anything without a status on it is a failure, deliberately: a dropped
+ * connection rejects with a `TypeError` carrying no `cause` at all, and
+ * reading that as a refusal is the exact confusion this function exists
+ * to stop. */
+function isRosterRefusal(error: unknown): boolean {
+	return error instanceof Error && (error.cause === 401 || error.cause === 403);
 }
 
 /** The same people as `Select` options -- the staff id stored, the name

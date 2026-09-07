@@ -812,7 +812,15 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 		const picker = testPage.getByLabelText('Who is this Visit for?');
 		await expect.element(picker).toBeVisible();
-		await expect.element(picker.getByRole('option', { name: 'Kanyakumari Balasubramanian' })).toBeInTheDocument();
+		// The option is asserted by its presence in the picker's own option
+		// list, not with `toBeVisible`: an <option> inside a closed <select>
+		// is not visible in the sense the matcher means, and this repo's
+		// `toBeVisible`-over-`toBeInTheDocument` rule is about a positive
+		// case that *can* be seen. What matters here is that her name is a
+		// choice the picker offers.
+		expect(
+			picker.getByRole('option', { name: 'Kanyakumari Balasubramanian' }).elements()
+		).toHaveLength(1);
 	});
 
 	// The bookkeeper holds the Admin role and no Doula role, so she can
@@ -855,6 +863,20 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
 		expect(testPage.getByLabelText('Reassign to').elements()).toHaveLength(0);
 		expect(testPage.getByRole('alert').elements()).toHaveLength(0);
+	});
+
+	// The other side of that criterion. "Absent, not erroring" is the
+	// answer to a *refusal*; a roster read that fell over is an outage, and
+	// answering it with the same silence hands an Owner a screen whose
+	// Add-a-Visit form and both pickers have vanished with no reason given.
+	// She is told, and the pickers still stay out because there is nobody
+	// to put in them.
+	it('says so when the roster read fails, rather than hiding the pickers silently', async () => {
+		await setupWithRoster(jsonResponse('the roster is unavailable', 500), ['owner']);
+
+		await expect.element(testPage.getByRole('alert').first()).toBeVisible();
+		await expect.element(testPage.getByText('the roster is unavailable')).toBeVisible();
+		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
 	});
 
 	// An Owner or Admin who is not a Doula has no self to log, so the
