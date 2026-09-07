@@ -808,6 +808,30 @@ func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 	}
 }
 
+// TestAttachmentHandler_StoreGetNotFoundReturns404 proves a Message whose
+// attachment metadata is in the DB but whose object was never Put (or is
+// otherwise gone from the store) 404s with objectstore.ErrNotFound,
+// distinct from TestAttachmentHandler_StoreGetFailureReturns500's genuine
+// storage-layer failure.
+func TestAttachmentHandler_StoreGetNotFoundReturns404(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-store-get-not-found"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	messageID := seedMessageWithAttachment(t, db, engagementID, "staff", staffID,
+		"messages/never/put", pngContentType, "photo.png", int64(len(pngBytes)))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages/"+messageID+"/attachment")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
 // TestAttachmentHandler_NoAttachmentNotFound proves a text-only Message
 // has no attachment to download.
 func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
