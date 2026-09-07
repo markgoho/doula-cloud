@@ -73,9 +73,11 @@ async function setup(detail: Detail, activityResponse?: Response) {
 	// Engagement this is (#596).
 	//
 	// `session` merges in from practices/[practiceId]/+layout.ts (#835) --
-	// this route never reads it, but the generated `data` prop type
-	// requires it, since SvelteKit really does merge ancestor layout data
-	// into it at runtime.
+	// the generated `data` prop type requires it either way, since
+	// SvelteKit really does merge ancestor layout data into it at runtime.
+	// `roles: []` here is fine for every test using this `setup()`: only
+	// the Contract PDF download (#302, its own describe block below)
+	// reads `session.roles` at all, and it builds its own session.
 	await render(Page, {
 		data: {
 			...detail,
@@ -200,5 +202,82 @@ describe('a section fails on its own, independent of the others (#841)', () => {
 				testPage.getByLabelText('Visits').getByRole('cell', { name: 'Anne-Marie Ochieng-Whitfield', exact: true })
 			)
 			.toBeVisible();
+	});
+});
+
+function pdfBlobResponse(): Response {
+	return new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });
+}
+
+// #302: the Practice-side download rides ContractStatus.svelte's own
+// onDownloadPdf prop (its own spec covers the click/error mechanics), so
+// what this page owns is deciding whether that prop is passed at all --
+// Owner/Admin per the endpoint's own OwnerAndAdmin gate (ADR-0008's money
+// row), never rendered for a role the endpoint would 403.
+describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', () => {
+	const signedContract = {
+		engagementId: 'engagement-1',
+		status: 'signed',
+		prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
+		mergeFields: [],
+		values: {}
+	};
+
+	function mockSignedContract(pdfResponse: Response) {
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.endsWith('/contract/pdf')) return Promise.resolve(pdfResponse);
+			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(signedContract));
+			return respond(path);
+		});
+	}
+
+	async function setupWithRoles(roles: string[], pdfResponse: Response) {
+		await testPage.viewport(1440, 900);
+		mockSignedContract(pdfResponse);
+		await render(Page, {
+			data: {
+				...fixtureDetail,
+				session: {
+					practiceId: fixture.params.practiceId,
+					practiceName: 'Riverside Doula Collective',
+					roles,
+					isContractor: false
+				}
+			},
+			params: fixture.params
+		});
+	}
+
+	it('offers the download to an Owner', async () => {
+		await setupWithRoles(['owner'], pdfBlobResponse());
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+	});
+
+	it('does not render the download for a Doula, the role the endpoint refuses', async () => {
+		await setupWithRoles(['doula'], pdfBlobResponse());
+
+		await expect.element(testPage.getByText('Status: signed')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
+	});
+
+	it('fetches the pdf path when an Owner clicks download', async () => {
+		await setupWithRoles(['owner'], pdfBlobResponse());
+		await testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/engagement-1/contract/pdf');
+	});
+
+	it('reports a failed pdf fetch in words (#305 is what fails this locally/in CI)', async () => {
+		await setupWithRoles(
+			['owner'],
+			{ ok: false, status: 500, text: () => Promise.resolve('signed PDF not found') } as Response
+		);
+		await testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('signed PDF not found');
 	});
 });

@@ -17,13 +17,13 @@
 	</section>
 
 	<section>
-		<h2>Signed, seen by Staff &mdash; Void is offered</h2>
-		<ContractStatus status="signed" onVoid={async () => {}} />
+		<h2>Signed, seen by an Owner or Admin &mdash; download and Void are both offered</h2>
+		<ContractStatus status="signed" onVoid={async () => {}} onDownloadPdf={async () => {}} />
 	</section>
 
 	<section>
-		<h2>Signed, seen by the Client &mdash; no onVoid, so no button</h2>
-		<ContractStatus status="signed" />
+		<h2>Signed, seen by a Doula &mdash; the PDF endpoint refuses her, so no download button</h2>
+		<ContractStatus status="signed" onVoid={async () => {}} />
 	</section>
 
 	<section>
