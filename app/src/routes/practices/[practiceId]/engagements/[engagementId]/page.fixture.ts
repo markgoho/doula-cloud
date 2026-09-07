@@ -25,7 +25,11 @@ export const detail = {
 	clientName,
 	status: 'active',
 	createdAt: '2026-08-01T00:00:00Z',
-	dueDate: '2027-03-01'
+	dueDate: '2027-03-01',
+	// #253: the one legal move from 'active' every role in the fixture's
+	// own role table reaches, so the continuum check sees the status
+	// section's "Mark care complete" control rendered, not hidden.
+	statusMoves: ['completed']
 };
 
 export const fixture: RouteFixture<RouteParameters> = {

@@ -168,6 +168,56 @@ func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
+	var d engagement.Detail
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(d.StatusMoves) != 0 {
+		t.Fatalf("statusMoves = %v, want none -- ADR-0015 refuses a contractor Doula every move outright", d.StatusMoves)
+	}
+}
+
+// TestDetailHandler_StatusMoves proves Detail.StatusMoves (#253) mirrors
+// legalMoves for every combination TestTransitionHandler_LegalMovesByRole
+// doesn't already reach through a successful write -- a bare Staff
+// member with no role, and an employee Doula reading a completed
+// Engagement, whose reopen move is Owner/Admin only.
+func TestDetailHandler_StatusMoves(t *testing.T) {
+	cases := []struct {
+		name   string
+		roles  []string
+		status string
+		want   []string
+	}{
+		{"bare staff, no role, at intake", []string{}, "intake", []string{}},
+		{"owner at intake sees active and completed", []string{ownerRole}, "intake", []string{"active", "completed"}},
+		{"owner at completed sees reopen", []string{ownerRole}, "completed", []string{"active"}},
+		{"employee doula at completed sees no reopen", []string{doulaRole}, "completed", []string{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "status-moves-" + tc.name
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, tc.roles, "employee")
+			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", uid+"@example.com", tc.status)
+
+			srv, session := newServer(t, db, uid)
+			defer srv.Close()
+
+			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200", resp.StatusCode)
+			}
+			var d engagement.Detail
+			if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(d.StatusMoves) != len(tc.want) || (len(tc.want) > 0 && d.StatusMoves[0] != tc.want[0]) {
+				t.Fatalf("statusMoves = %v, want %v", d.StatusMoves, tc.want)
+			}
+		})
+	}
 }
 
 func TestDetailHandler_InvalidEngagementID(t *testing.T) {

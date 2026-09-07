@@ -249,6 +249,30 @@ func TestSeedEngagementInStatus(t *testing.T) {
 	}
 }
 
+// TestSeedEngagementInStatus_CompletedSetsEndingReason proves a
+// "completed" status also sets ending_reason to 'care_complete' --
+// #253's engagements_completed_has_reason CHECK demands a non-null
+// reason on every completed row, so a caller of this fixture must not
+// have to know that just to get one.
+func TestSeedEngagementInStatus_CompletedSetsEndingReason(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Completed Engagement Test Practice")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Sam Client", "sam@example.com", "completed")
+
+	var status, endingReason string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT status::text, ending_reason::text FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&status, &endingReason); err != nil {
+		t.Fatalf("read seeded engagement: %v", err)
+	}
+	if status != "completed" {
+		t.Fatalf("status = %q, want completed", status)
+	}
+	if endingReason != "care_complete" {
+		t.Fatalf("ending_reason = %q, want care_complete", endingReason)
+	}
+}
+
 // TestSeedEngagementWithKind proves the Engagement lands with the
 // explicit kind given, not the 'birth' every other seed helper here
 // hardcodes.

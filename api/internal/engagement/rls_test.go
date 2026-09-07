@@ -261,3 +261,103 @@ func TestRLS_ClientsUpdateFollowsSelectScope(t *testing.T) {
 		t.Fatalf("Practice A's session updated %d rows of its own Client, want 1", n)
 	}
 }
+
+// TestEngagementsCompletedHasReason_CHECKRejectsNullReason proves
+// engagements_completed_has_reason (00087) is a real database CHECK, not
+// only TransitionHandler's own guard: a direct UPDATE to 'completed'
+// with no ending_reason is rejected by Postgres itself, superuser
+// connection and all -- a CHECK applies regardless of role or RLS.
+func TestEngagementsCompletedHasReason_CHECKRejectsNullReason(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "check-staff", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "check@example.com", "active")
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET status = 'completed' WHERE id = $1`, engagementID,
+	); err == nil {
+		t.Fatal("expected the CHECK to reject a completed row with no ending_reason, got no error")
+	}
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete' WHERE id = $1`, engagementID,
+	); err != nil {
+		t.Fatalf("expected a completed row with a reason to be accepted, got: %v", err)
+	}
+}
+
+// TestRLS_EngagementEventsScopedToPractice proves
+// engagement_events_practice_visibility (00087) narrows to rows for
+// app.current_practice_id, the same shape
+// TestRLS_EngagementsVisibilityIsScopedToCurrentPractice proves for
+// engagements itself.
+func TestRLS_EngagementEventsScopedToPractice(t *testing.T) {
+	db := testdb.New(t)
+	practiceA, _ := testdb.SeedStaffAtNewPractice(t, db, "events-staff-a", []string{doulaRole}, "employee")
+	practiceB, _ := testdb.SeedStaffAtNewPractice(t, db, "events-staff-b", []string{doulaRole}, "employee")
+	_, engagementA := testdb.SeedEngagementInStatus(t, db, practiceA, "Client A", "events-a@example.com", "intake")
+	_, engagementB := testdb.SeedEngagementInStatus(t, db, practiceB, "Client B", "events-b@example.com", "intake")
+
+	for _, row := range []struct{ practiceID, engagementID string }{
+		{practiceA, engagementA}, {practiceB, engagementB},
+	} {
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`INSERT INTO engagement_events (practice_id, engagement_id, event_type, previous_status, status)
+			 VALUES ($1, $2, 'status_changed', 'intake', 'active')`,
+			row.practiceID, row.engagementID,
+		); err != nil {
+			t.Fatalf("seed engagement_events: %v", err)
+		}
+	}
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM engagement_events`).Scan(&count); err != nil {
+		t.Fatalf("query engagement_events: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected only Practice A's engagement_events row visible, got count = %d", count)
+	}
+}
+
+// TestRLS_EngagementEventsInvisibleToPortalSession proves engagement_events
+// carries no client-tier read policy at all -- ADR-0015's "readable by
+// staff at the Practice and never by a portal session" -- by setting
+// app.current_client_id the way a Client-portal request does (00006) and
+// proving RLS still narrows to zero rows even though a real row exists.
+func TestRLS_EngagementEventsInvisibleToPortalSession(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "events-portal-staff", []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "events-portal@example.com", "intake")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO engagement_events (practice_id, engagement_id, event_type, previous_status, status)
+		 VALUES ($1, $2, 'status_changed', 'intake', 'active')`,
+		practiceID, engagementID,
+	); err != nil {
+		t.Fatalf("seed engagement_events: %v", err)
+	}
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM engagement_events`).Scan(&count); err != nil {
+		t.Fatalf("query engagement_events: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected zero engagement_events rows visible to a Client-portal session, got %d", count)
+	}
+}

@@ -6,8 +6,10 @@
 	import { SectionState } from '#lib/sectionState.svelte.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
+		changeEngagementStatus,
 		createVisit,
 		downloadAttachment,
+		endingReasons,
 		loadAttachmentPreviews,
 		loadMessagesPage,
 		loadOffersSection as loadOffers,
@@ -58,6 +60,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -71,6 +74,7 @@
 		status: string;
 		createdAt: string;
 		dueDate?: string;
+		statusMoves: string[];
 	};
 
 	// The Engagement comes from +page.ts's load now, not an onMount fetch
@@ -94,6 +98,65 @@
 		practiceId: page.params.practiceId!,
 		engagementId: page.params.engagementId!
 	});
+
+	// #253: the Engagement's status and its next legal moves, overlaid on
+	// the load-time read once a move succeeds -- the same "server answer
+	// replaces the derived initial value" shape SectionState gives every
+	// other in-page mutation, so the page reflects a successful move
+	// without a reload. `value` starts undefined (no move made yet), in
+	// which case `displayStatus`/`displayStatusMoves` below fall back to
+	// `detail` itself.
+	const statusChange = new SectionState<{ status: string; statusMoves: string[] } | undefined>(undefined);
+	const displayStatus = $derived(statusChange.value?.status ?? detail?.status ?? '');
+	const displayStatusMoves = $derived(statusChange.value?.statusMoves ?? detail?.statusMoves ?? []);
+
+	// Completing asks for a reason first (GOV.UK's question-page pattern,
+	// ADR-0021) rather than submitting the bare move -- the other three
+	// moves need nothing more than the click that requests them.
+	let isCompleteFormShown = $state(false);
+	let completeReasonValue = $state('');
+	let completeNoteValue = $state('');
+	let completeReasonError = $state('');
+
+	async function moveStatus(target: string, endingReason?: string, endingNote?: string): Promise<void> {
+		await statusChange.mutate(
+			() => changeEngagementStatus(apiFetchWithSession, reference, target, endingReason, endingNote),
+			'Failed to change status'
+		);
+	}
+
+	function handleStatusMoveClick(move: string) {
+		if (move === 'completed') {
+			isCompleteFormShown = true;
+			return;
+		}
+		isCompleteFormShown = false;
+		void moveStatus(move);
+	}
+
+	async function handleCompleteSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		if (!completeReasonValue) {
+			completeReasonError = 'Select why this Engagement is ending';
+			return;
+		}
+		completeReasonError = '';
+		await moveStatus('completed', completeReasonValue, completeNoteValue || undefined);
+		if (!statusChange.error) {
+			isCompleteFormShown = false;
+			completeReasonValue = '';
+			completeNoteValue = '';
+		}
+	}
+
+	/** The label a status-move button carries -- "Reopen" reads as a
+	 * correction (ADR-0015: "Reopen is undo, not resumption"), never as
+	 * the same word a first activation uses, even though both moves land
+	 * on 'active'. */
+	function statusMoveLabel(move: string): string {
+		if (move === 'completed') return 'Mark care complete';
+		return displayStatus === 'completed' ? 'Reopen (correction)' : 'Mark care as active';
+	}
 
 	// Visits are newest-first from the BFF (#446); a further page is
 	// appended to the end of what is already on screen rather than
@@ -263,10 +326,10 @@
 	 * this page it is a fact for the Staff working the Engagement, not one
 	 * the record's own subject didn't ask for -- the same "how did this
 	 * come to be" the repo asks every feature to answer. */
-	function summaryItems(d: Detail): { label: string; value: string }[] {
+	function summaryItems(d: Detail, status: string): { label: string; value: string }[] {
 		const items = [
 			{ label: 'Client', value: d.clientName },
-			{ label: 'Status', value: d.status },
+			{ label: 'Status', value: status },
 			{ label: 'Created', value: new Date(d.createdAt).toLocaleDateString() }
 		];
 		if (d.dueDate) {
@@ -612,7 +675,61 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
-		<DescriptionList items={summaryItems(detail!)} />
+		<DescriptionList items={summaryItems(detail!, displayStatus)} />
+
+		<!--
+			#253: exactly the moves ADR-0015's role table admits from the
+			current status for this caller -- the API decides the set
+			(Detail.statusMoves/TransitionResponse.statusMoves), this only
+			renders it. A contractor Doula or a status with no legal move
+			at all sees no controls here, rather than a disabled one.
+		-->
+		{#if displayStatusMoves.length > 0}
+			<cluster-l space="var(--space-3)">
+				{#each displayStatusMoves as move (move)}
+					<Button
+						label={statusMoveLabel(move)}
+						size="sm"
+						variant="secondary"
+						loading={statusChange.isBusy}
+						onClick={() => handleStatusMoveClick(move)}
+					/>
+				{/each}
+			</cluster-l>
+		{/if}
+		{#if statusChange.error}
+			<Notice variant="error" message={statusChange.error} />
+		{/if}
+		{#if isCompleteFormShown}
+			<form onsubmit={handleCompleteSubmit}>
+				<RadioGroup
+					legend="Why is this Engagement ending?"
+					name="ending-reason"
+					options={endingReasons}
+					value={completeReasonValue}
+					onChange={(value) => (completeReasonValue = value)}
+					error={completeReasonError}
+				/>
+				<LabeledField id="ending-note" label="Note (optional)">
+					{#snippet children({ id, describedBy })}
+						<Textarea
+							{id}
+							{describedBy}
+							value={completeNoteValue}
+							onInput={(value) => (completeNoteValue = value)}
+						/>
+					{/snippet}
+				</LabeledField>
+				<Button label="Confirm completion" type="submit" size="sm" loading={statusChange.isBusy} />
+				<Button
+					label="Cancel"
+					type="button"
+					size="sm"
+					variant="secondary"
+					onClick={() => (isCompleteFormShown = false)}
+				/>
+			</form>
+		{/if}
 
 		<!--
 			#500: the Client block. "View Client" alone doesn't say whose

@@ -175,13 +175,20 @@ func SeedEngagementWithKind(t *testing.T, db *DB, practiceID, name, email, kind 
 
 // SeedEngagementInStatus is SeedNamedEngagement with an explicit
 // Engagement status, for a test that needs the Engagement in a specific
-// state rather than the default "intake".
+// state rather than the default "intake". A status of "completed" also
+// sets ending_reason to 'care_complete' -- #253's engagements_completed_has_reason
+// CHECK demands one on every completed row, and a fixture that does not
+// care which reason just needs any legal one.
 func SeedEngagementInStatus(t *testing.T, db *DB, practiceID, name, email, status string) (clientID, engagementID string) {
 	t.Helper()
 	clientID = SeedNamedClient(t, db, practiceID, name, email)
+	var endingReason any
+	if status == "completed" {
+		endingReason = "care_complete"
+	}
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, $3, 'birth') RETURNING id`,
-		clientID, practiceID, status,
+		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason) VALUES ($1, $2, $3, 'birth', $4) RETURNING id`,
+		clientID, practiceID, status, endingReason,
 	).Scan(&engagementID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed engagement: %v", err)

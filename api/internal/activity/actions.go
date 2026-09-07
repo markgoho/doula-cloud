@@ -77,12 +77,11 @@ const (
 	ActionEngagementCreated   EngagementAction = "engagement_created"
 	ActionEngagementCompleted EngagementAction = "engagement_completed"
 
-	// ActionCarePhaseChanged has no writer yet: #253 ("An Engagement's
-	// status never changes") is the still-open ticket that will add the
-	// only other transition on engagements.status (intake -> active);
-	// completion is the sole transition that exists today and is its
-	// own ActionEngagementCompleted, not this one. #253's build must
-	// call activity.Record with this action when it lands.
+	// ActionCarePhaseChanged records an Engagement's intake -> active
+	// move (#253, ADR-0015), manual or automatic -- the only transition
+	// on engagements.status besides reaching 'completed', which stays
+	// its own ActionEngagementCompleted. Written by
+	// engagement.TransitionHandler.
 	ActionCarePhaseChanged EngagementAction = "care_phase_changed"
 
 	ActionContractCreated EngagementAction = "contract_created"

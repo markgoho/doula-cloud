@@ -96,7 +96,7 @@ func TestEngagementListHandler_RefusesBadEngagementID(t *testing.T) {
 // Completion closes what is still open on both sides at once: every open
 // Offer goes withdrawn with no actor recorded, and every open attachment
 // gets its ended_at.
-func TestCompleteHandler_RunsTheCascade(t *testing.T) {
+func TestTransitionHandler_CompletingRunsTheCascade(t *testing.T) {
 	f := newFixture(t)
 	accepted := f.makeOffer(t, offerBody(f.doulaID, 45000))
 	expectStatus(t, do(t, http.MethodPost, f.offerURL(accepted, "accept"), f.doulaSession, nil), http.StatusOK)
@@ -104,8 +104,9 @@ func TestCompleteHandler_RunsTheCascade(t *testing.T) {
 	secondID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
 	stillOpen := f.makeOffer(t, offerBody(secondID, 45000))
 
-	expectStatus(t, do(t, http.MethodPost,
-		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/complete", f.ownerSession, nil),
+	expectStatus(t, do(t, http.MethodPatch,
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/status", f.ownerSession,
+		map[string]string{"status": "completed", "endingReason": "care_complete"}),
 		http.StatusOK)
 
 	state, decidedBy := offerState(t, f.db, stillOpen)
@@ -131,14 +132,18 @@ func TestCompleteHandler_RunsTheCascade(t *testing.T) {
 	}
 }
 
-func TestCompleteHandler_RefusesUnknownEngagementAndNonPrivilegedCaller(t *testing.T) {
+func TestTransitionHandler_RefusesUnknownEngagementAndContractorDoula(t *testing.T) {
 	f := newFixture(t)
 	base := f.srv + "/api/practices/" + f.practiceID + "/engagements/"
+	completeBody := map[string]string{"status": "completed", "endingReason": "care_complete"}
 
-	expectStatus(t, do(t, http.MethodPost, base+"11111111-1111-1111-1111-111111111111/complete", f.ownerSession, nil),
+	expectStatus(t, do(t, http.MethodPatch, base+"11111111-1111-1111-1111-111111111111/status", f.ownerSession, completeBody),
 		http.StatusNotFound)
-	expectStatus(t, do(t, http.MethodPost, base+"not-a-uuid/complete", f.ownerSession, nil), http.StatusBadRequest)
-	expectStatus(t, do(t, http.MethodPost, base+f.engagementID+"/complete", f.doulaSession, nil), http.StatusForbidden)
+	expectStatus(t, do(t, http.MethodPatch, base+"not-a-uuid/status", f.ownerSession, completeBody), http.StatusBadRequest)
+	// f.doulaSession is a contractor (newFixture's own doc comment) --
+	// ADR-0015's outright refusal, not the role table's narrower reopen
+	// gate.
+	expectStatus(t, do(t, http.MethodPatch, base+f.engagementID+"/status", f.doulaSession, completeBody), http.StatusForbidden)
 }
 
 // #230: the copied Client fields stop being served the moment an Offer
