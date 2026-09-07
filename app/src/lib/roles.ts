@@ -62,7 +62,7 @@ export const EMPLOYMENT_TYPE_LABELS: readonly LabeledValue<EmploymentType>[] = [
  * confused.
  */
 export function roleLabel(role: string): string {
-	return ROLE_LABELS.find((option) => option.value === role)?.label ?? capitalize(role);
+	return labelFor(ROLE_LABELS, role);
 }
 
 /** A whole `roles` array as one readable string -- `Owner, Admin, Doula`
@@ -75,13 +75,15 @@ export function rolesLabel(roles: readonly string[]): string {
 /** The display word for one stored `employment_type` value. Lenient on an
  * unknown value, for the reason `roleLabel` gives. */
 export function employmentTypeLabel(employmentType: string): string {
-	return (
-		EMPLOYMENT_TYPE_LABELS.find((option) => option.value === employmentType)?.label ?? capitalize(employmentType)
-	);
+	return labelFor(EMPLOYMENT_TYPE_LABELS, employmentType);
 }
 
-function capitalize(value: string): string {
-	return value.charAt(0).toLocaleUpperCase() + value.slice(1);
+/**
+ * The lenient lookup both helpers above are: the labeled word if the map
+ * has one, otherwise the stored value with its first letter raised.
+ */
+function labelFor(options: readonly LabeledValue[], value: string): string {
+	return options.find((option) => option.value === value)?.label ?? value.charAt(0).toLocaleUpperCase() + value.slice(1);
 }
 
 /**

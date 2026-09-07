@@ -14,11 +14,11 @@ import { describe, expect, it } from 'vitest';
  * 1. **No raw `roles` join.** `member.roles.join(', ')` is exactly the
  *    defect this issue names -- stored values printed verbatim -- and it
  *    has no other legitimate use in a source file, so the call shape alone
- *    is the offence.
+ *    is the offense.
  * 2. **No second label map.** A file that quotes two or more of `Owner`,
  *    `Admin`, `Doula`, or both of `Employee` and `Contractor`, is naming
  *    the enum's display words; that is `roles.ts`'s job. One such literal
- *    on its own is not an offence, because a column heading ("Doula") and
+ *    on its own is not an offense, because a column heading ("Doula") and
  *    a table fixture ("Employee") each legitimately hold one and neither
  *    is a map.
  *
@@ -33,7 +33,7 @@ const EMPLOYMENT_WORDS = ['Employee', 'Contractor'];
 const QUOTED = /'([^'\n]*)'|"([^"\n]*)"/g;
 const RAW_JOIN = /\broles\.join\(/;
 
-interface Offence {
+interface Offense {
 	file: string;
 	found: string;
 }
@@ -48,17 +48,17 @@ function quotedLiterals(source: string): string[] {
 		.toArray();
 }
 
-function findOffences(file: string, source: string): Offence[] {
-	const offences: Offence[] = [];
-	if (RAW_JOIN.test(source)) offences.push({ file, found: 'a raw roles join' });
+function findOffenses(file: string, source: string): Offense[] {
+	const offenses: Offense[] = [];
+	if (RAW_JOIN.test(source)) offenses.push({ file, found: 'a raw roles join' });
 
 	const literals = new Set(quotedLiterals(source));
 	const roleWords = ROLE_WORDS.filter((word) => literals.has(word));
-	if (roleWords.length > 1) offences.push({ file, found: `a second role label map (${roleWords.join(', ')})` });
+	if (roleWords.length > 1) offenses.push({ file, found: `a second role label map (${roleWords.join(', ')})` });
 	if (EMPLOYMENT_WORDS.every((word) => literals.has(word)))
-		offences.push({ file, found: 'a second employment-type label map' });
+		offenses.push({ file, found: 'a second employment-type label map' });
 
-	return offences;
+	return offenses;
 }
 
 const sourceFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
@@ -73,38 +73,38 @@ describe('practice_role and employment_type are labeled in one place', () => {
 	});
 
 	it('finds no raw join and no second label map', () => {
-		const offences = sourceFiles.flatMap((file) =>
-			findOffences(file, readFileSync(path.join(appRoot, file), 'utf8'))
+		const offenses = sourceFiles.flatMap((file) =>
+			findOffenses(file, readFileSync(path.join(appRoot, file), 'utf8'))
 		);
 
-		expect(offences.map((offence) => `${offence.file}: ${offence.found}`)).toEqual([]);
+		expect(offenses.map((offense) => `${offense.file}: ${offense.found}`)).toEqual([]);
 	});
 });
 
-describe('findOffences', () => {
+describe('findOffenses', () => {
 	it('flags a raw roles join', () => {
-		expect(findOffences('x.svelte', 'member.roles.join(", ")')).toEqual([
+		expect(findOffenses('x.svelte', 'member.roles.join(", ")')).toEqual([
 			{ file: 'x.svelte', found: 'a raw roles join' }
 		]);
 	});
 
 	it('flags a file that names two role words itself', () => {
-		expect(findOffences('x.ts', "const m = { owner: 'Owner', doula: 'Doula' };")).toEqual([
+		expect(findOffenses('x.ts', "const m = { owner: 'Owner', doula: 'Doula' };")).toEqual([
 			{ file: 'x.ts', found: 'a second role label map (Owner, Doula)' }
 		]);
 	});
 
 	it('flags a file that names both employment-type words itself', () => {
-		expect(findOffences('x.ts', 'const m = ["Employee", "Contractor"];')).toEqual([
+		expect(findOffenses('x.ts', 'const m = ["Employee", "Contractor"];')).toEqual([
 			{ file: 'x.ts', found: 'a second employment-type label map' }
 		]);
 	});
 
 	it('allows a single role word used as a heading', () => {
-		expect(findOffences('x.svelte', "<legend>{'Doula'}</legend>")).toEqual([]);
+		expect(findOffenses('x.svelte', "<legend>{'Doula'}</legend>")).toEqual([]);
 	});
 
 	it('allows a single employment word used as fixture data', () => {
-		expect(findOffences('x.svelte', "const row = { employment: 'Employee' };")).toEqual([]);
+		expect(findOffenses('x.svelte', "const row = { employment: 'Employee' };")).toEqual([]);
 	});
 });
