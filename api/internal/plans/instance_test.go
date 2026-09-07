@@ -555,3 +555,95 @@ func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 		t.Fatalf("instance fields = %+v, want the original 1-field snapshot untouched by the later template edit", out.Fields)
 	}
 }
+
+// TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgement is
+// #301's decision for the build: a Staff edit that actually changes the
+// stored answers resets the Client's acknowledgement, so Staff see
+// "not reviewed since last edit" until she confirms again.
+func TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgement(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "put-instance-clears-ack"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedInstance(t, db, engagementID, birthPlanType,
+		`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{"name":"Jamie"}`,
+	)
+	setAcknowledged(t, db, engagementID, birthPlanType)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	resp := putInstance(t, srv, session, practiceID, engagementID, birthPlanType, plans.PutInstanceRequest{
+		Answers: plans.Answers{nameFieldID: "Alex"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out plans.InstanceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ClientAcknowledgedAt != nil {
+		t.Fatalf("clientAcknowledgedAt = %v, want nil after an answers-changing edit", out.ClientAcknowledgedAt)
+	}
+}
+
+// TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgement
+// proves the reset is conditioned on the answers actually differing, not
+// on the PUT event itself -- re-sending the same answers (a retry, or
+// Staff saving without changing anything) leaves an existing
+// acknowledgement in place.
+func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgement(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "put-instance-keeps-ack"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedInstance(t, db, engagementID, birthPlanType,
+		`[{"id":"name","type":"short_text","label":"Name","order":0}]`, `{"name":"Jamie"}`,
+	)
+	setAcknowledged(t, db, engagementID, birthPlanType)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	resp := putInstance(t, srv, session, practiceID, engagementID, birthPlanType, plans.PutInstanceRequest{
+		Answers: plans.Answers{nameFieldID: jamieAnswer},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out plans.InstanceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ClientAcknowledgedAt == nil {
+		t.Fatalf("clientAcknowledgedAt = nil, want the pre-existing acknowledgement kept since answers didn't change")
+	}
+}
+
+// TestGetInstanceHandler_ReflectsClientAcknowledgement is the Staff
+// visibility half of #301's AC4: Staff can see, on their own read, that
+// the Client has reviewed her Birth Plan.
+func TestGetInstanceHandler_ReflectsClientAcknowledgement(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-instance-shows-ack"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedInstance(t, db, engagementID, birthPlanType, `[]`, `{}`)
+	setAcknowledged(t, db, engagementID, birthPlanType)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
+	defer resp.Body.Close()
+	var out plans.InstanceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ClientAcknowledgedAt == nil {
+		t.Fatalf("clientAcknowledgedAt = nil, want Staff's own read to show the Client's acknowledgement")
+	}
+}

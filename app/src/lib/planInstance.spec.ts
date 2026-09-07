@@ -3,6 +3,7 @@ import {
 	isAnswerChecked,
 	answerOptions,
 	answerText,
+	acknowledgeClientBirthPlan,
 	createInstance,
 	loadClientBirthPlan,
 	loadInstance,
@@ -62,6 +63,30 @@ describe('loadClientBirthPlan', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('engagement not linked to this client', 403));
 
 		await expect(loadClientBirthPlan(fetcher, 'eng-1')).rejects.toThrow('engagement not linked to this client');
+	});
+});
+
+describe('acknowledgeClientBirthPlan', () => {
+	it('POSTs to the portal engagement birth-plan/acknowledge path and returns the decoded instance', async () => {
+		const instance = {
+			engagementId: 'eng-1',
+			planType: 'birth_plan',
+			fields: [],
+			answers: {},
+			clientAcknowledgedAt: '2026-09-07T12:00:00Z'
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(instance));
+
+		const result = await acknowledgeClientBirthPlan(fetcher, 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/portal/engagements/eng-1/birth-plan/acknowledge', { method: 'POST' });
+		expect(result).toEqual(instance);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('no birth plan found for this engagement', 404));
+
+		await expect(acknowledgeClientBirthPlan(fetcher, 'eng-1')).rejects.toThrow('no birth plan found for this engagement');
 	});
 });
 

@@ -38,6 +38,20 @@ func getClientBirthPlan(t *testing.T, srv *httptest.Server, session string, enga
 	return resp
 }
 
+func postAcknowledgeBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/engagements/"+engagementID+"/birth-plan/acknowledge", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
 func TestClientGetBirthPlanHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-viewing-birth-plan"
@@ -123,6 +137,97 @@ func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) 
 	defer srv.Close()
 
 	resp := getClientBirthPlan(t, srv, session, otherEngagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+// TestClientAcknowledgeBirthPlanHandler_Success is #301's central AC: a
+// Client can confirm she has read her Birth Plan, the write lands on the
+// row, and it is attributed to her in the audit trail (ADR-0022).
+func TestClientAcknowledgeBirthPlanHandler_Success(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-acknowledging-birth-plan"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	seedInstance(t, db, engagementID, birthPlanType,
+		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
+		`{"location":"Hospital"}`,
+	)
+
+	srv, session := newPortalServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out plans.InstanceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ClientAcknowledgedAt == nil {
+		t.Fatalf("clientAcknowledgedAt = nil, want it set by the acknowledge write")
+	}
+
+	getResp := getClientBirthPlan(t, srv, session, engagementID)
+	defer getResp.Body.Close()
+	var getOut plans.InstanceResponse
+	if err := json.NewDecoder(getResp.Body).Decode(&getOut); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if getOut.ClientAcknowledgedAt == nil {
+		t.Fatalf("a subsequent GET clientAcknowledgedAt = nil, want the acknowledgement to persist")
+	}
+
+	var action, actorKind, actorClientID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT action, actor_kind::text, actor_client_id FROM activity
+		 WHERE subject_kind = 'engagement' AND subject_id = $1 ORDER BY created_at DESC LIMIT 1`,
+		engagementID,
+	).Scan(&action, &actorKind, &actorClientID); err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	if action != "birth_plan_acknowledged" || actorKind != "client" || actorClientID != clientID {
+		t.Fatalf("activity row = (action=%q, actorKind=%q, actorClientID=%q), want (birth_plan_acknowledged, client, %q)", action, actorKind, actorClientID, clientID)
+	}
+}
+
+func TestClientAcknowledgeBirthPlanHandler_NoInstanceYet404(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-acknowledging-no-birth-plan"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
+
+	srv, session := newPortalServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := postAcknowledgeBirthPlan(t, srv, session, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestClientAcknowledgeBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-acknowledging-not-linked"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
+
+	srv, session := newPortalServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := postAcknowledgeBirthPlan(t, srv, session, otherEngagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {

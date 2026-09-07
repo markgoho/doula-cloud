@@ -58,6 +58,20 @@ func seedInstance(t *testing.T, db *testdb.DB, engagementID, planType, fieldsJSO
 	}
 }
 
+// setAcknowledged directly sets client_acknowledged_at on a seeded Plan
+// Instance, bypassing ClientAcknowledgeBirthPlanHandler -- used to set up
+// the "already acknowledged" state a test needs before exercising some
+// other behavior (e.g. PutInstanceHandler's reset-on-edit).
+func setAcknowledged(t *testing.T, db *testdb.DB, engagementID, planType string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE plan_instances SET client_acknowledged_at = now() WHERE engagement_id = $1 AND plan_type = $2`,
+		engagementID, planType,
+	); err != nil {
+		t.Fatalf("set acknowledged: %v", err)
+	}
+}
+
 func newPlanServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()

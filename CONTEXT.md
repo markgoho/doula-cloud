@@ -101,7 +101,8 @@ Internal working notes on how the Practice will support a Client's Engagement. S
 _Avoid_: Plan, notes
 
 **Birth Plan**:
-A standalone document of the Client's labor/delivery preferences, meant to be handed to a third party (e.g. hospital staff). Distinct from Care Plan. Structure is defined per-Practice via a Plan Template; staff-drafted, with a read-only view in the Client portal and a print stylesheet for handoff.
+A standalone document of the Client's labor/delivery preferences, meant to be handed to a third party (e.g. hospital staff). Distinct from Care Plan. Structure is defined per-Practice via a Plan Template; staff-drafted, with a read-only view in the Client portal and a print stylesheet for handoff. She may acknowledge that she has read it — a v1, acknowledgement-only answer to "does she contribute to it" — but cannot edit a field or suggest a change; a Staff edit that changes the stored answers clears her acknowledgement, so it always means "read since it last changed." Decided on [#301](https://github.com/markgoho/doula-cloud/issues/301); a richer answer (suggest-and-approve, or Practice-defined client-editable fields) stays a candidate future ticket, tracked for signal on [#243](https://github.com/markgoho/doula-cloud/issues/243).
+_Client says_: I've read this — the one control she has; Staff's own view shows "Reviewed by client on {date}" or "Not yet reviewed by client". The model holds one acknowledged/not-acknowledged fact, not a history of edits and reads, so "not yet reviewed" is also what a Staff edit since her last read looks like — there is no separate word for "she read an earlier version."
 _Avoid_: Plan (ambiguous with Care Plan)
 
 **Plan Template**:

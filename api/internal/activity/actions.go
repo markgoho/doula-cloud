@@ -95,6 +95,15 @@ const (
 
 	ActionPlanInstanceEdited EngagementAction = "plan_instance_edited"
 
+	// ActionBirthPlanAcknowledged records a Client confirming she has
+	// read her Birth Plan (#301, v1: acknowledgement only -- she cannot
+	// edit a field or suggest a change). Always a ClientActor: it is her
+	// own act, never Staff's on her behalf. A Staff edit that changes the
+	// Plan Instance's stored answers clears the acknowledgement itself
+	// (plans.PutInstanceHandler) but records no activity row of its own --
+	// that edit already fires ActionPlanInstanceEdited.
+	ActionBirthPlanAcknowledged EngagementAction = "birth_plan_acknowledged"
+
 	ActionOfferSent       EngagementAction = "offer_sent"
 	ActionOfferAccepted   EngagementAction = "offer_accepted"
 	ActionOfferDeclined   EngagementAction = "offer_declined"
