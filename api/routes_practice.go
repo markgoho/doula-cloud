@@ -8,6 +8,7 @@ import (
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/export"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/message"
@@ -53,4 +54,5 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	pushsub.Mount(g, ir, d.DB)
 	portalinvite.Mount(g, ir, d.DB, d.NudgeEnqueuer)
 	mailsuppress.Mount(g, ir, d.BounceClearer)
+	export.Mount(g)
 }
