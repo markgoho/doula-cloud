@@ -120,37 +120,55 @@ func GetInstanceHandler() http.Handler {
 			return
 		}
 
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canAccess {
-			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+		fields, answers, clientAcknowledgedAt, ok := loadInstanceForStaff(w, r, tx, engagementID, planType)
+		if !ok {
 			return
 		}
 
-		fields, answers, clientAcknowledgedAt, err := fetchInstance(r.Context(), tx, engagementID, planType)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers.nonEmpty(), ClientAcknowledgedAt: clientAcknowledgedAt}
+		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
+}
+
+// loadInstanceForStaff resolves and reads the Plan Instance for
+// engagementID + planType on the calling Staff member's own tx, applying
+// ADR-0008's attachment narrowing via staffauth.Reader.CanAccessEngagement
+// -- shared by GetInstanceHandler (JSON, above) and
+// GetBirthPlanPDFHandler (#306, pdf.go), so the two surfaces can never
+// drift on who can reach an instance. Writes the appropriate error
+// response itself and returns ok=false on any failure, matching
+// resolveInstanceRequest's own contract; callers just return in that
+// case. Answers is already normalized (nonEmpty), so a caller never
+// re-applies it.
+func loadInstanceForStaff(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID, planType string) (fields []Field, answers Answers, clientAcknowledgedAt *time.Time, ok bool) {
+	reader, has := staffauth.ReaderFrom(r.Context())
+	if !has {
+		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, nil, nil, false
+	}
+	canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, nil, nil, false
+	}
+	if !canAccess {
+		apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+		return nil, nil, nil, false
+	}
+
+	fields, rawAnswers, clientAcknowledgedAt, err := fetchInstance(r.Context(), tx, engagementID, planType)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
+		return nil, nil, nil, false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, nil, nil, false
+	}
+	return fields, rawAnswers.nonEmpty(), clientAcknowledgedAt, true
 }
 
 // PutInstanceHandler replaces the full Answers map of the Plan Instance

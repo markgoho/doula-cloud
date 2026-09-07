@@ -10,8 +10,9 @@ import (
 
 // Mount registers the Plan Template (every Staff role, ADR-0008, no
 // attachment narrowing -- a Template isn't Engagement-scoped) and Plan
-// Instance surface, its rendered PDF (#306), plus the Client portal's own
-// birth-plan read, acknowledge, and PDF.
+// Instance surface, the Birth Plan's rendered PDF (#306, Birth Plan only
+// -- Care Plan has no Client-facing surface for it to mirror), plus the
+// Client portal's own birth-plan read, acknowledge, and PDF.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, GetTemplateHandler())
 	ir.Exempt("PUT /api/practices/{practiceId}/plan-templates/{planType}",
@@ -27,7 +28,11 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 	// Rendered fresh on every request, never stored (#306): a Plan
 	// Instance has no "final" event the way a signed Contract does, so
 	// there is nothing to cache and no staleness to manage server-side.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}/pdf", staffauth.AnyStaff, GetInstancePDFHandler())
+	// Mounted generically over :planType (same pattern as the routes
+	// above) so the URL a Practice-side download button calls matches the
+	// JSON route it already reads, but GetBirthPlanPDFHandler itself
+	// refuses anything but birth_plan.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}/pdf", staffauth.AnyStaff, GetBirthPlanPDFHandler())
 
 	g.OpenGet("/api/portal/engagements/{engagementId}/birth-plan", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetBirthPlanHandler()))

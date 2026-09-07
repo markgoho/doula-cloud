@@ -110,14 +110,3 @@ func TestRenderPlanPDF_ProducesAValidPDF(t *testing.T) {
 		t.Fatalf("renderPlanPDF output does not start with the PDF magic header: %q", out[:min(16, len(out))])
 	}
 }
-
-// TestPlanPDFFilename proves the Content-Disposition filename swaps the
-// plan_type's underscore for a hyphen.
-func TestPlanPDFFilename(t *testing.T) {
-	if got := planPDFFilename("birth_plan"); got != "birth-plan.pdf" {
-		t.Fatalf("planPDFFilename(birth_plan) = %q, want birth-plan.pdf", got)
-	}
-	if got := planPDFFilename("care_plan"); got != "care-plan.pdf" {
-		t.Fatalf("planPDFFilename(care_plan) = %q, want care-plan.pdf", got)
-	}
-}

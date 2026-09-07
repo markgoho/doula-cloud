@@ -28,7 +28,7 @@
 		loadInstance,
 		createInstance,
 		saveAnswers,
-		downloadPlanPdf,
+		downloadBirthPlanPdf,
 		setAnswer,
 		toggleMultiSelectOption,
 		type Instance
@@ -348,7 +348,7 @@
 		downloadBirthPlanPdfError = '';
 		isDownloadingBirthPlanPdf = true;
 		try {
-			const blob = await downloadPlanPdf(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, 'birth_plan');
+			const blob = await downloadBirthPlanPdf(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 			triggerBlobDownload(blob, 'birth-plan.pdf');
 		} catch (error_) {
 			downloadBirthPlanPdfError = error_ instanceof Error ? error_.message : 'Failed to download Birth Plan';

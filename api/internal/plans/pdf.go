@@ -13,22 +13,22 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/engagement"
-	"doula-cloud/api/internal/staffauth"
 )
 
-// contentTypePDF is the Plan Instance PDF's Content-Type, shared by both
-// retrieval handlers below -- this package's own constant, since Go
-// doesn't let one package reuse an unexported const from another
-// (contracts.contentTypePDF holds the identical string).
+// contentTypePDF is the Birth Plan PDF's Content-Type -- this package's
+// own constant, since Go doesn't let one package reuse an unexported
+// const from another (contracts.contentTypePDF holds the identical
+// string).
 const contentTypePDF = "application/pdf"
 
-// planTypeHeadings maps a plan_type to the heading its rendered PDF opens
-// with -- the same labels planSections carries in the Engagement view
-// (app/src/routes/practices/[practiceId]/engagements/[engagementId]/+page.svelte).
-var planTypeHeadings = map[string]string{
-	"care_plan":  "Care Plan",
-	"birth_plan": "Birth Plan",
-}
+// birthPlanPDFHeading and birthPlanPDFFilename are fixed, not
+// parameterized by plan type (#306 scoped this ticket's PDF to Birth
+// Plan only -- Care Plan has no Client-facing surface to extend it
+// from, so nothing here should be able to render one).
+const (
+	birthPlanPDFHeading  = "Birth Plan"
+	birthPlanPDFFilename = "birth-plan.pdf"
+)
 
 // renderPlanPDF renders a Plan Instance's field list and answers to PDF
 // bytes (#306) -- built fresh on every request, never stored, since a
@@ -99,73 +99,50 @@ func planFieldAnswerText(field Field, answers Answers) string {
 	}
 }
 
-// planPDFFilename is the Content-Disposition filename for planType's PDF,
-// e.g. "birth_plan" -> "birth-plan.pdf" -- mirrors contracts' static
-// "contract.pdf", just parameterized by plan type.
-func planPDFFilename(planType string) string {
-	return strings.ReplaceAll(planType, "_", "-") + ".pdf"
-}
-
-// servePlanPDF renders fields/answers and writes the result as a PDF
-// download response. Shared by GetInstancePDFHandler and
+// serveBirthPlanPDF renders fields/answers as the Birth Plan PDF and
+// writes it as a download response. Shared by GetBirthPlanPDFHandler and
 // ClientGetBirthPlanPDFHandler.
-func servePlanPDF(w http.ResponseWriter, planType string, fields []Field, answers Answers) {
-	pdfBytes, err := renderPlanPDF(planTypeHeadings[planType], fields, answers)
+func serveBirthPlanPDF(w http.ResponseWriter, fields []Field, answers Answers) {
+	pdfBytes, err := renderPlanPDF(birthPlanPDFHeading, fields, answers)
 	if err != nil {
 		// coverage:ignore reason: renderPlanPDF only fails on an internal fpdf encoding error, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", contentTypePDF)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", planPDFFilename(planType)))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", birthPlanPDFFilename))
 	// coverage:ignore reason: response write failure, not exercised by unit tests
 	if _, err := w.Write(pdfBytes); err != nil {
 		return
 	}
 }
 
-// GetInstancePDFHandler streams a rendered PDF of the Plan Instance for
-// :engagementId + :planType to the calling Staff member -- the same
-// generic Plan Instance surface GetInstanceHandler serves (narrowed by
-// ADR-0008's attachment rule for a contractor Doula, same as
-// GetInstanceHandler), rendered as a PDF instead of JSON (#306). Must be
-// mounted behind staffauth.Middleware.
-func GetInstancePDFHandler() http.Handler {
+// GetBirthPlanPDFHandler streams a rendered PDF of the Birth Plan
+// Instance for :engagementId to the calling Staff member -- the
+// Practice-side half of #306's "same document, same mechanism" rule,
+// sharing loadInstanceForStaff (instance.go) with GetInstanceHandler's
+// JSON read so the two can never drift on who can reach an instance.
+// planType is read off the URL only to be checked against birthPlanType:
+// Care Plan has no Client-facing surface for this PDF to mirror, so this
+// handler refuses it the same way a nonexistent instance 404s, rather
+// than rendering one. Must be mounted behind staffauth.Middleware.
+func GetBirthPlanPDFHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, planType, ok := resolveInstanceRequest(w, r)
 		if !ok {
 			return
 		}
-
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canAccess {
+		if planType != birthPlanType {
 			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
 			return
 		}
 
-		fields, answers, _, err := fetchInstance(r.Context(), tx, engagementID, planType)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		fields, answers, _, ok := loadInstanceForStaff(w, r, tx, engagementID, planType)
+		if !ok {
 			return
 		}
 
-		servePlanPDF(w, planType, fields, answers.nonEmpty())
+		serveBirthPlanPDF(w, fields, answers)
 	})
 }
 
@@ -208,6 +185,6 @@ func ClientGetBirthPlanPDFHandler() http.Handler {
 			return
 		}
 
-		servePlanPDF(w, birthPlanType, fields, answers.nonEmpty())
+		serveBirthPlanPDF(w, fields, answers.nonEmpty())
 	})
 }

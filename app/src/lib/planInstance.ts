@@ -9,6 +9,7 @@ import type { Fetcher } from './fetcher.js';
 
 import type { Field,  } from './planTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { fetchBlob } from './blobDownload.js';
 
 
 
@@ -163,29 +164,17 @@ export async function acknowledgeClientBirthPlan(fetcher: Fetcher, engagementId:
  * answers. Throws with the response body text on a non-2xx response
  * (e.g. no Birth Plan created yet). */
 export async function downloadClientBirthPlanPdf(fetcher: Fetcher, engagementId: string): Promise<Blob> {
-	const response = await fetcher(`${clientBirthPlanPath(engagementId)}/pdf`);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.blob();
+	return fetchBlob(fetcher, `${clientBirthPlanPath(engagementId)}/pdf`);
 }
 
-/** Downloads a rendered PDF of the Plan Instance for engagementId +
- * planType from the Practice route (#306) -- mirrors
- * downloadClientBirthPlanPdf above, generic over plan type the same way
- * loadInstance/saveAnswers already are. Throws with the response body
- * text on a non-2xx response. */
-export async function downloadPlanPdf(
-	fetcher: Fetcher,
-	practiceId: string,
-	engagementId: string,
-	planType: string
-): Promise<Blob> {
-	const response = await fetcher(`${instancePath(practiceId, engagementId, planType)}/pdf`);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.blob();
+/** Downloads a rendered PDF of the Birth Plan for engagementId from the
+ * Practice route (#306) -- mirrors downloadClientBirthPlanPdf above.
+ * Birth Plan only, not generic over plan type: Care Plan has no
+ * Client-facing surface for this PDF to mirror, so the BFF route itself
+ * refuses anything but birth_plan (api/internal/plans/pdf.go), and this
+ * function never gives a caller the chance to ask for another type. */
+export async function downloadBirthPlanPdf(fetcher: Fetcher, practiceId: string, engagementId: string): Promise<Blob> {
+	return fetchBlob(fetcher, `${instancePath(practiceId, engagementId, 'birth_plan')}/pdf`);
 }
 
 /** Sets or clears the answer for fieldId within answers, returning a new

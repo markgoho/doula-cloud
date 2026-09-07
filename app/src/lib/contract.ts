@@ -10,6 +10,7 @@ import type { Fetcher } from './fetcher.js';
 
 import { MERGE_FIELDS } from './contractTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { fetchBlob } from './blobDownload.js';
 
 export interface Contract {
 	engagementId: string;
@@ -92,11 +93,7 @@ export async function loadContract(
  * engagementDetail.ts's downloadAttachment. Throws with the response
  * body text on a non-2xx response (e.g. not yet signed). */
 export async function downloadClientSignedContractPdf(fetcher: Fetcher, engagementId: string): Promise<Blob> {
-	const response = await fetcher(`${clientContractPath(engagementId)}/pdf`);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.blob();
+	return fetchBlob(fetcher, `${clientContractPath(engagementId)}/pdf`);
 }
 
 /** Downloads the Signed PDF for engagementId's Contract from the Practice
@@ -108,11 +105,7 @@ export async function downloadSignedContractPdf(
 	practiceId: string,
 	engagementId: string
 ): Promise<Blob> {
-	const response = await fetcher(`${contractPath(practiceId, engagementId)}/pdf`);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.blob();
+	return fetchBlob(fetcher, `${contractPath(practiceId, engagementId)}/pdf`);
 }
 
 /** Creates the Draft Contract for engagementId, snapshotting the

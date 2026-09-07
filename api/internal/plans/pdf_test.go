@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
@@ -31,6 +32,9 @@ func requirePDFBody(t *testing.T, resp *http.Response) {
 	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
 		t.Fatalf("Content-Type = %q, want application/pdf", ct)
 	}
+	if cd := resp.Header.Get("Content-Disposition"); !strings.Contains(cd, "birth-plan.pdf") {
+		t.Fatalf("Content-Disposition = %q, want it to name birth-plan.pdf", cd)
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
@@ -40,9 +44,9 @@ func requirePDFBody(t *testing.T, resp *http.Response) {
 	}
 }
 
-// TestGetInstancePDFHandler_Success proves Staff can download a rendered
+// TestGetBirthPlanPDFHandler_Success proves Staff can download a rendered
 // PDF of a Plan Instance they can already view as JSON (#306).
-func TestGetInstancePDFHandler_Success(t *testing.T) {
+func TestGetBirthPlanPDFHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-pdf-success"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
@@ -64,9 +68,35 @@ func TestGetInstancePDFHandler_Success(t *testing.T) {
 	requirePDFBody(t, resp)
 }
 
-// TestGetInstancePDFHandler_NoInstance proves an Engagement with no Plan
+// TestGetBirthPlanPDFHandler_CarePlanRejected proves the route stays
+// scoped to Birth Plan (#306's decision) even though it is mounted
+// generically over :planType, the same way GetInstanceHandler's own JSON
+// route is: a Care Plan instance's PDF 404s the same way a missing
+// instance does, rather than rendering one.
+func TestGetBirthPlanPDFHandler_CarePlanRejected(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-instance-pdf-care-plan-rejected"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedInstance(t, db, engagementID, carePlanType,
+		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
+		`{"f1":"Jamie"}`,
+	)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getInstancePDF(t, srv.Client(), srv.URL+instancePath(practiceID, engagementID, carePlanType)+"/pdf", session)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestGetBirthPlanPDFHandler_NoInstance proves an Engagement with no Plan
 // Instance yet 404s, same as GetInstanceHandler.
-func TestGetInstancePDFHandler_NoInstance(t *testing.T) {
+func TestGetBirthPlanPDFHandler_NoInstance(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-pdf-no-instance"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
@@ -83,9 +113,9 @@ func TestGetInstancePDFHandler_NoInstance(t *testing.T) {
 	}
 }
 
-// TestGetInstancePDFHandler_CrossPracticeRejected proves a Staff member
+// TestGetBirthPlanPDFHandler_CrossPracticeRejected proves a Staff member
 // at Practice A can't download the PDF for an Engagement at Practice B.
-func TestGetInstancePDFHandler_CrossPracticeRejected(t *testing.T) {
+func TestGetBirthPlanPDFHandler_CrossPracticeRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-pdf-cross-practice"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
@@ -105,10 +135,10 @@ func TestGetInstancePDFHandler_CrossPracticeRejected(t *testing.T) {
 	}
 }
 
-// TestGetInstancePDFHandler_ContractorWithoutAttachmentForbidden proves
+// TestGetBirthPlanPDFHandler_ContractorWithoutAttachmentForbidden proves
 // ADR-0008's attachment rule applies to the PDF the same way it does to
 // GetInstanceHandler's JSON read: an unattached contractor Doula 404s.
-func TestGetInstancePDFHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
+func TestGetBirthPlanPDFHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-pdf-contractor-unattached"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
@@ -129,9 +159,9 @@ func TestGetInstancePDFHandler_ContractorWithoutAttachmentForbidden(t *testing.T
 	}
 }
 
-// TestGetInstancePDFHandler_Unauthenticated proves a request with no
+// TestGetBirthPlanPDFHandler_Unauthenticated proves a request with no
 // credential 401s before ever reaching the handler.
-func TestGetInstancePDFHandler_Unauthenticated(t *testing.T) {
+func TestGetBirthPlanPDFHandler_Unauthenticated(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-pdf-unauthenticated"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
