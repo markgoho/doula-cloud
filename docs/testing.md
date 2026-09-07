@@ -196,6 +196,60 @@ explicit `container.Terminate` at process exit, a full local `go test
 `testdb.Main` too, since Ryuk only reaps containers after they're already
 orphaned.
 
+Every package that calls `testdb.New` must wire up its own `TestMain` --
+four didn't (`internal/mfarecoverymail`, `internal/outbox`,
+`internal/sessionmint`, `internal/sessionnotice`), which meant those
+packages leaked their container on every run, clean or not, until #889
+gave each one the same three-line `TestMain` every other package already
+had.
+
+## Reaping orphaned testcontainers
+
+`testdb.Main`'s teardown above only runs on a clean process exit. A
+killed test process -- an interrupted agent, a timeout, a cut-short TDD
+loop -- never reaches it, and Ryuk being disabled locally (previous
+section) means nothing else reaps that container either. With several
+parallel Claude Code agent sessions on one machine, these orphans
+accumulate without bound: 116 running `postgres:16-alpine` containers,
+146 total, 133MB free of a 4GB Podman machine, observed live (#889). That
+starvation made `podman compose up` for `dev:full` time out with
+`ETIMEDOUT` and made unrelated `api/internal/visit` tests flake locally
+while staying green in CI.
+
+`.claude/hooks/testdb-reap.ts` is a `SessionStart` hook (registered in
+`.claude/settings.json`) that clears these out at the start of every
+session. It removes any container labeled `org.testcontainers=true`
+(testcontainers-go's own label, present on every container `testdb.New`
+starts and nothing else on the machine) that is older than **15
+minutes**. That threshold is deliberately generous, not tight: a
+container backs one `go test` process for one package, so a live one
+lives minutes at most, and the slowest single package observed on this
+machine (`internal/payments`, idle machine) finished in 90.4s. 15 minutes
+is roughly 10x that, enough headroom for several sessions competing for
+the same 4GB Podman machine -- which is exactly the condition that causes
+the leak -- without ever mistaking a live run for an orphan. The
+reasoning lives as a comment on `REAP_THRESHOLD_MS` in the hook itself,
+not only here.
+
+The hook reads `DOCKER_HOST` the same way `testdb.go` does (previous
+section); if it's unset, or the container engine at that socket isn't
+reachable, it does nothing and exits 0. It **fails open on every error
+path** -- unlike `gate-worktree-edit.ts`/`gate-bash-write.ts`, which fail
+closed because they're `PreToolUse` gates deciding whether to allow a
+tool call. This hook runs on `SessionStart`, makes no such decision, and
+exists purely to tidy up; a reaper that errors must never block or slow a
+session from starting. `gate-shared-index.sh` is the existing fail-open
+precedent, for the same class of reason. It's quiet when there's nothing
+to reap; when it does reap, it logs the count and the reason.
+
+If containers pile up faster than a session boundary clears them, the
+same manual command #889 was diagnosed with still works as an escape
+hatch:
+
+```sh
+podman rm -f -t 2 $(podman ps -aq --filter 'label=org.testcontainers=true')
+```
+
 ## `api/`: migrations via goose
 
 Migrations live in `api/db/migrations`. In dev/CI, `internal/testdb`
