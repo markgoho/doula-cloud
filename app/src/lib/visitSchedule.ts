@@ -104,7 +104,7 @@ export function toInstantRange(from: string, to: string): { from: string; to: st
 export function scheduleFiltersFromParameters(
 	parameters: URLSearchParams,
 	now: Date = new Date()
-): Required<Pick<ScheduleFilters, 'from' | 'to'>> & Pick<ScheduleFilters, 'staffId'> {
+): ResolvedScheduleFilters {
 	const fallback = defaultScheduleRange(now);
 	return {
 		from: parameters.get('from') ?? fallback.from,
@@ -112,6 +112,14 @@ export function scheduleFiltersFromParameters(
 		staffId: parameters.get('staffId') ?? undefined
 	};
 }
+
+/** The narrowing once the default window has filled the gaps a bare URL
+ * leaves: two calendar days that are always present, and the Doula only
+ * if one was chosen. The href builder, the BFF path and the loader all
+ * take this one shape, so none of them can be handed a half-decided
+ * range. */
+export type ResolvedScheduleFilters = Required<Pick<ScheduleFilters, 'from' | 'to'>> &
+	Pick<ScheduleFilters, 'staffId'>;
 
 /** The screen's own URL for a narrowing -- what the browser's address bar
  * holds, and what a shared link carries. Only the parts a reader actually
@@ -134,7 +142,7 @@ export function scheduleHref(
  * already turned into the instants the endpoint takes. */
 export function practiceSchedulePath(
 	practiceId: string,
-	filters: Required<Pick<ScheduleFilters, 'from' | 'to'>> & Pick<ScheduleFilters, 'staffId'>,
+	filters: ResolvedScheduleFilters,
 	cursor = ''
 ): string {
 	const range = toInstantRange(filters.from, filters.to);
@@ -151,7 +159,7 @@ export function practiceSchedulePath(
 export async function loadPracticeSchedule(
 	fetcher: Fetcher,
 	practiceId: string,
-	filters: Required<Pick<ScheduleFilters, 'from' | 'to'>> & Pick<ScheduleFilters, 'staffId'>,
+	filters: ResolvedScheduleFilters,
 	cursor = ''
 ): Promise<CursorPage<ScheduledVisit>> {
 	const response = await fetcher(practiceSchedulePath(practiceId, filters, cursor));

@@ -6,6 +6,7 @@ import { loadStaff } from '#lib/staff.js';
 import {
 	practiceSchedulePath,
 	scheduleFiltersFromParameters,
+	type ResolvedScheduleFilters,
 	type ScheduledVisit
 } from '#lib/visitSchedule.js';
 import type { CursorPage } from '#lib/paginatedList.svelte.js';
@@ -13,7 +14,7 @@ import type { PageLoad } from './$types';
 
 export interface SchedulePageData {
 	page: CursorPage<ScheduledVisit>;
-	filters: { from: string; to: string; staffId?: string };
+	filters: ResolvedScheduleFilters;
 	/**
 	 * The Doulas the filter offers, empty when this Staff member cannot be
 	 * offered one at all. `GET .../staff` is Owner/Admin on the BFF, which

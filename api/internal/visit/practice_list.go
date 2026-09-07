@@ -31,11 +31,10 @@ const defaultScheduleWindow = 30 * 24 * time.Hour
 // The refusals this endpoint owns; the screen renders them and the tests
 // assert them.
 const (
-	MsgInvalidFrom      = "from must be an RFC3339 timestamp"
-	MsgInvalidTo        = "to must be an RFC3339 timestamp"
-	MsgEmptyRange       = "to must be after from"
-	MsgInvalidCursor    = "invalid cursor"
-	msgInternalNoReader = "no reader on context"
+	MsgInvalidFrom   = "from must be an RFC3339 timestamp"
+	MsgInvalidTo     = "to must be an RFC3339 timestamp"
+	MsgEmptyRange    = "to must be after from"
+	MsgInvalidCursor = "invalid cursor"
 )
 
 // ScheduledVisit is one row of the Practice-wide schedule: when the Visit
@@ -197,7 +196,7 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request) (scheduleFilter
 	staffID, hasStaffID := staffauth.StaffID(r.Context())
 	if !has || !hasStaffID {
 		// coverage:ignore reason: staffauth.Middleware always places a Reader and a staff id on context before this handler runs
-		apierr.WriteError(w, msgInternalNoReader, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return scheduleFilter{}, false
 	}
 	if reader.IsAmbientContractor() {

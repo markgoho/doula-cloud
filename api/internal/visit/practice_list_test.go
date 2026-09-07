@@ -37,7 +37,7 @@ func schedulePath(srvURL, practiceID string, params url.Values) string {
 // test on any status other than 200.
 func getSchedule(t *testing.T, session, requestURL string) visit.PracticeScheduleResponse {
 	t.Helper()
-	resp := getScheduleRaw(t, session, requestURL)
+	resp := authedGet(t, session, requestURL)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -47,11 +47,6 @@ func getSchedule(t *testing.T, session, requestURL string) visit.PracticeSchedul
 		t.Fatalf("decode schedule: %v", err)
 	}
 	return page
-}
-
-func getScheduleRaw(t *testing.T, session, requestURL string) *http.Response {
-	t.Helper()
-	return authedGet(t, session, requestURL)
 }
 
 // visitIDs pulls the identities out of a page, so an assertion compares
@@ -64,17 +59,12 @@ func visitIDs(page visit.PracticeScheduleResponse) []string {
 	return ids
 }
 
-func equalIDs(got, want []string) bool {
-	return slices.Equal(got, want)
-}
-
 // scheduleFixture is one Practice with two Clients, three Staff and four
 // Visits -- the smallest shape that can tell every acceptance criterion
 // apart: a Visit with no scheduled instant, a Visit outside the window,
 // two Doulas to filter between, and one Engagement a contractor is
 // attached to.
 type scheduleFixture struct {
-	db         *testdb.DB
 	practiceID string
 	// engagementA is the Engagement the contractor holds an open, granted
 	// attachment on; engagementB is the one she does not.
@@ -99,7 +89,6 @@ func newScheduleFixture(t *testing.T, db *testdb.DB, prefix string) scheduleFixt
 
 	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 	f := scheduleFixture{
-		db:              db,
 		practiceID:      practiceID,
 		engagementA:     engagementA,
 		engagementB:     engagementB,
@@ -127,7 +116,7 @@ func TestPracticeSchedule_ListsEveryScheduledVisitSoonestFirst(t *testing.T) {
 	defer srv.Close()
 
 	page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, nil))
-	if got := visitIDs(page); !equalIDs(got, []string{f.soonVisit, f.laterVisit}) {
+	if got := visitIDs(page); !slices.Equal(got, []string{f.soonVisit, f.laterVisit}) {
 		t.Fatalf("schedule = %v, want [%s %s]", got, f.soonVisit, f.laterVisit)
 	}
 
@@ -196,7 +185,7 @@ func TestPracticeSchedule_NarrowsToADateRange(t *testing.T) {
 		fromParameter: {f.base.Add(-96 * time.Hour).Format(time.RFC3339)},
 		toParameter:   {f.base.Format(time.RFC3339)},
 	}))
-	if got := visitIDs(past); !equalIDs(got, []string{f.pastVisit}) {
+	if got := visitIDs(past); !slices.Equal(got, []string{f.pastVisit}) {
 		t.Fatalf("backward window = %v, want [%s]", got, f.pastVisit)
 	}
 
@@ -206,7 +195,7 @@ func TestPracticeSchedule_NarrowsToADateRange(t *testing.T) {
 		fromParameter: {f.base.Format(time.RFC3339)},
 		toParameter:   {f.base.Add(48 * time.Hour).Format(time.RFC3339)},
 	}))
-	if got := visitIDs(upToLater); !equalIDs(got, []string{f.soonVisit}) {
+	if got := visitIDs(upToLater); !slices.Equal(got, []string{f.soonVisit}) {
 		t.Fatalf("exclusive upper bound = %v, want [%s]", got, f.soonVisit)
 	}
 }
@@ -225,7 +214,7 @@ func TestPracticeSchedule_NarrowsToOneDoula(t *testing.T) {
 	page := getSchedule(t, session, schedulePath(srv.URL, f.practiceID, url.Values{
 		staffParameter: {f.otherDoulaID},
 	}))
-	if got := visitIDs(page); !equalIDs(got, []string{f.laterVisit}) {
+	if got := visitIDs(page); !slices.Equal(got, []string{f.laterVisit}) {
 		t.Fatalf("narrowed to one Doula = %v, want [%s]", got, f.laterVisit)
 	}
 }
@@ -262,7 +251,7 @@ func TestPracticeSchedule_RefusesMalformedNarrowing(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := getScheduleRaw(t, session, schedulePath(srv.URL, f.practiceID, tc.params))
+			resp := authedGet(t, session, schedulePath(srv.URL, f.practiceID, tc.params))
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -310,7 +299,7 @@ func TestPracticeSchedule_ReadFollowsTheRole(t *testing.T) {
 				// engagementA only: the Engagement she is attached to.
 				want = []string{f.soonVisit}
 			}
-			if got := visitIDs(page); !equalIDs(got, want) {
+			if got := visitIDs(page); !slices.Equal(got, want) {
 				t.Fatalf("schedule = %v, want %v", got, want)
 			}
 		})
@@ -385,7 +374,7 @@ func TestPracticeSchedule_PagesSoonestFirst(t *testing.T) {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Items), first.HasMore, first.NextCursor)
 	}
-	if !equalIDs(visitIDs(first), seeded[:30]) {
+	if !slices.Equal(visitIDs(first), seeded[:30]) {
 		t.Fatalf("first page order = %v, want %v", visitIDs(first), seeded[:30])
 	}
 
