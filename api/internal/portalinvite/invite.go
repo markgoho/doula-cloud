@@ -17,9 +17,23 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
+
+// msgAddressBlocked is what a Staff member sees when the Client's
+// address is currently suppressed (ADR-0029). Named field-keyed so a
+// caller with somewhere to point it (docs/api-design.md section 7)
+// can, even though today's Engagement hub renders it as plain text
+// where "An email has been sent to them" would have gone (#789).
+//
+// Points at the screen rather than promising a Clear: a Doula-role
+// Staff member can send this invite (practice-tier, per #90) but
+// cannot reach Clear (Owner/Admin-only, #744), and a complaint-caused
+// suppression is never clearable at all (mailsuppress.ErrNotClearable)
+// -- "clear it" would be wrong for either reader.
+const msgAddressBlocked = "This email address is blocked. Blocked email addresses shows why and what can be done."
 
 // inviteTokenLifetime is how long a portal invitation stays acceptable --
 // #616's AC, longer than a sign-in link (ADR-0026's 15 minutes) because
@@ -61,7 +75,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		clientID, err := resolveEngagementClient(r.Context(), tx, engagementID, practiceID)
+		clientID, email, err := resolveEngagementClient(r.Context(), tx, engagementID, practiceID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
@@ -70,6 +84,27 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
+		}
+
+		// A suppressed address (ADR-0029) is refused here rather than
+		// queued: the outbox guard would only dead-letter it later,
+		// after client_portal_users already carries a pending row and
+		// the screen already says "an email has been sent." The Client
+		// is this Practice's own, so there is nothing here #744's
+		// AttachedToPractice check would add -- the address is already
+		// this Practice's business.
+		if email.Valid {
+			suppressed, err := mailsuppress.Active(r.Context(), tx, email.String)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			if suppressed {
+				apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgAddressBlocked,
+					map[string]string{"email": msgAddressBlocked})
+				return
+			}
 		}
 
 		resp, status, code, msg := invite(r.Context(), tx, clientID)
@@ -96,23 +131,25 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 }
 
 // resolveEngagementClient confirms engagementID belongs to practiceID and
-// returns its client_id, mirroring engagement.DetailHandler's join. Returns
-// sql.ErrNoRows if the Engagement doesn't exist at this Practice.
-func resolveEngagementClient(ctx context.Context, tx *sql.Tx, engagementID, practiceID string) (string, error) {
+// returns its client_id and email (nullable, per ADR-0017), mirroring
+// engagement.DetailHandler's join. Returns sql.ErrNoRows if the
+// Engagement doesn't exist at this Practice.
+func resolveEngagementClient(ctx context.Context, tx *sql.Tx, engagementID, practiceID string) (string, sql.NullString, error) {
 	var clientID string
+	var email sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`SELECT c.id FROM engagements e JOIN clients c ON c.id = e.client_id
+		`SELECT c.id, c.email FROM engagements e JOIN clients c ON c.id = e.client_id
 		 WHERE e.id = $1 AND e.practice_id = $2`,
 		engagementID, practiceID,
-	).Scan(&clientID)
+	).Scan(&clientID, &email)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", sql.ErrNoRows
+		return "", sql.NullString{}, sql.ErrNoRows
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return "", fmt.Errorf("portalinvite: resolve engagement client: %w", err)
+		return "", sql.NullString{}, fmt.Errorf("portalinvite: resolve engagement client: %w", err)
 	}
-	return clientID, nil
+	return clientID, email, nil
 }
 
 // invite creates a pending client_portal_users row for clientID, or
