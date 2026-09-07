@@ -22,6 +22,7 @@ var exemptEngagementWriteRoutes = map[string]string{
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices": "payments.PostInvoiceHandler is open to any Staff with practice access by design (#68); it is not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/offers":            "offer.CreateHandler is the Practice side of the Offer flow (Owner/Admin, per its own Mount comment); it is not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite":     "portalinvite.InviteHandler invites the Client to the portal; it is not one of #350's four named write surfaces",
+	"POST /api/portal/engagements/{engagementId}/birth-plan/acknowledge":            reasonPortalWrite,
 	"POST /api/portal/engagements/{engagementId}/contract/sign":                     reasonPortalWrite,
 	"POST /api/portal/engagements/{engagementId}/messages":                          reasonPortalWrite,
 	"POST /api/portal/engagements/{engagementId}/push-subscriptions":                reasonPortalWrite,
