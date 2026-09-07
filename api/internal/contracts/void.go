@@ -10,8 +10,6 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-const statusVoided = "voided"
-
 // PostVoidContractHandler transitions the Contract for :engagementId from
 // 'signed' to 'voided' -- the only transition it permits; any other
 // current status (including an already-voided Contract) 409s. Voiding is
@@ -45,14 +43,14 @@ func PostVoidContractHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if status != statusSigned {
-			apierr.WriteError(w, "contract is not signed", http.StatusConflict)
+		if ok, refusal := TransitionVoid.Check(Status(status)); !ok {
+			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
 			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
-			statusVoided, id,
+			string(StatusVoided), id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -74,7 +72,7 @@ func PostVoidContractHandler() http.Handler {
 
 		out := ContractResponse{
 			EngagementID: engagementID,
-			Status:       statusVoided,
+			Status:       string(StatusVoided),
 			Prose:        prose,
 			MergeFields:  extractMergeFields(prose),
 			Values:       values.nonEmpty(),

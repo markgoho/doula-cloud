@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	billableContractStatus,
 	createInvoice,
 	formatAmount,
 	invoiceStatusLabel,
 	loadInvoices,
 	loadPracticeInvoices,
-	practiceInvoicesPath
+	practiceInvoicesPath,
+	unbillableContractMessage
 } from './invoice.js';
 import { jsonResponse } from './testResponse.js';
 
@@ -108,6 +110,29 @@ describe('invoiceStatusLabel', () => {
 
 	it('falls through to the status itself rather than a blank when Stripe adds one', () => {
 		expect(invoiceStatusLabel('something_new')).toBe('something_new');
+	});
+});
+
+describe('unbillableContractMessage', () => {
+	it('names the voided Contract state specifically', () => {
+		expect(unbillableContractMessage('voided')).toBe(
+			'This Contract has been voided. Invoicing is unavailable until Staff issues a new Contract.'
+		);
+	});
+
+	it('gives the same not-yet-signed message for draft and sent', () => {
+		expect(unbillableContractMessage('draft')).toBe(
+			'Invoicing is unavailable until the Client signs this Contract.'
+		);
+		expect(unbillableContractMessage('sent')).toBe(
+			'Invoicing is unavailable until the Client signs this Contract.'
+		);
+	});
+});
+
+describe('billableContractStatus', () => {
+	it('is the one status a Contract may be billed at, matching the BFF', () => {
+		expect(billableContractStatus).toBe('signed');
 	});
 });
 

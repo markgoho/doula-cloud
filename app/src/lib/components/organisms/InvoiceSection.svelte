@@ -10,23 +10,42 @@
 	 * change (e.g. flipping connectGate); this component only reports the
 	 * amount the Staff member entered and displays whatever error either
 	 * callback throws.
+	 *
+	 * #275: contractStatus gates all of the above. A Contract that isn't
+	 * billableContractStatus (Signed) never reaches the connect gate or the
+	 * form at all -- Create Invoice is not offered, and Notice's info
+	 * variant (role="status", a polite live region) says why, so a Staff
+	 * member who just voided the Contract, or a screen reader user, hears
+	 * that billing is deliberately unavailable rather than finding the
+	 * control silently gone.
 	 */
-	import { formatAmount, invoiceStatusLabel, type Invoice } from '#lib/invoice.js';
+	import {
+		billableContractStatus,
+		formatAmount,
+		invoiceStatusLabel,
+		unbillableContractMessage,
+		type Invoice
+	} from '#lib/invoice.js';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	let {
 		invoices,
+		contractStatus,
 		connectGate,
 		onCreate,
 		onConnect
 	}: {
 		invoices: Invoice[];
+		contractStatus: string;
 		connectGate?: { isOwner: boolean };
 		onCreate: (amountCents: number) => Promise<void>;
 		onConnect: () => Promise<void>;
 	} = $props();
+
+	const isBillable = $derived(contractStatus === billableContractStatus);
 
 	let amountDollars = $state('');
 	let isCreating = $state(false);
@@ -87,7 +106,9 @@
 	</ul>
 {/if}
 
-{#if connectGate?.isOwner}
+{#if !isBillable}
+	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
+{:else if connectGate?.isOwner}
 	<p>Connect Stripe to create an Invoice.</p>
 	<Button label="Connect Stripe" onClick={handleConnect} loading={isConnecting} />
 	{#if connectError}

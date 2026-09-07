@@ -14,8 +14,6 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-const statusSent = "sent"
-
 // sendPushPayload is the content-free payload delivered to the Client's
 // push subscription(s) on Send -- per the ticket's "no Contract content
 // leaking through the notification channel" rule, it carries only the
@@ -48,14 +46,14 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if status != statusDraft {
-			apierr.WriteError(w, "contract is no longer a draft", http.StatusConflict)
+		if ok, refusal := TransitionSend.Check(Status(status)); !ok {
+			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
 			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
-			statusSent, id,
+			string(StatusSent), id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -79,7 +77,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 
 		out := ContractResponse{
 			EngagementID: engagementID,
-			Status:       statusSent,
+			Status:       string(StatusSent),
 			Prose:        prose,
 			MergeFields:  extractMergeFields(prose),
 			Values:       values.nonEmpty(),

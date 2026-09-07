@@ -154,3 +154,22 @@ const invoiceStatusLabels: Record<string, string> = {
 export function invoiceStatusLabel(status: string): string {
 	return invoiceStatusLabels[status] ?? status;
 }
+
+/** The one Contract status an Invoice may be raised against -- mirrors
+ * the Go BFF's one declaration of the precondition
+ * (contracts.TransitionBill, api/internal/contracts/lifecycle.go, #275).
+ * InvoiceSection derives from this rather than restating its own
+ * comparison, so the screen and the API can't drift apart on which
+ * Contract states are billable. */
+export const billableContractStatus = 'signed';
+
+/** The message InvoiceSection shows in place of the Create Invoice form
+ * when the Contract's status isn't billableContractStatus -- #275's UI
+ * side: the control is not offered, and the screen says why rather than
+ * only hiding it. */
+export function unbillableContractMessage(status: string): string {
+	if (status === 'voided') {
+		return 'This Contract has been voided. Invoicing is unavailable until Staff issues a new Contract.';
+	}
+	return 'Invoicing is unavailable until the Client signs this Contract.';
+}

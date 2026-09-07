@@ -17,8 +17,6 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-const statusDraft = "draft"
-
 // MergeFieldValues is a Contract's filled-in merge field values, keyed by
 // merge field key (e.g. "client_name"), mirroring plans.Answers but
 // string-only -- every merge field in a Contract Template's prose is
@@ -148,7 +146,7 @@ func PostContractHandler() http.Handler {
 
 		out := ContractResponse{
 			EngagementID: engagementID,
-			Status:       statusDraft,
+			Status:       string(StatusDraft),
 			Prose:        prose,
 			MergeFields:  mergeFields,
 			Values:       values,
@@ -233,8 +231,8 @@ func PutContractHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if status != statusDraft {
-			apierr.WriteError(w, "contract is no longer a draft", http.StatusConflict)
+		if ok, refusal := TransitionEdit.Check(Status(status)); !ok {
+			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
 

@@ -368,7 +368,7 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 			}
 
 			row := fetchSignedRow(t, db, engagementID)
-			if row.status != "sent" {
+			if row.status != statusSent {
 				t.Fatalf("contract status = %q, want unchanged sent", row.status)
 			}
 		})
