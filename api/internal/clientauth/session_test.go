@@ -216,6 +216,10 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 	resp := getSession(t, srv, session)
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
 	var out clientauth.SessionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -226,10 +230,10 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 }
 
 // TestSessionHandler_NoStaffOnlyFact locks the response shape to exactly
-// the three Client-facing fields the Agent Brief names -- the Engagement's
-// id, the Practice's name, and the raw status (clientRegister.ts labels it
-// client-side, per #212). kind, birthOutcome and endingReason are
-// staff-only (ADR-0015) and must never reach this DTO.
+// the three Client-facing fields #312's acceptance criteria name -- the
+// Engagement's id, the Practice's name, and the raw status
+// (clientRegister.ts labels it client-side, per #212). kind, birthOutcome
+// and endingReason are staff-only (ADR-0015) and must never reach this DTO.
 func TestSessionHandler_NoStaffOnlyFact(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "no-staff-fact-client"

@@ -65,20 +65,19 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 		expect(apiFetch).toHaveBeenCalledWith('/api/portal/session');
 	});
 
-	it('shows the Engagement picker for a signed-in visitor with several Engagements', async () => {
+	// #312: the picker used to render inline, here, on the sign-in screen --
+	// not an address she could return to. It now lives at the app root,
+	// which already probes both populations and renders the same list, so
+	// a signed-in visitor with several Engagements is sent there instead.
+	it("sends a signed-in visitor with several Engagements to the portal root, without rendering a picker of its own", async () => {
 		// The fixture's own session already has two Engagements -- it is
 		// this test's happy path, not a reason to invent a second one.
 		apiFetch.mockImplementation(toApiResponder(fixture));
 
 		await render(Page, {});
 
-		// #212: the register's heading ("Your care"), not the team's "Choose
-		// an Engagement".
-		await expect.element(testPage.getByRole('heading', { name: 'Your care' })).toBeVisible();
-		await expect
-			.element(testPage.getByRole('link', { name: secondEngagement.practiceName }))
-			.toBeVisible();
-		expect(goto).not.toHaveBeenCalled();
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
+		expect(testPage.getByRole('link', { name: secondEngagement.practiceName }).elements()).toHaveLength(0);
 	});
 
 	it('renders the ordinary login form for a signed-out visitor, with no session-ended messaging', async () => {

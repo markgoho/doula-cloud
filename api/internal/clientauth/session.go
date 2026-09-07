@@ -35,11 +35,13 @@ type SessionResponse struct {
 	Engagements   []EngagementSummary `json:"engagements"`
 }
 
-// SessionHandler resolves the verified caller to a Client (via
-// client_portal_users) and reports their Engagements. It runs before any
-// Engagement is chosen, so -- like clientauth.Middleware before it checks
-// Engagement ownership -- it only ever sets app.current_identity_uid and
-// then app.current_client_id, never anything scoped by :engagementId.
+// SessionHandler resolves the verified caller's identity and reports every
+// Engagement it reaches, across every Client and Practice (ADR-0015: one
+// Portal Account, many Clients). It runs before any Engagement is chosen,
+// so -- like clientauth.Middleware before it checks Engagement ownership --
+// it only ever sets app.current_identity_uid, and #312 deliberately never
+// sets app.current_client_id here: that variable would narrow the read to
+// one Client, which is the bug this handler exists to not have.
 func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, uid, _, ok := authn.Begin(w, r, db)

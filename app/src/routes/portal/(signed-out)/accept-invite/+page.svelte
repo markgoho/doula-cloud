@@ -5,19 +5,16 @@
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
-	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
-	import { CARE_HEADING, NO_CARE_MESSAGE } from '#lib/clientRegister.js';
+	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
-	import Link from '#lib/components/atoms/Link.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
 
 	const submission = new FormSubmission();
-	let picker = $state<Engagement[] | undefined>();
 
 	/*
 	 * #610: what the BFF said continuing costs, once it has refused an
@@ -69,7 +66,14 @@
 					resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: landing.engagementId })
 				);
 			} else {
-				picker = landing.engagements;
+				// #312: more than one Engagement -- ADR-0015's own case, a
+				// second Practice's invite accepted by an existing Portal
+				// Account (#309) -- lands on the app root, the address she
+				// can return to for the same list. See the login screen's
+				// own comment on why a live portal session here rules out a
+				// Staff session surviving to be misrouted by `/`'s probe
+				// order.
+				await goto(resolve('/'));
 			}
 		}, orServiceProblem);
 	}
@@ -82,24 +86,6 @@
 {#snippet content()}
 	{#if !inviteToken}
 		<Notice variant="error" message="Missing invite token" />
-	{:else if picker}
-		<h2>{CARE_HEADING}</h2>
-		{#if picker.length === 0}
-			<p>{NO_CARE_MESSAGE}</p>
-		{:else}
-			<ul>
-				{#each picker as engagement (engagement.engagementId)}
-					<li>
-						<Link
-							href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
-								engagementId: engagement.engagementId
-							})}
-							label={engagement.practiceName}
-						/>
-					</li>
-				{/each}
-			</ul>
-		{/if}
 	{:else}
 		<!-- #610: see the sign-in page for why the warning sits on this button. -->
 		{#if signOutWarning}
