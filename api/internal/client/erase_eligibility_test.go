@@ -36,7 +36,7 @@ func decodeEligibility(t *testing.T, resp *http.Response) client.EraseEligibilit
 func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-eligibility-clear"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
 	srv, session := newServer(t, db, uid)
@@ -62,7 +62,7 @@ func TestEraseEligibilityHandler_ClearWithNoInvoices(t *testing.T) {
 func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-eligibility-invoices"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_open", "open", time.Hour)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_paid", "paid", time.Hour)
@@ -109,7 +109,7 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 func TestEraseEligibilityHandler_AlreadyErased(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-eligibility-erased"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
 	srv, session := newServer(t, db, uid)
@@ -166,7 +166,7 @@ func TestEraseEligibilityHandler_RefusesEveryRoleButOwner(t *testing.T) {
 func TestEraseEligibilityHandler_RefusesAnUnknownClient(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-eligibility-other-practice"
-	practiceID, _ := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
 	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "other-owner-eligibility", []string{ownerRole}, "employee")
 	otherClientID := seedFullClient(t, db, otherPracticeID, otherStaffID)
@@ -184,7 +184,7 @@ func TestEraseEligibilityHandler_RefusesAnUnknownClient(t *testing.T) {
 func TestEraseEligibilityHandler_RefusesAMalformedClientID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-eligibility-bad-id"
-	practiceID, _ := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()

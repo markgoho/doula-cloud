@@ -84,7 +84,7 @@ func seedInvoicedClient(t *testing.T, db *testdb.DB, practiceID, clientID, custo
 func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-stripe"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_recent", "paid", 10*24*time.Hour)
 
@@ -144,7 +144,7 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-old-invoice"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_old", "paid", 200*24*time.Hour)
 
@@ -188,7 +188,7 @@ func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-two-customers"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_ancient", "paid", 200*24*time.Hour)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_fresh", "paid", 10*24*time.Hour)
@@ -237,7 +237,7 @@ func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) 
 func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-redaction-fails"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_failing", "paid", 10*24*time.Hour)
 
@@ -288,7 +288,7 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-redaction-succeeds"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_done", "paid", 200*24*time.Hour)
 
@@ -315,7 +315,7 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
 			uid := "owner-erase-unsettled-" + status
-			practiceID, staffID := seedOwner(t, db, uid)
+			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 			clientID := seedFullClient(t, db, practiceID, staffID)
 			seedInvoicedClient(t, db, practiceID, clientID, "cus_"+status, status, time.Hour)
 
@@ -351,7 +351,7 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-portal"
 	const portalUID = "portal-uid-erasure"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
@@ -412,7 +412,7 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-pending-invite"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`, clientID,
@@ -449,7 +449,7 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-worker-happy"
 	const portalUID = "portal-uid-worker"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_worker", "paid", 200*24*time.Hour)
 	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
@@ -489,7 +489,7 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-worker-retry"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_retry", "paid", 200*24*time.Hour)
 
@@ -514,7 +514,7 @@ func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-worker-no-account"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_orphan", "paid", 200*24*time.Hour)
 	if _, err := db.Admin.ExecContext(t.Context(),
@@ -548,7 +548,7 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erasure-endpoint"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	seedInvoicedClient(t, db, practiceID, clientID, "cus_endpoint", "paid", 200*24*time.Hour)
 

@@ -52,7 +52,7 @@ func authedJSON(t *testing.T, session, method, url string, body any) *http.Respo
 func TestCreateHandler_MinimalSavesFreely(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-minimal-create"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
@@ -96,7 +96,7 @@ func TestCreateHandler_MinimalSavesFreely(t *testing.T) {
 func TestCreateHandler_InvalidBodyAndInvalidDateOfBirth(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-create-validation"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
@@ -125,7 +125,7 @@ func TestCreateHandler_InvalidBodyAndInvalidDateOfBirth(t *testing.T) {
 func TestCreateHandler_MissingGivenName(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-missing-name"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
@@ -141,9 +141,9 @@ func TestCreateHandler_MissingGivenName(t *testing.T) {
 // endpoint with a message distinguishable from a bare 403.
 func TestCreateHandler_RefusesContractor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-contractor")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-contractor", []string{doulaRole}, "employee")
 	const contractorUID = "contractor-creating"
-	seedContractorAtPractice(t, db, practiceID, contractorUID)
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
@@ -171,7 +171,7 @@ func TestCreateHandler_OwnerWithContractorEmploymentTypeMayCreate(t *testing.T) 
 		t.Fatalf("seed practice: %v", err)
 	}
 	const uid = "owner-contractor-creating"
-	seedOwnerContractorAtPractice(t, db, practiceID, uid)
+	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole, doulaRole}, "contractor")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
@@ -190,8 +190,8 @@ func TestCreateHandler_OwnerWithContractorEmploymentTypeMayCreate(t *testing.T) 
 func TestCreateHandler_RefusesOnMatchAndOverrideProceeds(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-dup-create"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	existingID := seedClient(t, db, practiceID, "Sarah Beck", "sarah@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	existingID := testdb.SeedNamedClient(t, db, practiceID, "Sarah Beck", "sarah@example.com")
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
@@ -223,10 +223,10 @@ func TestCreateHandler_RefusesOnMatchAndOverrideProceeds(t *testing.T) {
 func TestSearchHandler_MatchesNameDOBEmailPhoneWithinPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-searching"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	otherPracticeID := seedStaffWithMembership(t, db, "staff-other-practice-search")
-	inPractice := seedClient(t, db, practiceID, "Nadia Haddad", "nadia@example.com")
-	seedClient(t, db, otherPracticeID, "Nadia Haddad", "nadia@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-other-practice-search", []string{doulaRole}, "employee")
+	inPractice := testdb.SeedNamedClient(t, db, practiceID, "Nadia Haddad", "nadia@example.com")
+	testdb.SeedNamedClient(t, db, otherPracticeID, "Nadia Haddad", "nadia@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET phone = '555-0100', date_of_birth = '1990-03-02' WHERE id = $1`, inPractice); err != nil {
 		t.Fatalf("set phone/dob: %v", err)
 	}
@@ -257,11 +257,11 @@ func TestSearchHandler_MatchesNameDOBEmailPhoneWithinPractice(t *testing.T) {
 // attached/unattached split on edit access.
 func TestEditHandler_WhoeverMayReadMayEdit(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-edit")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Edit Client", "edit@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-edit", []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Edit Client", "edit@example.com", "active")
 
 	const unattachedUID = "contractor-unattached-edit"
-	seedContractorAtPractice(t, db, practiceID, unattachedUID)
+	testdb.SeedContractorAtPractice(t, db, practiceID, unattachedUID)
 	srvUnattached, sessionUnattached := newServer(t, db, unattachedUID)
 	defer srvUnattached.Close()
 	respUnattached := authedJSON(t, sessionUnattached, http.MethodPut, srvUnattached.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
@@ -272,8 +272,8 @@ func TestEditHandler_WhoeverMayReadMayEdit(t *testing.T) {
 	}
 
 	const attachedUID = "contractor-attached-edit"
-	attachedStaffID := seedContractorAtPractice(t, db, practiceID, attachedUID)
-	seedGrantedAttachment(t, db, engagementID, attachedStaffID)
+	attachedStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, attachedUID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, attachedStaffID)
 	srvAttached, sessionAttached := newServer(t, db, attachedUID)
 	defer srvAttached.Close()
 	respAttached := authedJSON(t, sessionAttached, http.MethodPut, srvAttached.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
@@ -290,9 +290,9 @@ func TestEditHandler_WhoeverMayReadMayEdit(t *testing.T) {
 func TestEditHandler_RefusesOnMatchWithDifferentClientAndOverrideProceeds(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-edit-match"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	seedClient(t, db, practiceID, "Nadia Haddad", "nadia@example.com")
-	editingID := seedClient(t, db, practiceID, "Sara Beck", "sara@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	testdb.SeedNamedClient(t, db, practiceID, "Nadia Haddad", "nadia@example.com")
+	editingID := testdb.SeedNamedClient(t, db, practiceID, "Sara Beck", "sara@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -318,8 +318,8 @@ func TestEditHandler_RefusesOnMatchWithDifferentClientAndOverrideProceeds(t *tes
 func TestEditHandler_ChangingEmailRevokesPendingInvite(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-revoking"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Revoke Client", "old@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Revoke Client", "old@example.com")
 	outboxID := seedPendingOutboxRow(t, db, clientID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -344,8 +344,8 @@ func TestEditHandler_ChangingEmailRevokesPendingInvite(t *testing.T) {
 func TestEditHandler_EveryEditWritesOneClientEvent(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-editing-events"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Event Client", "event@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Event Client", "event@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -376,8 +376,8 @@ func TestEditHandler_EveryEditWritesOneClientEvent(t *testing.T) {
 func TestEditHandler_NoChangeStillWritesOneEmptyDiffEvent(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-noop-edit"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Noop Client", "noop@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Noop Client", "noop@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -433,8 +433,8 @@ func readClientEventDiff(t *testing.T, db *testdb.DB, session string, srv *httpt
 func TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-field-values"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Field Values Client", "fieldvalues@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Field Values Client", "fieldvalues@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -461,8 +461,8 @@ func TestEditHandler_FieldValuesChangeIsDiffedAsOneWholeBlob(t *testing.T) {
 func TestDetailHandler_ReturnsRecordEngagementsAndHistory(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-detail"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Detail Client", "detail@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Detail Client", "detail@example.com", "active")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -489,8 +489,8 @@ func TestDetailHandler_ReturnsRecordEngagementsAndHistory(t *testing.T) {
 func TestDetailHandler_ResolvedFieldsCoverActiveBlankArchivedHeldAndDropped(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-resolved-fields"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Resolved Fields Client", "resolved@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Resolved Fields Client", "resolved@example.com")
 
 	seedFieldTemplate(t, db, practiceID, `[
 		{"id":"active_blank","type":"short_text","label":"Pronouns","order":0,"archived":false},
@@ -546,8 +546,8 @@ func TestDetailHandler_ResolvedFieldsCoverActiveBlankArchivedHeldAndDropped(t *t
 func TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-live-template"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Live Template Client", "live@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Live Template Client", "live@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -581,15 +581,15 @@ func TestDetailHandler_ResolvedFieldsAreLiveNotSnapshotted(t *testing.T) {
 func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-listing"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	withTwoEngagements, _ := seedClientEngagement(t, db, practiceID, "Two Engagements", "two@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	withTwoEngagements, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Two Engagements", "two@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'completed', 'postpartum')`,
 		withTwoEngagements, practiceID,
 	); err != nil {
 		t.Fatalf("seed second engagement: %v", err)
 	}
-	noWork := seedClient(t, db, practiceID, "No Work Yet", "nowork@example.com")
+	noWork := testdb.SeedNamedClient(t, db, practiceID, "No Work Yet", "nowork@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -636,16 +636,16 @@ func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	const identityUID = "staff-pending-request"
-	staffID := seedStaffAtPractice(t, db, practiceID, identityUID)
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
-	pendingBirth := seedClient(t, db, practiceID, "Pending Birth", "pending-birth@example.com")
+	pendingBirth := testdb.SeedNamedClient(t, db, practiceID, "Pending Birth", "pending-birth@example.com")
 	seedPendingRequest(t, db, practiceID, pendingBirth, staffID, birthKind)
 
-	pendingBoth := seedClient(t, db, practiceID, "Pending Both", "pending-both@example.com")
+	pendingBoth := testdb.SeedNamedClient(t, db, practiceID, "Pending Both", "pending-both@example.com")
 	seedPendingRequest(t, db, practiceID, pendingBoth, staffID, birthKind)
 	seedPendingRequest(t, db, practiceID, pendingBoth, staffID, "postpartum")
 
-	refusedOnly := seedClient(t, db, practiceID, "Refused Only", "refused-only@example.com")
+	refusedOnly := testdb.SeedNamedClient(t, db, practiceID, "Refused Only", "refused-only@example.com")
 	seedRefusedRequest(t, db, practiceID, refusedOnly, staffID, birthKind)
 
 	srv, session := newServer(t, db, identityUID)
@@ -703,13 +703,13 @@ func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
 func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-portal-status"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	neverInvited, _ := seedClientEngagement(t, db, practiceID, "Never Invited", "never@example.com")
-	invited, _ := seedClientEngagement(t, db, practiceID, "Invited Client", "invited@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	neverInvited, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Never Invited", "never@example.com", "active")
+	invited, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Invited Client", "invited@example.com", "active")
 	seedPendingOutboxRow(t, db, invited)
-	accepted, _ := seedClientEngagement(t, db, practiceID, "Accepted Client", "accepted@example.com")
+	accepted, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Accepted Client", "accepted@example.com", "active")
 	seedAcceptedPortalUser(t, db, accepted)
-	portalUserNoOutbox, _ := seedClientEngagement(t, db, practiceID, "No Outbox Client", "no-outbox@example.com")
+	portalUserNoOutbox, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "No Outbox Client", "no-outbox@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`, portalUserNoOutbox,
 	); err != nil {
@@ -756,10 +756,10 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 func TestListHandler_EmailSuppressed(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "staff-owner-suppression-list"
-	practiceID := seedStaffWithMembership(t, db, ownerUID)
-	suppressed, engagementID := seedClientEngagement(t, db, practiceID, "Suppressed Client", "Blocked@Example.com")
-	cleared, _ := seedClientEngagement(t, db, practiceID, "Cleared Client", "cleared@example.com")
-	untouched, _ := seedClientEngagement(t, db, practiceID, "Untouched Client", "fine@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{doulaRole}, "employee")
+	suppressed, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Suppressed Client", "Blocked@Example.com", "active")
+	cleared, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Cleared Client", "cleared@example.com", "active")
+	untouched, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Untouched Client", "fine@example.com", "active")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO email_suppressions (address, cause) VALUES ($1, 'bounce'), ($2, 'bounce')`,
@@ -774,8 +774,8 @@ func TestListHandler_EmailSuppressed(t *testing.T) {
 	}
 
 	const contractorUID = "contractor-suppression-list"
-	contractorStaffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
-	seedGrantedAttachment(t, db, engagementID, contractorStaffID)
+	contractorStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, contractorStaffID)
 
 	for _, tc := range []struct {
 		name string
@@ -829,13 +829,13 @@ func TestListHandler_EmailSuppressed(t *testing.T) {
 // a granted attachment to, and an unattached Client never appears.
 func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-contractor-list")
-	attachedClient, engagementID := seedClientEngagement(t, db, practiceID, "Attached Client", "attached@example.com")
-	seedClientEngagement(t, db, practiceID, "Unattached Client", "unattached@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-contractor-list", []string{doulaRole}, "employee")
+	attachedClient, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Attached Client", "attached@example.com", "active")
+	testdb.SeedEngagementInStatus(t, db, practiceID, "Unattached Client", "unattached@example.com", "active")
 
 	const contractorUID = "contractor-listing"
-	staffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
-	seedGrantedAttachment(t, db, engagementID, staffID)
+	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 	seedPendingRequest(t, db, practiceID, attachedClient, staffID, "birth")
 
 	srv, session := newServer(t, db, contractorUID)
@@ -864,9 +864,9 @@ func TestListHandler_ContractorSeesOnlyAttachedClients(t *testing.T) {
 // cleanly rather than erroring.
 func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-search-refusal")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-search-refusal", []string{doulaRole}, "employee")
 	const contractorUID = "contractor-searching"
-	seedContractorAtPractice(t, db, practiceID, contractorUID)
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 
 	srvContractor, sessionContractor := newServer(t, db, contractorUID)
 	defer srvContractor.Close()
@@ -877,7 +877,7 @@ func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing
 	}
 
 	const ownerUID = "staff-empty-search"
-	seedStaffAtPractice(t, db, practiceID, ownerUID)
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{doulaRole}, "employee")
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/search")
@@ -897,8 +897,8 @@ func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing
 func TestEditHandler_InvalidClientIDAndBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-edit-validation"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Validation Client", "validation@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Validation Client", "validation@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -952,7 +952,7 @@ func TestEditHandler_InvalidClientIDAndBody(t *testing.T) {
 // carve-out.
 func TestDetailHandler_InvalidAndMissing(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-detail-validation")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-detail-validation", []string{doulaRole}, "employee")
 	srv, session := newServer(t, db, "staff-detail-validation")
 	defer srv.Close()
 
@@ -969,8 +969,8 @@ func TestDetailHandler_InvalidAndMissing(t *testing.T) {
 	}
 
 	const contractorUID = "contractor-unattached-client-detail"
-	seedContractorAtPractice(t, db, practiceID, contractorUID)
-	unattachedID := seedClient(t, db, practiceID, "Unattached Detail Client", "unattached-cd@example.com")
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	unattachedID := testdb.SeedNamedClient(t, db, practiceID, "Unattached Detail Client", "unattached-cd@example.com")
 	srvContractor, sessionContractor := newServer(t, db, contractorUID)
 	defer srvContractor.Close()
 	forbidden := authedGet(t, sessionContractor, srvContractor.URL+"/api/practices/"+practiceID+"/clients/"+unattachedID)
@@ -986,7 +986,7 @@ func TestDetailHandler_InvalidAndMissing(t *testing.T) {
 func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-history"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -1003,7 +1003,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 		client.EditRequest{Record: client.Record{GivenName: "History Client", Phone: "555-0177"}})
 	_ = edited.Body.Close()
 
-	staffID := seedStaffAtPractice(t, db, practiceID, "requesting-staff-history")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "requesting-staff-history", []string{doulaRole}, "employee")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagement_requests (practice_id, client_id, kind, requested_by, state)
 		 VALUES ($1, $2, 'birth', $3, 'pending')`,
@@ -1096,7 +1096,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-clients-bad-cursor"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -1116,11 +1116,11 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-clients-paging"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	const total = 31 // pageSize (30) + 1, to force a second page
 	for i := range total {
-		seedClient(t, db, practiceID, "Client", fmt.Sprintf("client-%d@example.com", i))
+		testdb.SeedNamedClient(t, db, practiceID, "Client", fmt.Sprintf("client-%d@example.com", i))
 	}
 
 	srv, session := newServer(t, db, identityUID)
@@ -1154,14 +1154,14 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 // TestListHandler_PaginatesNewestFirst.
 func TestListHandler_ContractorPaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-contractor-paging")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-contractor-paging", []string{doulaRole}, "employee")
 	const contractorUID = "contractor-paging"
-	staffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 
 	const total = 31
 	for i := range total {
-		_, engagementID := seedClientEngagement(t, db, practiceID, "Client", fmt.Sprintf("attached-%d@example.com", i))
-		seedGrantedAttachment(t, db, engagementID, staffID)
+		_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", fmt.Sprintf("attached-%d@example.com", i), "active")
+		testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 	}
 
 	srv, session := newServer(t, db, contractorUID)
@@ -1201,17 +1201,17 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	const ownerUID = "staff-rollup-owner"
 	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
-	doulaID := seedStaffAtPractice(t, db, practiceID, "doula-for-rollup")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-for-rollup", []string{doulaRole}, "employee")
 
-	clientID, birthEngagement := seedClientEngagement(t, db, practiceID, "Rollup Client", "rollup@example.com")
-	seedGrantedAttachment(t, db, birthEngagement, doulaID)
-	contractID := seedContract(t, db, birthEngagement, "sent")
-	seedInvoice(t, db, practiceID, contractID, openInvoiceStatus, 50000)
+	clientID, birthEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Rollup Client", "rollup@example.com", "active")
+	testdb.SeedGrantedAttachment(t, db, birthEngagement, doulaID)
+	contractID := seedClientContract(t, db, birthEngagement, "sent")
+	seedClientInvoice(t, db, practiceID, contractID, openInvoiceStatus, 50000)
 
-	postpartumEngagement := seedEngagement(t, db, clientID, practiceID, "intake", "postpartum")
+	postpartumEngagement := seedEngagementForClient(t, db, clientID, practiceID, "intake", "postpartum")
 	// No Contract, no Doula on this one -- proves the nil/absent case.
 
-	seedEngagement(t, db, clientID, practiceID, "completed", "birth")
+	seedEngagementForClient(t, db, clientID, practiceID, "completed", "birth")
 
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
@@ -1284,9 +1284,9 @@ func TestListHandler_OpenEngagementsRollup_AdminSeesInvoiceAndMoney(t *testing.T
 	const adminUID = "staff-rollup-admin"
 	testdb.SeedStaffAtPractice(t, db, practiceID, adminUID, []string{adminRole}, "employee")
 
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Admin View Client", "admin-view@example.com")
-	contractID := seedContract(t, db, engagementID, "sent")
-	seedInvoice(t, db, practiceID, contractID, openInvoiceStatus, 30000)
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Admin View Client", "admin-view@example.com", "active")
+	contractID := seedClientContract(t, db, engagementID, "sent")
+	seedClientInvoice(t, db, practiceID, contractID, openInvoiceStatus, 30000)
 
 	srv, session := newServer(t, db, adminUID)
 	defer srv.Close()
@@ -1320,7 +1320,7 @@ func TestListHandler_OpenEngagementsRollup_AdminSeesInvoiceAndMoney(t *testing.T
 func TestListHandler_OpenEngagementsRollup_NoClientsSkipsTheRollupQuery(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "staff-rollup-no-clients"
-	practiceID := seedStaffWithMembership(t, db, ownerUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
@@ -1342,8 +1342,8 @@ func TestListHandler_OpenEngagementsRollup_NoClientsSkipsTheRollupQuery(t *testi
 func TestListHandler_OpenEngagementsRollup_ZeroOpenEngagementsShowsNoLines(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "staff-rollup-zero-open"
-	practiceID := seedStaffWithMembership(t, db, ownerUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Done Client", "done@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Done Client", "done@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE engagements SET status = 'completed' WHERE id = $1`, engagementID,
 	); err != nil {
@@ -1376,12 +1376,12 @@ func TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney(
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	const employeeUID = "employee-doula-rollup"
-	staffID := seedStaffAtPractice(t, db, practiceID, employeeUID)
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, employeeUID, []string{doulaRole}, "employee")
 
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Employee View Client", "employee-view@example.com")
-	seedGrantedAttachment(t, db, engagementID, staffID)
-	contractID := seedContract(t, db, engagementID, "signed")
-	seedInvoice(t, db, practiceID, contractID, "paid", 75000)
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Employee View Client", "employee-view@example.com", "active")
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	contractID := seedClientContract(t, db, engagementID, "signed")
+	seedClientInvoice(t, db, practiceID, contractID, "paid", 75000)
 
 	srv, session := newServer(t, db, employeeUID)
 	defer srv.Close()
@@ -1424,19 +1424,19 @@ func TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney(
 // gate.
 func TestListHandler_OpenEngagementsRollup_ContractorSeesOwnFeeOnlyOnAttachedEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-for-contractor-rollup")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-contractor-rollup", []string{doulaRole}, "employee")
 	const contractorUID = "contractor-rollup"
-	contractorID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 
-	clientID, attachedEngagement := seedClientEngagement(t, db, practiceID, "Contractor Rollup Client", "contractor-rollup@example.com")
+	clientID, attachedEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Contractor Rollup Client", "contractor-rollup@example.com", "active")
 	seedGrantedAttachmentWithFee(t, db, attachedEngagement, contractorID, 120000)
-	contractID := seedContract(t, db, attachedEngagement, "signed")
+	contractID := seedClientContract(t, db, attachedEngagement, "signed")
 	// An Invoice exists, but a contractor never reads Invoice money.
-	seedInvoice(t, db, practiceID, contractID, openInvoiceStatus, 120000)
+	seedClientInvoice(t, db, practiceID, contractID, openInvoiceStatus, 120000)
 
 	// A second open Engagement on the same Client she holds no
 	// attachment on at all.
-	unattachedEngagement := seedEngagement(t, db, clientID, practiceID, "active", "postpartum")
+	unattachedEngagement := seedEngagementForClient(t, db, clientID, practiceID, "active", "postpartum")
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
@@ -1497,12 +1497,12 @@ func TestListHandler_OpenEngagementsRollup_VoidedContractDoesNotDuplicateLine(t 
 	const ownerUID = "staff-voided-owner"
 	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
 
-	recreatedClient, recreatedEngagement := seedClientEngagement(t, db, practiceID, "Recreated Contract", "recreated@example.com")
-	seedContract(t, db, recreatedEngagement, "voided")
-	seedContract(t, db, recreatedEngagement, "draft")
+	recreatedClient, recreatedEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Recreated Contract", "recreated@example.com", "active")
+	seedClientContract(t, db, recreatedEngagement, "voided")
+	seedClientContract(t, db, recreatedEngagement, "draft")
 
-	voidedOnlyClient, voidedOnlyEngagement := seedClientEngagement(t, db, practiceID, "Voided Only", "voided@example.com")
-	seedContract(t, db, voidedOnlyEngagement, "voided")
+	voidedOnlyClient, voidedOnlyEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Voided Only", "voided@example.com", "active")
+	seedClientContract(t, db, voidedOnlyEngagement, "voided")
 
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()

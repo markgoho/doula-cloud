@@ -121,8 +121,8 @@ func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
 
 	// A different, unrelated Client's Engagement: the caller is a known
 	// Client-portal user, but not linked to this Engagement.
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	_, otherEngagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagementInStatus(t, db, otherPracticeID, "Other Client", "other@example.com", "intake")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -176,12 +176,12 @@ func TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices(t *tes
 	db := testdb.New(t)
 	const identityUID = "client-at-two-practices"
 
-	practiceA := seedPractice(t, db, "Practice A")
-	clientA, _ := seedClientEngagement(t, db, practiceA, "Client A", "a@example.com")
-	seedPortalUser(t, db, identityUID, clientA)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	clientA, _ := testdb.SeedEngagementInStatus(t, db, practiceA, "Client A", "a@example.com", "intake")
+	testdb.SeedPortalUser(t, db, identityUID, clientA)
 
-	practiceB := seedPractice(t, db, "Practice B")
-	clientB, engagementB := seedClientEngagement(t, db, practiceB, "Client B", "b@example.com")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	clientB, engagementB := testdb.SeedEngagementInStatus(t, db, practiceB, "Client B", "b@example.com", "intake")
 	// The same Portal Account reaching a second Practice (#309): a second
 	// client_portal_users row, not a second seedPortalUser call -- the
 	// Portal Account itself already exists from clientA's call above.

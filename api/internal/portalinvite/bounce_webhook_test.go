@@ -79,7 +79,7 @@ func seedSentOutboxRow(t *testing.T, db *testdb.DB) (outboxID, email string) {
 	t.Helper()
 	clientID, _ := seedPendingPortalInvite(t, db)
 	portalUserID := portalUserIDForClient(t, db, clientID)
-	outboxID = seedOutboxRow(t, db, portalUserID, 0, time.Now())
+	outboxID = seedPortalInviteOutboxRow(t, db, portalUserID, 0, time.Now())
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE portal_invite_outbox SET status = 'sent', sent_at = now() WHERE id = $1`, outboxID,
 	); err != nil {

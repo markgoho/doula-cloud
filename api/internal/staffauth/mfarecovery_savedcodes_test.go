@@ -126,7 +126,7 @@ func TestAcceptInvite_SecondOwnerRevokesFirstOwnersSavedCodes(t *testing.T) {
 func TestRemoveMembership_RestoresSoleOwnerSavedCodes(t *testing.T) {
 	db := testdb.New(t)
 	ownerAID, practiceID := seedOwnerMembership(t, db, "owner-a-restore")
-	ownerBID := seedStaff(t, db, "owner-b-restore")
+	ownerBID := testdb.SeedStaff(t, db, "owner-b-restore")
 	seedMembership(t, db, practiceID, ownerBID)
 	membershipSrv, session := newMembershipServer(t, db, "owner-a-restore")
 	defer membershipSrv.Close()
@@ -182,7 +182,7 @@ func TestRotateSavedCodesHandler_UnknownStaff(t *testing.T) {
 func TestRotateSavedCodesHandler_NonSoleOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-rotating"
-	seedStaffWithMembership(t, db, uid) // '{doula}', not owner
+	testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType) // '{doula}', not owner
 	srv, session := newRotateSavedCodesServer(t, db, uid)
 	defer srv.Close()
 

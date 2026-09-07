@@ -8,38 +8,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-	return practiceID
-}
-
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) (staffID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', $1 || '@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	return staffID
-}
-
-func seedClient(t *testing.T, db *testdb.DB, practiceID string) (clientID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name) VALUES ($1, 'Test Client') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	return clientID
-}
-
 type row struct {
 	SubjectKind   string
 	SubjectID     string
@@ -63,8 +31,8 @@ func readRow(t *testing.T, db *testdb.DB, practiceID string) row {
 
 func TestRecord_StaffActor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	staffID := seedStaff(t, db, "record-staff-actor")
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	staffID := testdb.SeedStaff(t, db, "record-staff-actor")
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -98,8 +66,8 @@ func TestRecord_StaffActor(t *testing.T) {
 
 func TestRecord_ClientActor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -129,7 +97,7 @@ func TestRecord_ClientActor(t *testing.T) {
 
 func TestRecord_SystemActor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -137,7 +105,7 @@ func TestRecord_SystemActor(t *testing.T) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	staffID := seedStaff(t, db, "record-system-actor")
+	staffID := testdb.SeedStaff(t, db, "record-system-actor")
 	if err := activity.Record(t.Context(), tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: "offer",
@@ -254,8 +222,8 @@ func TestStaffingActions_Sorted(t *testing.T) {
 // where a plain Record call from the same session does not.
 func TestRecord_ScopedToLetsAWriteOutsideStaffauthMiddlewarePassRLS(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 
 	// Proved in its own transaction: a failed statement aborts the rest
 	// of a Postgres transaction (SQLSTATE 25P02), so the RLS failure and

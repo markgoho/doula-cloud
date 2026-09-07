@@ -43,7 +43,12 @@ func seedStaffRow(t *testing.T, db *testdb.DB, identityUID, name string) string 
 	return id
 }
 
-func seedOutboxRow(t *testing.T, db *testdb.DB, recipientIdentityUID, subjectStaffID, token string, nextAttemptAt time.Time) string {
+// seedMFARecoveryOutboxRow inserts a pending staff_mfa_recovery_outbox
+// row directly, using the superuser Admin connection. Stays local under
+// this name rather than testdb: each outbox table (staff_mfa_recovery,
+// portal_invite, staff_invite, session_notice) has its own columns, so
+// there is no single shared row shape to promote.
+func seedMFARecoveryOutboxRow(t *testing.T, db *testdb.DB, recipientIdentityUID, subjectStaffID, token string, nextAttemptAt time.Time) string {
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -114,7 +119,7 @@ func TestWorker_ProcessPending_SendsToRecipientAndMarksSent(t *testing.T) {
 	subjectID := seedStaffRow(t, db, "subject-1", "Priya Raman")
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed("owner-uid-1", "owner@example.com", true)
-	rowID := seedOutboxRow(t, db, "owner-uid-1", subjectID, "87654321", time.Now().Add(-time.Minute))
+	rowID := seedMFARecoveryOutboxRow(t, db, "owner-uid-1", subjectID, "87654321", time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
 	runTx(t, db, newWorker(sender, accounts).ProcessPending)

@@ -84,11 +84,11 @@ func readPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceI
 func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-list"
-	practiceID := seedOwner(t, db, uid)
-	engagementA := seedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	engagementB := seedEngagement(t, db, practiceID, "Bea Client", "bea@example.com")
-	contractA := seedContract(t, db, engagementA)
-	contractB := seedContract(t, db, engagementB)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
+	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Bea Client", "bea@example.com")
+	contractA := seedDraftContract(t, db, engagementA)
+	contractB := seedDraftContract(t, db, engagementB)
 	base := time.Now().Add(-time.Hour)
 	older := seedInvoice(t, db, practiceID, contractA, "in_prac_a", invoiceStatusOpen, 15000, base)
 	newer := seedInvoice(t, db, practiceID, contractB, "in_prac_b", invoiceStatusOpen, 25000, base.Add(time.Minute))
@@ -122,9 +122,9 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 func TestGetPracticeInvoicesHandler_TotalsCoverTheWholeBook(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-totals"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	base := time.Now().Add(-time.Hour)
 	seedInvoice(t, db, practiceID, contractID, "in_tot_open1", invoiceStatusOpen, 15000, base)
 	seedInvoice(t, db, practiceID, contractID, "in_tot_open2", invoiceStatusOpen, 5000, base.Add(time.Second))
@@ -155,14 +155,14 @@ func TestGetPracticeInvoicesHandler_TotalsCoverTheWholeBook(t *testing.T) {
 func TestGetPracticeInvoicesHandler_ExcludesOtherPractices(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-tenancy"
-	practiceID := seedOwner(t, db, uid)
-	mine := seedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	mineContract := seedContract(t, db, mine)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, mine := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
+	mineContract := seedDraftContract(t, db, mine)
 	mineInvoice := seedInvoice(t, db, practiceID, mineContract, "in_mine", invoiceStatusOpen, 1000, time.Now())
 
-	otherPractice := seedPractice(t, db, "Another Practice")
-	theirs := seedEngagement(t, db, otherPractice, "Zoe Client", "zoe@example.com")
-	theirsContract := seedContract(t, db, theirs)
+	otherPractice := testdb.SeedPractice(t, db, "Another Practice")
+	_, theirs := testdb.SeedNamedEngagement(t, db, otherPractice, "Zoe Client", "zoe@example.com")
+	theirsContract := seedDraftContract(t, db, theirs)
 	seedInvoice(t, db, otherPractice, theirsContract, "in_theirs", invoiceStatusOpen, 500000, time.Now())
 
 	srv, session := newPracticeInvoiceServer(t, db, uid)
@@ -182,7 +182,7 @@ func TestGetPracticeInvoicesHandler_ExcludesOtherPractices(t *testing.T) {
 func TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-empty"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
@@ -202,9 +202,9 @@ func TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList(t *testing.T) {
 func TestGetPracticeInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-paid-at"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_at", "paid", 4200, time.Now())
 	paidAt := time.Now().UTC().Truncate(time.Second)
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = $1 WHERE id = $2`, paidAt, invoiceID); err != nil {
@@ -230,9 +230,9 @@ func TestGetPracticeInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-paginate"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 
 	const total = 31
 	base := time.Now().Add(-time.Hour)
@@ -273,7 +273,7 @@ func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 func TestGetPracticeInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-bad-cursor"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
@@ -300,9 +300,9 @@ func TestGetPracticeInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 func TestGetPracticeInvoicesHandler_UnpaidFilterKeepsOnlyOpen(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-unpaid-filter"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	base := time.Now().Add(-time.Hour)
 	openID := seedInvoice(t, db, practiceID, contractID, "in_unpaid_open", invoiceStatusOpen, 15000, base)
 	seedInvoice(t, db, practiceID, contractID, "in_unpaid_paid", "paid", 30000, base.Add(time.Second))
@@ -333,9 +333,9 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterKeepsOnlyOpen(t *testing.T) {
 func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-unpaid-paginate"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 
 	const totalOpen = 31
 	base := time.Now().Add(-time.Hour)
@@ -381,7 +381,7 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 func TestGetPracticeInvoicesHandler_RefusesADoula(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-doula"
-	practiceID := seedMember(t, db, uid) // doula role, not owner/admin
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner/admin
 
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
@@ -126,52 +125,14 @@ func expectStatus(t *testing.T, resp response, want int) {
 	}
 }
 
-// seedPractice inserts a bare Practice row.
-func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-	return practiceID
-}
-
-// seedMember inserts a Staff row bound to identityUID plus a Membership
-// at practiceID with the given roles and employment type.
-func seedMember(t *testing.T, db *testdb.DB, practiceID, identityUID string, roles []string, employmentType string) (staffID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
-		identityUID, "Staff "+identityUID, identityUID+"@example.com",
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
-		 VALUES ($1, $2, $3::practice_role[], $4::employment_type)`,
-		practiceID, staffID, "{"+strings.Join(roles, ",")+"}", employmentType,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-	return staffID
-}
-
-// seedClient inserts a bare Client row at practiceID.
-func seedClient(t *testing.T, db *testdb.DB, practiceID string) (clientID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	return clientID
-}
-
-// seedEngagement inserts an Engagement for clientID at practiceID with
-// the given status ('intake', 'active', 'postpartum', or 'completed').
-func seedEngagement(t *testing.T, db *testdb.DB, practiceID, clientID, status string) {
+// seedEngagementInStatus inserts an Engagement for an existing clientID
+// at practiceID with the given status ('intake', 'active', 'postpartum',
+// or 'completed'). Stays local under this name rather than testdb:
+// callers here already have a Client seeded (testdb.SeedNamedClient) and
+// only need a second/explicit-status Engagement added to it, the one
+// shape testdb.SeedEngagementInStatus (which always seeds its own new
+// Client) doesn't cover.
+func seedEngagementInStatus(t *testing.T, db *testdb.DB, practiceID, clientID, status string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, kind, status) VALUES ($1, $2, 'birth', $3::engagement_status)`,

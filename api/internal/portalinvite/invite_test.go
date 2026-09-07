@@ -29,7 +29,7 @@ func inviteTokenExpiresAt(t *testing.T, db *testdb.DB, portalUserID string) time
 func TestInviteHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "invite-engagement-not-found"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
@@ -45,7 +45,7 @@ func TestInviteHandler_EngagementNotFound(t *testing.T) {
 func TestInviteHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "invite-invalid-engagement-id"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
@@ -61,8 +61,8 @@ func TestInviteHandler_InvalidEngagementID(t *testing.T) {
 func TestInviteHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "invite-success-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "New Client", "new@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "New Client", "new@example.com")
 
 	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
@@ -110,8 +110,8 @@ func TestInviteHandler_Success(t *testing.T) {
 func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "invite-reinvite-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Reinvited Client", "reinvited@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Reinvited Client", "reinvited@example.com")
 
 	srv, session := newInviteServer(t, db, identityUID)
 	defer srv.Close()
@@ -180,8 +180,8 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "invite-already-accepted-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Accepted Client", "accepted@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Accepted Client", "accepted@example.com")
 	testdb.SeedPortalAccount(t, db, "already-accepted-uid", "already-accepted-uid@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted-uid', $1)`,

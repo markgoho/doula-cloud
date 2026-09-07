@@ -43,7 +43,7 @@ func postSendContract(t *testing.T, srv *httptest.Server, session string, practi
 func TestPostSendContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -59,9 +59,9 @@ func TestPostSendContractHandler_InvalidEngagementID(t *testing.T) {
 func TestPostSendContractHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-no-engagement"
-	practiceID := seedMember(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -77,8 +77,8 @@ func TestPostSendContractHandler_EngagementNotFound(t *testing.T) {
 func TestPostSendContractHandler_NoContract(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-no-contract"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -98,8 +98,8 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
 			uid := "send-non-draft-" + status
-			practiceID := seedMember(t, db, uid)
-			engagementID := seedEngagement(t, db, practiceID)
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
 			srv, session := newContractServer(t, db, uid)
@@ -123,10 +123,10 @@ func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
 func TestPostSendContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-success"
-	practiceID := seedMember(t, db, uid)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
 	srv, session := newContractServerWithPusher(t, db, uid, pusher)
@@ -188,8 +188,8 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-no-subscription"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	pusher := push.NewFakePusher()
@@ -216,10 +216,10 @@ func TestPostSendContractHandler_NoSubscriptionNoPush(t *testing.T) {
 func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-push-fails"
-	practiceID := seedMember(t, db, uid)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")

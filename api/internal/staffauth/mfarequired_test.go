@@ -44,7 +44,7 @@ func putMFARequired(t *testing.T, srv *httptest.Server, session, practiceID stri
 func TestPutMFARequiredHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const doulaUID = "doula-throws-switch"
-	_, practiceID := seedStaffWithMembership(t, db, doulaUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType)
 
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
@@ -193,7 +193,7 @@ func TestPutMFARequiredHandler_MalformedBody(t *testing.T) {
 func TestGetMFAImpactHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const doulaUID = "doula-reads-impact"
-	_, practiceID := seedStaffWithMembership(t, db, doulaUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType)
 
 	srv, seedSession := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
 	defer srv.Close()
@@ -221,11 +221,11 @@ func TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor(t *testing.T) {
 	setRequireMFA(t, db, practiceID)
 
 	const enrolledDoulaUID = "doula-enrolled-impact"
-	enrolledID := seedStaff(t, db, enrolledDoulaUID)
+	enrolledID := testdb.SeedStaff(t, db, enrolledDoulaUID)
 	seedMembership(t, db, practiceID, enrolledID)
 
 	const unenrolledDoulaUID = "doula-unenrolled-impact"
-	unenrolledID := seedStaff(t, db, unenrolledDoulaUID)
+	unenrolledID := testdb.SeedStaff(t, db, unenrolledDoulaUID)
 	seedMembership(t, db, practiceID, unenrolledID)
 
 	accounts := authntest.NewFakeAccountManager()

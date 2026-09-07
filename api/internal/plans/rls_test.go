@@ -14,8 +14,8 @@ import (
 // denies all rows when app.current_practice_id is never set.
 func TestRLS_PlanTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
-	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
+	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
 	var count int
 	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM plan_templates`).Scan(&count); err != nil {
@@ -31,10 +31,10 @@ func TestRLS_PlanTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // app.current_practice_id, not every row globally.
 func TestRLS_PlanTemplatesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	seedTemplate(t, db, practiceA, carePlanType, `[{"id":"a","type":"short_text","label":"A field","order":0}]`)
-	seedTemplate(t, db, practiceB, carePlanType, `[{"id":"b","type":"short_text","label":"B field","order":0}]`)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	seedPlanTemplate(t, db, practiceA, carePlanType, `[{"id":"a","type":"short_text","label":"A field","order":0}]`)
+	seedPlanTemplate(t, db, practiceB, carePlanType, `[{"id":"b","type":"short_text","label":"B field","order":0}]`)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -77,8 +77,8 @@ func TestRLS_PlanTemplatesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 // denies all rows when app.current_practice_id is never set.
 func TestRLS_PlanInstancesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
 	var count int
@@ -95,10 +95,10 @@ func TestRLS_PlanInstancesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // app.current_practice_id, not every row globally.
 func TestRLS_PlanInstancesSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	engagementA := seedEngagement(t, db, practiceA)
-	engagementB := seedEngagement(t, db, practiceB)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	_, engagementA := testdb.SeedEngagement(t, db, practiceA)
+	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	seedInstance(t, db, engagementA, carePlanType, `[{"id":"a","type":"short_text","label":"A field","order":0}]`, `{}`)
 	seedInstance(t, db, engagementB, carePlanType, `[{"id":"b","type":"short_text","label":"B field","order":0}]`, `{}`)
 
@@ -141,9 +141,9 @@ func TestRLS_PlanInstancesSelectIsScopedViaEngagementsExistsSubquery(t *testing.
 // the first place.
 func TestRLS_PlanInstancesUpdateRejectedAcrossPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	engagementB := seedEngagement(t, db, practiceB)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	seedInstance(t, db, engagementB, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)

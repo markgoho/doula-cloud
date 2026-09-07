@@ -25,21 +25,11 @@ func seedStaffMember(t *testing.T, db *testdb.DB, identityUID string) (staffID s
 	return staffID
 }
 
-func seedPractice(t *testing.T, db *testdb.DB, name string) (practiceID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ($1) RETURNING id`, name,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return practiceID
-}
-
 // TestRLS_IdempotencyKeysFailsClosedWithNoSessionSet proves a row is
 // invisible with no app.current_practice_id/app.current_staff_id set.
 func TestRLS_IdempotencyKeysFailsClosedWithNoSessionSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "No Session Practice")
+	practiceID := testdb.SeedPractice(t, db, "No Session Practice")
 	staffID := seedStaffMember(t, db, "no-session-staff")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body) VALUES ('k', $1, $2, 200, '{}')`,
@@ -68,8 +58,8 @@ func TestRLS_IdempotencyKeysFailsClosedWithNoSessionSet(t *testing.T) {
 // one of the two matches.
 func TestRLS_IdempotencyKeysDeniesOtherPracticeAndStaff(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	staffA := seedStaffMember(t, db, "staff-a")
 	staffB := seedStaffMember(t, db, "staff-b")
 
@@ -117,7 +107,7 @@ func TestRLS_IdempotencyKeysDeniesOtherPracticeAndStaff(t *testing.T) {
 // helper relies on actually opens for the matching case.
 func TestRLS_IdempotencyKeysAllowsOwnPracticeAndStaff(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Own Practice")
+	practiceID := testdb.SeedPractice(t, db, "Own Practice")
 	staffID := seedStaffMember(t, db, "own-staff")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body) VALUES ('own-key', $1, $2, 201, '{"ok":true}')`,
@@ -154,7 +144,7 @@ func TestRLS_IdempotencyKeysAllowsOwnPracticeAndStaff(t *testing.T) {
 // staff_id other than the caller's own.
 func TestRLS_IdempotencyKeysInsertRejectedForOtherStaff(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Insert Practice")
+	practiceID := testdb.SeedPractice(t, db, "Insert Practice")
 	staffID := seedStaffMember(t, db, "insert-staff")
 	otherStaffID := seedStaffMember(t, db, "other-insert-staff")
 

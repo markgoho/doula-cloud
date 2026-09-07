@@ -38,8 +38,8 @@ func seedWebsiteEvent(t *testing.T, db *testdb.DB, practiceID, actorStaffID stri
 // row when app.current_practice_id is unset -- fail closed, not open.
 func TestRLS_FailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Doulas")
-	staffID := seedStaff(t, db, "rls-closed", "Maya Chen")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
+	staffID := testdb.SeedStaff(t, db, "rls-closed")
 	seedWebsite(t, db, practiceID, "own", ownSiteURL)
 	seedWebsiteEvent(t, db, practiceID, staffID)
 
@@ -62,10 +62,10 @@ func TestRLS_FailsClosedWithNoSessionVarSet(t *testing.T) {
 // Practice's own record.
 func TestRLS_VisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	staffA := seedStaff(t, db, "rls-a", "Maya Chen")
-	staffB := seedStaff(t, db, "rls-b", "Ana Reyes")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	staffA := testdb.SeedStaff(t, db, "rls-a")
+	staffB := testdb.SeedStaff(t, db, "rls-b")
 	seedWebsite(t, db, practiceA, "own", "https://a.example.com")
 	seedWebsite(t, db, practiceB, "own", "https://b.example.com")
 	seedWebsiteEvent(t, db, practiceA, staffA)
@@ -104,8 +104,8 @@ func TestRLS_VisibilityIsScopedToCurrentPractice(t *testing.T) {
 // insert a row naming Practice B.
 func TestRLS_RefusesAWriteForAnotherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
@@ -130,8 +130,8 @@ func TestRLS_RefusesAWriteForAnotherPractice(t *testing.T) {
 // else, so an UPDATE fails however the policies read.
 func TestRLS_EventsCannotBeRewritten(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Doulas")
-	staffID := seedStaff(t, db, "rls-append-only", "Maya Chen")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
+	staffID := testdb.SeedStaff(t, db, "rls-append-only")
 	seedWebsiteEvent(t, db, practiceID, staffID)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -157,7 +157,7 @@ func TestRLS_EventsCannotBeRewritten(t *testing.T) {
 // impossible rather than merely unlikely.
 func TestSchema_RefusesAModeWithoutItsFacts(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Doulas")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_websites (practice_id, mode) VALUES ($1, 'own')`, practiceID,
@@ -190,8 +190,8 @@ func TestSchema_RefusesAModeWithoutItsFacts(t *testing.T) {
 // be published and change nothing at all.
 func TestRLS_SiteBuilderReadsEveryPublishedPageAndWritesNothing(t *testing.T) {
 	db := testdb.New(t)
-	first := seedPractice(t, db, "Rochester Doulas")
-	second := seedPractice(t, db, "Genesee Birth Collective")
+	first := testdb.SeedPractice(t, db, "Rochester Doulas")
+	second := testdb.SeedPractice(t, db, "Genesee Birth Collective")
 	seedWebsite(t, db, first, "hosted", "")
 	seedWebsite(t, db, second, "hosted", "")
 

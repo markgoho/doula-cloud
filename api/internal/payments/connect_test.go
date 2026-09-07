@@ -28,38 +28,12 @@ const (
 	// The Practice seedOwner creates, and so the descriptor its name
 	// makes.
 	seededPracticeName = "Test Practice"
+	// ownerRole and doulaRole are named once so golangci-lint's goconst
+	// check doesn't see repeated "owner"/"doula" literals across this
+	// package's whole test surface.
+	ownerRole = "owner"
+	doulaRole = "doula"
 )
-
-func seedPractice(t *testing.T, db *testdb.DB, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
-}
-
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
-	return id
-}
-
-func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string, roles string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
-		practiceID, staffID, roles,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-}
 
 // seedDeclaredWebsite records the website answer #440 collects, which
 // #442 makes a precondition of starting Connect onboarding. Written
@@ -76,10 +50,12 @@ func seedDeclaredWebsite(t *testing.T, db *testdb.DB, practiceID, ownURL string)
 	}
 }
 
-// seedHostedPage records the other answer: a page published here, at the
-// slug 00046 mints once. pageState is 00049's liveness (#443), which a
-// real publish always sets to "pending".
-func seedHostedPage(t *testing.T, db *testdb.DB, practiceID, slug, description string) {
+// seedPaymentsHostedPage records the other answer: a page published
+// here, at the slug 00046 mints once, at an existing practiceID. Stays
+// local under this name rather than testdb: sitebuild's own
+// seedHostedPage creates its own fresh Practice too, a different shape
+// this package's connect-status tests don't need.
+func seedPaymentsHostedPage(t *testing.T, db *testdb.DB, practiceID, slug, description string) {
 	t.Helper()
 	seedHostedPageInState(t, db, practiceID, slug, description, "pending")
 }
@@ -93,26 +69,6 @@ func seedHostedPageInState(t *testing.T, db *testdb.DB, practiceID, slug, descri
 	); err != nil {
 		t.Fatalf("seed hosted page: %v", err)
 	}
-}
-
-// seedOwner seeds a Practice and a Staff member holding the owner role
-// there -- PostConnectHandler is Owner-only, unlike GetConnectStatusHandler.
-func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{owner}")
-	return practiceID
-}
-
-// seedMember seeds a Practice and a Staff member holding a doula
-// (non-Owner) role there.
-func seedMember(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{doula}")
-	return practiceID
 }
 
 func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *string {
@@ -173,7 +129,7 @@ func getConnectStatus(t *testing.T, srv *httptest.Server, session string, practi
 func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-owner"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 
@@ -217,7 +173,7 @@ func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 func TestPostConnectHandler_SecondAttemptReusesExistingAccount(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-owner-repeat"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 
@@ -253,7 +209,7 @@ func TestPostConnectHandler_SecondAttemptReusesExistingAccount(t *testing.T) {
 func TestPostConnectHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-non-owner"
-	practiceID := seedMember(t, db, uid) // doula role, not owner
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -276,7 +232,7 @@ func TestPostConnectHandler_NonOwnerForbidden(t *testing.T) {
 func TestPostConnectHandler_CreateAccountFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-account-fail"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 	client.CreateAccountErr = errStripeFake
@@ -300,7 +256,7 @@ func TestPostConnectHandler_CreateAccountFailureReturns500(t *testing.T) {
 func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-link-fail"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 	client.CreateAccountLinkErr = errStripeFake
@@ -322,7 +278,7 @@ func TestPostConnectHandler_CreateAccountLinkFailureReturns500(t *testing.T) {
 func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-not-connected"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -353,7 +309,7 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-doula-forbidden"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -373,7 +329,7 @@ func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
 func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-incomplete"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -414,7 +370,7 @@ func TestGetConnectStatusHandler_OnboardingIncomplete(t *testing.T) {
 func TestGetConnectStatusHandler_Pending(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-pending"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
@@ -450,7 +406,7 @@ func TestGetConnectStatusHandler_Pending(t *testing.T) {
 func TestGetConnectStatusHandler_FreshAccountReportsOnboardingIncomplete(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-fresh"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
@@ -483,7 +439,7 @@ func TestGetConnectStatusHandler_FreshAccountReportsOnboardingIncomplete(t *test
 func TestGetConnectStatusHandler_MixedStateWithRequirementsIsNotPending(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-mixed"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
@@ -515,7 +471,7 @@ func TestGetConnectStatusHandler_MixedStateWithRequirementsIsNotPending(t *testi
 func TestGetConnectStatusHandler_PayoutsRestricted(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-payouts-restricted"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
@@ -545,7 +501,7 @@ func TestGetConnectStatusHandler_PayoutsRestricted(t *testing.T) {
 func TestGetConnectStatusHandler_Active(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-active"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	accountID := postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
@@ -574,7 +530,7 @@ func TestGetConnectStatusHandler_Active(t *testing.T) {
 func TestGetConnectStatusHandler_RetrieveFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "status-retrieve-fail"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 	postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
 	client.RetrieveAccountErr = errStripeFake
@@ -621,7 +577,7 @@ func postConnectAsOwnerForStatusFixture(t *testing.T, db *testdb.DB, client *pay
 func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-display-name"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedDeclaredWebsite(t, db, practiceID, fixtureOwnSiteURL)
 	client := payments.NewFakeClient()
 
@@ -656,7 +612,7 @@ func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
 func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-no-website"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -704,7 +660,7 @@ func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
 func TestPostConnectHandler_RefusesAnAlreadyConnectedPracticeWithoutAWebsite(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-legacy-account"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 	postConnectAsOwnerForStatusFixture(t, db, client, practiceID)
 
@@ -729,7 +685,7 @@ func TestPostConnectHandler_RefusesAnAlreadyConnectedPracticeWithoutAWebsite(t *
 func TestPostConnectHandler_SendsHerOwnWebsiteToStripe(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-own-website"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedDeclaredWebsite(t, db, practiceID, "https://facebook.com/rochester-doulas")
 	client := payments.NewFakeClient()
 
@@ -771,8 +727,8 @@ func TestPostConnectHandler_SendsHerOwnWebsiteToStripe(t *testing.T) {
 func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-hosted-page"
-	practiceID := seedOwner(t, db, uid)
-	seedHostedPage(t, db, practiceID, "rochester-doulas", "Birth and postpartum doula support across Monroe County.")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	seedPaymentsHostedPage(t, db, practiceID, "rochester-doulas", "Birth and postpartum doula support across Monroe County.")
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -802,7 +758,7 @@ func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
 func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-page-failed"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedHostedPageInState(t, db, practiceID, "test-practice", "Birth support.", "failed")
 	client := payments.NewFakeClient()
 
@@ -836,7 +792,7 @@ func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T)
 func TestPostConnectHandler_AllowsAPageStillWaitingForItsDeploy(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "connect-page-pending"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedHostedPageInState(t, db, practiceID, "test-practice", "Birth support.", "pending")
 	client := payments.NewFakeClient()
 

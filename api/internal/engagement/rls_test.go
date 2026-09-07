@@ -14,8 +14,8 @@ import (
 
 func TestRLS_ClientsFailsClosedWithNoPracticeSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "fail-closed-staff")
-	seedClientEngagement(t, db, practiceID, "Some Client", "some@example.com", "intake")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "fail-closed-staff", []string{doulaRole}, "employee")
+	testdb.SeedEngagementInStatus(t, db, practiceID, "Some Client", "some@example.com", "intake")
 
 	var count int
 	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM clients`).Scan(&count); err != nil {
@@ -33,10 +33,10 @@ func TestRLS_ClientsFailsClosedWithNoPracticeSet(t *testing.T) {
 // globally.
 func TestRLS_ClientsSelectIsScopedToPracticeID(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedStaffWithMembership(t, db, "staff-at-a")
-	practiceB := seedStaffWithMembership(t, db, "staff-at-b")
-	clientAtA, _ := seedClientEngagement(t, db, practiceA, "Client A", "a@example.com", "intake")
-	seedClientEngagement(t, db, practiceB, "Client B", "b@example.com", "intake")
+	practiceA, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-at-a", []string{doulaRole}, "employee")
+	practiceB, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-at-b", []string{doulaRole}, "employee")
+	clientAtA, _ := testdb.SeedEngagementInStatus(t, db, practiceA, "Client A", "a@example.com", "intake")
+	testdb.SeedEngagementInStatus(t, db, practiceB, "Client B", "b@example.com", "intake")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestRLS_ClientsInsertRejectedWithNoPracticeSet(t *testing.T) {
 	// A real Practice to reference, so the only thing distinguishing this
 	// from the allowed case below is the missing session var -- not a
 	// missing practice_id or given_name NOT NULL violation instead.
-	practiceID := seedStaffWithMembership(t, db, "fail-closed-inserting")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "fail-closed-inserting", []string{doulaRole}, "employee")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestRLS_ClientsInsertRejectedWithNoPracticeSet(t *testing.T) {
 // CreateHandler relies on.
 func TestRLS_ClientsInsertAllowedWithPracticeSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := seedStaffWithMembershipID(t, db, "staff-inserting")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "staff-inserting", []string{doulaRole}, "employee")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -132,8 +132,8 @@ func TestRLS_ClientsInsertAllowedWithPracticeSet(t *testing.T) {
 // nothing" -- she cannot create a Client at a Practice she contracts for.
 func TestRLS_ClientsInsertRejectedForContractorMembership(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-contractor-inserting")
-	contractorID := seedContractorAtPractice(t, db, practiceID, "contractor-inserting")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-contractor-inserting", []string{doulaRole}, "employee")
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-inserting")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -170,7 +170,7 @@ func TestRLS_ClientsInsertAllowedForOwnerWithContractorEmploymentType(t *testing
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)
 	}
-	ownerContractorID := seedOwnerContractorAtPractice(t, db, practiceID, "owner-contractor-inserting")
+	ownerContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "owner-contractor-inserting", []string{"owner", doulaRole}, "contractor")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -198,10 +198,10 @@ func TestRLS_ClientsInsertAllowedForOwnerWithContractorEmploymentType(t *testing
 // every Engagement globally.
 func TestRLS_EngagementsVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedStaffWithMembership(t, db, "staff-eng-a")
-	practiceB := seedStaffWithMembership(t, db, "staff-eng-b")
-	seedClientEngagement(t, db, practiceA, "Client A", "a@example.com", "intake")
-	seedClientEngagement(t, db, practiceB, "Client B", "b@example.com", "intake")
+	practiceA, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-eng-a", []string{doulaRole}, "employee")
+	practiceB, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-eng-b", []string{doulaRole}, "employee")
+	testdb.SeedEngagementInStatus(t, db, practiceA, "Client A", "a@example.com", "intake")
+	testdb.SeedEngagementInStatus(t, db, practiceB, "Client B", "b@example.com", "intake")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -229,9 +229,9 @@ func TestRLS_EngagementsVisibilityIsScopedToCurrentPractice(t *testing.T) {
 // than erroring -- RLS filters rows, it doesn't reject the statement.
 func TestRLS_ClientsUpdateFollowsSelectScope(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedStaffWithMembership(t, db, "staff-updating-a")
-	practiceB := seedStaffWithMembership(t, db, "staff-updating-b")
-	clientID, _ := seedClientEngagement(t, db, practiceA, "Original Name", "original@example.com", "intake")
+	practiceA, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-updating-a", []string{doulaRole}, "employee")
+	practiceB, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-updating-b", []string{doulaRole}, "employee")
+	clientID, _ := testdb.SeedEngagementInStatus(t, db, practiceA, "Original Name", "original@example.com", "intake")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {

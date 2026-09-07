@@ -3,6 +3,8 @@ package testdb
 import (
 	"strings"
 	"testing"
+
+	"doula-cloud/api/internal/activity"
 )
 
 // SeedPractice inserts a bare Practice row using the superuser Admin
@@ -16,6 +18,43 @@ func SeedPractice(t *testing.T, db *DB, name string) (practiceID string) {
 		t.Fatalf("testdb: seed practice %q: %v", name, err)
 	}
 	return practiceID
+}
+
+// SeedStaff inserts a bare Staff row, with no practice_memberships row,
+// using the superuser Admin connection. Named "Test Staff "+identityUID
+// and emailed identityUID+"@example.com", the same derivation
+// SeedStaffAtPractice uses, so a caller that later attaches a membership
+// itself (a test proving RLS visibility before and after membership is
+// granted, say) sees the same Staff identity either way.
+func SeedStaff(t *testing.T, db *DB, identityUID string) (staffID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
+		identityUID, "Test Staff "+identityUID, identityUID+"@example.com",
+	).Scan(&staffID); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed staff: %v", err)
+	}
+	return staffID
+}
+
+// SeedStaffAtNewPractice creates a fresh Practice and a Staff member on
+// it in one call, for the "give me an authenticated caller at her own
+// Practice" fixture shape a dozen package tests repeated as their own
+// seedOwner/seedMember.
+func SeedStaffAtNewPractice(t *testing.T, db *DB, identityUID string, roles []string, employmentType string) (practiceID, staffID string) {
+	t.Helper()
+	practiceID = SeedPractice(t, db, "Test Practice")
+	staffID = SeedStaffAtPractice(t, db, practiceID, identityUID, roles, employmentType)
+	return practiceID, staffID
+}
+
+// SeedContractorAtPractice seeds a Staff row at practiceID with the
+// contractor Doula shape (`doula` role, contractor employment) a
+// half-dozen package tests each declared their own copy of.
+func SeedContractorAtPractice(t *testing.T, db *DB, practiceID, identityUID string) (staffID string) {
+	t.Helper()
+	return SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "contractor")
 }
 
 // SeedStaffAtPractice inserts a Staff row bound to identityUID and a
@@ -80,16 +119,52 @@ func SeedPortalAccount(t *testing.T, db *DB, identifier, signInAddress string) {
 // duplicated in staffauth_test and activitygate_test.
 func SeedEngagement(t *testing.T, db *DB, practiceID string) (clientID, engagementID string) {
 	t.Helper()
+	return SeedNamedEngagement(t, db, practiceID, "Test Client", "test-client@example.com")
+}
+
+// SeedNamedClient inserts a Client row with the given name and email,
+// using the superuser Admin connection. An empty email is stored as NULL
+// (NULLIF), not as an empty string -- ADR-0017's "no email on file"
+// refusal (payments' invoicing path) and client's own erasure/merge
+// tests both key off the column actually being NULL.
+func SeedNamedClient(t *testing.T, db *DB, practiceID, givenName, email string) (clientID string) {
+	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'test-client@example.com') RETURNING id`,
-		practiceID,
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, NULLIF($3, '')) RETURNING id`,
+		practiceID, givenName, email,
 	).Scan(&clientID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
-		t.Fatalf("testdb: seed client: %v", err)
+		t.Fatalf("testdb: seed client %q: %v", givenName, err)
 	}
+	return clientID
+}
+
+// SeedNamedEngagement inserts a Client with the given name and email and
+// an Engagement linking them to practiceID, at the schema's default
+// status ("intake"). Collapses the near-identical seedClientEngagement
+// copies #848 found duplicated across a dozen package tests.
+func SeedNamedEngagement(t *testing.T, db *DB, practiceID, name, email string) (clientID, engagementID string) {
+	t.Helper()
+	clientID = SeedNamedClient(t, db, practiceID, name, email)
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
 		clientID, practiceID,
+	).Scan(&engagementID); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed engagement: %v", err)
+	}
+	return clientID, engagementID
+}
+
+// SeedEngagementInStatus is SeedNamedEngagement with an explicit
+// Engagement status, for a test that needs the Engagement in a specific
+// state rather than the default "intake".
+func SeedEngagementInStatus(t *testing.T, db *DB, practiceID, name, email, status string) (clientID, engagementID string) {
+	t.Helper()
+	clientID = SeedNamedClient(t, db, practiceID, name, email)
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, $3, 'birth') RETURNING id`,
+		clientID, practiceID, status,
 	).Scan(&engagementID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed engagement: %v", err)
@@ -120,6 +195,43 @@ func SeedAttachment(t *testing.T, db *DB, engagementID, staffID, origin string, 
 	}
 }
 
+// SeedGrantedAttachment is SeedAttachment with origin "granted" and
+// ended false -- the open, granted attachment shape a half-dozen package
+// tests each declared their own copy of.
+func SeedGrantedAttachment(t *testing.T, db *DB, engagementID, staffID string) {
+	t.Helper()
+	SeedAttachment(t, db, engagementID, staffID, "granted", false)
+}
+
+// SeedActivity writes one activity.Record row directly against a
+// transaction of its own, for a test that needs an audit-trail entry to
+// already exist rather than exercising the write that would produce it.
+// Collapses the near-identical seedActivity copies #848 found duplicated
+// in portal, activityfeed and engagement's own tests.
+func SeedActivity(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action string, actor activity.Actor) {
+	t.Helper()
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed activity begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := activity.Record(t.Context(), tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: subjectKind,
+		SubjectID:   subjectID,
+		Action:      action,
+		Actor:       actor,
+	}); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed activity: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed activity commit: %v", err)
+	}
+}
+
 // AttachPortalUser links an already-seeded Portal Account (identifier) to
 // clientID via a new client_portal_users row, using the superuser Admin
 // connection. For the second (and later) client_portal_users row a
@@ -136,4 +248,30 @@ func AttachPortalUser(t *testing.T, db *DB, identifier, clientID string) {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: attach portal user %q to client %q: %v", identifier, clientID, err)
 	}
+}
+
+// SeedPortalUser mints a fresh Portal Account for identityUID and
+// attaches it to clientID -- the "a Client has an accepted portal user"
+// shape a half-dozen package tests each declared their own copy of.
+func SeedPortalUser(t *testing.T, db *DB, identityUID, clientID string) {
+	t.Helper()
+	SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
+	AttachPortalUser(t, db, identityUID, clientID)
+}
+
+// SeedPushSubscription inserts a push_subscriptions row for
+// ownerType/ownerID, using the superuser Admin connection. p256dh_key and
+// auth_key are fixed placeholder values -- no caller asserts on them,
+// only on the row's existence and its endpoint.
+func SeedPushSubscription(t *testing.T, db *DB, ownerType, ownerID, endpoint string) (id string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key)
+		 VALUES ($1, $2, $3, 'p256dh-key', 'auth-key') RETURNING id`,
+		ownerType, ownerID, endpoint,
+	).Scan(&id); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed push subscription: %v", err)
+	}
+	return id
 }

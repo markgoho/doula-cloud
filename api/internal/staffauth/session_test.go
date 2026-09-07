@@ -85,7 +85,7 @@ func TestSessionHandler_UnknownStaff(t *testing.T) {
 func TestSessionHandler_SingleMembership(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "single-practice-staff"
-	staffID, practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
 	srv, session := newSessionServer(t, db, identityUID)
 	defer srv.Close()
@@ -128,7 +128,7 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 func TestSessionHandler_SecondFactor(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "session-second-factor"
-	seedStaffWithMembership(t, db, identityUID)
+	testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
@@ -163,9 +163,9 @@ func TestSessionHandler_SecondFactor(t *testing.T) {
 func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "multi-practice-staff"
-	staffID := seedStaff(t, db, identityUID)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
+	staffID := testdb.SeedStaff(t, db, identityUID)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	seedMembership(t, db, practiceA, staffID)
 	seedMembership(t, db, practiceB, staffID)
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE staff SET last_practice_id = $1 WHERE id = $2`, practiceB, staffID); err != nil {

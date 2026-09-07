@@ -16,9 +16,9 @@ import (
 // genuinely exists.
 func TestRLS_MessagesFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Fail Closed Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, "fail-closed-staff")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Some Client", "some@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Fail Closed Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "fail-closed-staff", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Some Client", "some@example.com")
 	seedMessage(t, db, engagementID, "staff", staffID, "hello")
 
 	var count int
@@ -36,13 +36,13 @@ func TestRLS_MessagesFailsClosedWithNoSessionVarsSet(t *testing.T) {
 // Practice gets zero rows, per the ticket's acceptance criteria.
 func TestRLS_MessagesPracticeTierScopedToOwnPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	staffA := seedStaffAtPractice(t, db, practiceA, "staff-a")
-	_, engagementA := seedClientEngagement(t, db, practiceA, "Client A", "a@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	staffA := testdb.SeedStaffAtPractice(t, db, practiceA, "staff-a", []string{doulaRole}, "employee")
+	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
 	seedMessage(t, db, engagementA, "staff", staffA, "message at A")
 
-	practiceB := seedPractice(t, db, "Practice B")
-	seedStaffAtPractice(t, db, practiceB, "staff-b")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	testdb.SeedStaffAtPractice(t, db, practiceB, "staff-b", []string{doulaRole}, "employee")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -78,11 +78,11 @@ func TestRLS_MessagesPracticeTierScopedToOwnPractice(t *testing.T) {
 // rows, per the ticket's acceptance criteria.
 func TestRLS_MessagesClientTierScopedToOwnEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientA, engagementA := seedClientEngagement(t, db, practiceID, "Client A", "a@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientA, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
 	seedMessage(t, db, engagementA, "client", clientA, "message from client A")
 
-	clientB, _ := seedClientEngagement(t, db, practiceID, "Client B", "b@example.com")
+	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -119,9 +119,9 @@ func TestRLS_MessagesClientTierScopedToOwnEngagement(t *testing.T) {
 // connection RLS actually applies to.
 func TestRLS_MessagesPracticeTierAllowsStaffInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Insert Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, "insert-staff")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Insert Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "insert-staff", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -147,8 +147,8 @@ func TestRLS_MessagesPracticeTierAllowsStaffInsert(t *testing.T) {
 // can INSERT a Message through db.App.
 func TestRLS_MessagesClientTierAllowsClientInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Insert Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Insert Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -175,9 +175,9 @@ func TestRLS_MessagesClientTierAllowsClientInsert(t *testing.T) {
 // policies under test elsewhere in this file.
 func TestMessages_HasContentConstraintRejectsEmptyMessage(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, "staff-empty-msg")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "staff-empty-msg", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	_, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id) VALUES ($1, 'staff', $2)`,
@@ -194,9 +194,9 @@ func TestMessages_HasContentConstraintRejectsEmptyMessage(t *testing.T) {
 // TestMessages_HasContentConstraintRejectsEmptyMessage above.
 func TestMessages_AttachmentColumnsMustAllBeSetTogether(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, "staff-partial-attachment")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "staff-partial-attachment", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	_, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO messages (engagement_id, sender_type, sender_id, attachment_object_path)
@@ -213,9 +213,9 @@ func TestMessages_AttachmentColumnsMustAllBeSetTogether(t *testing.T) {
 // even though a matching row genuinely exists.
 func TestRLS_PushSubscriptionsFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, "fail-closed-push-staff")
-	seedPushSubscription(t, db, "staff", staffID, "https://push.example.com/fail-closed")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "fail-closed-push-staff", []string{doulaRole}, "employee")
+	testdb.SeedPushSubscription(t, db, "staff", staffID, "https://push.example.com/fail-closed")
 
 	var count int
 	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM push_subscriptions`).Scan(&count); err != nil {
@@ -235,13 +235,13 @@ func TestRLS_PushSubscriptionsFailsClosedWithNoSessionVarsSet(t *testing.T) {
 // to which subscription is visible.
 func TestRLS_PushSubscriptionsStaffScopedToOwnIdentity(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	staffA := seedStaffAtPractice(t, db, practiceA, "push-staff-a")
-	subA := seedPushSubscription(t, db, "staff", staffA, "https://push.example.com/staff-a")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	staffA := testdb.SeedStaffAtPractice(t, db, practiceA, "push-staff-a", []string{doulaRole}, "employee")
+	subA := testdb.SeedPushSubscription(t, db, "staff", staffA, "https://push.example.com/staff-a")
 
-	practiceB := seedPractice(t, db, "Practice B")
-	staffB := seedStaffAtPractice(t, db, practiceB, "push-staff-b")
-	seedPushSubscription(t, db, "staff", staffB, "https://push.example.com/staff-b")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	staffB := testdb.SeedStaffAtPractice(t, db, practiceB, "push-staff-b", []string{doulaRole}, "employee")
+	testdb.SeedPushSubscription(t, db, "staff", staffB, "https://push.example.com/staff-b")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -283,12 +283,12 @@ func TestRLS_PushSubscriptionsStaffScopedToOwnIdentity(t *testing.T) {
 // own subscription row specifically, never another Client's.
 func TestRLS_PushSubscriptionsClientScopedToOwnIdentity(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientA, _ := seedClientEngagement(t, db, practiceID, "Client A", "a@example.com")
-	subA := seedPushSubscription(t, db, "client", clientA, "https://push.example.com/client-a")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
+	subA := testdb.SeedPushSubscription(t, db, "client", clientA, "https://push.example.com/client-a")
 
-	clientB, _ := seedClientEngagement(t, db, practiceID, "Client B", "b@example.com")
-	seedPushSubscription(t, db, "client", clientB, "https://push.example.com/client-b")
+	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
+	testdb.SeedPushSubscription(t, db, "client", clientB, "https://push.example.com/client-b")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -328,8 +328,8 @@ func TestRLS_PushSubscriptionsClientScopedToOwnIdentity(t *testing.T) {
 // current_staff_id()) through db.App.
 func TestRLS_PushSubscriptionsStaffTierAllowsInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, "insert-push-staff")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "insert-push-staff", []string{doulaRole}, "employee")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -358,8 +358,8 @@ func TestRLS_PushSubscriptionsStaffTierAllowsInsert(t *testing.T) {
 // population.
 func TestRLS_PushSubscriptionsClientTierAllowsInsert(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, _ := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -391,12 +391,12 @@ func TestRLS_PushSubscriptionsStaffRowHiddenDuringClientPortalContext(t *testing
 	db := testdb.New(t)
 	const sharedUID = "shared-push-identity"
 
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, sharedUID)
-	seedPushSubscription(t, db, "staff", staffID, "https://push.example.com/shared-staff")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, sharedUID, []string{doulaRole}, "employee")
+	testdb.SeedPushSubscription(t, db, "staff", staffID, "https://push.example.com/shared-staff")
 
-	clientID, _ := seedClientEngagement(t, db, practiceID, "Shared Client", "shared@example.com")
-	seedPortalUser(t, db, sharedUID, clientID)
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Shared Client", "shared@example.com")
+	testdb.SeedPortalUser(t, db, sharedUID, clientID)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {

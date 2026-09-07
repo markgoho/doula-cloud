@@ -18,10 +18,10 @@ import (
 // Mailgun through that same wrapped Sender.
 func TestWorker_ProcessPending_SuppressedAddressDeadLettersWithoutSending(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Suppressed Invite Practice")
+	practiceID := testdb.SeedPractice(t, db, "Suppressed Invite Practice")
 	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 	const token = "22222222-2222-2222-2222-222222222222"
-	outboxID := seedOutboxRow(t, db, invitationID, token, 0, time.Now().Add(-time.Minute))
+	outboxID := seedStaffInviteOutboxRow(t, db, invitationID, token, 0, time.Now().Add(-time.Minute))
 
 	if err := mailsuppress.Record(t.Context(), db.App, testInvitedAddress, mailsuppress.CauseComplaint, "evt-1"); err != nil {
 		t.Fatalf("record suppression: %v", err)
@@ -46,10 +46,10 @@ func TestWorker_ProcessPending_SuppressedAddressDeadLettersWithoutSending(t *tes
 // the dead-letter above is the suppression's doing and not the fixture's.
 func TestWorker_ProcessPending_ClearedSuppressionSendsNormally(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Cleared Suppression Practice")
+	practiceID := testdb.SeedPractice(t, db, "Cleared Suppression Practice")
 	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 	const token = "33333333-3333-3333-3333-333333333333"
-	outboxID := seedOutboxRow(t, db, invitationID, token, 0, time.Now().Add(-time.Minute))
+	outboxID := seedStaffInviteOutboxRow(t, db, invitationID, token, 0, time.Now().Add(-time.Minute))
 
 	if err := mailsuppress.Record(t.Context(), db.App, testInvitedAddress, mailsuppress.CauseBounce, "evt-1"); err != nil {
 		t.Fatalf("record suppression: %v", err)

@@ -27,18 +27,19 @@ type fixture struct {
 func newFixture(t *testing.T) fixture {
 	t.Helper()
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	ownerID := seedMember(t, db, practiceID, "uid-owner", []string{ownerRole}, employeeType)
-	doulaID := seedMember(t, db, practiceID, "uid-doula", []string{doulaRole}, contractorType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "uid-owner", []string{ownerRole}, employeeType)
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "uid-doula", []string{doulaRole}, contractorType)
 	enq := &tasknudge.FakeEnqueuer{}
 	srv, ownerSession := newServer(t, db, "uid-owner", enq)
 	t.Cleanup(srv.Close)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	return fixture{
 		db:           db,
 		srv:          srv.URL,
 		ownerSession: ownerSession,
 		practiceID:   practiceID,
-		engagementID: seedEngagement(t, db, practiceID),
+		engagementID: engagementID,
 		ownerID:      ownerID,
 		doulaID:      doulaID,
 		doulaSession: seedSessionFor(t, db, "uid-doula"),
@@ -217,8 +218,8 @@ func TestCreateHandler_ReoffersAfterTheFirstExpires(t *testing.T) {
 
 func TestCreateHandler_Validation(t *testing.T) {
 	f := newFixture(t)
-	employeeID := seedMember(t, f.db, f.practiceID, "uid-employee-doula", []string{doulaRole}, employeeType)
-	adminOnlyID := seedMember(t, f.db, f.practiceID, "uid-admin-only", []string{"admin"}, employeeType)
+	employeeID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-employee-doula", []string{doulaRole}, employeeType)
+	adminOnlyID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-admin-only", []string{"admin"}, employeeType)
 	fee := int64(45000)
 
 	cases := []struct {
@@ -249,7 +250,7 @@ func TestCreateHandler_Validation(t *testing.T) {
 // Offer settles her claim on the work, not her price for it.
 func TestCreateHandler_EmployeeTargetNeedsNoFee(t *testing.T) {
 	f := newFixture(t)
-	employeeID := seedMember(t, f.db, f.practiceID, "uid-employee-doula", []string{doulaRole}, employeeType)
+	employeeID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-employee-doula", []string{doulaRole}, employeeType)
 
 	body := offerBody(employeeID, 0)
 	body.AmountCents = nil

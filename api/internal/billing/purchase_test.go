@@ -19,16 +19,6 @@ import (
 // exercise a handler's Stripe-failure path.
 var errStripeFake = errors.New("stripe: fake failure")
 
-// seedOwner seeds a Practice and a Staff member holding the owner role
-// there -- PostPurchaseHandler is Owner-only, unlike GetBalanceHandler.
-func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{owner}")
-	return practiceID
-}
-
 func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient billing.StripeClient) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -70,7 +60,7 @@ func stripeCustomerID(t *testing.T, db *testdb.DB, practiceID string) *string {
 func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-owner"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	stripeClient := billing.NewFakeStripeClient()
 
 	srv, session := newPurchaseServer(t, db, uid, stripeClient)
@@ -117,7 +107,7 @@ func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T
 func TestPostPurchaseHandler_AdminCanPurchase(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-admin"
-	practiceID := seedMember(t, db, uid, "{admin}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"admin"}, "employee")
 	stripeClient := billing.NewFakeStripeClient()
 
 	srv, session := newPurchaseServer(t, db, uid, stripeClient)
@@ -143,7 +133,7 @@ func TestPostPurchaseHandler_AdminCanPurchase(t *testing.T) {
 func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-owner-repeat"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	stripeClient := billing.NewFakeStripeClient()
 
 	srv, session := newPurchaseServer(t, db, uid, stripeClient)
@@ -178,7 +168,7 @@ func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) 
 func TestPostPurchaseHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-non-owner"
-	practiceID := seedMember(t, db, uid, "{doula}") // doula role, not owner
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner
 	stripeClient := billing.NewFakeStripeClient()
 
 	srv, session := newPurchaseServer(t, db, uid, stripeClient)
@@ -200,7 +190,7 @@ func TestPostPurchaseHandler_NonOwnerForbidden(t *testing.T) {
 func TestPostPurchaseHandler_InvalidQuantityRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-bad-quantity"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	stripeClient := billing.NewFakeStripeClient()
 
 	srv, session := newPurchaseServer(t, db, uid, stripeClient)
@@ -222,7 +212,7 @@ func TestPostPurchaseHandler_InvalidQuantityRejected(t *testing.T) {
 func TestPostPurchaseHandler_InvalidBodyRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-bad-body"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	stripeClient := billing.NewFakeStripeClient()
 
 	srv, session := newPurchaseServer(t, db, uid, stripeClient)
@@ -242,7 +232,7 @@ func TestPostPurchaseHandler_InvalidBodyRejected(t *testing.T) {
 func TestPostPurchaseHandler_CreateCustomerFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-customer-fail"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	stripeClient := billing.NewFakeStripeClient()
 	stripeClient.CreateCustomerErr = errStripeFake
 
@@ -265,7 +255,7 @@ func TestPostPurchaseHandler_CreateCustomerFailureReturns500(t *testing.T) {
 func TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-checkout-fail"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	stripeClient := billing.NewFakeStripeClient()
 	stripeClient.CreateCheckoutSessionErr = errStripeFake
 
@@ -280,6 +270,21 @@ func TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500(t *testing.T
 	}
 }
 
+// attachMembership inserts a practice_memberships row directly for a
+// Staff row already seeded with its own custom attributes (a specific
+// work_state or email testdb.SeedStaffAtPractice can't parameterize).
+// Stays local: this package's own apportion-by-work-state tests are the
+// only ones that need a Staff row with an explicit non-NY work_state.
+func attachMembership(t *testing.T, db *testdb.DB, practiceID, staffID, roles string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
+		practiceID, staffID, roles,
+	); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+}
+
 // seedStaffInState seeds a Staff member who works in workState and gives
 // her a Membership at practiceID.
 func seedStaffInState(t *testing.T, db *testdb.DB, practiceID, identityUID, workState string) {
@@ -291,7 +296,7 @@ func seedStaffInState(t *testing.T, db *testdb.DB, practiceID, identityUID, work
 	).Scan(&staffID); err != nil {
 		t.Fatalf("seed staff %q in %q: %v", identityUID, workState, err)
 	}
-	seedMembership(t, db, practiceID, staffID, "{doula}")
+	attachMembership(t, db, practiceID, staffID, "{doula}")
 }
 
 // TestPostPurchaseHandler_ApportionsByWhereStaffWork proves the headcount
@@ -302,13 +307,13 @@ func seedStaffInState(t *testing.T, db *testdb.DB, practiceID, identityUID, work
 func TestPostPurchaseHandler_ApportionsByWhereStaffWork(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-apportion-owner"
-	practiceID := seedOwner(t, db, uid) // the Owner herself works in NY
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee") // the Owner herself works in NY
 	seedStaffInState(t, db, practiceID, "purchase-apportion-ny", "NY")
 	seedStaffInState(t, db, practiceID, "purchase-apportion-nj", "NJ")
 	seedStaffInState(t, db, practiceID, "purchase-apportion-ca", "CA")
 
 	// A second Practice's out-of-state doula must not dilute the ratio.
-	other := seedPractice(t, db, "Other Practice")
+	other := testdb.SeedPractice(t, db, "Other Practice")
 	seedStaffInState(t, db, other, "purchase-apportion-other", "TX")
 
 	stripeClient := billing.NewFakeStripeClient()
@@ -336,7 +341,7 @@ func TestPostPurchaseHandler_ApportionsByWhereStaffWork(t *testing.T) {
 func TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "purchase-out-of-state-owner"
-	practiceID := seedPractice(t, db, "Out Of State Practice")
+	practiceID := testdb.SeedPractice(t, db, "Out Of State Practice")
 	var ownerID string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Owner', 'oos-owner@example.com', 'NJ') RETURNING id`,
@@ -344,7 +349,7 @@ func TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff(t *tes
 	).Scan(&ownerID); err != nil {
 		t.Fatalf("seed owner: %v", err)
 	}
-	seedMembership(t, db, practiceID, ownerID, "{owner}")
+	attachMembership(t, db, practiceID, ownerID, "{owner}")
 	seedStaffInState(t, db, practiceID, "purchase-out-of-state-pa", "PA")
 
 	stripeClient := billing.NewFakeStripeClient()

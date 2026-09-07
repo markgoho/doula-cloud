@@ -14,11 +14,11 @@ import (
 // names her as requester, and queues one outbox row per Owner/Admin.
 func TestRequestHandler_DoulaCreatesPendingRequestAndMailsOwnersAndAdmins(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	enq := &tasknudge.FakeEnqueuer{}
 
 	srv, session := newServer(t, db, "doula-1", enq)
@@ -45,9 +45,9 @@ func TestRequestHandler_DoulaCreatesPendingRequestAndMailsOwnersAndAdmins(t *tes
 // originates nothing" at the endpoint.
 func TestRequestHandler_ContractorForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "contractor-1", []string{doulaRole}, contractorType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "contractor-1", []string{doulaRole}, contractorType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "contractor-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -63,9 +63,9 @@ func TestRequestHandler_ContractorForbidden(t *testing.T) {
 // legitimate birth-and-postpartum pair.
 func TestRequestHandler_DuplicatePendingSameKindRefused(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -81,9 +81,9 @@ func TestRequestHandler_DuplicatePendingSameKindRefused(t *testing.T) {
 
 func TestRequestHandler_DifferentKindAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -101,10 +101,10 @@ func TestRequestHandler_DifferentKindAllowed(t *testing.T) {
 // warns rather than refuses, at request time.
 func TestRequestHandler_LiveEngagementWarns(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
-	seedEngagement(t, db, practiceID, clientID, "active")
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	seedEngagementInStatus(t, db, practiceID, clientID, "active")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -123,10 +123,10 @@ func TestRequestHandler_LiveEngagementWarns(t *testing.T) {
 // decided in the same instant, spends a Credit, and queues no outbox row.
 func TestRequestHandler_SoloOwnerCollapsesToApprovedAndMailsNobody(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, contractorType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, contractorType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -160,9 +160,9 @@ func TestRequestHandler_SoloOwnerCollapsesToApprovedAndMailsNobody(t *testing.T)
 // engagement, and the out-of-Credits Notification is queued.
 func TestRequestHandler_SoloOwnerNoCreditsLeavesNothingBehind(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -187,10 +187,10 @@ func TestRequestHandler_SoloOwnerNoCreditsLeavesNothingBehind(t *testing.T) {
 // Practice (or nonexistent) is a 404, not a 500.
 func TestRequestHandler_ClientNotFound(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	otherPracticeID := seedPractice(t, db)
-	otherClientID := seedClient(t, db, otherPracticeID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	otherPracticeID := testdb.SeedPractice(t, db, "Test Practice")
+	otherClientID := testdb.SeedNamedClient(t, db, otherPracticeID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -204,9 +204,9 @@ func TestRequestHandler_ClientNotFound(t *testing.T) {
 // any write.
 func TestRequestHandler_InvalidKindRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -220,8 +220,8 @@ func TestRequestHandler_InvalidKindRejected(t *testing.T) {
 // segment is a 400, not a query against a bogus id.
 func TestRequestHandler_InvalidClientIDRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -234,9 +234,9 @@ func TestRequestHandler_InvalidClientIDRejected(t *testing.T) {
 // TestRequestHandler_InvalidBodyRejected proves malformed JSON is a 400.
 func TestRequestHandler_InvalidBodyRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -249,9 +249,9 @@ func TestRequestHandler_InvalidBodyRejected(t *testing.T) {
 // postpartum-only Engagement has none.
 func TestRequestHandler_NoDueDateAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -265,9 +265,9 @@ func TestRequestHandler_NoDueDateAllowed(t *testing.T) {
 // a 400.
 func TestRequestHandler_InvalidDueDateRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -282,11 +282,11 @@ func TestRequestHandler_InvalidDueDateRejected(t *testing.T) {
 // warning.
 func TestRequestHandler_SoloOwnerCollapseWarnsOnLiveEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
-	seedEngagement(t, db, practiceID, clientID, "active")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	seedEngagementInStatus(t, db, practiceID, clientID, "active")
 
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()

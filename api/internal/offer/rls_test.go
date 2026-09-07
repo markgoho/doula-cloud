@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/testdb"
 )
 
 // These tests exercise 00041's two new policies on engagement_offers
@@ -106,10 +107,10 @@ func TestRLS_PracticeTierFencesAnotherPractice(t *testing.T) {
 	f := newFixture(t)
 	mine := f.makeOffer(t, offerBody(f.doulaID, 45000))
 
-	otherPractice := seedPractice(t, f.db)
-	otherOwner := seedMember(t, f.db, otherPractice, "uid-other-owner", []string{ownerRole}, employeeType)
-	otherDoula := seedMember(t, f.db, otherPractice, "uid-other-doula", []string{doulaRole}, contractorType)
-	otherEngagement := seedEngagement(t, f.db, otherPractice)
+	otherPractice := testdb.SeedPractice(t, f.db, "Test Practice")
+	otherOwner := testdb.SeedStaffAtPractice(t, f.db, otherPractice, "uid-other-owner", []string{ownerRole}, employeeType)
+	otherDoula := testdb.SeedStaffAtPractice(t, f.db, otherPractice, "uid-other-doula", []string{doulaRole}, contractorType)
+	_, otherEngagement := testdb.SeedEngagement(t, f.db, otherPractice)
 	if _, err := f.db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagement_offers
 		     (engagement_id, staff_id, employment_type, amount_cents, client_first_initial, client_area,

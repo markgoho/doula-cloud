@@ -29,12 +29,12 @@ func newTestWorker(sender mail.Sender) portalinvite.Worker {
 	return portalinvite.NewWorker(outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: "noreply@b.test"})
 }
 
-// seedOutboxRow inserts a pending portal_invite_outbox row for
+// seedPortalInviteOutboxRow inserts a pending portal_invite_outbox row for
 // portalUserID with the given attempt_count/next_attempt_at, using the
 // superuser Admin connection -- the table carries no RLS (00032), so
 // db.App would work too, but Admin matches this package's seeding
 // convention.
-func seedOutboxRow(t *testing.T, db *testdb.DB, portalUserID string, attemptCount int, nextAttemptAt time.Time) string {
+func seedPortalInviteOutboxRow(t *testing.T, db *testdb.DB, portalUserID string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -95,7 +95,7 @@ func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
 	portalUserID := portalUserIDForClient(t, db, clientID)
-	outboxID := seedOutboxRow(t, db, portalUserID, 0, time.Now().Add(-time.Minute))
+	outboxID := seedPortalInviteOutboxRow(t, db, portalUserID, 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))

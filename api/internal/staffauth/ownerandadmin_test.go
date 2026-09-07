@@ -16,7 +16,7 @@ import (
 // Practice at all.
 func TestRequireOwnerOrAdmin(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "OwnerOrAdmin Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "OwnerOrAdmin Test Practice")
 
 	people := map[string]string{
 		"ooa-owner": "{owner}",
@@ -24,7 +24,7 @@ func TestRequireOwnerOrAdmin(t *testing.T) {
 		"ooa-doula": "{doula}",
 	}
 	for uid, roles := range people {
-		seedMembershipWithRoles(t, db, practiceID, seedStaff(t, db, uid), roles)
+		seedMembershipWithRoles(t, db, practiceID, testdb.SeedStaff(t, db, uid), roles)
 	}
 
 	mux := http.NewServeMux()

@@ -53,11 +53,11 @@ func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) res
 // sent.
 func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()

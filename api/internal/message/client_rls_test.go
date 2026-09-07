@@ -18,9 +18,9 @@ import (
 // lets a Client see their own clients row and no other Client's.
 func TestRLS_ClientsSelfVisibilityScopedToOwnRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientA, _ := seedClientEngagement(t, db, practiceID, "Client A", "a@example.com")
-	clientB, _ := seedClientEngagement(t, db, practiceID, "Client B", "b@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
+	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -55,12 +55,12 @@ func TestRLS_ClientsSelfVisibilityScopedToOwnRow(t *testing.T) {
 // unrelated Practice.
 func TestRLS_StaffVisibleToOwnClientPortalEngagements(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	staffAtA := seedStaffAtPracticeNamed(t, db, practiceA, "staff-at-a", "Staff At A")
-	clientA, _ := seedClientEngagement(t, db, practiceA, "Client A", "a@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	staffAtA := testdb.SeedNamedStaffAtPractice(t, db, practiceA, "staff-at-a", "Staff At A", []string{doulaRole}, "employee")
+	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
 
-	practiceB := seedPractice(t, db, "Practice B")
-	seedStaffAtPracticeNamed(t, db, practiceB, "staff-at-b", "Staff At B")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	testdb.SeedNamedStaffAtPractice(t, db, practiceB, "staff-at-b", "Staff At B", []string{doulaRole}, "employee")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {

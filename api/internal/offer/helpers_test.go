@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -119,58 +118,6 @@ func expectStatus(t *testing.T, resp response, want int) {
 	if resp.status != want {
 		t.Fatalf("status = %d, want %d: %s", resp.status, want, resp.body)
 	}
-}
-
-// seedPractice inserts a bare Practice row.
-func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-	return practiceID
-}
-
-// seedMember inserts a Staff row bound to identityUID plus a Membership
-// at practiceID with the given roles and employment type, using the
-// superuser Admin connection so fixture setup isn't gated by the policies
-// under test.
-func seedMember(t *testing.T, db *testdb.DB, practiceID, identityUID string, roles []string, employmentType string) (staffID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
-		identityUID, "Staff "+identityUID, identityUID+"@example.com",
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
-		 VALUES ($1, $2, $3::practice_role[], $4::employment_type)`,
-		practiceID, staffID, "{"+strings.Join(roles, ",")+"}", employmentType,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-	return staffID
-}
-
-// seedEngagement inserts a Client and an Engagement at practiceID.
-func seedEngagement(t *testing.T, db *testdb.DB, practiceID string) (engagementID string) {
-	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return engagementID
 }
 
 // offerBody is a valid contractor-target CreateRequest for staffID, with

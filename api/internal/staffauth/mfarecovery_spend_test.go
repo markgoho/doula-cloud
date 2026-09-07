@@ -140,7 +140,7 @@ func TestSpendMFARecoveryHandler_IssuedCode(t *testing.T) {
 	const targetUID = "target-spend-issued"
 	targetID := seedStaffWithEmail(t, db, targetUID, "target-issued@example.com")
 	const ownerUID = "owner-spend-issued"
-	ownerID := seedStaff(t, db, ownerUID)
+	ownerID := testdb.SeedStaff(t, db, ownerUID)
 
 	code := seedIssuedCode(t, db, targetUID, targetID, ownerID)
 	authntest.SeedSession(t, db.App, targetUID)
@@ -186,7 +186,7 @@ func TestSpendMFARecoveryHandler_ClearSecondFactorsFailureIs500(t *testing.T) {
 	const targetUID = "target-spend-clear-fails"
 	targetID := seedStaffWithEmail(t, db, targetUID, "target-clear-fails@example.com")
 	const ownerUID = "owner-spend-clear-fails"
-	ownerID := seedStaff(t, db, ownerUID)
+	ownerID := testdb.SeedStaff(t, db, ownerUID)
 	code := seedIssuedCode(t, db, targetUID, targetID, ownerID)
 
 	accounts := authntest.NewFakeAccountManager()
@@ -207,7 +207,7 @@ func TestSpendMFARecoveryHandler_IssuedCodeIsSingleUse(t *testing.T) {
 	const targetUID = "target-spend-single-use"
 	targetID := seedStaffWithEmail(t, db, targetUID, "target-single-use@example.com")
 	const ownerUID = "owner-spend-single-use"
-	ownerID := seedStaff(t, db, ownerUID)
+	ownerID := testdb.SeedStaff(t, db, ownerUID)
 	code := seedIssuedCode(t, db, targetUID, targetID, ownerID)
 
 	accounts := authntest.NewFakeAccountManager()

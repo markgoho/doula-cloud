@@ -31,7 +31,7 @@ func practiceTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
 // at all, and "she has not answered" is the answer, not a failure.
 func TestReadStripeProfile_UndeclaredIsTheGate(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Doulas")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
 
 	got, err := website.ReadStripeProfile(t.Context(), practiceTx(t, db, practiceID), practiceID)
 	if err != nil {
@@ -50,7 +50,7 @@ func TestReadStripeProfile_UndeclaredIsTheGate(t *testing.T) {
 // #440 never asks a Practice declaring her own site for one.
 func TestReadStripeProfile_HerOwnSite(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Doulas")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
 	seedWebsite(t, db, practiceID, "own", "https://facebook.com/rochester-doulas")
 
 	got, err := website.ReadStripeProfile(t.Context(), practiceTx(t, db, practiceID), practiceID)
@@ -73,7 +73,7 @@ func TestReadStripeProfile_HerOwnSite(t *testing.T) {
 // minted once and never recomputes.
 func TestReadStripeProfile_HerHostedPage(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Doulas")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_websites (practice_id, mode, service_description, cancellation_policy, slug, page_state)
 		 VALUES ($1, 'hosted', $2, $3, $4, 'pending')`,

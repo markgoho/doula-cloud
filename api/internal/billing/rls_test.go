@@ -10,15 +10,6 @@ import (
 // 00015_credit_ledger.sql directly via db.App and set_config, following the
 // pattern in staffauth/rls_test.go.
 
-func seedPractice(t *testing.T, db *testdb.DB, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
-}
-
 func seedSignupBonus(t *testing.T, db *testdb.DB, practiceID string) string {
 	t.Helper()
 	var id string
@@ -35,7 +26,7 @@ func seedSignupBonus(t *testing.T, db *testdb.DB, practiceID string) string {
 // denies all rows when app.current_practice_id is unset.
 func TestRLS_CreditLedgerFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
 	seedSignupBonus(t, db, practiceID)
 
 	var count int
@@ -52,8 +43,8 @@ func TestRLS_CreditLedgerFailsClosedWithNoSessionVarSet(t *testing.T) {
 // stays invisible and unaffected.
 func TestRLS_CreditLedgerVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	rowA := seedSignupBonus(t, db, practiceA)
 	seedSignupBonus(t, db, practiceB)
 
@@ -94,8 +85,8 @@ func TestRLS_CreditLedgerVisibilityIsScopedToCurrentPractice(t *testing.T) {
 // of the policy, derived from the same USING clause, rejects it.
 func TestRLS_CreditLedgerCannotInsertForAnotherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -123,7 +114,7 @@ func TestRLS_CreditLedgerCannotInsertForAnotherPractice(t *testing.T) {
 // a row.
 func TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "worker-untrusted")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "worker-untrusted", []string{ownerRole}, "employee")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -149,7 +140,7 @@ func TestRLS_NotificationWorkerCannotReadStaffOrMembershipsWithoutTrustedFlag(t 
 // regardless of Practice.
 func TestRLS_NotificationWorkerTrustedFlagOpensStaffAndMemberships(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "worker-trusted")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "worker-trusted", []string{ownerRole}, "employee")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -180,7 +171,7 @@ func TestRLS_NotificationWorkerTrustedFlagOpensStaffAndMemberships(t *testing.T)
 // property law is owed the whole balance, not a written-down one (#420).
 func TestRLS_CreditLedgerIsAppendOnlyForTheRuntime(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Append Only")
+	practiceID := testdb.SeedPractice(t, db, "Append Only")
 	seedSignupBonus(t, db, practiceID)
 
 	// A refused statement aborts its transaction, so each attempt runs

@@ -32,8 +32,8 @@ func seedClientCustomer(t *testing.T, db *testdb.DB, practiceID, engagementID, a
 // mapping denies all rows when app.current_practice_id is unset.
 func TestRLS_ClientStripeCustomersFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Mapping Practice")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Mapping Practice")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedClientCustomer(t, db, practiceID, engagementID, "acct_rls_closed", "cus_rls_closed")
 
 	var count int
@@ -50,10 +50,10 @@ func TestRLS_ClientStripeCustomersFailsClosedWithNoSessionVarSet(t *testing.T) {
 // A's session sees only Practice A's mappings.
 func TestRLS_ClientStripeCustomersIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Mapping Practice A")
-	practiceB := seedPractice(t, db, "Mapping Practice B")
-	engagementA := seedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	engagementB := seedEngagement(t, db, practiceB, "Client B", "b@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Mapping Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Mapping Practice B")
+	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
+	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "b@example.com")
 	seedClientCustomer(t, db, practiceA, engagementA, "acct_rls_a", "cus_rls_a")
 	seedClientCustomer(t, db, practiceB, engagementB, "acct_rls_b", "cus_rls_b")
 
@@ -95,9 +95,9 @@ func TestRLS_ClientStripeCustomersIsScopedToCurrentPractice(t *testing.T) {
 // session cannot claim a Customer for Practice A's Client.
 func TestRLS_ClientStripeCustomersCannotInsertForAnotherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Mapping Practice A")
-	practiceB := seedPractice(t, db, "Mapping Practice B")
-	engagementA := seedEngagement(t, db, practiceA, "Client A", "a@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Mapping Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Mapping Practice B")
+	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
 	clientA := clientOfEngagement(t, db, engagementA)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -130,8 +130,8 @@ func TestRLS_ClientStripeCustomersCannotInsertForAnotherPractice(t *testing.T) {
 // existed.
 func TestGrant_ClientStripeCustomersHasNoUpdateOrDelete(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Mapping Grant Practice")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Mapping Grant Practice")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedClientCustomer(t, db, practiceID, engagementID, "acct_grant", "cus_grant")
 
 	if _, err := db.App.ExecContext(t.Context(),

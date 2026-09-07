@@ -18,7 +18,7 @@ import (
 // (00030) admits nothing either, since app.current_practice_id is unset.
 func TestRLS_NotificationWorkerCannotReadPracticeInvitationsWithoutTrustedFlag(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "No Session Practice")
+	practiceID := testdb.SeedPractice(t, db, "No Session Practice")
 	seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -43,8 +43,8 @@ func TestRLS_NotificationWorkerCannotReadPracticeInvitationsWithoutTrustedFlag(t
 // Practice's session to scope by.
 func TestRLS_NotificationWorkerTrustedFlagOpensPracticeInvitationsAcrossPractices(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Worker Visibility A")
-	practiceB := seedPractice(t, db, "Worker Visibility B")
+	practiceA := testdb.SeedPractice(t, db, "Worker Visibility A")
+	practiceB := testdb.SeedPractice(t, db, "Worker Visibility B")
 	seedPracticeInvitation(t, db, practiceA, "a@example.com")
 	seedPracticeInvitation(t, db, practiceB, "b@example.com")
 

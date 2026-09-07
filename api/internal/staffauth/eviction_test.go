@@ -113,8 +113,8 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 	db := testdb.New(t)
 	const identityUID = "accept-with-portal-session"
 	const address = "invitee-portal-collision@example.com"
-	practiceID := seedPractice(t, db, "Inviting Practice")
-	inviterID := seedStaff(t, db, "inviter-uid")
+	practiceID := testdb.SeedPractice(t, db, "Inviting Practice")
+	inviterID := testdb.SeedStaff(t, db, "inviter-uid")
 	_, inviteToken := seedInvitationWithToken(t, db, practiceID, inviterID, address, "{doula}", "employee", time.Now().Add(time.Hour))
 	portalUID := portalaccount.NewIdentifier()
 	portalToken := authntest.SeedSession(t, db.App, portalUID)
@@ -178,7 +178,7 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 func TestFinishEnrollmentHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "enrol-with-portal-session"
-	staffID := seedStaff(t, db, identityUID)
+	staffID := testdb.SeedStaff(t, db, identityUID)
 	portalUID := portalaccount.NewIdentifier()
 	portalToken := authntest.SeedSession(t, db.App, portalUID)
 	srv := newFinishEnrollmentServer(t, db, authntest.Verifier{UID: identityUID, SecondFactor: true})

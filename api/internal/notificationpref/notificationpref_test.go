@@ -65,8 +65,8 @@ func TestGetHandler_NeverDecidedReportsDisabled(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-never-decided"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -87,8 +87,8 @@ func TestSetHandler_TurnsOnRecordsChoiceAndActivity(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-turns-on"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -118,8 +118,8 @@ func TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-turns-off"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -159,8 +159,8 @@ func TestSetHandler_InvalidJSONBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-bad-json"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -188,12 +188,12 @@ func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) 
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	const identityA = "client-a-owns-the-engagement"
-	clientA, engagementA := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityA, clientA)
+	clientA, engagementA := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityA, clientA)
 
 	const identityB = "client-b-attacker"
-	clientB, _ := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityB, clientB)
+	clientB, _ := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityB, clientB)
 
 	srvB, sessionB := newPortalServer(t, db, identityB)
 	defer srvB.Close()
@@ -224,9 +224,9 @@ func TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected(t *test
 	db := testdb.New(t)
 	const identityUID = "client-two-engagements"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, mutedEngagementID := seedClientEngagement(t, db, practiceID)
-	otherEngagementID := seedEngagement(t, db, practiceID, clientID)
-	seedPortalUser(t, db, identityUID, clientID)
+	clientID, mutedEngagementID := testdb.SeedEngagement(t, db, practiceID)
+	otherEngagementID := seedSecondEngagement(t, db, practiceID, clientID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -264,11 +264,11 @@ func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *test
 	const identityUID = "client-two-practices"
 
 	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	clientA, engagementA := seedClientEngagement(t, db, practiceA)
-	seedPortalUser(t, db, identityUID, clientA)
+	clientA, engagementA := testdb.SeedEngagement(t, db, practiceA)
+	testdb.SeedPortalUser(t, db, identityUID, clientA)
 
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	clientB, engagementB := seedClientEngagement(t, db, practiceB)
+	clientB, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	// The same Portal Account reaching a second Practice: a second
 	// client_portal_users row, not a second SeedPortalAccount call (the
 	// Portal Account itself already exists from clientA's seedPortalUser

@@ -14,9 +14,9 @@ import (
 // as herself.
 func TestWithdrawHandler_RequesterWithdrawsOwnPendingRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
@@ -39,10 +39,10 @@ func TestWithdrawHandler_RequesterWithdrawsOwnPendingRequest(t *testing.T) {
 // member -- even an Owner -- cannot withdraw someone else's Request.
 func TestWithdrawHandler_OnlyRequesterMayWithdraw(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
@@ -61,9 +61,9 @@ func TestWithdrawHandler_OnlyRequesterMayWithdraw(t *testing.T) {
 // cannot be withdrawn.
 func TestWithdrawHandler_OnlyPendingMayBeWithdrawn(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
@@ -80,8 +80,8 @@ func TestWithdrawHandler_OnlyPendingMayBeWithdrawn(t *testing.T) {
 // segment is a 400, not a query against a bogus id.
 func TestWithdrawHandler_InvalidRequestIDRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -93,8 +93,8 @@ func TestWithdrawHandler_InvalidRequestIDRejected(t *testing.T) {
 // TestWithdrawHandler_NotFound proves a bogus request id is a 404.
 func TestWithdrawHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()

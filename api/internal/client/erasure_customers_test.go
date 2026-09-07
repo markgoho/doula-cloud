@@ -33,7 +33,7 @@ func seedMappedCustomer(t *testing.T, db *testdb.DB, practiceID, clientID, accou
 func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-every-customer"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
 	// Historical: one Invoice, from before the mapping existed.
@@ -76,7 +76,7 @@ func TestEraseHandler_ReachesEveryCustomerSheEverHad(t *testing.T) {
 func TestEraseHandler_MappedCustomerWithNoInvoiceAgesFromItsOwnCreation(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-mapped-only"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE practices SET stripe_connect_account_id = $2 WHERE id = $1`, practiceID, testConnectAccount,

@@ -21,11 +21,11 @@ func listURL(srvURL, practiceID string) string {
 // id it links to, oldest first.
 func TestListHandler_GathersEveryPendingRequestOldestFirst(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	firstClient := seedClient(t, db, practiceID)
-	secondClient := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	firstClient := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	secondClient := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	oldest := pendingRequest(t, db, practiceID, firstClient, testKindBirth, doulaID)
 	newest := pendingRequest(t, db, practiceID, secondClient, testKindPostpartum, doulaID)
 
@@ -49,7 +49,7 @@ func TestListHandler_GathersEveryPendingRequestOldestFirst(t *testing.T) {
 	if row.Kind != testKindBirth || row.DueDate == nil || *row.DueDate != testDueDate {
 		t.Fatalf("ask = %s due %v, want the birth Request as it was made", row.Kind, row.DueDate)
 	}
-	if row.RequestedByName != "Staff doula-1" || row.RequestedAt.IsZero() {
+	if row.RequestedByName != "Test Staff doula-1" || row.RequestedAt.IsZero() {
 		t.Fatalf("requester = %q at %v, want the seeded Doula and her timestamp", row.RequestedByName, row.RequestedAt)
 	}
 }
@@ -59,12 +59,12 @@ func TestListHandler_GathersEveryPendingRequestOldestFirst(t *testing.T) {
 // so does a Request whose due date was never given.
 func TestListHandler_OmitsDecidedRequests(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	decidedClient := seedClient(t, db, practiceID)
-	waitingClient := seedClient(t, db, practiceID)
+	decidedClient := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	waitingClient := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	decided := pendingRequest(t, db, practiceID, decidedClient, testKindBirth, doulaID)
 	waiting := pendingRequest(t, db, practiceID, waitingClient, testKindBirth, doulaID)
 	clearDueDate(t, db, waiting)
@@ -88,8 +88,8 @@ func TestListHandler_OmitsDecidedRequests(t *testing.T) {
 // decisions do: a Doula cannot read a queue of decisions she cannot make.
 func TestListHandler_RefusesADoula(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -101,8 +101,8 @@ func TestListHandler_RefusesADoula(t *testing.T) {
 // endpoint issued is refused rather than silently treated as page one.
 func TestListHandler_RejectsAMalformedCursor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -120,12 +120,12 @@ func TestListHandler_RejectsAMalformedCursor(t *testing.T) {
 // resumes at the row after the last one rather than repeating it.
 func TestListHandler_WalksTheCursor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 	const total = 31 // pageSize (30) + 1, to force a second page
 	for range total {
-		pendingRequest(t, db, practiceID, seedClient(t, db, practiceID), testKindBirth, doulaID)
+		pendingRequest(t, db, practiceID, testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com"), testKindBirth, doulaID)
 	}
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})

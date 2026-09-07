@@ -28,7 +28,7 @@ type attachFixture struct {
 func newAttachFixture(t *testing.T) attachFixture {
 	t.Helper()
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Attach Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "Attach Test Practice")
 
 	var clientID, engagementID string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -105,7 +105,7 @@ func (f attachFixture) attachmentFor(t *testing.T, staffID string) (origin, atta
 // attached_by equal to her own staff id -- ADR-0008's write-side seam.
 func TestAttachingWrite_AccruesTheActingDoula(t *testing.T) {
 	f := newAttachFixture(t)
-	doulaID := seedStaff(t, f.db, "attach-doula")
+	doulaID := testdb.SeedStaff(t, f.db, "attach-doula")
 	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
 
 	f.write(t, "attach-doula", "ok")
@@ -127,9 +127,9 @@ func TestAttachingWrite_AccruesTheActingDoula(t *testing.T) {
 // this birth", and running the Practice is not being on it.
 func TestAttachingWrite_NeverAttachesAnOwnerOrAdmin(t *testing.T) {
 	f := newAttachFixture(t)
-	ownerID := seedStaff(t, f.db, "attach-owner")
+	ownerID := testdb.SeedStaff(t, f.db, "attach-owner")
 	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner,doula}")
-	adminID := seedStaff(t, f.db, "attach-admin")
+	adminID := testdb.SeedStaff(t, f.db, "attach-admin")
 	seedMembershipWithRoles(t, f.db, f.practiceID, adminID, "{admin,doula}")
 
 	f.write(t, "attach-owner", "ok")
@@ -147,7 +147,7 @@ func TestAttachingWrite_NeverAttachesAnOwnerOrAdmin(t *testing.T) {
 // actually happened.
 func TestAttachingWrite_AttachesNothingOnARefusedWrite(t *testing.T) {
 	f := newAttachFixture(t)
-	doulaID := seedStaff(t, f.db, "attach-refused-doula")
+	doulaID := testdb.SeedStaff(t, f.db, "attach-refused-doula")
 	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
 
 	f.write(t, "attach-refused-doula", "refused")
@@ -162,7 +162,7 @@ func TestAttachingWrite_AttachesNothingOnARefusedWrite(t *testing.T) {
 // contractor's read gets -- #350, the write-side mirror of #231/#315.
 func TestAttachingWrite_RefusesAnUnattachedContractor(t *testing.T) {
 	f := newAttachFixture(t)
-	contractorID := seedStaff(t, f.db, "attach-unattached-contractor")
+	contractorID := testdb.SeedStaff(t, f.db, "attach-unattached-contractor")
 	seedContractorMembership(t, f.db, f.practiceID, contractorID)
 
 	resp := f.writeStatus(t, "attach-unattached-contractor", "ok")
@@ -181,7 +181,7 @@ func TestAttachingWrite_RefusesAnUnattachedContractor(t *testing.T) {
 // without a granted attachment.
 func TestAttachingWrite_RefusesAContractorWithOnlyAnAccruedAttachment(t *testing.T) {
 	f := newAttachFixture(t)
-	contractorID := seedStaff(t, f.db, "attach-accrued-only-contractor")
+	contractorID := testdb.SeedStaff(t, f.db, "attach-accrued-only-contractor")
 	seedContractorMembership(t, f.db, f.practiceID, contractorID)
 	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "accrued", false)
 
@@ -197,7 +197,7 @@ func TestAttachingWrite_RefusesAContractorWithOnlyAnAccruedAttachment(t *testing
 // -- writes through the seam like anyone else.
 func TestAttachingWrite_AllowsAContractorWithAGrantedAttachment(t *testing.T) {
 	f := newAttachFixture(t)
-	contractorID := seedStaff(t, f.db, "attach-granted-contractor")
+	contractorID := testdb.SeedStaff(t, f.db, "attach-granted-contractor")
 	seedContractorMembership(t, f.db, f.practiceID, contractorID)
 	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "granted", false)
 
@@ -213,7 +213,7 @@ func TestAttachingWrite_AllowsAContractorWithAGrantedAttachment(t *testing.T) {
 // -- attachment gates the Engagement live, not once.
 func TestAttachingWrite_RefusesAContractorWhoseAttachmentHasEnded(t *testing.T) {
 	f := newAttachFixture(t)
-	contractorID := seedStaff(t, f.db, "attach-ended-contractor")
+	contractorID := testdb.SeedStaff(t, f.db, "attach-ended-contractor")
 	seedContractorMembership(t, f.db, f.practiceID, contractorID)
 	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "granted", true)
 
@@ -229,7 +229,7 @@ func TestAttachingWrite_RefusesAContractorWhoseAttachmentHasEnded(t *testing.T) 
 // attachment needed at all.
 func TestAttachingWrite_AllowsAnEmployeeDoulaWithNoAttachment(t *testing.T) {
 	f := newAttachFixture(t)
-	employeeID := seedStaff(t, f.db, "attach-employee-doula")
+	employeeID := testdb.SeedStaff(t, f.db, "attach-employee-doula")
 	seedMembershipWithRoles(t, f.db, f.practiceID, employeeID, "{doula}")
 
 	resp := f.writeStatus(t, "attach-employee-doula", "ok")
@@ -245,8 +245,8 @@ func TestAttachingWrite_AllowsAnEmployeeDoulaWithNoAttachment(t *testing.T) {
 // segment into a 500 by handing it straight to a UUID column.
 func TestAttachingWrite_MalformedEngagementIDReachesTheHandler(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Malformed Engagement Practice")
-	doulaID := seedStaff(t, db, "attach-malformed-doula")
+	practiceID := testdb.SeedPractice(t, db, "Malformed Engagement Practice")
+	doulaID := testdb.SeedStaff(t, db, "attach-malformed-doula")
 	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
 
 	mux := http.NewServeMux()
@@ -280,7 +280,7 @@ func TestAttachingWrite_MalformedEngagementIDReachesTheHandler(t *testing.T) {
 // copied fee, exactly as they are.
 func TestAttachingWrite_NeverDowngradesAGrantedAttachment(t *testing.T) {
 	f := newAttachFixture(t)
-	doulaID := seedStaff(t, f.db, "attach-granted-doula")
+	doulaID := testdb.SeedStaff(t, f.db, "attach-granted-doula")
 	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
 	if _, err := f.db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents)
@@ -309,7 +309,7 @@ func TestAttachingWrite_NeverDowngradesAGrantedAttachment(t *testing.T) {
 // inserting a second one -- one row per (Engagement, Doula) while open.
 func TestGrant_UpgradesAnAccruedAttachmentInPlace(t *testing.T) {
 	f := newAttachFixture(t)
-	doulaID := seedStaff(t, f.db, "grant-doula")
+	doulaID := testdb.SeedStaff(t, f.db, "grant-doula")
 	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
 	f.write(t, "grant-doula", "ok")
 
@@ -344,9 +344,9 @@ func TestGrant_UpgradesAnAccruedAttachmentInPlace(t *testing.T) {
 // and leaves an already-ended one alone.
 func TestEndAttachments_ClosesOpenRowsOnly(t *testing.T) {
 	f := newAttachFixture(t)
-	doulaID := seedStaff(t, f.db, "end-doula")
+	doulaID := testdb.SeedStaff(t, f.db, "end-doula")
 	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
-	ownerID := seedStaff(t, f.db, "end-owner")
+	ownerID := testdb.SeedStaff(t, f.db, "end-owner")
 	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner}")
 	f.write(t, "end-doula", "ok")
 

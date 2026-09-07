@@ -16,6 +16,10 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// doulaRole is named once so golangci-lint's goconst check doesn't see
+// repeated "doula" literals across this package's test surface.
+const doulaRole = "doula"
+
 // pngBytes is a minimal valid 1x1 PNG, enough for http.DetectContentType
 // to recognize it as image/png -- mirrors message_test's constant of the
 // same name, kept as its own copy since that one is unexported.
@@ -85,59 +89,4 @@ func postWidget(t *testing.T, srv *httptest.Server, session, practiceID, idempot
 		t.Fatalf("request: %v", err)
 	}
 	return resp
-}
-
-// seedStaffWithMembership seeds a Practice and a Staff member holding a
-// membership there, mirroring portalinvite_test's helper of the same name.
-func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Idempotency Test Practice")
-	var staffID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&staffID); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'employee')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-	return practiceID
-}
-
-// seedClientEngagement inserts a Client and an Engagement linking them to
-// practiceID, mirroring portalinvite_test's helper of the same name.
-func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email string) (clientID, engagementID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $3) RETURNING id`,
-		practiceID, name, email,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return clientID, engagementID
-}
-
-// seedPushSubscription registers a Web Push subscription for ownerType
-// ("staff" or "client") + ownerID, so notifyRecipient (message/push.go) has
-// something to deliver to -- without a row here, push.FakePusher never
-// records a call regardless of whether the handler actually ran.
-func seedPushSubscription(t *testing.T, db *testdb.DB, ownerType, ownerID, endpoint string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key)
-		 VALUES ($1, $2, $3, 'p256dh', 'auth')`,
-		ownerType, ownerID, endpoint,
-	); err != nil {
-		t.Fatalf("seed push subscription: %v", err)
-	}
 }

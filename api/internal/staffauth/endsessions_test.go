@@ -43,7 +43,7 @@ func TestEndSessionsHandler_RequiresConfirmation(t *testing.T) {
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
 	const targetUID = "target-unconfirmed-end-sessions"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 	authntest.SeedSession(t, db.App, targetUID)
 
@@ -78,7 +78,7 @@ func TestEndSessionsHandler_RecordsActivity(t *testing.T) {
 	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
 
 	const targetUID = "target-end-sessions-audited"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 	authntest.SeedSession(t, db.App, targetUID)
 
@@ -107,7 +107,7 @@ func TestEndSessionsHandler_RecordsActivity(t *testing.T) {
 func TestEndSessionsHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-ending-sessions"
-	staffID, practiceID := seedStaffWithMembership(t, db, identityUID) // '{doula}', not owner
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType) // '{doula}', not owner
 
 	srv, session := newEndSessionsServer(t, db, identityUID)
 	defer srv.Close()
@@ -130,7 +130,7 @@ func TestEndSessionsHandler_OwnerAtDifferentPracticeForbidden(t *testing.T) {
 	seedOwnerMembership(t, db, ownerUID) // owns a different Practice
 
 	const targetUID = "target-at-other-practice"
-	targetID, otherPracticeID := seedStaffWithMembership(t, db, targetUID)
+	otherPracticeID, targetID := testdb.SeedStaffAtNewPractice(t, db, targetUID, []string{doulaRole}, employeeType)
 
 	srv, session := newEndSessionsServer(t, db, ownerUID)
 	defer srv.Close()
@@ -168,7 +168,7 @@ func TestEndSessionsHandler_Success(t *testing.T) {
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
 	const targetUID = "staff-offboarded"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 	authntest.SeedSession(t, db.App, targetUID) // laptop
 	authntest.SeedSession(t, db.App, targetUID) // phone
@@ -199,7 +199,7 @@ func TestEndSessionsHandler_QueuesSessionRevokedNotice(t *testing.T) {
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
 	const targetUID = "staff-notice-target"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 
 	srv, session := newEndSessionsServer(t, db, ownerUID)

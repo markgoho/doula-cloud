@@ -37,11 +37,11 @@ func TestListForSubject_ScopesToOneSubjectOnly(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "ListForSubject Scope Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "list-for-subject-owner", []string{ownerRole}, employeeType)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client A", "list-for-subject-a@example.com")
-	_, otherEngagementID := seedClientEngagement(t, db, practiceID, "Client B", "list-for-subject-b@example.com")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client A", "list-for-subject-a@example.com", "active")
+	_, otherEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client B", "list-for-subject-b@example.com", "active")
 
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "visit_logged", activity.StaffActor(ownerID))
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, otherEngagementID, "visit_logged", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "visit_logged", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, otherEngagementID, "visit_logged", activity.StaffActor(ownerID))
 
 	tx := beginScopedTx(t, db, practiceID)
 	got, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, "", nil, 30)
@@ -62,10 +62,10 @@ func TestListForSubject_ExcludedActionsNotInHidesThoseRows(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "ListForSubject Exclude Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "list-for-subject-exclude-owner", []string{ownerRole}, employeeType)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "list-for-subject-exclude@example.com")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "list-for-subject-exclude@example.com", "active")
 
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "visit_logged", activity.StaffActor(ownerID))
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "offer_sent", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "visit_logged", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "offer_sent", activity.StaffActor(ownerID))
 
 	tx := beginScopedTx(t, db, practiceID)
 	got, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, "'offer_sent'", nil, 30)
@@ -84,11 +84,11 @@ func TestListForSubject_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "ListForSubject Paginate Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "list-for-subject-paginate-owner", []string{ownerRole}, employeeType)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "list-for-subject-paginate@example.com")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "list-for-subject-paginate@example.com", "active")
 
 	const total = 31
 	for i := range total {
-		seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, fmt.Sprintf("visit_%d", i), activity.StaffActor(ownerID))
+		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, fmt.Sprintf("visit_%d", i), activity.StaffActor(ownerID))
 	}
 
 	tx := beginScopedTx(t, db, practiceID)

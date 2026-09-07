@@ -102,7 +102,7 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "owner-edits-membership"
 	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := seedStaff(t, db, "target-membership")
+	targetID := testdb.SeedStaff(t, db, "target-membership")
 	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
 
 	srv, session := newMembershipServer(t, db, ownerUID)
@@ -167,7 +167,7 @@ func TestUpdateMembershipHandler_NoOpRecordsNothing(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "owner-edits-nothing"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := seedStaff(t, db, "unchanged-membership")
+	targetID := testdb.SeedStaff(t, db, "unchanged-membership")
 	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
 
 	srv, session := newMembershipServer(t, db, ownerUID)
@@ -207,7 +207,7 @@ func TestUpdateMembershipHandler_KeepsTheLastOwner(t *testing.T) {
 	}
 
 	// With a second Owner in place, the same demotion is allowed.
-	secondOwner := seedStaff(t, db, "second-owner")
+	secondOwner := testdb.SeedStaff(t, db, "second-owner")
 	seedMembershipWithRoles(t, db, practiceID, secondOwner, "{owner}")
 
 	allowed := patchMembership(t, srv, session, practiceID, ownerID, staffauth.UpdateMembershipRequest{
@@ -222,7 +222,7 @@ func TestUpdateMembershipHandler_KeepsTheLastOwner(t *testing.T) {
 func TestUpdateMembershipHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const doulaUID = "doula-edits-membership"
-	staffID, practiceID := seedStaffWithMembership(t, db, doulaUID) // '{doula}'
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType) // '{doula}'
 
 	srv, session := newMembershipServer(t, db, doulaUID)
 	defer srv.Close()
@@ -307,7 +307,7 @@ func TestRemoveMembershipHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "owner-removes-a-membership"
 	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := seedStaff(t, db, "removable-membership")
+	targetID := testdb.SeedStaff(t, db, "removable-membership")
 	seedMembership(t, db, practiceID, targetID) // '{doula}', employee
 
 	srv, session := newMembershipServer(t, db, ownerUID)
@@ -400,7 +400,7 @@ func TestRemoveMembershipHandler_RequiresConfirmation(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "owner-forgets-to-confirm"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := seedStaff(t, db, "unconfirmed-removal")
+	targetID := testdb.SeedStaff(t, db, "unconfirmed-removal")
 	seedMembership(t, db, practiceID, targetID)
 
 	srv, session := newMembershipServer(t, db, ownerUID)
@@ -437,7 +437,7 @@ func TestRemoveMembershipHandler_RequiresConfirmation(t *testing.T) {
 func TestRemoveMembershipHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const doulaUID = "doula-removes-a-membership"
-	staffID, practiceID := seedStaffWithMembership(t, db, doulaUID) // '{doula}'
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType) // '{doula}'
 
 	srv, session := newMembershipServer(t, db, doulaUID)
 	defer srv.Close()
@@ -457,7 +457,7 @@ func TestUpdateMembershipHandler_ReorderedRolesAreNoChange(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "owner-reorders-roles"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-	targetID := seedStaff(t, db, "reordered-membership")
+	targetID := testdb.SeedStaff(t, db, "reordered-membership")
 	seedMembershipWithRoles(t, db, practiceID, targetID, "{admin,doula}")
 
 	srv, session := newMembershipServer(t, db, ownerUID)

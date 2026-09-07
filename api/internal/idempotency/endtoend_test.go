@@ -29,8 +29,8 @@ import (
 func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-portal-invite-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "E2E Client", "e2e@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Client", "e2e@example.com")
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/portal-invite",
@@ -103,8 +103,8 @@ func TestEndToEnd_PortalInviteReplaysOnRetry(t *testing.T) {
 func TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-portal-invite-nudge-fail-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "E2E Client", "e2e-nudge-fail@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Client", "e2e-nudge-fail@example.com")
 
 	failingEnq := &tasknudge.FakeEnqueuer{Err: errors.New("cloud tasks unavailable")}
 	mux := http.NewServeMux()
@@ -169,7 +169,7 @@ func TestEndToEnd_PortalInviteReplaysOnRetryEvenWhenNudgeEnqueueFails(t *testing
 func TestEndToEnd_CreateClientNoDuplicateRowOnRetry(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-create-client-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/clients",
@@ -268,9 +268,9 @@ func TestEndToEnd_CreateClientNoDuplicateRowOnRetry(t *testing.T) {
 func TestEndToEnd_MessageCreateNoDuplicateRowOnRetry(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-message-create-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "E2E Client", "e2e-message@example.com")
-	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/message-create-retry")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Client", "e2e-message@example.com")
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/message-create-retry")
 
 	pusher := push.NewFakePusher()
 	mux := http.NewServeMux()
@@ -381,8 +381,8 @@ func TestEndToEnd_MessageCreateNoDuplicateRowOnRetry(t *testing.T) {
 func TestEndToEnd_MessageCreateMultipartNoDuplicateUploadOnRetry(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "e2e-message-multipart-staff"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "E2E Multipart Client", "e2e-multipart@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "E2E Multipart Client", "e2e-multipart@example.com")
 
 	store := newCountingPutStore()
 	mux := http.NewServeMux()

@@ -34,9 +34,9 @@ func beginAs(t *testing.T, db *testdb.DB, practiceID, staffID string) *sql.Tx {
 // RequestHandler's own Go-level check.
 func TestRLS_ContractorInsertRefused(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	contractorID := seedMember(t, db, practiceID, "contractor-1", []string{doulaRole}, contractorType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	contractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "contractor-1", []string{doulaRole}, contractorType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	tx := beginAs(t, db, practiceID, contractorID)
 
 	_, err := tx.ExecContext(t.Context(),
@@ -54,9 +54,9 @@ func TestRLS_ContractorInsertRefused(t *testing.T) {
 // gate working, not a blanket refusal.
 func TestRLS_EmployeeDoulaInsertAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	tx := beginAs(t, db, practiceID, doulaID)
 
 	_, err := tx.ExecContext(t.Context(),
@@ -74,9 +74,9 @@ func TestRLS_EmployeeDoulaInsertAllowed(t *testing.T) {
 // Admin membership.
 func TestRLS_ContractorOwnerInsertAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	ownerID := seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, contractorType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, contractorType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	tx := beginAs(t, db, practiceID, ownerID)
 
 	_, err := tx.ExecContext(t.Context(),

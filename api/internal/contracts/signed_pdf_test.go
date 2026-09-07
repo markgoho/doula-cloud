@@ -22,8 +22,8 @@ const signedPDFBytes = "%PDF-1.4 fake signed contract pdf"
 func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-success"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	objectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, objectPath)
 
@@ -58,8 +58,8 @@ func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 func TestGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-unauthenticated"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, _ := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -79,9 +79,9 @@ func TestGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-cross-practice"
-	practiceID := seedOwner(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 	objectPath := contracts.SignedPDFObjectPath(otherEngagementID)
 	seedSignedContract(t, db, otherEngagementID, objectPath)
 
@@ -101,8 +101,8 @@ func TestGetSignedContractPDFHandler_CrossPracticeRejected(t *testing.T) {
 func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-not-signed"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -123,8 +123,8 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 func TestGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-missing-object"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 
 	srv, session := newContractServer(t, db, uid)
@@ -143,9 +143,9 @@ func TestGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) 
 func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-get-pdf-success"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	objectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, objectPath)
 
@@ -173,9 +173,9 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 func TestClientGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-get-pdf-unauthenticated"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, _ := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -195,11 +195,11 @@ func TestClientGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-get-pdf-not-linked"
-	practiceID := seedPractice(t, db, "Practice")
-	_, otherEngagementID := seedClientEngagement(t, db, practiceID, "Other Client", "other@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
 	seedSignedContract(t, db, otherEngagementID, contracts.SignedPDFObjectPath(otherEngagementID))
-	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -217,9 +217,9 @@ func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *tes
 func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-get-pdf-not-signed"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -239,9 +239,9 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 func TestClientGetSignedContractPDFHandler_MissingObjectIsInternalError(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-get-pdf-missing-object"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedSignedContract(t, db, engagementID, contracts.SignedPDFObjectPath(engagementID))
 
 	srv, session := newPortalServer(t, db, identityUID)

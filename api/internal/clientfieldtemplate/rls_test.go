@@ -44,7 +44,7 @@ func seedStaffID(t *testing.T, db *testdb.DB, identityUID string) string {
 // denies all rows when app.current_practice_id is never set.
 func TestRLS_SelectFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "rls-fail-closed")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-fail-closed", []string{ownerRole}, "employee")
 	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Note","order":0,"archived":false}]`)
 
 	var count int
@@ -61,8 +61,8 @@ func TestRLS_SelectFailsClosedWithNoSessionVarSet(t *testing.T) {
 // Practice's row and not another Practice's.
 func TestRLS_SelectScopedToCurrentPracticeAndAnyRole(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedDoula(t, db, "rls-select-a")
-	practiceB := seedOwner(t, db, "rls-select-b")
+	practiceA, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-select-a", []string{doulaRole}, "employee")
+	practiceB, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-select-b", []string{ownerRole}, "employee")
 	seedTemplate(t, db, practiceA, `[{"id":"a","type":"short_text","label":"A","order":0,"archived":false}]`)
 	seedTemplate(t, db, practiceB, `[{"id":"b","type":"short_text","label":"B","order":0,"archived":false}]`)
 
@@ -93,7 +93,7 @@ func TestRLS_SelectScopedToCurrentPracticeAndAnyRole(t *testing.T) {
 // a Doula's INSERT independent of PutHandler's own Go-level check.
 func TestRLS_DoulaInsertRefused(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedDoula(t, db, "rls-insert-doula")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-insert-doula", []string{doulaRole}, "employee")
 	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-insert-doula"))
 
 	_, err := tx.ExecContext(t.Context(),
@@ -109,7 +109,7 @@ func TestRLS_DoulaInsertRefused(t *testing.T) {
 // refusal.
 func TestRLS_OwnerInsertAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "rls-insert-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-insert-owner", []string{ownerRole}, "employee")
 	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-insert-owner"))
 
 	_, err := tx.ExecContext(t.Context(),
@@ -124,7 +124,7 @@ func TestRLS_OwnerInsertAllowed(t *testing.T) {
 // holds in RLS too, not only in Go.
 func TestRLS_AdminInsertAllowed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedAdmin(t, db, "rls-insert-admin")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-insert-admin", []string{"admin"}, "employee")
 	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-insert-admin"))
 
 	_, err := tx.ExecContext(t.Context(),
@@ -141,7 +141,7 @@ func TestRLS_AdminInsertAllowed(t *testing.T) {
 // test pinning the fix.
 func TestRLS_DoulaUpdateAffectsZeroRows(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedDoula(t, db, "rls-update-doula")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-update-doula", []string{doulaRole}, "employee")
 	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Note","order":0,"archived":false}]`)
 	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-update-doula"))
 
@@ -175,9 +175,9 @@ func TestRLS_DoulaUpdateAffectsZeroRows(t *testing.T) {
 // same seam every other Staff-write endpoint in this repo relies on.
 func TestRLS_ActivityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	mine := seedOwner(t, db, "rls-activity-mine")
+	mine, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-activity-mine", []string{ownerRole}, "employee")
 	mineID := seedStaffID(t, db, "rls-activity-mine")
-	theirs := seedOwner(t, db, "rls-activity-theirs")
+	theirs, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-activity-theirs", []string{ownerRole}, "employee")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)

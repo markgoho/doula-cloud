@@ -162,11 +162,11 @@ func TestGatedRouter_WriteRefusesAPatternWithNoMethod(t *testing.T) {
 // "Credit balance and ledger: Doula ✗" cell holds.
 func TestGatedRouter_BillingBalance_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Gate Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "Gate Test Practice")
 
 	ownerUID, doulaUID := "gate-owner", "gate-doula"
-	ownerID := seedStaff(t, db, ownerUID)
-	doulaID := seedStaff(t, db, doulaUID)
+	ownerID := testdb.SeedStaff(t, db, ownerUID)
+	doulaID := testdb.SeedStaff(t, db, doulaUID)
 	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
 	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
 
@@ -197,10 +197,10 @@ func TestGatedRouter_BillingBalance_DoulaForbidden(t *testing.T) {
 // staffauth.AnyStaff.
 func TestGatedRouter_AnyStaff_OpensToEveryRole(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "AnyStaff Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "AnyStaff Test Practice")
 
 	doulaUID := "any-staff-doula"
-	doulaID := seedStaff(t, db, doulaUID)
+	doulaID := testdb.SeedStaff(t, db, doulaUID)
 	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
 
 	mux := http.NewServeMux()

@@ -57,7 +57,7 @@ func TestChangeEmailHandler_MissingNewEmail(t *testing.T) {
 	const uid = "change-email-missing-uid"
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed(uid, "old@example.com", true)
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 	srv, session := newChangeEmailServer(t, db, accounts, uid)
 	defer srv.Close()
 
@@ -73,7 +73,7 @@ func TestChangeEmailHandler_InvalidRequestBody(t *testing.T) {
 	const uid = "change-email-invalid-body-uid"
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed(uid, "old@example.com", true)
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 	srv, session := newChangeEmailServer(t, db, accounts, uid)
 	defer srv.Close()
 
@@ -93,7 +93,7 @@ func TestChangeEmailHandler_Success(t *testing.T) {
 	const uid = "change-email-success-uid"
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed(uid, "old@example.com", true)
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 	srv, session := newChangeEmailServer(t, db, accounts, uid)
 	defer srv.Close()
 
@@ -148,7 +148,7 @@ func TestChangeEmailHandler_GetAccountFailureReturns500(t *testing.T) {
 	const uid = "change-email-get-fail-uid"
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Err = errors.New("admin sdk unreachable")
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 	srv, session := newChangeEmailServer(t, db, accounts, uid)
 	defer srv.Close()
 
@@ -168,7 +168,7 @@ func TestChangeEmailHandler_SetEmailFailureReturns500(t *testing.T) {
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed(uid, "old@example.com", true)
 	accounts.SetEmailErr = errors.New("admin sdk rejected the write")
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 	srv, session := newChangeEmailServer(t, db, accounts, uid)
 	defer srv.Close()
 

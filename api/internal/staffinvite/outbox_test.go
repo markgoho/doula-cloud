@@ -29,12 +29,12 @@ func newTestWorker(sender mail.Sender) staffinvite.Worker {
 	return staffinvite.NewWorker(outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: testSenderAddr, ReplyTo: "support@b.test"})
 }
 
-// seedOutboxRow inserts a pending staff_invite_outbox row for
+// seedStaffInviteOutboxRow inserts a pending staff_invite_outbox row for
 // invitationID with the given attempt_count/next_attempt_at/token, using
 // the superuser Admin connection -- the table carries no RLS (00038), so
 // db.App would work too, but Admin matches this package's seeding
 // convention.
-func seedOutboxRow(t *testing.T, db *testdb.DB, invitationID, token string, attemptCount int, nextAttemptAt time.Time) string {
+func seedStaffInviteOutboxRow(t *testing.T, db *testdb.DB, invitationID, token string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -82,10 +82,10 @@ func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string, invi
 
 func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Staff Invite Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "Staff Invite Test Practice")
 	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 	const token = "11111111-1111-1111-1111-111111111111"
-	outboxID := seedOutboxRow(t, db, invitationID, token, 0, time.Now().Add(-time.Minute))
+	outboxID := seedStaffInviteOutboxRow(t, db, invitationID, token, 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
@@ -118,7 +118,7 @@ func TestWorker_ProcessPending_SendsDueRowAndMarksSent(t *testing.T) {
 
 func TestQueue_InsertsPendingRowThenRotationRefreshesToken(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Queue Practice")
+	practiceID := testdb.SeedPractice(t, db, "Queue Practice")
 	invitationID := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -197,7 +197,7 @@ func TestQueue_InsertsPendingRowThenRotationRefreshesToken(t *testing.T) {
 // credential back to a resolved row.
 func TestRefresh_ReplacesAPendingRowsTokenOnly(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Refresh Practice")
+	practiceID := testdb.SeedPractice(t, db, "Refresh Practice")
 	pendingInvitation := seedPracticeInvitation(t, db, practiceID, testInvitedAddress)
 	sentInvitation := seedPracticeInvitation(t, db, practiceID, "sent@example.com")
 

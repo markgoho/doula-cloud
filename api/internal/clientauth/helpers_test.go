@@ -39,59 +39,14 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-// seedPractice inserts a Practice using the superuser Admin connection.
-func seedPractice(t *testing.T, db *testdb.DB, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
-}
-
-// seedClientEngagement inserts a Client and an Engagement linking them to
-// practiceID, using the superuser Admin connection. The Engagement is
-// always at 'intake': nothing in this package reads engagements.status,
-// so a parameter for it would be a knob no test has a reason to turn.
-func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, name, email string) (clientID, engagementID string) {
-	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $3) RETURNING id`,
-		practiceID, name, email,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'intake', 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return clientID, engagementID
-}
-
-// seedPortalUser links identityUID to clientID via client_portal_users,
-// using the superuser Admin connection.
-func seedPortalUser(t *testing.T, db *testdb.DB, identityUID, clientID string) {
-	t.Helper()
-	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		identityUID, clientID,
-	); err != nil {
-		t.Fatalf("seed client_portal_users: %v", err)
-	}
-}
-
 // seedClientWithEngagement inserts a Practice, a Client with an
 // Engagement at it, and a client_portal_users row linking identityUID to
 // that Client -- the full fixture most middleware tests need.
 func seedClientWithEngagement(t *testing.T, db *testdb.DB, identityUID string) (clientID, engagementID string) {
 	t.Helper()
 
-	practiceID := seedPractice(t, db, "Test Practice")
-	clientID, engagementID = seedClientEngagement(t, db, practiceID, "Test Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID, engagementID = testdb.SeedEngagementInStatus(t, db, practiceID, "Test Client", "client@example.com", "intake")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	return clientID, engagementID
 }

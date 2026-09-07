@@ -13,8 +13,8 @@ import (
 // dead-lettered.
 func TestRevokePending_DeadLettersThePendingRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "revoke-owner")
-	clientID, _ := seedClientEngagement(t, db, practiceID, "Revoke Client", "revoke@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "revoke-owner", []string{doulaRole}, "employee")
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Revoke Client", "revoke@example.com")
 	var portalUserID string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
@@ -22,7 +22,7 @@ func TestRevokePending_DeadLettersThePendingRow(t *testing.T) {
 	).Scan(&portalUserID); err != nil {
 		t.Fatalf("seed portal user: %v", err)
 	}
-	outboxID := seedOutboxRow(t, db, portalUserID, 0, time.Now())
+	outboxID := seedPortalInviteOutboxRow(t, db, portalUserID, 0, time.Now())
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {

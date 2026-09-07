@@ -15,10 +15,10 @@ import (
 // demand.
 func TestRefuseHandler_RequiresReasonAndStampsRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
@@ -46,8 +46,8 @@ func TestRefuseHandler_RequiresReasonAndStampsRequest(t *testing.T) {
 // segment is a 400, not a query against a bogus id.
 func TestRefuseHandler_InvalidRequestIDRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -60,10 +60,10 @@ func TestRefuseHandler_InvalidRequestIDRejected(t *testing.T) {
 // TestRefuseHandler_InvalidBodyRejected proves malformed JSON is a 400.
 func TestRefuseHandler_InvalidBodyRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
@@ -76,8 +76,8 @@ func TestRefuseHandler_InvalidBodyRejected(t *testing.T) {
 // TestRefuseHandler_NotFound proves a bogus request id is a 404.
 func TestRefuseHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -92,9 +92,9 @@ func TestRefuseHandler_NotFound(t *testing.T) {
 // at the database itself, independent of the endpoint's own 400.
 func TestDatabase_RefusalWithoutReasonRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	_, err := db.Admin.ExecContext(t.Context(),
@@ -109,9 +109,9 @@ func TestDatabase_RefusalWithoutReasonRejected(t *testing.T) {
 // TestRefuseHandler_DoulaForbidden proves refuse is Owner/Admin only.
 func TestRefuseHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
@@ -126,10 +126,10 @@ func TestRefuseHandler_DoulaForbidden(t *testing.T) {
 // decided Request is a 409.
 func TestRefuseHandler_AlreadyDecidedConflict(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})

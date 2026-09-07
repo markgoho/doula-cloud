@@ -36,27 +36,20 @@ func completeAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practice
 	return resp.StatusCode
 }
 
-// seedOwnerAtPractice inserts an Owner Membership, the role completion
-// requires.
-func seedOwnerAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
-	t.Helper()
-	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
-}
-
 // Completion is one act with three effects: the Engagement's status, the
 // open Offers, and the open attachments.
 func TestCompleteHandler_RunsTheWholeCascade(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "complete-doula")
-	ownerID := seedOwnerAtPractice(t, db, practiceID, "complete-owner")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com", "active")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "complete-doula", []string{doulaRole}, "employee")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "complete-owner", []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "client@example.com", "active")
 
 	var doulaID string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`SELECT id FROM staff WHERE identity_uid = 'complete-doula'`).Scan(&doulaID); err != nil {
 		t.Fatalf("read doula: %v", err)
 	}
-	seedGrantedAttachment(t, db, engagementID, doulaID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, doulaID)
 	var offerID string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO engagement_offers
@@ -108,9 +101,9 @@ func TestCompleteHandler_RunsTheWholeCascade(t *testing.T) {
 
 func TestCompleteHandler_RefusesWhatItShould(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "complete-refuse-doula")
-	seedOwnerAtPractice(t, db, practiceID, "complete-refuse-owner")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com", "active")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "complete-refuse-doula", []string{doulaRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "complete-refuse-owner", []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "client@example.com", "active")
 	srv := newCompleteServer(t, db)
 
 	cases := []struct {

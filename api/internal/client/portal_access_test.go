@@ -25,8 +25,8 @@ import (
 func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-editing-email"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Portal Client", "old-contact@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Portal Client", "old-contact@example.com")
 
 	portalIdentifier := portalaccount.NewIdentifier()
 	testdb.SeedPortalAccount(t, db, portalIdentifier, "her-own@example.com")
@@ -78,8 +78,8 @@ func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 func TestDetailHandler_ShowsHerOwnSignInAddressChange(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-reading-her-change"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	clientID := seedClient(t, db, practiceID, "Margaretha", "contact@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Margaretha", "contact@example.com")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_client_id)

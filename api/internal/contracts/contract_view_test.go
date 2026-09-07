@@ -28,7 +28,7 @@ func fullContractResponse() contracts.ContractResponse {
 // money-tagged merge field's value reachable.
 func TestReadContract_OwnerAndAdminGetMoney(t *testing.T) {
 	readers := []staffauth.Reader{
-		staffauth.NewReader("view-owner", []string{"owner"}, "employee"),
+		staffauth.NewReader("view-owner", []string{ownerRole}, "employee"),
 		staffauth.NewReader("view-admin", []string{"admin"}, "employee"),
 	}
 	for _, reader := range readers {

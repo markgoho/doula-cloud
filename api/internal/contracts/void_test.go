@@ -33,7 +33,7 @@ func postVoidContract(t *testing.T, srv *httptest.Server, session string, practi
 func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -49,9 +49,9 @@ func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
 func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-no-engagement"
-	practiceID := seedMember(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -67,8 +67,8 @@ func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
 func TestPostVoidContractHandler_NoContract(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-no-contract"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -89,8 +89,8 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
 			uid := "void-non-signed-" + status
-			practiceID := seedMember(t, db, uid)
-			engagementID := seedEngagement(t, db, practiceID)
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
 			srv, session := newContractServer(t, db, uid)
@@ -115,8 +115,8 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 func TestPostVoidContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-success"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	objectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, objectPath)
 
@@ -176,9 +176,9 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-after-void"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, mergeFieldProse)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, mergeFieldProse)
 	oldObjectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, oldObjectPath)
 

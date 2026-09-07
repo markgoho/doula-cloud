@@ -13,36 +13,13 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
-	return id
-}
-
-func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string, roles string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, $3::practice_role[], 'employee')`,
-		practiceID, staffID, roles,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-}
-
-// seedMember seeds a Practice and a Staff member holding roles there.
-func seedMember(t *testing.T, db *testdb.DB, identityUID string, roles string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, roles)
-	return practiceID
-}
+// ownerRole and doulaRole are named once so golangci-lint's goconst check
+// doesn't see repeated "owner"/"doula" literals across this package's
+// whole test surface.
+const (
+	ownerRole = "owner"
+	doulaRole = "doula"
+)
 
 // seedLedgerRow seeds one lot. A purchase carries what it cost and the
 // payment it arrived on (#420); a grant carries the defaults, which are a
@@ -118,7 +95,7 @@ func getBalance(t *testing.T, srv *httptest.Server, session string, practiceID s
 // credit_ledger rows of different origins and signs.
 func TestBalance_SumsLedgerRows(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
 	lotID := seedLedgerRow(t, db, practiceID, "purchase", 5)
 	seedRefundRow(t, db, practiceID, lotID, 1)
@@ -143,7 +120,7 @@ func TestBalance_SumsLedgerRows(t *testing.T) {
 // value.
 func TestBalance_ZeroForPracticeWithNoLedgerRows(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -167,7 +144,7 @@ func TestBalance_ZeroForPracticeWithNoLedgerRows(t *testing.T) {
 func TestGetBalanceHandler_AdminAllowed(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-admin-member"
-	practiceID := seedMember(t, db, uid, "{admin}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"admin"}, "employee")
 	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
 	seedLedgerRow(t, db, practiceID, "purchase", 5)
 
@@ -207,7 +184,7 @@ func TestGetBalanceHandler_AdminAllowed(t *testing.T) {
 func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-empty-ledger"
-	practiceID := seedMember(t, db, uid, "{owner}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newBillingServer(t, db, uid)
 	defer srv.Close()
@@ -239,7 +216,7 @@ func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 func TestGetBalanceHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-doula-member"
-	practiceID := seedMember(t, db, uid, "{doula}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newBillingServer(t, db, uid)
 	defer srv.Close()
@@ -257,7 +234,7 @@ func TestGetBalanceHandler_DoulaForbidden(t *testing.T) {
 func TestGetBalanceHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-owner-bad-cursor"
-	practiceID := seedMember(t, db, uid, "{owner}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newBillingServer(t, db, uid)
 	defer srv.Close()
@@ -286,7 +263,7 @@ func TestGetBalanceHandler_InvalidCursorRejected(t *testing.T) {
 func TestGetBalanceHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-owner-paging"
-	practiceID := seedMember(t, db, uid, "{owner}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	const total = 31 // pageSize (30) + 1, to force a second page
 	for range total {

@@ -16,8 +16,8 @@ import (
 // never set.
 func TestRLS_ContractTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
-	seedTemplate(t, db, practiceID, "Some prose")
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
+	seedContractTemplate(t, db, practiceID, "Some prose")
 
 	var count int
 	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM contract_templates`).Scan(&count); err != nil {
@@ -33,10 +33,10 @@ func TestRLS_ContractTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // app.current_practice_id, not every row globally.
 func TestRLS_ContractTemplatesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	seedTemplate(t, db, practiceA, "Practice A's prose")
-	seedTemplate(t, db, practiceB, "Practice B's prose")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	seedContractTemplate(t, db, practiceA, "Practice A's prose")
+	seedContractTemplate(t, db, practiceB, "Practice B's prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -77,9 +77,9 @@ func TestRLS_ContractTemplatesVisibilityIsScopedToCurrentPractice(t *testing.T) 
 // first place.
 func TestRLS_ContractTemplatesUpdateRejectedAcrossPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	seedTemplate(t, db, practiceB, "Practice B's prose")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	seedContractTemplate(t, db, practiceB, "Practice B's prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -116,8 +116,8 @@ func TestRLS_ContractTemplatesUpdateRejectedAcrossPractice(t *testing.T) {
 // all rows when app.current_practice_id is never set.
 func TestRLS_ContractsFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, "Some prose")
 
 	var count int
@@ -134,10 +134,10 @@ func TestRLS_ContractsFailsClosedWithNoSessionVarSet(t *testing.T) {
 // app.current_practice_id, not every row globally.
 func TestRLS_ContractsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	engagementA := seedEngagement(t, db, practiceA)
-	engagementB := seedEngagement(t, db, practiceB)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	_, engagementA := testdb.SeedEngagement(t, db, practiceA)
+	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	seedContract(t, db, engagementA, statusDraft, "Practice A's prose")
 	seedContract(t, db, engagementB, statusDraft, "Practice B's prose")
 
@@ -180,9 +180,9 @@ func TestRLS_ContractsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 // first place.
 func TestRLS_ContractsUpdateRejectedAcrossPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	engagementB := seedEngagement(t, db, practiceB)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	seedContract(t, db, engagementB, statusDraft, "Practice B's prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -220,8 +220,8 @@ func TestRLS_ContractsUpdateRejectedAcrossPractice(t *testing.T) {
 // session can read a sent Contract on their own Engagement.
 func TestRLS_ContractsClientCanReadOwnSentContract(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -251,8 +251,8 @@ func TestRLS_ContractsClientCanReadOwnSentContract(t *testing.T) {
 // Engagement -- zero rows, not an error, per the ticket's AC.
 func TestRLS_ContractsClientCannotReadDraft(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, statusDraft, "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -282,8 +282,8 @@ func TestRLS_ContractsClientCanReadSignedAndVoided(t *testing.T) {
 	for _, status := range []string{statusSigned, statusVoided} {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
-			practiceID := seedPractice(t, db, "Practice")
-			clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+			practiceID := testdb.SeedPractice(t, db, "Practice")
+			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 			seedContract(t, db, engagementID, status, "Agreement prose")
 
 			tx, err := db.App.BeginTx(t.Context(), nil)
@@ -315,9 +315,9 @@ func TestRLS_ContractsClientCanReadSignedAndVoided(t *testing.T) {
 // on an Engagement belonging to a different Client.
 func TestRLS_ContractsClientCannotReadOtherClientsContract(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientA, _ := seedClientEngagement(t, db, practiceID, "Client A", "a@example.com")
-	_, engagementB := seedClientEngagement(t, db, practiceID, "Client B", "b@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
+	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 	seedContract(t, db, engagementB, "sent", "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -354,8 +354,8 @@ func TestRLS_ContractsClientCannotReadOtherClientsContract(t *testing.T) {
 // invisible row is simply filtered out.
 func TestRLS_ContractsClientUpdateRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -387,8 +387,8 @@ func TestRLS_ContractsClientUpdateRejected(t *testing.T) {
 // signed.
 func TestRLS_ContractsClientCanSignOwnSentContract(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -423,9 +423,9 @@ func TestRLS_ContractsClientCanSignOwnSentContract(t *testing.T) {
 // Engagement belonging to a different Client.
 func TestRLS_ContractsClientCannotSignOtherClientsContract(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientA, _ := seedClientEngagement(t, db, practiceID, "Client A", "a@example.com")
-	_, engagementB := seedClientEngagement(t, db, practiceID, "Client B", "b@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
+	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 	seedContract(t, db, engagementB, "sent", "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -462,8 +462,8 @@ func TestRLS_ContractsClientCannotSignNonSentContract(t *testing.T) {
 	for _, status := range []string{statusSigned, statusVoided} {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
-			practiceID := seedPractice(t, db, "Practice")
-			clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+			practiceID := testdb.SeedPractice(t, db, "Practice")
+			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 			seedContract(t, db, engagementID, status, "Agreement prose")
 
 			tx, err := db.App.BeginTx(t.Context(), nil)
@@ -502,8 +502,8 @@ func TestRLS_ContractsClientCannotSignNonSentContract(t *testing.T) {
 // the resulting 'voided' row outright.
 func TestRLS_ContractsClientCannotTransitionSentToOtherStatus(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedContract(t, db, engagementID, "sent", "Agreement prose")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)

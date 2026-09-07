@@ -7,37 +7,13 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedPractice inserts a Practice using the superuser Admin connection.
-func seedPractice(t *testing.T, db *testdb.DB, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
-}
-
-// seedStaff inserts a Staff member (an Invitation's invited_by) using the
-// superuser Admin connection.
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Inviting Staff', 'inviter@example.com', 'NY') RETURNING id`,
-		identityUID,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	return id
-}
-
 // seedPracticeInvitation inserts a practice_invitations row (00030) at
 // practiceID, inviting address. token_digest is a fixed placeholder --
 // this package's tests never verify it, since #316's accept flow (not
 // built yet) is what will ever read it back.
 func seedPracticeInvitation(t *testing.T, db *testdb.DB, practiceID, address string) string {
 	t.Helper()
-	invitedBy := seedStaff(t, db, "inviting-owner-"+address)
+	invitedBy := testdb.SeedStaff(t, db, "inviting-owner-"+address)
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO practice_invitations (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)

@@ -6,25 +6,12 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedClientEngagement inserts a Client and an Engagement linking them to
-// practiceID, using the superuser Admin connection.
-func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID string) (clientID, engagementID string) {
-	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	engagementID = seedEngagement(t, db, practiceID, clientID)
-	return clientID, engagementID
-}
-
-// seedEngagement inserts one more Engagement for an already-seeded
+// seedSecondEngagement inserts one more Engagement for an already-seeded
 // clientID -- used to prove muting one Engagement leaves a sibling
-// Engagement's own push preference untouched.
-func seedEngagement(t *testing.T, db *testdb.DB, practiceID, clientID string) (engagementID string) {
+// Engagement's own push preference untouched. Stays local under this
+// name rather than testdb: adding a second Engagement to an existing
+// Client is a shape only this package's sibling-isolation tests need.
+func seedSecondEngagement(t *testing.T, db *testdb.DB, practiceID, clientID string) (engagementID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'intake', 'birth') RETURNING id`,
@@ -33,19 +20,6 @@ func seedEngagement(t *testing.T, db *testdb.DB, practiceID, clientID string) (e
 		t.Fatalf("seed engagement: %v", err)
 	}
 	return engagementID
-}
-
-// seedPortalUser links identityUID to clientID via client_portal_users,
-// using the superuser Admin connection.
-func seedPortalUser(t *testing.T, db *testdb.DB, identityUID, clientID string) {
-	t.Helper()
-	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		identityUID, clientID,
-	); err != nil {
-		t.Fatalf("seed client_portal_users: %v", err)
-	}
 }
 
 // readPreferenceRow reads notification_preferences' ground truth for

@@ -73,8 +73,8 @@ func TestQueueSessionEvicted_ConflictOnExistingPendingRowIsNoop(t *testing.T) {
 func TestWorker_ProcessPending_MailsSessionEvicted(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-evicted"
-	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "session_evicted", time.Now().Add(-time.Minute), time.Now())
+	testdb.SeedStaff(t, db, uid)
+	outboxID := seedSessionNoticeOutboxRow(t, db, uid, "session_evicted", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))

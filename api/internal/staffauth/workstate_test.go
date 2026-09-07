@@ -320,7 +320,7 @@ func TestUpdateWorkState_UnknownStaff(t *testing.T) {
 
 func TestUpdateWorkState_RejectsMalformedBody(t *testing.T) {
 	db := testdb.New(t)
-	seedStaff(t, db, "malformed-body-uid")
+	testdb.SeedStaff(t, db, "malformed-body-uid")
 	srv, session := newWorkStateServer(t, db, "malformed-body-uid")
 	defer srv.Close()
 
@@ -338,7 +338,7 @@ func TestUpdateWorkState_RejectsMalformedBody(t *testing.T) {
 // onboarding paths use.
 func TestUpdateWorkState_RejectsSomethingThatIsNotAState(t *testing.T) {
 	db := testdb.New(t)
-	seedStaff(t, db, "not-a-state-uid")
+	testdb.SeedStaff(t, db, "not-a-state-uid")
 	srv, session := newWorkStateServer(t, db, "not-a-state-uid")
 	defer srv.Close()
 
@@ -368,7 +368,7 @@ func TestUpdateWorkState_RejectsSomethingThatIsNotAState(t *testing.T) {
 // moves, and the audit row carries both sides rather than only the new one.
 func TestUpdateWorkState_MovesTheValueAndRecordsBothSides(t *testing.T) {
 	db := testdb.New(t)
-	seedStaff(t, db, "she-moved-uid")
+	testdb.SeedStaff(t, db, "she-moved-uid")
 	before := reportedAt(t, db, "she-moved-uid")
 	srv, session := newWorkStateServer(t, db, "she-moved-uid")
 	defer srv.Close()
@@ -426,7 +426,7 @@ func TestUpdateWorkState_MovesTheValueAndRecordsBothSides(t *testing.T) {
 // today" has to be sayable.
 func TestUpdateWorkState_SameStateIsAReAssertion(t *testing.T) {
 	db := testdb.New(t)
-	seedStaff(t, db, "still-here-uid")
+	testdb.SeedStaff(t, db, "still-here-uid")
 	before := reportedAt(t, db, "still-here-uid")
 	srv, session := newWorkStateServer(t, db, "still-here-uid")
 	defer srv.Close()
@@ -455,10 +455,10 @@ func TestUpdateWorkState_SameStateIsAReAssertion(t *testing.T) {
 // an Owner's own correction moves her own row and nobody else's.
 func TestUpdateWorkState_AnOwnerCorrectsOnlyHerself(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Reach Practice")
-	ownerID := seedStaff(t, db, "owner-correcting-uid")
+	practiceID := testdb.SeedPractice(t, db, "Reach Practice")
+	ownerID := testdb.SeedStaff(t, db, "owner-correcting-uid")
 	seedMembership(t, db, practiceID, ownerID)
-	doulaID := seedStaff(t, db, "her-doula-uid")
+	doulaID := testdb.SeedStaff(t, db, "her-doula-uid")
 	seedMembership(t, db, practiceID, doulaID)
 
 	srv, session := newWorkStateServer(t, db, "owner-correcting-uid")
@@ -483,8 +483,8 @@ func TestUpdateWorkState_AnOwnerCorrectsOnlyHerself(t *testing.T) {
 // future route that forgets the shape rule still meets the boundary.
 func TestRLS_StaffSelfUpdateReachesOnlyHerOwnRow(t *testing.T) {
 	db := testdb.New(t)
-	seedStaff(t, db, "rls-owner-uid")
-	otherID := seedStaff(t, db, "rls-doula-uid")
+	testdb.SeedStaff(t, db, "rls-owner-uid")
+	otherID := testdb.SeedStaff(t, db, "rls-doula-uid")
 
 	if _, err := db.App.ExecContext(t.Context(),
 		`SELECT set_config('app.current_identity_uid', $1, false)`, "rls-owner-uid",
@@ -511,8 +511,8 @@ func TestRLS_StaffSelfUpdateReachesOnlyHerOwnRow(t *testing.T) {
 // actor_staff_id stays a signal rather than a field anyone may fill in.
 func TestRLS_WorkStateEventRefusesAForeignActor(t *testing.T) {
 	db := testdb.New(t)
-	subjectID := seedStaff(t, db, "event-subject-uid")
-	foreignID := seedStaff(t, db, "event-foreign-uid")
+	subjectID := testdb.SeedStaff(t, db, "event-subject-uid")
+	foreignID := testdb.SeedStaff(t, db, "event-foreign-uid")
 
 	if _, err := db.App.ExecContext(t.Context(),
 		`SELECT set_config('app.current_identity_uid', $1, false)`, "event-subject-uid",

@@ -14,6 +14,10 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// doulaRole is named once so golangci-lint's goconst check doesn't see
+// repeated "doula" literals across this package's test surface.
+const doulaRole = "doula"
+
 // newStaffServer and newPortalServer both mount this package's whole
 // surface through pushsub.Mount, the same call main.go makes on the real
 // GatedRouter and idempotency.Router -- one server, two populations,
@@ -70,8 +74,8 @@ func subscribeBody(t *testing.T, endpoint string) []byte {
 func TestRegisterHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-registers"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
@@ -94,8 +98,8 @@ func TestRegisterHandler_Success(t *testing.T) {
 func TestRegisterHandler_ReregisterSameEndpointUpserts(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-reregisters"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
@@ -120,8 +124,8 @@ func TestRegisterHandler_ReregisterSameEndpointUpserts(t *testing.T) {
 func TestRegisterHandler_InvalidJSONBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-json"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
@@ -136,8 +140,8 @@ func TestRegisterHandler_InvalidJSONBody(t *testing.T) {
 func TestRegisterHandler_MissingFieldsRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-missing-fields"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
@@ -153,8 +157,8 @@ func TestRegisterHandler_MissingFieldsRejected(t *testing.T) {
 func TestUnregisterHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-unregisters"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
@@ -176,8 +180,8 @@ func TestUnregisterHandler_Success(t *testing.T) {
 func TestUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-missing-endpoint"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newStaffServer(t, db, identityUID)
 	defer srv.Close()
@@ -195,9 +199,9 @@ func TestUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 // Staff A's endpoint deletes nothing.
 func TestUnregisterHandler_CannotDeleteAnotherStaffMembersSubscription(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Shared Practice")
-	seedStaffAtPractice(t, db, practiceID, "staff-a-owns-sub")
-	seedStaffAtPractice(t, db, practiceID, "staff-b-attacker")
+	practiceID := testdb.SeedPractice(t, db, "Shared Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "staff-a-owns-sub", []string{doulaRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "staff-b-attacker", []string{doulaRole}, "employee")
 
 	const endpoint = "https://push.example.com/staff-a-device"
 	srvA, srvASession := newStaffServer(t, db, "staff-a-owns-sub")
@@ -220,9 +224,9 @@ func TestUnregisterHandler_CannotDeleteAnotherStaffMembersSubscription(t *testin
 func TestClientRegisterHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-registers"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -241,9 +245,9 @@ func TestClientRegisterHandler_Success(t *testing.T) {
 func TestClientRegisterHandler_InvalidJSONBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-bad-json"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -258,9 +262,9 @@ func TestClientRegisterHandler_InvalidJSONBody(t *testing.T) {
 func TestClientUnregisterHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-unregisters"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -282,9 +286,9 @@ func TestClientUnregisterHandler_Success(t *testing.T) {
 func TestClientUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-missing-endpoint"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID)
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()

@@ -77,7 +77,7 @@ func TestSupportClearHandler_InvalidRequestBody(t *testing.T) {
 
 func TestSupportClearHandler_MissingOperator(t *testing.T) {
 	db := testdb.New(t)
-	staffID := seedStaff(t, db, "support-target-no-operator")
+	staffID := testdb.SeedStaff(t, db, "support-target-no-operator")
 	srv := newSupportClearServer(authntest.NewFakeAccountManager(), db, supportTestSecret)
 	defer srv.Close()
 
@@ -118,7 +118,7 @@ func TestSupportClearHandler_UnknownStaffID(t *testing.T) {
 func TestSupportClearHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const targetUID = "support-target-success"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	authntest.SeedSession(t, db.App, targetUID)
 
 	accounts := authntest.NewFakeAccountManager()

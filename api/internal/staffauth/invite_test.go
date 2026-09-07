@@ -257,7 +257,7 @@ func TestInviteHandler_Rejects(t *testing.T) {
 func TestInviteHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const doulaUID = "doula-invites"
-	_, practiceID := seedStaffWithMembership(t, db, doulaUID) // '{doula}'
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType) // '{doula}'
 
 	srv, session, _ := newInviteServer(t, db, doulaUID)
 	defer srv.Close()
@@ -382,7 +382,7 @@ func TestRevokeInvitationHandler_RequiresConfirmation(t *testing.T) {
 func TestRevokeInvitationHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const doulaUID = "doula-revokes"
-	staffID, practiceID := seedStaffWithMembership(t, db, doulaUID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType)
 	invitationID := seedInvitation(t, db, practiceID, staffID, "safe@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
 
 	srv, session, _ := newInviteServer(t, db, doulaUID)

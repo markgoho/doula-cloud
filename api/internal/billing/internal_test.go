@@ -56,7 +56,7 @@ func internalRequest(t *testing.T, srv *httptest.Server, method, path, secret, b
 // payment, and the ledger keeps the receipt.
 func TestRefundHandler_IssuesTheRefundAndRecordsIt(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Refund Endpoint")
+	practiceID := testdb.SeedPractice(t, db, "Refund Endpoint")
 	seedPurchase(t, db, practiceID, 3, 2000, 300, "pi_endpoint", time.Now())
 	client := billing.NewFakeStripeClient()
 	srv := newInternalBillingServer(db, client)
@@ -93,7 +93,7 @@ func TestRefundHandler_IssuesTheRefundAndRecordsIt(t *testing.T) {
 // by, and the retry would move the money a second time.
 func TestRefundHandler_RefusesAnUnnamedRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Unnamed")
+	practiceID := testdb.SeedPractice(t, db, "Unnamed")
 	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
@@ -151,7 +151,7 @@ func TestRefundHandler_RejectsMalformedRequests(t *testing.T) {
 // answer rather than as an internal error.
 func TestRefundHandler_ReportsARefusalAsAConflict(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Nothing To Refund")
+	practiceID := testdb.SeedPractice(t, db, "Nothing To Refund")
 	seedSignupBonus(t, db, practiceID)
 	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
 
@@ -166,7 +166,7 @@ func TestRefundHandler_ReportsARefusalAsAConflict(t *testing.T) {
 // refused is not reported as done.
 func TestRefundHandler_ReportsAStripeFailureAsAnError(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Stripe Refuses")
+	practiceID := testdb.SeedPractice(t, db, "Stripe Refuses")
 	seedPurchase(t, db, practiceID, 1, 2000, 0, "pi_refused", time.Now())
 	client := billing.NewFakeStripeClient()
 	client.RefundPaymentErr = errStripeUnavailable
@@ -183,7 +183,7 @@ func TestRefundHandler_ReportsAStripeFailureAsAnError(t *testing.T) {
 // mailing list is readable through the same guard, and only through it.
 func TestDormantPracticesHandler_ListsBalancesNobodyHasTouched(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Dormant Endpoint")
+	practiceID := testdb.SeedPractice(t, db, "Dormant Endpoint")
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_dormant_endpoint", time.Now().AddDate(-3, 0, 0))
 	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
 

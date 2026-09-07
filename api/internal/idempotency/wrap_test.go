@@ -34,7 +34,7 @@ func readBody(t *testing.T, resp *http.Response) map[string]int {
 // without re-running the wrapped handler.
 func TestWrap_ReplaysStoredResponseForSameKey(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "same-key-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "same-key-owner", []string{doulaRole}, "employee")
 	var calls int
 	srv, session := newIdempotencyServer(t, db, "same-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()
@@ -68,7 +68,7 @@ func TestWrap_ReplaysStoredResponseForSameKey(t *testing.T) {
 // permanently stale by ON CONFLICT DO UPDATE's WHERE guard.
 func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "ttl-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "ttl-owner", []string{doulaRole}, "employee")
 	var calls int
 	srv, session := newIdempotencyServer(t, db, "ttl-owner", &calls, http.StatusCreated)
 	defer srv.Close()
@@ -116,7 +116,7 @@ func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 // Idempotency-Key header always execute normally.
 func TestWrap_RunsHandlerAgainWithNoKey(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "no-key-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "no-key-owner", []string{doulaRole}, "employee")
 	var calls int
 	srv, session := newIdempotencyServer(t, db, "no-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()
@@ -133,7 +133,7 @@ func TestWrap_RunsHandlerAgainWithNoKey(t *testing.T) {
 // treated as an independent request, not a replay.
 func TestWrap_RunsHandlerAgainWithDifferentKey(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "diff-key-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "diff-key-owner", []string{doulaRole}, "employee")
 	var calls int
 	srv, session := newIdempotencyServer(t, db, "diff-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()
@@ -151,7 +151,7 @@ func TestWrap_RunsHandlerAgainWithDifferentKey(t *testing.T) {
 // handler again, not get the failure replayed forever.
 func TestWrap_DoesNotPersistServerErrorResponse(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "server-error-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "server-error-owner", []string{doulaRole}, "employee")
 	var calls int
 	srv, session := newIdempotencyServer(t, db, "server-error-owner", &calls, http.StatusInternalServerError)
 	defer srv.Close()
@@ -170,7 +170,7 @@ func TestWrap_DoesNotPersistServerErrorResponse(t *testing.T) {
 // correct status rather than 0.
 func TestWrap_DefaultsToStatusOKWhenHandlerOmitsWriteHeader(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "no-writeheader-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "no-writeheader-owner", []string{doulaRole}, "employee")
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /practices/{practiceId}/widgets",
@@ -201,7 +201,7 @@ func TestWrap_DefaultsToStatusOKWhenHandlerOmitsWriteHeader(t *testing.T) {
 // idempotency protection.
 func TestWrap_TreatsOversizedKeyAsAbsent(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "oversized-key-owner")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "oversized-key-owner", []string{doulaRole}, "employee")
 	var calls int
 	srv, session := newIdempotencyServer(t, db, "oversized-key-owner", &calls, http.StatusCreated)
 	defer srv.Close()

@@ -16,15 +16,6 @@ import (
 
 const adminRole = "admin"
 
-// seedAdmin seeds a Practice and a Staff member holding the 'admin' role
-// there -- the second of the two seats AwaitingSignatureHandler admits.
-func seedAdmin(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{adminRole}, "employee")
-	return practiceID
-}
-
 // seedNamedEngagement seeds a Client carrying both a legal given name and
 // the preferred name she is actually called, plus her Engagement --
 // seedEngagement's Client has no preferred name, and the roll-up is
@@ -91,7 +82,7 @@ func decodeAwaiting(t *testing.T, session, url string) contracts.AwaitingRespons
 func TestAwaitingSignatureHandler_EmptyPracticeAnswersWithAnEmptyList(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "awaiting-empty"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -120,14 +111,15 @@ func TestAwaitingSignatureHandler_EmptyPracticeAnswersWithAnEmptyList(t *testing
 func TestAwaitingSignatureHandler_ListsOnlyOutstandingContractsOldestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "awaiting-mixed"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	draftEngagement, draftClient := seedNamedEngagement(t, db, practiceID, "Jamesina", jamieName)
 	seedContract(t, db, draftEngagement, statusDraft, mergeFieldProse)
 	sentEngagement, _ := seedNamedEngagement(t, db, practiceID, "Renata", "")
 	seedContract(t, db, sentEngagement, statusSent, mergeFieldProse)
-	seedContract(t, db, seedEngagement(t, db, practiceID), statusSigned, mergeFieldProse)
-	voidedEngagement := seedEngagement(t, db, practiceID)
+	_, signedEngagement := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, signedEngagement, statusSigned, mergeFieldProse)
+	_, voidedEngagement := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, voidedEngagement, statusVoided, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -164,10 +156,11 @@ func TestAwaitingSignatureHandler_ListsOnlyOutstandingContractsOldestFirst(t *te
 func TestAwaitingSignatureHandler_IgnoresAnotherPracticesContracts(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "awaiting-scope"
-	practiceID := seedOwner(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	seedContract(t, db, seedEngagement(t, db, otherPracticeID), statusSent, mergeFieldProse)
-	mine := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagement := testdb.SeedEngagement(t, db, otherPracticeID)
+	seedContract(t, db, otherEngagement, statusSent, mergeFieldProse)
+	_, mine := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, mine, statusSent, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -186,8 +179,8 @@ func TestAwaitingSignatureHandler_IgnoresAnotherPracticesContracts(t *testing.T)
 func TestAwaitingSignatureHandler_AdmitsAnAdmin(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "awaiting-admin"
-	practiceID := seedAdmin(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusSent, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -206,7 +199,7 @@ func TestAwaitingSignatureHandler_AdmitsAnAdmin(t *testing.T) {
 func TestAwaitingSignatureHandler_RefusesADoula(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "awaiting-doula"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -225,7 +218,7 @@ func TestAwaitingSignatureHandler_RefusesADoula(t *testing.T) {
 func TestAwaitingSignatureHandler_RejectsAMalformedCursor(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "awaiting-bad-cursor"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -253,10 +246,11 @@ func TestAwaitingSignatureHandler_RejectsAMalformedCursor(t *testing.T) {
 func TestAwaitingSignatureHandler_WalksTheCursor(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "awaiting-cursor"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	const total = 31 // awaitingPageSize (30) + 1, to force a second page
 	for range total {
-		seedContract(t, db, seedEngagement(t, db, practiceID), statusSent, mergeFieldProse)
+		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+		seedContract(t, db, engagementID, statusSent, mergeFieldProse)
 	}
 
 	srv, session := newContractServer(t, db, uid)

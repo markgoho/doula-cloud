@@ -201,7 +201,11 @@ func seedPracticeAndClient(t *testing.T, db *sql.DB) (practiceID, clientID strin
 	return practiceID, clientID
 }
 
-// seedClient seeds one more Client of an existing Practice.
+// seedClient seeds one more Client of an existing Practice. Stays local
+// rather than testdb: this package's own fixtures pass a raw *sql.DB
+// (the low-privilege app_runtime connection, not testdb.DB's
+// Admin/App pair), and set family_name, which no other package's fixture
+// needs.
 func seedClient(t *testing.T, db *sql.DB, practiceID, name string) string {
 	t.Helper()
 	var clientID string

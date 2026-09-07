@@ -239,7 +239,7 @@ func TestCreate_ReissuesAnOpenOfferWhenTheTokenRotates(t *testing.T) {
 	f := newFixture(t)
 	firstOffer, firstToken, firstCode := seedEmailOffer(t, f)
 
-	secondEngagement := seedEngagement(t, f.db, f.practiceID)
+	_, secondEngagement := testdb.SeedEngagement(t, f.db, f.practiceID)
 	fee := int64(52000)
 	var created offer.CreateResponse
 	decode(t, do(t, http.MethodPost,
@@ -289,7 +289,7 @@ func TestCreate_ReissueResetsTheGuessCounter(t *testing.T) {
 		expectStatus(t, do(t, http.MethodGet, f.readURL(firstOffer, firstToken, "000000"), "", nil), http.StatusForbidden)
 	}
 
-	secondEngagement := seedEngagement(t, f.db, f.practiceID)
+	_, secondEngagement := testdb.SeedEngagement(t, f.db, f.practiceID)
 	fee := int64(52000)
 	decode(t, do(t, http.MethodPost,
 		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",

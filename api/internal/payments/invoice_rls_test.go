@@ -16,9 +16,9 @@ import (
 // all rows when app.current_practice_id is unset.
 func TestRLS_InvoicesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	seedInvoice(t, db, practiceID, contractID, "in_rls_closed", invoiceStatusOpen, 5000, time.Now())
 
 	var count int
@@ -34,12 +34,12 @@ func TestRLS_InvoicesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // session sees only Practice A's invoices -- Practice B's stay invisible.
 func TestRLS_InvoicesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	engagementA := seedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	engagementB := seedEngagement(t, db, practiceB, "Client B", "b@example.com")
-	contractA := seedContract(t, db, engagementA)
-	contractB := seedContract(t, db, engagementB)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
+	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "b@example.com")
+	contractA := seedDraftContract(t, db, engagementA)
+	contractB := seedDraftContract(t, db, engagementB)
 	invoiceA := seedInvoice(t, db, practiceA, contractA, "in_rls_a", invoiceStatusOpen, 5000, time.Now())
 	seedInvoice(t, db, practiceB, contractB, "in_rls_b", invoiceStatusOpen, 7000, time.Now())
 
@@ -80,10 +80,10 @@ func TestRLS_InvoicesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 // side of the policy, derived from the same USING clause, rejects it.
 func TestRLS_InvoicesCannotInsertForAnotherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	engagementA := seedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	contractA := seedContract(t, db, engagementA)
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
+	contractA := seedDraftContract(t, db, engagementA)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {

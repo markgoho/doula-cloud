@@ -13,8 +13,8 @@ import (
 
 func TestRLS_VisitsFailsClosedWithNoPracticeSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := seedDoulaWithMembership(t, db, "fail-closed-doula")
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "fail-closed-doula", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
 	var count int
@@ -31,10 +31,10 @@ func TestRLS_VisitsFailsClosedWithNoPracticeSet(t *testing.T) {
 // belongs to app.current_practice_id, not to every Visit row globally.
 func TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	db := testdb.New(t)
-	practiceA, staffA := seedDoulaWithMembership(t, db, "staff-visits-a")
-	practiceB, staffB := seedDoulaWithMembership(t, db, "staff-visits-b")
-	engagementA := seedEngagement(t, db, practiceA)
-	engagementB := seedEngagement(t, db, practiceB)
+	practiceA, staffA := testdb.SeedStaffAtNewPractice(t, db, "staff-visits-a", []string{doulaRole}, "employee")
+	practiceB, staffB := testdb.SeedStaffAtNewPractice(t, db, "staff-visits-b", []string{doulaRole}, "employee")
+	_, engagementA := testdb.SeedEngagement(t, db, practiceA)
+	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	visitAtA := seedVisit(t, db, engagementA, staffA)
 	seedVisit(t, db, engagementB, staffB)
 
@@ -76,9 +76,9 @@ func TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 // visit id, because the row isn't visible to update in the first place.
 func TestRLS_VisitsUpdateRejectedAcrossPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA, staffA := seedDoulaWithMembership(t, db, "staff-update-a")
-	practiceB, staffB := seedDoulaWithMembership(t, db, "staff-update-b")
-	engagementB := seedEngagement(t, db, practiceB)
+	practiceA, staffA := testdb.SeedStaffAtNewPractice(t, db, "staff-update-a", []string{doulaRole}, "employee")
+	practiceB, staffB := testdb.SeedStaffAtNewPractice(t, db, "staff-update-b", []string{doulaRole}, "employee")
+	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
 	visitAtB := seedVisit(t, db, engagementB, staffB)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)

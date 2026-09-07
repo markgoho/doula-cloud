@@ -279,7 +279,7 @@ func TestCreate_RefreshesAStaleStaffInviteOutboxToken(t *testing.T) {
 		t.Fatalf("seed staff invite outbox: %v", err)
 	}
 
-	secondEngagement := seedEngagement(t, f.db, f.practiceID)
+	_, secondEngagement := testdb.SeedEngagement(t, f.db, f.practiceID)
 	fee := int64(52000)
 	var created offer.CreateResponse
 	decode(t, do(t, http.MethodPost,

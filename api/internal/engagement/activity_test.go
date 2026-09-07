@@ -10,42 +10,18 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedActivity writes one activity row for engagementID via the real
-// activity.Record path (not a bare INSERT), so these tests exercise the
-// same write shape every #476 call site uses.
-func seedActivity(t *testing.T, db *testdb.DB, practiceID, engagementID string, action activity.EngagementAction, actor activity.Actor) {
-	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   engagementID,
-		Action:      string(action),
-		Actor:       actor,
-	}); err != nil {
-		t.Fatalf("seed activity: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-}
-
 // TestListActivityHandler_OwnerSeesEveryEntry proves the Owner column of
 // ADR-0008's read table: nothing is filtered, including money actions.
 func TestListActivityHandler_OwnerSeesEveryEntry(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-activity-full"
 	practiceID := testdb.SeedPractice(t, db, "Owner Activity Full")
-	ownerID := seedOwnerAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "owner-activity-full-client@example.com", "active")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-full-client@example.com", "active")
 
-	seedActivity(t, db, practiceID, engagementID, activity.ActionEngagementCreated, activity.StaffActor(ownerID))
-	seedActivity(t, db, practiceID, engagementID, activity.ActionInvoiceRaised, activity.StaffActor(ownerID))
-	seedActivity(t, db, practiceID, engagementID, activity.ActionInvoicePaid, activity.ClientActor(clientID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.ClientActor(clientID))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -71,14 +47,14 @@ func TestListActivityHandler_EmployeeDoulaExcludesMoneyEntries(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-activity-money"
 	practiceID := testdb.SeedPractice(t, db, "Doula Activity Money")
-	doulaID := seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "doula-activity-money-client@example.com", "active")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "doula-activity-money-client@example.com", "active")
 
-	seedActivity(t, db, practiceID, engagementID, activity.ActionEngagementCreated, activity.StaffActor(doulaID))
-	seedActivity(t, db, practiceID, engagementID, activity.ActionVisitLogged, activity.StaffActor(doulaID))
-	seedActivity(t, db, practiceID, engagementID, activity.ActionInvoiceRaised, activity.StaffActor(doulaID))
-	seedActivity(t, db, practiceID, engagementID, activity.ActionInvoicePaid, activity.SystemActor())
-	seedActivity(t, db, practiceID, engagementID, activity.ActionContractSent, activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.SystemActor())
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSent), activity.StaffActor(doulaID))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -112,13 +88,13 @@ func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.
 	db := testdb.New(t)
 	const identityUID = "contractor-activity-money"
 	practiceID := testdb.SeedPractice(t, db, "Contractor Activity Money")
-	contractorID := seedContractorAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "contractor-activity-money-client@example.com", "active")
-	seedGrantedAttachment(t, db, engagementID, contractorID)
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, identityUID)
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "contractor-activity-money-client@example.com", "active")
+	testdb.SeedGrantedAttachment(t, db, engagementID, contractorID)
 
-	seedActivity(t, db, practiceID, engagementID, activity.ActionOfferAccepted, activity.StaffActor(contractorID))
-	seedActivity(t, db, practiceID, engagementID, activity.ActionContractSigned, activity.ClientActor(clientID))
-	seedActivity(t, db, practiceID, engagementID, activity.ActionInvoicePaid, activity.SystemActor())
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferAccepted), activity.StaffActor(contractorID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSigned), activity.ClientActor(clientID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.SystemActor())
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -143,10 +119,10 @@ func TestListActivityHandler_SystemActorRendersAsDoulaCloud(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-activity-system-name"
 	practiceID := testdb.SeedPractice(t, db, "Owner Activity System Name")
-	seedOwnerAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "owner-activity-system-name-client@example.com", "active")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-system-name-client@example.com", "active")
 
-	seedActivity(t, db, practiceID, engagementID, activity.ActionPortalInviteSent, activity.SystemActor())
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionPortalInviteSent), activity.SystemActor())
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -174,7 +150,7 @@ func TestListActivityHandler_InvalidEngagementIDRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-activity-bad-engagement-id"
 	practiceID := testdb.SeedPractice(t, db, "Owner Activity Bad Engagement Id")
-	seedOwnerAtPractice(t, db, practiceID, identityUID)
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -192,8 +168,8 @@ func TestListActivityHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-activity-bad-cursor"
 	practiceID := testdb.SeedPractice(t, db, "Owner Activity Bad Cursor")
-	seedOwnerAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "owner-activity-bad-cursor-client@example.com", "active")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-bad-cursor-client@example.com", "active")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -211,12 +187,12 @@ func TestListActivityHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-activity-paging"
 	practiceID := testdb.SeedPractice(t, db, "Owner Activity Paging")
-	ownerID := seedOwnerAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "owner-activity-paging-client@example.com", "active")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "owner-activity-paging-client@example.com", "active")
 
 	const total = 31 // activityPageSize (30) + 1, to force a second page
 	for range total {
-		seedActivity(t, db, practiceID, engagementID, activity.ActionVisitLogged, activity.StaffActor(ownerID))
+		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
 	}
 
 	srv, session := newServer(t, db, identityUID)
@@ -252,8 +228,8 @@ func TestListActivityHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "contractor-activity-unattached"
 	practiceID := testdb.SeedPractice(t, db, "Contractor Activity Unattached")
-	seedContractorAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "contractor-activity-unattached-client@example.com", "active")
+	testdb.SeedContractorAtPractice(t, db, practiceID, identityUID)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "contractor-activity-unattached-client@example.com", "active")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
