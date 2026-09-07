@@ -37,14 +37,18 @@
 	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
 
 	const settings = $derived([
-		// Payments (#267) is gated the same notch as blocked addresses, and
-		// for the same reason: its screen reads an Owner-or-Admin endpoint,
-		// so a Doula who followed the link would meet a screen with nothing
-		// on it. It stays first in the list for whoever does see it.
+		// Getting paid (#267) is gated the same notch as blocked addresses,
+		// and for the same reason: its screen reads an Owner-or-Admin
+		// endpoint, so a Doula who followed the link would meet a screen
+		// with nothing on it. It stays first in the list for whoever does
+		// see it. Labeled Getting paid, not Payments (#256): the route
+		// stays `/settings/payments` on purpose (ADR-0032), but CONTEXT.md
+		// defines Payment as money received against an Invoice, which this
+		// screen holds none of -- it manages a Connected account instead.
 		...(isPracticeOwnerOrAdmin
 			? [
 					{
-						label: 'Payments',
+						label: 'Getting paid',
 						description: 'How this Practice gets paid, and what Stripe still wants from it.',
 						href: resolve('/practices/[practiceId]/settings/payments', { practiceId })
 					}

@@ -180,8 +180,8 @@ Stripe refuses to create the older Accounts v1 shape for a new
 integration. Its state is two capability statuses, `card_payments` and
 `stripe_balance.payouts`, each one of `active` / `pending` / `restricted`
 / `unsupported`, plus a list of outstanding **requirements**. There is no
-single "connected / not connected" fact to read, which is why the Payments
-screen reports five states rather than two. See
+single "connected / not connected" fact to read, which is why the Getting
+paid screen reports five states rather than two. See
 [ADR-0007](docs/adr/0007-connect-account-state-is-two-capabilities-and-a-requirements-list.md).
 _Avoid_: Standard account, merchant account, Stripe account (ambiguous — the platform has one too)
 

@@ -26,10 +26,10 @@ async function setup(roles: string[] = []) {
 }
 
 describe('the Settings hub', () => {
-	it('withholds Payments, blocked addresses and MFA from a Doula', async () => {
+	it('withholds Getting paid, blocked addresses and MFA from a Doula', async () => {
 		await setup(['doula']);
 
-		await expect.element(testPage.getByRole('link', { name: 'Payments' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'Getting paid' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('link', { name: 'Website' })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Client Fields' })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Plan Templates' })).toBeVisible();
@@ -51,13 +51,13 @@ describe('the Settings hub', () => {
 	 * Contract nor the payment notice until somebody lifts it -- while who
 	 * is at the Practice at all stays the Owner's.
 	 */
-	it('gives an Admin the blocked-addresses and Payments entries but not the Owner-only MFA one', async () => {
+	it('gives an Admin the blocked-addresses and Getting paid entries but not the Owner-only MFA one', async () => {
 		await setup(['admin']);
 
-		// #267: Payments is the second entry gated at Owner-or-Admin, and
-		// for the same reason -- its screen reads an endpoint an Admin may
-		// read and a Doula may not.
-		await expect.element(testPage.getByRole('link', { name: 'Payments' })).toBeVisible();
+		// #267: Getting paid is the second entry gated at Owner-or-Admin,
+		// and for the same reason -- its screen reads an endpoint an Admin
+		// may read and a Doula may not.
+		await expect.element(testPage.getByRole('link', { name: 'Getting paid' })).toBeVisible();
 		const link = testPage.getByRole('link', { name: 'Blocked email addresses' });
 		await expect.element(link).toBeVisible();
 		await expect
@@ -73,7 +73,7 @@ describe('the Settings hub', () => {
 
 		const link = testPage.getByRole('link', { name: 'Multi-factor authentication' });
 		await expect.element(link).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Payments' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Getting paid' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Blocked email addresses' }))
 			.toBeVisible();

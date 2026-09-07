@@ -179,6 +179,44 @@ describe('payments settings screen', () => {
 
 });
 
+describe('what Getting paid is, who it is between, and how it differs from Credits (#256)', () => {
+	it('is titled Getting paid, not Payments', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'] });
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 1, name: 'Getting paid' }))
+			.toBeVisible();
+	});
+
+	// The intro is a fixed sentence, not the Connect status -- present
+	// before that fetch resolves (FormPage renders `intro` in its
+	// `loading` branch too, #256) and for every role, not only an Owner
+	// or Admin.
+	it('states its purpose and names Credits as the other screen, before the Connect status resolves', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'] });
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('This is where a Practice connects Stripe, so its Clients can pay it directly.'))
+			.toBeVisible();
+		await expect
+			.element(
+				testPage.getByText('Credits is a separate screen, where this Practice buys Credits from Doula Cloud.')
+			)
+			.toBeVisible();
+	});
+
+	it('states its purpose for a Doula too, who sees no Connect status at all', async () => {
+		mockApi({ status: 'not_connected', roles: ['doula'] });
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('This is where a Practice connects Stripe, so its Clients can pay it directly.'))
+			.toBeVisible();
+	});
+});
+
 describe('payments settings screen: the states Accounts v1 could not report', () => {
 	it('offers no onboarding button while Stripe is reviewing', async () => {
 		mockApi({ status: 'pending', roles: ['owner'] });

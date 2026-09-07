@@ -207,7 +207,7 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request, conte
 			key: 'practices/[practiceId]/billing',
 			archetype: 'C',
 			url: `/practices/${practiceId}/billing`,
-			h1: 'Billing'
+			h1: 'Credits'
 		},
 		{
 			key: 'practices/[practiceId]/staff',
@@ -326,7 +326,7 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request, conte
 			key: 'practices/[practiceId]/settings/payments',
 			archetype: 'F',
 			url: `/practices/${practiceId}/settings/payments`,
-			h1: 'Payments'
+			h1: 'Getting paid'
 		},
 		{
 			key: 'practices/[practiceId]/settings/contract-template',

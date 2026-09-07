@@ -41,5 +41,5 @@ export const fixture: RouteFixture<RouteParameters> = {
 			isContractor: false
 		}
 	},
-	readyText: 'Billing'
+	readyText: 'Credits'
 };

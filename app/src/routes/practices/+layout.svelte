@@ -64,7 +64,7 @@
 			{ label: 'Schedule', href: resolve('/practices/[practiceId]/schedule', { practiceId }) },
 			...(isAdmin
 				? [
-						// Invoices is the Practice's money in, Billing its money
+						// Invoices is the Practice's money in, Credits its money
 						// out (#265) -- two sections rather than one, because
 						// "what have our Clients not paid us" and "how many
 						// credits do we have left" are not the same question.
@@ -77,7 +77,11 @@
 						// comment argues (ADR-0008 has no Practice-wide row), so
 						// it sits behind the same flag rather than a new one.
 						{ label: 'Contracts', href: resolve('/practices/[practiceId]/contracts', { practiceId }) },
-						{ label: 'Billing', href: resolve('/practices/[practiceId]/billing', { practiceId }) },
+						// Labeled Credits, not Billing (#256): the route stays
+						// `/billing` on purpose (ADR-0032), but the visible
+						// name is the domain term CONTEXT.md defines, so it
+						// reads as a different counterparty than Getting paid.
+						{ label: 'Credits', href: resolve('/practices/[practiceId]/billing', { practiceId }) },
 						{ label: 'Staff', href: resolve('/practices/[practiceId]/staff', { practiceId }) }
 					]
 				: []),

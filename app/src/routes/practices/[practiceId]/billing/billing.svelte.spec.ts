@@ -140,11 +140,41 @@ describe('what a Credit buys (#286)', () => {
 	});
 });
 
+describe('what Credits is, who it is between, and how it differs from Getting paid (#256)', () => {
+	it('is titled Credits, not Billing', async () => {
+		await render(Page, { params: fixture.params, data: dataWithSession });
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Credits' })).toBeVisible();
+	});
+
+	it('names Doula Cloud as the counterparty and states the fixed price', async () => {
+		await render(Page, { params: fixture.params, data: dataWithSession });
+
+		await expect.element(testPage.getByText('Practices buy Credits from Doula Cloud.')).toBeVisible();
+		await expect.element(testPage.getByText('One Credit costs $20.00.')).toBeVisible();
+	});
+
+	it('names Getting paid as the other money screen, and what it is for', async () => {
+		await render(Page, { params: fixture.params, data: dataWithSession });
+
+		await expect
+			.element(
+				testPage.getByText(
+					'Getting paid is a separate screen, where this Practice connects Stripe so its Clients can pay it directly.'
+				)
+			)
+			.toBeVisible();
+	});
+});
+
 describe('what a Credit costs (#285)', () => {
 	it('states the unit price and the subtotal for the default quantity', async () => {
 		await renderBilling();
 
-		await expect.element(testPage.getByText('$20.00')).toBeVisible();
+		// exact: true, not a plain substring match -- #256's intro sentence
+		// ("One Credit costs $20.00.") also contains "$20.00", and this
+		// test means the DescriptionList's own Price per Credit value.
+		await expect.element(testPage.getByText('$20.00', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('$100.00')).toBeVisible();
 		await expect
 			.element(testPage.getByText('New York sales tax is added at checkout where it applies.'))
@@ -162,7 +192,9 @@ describe('what a Credit costs (#285)', () => {
 	it('says the price is unavailable, and still renders the balance and buy form, when Stripe could not be read', async () => {
 		await renderBilling({ price: undefined });
 
-		await expect.element(testPage.getByText('Credit price is unavailable right now.')).toBeVisible();
+		await expect
+			.element(testPage.getByText("This purchase's exact price could not be confirmed with Stripe right now."))
+			.toBeVisible();
 		await expect.element(testPage.getByText(`Credit balance: ${data.balance}`)).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeVisible();
 	});
