@@ -16,8 +16,6 @@ import (
 	"doula-cloud/api/internal/objectstore"
 )
 
-const statusSigned = "signed"
-
 // SignContractRequest is the body of the Client-portal Sign request: only
 // what the Client themselves supplies -- the typed full legal name and
 // the attestation checkbox state. signed_at and the signer's IP are never
@@ -74,8 +72,8 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if status != statusSent {
-			apierr.WriteError(w, "contract is not awaiting signature", http.StatusConflict)
+		if ok, refusal := TransitionSign.Check(Status(status)); !ok {
+			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
 
@@ -96,7 +94,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			 SET status = $1::contract_status, signer_full_name = $2, signer_attestation = $3,
 			     signed_at = now(), signer_ip = $4, signed_pdf_object_path = $5
 			 WHERE id = $6`,
-			statusSigned, req.FullLegalName, req.Attestation, clientip.From(r), objectPath, id,
+			string(StatusSigned), req.FullLegalName, req.Attestation, clientip.From(r), objectPath, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -110,7 +108,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 
 		out := ContractResponse{
 			EngagementID: engagementID,
-			Status:       statusSigned,
+			Status:       string(StatusSigned),
 			Prose:        prose,
 			MergeFields:  extractMergeFields(prose),
 			Values:       values.nonEmpty(),

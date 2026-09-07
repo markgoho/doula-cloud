@@ -69,7 +69,7 @@ func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 	const uid = "invoice-one-customer"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedDraftContract(t, db, engagementID)
+	seedSignedContract(t, db, engagementID)
 	const accountID = "acct_one_customer"
 	seedConnectAccount(t, db, practiceID, accountID)
 
@@ -114,7 +114,7 @@ func TestPostInvoiceHandler_PreExistingMappingIsUsedUnchanged(t *testing.T) {
 	const uid = "invoice-preallocated"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedDraftContract(t, db, engagementID)
+	seedSignedContract(t, db, engagementID)
 	const accountID = "acct_preallocated"
 	seedConnectAccount(t, db, practiceID, accountID)
 
@@ -153,7 +153,7 @@ func TestPostInvoiceHandler_CustomerFailureRaisesNoInvoice(t *testing.T) {
 	const uid = "invoice-customer-fails"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedDraftContract(t, db, engagementID)
+	seedSignedContract(t, db, engagementID)
 	seedConnectAccount(t, db, practiceID, "acct_customer_fails")
 
 	client := payments.NewFakeClient()

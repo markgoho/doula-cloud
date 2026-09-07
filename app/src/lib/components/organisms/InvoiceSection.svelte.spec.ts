@@ -6,6 +6,7 @@ import type { Invoice } from '#lib/invoice.js';
 
 interface SetupOptions {
 	invoices?: Invoice[];
+	contractStatus?: string;
 	connectGate?: { isOwner: boolean };
 	onCreate?: (amountCents: number) => Promise<void>;
 	onConnect?: () => Promise<void>;
@@ -32,11 +33,12 @@ const invoicePaid: Invoice = {
 
 async function setup({
 	invoices = [],
+	contractStatus = 'signed',
 	connectGate,
 	onCreate = vi.fn().mockResolvedValue(undefined),
 	onConnect = vi.fn().mockResolvedValue(undefined)
 }: SetupOptions = {}) {
-	await render(InvoiceSection, { invoices, connectGate, onCreate, onConnect });
+	await render(InvoiceSection, { invoices, contractStatus, connectGate, onCreate, onConnect });
 	return { onCreate, onConnect };
 }
 
@@ -156,5 +158,44 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByText('Ask a Practice Owner to connect Stripe.')).toBeInTheDocument();
 		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+	});
+
+	// #275: a Contract that cannot be billed hides Create Invoice and says
+	// why, taking priority over the connect gate -- a voided Contract at an
+	// unconnected Practice must not show "Connect Stripe" first.
+	it('shows why billing is unavailable instead of the form on a draft Contract', async () => {
+		await setup({ contractStatus: 'draft' });
+
+		await expect
+			.element(page.getByText('Invoicing is unavailable until the Client signs this Contract.'))
+			.toBeVisible();
+		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+	});
+
+	it('shows why billing is unavailable instead of the form on a sent (unsigned) Contract', async () => {
+		await setup({ contractStatus: 'sent' });
+
+		await expect
+			.element(page.getByText('Invoicing is unavailable until the Client signs this Contract.'))
+			.toBeVisible();
+		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+	});
+
+	it('shows a voided-specific message instead of the form on a voided Contract', async () => {
+		await setup({ contractStatus: 'voided' });
+
+		await expect
+			.element(
+				page.getByText('This Contract has been voided. Invoicing is unavailable until Staff issues a new Contract.')
+			)
+			.toBeVisible();
+		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+	});
+
+	it('takes priority over the connect gate on an unbillable Contract', async () => {
+		await setup({ contractStatus: 'voided', connectGate: { isOwner: true } });
+
+		await expect.element(page.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+		await expect.element(page.getByText(/This Contract has been voided/)).toBeVisible();
 	});
 });

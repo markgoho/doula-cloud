@@ -66,7 +66,7 @@ func serveSignedPDF(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store ob
 	err := tx.QueryRowContext(r.Context(),
 		`SELECT signed_pdf_object_path FROM contracts
 		 WHERE engagement_id = $1 AND status = $2::contract_status AND signed_pdf_object_path IS NOT NULL`,
-		engagementID, statusSigned,
+		engagementID, string(StatusSigned),
 	).Scan(&objectPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "no signed contract found for this engagement", http.StatusNotFound)

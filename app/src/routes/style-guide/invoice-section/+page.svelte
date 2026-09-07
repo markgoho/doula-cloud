@@ -33,18 +33,19 @@
 
 	<section>
 		<h2>Stripe connected</h2>
-		<InvoiceSection {invoices} onCreate={async () => {}} onConnect={async () => {}} />
+		<InvoiceSection {invoices} contractStatus="signed" onCreate={async () => {}} onConnect={async () => {}} />
 	</section>
 
 	<section>
 		<h2>No Invoices yet</h2>
-		<InvoiceSection invoices={[]} onCreate={async () => {}} onConnect={async () => {}} />
+		<InvoiceSection invoices={[]} contractStatus="signed" onCreate={async () => {}} onConnect={async () => {}} />
 	</section>
 
 	<section>
 		<h2>Connect gate, seen by the Owner</h2>
 		<InvoiceSection
 			invoices={[]}
+			contractStatus="signed"
 			connectGate={{ isOwner: true }}
 			onCreate={async () => {}}
 			onConnect={async () => {}}
@@ -55,9 +56,22 @@
 		<h2>Connect gate, seen by anyone else</h2>
 		<InvoiceSection
 			invoices={[]}
+			contractStatus="signed"
 			connectGate={{ isOwner: false }}
 			onCreate={async () => {}}
 			onConnect={async () => {}}
 		/>
+	</section>
+
+	<!-- #275: a Contract that cannot be billed hides Create Invoice and says
+	     why, whether or not Stripe is connected. -->
+	<section>
+		<h2>Contract not yet signed</h2>
+		<InvoiceSection invoices={[]} contractStatus="sent" onCreate={async () => {}} onConnect={async () => {}} />
+	</section>
+
+	<section>
+		<h2>Contract voided</h2>
+		<InvoiceSection invoices={[]} contractStatus="voided" onCreate={async () => {}} onConnect={async () => {}} />
 	</section>
 </stack-l>

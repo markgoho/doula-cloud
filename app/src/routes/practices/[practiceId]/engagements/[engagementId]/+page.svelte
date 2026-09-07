@@ -993,7 +993,13 @@
 		<Notice variant="error" message={invoicesError} />
 	{/if}
 
-	<InvoiceSection {invoices} {connectGate} onCreate={handleCreateInvoice} onConnect={handleConnectInvoicing} />
+	<InvoiceSection
+		{invoices}
+		contractStatus={contract!.status}
+		{connectGate}
+		onCreate={handleCreateInvoice}
+		onConnect={handleConnectInvoicing}
+	/>
 {/snippet}
 
 {#snippet offersSection()}

@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -69,11 +70,22 @@ type ListInvoicesResponse struct {
 // a 200 gate response is returned instead: an Owner gets ConnectRequired
 // so the frontend can route them into the #79 connect flow, a non-Owner
 // gets the same flag so the frontend can show the static "ask an Owner"
-// message. Must be mounted behind staffauth.Middleware.
+// message.
+//
+// Before any of that, #275: the Contract must be billable at all, per
+// contracts.TransitionBill -- Signed and still in force. A Draft, a Sent
+// (unsigned), or a Voided Contract 409s here, before the Connect gate and
+// well before anything is asked of Stripe. This is the fifth route that
+// consults contracts' one lifecycle declaration, alongside Contract's own
+// edit/send/void/sign transitions.
 func PostInvoiceHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, engagementID, contractID, ok := resolveInvoiceEngagement(w, r)
+		tx, practiceID, engagementID, contractID, contractStatus, ok := resolveInvoiceEngagement(w, r)
 		if !ok {
+			return
+		}
+		if billable, refusal := contracts.TransitionBill.Check(contractStatus); !billable {
+			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
 
@@ -248,43 +260,44 @@ func GetInvoicesHandler() http.Handler {
 
 // resolveInvoiceEngagement resolves the request-scoped tx, Practice id,
 // and :engagementId path segment, confirms the Engagement belongs to the
-// current Practice, and fetches its current Contract id (the most
-// recently created row, mirroring contracts.fetchContract's "most recent
-// wins" rule) -- the shared prologue for PostInvoiceHandler. Writes the
-// appropriate error response itself and returns ok=false on any failure.
-func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID, engagementID, contractID string, ok bool) {
+// current Practice, and fetches its current Contract's id and status
+// (the most recently created row, mirroring contracts.fetchContract's
+// "most recent wins" rule) -- the shared prologue for PostInvoiceHandler.
+// Writes the appropriate error response itself and returns ok=false on
+// any failure.
+func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID, engagementID, contractID string, contractStatus contracts.Status, ok bool) {
 	tx, practiceID, ok = staffauth.RequireTx(w, r)
 	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 	if !ok {
-		return nil, "", "", "", false
+		return nil, "", "", "", "", false
 	}
 
 	engagementID = r.PathValue("engagementId")
 	if !staffauth.ParseUUID(w, "engagement", engagementID) {
-		return nil, "", "", "", false
+		return nil, "", "", "", "", false
 	}
 	if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return nil, "", "", "", false
+			return nil, "", "", "", "", false
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", "", "", false
+		return nil, "", "", "", "", false
 	}
 
-	contractID, err := fetchCurrentContractID(r.Context(), tx, engagementID)
+	contractID, contractStatus, err := fetchCurrentContract(r.Context(), tx, engagementID)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-		return nil, "", "", "", false
+		return nil, "", "", "", "", false
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", "", "", false
+		return nil, "", "", "", "", false
 	}
 
-	return tx, practiceID, engagementID, contractID, true
+	return tx, practiceID, engagementID, contractID, contractStatus, true
 }
 
 // requireEngagementAtPractice confirms engagementID exists and belongs to
@@ -306,18 +319,22 @@ func requireEngagementAtPractice(ctx context.Context, tx *sql.Tx, engagementID, 
 	return nil
 }
 
-// fetchCurrentContractID returns the id of engagementID's most recently
-// created Contract row, or a wrapped sql.ErrNoRows if none exists yet.
-func fetchCurrentContractID(ctx context.Context, tx *sql.Tx, engagementID string) (string, error) {
-	var id string
-	err := tx.QueryRowContext(ctx,
-		`SELECT id FROM contracts WHERE engagement_id = $1 ORDER BY created_at DESC LIMIT 1`, engagementID,
-	).Scan(&id)
+// fetchCurrentContract returns the id and status of engagementID's most
+// recently created Contract row, or a wrapped sql.ErrNoRows if none
+// exists yet. The status travels back with the id (rather than a
+// separate query) because resolveInvoiceEngagement's only caller,
+// PostInvoiceHandler, needs it immediately afterward to check
+// contracts.TransitionBill -- #275.
+func fetchCurrentContract(ctx context.Context, tx *sql.Tx, engagementID string) (id string, status contracts.Status, err error) {
+	var rawStatus string
+	err = tx.QueryRowContext(ctx,
+		`SELECT id, status FROM contracts WHERE engagement_id = $1 ORDER BY created_at DESC LIMIT 1`, engagementID,
+	).Scan(&id, &rawStatus)
 	// coverage:ignore reason: the sql.ErrNoRows branch is exercised by unit tests; a non-ErrNoRows DB failure here is not
 	if err != nil {
-		return "", fmt.Errorf("payments: fetch current contract: %w", err)
+		return "", "", fmt.Errorf("payments: fetch current contract: %w", err)
 	}
-	return id, nil
+	return id, contracts.Status(rawStatus), nil
 }
 
 // fetchConnectAccount reads practiceID's stored Stripe Connect account id,
