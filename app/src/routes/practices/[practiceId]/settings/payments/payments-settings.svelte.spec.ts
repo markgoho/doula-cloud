@@ -216,6 +216,23 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 	});
 
+	// The same count, said to somebody who is not the one Stripe will ask.
+	// "from you" is the Owner's sentence; the Admin reads the state of the
+	// Practice's account, not an errand she could run if she wanted to.
+	it('names the Owner rather than the reader when an Admin reads the count', async () => {
+		mockApi({
+			status: 'onboarding_incomplete',
+			roles: ['admin'],
+			requirementsDue: ['configuration.merchant.mcc']
+		});
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('Stripe needs 1 more detail from a Practice Owner.'))
+			.toBeVisible();
+		await expect.element(testPage.getByText('Stripe needs 1 more detail from you.')).not.toBeInTheDocument();
+	});
+
 	it('offers no onboarding button when payouts are held up with nothing to supply', async () => {
 		mockApi({ status: 'payouts_restricted', roles: ['owner'], requirementsDue: [] });
 		await render(Page, {});
