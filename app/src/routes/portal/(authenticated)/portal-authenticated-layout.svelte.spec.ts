@@ -15,7 +15,12 @@ import Layout from './+layout.svelte';
 const pageState = vi.hoisted(() => ({
 	params: { engagementId: 'engagement-1' },
 	url: new URL('http://localhost/portal/engagements/engagement-1'),
-	data: {} as { practiceName?: string; clientName?: string; createdAt?: string }
+	data: {} as {
+		practiceName?: string;
+		clientName?: string;
+		createdAt?: string;
+		offersBirthPlan?: boolean;
+	}
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
@@ -53,12 +58,17 @@ interface SetupOptions {
 	 * component's own job is unchanged: draw the bar regardless.
 	 */
 	identityUnknown?: boolean;
+	/** #311: whether the Engagement calls for a Birth Plan -- true by
+	 * default so every existing test here keeps seeing the same five nav
+	 * items it always has. */
+	offersBirthPlan?: boolean;
 }
 
 async function setup({
 	outcome = { ok: true },
 	pathname = '/portal/engagements/engagement-1',
-	identityUnknown = false
+	identityUnknown = false,
+	offersBirthPlan = true
 }: SetupOptions = {}) {
 	pageState.url = new URL(`http://localhost${pathname}`);
 	pageState.data = identityUnknown
@@ -66,7 +76,8 @@ async function setup({
 		: {
 				practiceName: 'Riverside Doula Collective',
 				clientName: 'Tasha Bell',
-				createdAt: '2026-03-12T20:00:00Z'
+				createdAt: '2026-03-12T20:00:00Z',
+				offersBirthPlan
 			};
 	goto.mockReset();
 	invalidateAll.mockReset();
@@ -131,6 +142,17 @@ describe('Client portal authenticated layout', () => {
 		await setup();
 
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeVisible();
+	});
+
+	// #311: a postpartum-only Engagement offers no Birth Plan anywhere in
+	// the portal -- this persistent nav item included, with no gap left in
+	// its place.
+	it('offers no Birth plan nav item when the Engagement does not call for one', async () => {
+		await setup({ offersBirthPlan: false });
+
+		await expect.element(page.getByRole('link', { name: 'Your care' }).first()).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Contract' }).first()).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Birth plan' })).not.toBeInTheDocument();
 	});
 
 	/*

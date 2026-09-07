@@ -12,6 +12,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
+	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 
 	let instance = $state<Instance | null | undefined>();
 	let error = $state('');
@@ -19,6 +20,10 @@
 	let acknowledgeError = $state('');
 
 	onMount(async () => {
+		// #311: not applicable, per ADR-0015's suppression rule -- skip the
+		// fetch entirely rather than let a real Birth Plan endpoint 404
+		// read as "not yet".
+		if (!page.data.offersBirthPlan) return;
 		try {
 			instance = await loadClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
 		} catch (error_) {
@@ -44,34 +49,48 @@
 	}
 </script>
 
-<div class="no-print">
-	<BackLink
-		href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
+{#if !page.data.offersBirthPlan}
+	<!--
+		#311: an Engagement this does not apply to gets the portal's
+		ordinary not-found state -- the same one `+error.svelte` renders --
+		rather than a Birth-Plan-specific message. CONTEXT.md's Birth Plan
+		entry: where it does not apply, she meets no mention of it at all.
+	-->
+	<ErrorPage
+		kind="notFound"
+		wayOutHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
+		wayOutLabel="Go to your care"
 	/>
-</div>
-
-<PageTitle page="Birth Plan" serviceName={page.data.practiceName} />
-
-{#if error}
-	<div class="no-print"><Notice variant="error" message={error} /></div>
-{:else if instance === undefined}
-	<div class="no-print"><Text text="Loading..." /></div>
-{:else if instance === null}
-	<div class="no-print"><Text text="No Birth Plan has been created for your care yet." /></div>
 {:else}
-	<Heading level={1} text="Birth Plan" />
 	<div class="no-print">
-		<Button label="Print" onClick={() => print()} />
-		{#if instance.clientAcknowledgedAt}
-			<Notice variant="status" message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}." />
-		{:else}
-			<Button label="I've read this" onClick={handleAcknowledge} loading={isAcknowledging} />
-		{/if}
-		{#if acknowledgeError}
-			<Notice variant="error" message={acknowledgeError} />
-		{/if}
+		<BackLink
+			href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
+		/>
 	</div>
-	<BirthPlanView fields={instance.fields} answers={instance.answers} />
+
+	<PageTitle page="Birth Plan" serviceName={page.data.practiceName} />
+
+	{#if error}
+		<div class="no-print"><Notice variant="error" message={error} /></div>
+	{:else if instance === undefined}
+		<div class="no-print"><Text text="Loading..." /></div>
+	{:else if instance === null}
+		<div class="no-print"><Text text="No Birth Plan has been created for your care yet." /></div>
+	{:else}
+		<Heading level={1} text="Birth Plan" />
+		<div class="no-print">
+			<Button label="Print" onClick={() => print()} />
+			{#if instance.clientAcknowledgedAt}
+				<Notice variant="status" message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}." />
+			{:else}
+				<Button label="I've read this" onClick={handleAcknowledge} loading={isAcknowledging} />
+			{/if}
+			{#if acknowledgeError}
+				<Notice variant="error" message={acknowledgeError} />
+			{/if}
+		</div>
+		<BirthPlanView fields={instance.fields} answers={instance.answers} />
+	{/if}
 {/if}
 
 <style>

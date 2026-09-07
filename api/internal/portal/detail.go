@@ -14,6 +14,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/engagement"
 )
 
 // Detail is an Engagement's basic detail as seen from the Client portal:
@@ -43,6 +44,12 @@ type Detail struct {
 	// from this DTO once before (#505, when the portal page had no use
 	// for it) and is back now that the chrome does.
 	CreatedAt time.Time `json:"createdAt"`
+	// OffersBirthPlan is engagement.OffersBirthPlan's own resolved answer
+	// (#311), not the Engagement's kind -- kind is staff-only
+	// (CONTEXT.md's Engagement entry) and must never reach a Client-facing
+	// response. Every portal surface that offers, links to or announces a
+	// Birth Plan reads this one field, so they cannot drift apart.
+	OffersBirthPlan bool `json:"offersBirthPlan"`
 }
 
 // DetailHandler views the caller's Engagement's basic detail. Must be
@@ -60,16 +67,17 @@ func DetailHandler() http.Handler {
 
 		var d Detail
 		var dueDate sql.NullString
+		var kind string
 		err := tx.QueryRowContext(r.Context(),
 			`SELECT e.id, p.name,
 			        trim(concat_ws(' ', coalesce(c.preferred_name, c.given_name), c.family_name)),
-			        e.status, e.due_date::text, e.created_at
+			        e.status, e.due_date::text, e.created_at, e.kind::text
 			 FROM engagements e
 			 JOIN practices p ON p.id = e.practice_id
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &dueDate, &d.CreatedAt)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &dueDate, &d.CreatedAt, &kind)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
@@ -83,6 +91,7 @@ func DetailHandler() http.Handler {
 		if dueDate.Valid {
 			d.DueDate = &dueDate.String
 		}
+		d.OffersBirthPlan = engagement.OffersBirthPlan(engagement.BirthPlanInputs{Kind: engagement.Kind(kind)})
 
 		apierr.WriteJSON(w, http.StatusOK, d)
 	})

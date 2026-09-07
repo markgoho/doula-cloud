@@ -10,6 +10,12 @@ export interface EngagementIdentity {
 	 * way back to the portal root needs it to build the same
 	 * `engagementLabel` the root list and the choosers use. */
 	createdAt: string;
+	/** portal.Detail's own resolved answer to ADR-0015's suppression
+	 * question (#311) -- never the Engagement's kind itself, which
+	 * CONTEXT.md gives no Client word and which this DTO never carries.
+	 * Every portal surface that offers, links to or announces a Birth
+	 * Plan reads this one field. */
+	offersBirthPlan: boolean;
 }
 
 /**

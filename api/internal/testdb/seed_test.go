@@ -249,6 +249,25 @@ func TestSeedEngagementInStatus(t *testing.T) {
 	}
 }
 
+// TestSeedEngagementWithKind proves the Engagement lands with the
+// explicit kind given, not the 'birth' every other seed helper here
+// hardcodes.
+func TestSeedEngagementWithKind(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Engagement With Kind Test Practice")
+	_, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Sasha Client", "sasha@example.com", "postpartum")
+
+	var kind string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT kind::text FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&kind); err != nil {
+		t.Fatalf("read seeded engagement: %v", err)
+	}
+	if kind != "postpartum" {
+		t.Fatalf("kind = %q, want postpartum", kind)
+	}
+}
+
 // TestSeedActivity proves the row it writes lands through the real
 // activity.Record path, readable back with the subject and action given.
 func TestSeedActivity(t *testing.T) {

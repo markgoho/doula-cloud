@@ -34,7 +34,12 @@
 	 * now loads it before first paint, so it is read here instead.
 	 */
 	const detail = $derived(
-		page.data as { practiceName?: string; clientName?: string; createdAt?: string }
+		page.data as {
+			practiceName?: string;
+			clientName?: string;
+			createdAt?: string;
+			offersBirthPlan?: boolean;
+		}
 	);
 
 	const engagementId = $derived(page.params.engagementId!);
@@ -86,12 +91,19 @@
 					engagementId
 				})
 			},
-			{
-				label: 'Birth plan',
-				href: resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', {
-					engagementId
-				})
-			},
+			// #311: offered only where the Engagement's kind calls for one --
+			// a postpartum-only Engagement offers no Birth Plan anywhere in
+			// the portal, this nav item included.
+			...(detail.offersBirthPlan
+				? [
+						{
+							label: 'Birth plan',
+							href: resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', {
+								engagementId
+							})
+						}
+					]
+				: []),
 			{
 				label: 'Contract',
 				href: resolve('/portal/(authenticated)/engagements/[engagementId]/contract', {

@@ -2,6 +2,7 @@ package portal_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -32,6 +33,15 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 // detail-view tests care about, and no other package's fixture needs it.
 func seedClientAtPracticeWithDueDate(t *testing.T, db *testdb.DB, identityUID, practiceName, dueDate string) (engagementID, status string) {
 	t.Helper()
+	return seedClientAtPracticeWithDueDateAndKind(t, db, identityUID, practiceName, dueDate, "birth")
+}
+
+// seedClientAtPracticeWithDueDateAndKind is
+// seedClientAtPracticeWithDueDate with an explicit kind, for #311's own
+// offersBirthPlan assertions -- every other call in this file wants the
+// 'birth' default, so that one stays the short form.
+func seedClientAtPracticeWithDueDateAndKind(t *testing.T, db *testdb.DB, identityUID, practiceName, dueDate, kind string) (engagementID, status string) {
+	t.Helper()
 
 	var practiceID string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -50,8 +60,8 @@ func seedClientAtPracticeWithDueDate(t *testing.T, db *testdb.DB, identityUID, p
 
 	status = "intake"
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind, due_date) VALUES ($1, $2, $3, 'birth', nullif($4, '')::date) RETURNING id`,
-		clientID, practiceID, status, dueDate,
+		`INSERT INTO engagements (client_id, practice_id, status, kind, due_date) VALUES ($1, $2, $3, $5, nullif($4, '')::date) RETURNING id`,
+		clientID, practiceID, status, dueDate, kind,
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)
 	}
@@ -112,6 +122,11 @@ func TestDetailHandler_Success(t *testing.T) {
 	if out.DueDate == nil || *out.DueDate != "2027-06-15" {
 		t.Fatalf("dueDate = %v, want %q", out.DueDate, "2027-06-15")
 	}
+	// #311: a birth Engagement's own read still resolves the question
+	// true, the same as before this field existed.
+	if !out.OffersBirthPlan {
+		t.Fatalf("offersBirthPlan = %v, want true for a birth Engagement", out.OffersBirthPlan)
+	}
 	// #310: when the Engagement began, back on this DTO for the chrome's
 	// switcher label.
 	if out.CreatedAt.IsZero() {
@@ -152,6 +167,56 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 	}
 	if _, present := raw["dueDate"]; present {
 		t.Fatalf("dueDate key present in response, want omitted: %v", raw["dueDate"])
+	}
+}
+
+// TestDetailHandler_PostpartumEngagementDoesNotOfferBirthPlan proves
+// #311's own AC: the portal's Engagement read resolves the suppression
+// question for a postpartum-only Engagement to false, and the raw kind
+// never appears in the response at all -- CONTEXT.md's Engagement entry
+// gives kind no Client word, so no key on this DTO may carry it.
+func TestDetailHandler_PostpartumEngagementDoesNotOfferBirthPlan(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-detail-postpartum-uid"
+	engagementID, _ := seedClientAtPracticeWithDueDateAndKind(t, db, identityUID, "Postpartum Only Doulas", "", "postpartum")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	var out portal.Detail
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.OffersBirthPlan {
+		t.Fatalf("offersBirthPlan = %v, want false for a postpartum Engagement", out.OffersBirthPlan)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw response: %v", err)
+	}
+	if _, present := raw["kind"]; present {
+		t.Fatalf("kind key present in response, want omitted entirely: %v", raw["kind"])
 	}
 }
 
