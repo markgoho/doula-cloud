@@ -34,6 +34,12 @@ const (
 	testAddress    = "renata@example.test"
 )
 
+// completeStatusBody is the PATCH .../status body every completion test
+// here sends -- one shared literal rather than three copies of the same
+// two-key map (#253's TransitionHandler replaced the old bare-body POST
+// .../complete these tests used to drive).
+var completeStatusBody = map[string]string{"status": engagement.StatusCompleted, "endingReason": "care_complete"}
+
 // newServer mounts this package's whole surface through offer.Mount --
 // the Practice side and the pre-account token-authenticated side both --
 // the same call main.go makes on the real GatedRouter and

@@ -1,5 +1,5 @@
 // Package engagement holds the Staff-side BFF handlers for Engagement
-// detail and completion. All handlers rely on staffauth.Middleware
+// detail and its status transition (#253). All handlers rely on staffauth.Middleware
 // having already resolved the caller's Staff/Practice ids and opened a
 // request-scoped *sql.Tx with app.current_practice_id set, the same way
 // staffauth's own Owner-only handlers (invite, role assignment) do. The
@@ -32,6 +32,13 @@ type Detail struct {
 	// field (#505) -- same nullable-column read, same omitted-when-null
 	// shape (#538).
 	DueDate *string `json:"dueDate,omitempty"`
+	// StatusMoves (#253) is legalMoves(reader, Status) -- exactly the
+	// target statuses this caller may move to from Status, per ADR-0015's
+	// six-move table narrowed by its role table. TransitionHandler
+	// answers the same call with the same function, so the Engagement hub
+	// renders exactly the controls the write endpoint will accept without
+	// copying the role table into Svelte.
+	StatusMoves []string `json:"statusMoves"`
 }
 
 // DetailHandler views one Engagement's basic detail: every Staff role
@@ -91,6 +98,7 @@ func DetailHandler() http.Handler {
 		if dueDate.Valid {
 			d.DueDate = &dueDate.String
 		}
+		d.StatusMoves = legalMoves(reader, d.Status)
 
 		apierr.WriteJSON(w, http.StatusOK, d)
 	})

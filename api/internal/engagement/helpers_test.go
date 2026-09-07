@@ -29,3 +29,12 @@ const doulaRole = "doula"
 // ownerRole is named once so golangci-lint's goconst check doesn't see
 // repeated "owner" literals across this package's test surface.
 const ownerRole = "owner"
+
+// employeeType is named once for the same reason, shared by every test
+// that seeds a Staff member's employment_type.
+const employeeType = "employee"
+
+// careCompleteReason is named once for the same reason, shared by every
+// transition test that completes an Engagement without caring which of
+// the six legal ending reasons it carries.
+const careCompleteReason = "care_complete"

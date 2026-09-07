@@ -47,6 +47,7 @@ interface Detail {
 	status: string;
 	createdAt: string;
 	dueDate?: string;
+	statusMoves: string[];
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -98,7 +99,8 @@ async function setup(detail: Detail, activityResponse?: Response) {
 // which would erase the fixture responder a caller sets up itself -- the
 // #841 test below takes the same direct-render path for the same reason.
 async function renderWithFixtureResponder(
-	respondOverride?: (path: string, init?: RequestInit) => Promise<Response> | undefined
+	respondOverride?: (path: string, init?: RequestInit) => Promise<Response> | undefined,
+	detail: Detail = fixtureDetail
 ) {
 	await testPage.viewport(1440, 900);
 	const respond = toApiResponder(fixture);
@@ -109,7 +111,7 @@ async function renderWithFixtureResponder(
 	});
 	await render(Page, {
 		data: {
-			...fixtureDetail,
+			...detail,
 			session: {
 				practiceId: fixture.params.practiceId,
 				practiceName: 'Riverside Doula Collective',
@@ -145,6 +147,101 @@ describe('Staff Engagement detail summary', () => {
 
 		await expect.element(testPage.getByText('active')).toBeVisible();
 		await expect.element(testPage.getByText(/due date/i)).not.toBeInTheDocument();
+	});
+});
+
+// #253: the status-move controls -- exactly what Detail.statusMoves
+// names, nothing hand-decided in the component.
+describe('the status-move controls (#253)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('shows no status control at all when statusMoves is empty', async () => {
+		await setup({ ...fixtureDetail, statusMoves: [] });
+
+		await expect.element(testPage.getByRole('button', { name: 'Mark care complete' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: /reopen|mark care as active/i })).not.toBeInTheDocument();
+	});
+
+	it('moves status directly for a move that is not completing, and reflects it without a reload', async () => {
+		const requests: { path: string; body: unknown }[] = [];
+		await renderWithFixtureResponder(
+			(path, init) => {
+				if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
+				requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+				return Promise.resolve(jsonResponse({ status: 'active', statusMoves: ['completed'] }));
+			},
+			{ ...fixtureDetail, status: 'completed', statusMoves: ['active'] }
+		);
+
+		await testPage.getByRole('button', { name: 'Reopen (correction)' }).click();
+
+		await expect.poll(() => requests).toHaveLength(1);
+		expect(requests[0]!.body).toEqual({ status: 'active' });
+		await expect.element(testPage.getByText('active', { exact: true })).toBeVisible();
+	});
+
+	it('asks for a reason before completing, and refuses to submit without one', async () => {
+		const requests: unknown[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
+			requests.push(init.body);
+			return Promise.resolve(jsonResponse({ status: 'completed', statusMoves: ['active'] }));
+		});
+
+		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
+		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
+
+		// GOV.UK's own pattern says the message twice -- once in the error
+		// summary's link, once against the radio group itself. Both are
+		// role="alert" (the same disambiguation the sibling
+		// engagement-requests/new spec uses for its own refusal).
+		await expect
+			.element(testPage.getByRole('link', { name: 'Select why this Engagement is ending' }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('alert').last())
+			.toHaveTextContent('Select why this Engagement is ending');
+		expect(requests).toHaveLength(0);
+	});
+
+	it('submits the chosen reason and note, then reflects the new status', async () => {
+		const requests: { path: string; body: unknown }[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
+			requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+			return Promise.resolve(jsonResponse({ status: 'completed', statusMoves: ['active'] }));
+		});
+
+		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
+		await testPage.getByLabelText('The work finished as agreed').click();
+		await testPage.getByLabelText('Note (optional)').fill('Baby arrived safely.');
+		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
+
+		await expect.poll(() => requests).toHaveLength(1);
+		expect(requests[0]!.body).toEqual({
+			status: 'completed',
+			endingReason: 'care_complete',
+			endingNote: 'Baby arrived safely.'
+		});
+		await expect.element(testPage.getByText('completed', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Confirm completion' })).not.toBeInTheDocument();
+	});
+
+	it('shows the refusal when the BFF rejects the move', async () => {
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'PATCH' || !path.endsWith('/status')) return;
+			return Promise.resolve(jsonResponse('endingReason is required to complete an Engagement', 400));
+		});
+
+		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
+		await testPage.getByLabelText('The work finished as agreed').click();
+		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
+
+		await expect
+			.element(testPage.getByText('endingReason is required to complete an Engagement'))
+			.toBeVisible();
 	});
 });
 

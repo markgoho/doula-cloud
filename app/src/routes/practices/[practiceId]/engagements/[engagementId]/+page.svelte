@@ -4,10 +4,13 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { SectionState } from '#lib/sectionState.svelte.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
+		changeEngagementStatus,
 		createVisit,
 		downloadAttachment,
+		endingReasons,
 		loadAttachmentPreviews,
 		loadMessagesPage,
 		loadOffersSection as loadOffers,
@@ -58,6 +61,8 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -71,6 +76,7 @@
 		status: string;
 		createdAt: string;
 		dueDate?: string;
+		statusMoves: string[];
 	};
 
 	// The Engagement comes from +page.ts's load now, not an onMount fetch
@@ -94,6 +100,73 @@
 		practiceId: page.params.practiceId!,
 		engagementId: page.params.engagementId!
 	});
+
+	// #253: the Engagement's status and its next legal moves, overlaid on
+	// the load-time read once a move succeeds -- so the page reflects it
+	// without a reload. Written by both paths below (the bare-click moves
+	// and the completing form), which is why it is one plain $state
+	// rather than living inside either path's own submission object.
+	// undefined means "no move made yet", in which case
+	// `displayStatus`/`displayStatusMoves` fall back to `detail` itself.
+	let statusOverride = $state<{ status: string; statusMoves: string[] } | undefined>();
+	const displayStatus = $derived(statusOverride?.status ?? detail?.status ?? '');
+	const displayStatusMoves = $derived(statusOverride?.statusMoves ?? detail?.statusMoves ?? []);
+
+	// intake -> active and the reopen correction are bare commands, not a
+	// form -- nothing is asked of the caller, so this stays SectionState +
+	// Notice, the same shape every other row control on this page uses
+	// (reassign, schedule, notes).
+	const directMove = new SectionState<void>(undefined);
+
+	async function handleStatusMoveClick(move: string) {
+		if (move === 'completed') {
+			isCompleteFormShown = true;
+			return;
+		}
+		isCompleteFormShown = false;
+		await directMove.mutate(async () => {
+			statusOverride = await changeEngagementStatus(apiFetchWithSession, reference, move);
+		}, 'Failed to change status');
+	}
+
+	// Completing asks for a reason -- GOV.UK's question-page pattern
+	// (ADR-0021), the same FormSubmission/ErrorSummary shape
+	// engagement-requests/new's own Refuse-shaped radio group uses, not a
+	// hand-rolled error string: `errorFor` is what lets RadioGroup show
+	// the same wording ErrorSummary lists at the top.
+	const completeSubmission = new FormSubmission();
+	let isCompleteFormShown = $state(false);
+	let completeReasonValue = $state('');
+	let completeNoteValue = $state('');
+	const endingReasonFieldId = `ending-reason-${endingReasons[0]!.value}`;
+
+	async function handleCompleteSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		await completeSubmission.run(async () => {
+			if (!completeReasonValue) {
+				return [{ message: 'Select why this Engagement is ending', targetId: endingReasonFieldId }];
+			}
+			statusOverride = await changeEngagementStatus(
+				apiFetchWithSession,
+				reference,
+				'completed',
+				completeReasonValue,
+				completeNoteValue || undefined
+			);
+			isCompleteFormShown = false;
+			completeReasonValue = '';
+			completeNoteValue = '';
+		}, orThrownMessage);
+	}
+
+	/** The label a status-move button carries -- "Reopen" reads as a
+	 * correction (ADR-0015: "Reopen is undo, not resumption"), never as
+	 * the same word a first activation uses, even though both moves land
+	 * on 'active'. */
+	function statusMoveLabel(move: string): string {
+		if (move === 'completed') return 'Mark care complete';
+		return displayStatus === 'completed' ? 'Reopen (correction)' : 'Mark care as active';
+	}
 
 	// Visits are newest-first from the BFF (#446); a further page is
 	// appended to the end of what is already on screen rather than
@@ -263,10 +336,10 @@
 	 * this page it is a fact for the Staff working the Engagement, not one
 	 * the record's own subject didn't ask for -- the same "how did this
 	 * come to be" the repo asks every feature to answer. */
-	function summaryItems(d: Detail): { label: string; value: string }[] {
+	function summaryItems(d: Detail, status: string): { label: string; value: string }[] {
 		const items = [
 			{ label: 'Client', value: d.clientName },
-			{ label: 'Status', value: d.status },
+			{ label: 'Status', value: status },
 			{ label: 'Created', value: new Date(d.createdAt).toLocaleDateString() }
 		];
 		if (d.dueDate) {
@@ -612,7 +685,64 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
-		<DescriptionList items={summaryItems(detail!)} />
+		<DescriptionList items={summaryItems(detail!, displayStatus)} />
+
+		<!--
+			#253: exactly the moves ADR-0015's role table admits from the
+			current status for this caller -- the API decides the set
+			(Detail.statusMoves/TransitionResponse.statusMoves), this only
+			renders it. A contractor Doula or a status with no legal move
+			at all sees no controls here, rather than a disabled one.
+		-->
+		{#if displayStatusMoves.length > 0}
+			<cluster-l space="var(--space-3)">
+				{#each displayStatusMoves as move (move)}
+					<Button
+						label={statusMoveLabel(move)}
+						size="sm"
+						variant="secondary"
+						loading={directMove.isBusy}
+						onClick={() => handleStatusMoveClick(move)}
+					/>
+				{/each}
+			</cluster-l>
+		{/if}
+		{#if directMove.error}
+			<Notice variant="error" message={directMove.error} />
+		{/if}
+		{#if isCompleteFormShown}
+			<form onsubmit={handleCompleteSubmit} novalidate>
+				{#if completeSubmission.errors.length > 0}
+					<ErrorSummary errors={completeSubmission.errors} />
+				{/if}
+				<RadioGroup
+					legend="Why is this Engagement ending?"
+					name="ending-reason"
+					options={endingReasons}
+					value={completeReasonValue}
+					onChange={(value) => (completeReasonValue = value)}
+					error={completeSubmission.errorFor(endingReasonFieldId)}
+				/>
+				<LabeledField id="ending-note" label="Note (optional)">
+					{#snippet children({ id, describedBy })}
+						<Textarea
+							{id}
+							{describedBy}
+							value={completeNoteValue}
+							onInput={(value) => (completeNoteValue = value)}
+						/>
+					{/snippet}
+				</LabeledField>
+				<Button label="Confirm completion" type="submit" size="sm" loading={completeSubmission.isSubmitting} />
+				<Button
+					label="Cancel"
+					type="button"
+					size="sm"
+					variant="secondary"
+					onClick={() => (isCompleteFormShown = false)}
+				/>
+			</form>
+		{/if}
 
 		<!--
 			#500: the Client block. "View Client" alone doesn't say whose

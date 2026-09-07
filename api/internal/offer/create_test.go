@@ -274,9 +274,9 @@ func TestCreateHandler_RefusesCompletedOrMissingEngagement(t *testing.T) {
 		f.srv+"/api/practices/"+f.practiceID+"/engagements/not-a-uuid/offers",
 		f.ownerSession, offerBody(f.doulaID, 45000)), http.StatusBadRequest)
 
-	expectStatus(t, do(t, http.MethodPost,
-		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/complete",
-		f.ownerSession, nil), http.StatusOK)
+	expectStatus(t, do(t, http.MethodPatch,
+		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/status",
+		f.ownerSession, completeStatusBody), http.StatusOK)
 	expectStatus(t, do(t, http.MethodPost, f.offersURL(), f.ownerSession, offerBody(f.doulaID, 45000)),
 		http.StatusConflict)
 }

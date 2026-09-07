@@ -18,7 +18,7 @@ import (
 const reasonPortalWrite = "clientauth.Middleware-scoped portal write, not a Staff population write ADR-0008's write table governs"
 
 var exemptEngagementWriteRoutes = map[string]string{
-	"POST /api/practices/{practiceId}/engagements/{engagementId}/complete":          "engagement.CompleteHandler runs its own ADR-0008 cascade (ending every open attachment); it is an Engagement lifecycle transition, not one of #350's four named write surfaces",
+	"PATCH /api/practices/{practiceId}/engagements/{engagementId}/status":           "engagement.TransitionHandler runs its own ADR-0008 cascade on reaching 'completed' (ending every open attachment); it is an Engagement lifecycle transition, not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices": "payments.PostInvoiceHandler is open to any Staff with practice access by design (#68); it is not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/offers":            "offer.CreateHandler is the Practice side of the Offer flow (Owner/Admin, per its own Mount comment); it is not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite":     "portalinvite.InviteHandler invites the Client to the portal; it is not one of #350's four named write surfaces",

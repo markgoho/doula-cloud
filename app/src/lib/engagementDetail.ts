@@ -45,7 +45,23 @@ export interface EngagementSummary {
 	status: string;
 	createdAt: string;
 	dueDate?: string;
+	/** The target statuses this caller may move the Engagement to from
+	 * its current status (#253, ADR-0015) -- always present, empty when
+	 * her role or the current status admits no move. The hub renders
+	 * exactly these, never a hand-copied role table of its own. */
+	statusMoves: string[];
 }
+
+/** ADR-0015's six named reasons a completed Engagement may carry, in the
+ * order the hub's radio group offers them. */
+export const endingReasons: { value: string; label: string }[] = [
+	{ value: 'care_complete', label: 'The work finished as agreed' },
+	{ value: 'client_withdrew', label: 'She stopped, for her own reasons' },
+	{ value: 'practice_ended', label: 'The Practice ended it' },
+	{ value: 'transferred', label: 'She moved to another provider' },
+	{ value: 'no_response', label: 'She stopped answering' },
+	{ value: 'entered_in_error', label: 'This Engagement should never have existed' }
+];
 
 export interface Visit {
 	visitId: string;
@@ -153,6 +169,29 @@ export async function loadMessagesPage<M>(
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
 	const page = (await response.json()) as CursorPage<M>;
 	return { ...page, items: page.items.toReversed() };
+}
+
+/**
+ * Moves the Engagement's status (#253). endingReason/endingNote matter
+ * only when status is 'completed' -- the BFF ignores them for every
+ * other target, but the page only ever sends them then. Returns the new
+ * status and this caller's next set of moves, so the page can update
+ * both without a second read.
+ */
+export async function changeEngagementStatus(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	status: string,
+	endingReason?: string,
+	endingNote?: string
+): Promise<Pick<EngagementSummary, 'status' | 'statusMoves'>> {
+	const response = await fetcher(`${engagementURL(reference)}/status`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ status, endingReason, endingNote })
+	});
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	return (await response.json()) as Pick<EngagementSummary, 'status' | 'statusMoves'>;
 }
 
 /**

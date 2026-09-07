@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from './testResponse.js';
 import {
+	changeEngagementStatus,
 	createVisit,
 	downloadAttachment,
 	loadAttachmentPreviews,
@@ -213,6 +214,45 @@ describe('loadOffersSection', () => {
 		const loadOffers = vi.fn().mockResolvedValue([]);
 
 		expect(await loadOffersSection(fetcher, reference, loadOffers)).toBeUndefined();
+	});
+});
+
+describe('changeEngagementStatus', () => {
+	it('patches the status alone for a move that is not completing', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ status: 'active', statusMoves: ['completed'] }));
+
+		const result = await changeEngagementStatus(fetcher, reference, 'active');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/status`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ status: 'active' })
+		});
+		expect(result).toEqual({ status: 'active', statusMoves: ['completed'] });
+	});
+
+	it('sends the ending reason and note when completing', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ status: 'completed', statusMoves: ['active'] }));
+
+		await changeEngagementStatus(fetcher, reference, 'completed', 'care_complete', 'Baby arrived safely.');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/status`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				status: 'completed',
+				endingReason: 'care_complete',
+				endingNote: 'Baby arrived safely.'
+			})
+		});
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('endingReason is required', 400));
+
+		await expect(changeEngagementStatus(fetcher, reference, 'completed')).rejects.toThrow(
+			'endingReason is required'
+		);
 	});
 });
 
