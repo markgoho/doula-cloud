@@ -12,18 +12,77 @@ export interface RoleSession {
 	isContractor: boolean;
 }
 
+/** The two stored `employment_type` values, named once here rather than
+ * spelled out as a union by every screen that edits a Membership. */
+export type EmploymentType = 'employee' | 'contractor';
+
+/** A stored enum value paired with the word shown for it -- the shape
+ * `RadioGroup` and the Roles checkboxes both take their options in. */
+export interface LabeledValue<Value extends string = string> {
+	value: Value;
+	label: string;
+}
+
 /**
  * The three stored role values paired with the words the product shows for
  * them -- the one place they are named, so a screen never spells out
  * `owner`, `admin` or `doula` itself (#290). `MembershipFields` renders
  * these as its Roles checkboxes; the signup screen reads the same array to
- * name the roles it grants (#262 covers the roster and Invitation list).
+ * name the roles it grants (#290); the Staff roster and the pending
+ * Invitation list read it through `rolesLabel` (#262).
  */
-export const ROLE_LABELS: readonly { value: string; label: string }[] = [
+export const ROLE_LABELS: readonly LabeledValue[] = [
 	{ value: 'owner', label: 'Owner' },
 	{ value: 'admin', label: 'Admin' },
 	{ value: 'doula', label: 'Doula' }
 ];
+
+/** The two stored `employment_type` values and the words shown for them --
+ * what a person *is to the business*, as against what she does, which is
+ * her roles. `MembershipFields` renders these as its Employment type
+ * radios; the roster and Invitation list read them through
+ * `employmentTypeLabel` (#262). */
+export const EMPLOYMENT_TYPE_LABELS: readonly LabeledValue<EmploymentType>[] = [
+	{ value: 'employee', label: 'Employee' },
+	{ value: 'contractor', label: 'Contractor' }
+];
+
+/**
+ * The display word for one stored `practice_role` value.
+ *
+ * **Unknown values are capitalized and printed, never thrown on.** A role
+ * the BFF grows before this map catches up still appears in a person's own
+ * list of what she is, rather than vanishing from her row or taking the
+ * screen down with it. That is the opposite of `clientRegister.ts`, whose
+ * lookups throw on an unrecognized value, and the difference is
+ * deliberate: ADR-0005 says a Client must never meet a domain word, so
+ * quietly printing a raw enum there would be the exact defect that module
+ * exists to prevent. Staff already speak these words -- an Owner reading
+ * `Midwife` for a role this build has not labeled is informed, not
+ * confused.
+ */
+export function roleLabel(role: string): string {
+	return ROLE_LABELS.find((option) => option.value === role)?.label ?? capitalize(role);
+}
+
+/** A whole `roles` array as one readable string -- `Owner, Admin, Doula`
+ * -- in the order the Membership carries them. Lenient on an unknown
+ * value, for the reason `roleLabel` gives. */
+export function rolesLabel(roles: readonly string[]): string {
+	return roles.map((role) => roleLabel(role)).join(', ');
+}
+
+/** The display word for one stored `employment_type` value. Lenient on an
+ * unknown value, for the reason `roleLabel` gives. */
+export function employmentTypeLabel(employmentType: string): string {
+	return (
+		EMPLOYMENT_TYPE_LABELS.find((option) => option.value === employmentType)?.label ?? capitalize(employmentType)
+	);
+}
+
+function capitalize(value: string): string {
+	return value.charAt(0).toLocaleUpperCase() + value.slice(1);
+}
 
 /**
  * Whether the session's caller holds the 'owner' role.

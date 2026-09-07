@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { isOwner, isOwnerOrAdmin, isAmbientContractor, ROLE_LABELS, type RoleSession } from './roles';
+import {
+	isOwner,
+	isOwnerOrAdmin,
+	isAmbientContractor,
+	ROLE_LABELS,
+	EMPLOYMENT_TYPE_LABELS,
+	roleLabel,
+	rolesLabel,
+	employmentTypeLabel,
+	type RoleSession
+} from './roles';
 
 function session(roles: string[], isContractor = false): RoleSession {
 	return { roles, isContractor };
@@ -70,5 +80,55 @@ describe('ROLE_LABELS', () => {
 			{ value: 'admin', label: 'Admin' },
 			{ value: 'doula', label: 'Doula' }
 		]);
+	});
+});
+
+describe('EMPLOYMENT_TYPE_LABELS', () => {
+	it('names both stored employment-type values', () => {
+		expect(EMPLOYMENT_TYPE_LABELS).toEqual([
+			{ value: 'employee', label: 'Employee' },
+			{ value: 'contractor', label: 'Contractor' }
+		]);
+	});
+});
+
+describe('roleLabel', () => {
+	it.each([
+		['owner', 'Owner'],
+		['admin', 'Admin'],
+		['doula', 'Doula']
+	])('writes %s as "%s"', (role, expected) => {
+		expect(roleLabel(role)).toBe(expected);
+	});
+
+	// A role the BFF grows before this map catches up still prints, rather
+	// than throwing or vanishing from a person's own list of what she is.
+	it('capitalizes an unrecognized role rather than throwing', () => {
+		expect(roleLabel('midwife')).toBe('Midwife');
+	});
+});
+
+describe('rolesLabel', () => {
+	it.each([
+		[['owner', 'admin'], 'Owner, Admin'],
+		[['owner', 'admin', 'doula'], 'Owner, Admin, Doula'],
+		[['doula'], 'Doula'],
+		[['midwife'], 'Midwife'],
+		[[], '']
+	])('writes %s as "%s"', (roles, expected) => {
+		expect(rolesLabel(roles)).toBe(expected);
+	});
+});
+
+describe('employmentTypeLabel', () => {
+	it.each([
+		['employee', 'Employee'],
+		['contractor', 'Contractor']
+	])('writes %s as "%s"', (employmentType, expected) => {
+		expect(employmentTypeLabel(employmentType)).toBe(expected);
+	});
+
+	it('capitalizes an unrecognized employment type rather than throwing', () => {
+		expect(employmentTypeLabel('apprentice')).toBe('Apprentice');
 	});
 });

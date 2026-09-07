@@ -28,6 +28,7 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
+	import { rolesLabel, employmentTypeLabel, type EmploymentType } from '#lib/roles.js';
 
 	let members = $state<StaffSummary[]>([]);
 	// Only the Invitations grow: the Members roster stays whole (#446 --
@@ -52,7 +53,7 @@
 	// and employment type on one form (RA-G2, #261), not two round trips.
 	let editingStaffId = $state('');
 	let editRoles = $state<string[]>([]);
-	let editEmploymentType = $state<'employee' | 'contractor'>('employee');
+	let editEmploymentType = $state<EmploymentType>('employee');
 	let isSavingEdit = $state(false);
 	let editError = $state('');
 
@@ -83,9 +84,12 @@
 		{ label: 'Email', accessor: (member: StaffSummary) => member.email },
 		{
 			label: 'Roles',
-			accessor: (member: StaffSummary) => member.roles.join(', ') || 'no roles yet'
+			accessor: (member: StaffSummary) => rolesLabel(member.roles) || 'no roles yet'
 		},
-		{ label: 'Employment type', accessor: (member: StaffSummary) => member.employmentType },
+		{
+			label: 'Employment type',
+			accessor: (member: StaffSummary) => employmentTypeLabel(member.employmentType)
+		},
 		// Only the person herself may set this, so "self-reported" is
 		// always the true provenance -- and the date is the only staleness
 		// signal there is, since nothing prompts a re-assertion (#415). A
@@ -100,10 +104,10 @@
 
 	const invitationColumns = [
 		{ label: 'Email', accessor: (invitation: InvitationSummary) => invitation.address },
-		{ label: 'Roles', accessor: (invitation: InvitationSummary) => invitation.roles.join(', ') },
+		{ label: 'Roles', accessor: (invitation: InvitationSummary) => rolesLabel(invitation.roles) },
 		{
 			label: 'Employment type',
-			accessor: (invitation: InvitationSummary) => invitation.employmentType
+			accessor: (invitation: InvitationSummary) => employmentTypeLabel(invitation.employmentType)
 		},
 		{
 			label: 'Expires',
