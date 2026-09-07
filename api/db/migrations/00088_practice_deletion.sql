@@ -4,7 +4,7 @@
 -- Practice carries that a Client does not: other people's access
 -- (Staff, Clients) and Doula Cloud's own business records. Three
 -- pieces: the durable deletion-state facts on practices itself, the
--- credit-forfeiture enum value (00085, a separate migration because
+-- credit-forfeiture enum value (00087, a separate migration because
 -- ALTER TYPE ... ADD VALUE and this file's own DDL cannot safely share
 -- one transaction if this file ever needed to read it back), and the
 -- outbox that carries the day-23 reminder and day-30 finalization.

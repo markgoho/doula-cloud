@@ -118,7 +118,7 @@ func seedUnsettledInvoice(t *testing.T, db *testdb.DB, practiceID string) {
 	}
 }
 
-// practiceDeletionState reads back the columns 00086_practice_deletion.sql
+// practiceDeletionState reads back the columns 00088_practice_deletion.sql
 // added to practices, for assertions the JSON response doesn't need to
 // carry (e.g. deletion_requested_by).
 func practiceDeletionState(t *testing.T, db *testdb.DB, practiceID string) (requestedAt, finalizeAt, deletedAt *time.Time, requestedBy *string) {

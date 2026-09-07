@@ -1,5 +1,5 @@
 -- +goose Up
--- 00085 added the 'forfeit' origin value but left credit_ledger_lot_or_draw
+-- 00087 added the 'forfeit' origin value but left credit_ledger_lot_or_draw
 -- (00052, widened by 00055 for 'founding_grant') unable to admit a row
 -- carrying it at all: the constraint's OR names every origin it accepts,
 -- and 'forfeit' was in neither branch, so any such row failed
