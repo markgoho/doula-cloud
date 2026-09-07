@@ -39,11 +39,6 @@ const maxKeyLength = 255
 // reaper/sweep job actually deleting anything.
 const ttl = 48 * time.Hour
 
-// msgInternalError is this package's own copy of the vague internal-error
-// message, per this repo's convention of small per-package copies (see
-// portalinvite/errors.go).
-const msgInternalError = "internal error"
-
 // Wrap runs next unmodified when no usable Idempotency-Key header is
 // present. When a key is present, it replays a stored response for that
 // key scoped to the caller's own Practice and Staff member, or runs next
@@ -67,7 +62,7 @@ func Wrap(next http.Handler) http.Handler {
 		found, status, body, err := lookup(r.Context(), tx, key, practiceID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if found {

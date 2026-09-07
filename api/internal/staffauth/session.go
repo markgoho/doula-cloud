@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -80,11 +79,7 @@ func SessionHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -93,7 +88,7 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string, secondFacto
 
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	var staffID, name, email, workState string
@@ -108,13 +103,13 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string, secondFacto
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	memberships, err := listMemberships(ctx, tx, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, MsgInternalError
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	resp := SessionResponse{

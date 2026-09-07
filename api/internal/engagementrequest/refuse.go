@@ -2,7 +2,6 @@ package engagementrequest
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -34,8 +33,7 @@ func RefuseHandler() http.Handler {
 		}
 
 		var body RefuseRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &body) {
 			return
 		}
 		reason := strings.TrimSpace(body.Reason)
@@ -52,13 +50,13 @@ func RefuseHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
@@ -66,7 +64,7 @@ func RefuseHandler() http.Handler {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, DecisionResponse{RequestID: requestID, State: "refused"})
+		apierr.WriteJSON(w, http.StatusOK, DecisionResponse{RequestID: requestID, State: "refused"})
 	})
 }
 
@@ -85,7 +83,7 @@ func writeRequestNotDecidable(w http.ResponseWriter, r *http.Request, tx *sql.Tx
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	apierr.WriteError(w, "that request is no longer pending -- it is "+state, http.StatusConflict)

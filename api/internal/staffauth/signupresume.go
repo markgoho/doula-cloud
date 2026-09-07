@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"doula-cloud/api/internal/apierr"
 )
 
 // existingStaff reports what the verified identity already holds, for
@@ -28,13 +30,13 @@ func existingStaff(ctx context.Context, tx *sql.Tx, identityUID string) (staffID
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", "", false, http.StatusInternalServerError, MsgInternalError
+		return "", "", false, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	memberships, err := listMemberships(ctx, tx, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", "", false, http.StatusInternalServerError, MsgInternalError
+		return "", "", false, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if len(memberships) > 0 {
 		return "", "", false, http.StatusConflict, MsgAlreadyBelongsToPractice

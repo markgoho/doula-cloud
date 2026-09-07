@@ -37,8 +37,7 @@ func PutMFARequiredHandler() http.Handler {
 		}
 
 		var req mfaRequiredRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -47,7 +46,7 @@ func PutMFARequiredHandler() http.Handler {
 			`SELECT require_mfa_for_all_staff FROM practices WHERE id = $1`, practiceID,
 		).Scan(&before); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -57,7 +56,7 @@ func PutMFARequiredHandler() http.Handler {
 				req.Required, practiceID,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 
@@ -75,7 +74,7 @@ func PutMFARequiredHandler() http.Handler {
 				Actor:       activity.StaffActor(actorStaffID),
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -112,7 +111,7 @@ func GetMFAImpactHandler(accounts authn.AccountManager) http.Handler {
 			`SELECT require_mfa_for_all_staff FROM practices WHERE id = $1`, practiceID,
 		).Scan(&required); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -128,7 +127,7 @@ func GetMFAImpactHandler(accounts authn.AccountManager) http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		defer func() { _ = rows.Close() }()
@@ -138,25 +137,24 @@ func GetMFAImpactHandler(accounts authn.AccountManager) http.Handler {
 			var uid string
 			if err := rows.Scan(&uid); err != nil {
 				// coverage:ignore reason: DB scan failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			uids = append(uids, uid)
 		}
 		if err := rows.Err(); err != nil {
 			// coverage:ignore reason: DB iteration failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		count, err := accounts.CountWithoutSecondFactor(r.Context(), uids)
 		if err != nil {
 			// coverage:ignore reason: Admin SDK failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(mfaImpactResponse{Required: required, WithoutSecondFactor: count})
+		apierr.WriteJSON(w, http.StatusOK, mfaImpactResponse{Required: required, WithoutSecondFactor: count})
 	})
 }

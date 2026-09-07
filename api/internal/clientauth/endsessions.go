@@ -45,7 +45,7 @@ func EndAllSessionsHandler(db *sql.DB) http.Handler {
 		holds, err := isPortalAccount(r.Context(), tx, uid)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !holds {
@@ -55,7 +55,7 @@ func EndAllSessionsHandler(db *sql.DB) http.Handler {
 
 		if err := authn.EndAllSessions(r.Context(), tx, uid); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -65,19 +65,19 @@ func EndAllSessionsHandler(db *sql.DB) http.Handler {
 		// applyAddressChange makes before its own call into this loop.
 		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, uid); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := recordForEachClient(r.Context(), tx, uid, activity.ActionPortalSessionsEnded); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

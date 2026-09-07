@@ -3,7 +3,6 @@ package website
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -30,7 +29,7 @@ func GetHandler() http.Handler {
 		tx, ok := staffauth.Tx(r.Context())
 		if !ok {
 			// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
@@ -38,11 +37,11 @@ func GetHandler() http.Handler {
 		resp, err := read(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		writeJSON(w, resp)
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -67,8 +66,7 @@ func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 		staffID, _ := staffauth.StaffID(r.Context())
 
 		var req Request
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, MsgInvalidBody, http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 
@@ -81,7 +79,7 @@ func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 		resp, siteIsStale, err := write(r.Context(), tx, practiceID, staffID, valid)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -94,13 +92,13 @@ func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 		if siteIsStale {
 			if err := sitebuild.Queue(r.Context(), tx, practiceID); err != nil {
 				// coverage:ignore reason: DB insert failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			tasknudge.Register(r.Context(), tasknudge.Fire(nudge, tasknudge.SiteBuild))
 		}
 
-		writeJSON(w, resp)
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -250,14 +248,6 @@ func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID string, v V
 	// offer her next time.
 	resp, err := read(ctx, tx, practiceID)
 	return resp, siteIsStale, err
-}
-
-func writeJSON(w http.ResponseWriter, resp Response) {
-	w.Header().Set("Content-Type", "application/json")
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-	}
 }
 
 // maxSlugAttempts bounds the collision retry. Ten Practices sharing one

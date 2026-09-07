@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -86,8 +85,7 @@ type DeclineByTokenRequest struct {
 func DeclineByTokenHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req DeclineByTokenRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		// Checked before withTokenTx: an unconfirmed request must not
@@ -108,11 +106,11 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 					o.OfferID,
 				); err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					return nil, http.StatusInternalServerError, staffauth.MsgInternalError
+					return nil, http.StatusInternalServerError, apierr.MsgInternalError
 				}
 				if err := recordPreAccountDecline(ctx, tx, o.OfferID); err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					return nil, http.StatusInternalServerError, staffauth.MsgInternalError
+					return nil, http.StatusInternalServerError, apierr.MsgInternalError
 				}
 				return DecisionResponse{OfferID: o.OfferID, State: stateDeclined}, http.StatusOK, ""
 			})
@@ -186,7 +184,7 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	committed := false
@@ -204,7 +202,7 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		if status == http.StatusForbidden {
 			if err := tx.Commit(); err != nil {
 				// coverage:ignore reason: DB commit failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			committed = true
@@ -220,11 +218,11 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 	}
 	if err := tx.Commit(); err != nil {
 		// coverage:ignore reason: DB commit failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	committed = true
-	writeJSON(w, body)
+	apierr.WriteJSON(w, http.StatusOK, body)
 }
 
 // resolveByToken opens the token-lookup door, finds the Offer, checks the
@@ -238,7 +236,7 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 		`SELECT set_config('app.invite_token_digest', $1, true)`, staffauth.TokenDigest(token),
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return PreAccountOffer{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	var o PreAccountOffer
@@ -258,7 +256,7 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return PreAccountOffer{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if attempts >= maxAccessCodeAttempts {
@@ -269,14 +267,14 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 			`UPDATE engagement_offers SET access_code_attempts = access_code_attempts + 1 WHERE id = $1`, o.OfferID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return PreAccountOffer{}, http.StatusInternalServerError, staffauth.MsgInternalError
+			return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		return PreAccountOffer{}, http.StatusForbidden, "that code is not right"
 	}
 
 	if err := expireOpen(ctx, tx, byID, o.OfferID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return PreAccountOffer{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if o.State == stateOffered && !expiresAt.After(time.Now()) {
 		o.State = stateExpired

@@ -3,7 +3,6 @@ package clientauth
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -85,7 +84,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		holds, err := isPortalAccount(r.Context(), tx, uid)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !holds {
@@ -94,8 +93,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		}
 
 		var req RequestAddressChangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		address := staffauth.NormalizeAddress(req.Email)
@@ -122,7 +120,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeClientSignInAddressChange, AddressChangeLifetime, time.Now())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if _, err := tx.ExecContext(r.Context(),
@@ -130,18 +128,18 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 			authtoken.Digest(token), uid, address,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := queueAddressChangeMail(r.Context(), tx, uid, address, token); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
@@ -209,8 +207,7 @@ const MsgAddressLinkInvalid = "this link is invalid or has expired -- ask for a 
 func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req SpendAddressChangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		req.Token = strings.TrimSpace(req.Token)
@@ -222,7 +219,7 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {
 			// coverage:ignore reason: DB connection failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed := false
@@ -240,16 +237,12 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(spendAddressChangeResponse{SignInAddress: address}); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, spendAddressChangeResponse{SignInAddress: address})
 	})
 }
 
@@ -267,7 +260,7 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	err = tx.QueryRowContext(ctx,
@@ -276,7 +269,7 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 	).Scan(&address)
 	if err != nil {
 		// coverage:ignore reason: the companion row is inserted in the same transaction as its token and cascades with it, so a spendable token always has one
-		return "", http.StatusInternalServerError, MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// portal_accounts_self_update (00079) admits exactly one row, the one
@@ -284,7 +277,7 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 	// not a convenience.
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identifier); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE portal_accounts SET sign_in_address = $1 WHERE identifier = $2`, address, identifier,
@@ -293,12 +286,12 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 			return "", http.StatusConflict, MsgAddressTaken
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if err := recordForEachClient(ctx, tx, identifier, activity.ActionPortalSignInAddressChanged); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	return address, http.StatusOK, ""
 }

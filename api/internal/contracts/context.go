@@ -34,7 +34,7 @@ func resolveContractRequest(w http.ResponseWriter, r *http.Request) (tx *sql.Tx,
 			return nil, "", false
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 

@@ -15,7 +15,6 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -166,7 +165,7 @@ func claimEvent(ctx context.Context, db *sql.DB, eventID string) (tx *sql.Tx, al
 func commitAndAck(w http.ResponseWriter, tx *sql.Tx, committed *bool) {
 	if err := tx.Commit(); err != nil {
 		// coverage:ignore reason: DB commit failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	*committed = true
@@ -250,14 +249,14 @@ func recordInvoicePaid(ctx context.Context, tx *sql.Tx, practiceID, invoiceID st
 func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, enq tasknudge.Enqueuer) {
 	var inv invoicePaidObject
 	if err := json.Unmarshal(event.Data, &inv); err != nil {
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
 	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
 	if err != nil {
 		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	committed := false
@@ -285,7 +284,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -307,19 +306,19 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		invoiceID, reference, inv.AmountPaid, paidAt,
 	).Scan(&paymentID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE invoices SET status = 'paid', paid_at = $1 WHERE id = $2`, paidAt, invoiceID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	if err := recordInvoicePaid(r.Context(), tx, practiceID, invoiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -329,7 +328,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	// rollback-surviving write the way QueueOutOfCreditsNotification does.
 	if err := QueuePaymentReceivedNotification(r.Context(), tx, paymentID, practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -350,14 +349,14 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) {
 	var inv invoicePaymentFailedObject
 	if err := json.Unmarshal(event.Data, &inv); err != nil {
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
 	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
 	if err != nil {
 		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	committed := false
@@ -380,7 +379,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -388,7 +387,7 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		`UPDATE invoices SET status = 'uncollectible' WHERE id = $1`, invoiceID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -460,14 +459,14 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		// delivery gets another chance to read the state. Nothing is
 		// claimed in stripe_webhook_events yet, so that retry is not
 		// swallowed as a replay.
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
 	tx, alreadyProcessed, err := claimEvent(r.Context(), db, event.ID)
 	if err != nil {
 		// coverage:ignore reason: claimEvent's own failures are DB failures, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	committed := false
@@ -506,7 +505,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 			return
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -522,7 +521,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		string(status.CardPayments), string(status.Payouts), newRequirementsDue, event.ID, practiceID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
@@ -530,7 +529,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 	if queuedPayoutNotification {
 		if err := QueuePayoutIncompleteNotification(r.Context(), tx, practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 	}

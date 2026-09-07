@@ -3,7 +3,6 @@ package offer
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -76,14 +75,13 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		var req CreateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		area, err := resolveClientArea(r.Context(), tx, engagementID, strings.TrimSpace(req.ClientArea))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		req.ClientArea = area
@@ -106,12 +104,7 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 			tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.EngagementOffer))
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, status, resp)
 	})
 }
 
@@ -222,7 +215,7 @@ func writeEngagementErr(w http.ResponseWriter, err error) {
 		apierr.WriteError(w, "that engagement has completed", http.StatusConflict)
 	default:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 	}
 }
 
@@ -243,12 +236,12 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 	// nobody would call a duplicate.
 	if err := expireOpen(ctx, tx, byEngagementID, engagementID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	open, err := hasOpenOffer(ctx, tx, engagementID, target)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if open {
 		return CreateResponse{}, http.StatusConflict, "that person already has an open offer on this engagement"
@@ -266,7 +259,7 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		f.clientFirstInitial, f.clientArea, f.dueDate, actorStaffID, expiresAt, target.accessCodeDigest,
 	).Scan(&offerID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
@@ -276,13 +269,13 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		Actor:       activity.StaffActor(actorStaffID),
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if target.invitationID.Valid {
 		if err := queue(ctx, tx, offerID, target.inviteToken, target.accessCode); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+			return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		// The Invitation's token was just rotated by MintInvitation, so a
 		// Staff invitation email still sitting unsent in its own outbox
@@ -291,7 +284,7 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		// Offer's email, which carries the same link.
 		if err := staffinvite.Refresh(ctx, tx, target.invitationID.String, target.inviteToken); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return CreateResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+			return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 	}
 

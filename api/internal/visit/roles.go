@@ -31,7 +31,7 @@ func requireDoula(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	reader, has := staffauth.ReaderFrom(r.Context())
 	if !has {
 		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, "", false
 	}
 	if !reader.Has(doulaRole) {

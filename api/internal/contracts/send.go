@@ -45,7 +45,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if status != statusDraft {
@@ -58,7 +58,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			statusSent, id,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		practiceID, _ := staffauth.PracticeID(r.Context())
@@ -71,13 +71,12 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		notifyClient(r.Context(), tx, pusher, engagementID)
 
-		w.Header().Set("Content-Type", "application/json")
 		out := ContractResponse{
 			EngagementID: engagementID,
 			Status:       statusSent,
@@ -85,10 +84,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			MergeFields:  extractMergeFields(prose),
 			Values:       values.nonEmpty(),
 		}
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(out); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
 

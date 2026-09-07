@@ -37,7 +37,7 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 		staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !found {
@@ -51,13 +51,13 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 
 		if err := clearEnrolmentAndRecord(r.Context(), tx, accounts, staffID, uid, AuthEventRemoved, staffID, ""); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		committed = true

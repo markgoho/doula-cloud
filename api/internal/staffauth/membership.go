@@ -166,8 +166,7 @@ func UpdateMembershipHandler() http.Handler {
 		}
 
 		var req UpdateMembershipRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		next, ok := parseMembership(w, req.Roles, req.EmploymentType)
@@ -189,7 +188,7 @@ func UpdateMembershipHandler() http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -200,7 +199,7 @@ func UpdateMembershipHandler() http.Handler {
 		lastOwner, err := removesLastOwner(r.Context(), tx, practiceID, targetStaffID, previousRoles, next.roles)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if lastOwner {
@@ -215,7 +214,7 @@ func UpdateMembershipHandler() http.Handler {
 			next.rolesLiteral, next.employmentType, practiceID, targetStaffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -229,7 +228,7 @@ func UpdateMembershipHandler() http.Handler {
 				ActorStaffID: actorStaffID,
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -240,7 +239,7 @@ func UpdateMembershipHandler() http.Handler {
 				ActorStaffID: actorStaffID,
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
@@ -250,16 +249,12 @@ func UpdateMembershipHandler() http.Handler {
 		// giving a Practice a second one.
 		if err := reconcileOwnersAtPractice(r.Context(), tx, practiceID, targetStaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		updated := UpdateMembershipResponse{StaffID: targetStaffID, Roles: next.roles, EmploymentType: next.employmentType}
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(updated); err != nil {
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, updated)
 	})
 }
 
@@ -327,7 +322,7 @@ func RemoveMembershipHandler() http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -336,7 +331,7 @@ func RemoveMembershipHandler() http.Handler {
 		lastOwner, err := removesLastOwner(r.Context(), tx, practiceID, targetStaffID, roles, nil)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if lastOwner {
@@ -352,7 +347,7 @@ func RemoveMembershipHandler() http.Handler {
 			ActorStaffID: actorStaffID,
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -361,7 +356,7 @@ func RemoveMembershipHandler() http.Handler {
 			practiceID, targetStaffID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -371,7 +366,7 @@ func RemoveMembershipHandler() http.Handler {
 		// DELETE so isSoleOwnerAnywhere no longer sees this Membership.
 		if err := reconcileOwnersAtPractice(r.Context(), tx, practiceID, targetStaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

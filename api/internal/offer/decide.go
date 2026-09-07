@@ -69,7 +69,7 @@ func decisionHandler(decide func(context.Context, *sql.Tx, string, string) (Deci
 			apierr.WriteError(w, msg, status)
 			return
 		}
-		writeJSON(w, resp)
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -94,7 +94,7 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	practiceID, _ := staffauth.PracticeID(ctx)
 	if err := activity.Record(ctx, tx, activity.Entry{
@@ -105,7 +105,7 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 		Actor:       activity.StaffActor(staffID),
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	// Every other open Offer on this Engagement loses, named to the
@@ -120,18 +120,18 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	supersededIDs, err := scanIDs(superseded)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	for _, supersededOfferID := range supersededIDs {
 		diff, err := json.Marshal(map[string]string{"supersededOfferId": supersededOfferID, "acceptedOfferId": offerID})
 		if err != nil {
 			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
-			return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+			return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 		if err := activity.Record(ctx, tx, activity.Entry{
 			PracticeID:  practiceID,
@@ -142,7 +142,7 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+			return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 		}
 	}
 
@@ -150,7 +150,7 @@ func accept(ctx context.Context, tx *sql.Tx, offerID, staffID string) (DecisionR
 	// opened by her agreement, not by the Practice reaching in.
 	if err := staffauth.Grant(ctx, tx, engagementID, staffID, staffID, nullableInt64(amountCents), nullableString(terms)); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	return DecisionResponse{OfferID: offerID, State: "accepted"}, http.StatusOK, ""
@@ -194,12 +194,12 @@ func decline(ctx context.Context, tx *sql.Tx, offerID, staffID string) (Decision
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
 		// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if rows == 0 {
 		if state, err := currentState(ctx, tx, offerID); err == nil && state == stateDeclined {
@@ -216,7 +216,7 @@ func decline(ctx context.Context, tx *sql.Tx, offerID, staffID string) (Decision
 		Actor:       activity.StaffActor(staffID),
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return DecisionResponse{}, http.StatusInternalServerError, staffauth.MsgInternalError
+		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	return DecisionResponse{OfferID: offerID, State: stateDeclined}, http.StatusOK, ""
 }
@@ -238,16 +238,16 @@ func lockOwnOffer(ctx context.Context, tx *sql.Tx, offerID, staffID string) (eng
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, staffauth.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
 	if _, err := tx.ExecContext(ctx, `SELECT id FROM engagements WHERE id = $1 FOR UPDATE`, engagementID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, staffauth.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if err := expireOpen(ctx, tx, byID, offerID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", http.StatusInternalServerError, staffauth.MsgInternalError
+		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	return engagementID, http.StatusOK, ""
 }

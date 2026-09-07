@@ -3,7 +3,6 @@ package engagementrequest
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -53,7 +52,7 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		reader, has := staffauth.ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if isContractorOriginator(reader) {
@@ -71,8 +70,7 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		var body RequestBody
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &body) {
 			return
 		}
 		kind, dueDate, ok := parseRequestBody(w, body)
@@ -92,7 +90,7 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -104,12 +102,12 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		warning, err := hasLiveEngagement(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := queueOutbox(r.Context(), tx, practiceID, requestID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.EngagementRequest))
@@ -118,7 +116,7 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		if warning {
 			resp.Warning = liveEngagementWarning
 		}
-		writeJSON(w, http.StatusCreated, resp)
+		apierr.WriteJSON(w, http.StatusCreated, resp)
 	})
 }
 
@@ -140,7 +138,7 @@ func collapse(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tasknudge.
 	if warning {
 		resp.Warning = liveEngagementWarning
 	}
-	writeJSON(w, http.StatusCreated, resp)
+	apierr.WriteJSON(w, http.StatusCreated, resp)
 }
 
 // clientExists reports whether clientID is visible to the caller's

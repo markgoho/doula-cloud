@@ -55,7 +55,7 @@ func RequireRecentAuth(w http.ResponseWriter, r *http.Request, verifier authn.Ve
 	var sessionIdentityUID string
 	if err := tx.QueryRowContext(r.Context(), `SELECT identity_uid FROM staff WHERE id = $1`, staffID).Scan(&sessionIdentityUID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
 	}
 	if verified.UID != sessionIdentityUID {

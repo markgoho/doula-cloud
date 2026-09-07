@@ -2,11 +2,12 @@ package staffauth
 
 import (
 	"database/sql"
-	"doula-cloud/api/internal/apierr"
 	"fmt"
 	"net/http"
 	"slices"
 	"strings"
+
+	"doula-cloud/api/internal/apierr"
 )
 
 // GatedRoute is one route's declaration, kept as data so a test can
@@ -164,7 +165,7 @@ func requireAnyRole(roles []string, h http.Handler) http.Handler {
 		reader, has := ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if slices.ContainsFunc(roles, reader.Has) {

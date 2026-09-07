@@ -11,7 +11,6 @@ package session
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -35,10 +34,6 @@ const CookieName = authn.SessionCookieName
 // so this alias is sound for it. Exported so tests can assert a cookie's
 // MaxAge against this constant instead of a repeated literal.
 const Lifetime = authn.SessionLifetime
-
-// MsgInternalError is the body a caller sees for a failure that carries
-// no more specific detail.
-const MsgInternalError = "internal error"
 
 // StatusResponse is the minimal success body both endpoints return --
 // neither needs to tell the caller anything beyond "this worked".
@@ -121,9 +116,5 @@ func EndHandler(db *sql.DB) http.Handler {
 }
 
 func writeStatus(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(StatusResponse{OK: true}); err != nil {
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
-	}
+	apierr.WriteJSON(w, http.StatusOK, StatusResponse{OK: true})
 }

@@ -7,8 +7,9 @@ import (
 	"log"
 	"net/http"
 
-	"doula-cloud/api/internal/apierr"
 	"github.com/google/uuid"
+
+	"doula-cloud/api/internal/apierr"
 )
 
 // AttachingWrite is ADR-0008's write-side seam. It wraps an
@@ -54,7 +55,7 @@ func AttachingWrite(next http.Handler) http.Handler {
 		tx, has := Tx(r.Context())
 		if !has {
 			// coverage:ignore reason: Middleware always sets a tx before this handler runs
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		staffID, _ := StaffID(r.Context())
@@ -62,7 +63,7 @@ func AttachingWrite(next http.Handler) http.Handler {
 		reader, has := ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -74,7 +75,7 @@ func AttachingWrite(next http.Handler) http.Handler {
 			canAccess, err := reader.CanAccessEngagement(r.Context(), tx, engagementID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 			if !canAccess {

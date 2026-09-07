@@ -39,13 +39,13 @@ func WithdrawHandler() http.Handler {
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
 			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if rows == 0 {
@@ -53,7 +53,7 @@ func WithdrawHandler() http.Handler {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, DecisionResponse{RequestID: requestID, State: "withdrawn"})
+		apierr.WriteJSON(w, http.StatusOK, DecisionResponse{RequestID: requestID, State: "withdrawn"})
 	})
 }
 
@@ -71,7 +71,7 @@ func writeWithdrawErr(w http.ResponseWriter, r *http.Request, tx *sql.Tx, reques
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 	if requestedBy != staffID {

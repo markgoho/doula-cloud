@@ -1,10 +1,9 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/staffauth"
@@ -15,11 +14,7 @@ type helloResponse struct {
 }
 
 func helloHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(helloResponse{Message: "hello world"}); err != nil {
-		log.Printf("helloHandler: encode response: %v", err)
-	}
+	apierr.WriteJSON(w, http.StatusOK, helloResponse{Message: "hello world"})
 }
 
 // The routes that belong to no Practice: the health probe and the Staff

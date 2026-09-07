@@ -17,9 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
+
+	"doula-cloud/api/internal/apierr"
 )
 
 // SessionCookieName is the name of the session cookie Begin reads. It
@@ -62,11 +63,6 @@ func SessionLifetimeFor(identityUID string) time.Duration {
 	}
 	return SessionLifetime
 }
-
-// msgInternalError is the body a caller sees when the failure is the
-// BFF's own, not theirs -- an unreachable database, not a bad
-// credential.
-const msgInternalError = "internal error"
 
 // NewSessionCookie builds the *http.Cookie every session cookie -- newly
 // minted or renewed -- is sent as, wrapping the session's token with the
@@ -168,7 +164,7 @@ func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool)
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return nil, false
 	}
 	return tx, true
@@ -195,7 +191,7 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 		return "", false, false
 	}
 	if err != nil {
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return "", false, false
 	}
 

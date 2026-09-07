@@ -109,14 +109,14 @@ func GetPracticeInvoicesHandler() http.Handler {
 		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, unpaidOnly)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
 		totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -131,7 +131,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)
 			resp.NextCursor = &next
 		}
-		writeJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 

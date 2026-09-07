@@ -1,9 +1,11 @@
 package apierr_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
@@ -82,4 +84,92 @@ func TestWriteError(t *testing.T) {
 	if out.Code != string(apierr.CodeNotFound) || out.Message != "engagement not found" {
 		t.Fatalf("body = %+v, want {NOT_FOUND engagement not found}", out)
 	}
+}
+
+// testPayloadName is the name value TestWriteJSON and TestDecodeJSON's
+// round-trip bodies carry -- one literal shared across both so goconst
+// does not flag it as three independent copies.
+const testPayloadName = "offer"
+
+func TestWriteJSON(t *testing.T) {
+	rec := httptest.NewRecorder()
+	type payload struct {
+		Name string `json:"name"`
+	}
+	apierr.WriteJSON(rec, http.StatusCreated, payload{Name: testPayloadName})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+	var out payload
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if out.Name != testPayloadName {
+		t.Fatalf("body = %+v, want {%s}", out, testPayloadName)
+	}
+}
+
+func TestDecodeJSON(t *testing.T) {
+	type reqBody struct {
+		Name string `json:"name"`
+	}
+
+	t.Run("valid body decodes", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"name":"`+testPayloadName+`"}`))
+
+		var out reqBody
+		if ok := apierr.DecodeJSON(rec, req, &out); !ok {
+			t.Fatalf("DecodeJSON returned false, want true")
+		}
+		if out.Name != testPayloadName {
+			t.Fatalf("decoded = %+v, want {%s}", out, testPayloadName)
+		}
+	})
+
+	t.Run("malformed body writes 400 and returns false", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{not json`))
+
+		var out reqBody
+		if ok := apierr.DecodeJSON(rec, req, &out); ok {
+			t.Fatalf("DecodeJSON returned true, want false")
+		}
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+		var out2 apierr.APIError
+		if err := json.NewDecoder(rec.Body).Decode(&out2); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if out2.Code != string(apierr.CodeInvalidArgument) || out2.Message != "invalid request body" {
+			t.Fatalf("body = %+v, want {INVALID_ARGUMENT invalid request body}", out2)
+		}
+	})
+
+	t.Run("oversized body writes 413 payload-too-large and returns false", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		oversized := bytes.Repeat([]byte("a"), apierr.MaxRequestBodyBytes+1)
+		body := append([]byte(`{"name":"`), append(oversized, []byte(`"}`)...)...)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", bytes.NewReader(body))
+
+		var out reqBody
+		if ok := apierr.DecodeJSON(rec, req, &out); ok {
+			t.Fatalf("DecodeJSON returned true, want false")
+		}
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+		}
+		var out2 apierr.APIError
+		if err := json.NewDecoder(rec.Body).Decode(&out2); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if out2.Code != string(apierr.CodePayloadTooLarge) {
+			t.Fatalf("code = %q, want %q", out2.Code, apierr.CodePayloadTooLarge)
+		}
+	})
 }

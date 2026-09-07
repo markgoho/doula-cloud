@@ -24,7 +24,6 @@ package sessionmint
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -33,11 +32,6 @@ import (
 	"doula-cloud/api/internal/sessionevict"
 	"doula-cloud/api/internal/tasknudge"
 )
-
-// msgInternalError is the body a caller sees for a failure that carries
-// no more specific detail -- the same literal every package in this
-// cluster writes for its own internal errors.
-const msgInternalError = "internal error"
 
 // Adapter is the difference between minting a Staff session and a Portal
 // Account one: which tier's rules govern eviction and lifetime, whether
@@ -161,7 +155,7 @@ func Issue(w http.ResponseWriter, r *http.Request, tx *sql.Tx, enq tasknudge.Enq
 
 	result, err := step(ctx, tx)
 	if err != nil {
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
 	}
 	if result.Refusal != nil {
@@ -181,7 +175,7 @@ func Issue(w http.ResponseWriter, r *http.Request, tx *sql.Tx, enq tasknudge.Enq
 		if cookie, err := r.Cookie(authn.SessionCookieName); err == nil {
 			if err := authn.EndSession(ctx, tx, cookie.Value); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return false
 			}
 		}
@@ -190,21 +184,21 @@ func Issue(w http.ResponseWriter, r *http.Request, tx *sql.Tx, enq tasknudge.Enq
 	cookie, err := authn.MintSession(ctx, tx, result.IdentityUID, adapter.SecondFactor, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
 	}
 
 	if finish != nil {
 		if err := finish(ctx, tx); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return false
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		// coverage:ignore reason: DB commit failure, not exercised by unit tests
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
 	}
 
@@ -230,7 +224,7 @@ func IssueFromDB(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tasknud
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false
 	}
 	defer func() {
@@ -250,7 +244,7 @@ func writeRefusal(w http.ResponseWriter, tx *sql.Tx, ref *Refusal) (committed bo
 	if ref.Keep {
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
-			apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return false
 		}
 		committed = true
@@ -263,16 +257,10 @@ func writeRefusal(w http.ResponseWriter, tx *sql.Tx, ref *Refusal) (committed bo
 	return committed
 }
 
-// writeBody writes status if it is not the zero value, then encodes
-// body -- Content-Type first, the same order every deleted per-handler
-// ritual used.
+// writeBody writes status, defaulting a zero value to 200, then body.
 func writeBody(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	if status != 0 {
-		w.WriteHeader(status)
+	if status == 0 {
+		status = http.StatusOK
 	}
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		apierr.WriteError(w, msgInternalError, http.StatusInternalServerError)
-	}
+	apierr.WriteJSON(w, status, body)
 }

@@ -2,7 +2,6 @@ package client
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -57,12 +56,7 @@ type CollisionMatch struct {
 // writeConflict writes a 409 EditConflictResponse, the shared tail of
 // both gates below.
 func writeConflict(w http.ResponseWriter, body EditConflictResponse) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusConflict)
-	// coverage:ignore reason: response encoding failure, not exercised by unit tests
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-	}
+	apierr.WriteJSON(w, http.StatusConflict, body)
 }
 
 // EditHandler saves changes to an existing Client. Whoever may read a
@@ -91,13 +85,13 @@ func EditHandler() http.Handler {
 		reader, has := staffauth.ReaderFrom(r.Context())
 		if !has {
 			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		canAccess, err := reader.CanAccessClient(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if !canAccess {
@@ -112,7 +106,7 @@ func EditHandler() http.Handler {
 		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -123,7 +117,7 @@ func EditHandler() http.Handler {
 		erased, err := isErased(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if erased {
@@ -139,7 +133,7 @@ func EditHandler() http.Handler {
 		mergedInto, err := readMergedInto(r.Context(), tx, clientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if mergedInto != nil {
@@ -148,8 +142,7 @@ func EditHandler() http.Handler {
 		}
 
 		var req EditRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
+		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
 		if !normalizeAndValidate(w, &req.Record) {
@@ -161,7 +154,7 @@ func EditHandler() http.Handler {
 			collisions, err := FindCollisions(r.Context(), tx, practiceID, req.GivenName, req.FamilyName, req.DateOfBirth, req.Email, req.Phone, clientID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 
@@ -190,7 +183,7 @@ func EditHandler() http.Handler {
 				sourceAttached, err := isAttachedRecord(r.Context(), tx, clientID)
 				if err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 					return
 				}
 				mergeOffered := !sourceAttached
@@ -200,7 +193,7 @@ func EditHandler() http.Handler {
 					sourceCreatedAt, err = clientCreatedAt(r.Context(), tx, clientID)
 					if err != nil {
 						// coverage:ignore reason: DB query failure, not exercised by unit tests
-						apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+						apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 						return
 					}
 				}
@@ -212,7 +205,7 @@ func EditHandler() http.Handler {
 						otherAttached, err := isAttachedRecord(r.Context(), tx, c.ID)
 						if err != nil {
 							// coverage:ignore reason: DB query failure, not exercised by unit tests
-							apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+							apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 							return
 						}
 						match.WouldSurvive = resolveMergeDirection(otherAttached, sourceCreatedAt, c.CreatedAt)
@@ -226,26 +219,22 @@ func EditHandler() http.Handler {
 
 		if err := updateClient(r.Context(), tx, clientID, req.Record); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if err := recordEvent(r.Context(), tx, practiceID, clientID, eventUpdated, diffRecords(old, req.Record), staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 		if old.Email != req.Email {
 			if err := portalinvite.RevokePending(r.Context(), tx, clientID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		// coverage:ignore reason: response encoding failure, not exercised by unit tests
-		if err := json.NewEncoder(w).Encode(req.Record); err != nil {
-			apierr.WriteError(w, staffauth.MsgInternalError, http.StatusInternalServerError)
-		}
+		apierr.WriteJSON(w, http.StatusOK, req.Record)
 	})
 }
