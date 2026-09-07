@@ -91,8 +91,16 @@ describe('ContractStatus.svelte', () => {
 			.not.toBeInTheDocument();
 	});
 
-	it('offers no PDF download on a draft, sent or voided Contract even with onDownloadPdf', async () => {
+	it('offers no PDF download on a draft or sent Contract even with onDownloadPdf', async () => {
 		await setup({ status: 'sent', onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('offers no PDF download on a voided Contract even with onDownloadPdf', async () => {
+		await setup({ status: 'voided', onDownloadPdf: vi.fn() });
 
 		await expect
 			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))

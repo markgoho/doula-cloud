@@ -4,6 +4,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { SectionState } from '#lib/sectionState.svelte.js';
+	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
 		createVisit,
 		downloadAttachment,
@@ -385,12 +386,7 @@
 			page.params.practiceId!,
 			page.params.engagementId!
 		);
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement('a');
-		link.href = url;
-		link.download = 'signed-contract.pdf';
-		link.click();
-		URL.revokeObjectURL(url);
+		triggerBlobDownload(blob, 'signed-contract.pdf');
 	}
 
 	async function loadInvoicesSection() {

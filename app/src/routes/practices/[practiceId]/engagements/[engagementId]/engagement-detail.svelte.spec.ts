@@ -57,6 +57,21 @@ interface Detail {
 // than throwing. `activityResponse` lets #486's own tests below answer
 // just that one path differently, without a blanket mock stopping being
 // useful to every other test in this file.
+// `session` merges in from practices/[practiceId]/+layout.ts (#835) -- the
+// generated `data` prop type requires it either way, since SvelteKit
+// really does merge ancestor layout data into it at runtime. `roles: []`
+// is fine for every test using `setup()` below: only the Contract PDF
+// download (#302, its own describe block further down) reads
+// `session.roles` at all, and it calls this with its own roles.
+function sessionFor(roles: string[] = []) {
+	return {
+		practiceId: fixture.params.practiceId,
+		practiceName: 'Riverside Doula Collective',
+		roles,
+		isContractor: false
+	};
+}
+
 async function setup(detail: Detail, activityResponse?: Response) {
 	await testPage.viewport(1440, 900);
 	if (activityResponse) {
@@ -71,23 +86,8 @@ async function setup(detail: Detail, activityResponse?: Response) {
 	// reads `page.params`, which the $app/state mock above supplies. Both
 	// come from the fixture, so the two cannot disagree about which
 	// Engagement this is (#596).
-	//
-	// `session` merges in from practices/[practiceId]/+layout.ts (#835) --
-	// the generated `data` prop type requires it either way, since
-	// SvelteKit really does merge ancestor layout data into it at runtime.
-	// `roles: []` here is fine for every test using this `setup()`: only
-	// the Contract PDF download (#302, its own describe block below)
-	// reads `session.roles` at all, and it builds its own session.
 	await render(Page, {
-		data: {
-			...detail,
-			session: {
-				practiceId: fixture.params.practiceId,
-				practiceName: 'Riverside Doula Collective',
-				roles: [],
-				isContractor: false
-			}
-		},
+		data: { ...detail, session: sessionFor() },
 		params: fixture.params
 	});
 }
@@ -180,15 +180,7 @@ describe('a section fails on its own, independent of the others (#841)', () => {
 		);
 
 		await render(Page, {
-			data: {
-				...fixtureDetail,
-				session: {
-					practiceId: fixture.params.practiceId,
-					practiceName: 'Riverside Doula Collective',
-					roles: [],
-					isContractor: false
-				}
-			},
+			data: { ...fixtureDetail, session: sessionFor() },
 			params: fixture.params
 		});
 
@@ -236,15 +228,7 @@ describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', ()
 		await testPage.viewport(1440, 900);
 		mockSignedContract(pdfResponse);
 		await render(Page, {
-			data: {
-				...fixtureDetail,
-				session: {
-					practiceId: fixture.params.practiceId,
-					practiceName: 'Riverside Doula Collective',
-					roles,
-					isContractor: false
-				}
-			},
+			data: { ...fixtureDetail, session: sessionFor(roles) },
 			params: fixture.params
 		});
 	}
@@ -272,10 +256,7 @@ describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', ()
 	});
 
 	it('reports a failed pdf fetch in words (#305 is what fails this locally/in CI)', async () => {
-		await setupWithRoles(
-			['owner'],
-			{ ok: false, status: 500, text: () => Promise.resolve('signed PDF not found') } as Response
-		);
+		await setupWithRoles(['owner'], new Response('signed PDF not found', { status: 500 }));
 		await testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('signed PDF not found');

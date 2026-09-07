@@ -98,7 +98,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 		apiFetchWithSession.mockImplementation((path: string) =>
 			Promise.resolve(
 				path.endsWith('/pdf')
-					? ({ ok: false, status: 500, text: () => Promise.resolve('signed PDF not found') } as Response)
+					? new Response('signed PDF not found', { status: 500 })
 					: jsonResponse({ ...contract, status: 'signed' })
 			)
 		);

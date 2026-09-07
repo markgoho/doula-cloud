@@ -9,6 +9,7 @@
 		downloadClientSignedContractPdf,
 		type Contract
 	} from '#lib/contract.js';
+	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { contractStatusLabel, contractVoidedNotice } from '#lib/clientRegister.js';
 	import ContractView from '#lib/components/molecules/ContractView.svelte';
 	import SignContract from '#lib/components/organisms/SignContract.svelte';
@@ -38,19 +39,14 @@
 
 	// #302: a fetch that fails here (#305 is the one still live in
 	// local/CI) is reported in words rather than swallowed -- the anchor
-	// created below never reaches the DOM tree, so there's no href for a
-	// screen reader or a failed navigation to fall back on.
-	async function handleDownloadSignedContract() {
+	// triggerBlobDownload creates never reaches the DOM tree, so there's
+	// no href for a screen reader or a failed navigation to fall back on.
+	async function handleDownloadSignedContractPdf() {
 		downloadError = '';
 		isDownloadingPdf = true;
 		try {
 			const blob = await downloadClientSignedContractPdf(apiFetchWithSession, page.params.engagementId!);
-			const url = URL.createObjectURL(blob);
-			const link = document.createElement('a');
-			link.href = url;
-			link.download = 'signed-contract.pdf';
-			link.click();
-			URL.revokeObjectURL(url);
+			triggerBlobDownload(blob, 'signed-contract.pdf');
 		} catch (error_) {
 			downloadError = error_ instanceof Error ? error_.message : 'Failed to download signed Contract';
 		} finally {
@@ -91,7 +87,7 @@
 			label="Download signed Contract (PDF)"
 			icon="file-text"
 			variant="secondary"
-			onClick={handleDownloadSignedContract}
+			onClick={handleDownloadSignedContractPdf}
 			loading={isDownloadingPdf}
 		/>
 		{#if downloadError}
