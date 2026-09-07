@@ -42,7 +42,7 @@
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 	import { proposedMergeChanges } from '#lib/editMerge.js';
 
@@ -82,9 +82,8 @@
 	}
 
 	let answer = $state('');
-	let errors = $state<FormError[]>([]);
+	const submission = new FormSubmission();
 	let answerError = $state<string | undefined>();
-	let isSaving = $state(false);
 
 	/*
 	 * A reader who reloads this page, or reaches it directly, has nothing
@@ -125,9 +124,7 @@
 	]);
 
 	async function saveAsDifferentPerson() {
-		errors = [];
-		isSaving = true;
-		try {
+		await submission.run(async () => {
 			const result = await editClient(
 				apiFetchWithSession,
 				practiceId,
@@ -136,25 +133,16 @@
 				true
 			);
 			if (result.conflict) {
-				errors = [{ message: 'The Client record could not be saved.' }];
-				return;
+				return [{ message: 'The Client record could not be saved.' }];
 			}
 			const id = editMergeDraft.clientId;
 			editMergeDraft.clear();
 			await goto(detailHref(id));
-		} catch (error) {
-			errors = [
-				{ message: error instanceof Error && error.message ? error.message : SERVICE_PROBLEM }
-			];
-		} finally {
-			isSaving = false;
-		}
+		}, orThrownMessage);
 	}
 
 	async function saveMerge(match: CollisionMatch) {
-		errors = [];
-		isSaving = true;
-		try {
+		await submission.run(async () => {
 			const record = await mergeClient(
 				apiFetchWithSession,
 				practiceId,
@@ -164,24 +152,17 @@
 			);
 			editMergeDraft.clear();
 			await goto(detailHref(record.id));
-		} catch (error) {
-			errors = [
-				{ message: error instanceof Error && error.message ? error.message : SERVICE_PROBLEM }
-			];
-		} finally {
-			isSaving = false;
-		}
+		}, orThrownMessage);
 	}
 
 	async function handleContinue(event: SubmitEvent) {
 		event.preventDefault();
 		if (answer === '') {
 			answerError = 'Choose whether this is the same person';
-			errors = [{ message: answerError, targetId: `${ANSWER_NAME}-${options[0]!.value}` }];
+			submission.errors = [{ message: answerError, targetId: `${ANSWER_NAME}-${options[0]!.value}` }];
 			return;
 		}
 		answerError = undefined;
-		errors = [];
 		if (answer === DIFFERENT_PERSON) {
 			await saveAsDifferentPerson();
 			return;
@@ -213,8 +194,8 @@
 		hint={`Nothing has been saved yet. No new record is created -- ${survivorName(reviewing)}'s record is kept and updated, and the other is closed as a duplicate.`}
 	>
 		{#snippet errorSummary()}
-			{#if errors.length > 0}
-				<ErrorSummary {errors} />
+			{#if submission.errors.length > 0}
+				<ErrorSummary errors={submission.errors} />
 			{/if}
 		{/snippet}
 
@@ -228,7 +209,7 @@
 		{/snippet}
 
 		{#snippet actions()}
-			<Button label="Save changes" loading={isSaving} onClick={handleSaveChanges} />
+			<Button label="Save changes" loading={submission.isSubmitting} onClick={handleSaveChanges} />
 		{/snippet}
 	</QuestionPage>
 {:else if editMergeDraft.matches.length > 0 && editMergeDraft.mergeOffered}
@@ -241,8 +222,8 @@
 			hint="Nothing has been saved yet. What was typed matches a Client this Practice already has."
 		>
 			{#snippet errorSummary()}
-				{#if errors.length > 0}
-					<ErrorSummary {errors} />
+				{#if submission.errors.length > 0}
+					<ErrorSummary errors={submission.errors} />
 				{/if}
 			{/snippet}
 
@@ -264,7 +245,7 @@
 			{/snippet}
 
 			{#snippet actions()}
-				<Button type="submit" label="Continue" loading={isSaving} />
+				<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 			{/snippet}
 		</QuestionPage>
 	</form>
@@ -277,8 +258,8 @@
 		hint="Nothing has been saved yet. What was typed matches a Client this Practice already has, but the two records can't be combined here."
 	>
 		{#snippet errorSummary()}
-			{#if errors.length > 0}
-				<ErrorSummary {errors} />
+			{#if submission.errors.length > 0}
+				<ErrorSummary errors={submission.errors} />
 			{/if}
 		{/snippet}
 
@@ -293,7 +274,7 @@
 		{/snippet}
 
 		{#snippet actions()}
-			<Button label="Yes, a different person" loading={isSaving} onClick={saveAsDifferentPerson} />
+			<Button label="Yes, a different person" loading={submission.isSubmitting} onClick={saveAsDifferentPerson} />
 		{/snippet}
 	</QuestionPage>
 {/if}

@@ -34,7 +34,7 @@
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import { journeySteps, nextStepHref, previousStepHref, type StepId } from '#lib/intakeJourney.js';
-	import type { FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import IntakeActions from './IntakeActions.svelte';
 	import { JOURNEY, basePath, checkOr, saveIntake, searchHref } from './intake.js';
 
@@ -65,14 +65,22 @@
 	const base = $derived(basePath(practiceId));
 	const steps = $derived(journeySteps(intakeFlow.steps, base, stepId, intakeDraft.visitedSteps));
 
-	let errors = $state<FormError[]>([]);
-	let isSaving = $state(false);
+	/*
+	 * One `FormSubmission`, but only `handleSaveForLater` drives it through
+	 * `run`: `IntakeActions`' own spinner belongs to that button alone, and
+	 * sharing `isSubmitting` with Continue's own (busy-free) navigation
+	 * would flip it on a click Continue never asked to be busy for.
+	 * `handleContinue` writes `submission.errors` directly instead -- the
+	 * same array, so the summary and the two actions never disagree about
+	 * what is wrong.
+	 */
+	const submission = new FormSubmission();
 
 	// Runs `validate` and keeps what it said, so the error summary and the
 	// controls both see the same refusals.
 	function isRefused(): boolean {
-		errors = validate?.() ?? [];
-		return errors.length > 0;
+		submission.errors = validate?.() ?? [];
+		return submission.errors.length > 0;
 	}
 
 	async function handleContinue(event: SubmitEvent) {
@@ -90,9 +98,7 @@
 
 	async function handleSaveForLater() {
 		if (isRefused()) return;
-		isSaving = true;
-		errors = (await saveIntake(practiceId, false)) ?? [];
-		isSaving = false;
+		await submission.run(() => saveIntake(practiceId, false), orServiceProblem);
 	}
 </script>
 
@@ -109,17 +115,17 @@
 		{hint}
 	>
 		{#snippet errorSummary()}
-			{#if errors.length > 0}
-				<ErrorSummary {errors} />
+			{#if submission.errors.length > 0}
+				<ErrorSummary errors={submission.errors} />
 			{/if}
 		{/snippet}
 
 		{#snippet content({ describedBy })}
-			{@render controls({ describedBy, errors })}
+			{@render controls({ describedBy, errors: submission.errors })}
 		{/snippet}
 
 		{#snippet actions()}
-			<IntakeActions {isSaving} onSaveForLater={handleSaveForLater} />
+			<IntakeActions isSaving={submission.isSubmitting} onSaveForLater={handleSaveForLater} />
 		{/snippet}
 	</QuestionPage>
 </form>

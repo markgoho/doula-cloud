@@ -31,7 +31,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
-	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import type { PageProps as PageProperties } from './$types';
 
 	// #501 (ADR-0017): +page.ts's load already decided, before this
@@ -53,8 +53,7 @@
 	let email = $state('');
 	let phone = $state('');
 
-	let pageErrors = $state<FormError[]>([]);
-	let isSearching = $state(false);
+	const submission = new FormSubmission();
 	let hasSearched = $state(false);
 	let matches = $state<ClientMatch[]>([]);
 	let searchToken = $state(0);
@@ -72,10 +71,6 @@
 		void searchToken;
 		resultsStart?.focus();
 	});
-
-	function errorFor(targetId: string): string | undefined {
-		return pageErrors.find((entry) => entry.targetId === targetId)?.message;
-	}
 
 	function currentFields(): ClientSearchFields {
 		return {
@@ -126,31 +121,22 @@
 
 	async function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
-		pageErrors = [];
-		const fields = currentFields();
-		if (!fields.name && !fields.dateOfBirth && !fields.email && !fields.phone) {
-			pageErrors = [
-				{ message: 'Enter a name, date of birth, email or phone to search', targetId: nameId }
-			];
-			return;
-		}
-		isSearching = true;
-		try {
+		await submission.run(async () => {
+			const fields = currentFields();
+			if (!fields.name && !fields.dateOfBirth && !fields.email && !fields.phone) {
+				return [
+					{ message: 'Enter a name, date of birth, email or phone to search', targetId: nameId }
+				];
+			}
+			// SearchHandler refuses a contractor Doula with a readable 403
+			// body (client/search.go), which reaches here as a thrown Error
+			// rather than a raw crash. #501's load-gate above intercepts her
+			// before this branch is ever reached in practice; this stays as
+			// the fallback for any other refusal this form can hit.
 			matches = await searchClients(apiFetchWithSession, page.params.practiceId!, fields);
 			hasSearched = true;
 			searchToken += 1;
-		} catch (error_) {
-			// SearchHandler refuses a contractor Doula with a readable 403
-			// body (client/search.go), which lands here as plain error text
-			// rather than as a raw crash. #501's load-gate above intercepts
-			// her before this branch is ever reached in practice; this stays
-			// as the fallback for any other refusal this form can hit.
-			pageErrors = [
-				{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }
-			];
-		} finally {
-			isSearching = false;
-		}
+		}, orThrownMessage);
 	}
 
 	function resultsHeading(): string {
@@ -185,7 +171,7 @@
 		</center-l>
 	</container-l>
 {:else}
-	<PageTitle page="Find a Client" isError={pageErrors.length > 0} />
+	<PageTitle page="Find a Client" isError={submission.errors.length > 0} />
 
 	<container-l>
 		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
@@ -197,13 +183,13 @@
 					text="Search for a Client already on file before adding a new one. Name, date of birth, email and phone all match — use whatever you have, one on its own is enough."
 				/>
 
-				{#if pageErrors.length > 0}
-					<ErrorSummary errors={pageErrors} />
+				{#if submission.errors.length > 0}
+					<ErrorSummary errors={submission.errors} />
 				{/if}
 
 				<form onsubmit={handleSearch} novalidate>
 					<stack-l space="var(--space-5)">
-						<LabeledField id={nameId} label="Name" error={errorFor(nameId)}>
+						<LabeledField id={nameId} label="Name" error={submission.errorFor(nameId)}>
 							{#snippet children({ id, describedBy, invalid })}
 								<TextInput
 									{id}
@@ -252,7 +238,7 @@
 							{/snippet}
 						</LabeledField>
 						<cluster-l space="var(--space-3)" align="center">
-							<Button type="submit" label="Search" loading={isSearching} />
+							<Button type="submit" label="Search" loading={submission.isSubmitting} />
 						</cluster-l>
 					</stack-l>
 				</form>

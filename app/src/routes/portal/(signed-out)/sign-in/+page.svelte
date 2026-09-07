@@ -3,7 +3,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, refusalOrConfirmable, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { decidePortalLanding, type Engagement, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import { CARE_HEADING, NO_CARE_MESSAGE } from '#lib/clientRegister.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -15,8 +16,7 @@
 
 	const token = page.url.searchParams.get('token') ?? '';
 
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let picker = $state<Engagement[] | undefined>();
 
 	/*
@@ -34,9 +34,7 @@
 	// following the link to inspect it must not burn it before she reads
 	// the mail.
 	async function handleContinue() {
-		errors = [];
-		isSubmitting = true;
-		try {
+		await submission.run(async () => {
 			const response = await fetch(`${apiBaseURL()}/api/portal/magic-link`, {
 				method: 'POST',
 				// #610 reads the __session cookie off this request to decide
@@ -60,16 +58,14 @@
 				const refusal = await refusalOrConfirmable(response);
 				if (refusal.kind === 'confirmable') {
 					signOutWarning = refusal.message;
-				} else {
-					errors = refusal.errors;
+					return;
 				}
-				return;
+				return refusal.errors;
 			}
 
 			const sessionResponse = await apiFetchWithSession('/api/portal/session');
 			if (!sessionResponse.ok) {
-				errors = await refusalErrors(sessionResponse);
-				return;
+				return await refusalErrors(sessionResponse);
 			}
 			const session: PortalSessionInfo = await sessionResponse.json();
 			const landing = decidePortalLanding(session);
@@ -80,16 +76,12 @@
 			} else {
 				picker = landing.engagements;
 			}
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -127,10 +119,10 @@
 		<Button
 			type="button"
 			label={signOutWarning ? 'Continue and sign out' : 'Continue'}
-			loading={isSubmitting}
+			loading={submission.isSubmitting}
 			onClick={handleContinue}
 		/>
 	{/if}
 {/snippet}
 
-<EntryPage title="Sign in" errorSummary={errors.length > 0 ? errorSummary : undefined} {content} />
+<EntryPage title="Sign in" errorSummary={submission.errors.length > 0 ? errorSummary : undefined} {content} />

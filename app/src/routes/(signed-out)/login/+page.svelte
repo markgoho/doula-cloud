@@ -27,10 +27,9 @@
 		isMultiFactorAuthRequired,
 		refusalErrors,
 		refusalOrConfirmable,
-		SERVICE_PROBLEM,
-		totpCodeRefusal,
-		type FormError
+		totpCodeRefusal
 	} from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const emailId = 'login-email';
 	const passwordId = 'login-password';
@@ -46,8 +45,7 @@
 	// holds a live Client-portal session, and she has to say she is
 	// willing to lose it before one is minted here.
 	let step = $state<'credentials' | 'challenge' | 'confirm-sign-out'>('credentials');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let picker = $state<Membership[] | undefined>();
 
 	// #610: what the BFF said continuing costs. Set only by its own
@@ -106,15 +104,6 @@
 		}
 	}
 
-	/*
-	 * One array is the whole mechanism (#467). The summary lists it and
-	 * each field reads its own entry out of it, so the two wordings cannot
-	 * drift -- they are one string rendered twice.
-	 */
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
-
 	// GOV.UK's wording rules: what to do, not what is wrong with it.
 	// "Enter your email address", never "Email is required".
 	function findEmptyFields(): FormError[] {
@@ -126,42 +115,40 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		// Cleared first, so a second refused submit unmounts the summary and
-		// remounts it -- which is what announces the new failure to anyone
-		// who has already tabbed away from the old one.
-		errors = [];
 		picker = undefined;
 
-		const empty = findEmptyFields();
-		if (empty.length > 0) {
-			errors = empty;
-			return;
-		}
+		await submission.run(async () => {
+			const empty = findEmptyFields();
+			if (empty.length > 0) return empty;
 
-		isSubmitting = true;
-		try {
-			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-			await finishSignIn(credential);
-		} catch (error_) {
-			if (isMultiFactorAuthRequired(error_)) {
-				// Identity Platform accepted the password and is waiting on
-				// the second factor -- not a refusal, so nothing is shown as
-				// one. `resolver.hints[0].uid` is the enrolment's id: TOTP is
-				// the only second factor this product ever offers, so there
-				// is exactly one hint and no picker to show.
-				mfaResolver = getMultiFactorResolver(getFirebaseAuth(), error_ as MultiFactorError);
-				step = 'challenge';
-				return;
+			try {
+				const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+				return await finishSignIn(credential);
+			} catch (error_) {
+				if (isMultiFactorAuthRequired(error_)) {
+					// Identity Platform accepted the password and is waiting on
+					// the second factor -- not a refusal, so nothing is shown as
+					// one. `resolver.hints[0].uid` is the enrolment's id: TOTP is
+					// the only second factor this product ever offers, so there
+					// is exactly one hint and no picker to show.
+					mfaResolver = getMultiFactorResolver(getFirebaseAuth(), error_ as MultiFactorError);
+					step = 'challenge';
+					return;
+				}
+				throw error_;
 			}
-			// Identity Platform's own words are a product name, a code and a
-			// banned adjective ("Firebase: Error (auth/invalid-credential)."),
-			// and the flat "Login failed" that replaced them said nothing
-			// about which field to look at. `authRefusal` maps the code onto
-			// a message and, where there is one, the control that caused it.
-			errors = [authRefusal(error_, { emailId, passwordId })];
-		} finally {
-			isSubmitting = false;
-		}
+		}, mapCredentialRefusal);
+	}
+
+	// Identity Platform's own words are a product name, a code and a banned
+	// adjective ("Firebase: Error (auth/invalid-credential)."), and the flat
+	// "Login failed" that replaced them said nothing about which field to
+	// look at. `authRefusal` maps the code onto a message and, where there
+	// is one, the control that caused it -- `findEmptyFields`'s own array
+	// passes straight through, the same fork every mapper in this file
+	// makes between an already-built refusal and one still to translate.
+	function mapCredentialRefusal(refusal: unknown): FormError[] {
+		return Array.isArray(refusal) ? refusal : [authRefusal(refusal, { emailId, passwordId })];
 	}
 
 	// #606's own AC: a wrong or expired code here fails as a sign-in
@@ -169,26 +156,18 @@
 	// never asked for again, since `mfaResolver` already proved it.
 	async function handleChallengeSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
+		await submission.run(async () => {
+			if (totpCode.trim() === '') {
+				return [{ message: 'Enter the 6-digit code from your authenticator app', targetId: codeId }];
+			}
 
-		if (totpCode.trim() === '') {
-			errors = [{ message: 'Enter the 6-digit code from your authenticator app', targetId: codeId }];
-			return;
-		}
-
-		isSubmitting = true;
-		try {
 			const assertion = TotpMultiFactorGenerator.assertionForSignIn(
 				mfaResolver!.hints[0].uid,
 				totpCode
 			);
 			const credential = await mfaResolver!.resolveSignIn(assertion);
-			await finishSignIn(credential);
-		} catch (error_) {
-			errors = [totpCodeRefusal(error_, codeId)];
-		} finally {
-			isSubmitting = false;
-		}
+			return await finishSignIn(credential);
+		}, (refusal) => (Array.isArray(refusal) ? refusal : [totpCodeRefusal(refusal, codeId)]));
 	}
 
 	/*
@@ -198,9 +177,9 @@
 	 * session and land her. One function rather than two copies, since
 	 * #606 added a second way to reach the same finish line.
 	 */
-	async function finishSignIn(credential: UserCredential) {
+	async function finishSignIn(credential: UserCredential): Promise<FormError[] | undefined> {
 		pendingIdToken = await credential.user.getIdToken();
-		await exchangeAndLand(false);
+		return await exchangeAndLand(false);
 	}
 
 	/*
@@ -240,15 +219,7 @@
 	 * again, this time carrying `X-Confirmed`.
 	 */
 	async function handleConfirmSignOut() {
-		errors = [];
-		isSubmitting = true;
-		try {
-			await exchangeAndLand(true);
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		await submission.run(() => exchangeAndLand(true), orServiceProblem);
 	}
 
 	/*
@@ -260,7 +231,7 @@
 	 * rather than `$state`: the markup never reads it, and it has to
 	 * survive whichever of the two sign-in steps produced it.
 	 */
-	async function exchangeAndLand(isConfirmed: boolean) {
+	async function exchangeAndLand(isConfirmed: boolean): Promise<FormError[] | undefined> {
 		const idToken = pendingIdToken;
 
 		// Exchange the Identity Platform ID token for the session cookie
@@ -291,11 +262,10 @@
 				// and this ID token is kept for that second press.
 				signOutWarning = refusal.message;
 				step = 'confirm-sign-out';
-				return;
+				return undefined;
 			}
-			errors = refusal.errors;
 			await signOut(getFirebaseAuth());
-			return;
+			return refusal.errors;
 		}
 		await signOut(getFirebaseAuth());
 
@@ -314,20 +284,20 @@
 				const portal = await probeSession('/api/portal/session');
 				if (!portal) {
 					await goto(resolve('/(signed-out)/no-practice'));
-					return;
+					return undefined;
 				}
 			}
-			errors = await refusalErrors(response);
-			return;
+			return await refusalErrors(response);
 		}
 
 		const session: SessionInfo = await response.json();
 		await land(session);
+		return undefined;
 	}
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -341,7 +311,7 @@
 	-->
 	{#if step === 'credentials'}
 		<form onsubmit={handleSubmit} novalidate>
-			<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -355,7 +325,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -369,7 +339,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Log in" loading={isSubmitting} />
+			<Button type="submit" label="Log in" loading={submission.isSubmitting} />
 		</form>
 
 		<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
@@ -386,7 +356,7 @@
 		<Button
 			type="button"
 			label="Continue and sign out"
-			loading={isSubmitting}
+			loading={submission.isSubmitting}
 			onClick={handleConfirmSignOut}
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
@@ -398,8 +368,8 @@
 			asking again would be asking a question that is already settled.
 		-->
 		<form onsubmit={handleChallengeSubmit} novalidate>
-			<TotpCodeField id={codeId} value={totpCode} onInput={(value) => (totpCode = value)} error={errorFor(codeId)} />
-			<Button type="submit" label="Continue" loading={isSubmitting} />
+			<TotpCodeField id={codeId} value={totpCode} onInput={(value) => (totpCode = value)} error={submission.errorFor(codeId)} />
+			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</form>
 	{/if}
 
@@ -423,4 +393,4 @@
 	{/if}
 {/snippet}
 
-<EntryPage title="Log in" errorSummary={errors.length > 0 ? errorSummary : undefined} {content} />
+<EntryPage title="Log in" errorSummary={submission.errors.length > 0 ? errorSummary : undefined} {content} />

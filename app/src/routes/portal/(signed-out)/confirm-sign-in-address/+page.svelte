@@ -16,7 +16,8 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL } from '#lib/api.js';
-	import { refusalErrors, SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { refusalErrors } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -26,35 +27,27 @@
 
 	const token = page.url.searchParams.get('token') ?? '';
 
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let confirmedAddress = $state('');
 
 	async function handleContinue() {
-		errors = [];
-		isSubmitting = true;
-		try {
+		await submission.run(async () => {
 			const response = await fetch(`${apiBaseURL()}/api/portal/sign-in-address`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ token })
 			});
 			if (!response.ok) {
-				errors = await refusalErrors(response);
-				return;
+				return await refusalErrors(response);
 			}
 			const body: { signInAddress: string } = await response.json();
 			confirmedAddress = body.signInAddress;
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -66,12 +59,12 @@
 		<Link href={resolve('/portal/(signed-out)/login')} label="Sign in" />
 	{:else}
 		<Text text="Confirm that you want to use this address to sign in to Doula Cloud." />
-		<Button type="button" label="Continue" loading={isSubmitting} onClick={handleContinue} />
+		<Button type="button" label="Continue" loading={submission.isSubmitting} onClick={handleContinue} />
 	{/if}
 {/snippet}
 
 <EntryPage
 	title="Confirm your sign-in address"
-	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

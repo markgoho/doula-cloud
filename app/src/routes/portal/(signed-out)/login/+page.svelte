@@ -12,13 +12,12 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 
 	const emailId = 'portal-login-email';
 
 	let email = $state('');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let hasRequested = $state(false);
 	let picker = $state<Engagement[] | undefined>();
 
@@ -46,15 +45,11 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
+		await submission.run(async () => {
+			if (email.trim() === '') {
+				return [{ message: 'Enter your email address', targetId: emailId }];
+			}
 
-		if (email.trim() === '') {
-			errors = [{ message: 'Enter your email address', targetId: emailId }];
-			return;
-		}
-
-		isSubmitting = true;
-		try {
 			// The response is identical whether or not the address is on
 			// record (#168) -- there is nothing here for a refused submit to
 			// report.
@@ -64,16 +59,12 @@
 				body: JSON.stringify({ email })
 			});
 			hasRequested = true;
-		} catch {
-			errors = [{ message: SERVICE_PROBLEM }];
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -85,11 +76,7 @@
 	{:else}
 		<!-- `novalidate`: this page refuses the submit, not the browser. -->
 		<form onsubmit={handleSubmit} novalidate>
-			<LabeledField
-				id={emailId}
-				label="Email"
-				error={errors.find((entry) => entry.targetId === emailId)?.message}
-			>
+			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -103,7 +90,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Send me a sign-in link" loading={isSubmitting} />
+			<Button type="submit" label="Send me a sign-in link" loading={submission.isSubmitting} />
 		</form>
 	{/if}
 
@@ -128,4 +115,4 @@
 	{/if}
 {/snippet}
 
-<EntryPage title="Log in" errorSummary={errors.length > 0 ? errorSummary : undefined} {content} />
+<EntryPage title="Log in" errorSummary={submission.errors.length > 0 ? errorSummary : undefined} {content} />

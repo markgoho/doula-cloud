@@ -36,13 +36,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, probeSession } from '#lib/api.js';
-	import {
-		passwordReauthRefusal,
-		refusalMessage,
-		refusalOrConfirmable,
-		totpCodeRefusal,
-		type FormError
-	} from '#lib/formErrors.js';
+	import { passwordReauthRefusal, refusalMessage, refusalOrConfirmable, totpCodeRefusal } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import type { SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -65,8 +60,7 @@
 	let email = $state('');
 	let password = $state('');
 	let code = $state('');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 	let qrCodeDataUrl = $state('');
 	let secretKey = $state('');
 	let signOutWarning = $state<string | undefined>();
@@ -84,10 +78,6 @@
 	// re-derived, since a second `getIdToken(true)` call is a second
 	// network round trip for no reason the retry needs.
 	let pendingIdToken = '';
-
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
 
 	onMount(async () => {
 		const session = await probeSession<SessionInfo>('/api/staff/session');
@@ -121,15 +111,11 @@
 
 	async function handlePasswordSubmit(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
-		errors = [];
+		await submission.run(async () => {
+			if (password === '') {
+				return [{ message: 'Enter your password', targetId: passwordId }];
+			}
 
-		if (password === '') {
-			errors = [{ message: 'Enter your password', targetId: passwordId }];
-			return;
-		}
-
-		isSubmitting = true;
-		try {
 			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
 			enrollingUser = credential.user;
 
@@ -138,11 +124,7 @@
 			qrCodeDataUrl = await QRCode.toDataURL(totpSecret.generateQrCodeUrl(email, 'Doula Cloud'));
 			secretKey = totpSecret.secretKey;
 			step = 'setup';
-		} catch (error_) {
-			errors = [passwordReauthRefusal(error_, passwordId)];
-		} finally {
-			isSubmitting = false;
-		}
+		}, (refusal) => (Array.isArray(refusal) ? refusal : [passwordReauthRefusal(refusal, passwordId)]));
 	}
 
 	/*
@@ -163,15 +145,11 @@
 
 	async function handleCodeSubmit(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
-		errors = [];
+		await submission.run(async () => {
+			if (code.trim() === '') {
+				return [{ message: 'Enter the 6-digit code from your authenticator app', targetId: codeId }];
+			}
 
-		if (code.trim() === '') {
-			errors = [{ message: 'Enter the 6-digit code from your authenticator app', targetId: codeId }];
-			return;
-		}
-
-		isSubmitting = true;
-		try {
 			const assertion = TotpMultiFactorGenerator.assertionForEnrollment(totpSecret!, code);
 			await multiFactor(enrollingUser!).enroll(assertion, 'Authenticator app');
 
@@ -213,12 +191,8 @@
 				step = 'confirm-sign-out';
 				return;
 			}
-			errors = refusal.errors;
-		} catch (error_) {
-			errors = [totpCodeRefusal(error_, codeId)];
-		} finally {
-			isSubmitting = false;
-		}
+			return refusal.errors;
+		}, (refusal) => (Array.isArray(refusal) ? refusal : [totpCodeRefusal(refusal, codeId)]));
 	}
 
 	/*
@@ -226,20 +200,17 @@
 	 * X-Confirmed, on the same freshly-minted idToken.
 	 */
 	async function handleConfirmSignOut(): Promise<void> {
-		errors = [];
-		isSubmitting = true;
-		try {
+		await submission.run(async () => {
 			const response = await postFinishEnrollment(pendingIdToken, true);
 			if (response.ok) {
 				await signOut(getFirebaseAuth());
 				await landAfterEnrolment();
 				return;
 			}
-			errors = [{ message: await refusalMessage(response) }];
+			const message = await refusalMessage(response);
 			step = 'setup';
-		} finally {
-			isSubmitting = false;
-		}
+			return [{ message }];
+		}, orServiceProblem);
 	}
 
 	/*
@@ -263,7 +234,7 @@
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -271,7 +242,7 @@
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
 		<form onsubmit={handlePasswordSubmit} novalidate>
 			<Text text="Confirm your password to set up an authenticator app." />
-			<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}
@@ -285,7 +256,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Continue" loading={isSubmitting} />
+			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</form>
 	{:else if step === 'confirm-sign-out'}
 		<!--
@@ -299,7 +270,7 @@
 		<Button
 			type="button"
 			label="Continue and sign out"
-			loading={isSubmitting}
+			loading={submission.isSubmitting}
 			onClick={handleConfirmSignOut}
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
@@ -321,14 +292,14 @@
 				screen, so this is the one alternative path -- #606's own AC.
 			-->
 			<p><code>{secretKey}</code></p>
-			<TotpCodeField id={codeId} value={code} onInput={(value) => (code = value)} error={errorFor(codeId)} />
-			<Button type="submit" label="Confirm and turn on" loading={isSubmitting} />
+			<TotpCodeField id={codeId} value={code} onInput={(value) => (code = value)} error={submission.errorFor(codeId)} />
+			<Button type="submit" label="Confirm and turn on" loading={submission.isSubmitting} />
 		</form>
 	{/if}
 {/snippet}
 
 <EntryPage
 	title="Set up two-factor authentication"
-	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

@@ -54,19 +54,27 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 
 	const reasonId = 'engagement-request-refusal-reason';
 
 	let detail = $state<ApprovalDetail | undefined>();
 	let loadError = $state('');
 	let reason = $state('');
-	let errors = $state<FormError[]>([]);
-	let isApproving = $state(false);
-	let isRefusing = $state(false);
+	/*
+	 * One `FormSubmission` for both decisions -- Approve and Refuse write
+	 * into the same summary -- but each button needs its own spinner, since
+	 * both render at once and only one is ever the one just pressed.
+	 * `isApproving`/`isRefusing` below are that per-button read, derived
+	 * from which decision is running rather than from `isSubmitting` alone.
+	 */
+	const submission = new FormSubmission();
+	let activeDecision = $state<'approve' | 'refuse' | undefined>();
 	let hasNoCredits = $state(false);
 
-	const isDeciding = $derived(isApproving || isRefusing);
+	const isApproving = $derived(activeDecision === 'approve' && submission.isSubmitting);
+	const isRefusing = $derived(activeDecision === 'refuse' && submission.isSubmitting);
+	const isDeciding = $derived(submission.isSubmitting);
 	// The empty-balance path is offered before the attempt as well as after
 	// it: the read already knows the balance, so an approver is told she
 	// must buy Credits rather than discovering it by pressing Approve.
@@ -138,44 +146,29 @@
 	});
 
 	async function handleApprove() {
-		errors = [];
 		hasNoCredits = false;
-		isApproving = true;
-		try {
+		activeDecision = 'approve';
+		await submission.run(async () => {
 			const result = await approveRequest(apiFetchWithSession, page.params.practiceId!, page.params.requestId!);
 			if (result.noCredits) {
 				hasNoCredits = true;
 				return;
 			}
 			await goto(engagementHref(result.outcome.engagementId));
-		} catch (error_) {
-			errors = [{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }];
-		} finally {
-			isApproving = false;
-		}
+		}, orThrownMessage);
 	}
 
 	async function handleRefuse(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
 		hasNoCredits = false;
-		if (reason.trim() === '') {
-			errors = [{ message: 'Enter why this request is being refused', targetId: reasonId }];
-			return;
-		}
-		isRefusing = true;
-		try {
+		activeDecision = 'refuse';
+		await submission.run(async () => {
+			if (reason.trim() === '') {
+				return [{ message: 'Enter why this request is being refused', targetId: reasonId }];
+			}
 			await refuseRequest(apiFetchWithSession, page.params.practiceId!, page.params.requestId!, reason.trim());
 			await goto(clientHref(detail!.client.clientId));
-		} catch (error_) {
-			errors = [{ message: error_ instanceof Error && error_.message ? error_.message : SERVICE_PROBLEM }];
-		} finally {
-			isRefusing = false;
-		}
-	}
-
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
+		}, orThrownMessage);
 	}
 </script>
 
@@ -192,8 +185,8 @@
 				<Notice variant="error" message="There are no credits left on this practice's balance." />
 				<Link href={billingHref()} label="Buy credits" />
 			{/if}
-			{#if errors.length > 0}
-				<ErrorSummary {errors} />
+			{#if submission.errors.length > 0}
+				<ErrorSummary errors={submission.errors} />
 			{/if}
 			<DescriptionList items={facts(detail)} />
 			<Link href={clientHref(detail.client.clientId)} label="View {clientName(detail.client)}'s record" />
@@ -224,7 +217,7 @@
 					id={reasonId}
 					label="Why are you refusing this?"
 					hint="The doula who asked will see this."
-					error={errorFor(reasonId)}
+					error={submission.errorFor(reasonId)}
 				>
 					{#snippet children({ id, describedBy, invalid })}
 						<Textarea {id} {describedBy} {invalid} value={reason} onInput={(v) => (reason = v)} />

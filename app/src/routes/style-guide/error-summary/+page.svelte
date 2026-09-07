@@ -5,22 +5,20 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import type { FormError } from '#lib/formErrors.js';
+	import { FormSubmission, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const emailId = 'style-guide-error-summary-email';
 	const passwordId = 'style-guide-error-summary-password';
 
 	let email = $state('');
 	let password = $state('');
-	let errors = $state<FormError[]>([]);
-
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
+	// No `run`: this demo submits nothing over the network, so there is no
+	// busy state to guard -- only the shared `errors` array and `errorFor`
+	// the real forms below on this page also use.
+	const submission = new FormSubmission();
 
 	function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
 		const found: FormError[] = [];
 		if (email.trim() === '')
 			found.push({
@@ -32,7 +30,7 @@
 				message: 'Enter the password you chose when you created your account',
 				targetId: passwordId
 			});
-		errors = found;
+		submission.errors = found;
 	}
 </script>
 
@@ -101,11 +99,11 @@
 	/>
 	<form onsubmit={handleSubmit} novalidate>
 		<stack-l space="var(--space-5)">
-			<ErrorSummary {errors} />
+			<ErrorSummary errors={submission.errors} />
 			<LabeledField
 				id={emailId}
 				label="Email address we send the portal invite to"
-				error={errorFor(emailId)}
+				error={submission.errorFor(emailId)}
 			>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
@@ -118,7 +116,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<LabeledField id={passwordId} label="Password" error={errorFor(passwordId)}>
+			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}

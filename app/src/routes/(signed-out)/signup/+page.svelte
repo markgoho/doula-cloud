@@ -17,13 +17,8 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
-	import {
-		authRefusal,
-		isEmailAlreadyInUse,
-		refusalErrors,
-		refusalOrConfirmable,
-		type FormError
-	} from '#lib/formErrors.js';
+	import { authRefusal, isEmailAlreadyInUse, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import { workStateCode } from '#lib/workStates.js';
 
 	const practiceNameId = 'signup-practice-name';
@@ -49,8 +44,7 @@
 	let workStateName = $state('');
 	let email = $state('');
 	let password = $state('');
-	let errors = $state<FormError[]>([]);
-	let isSubmitting = $state(false);
+	const submission = new FormSubmission();
 
 	// #816: this multi-step form has no single Continue button to hang
 	// #610's cross-population warning on, so it hangs on the form's own
@@ -64,10 +58,6 @@
 	// a plain local, not $state, for the same reason the sign-in page's
 	// own pendingIdToken is: the markup never reads it.
 	let pendingIdToken = '';
-
-	function errorFor(targetId: string): string | undefined {
-		return errors.find((entry) => entry.targetId === targetId)?.message;
-	}
 
 	/*
 	 * Every message starts with the field's own noun and says what to do,
@@ -169,16 +159,11 @@
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		errors = [];
 
-		const refusals = findRefusals();
-		if (refusals.length > 0) {
-			errors = refusals;
-			return;
-		}
+		await submission.run(async () => {
+			const refusals = findRefusals();
+			if (refusals.length > 0) return refusals;
 
-		isSubmitting = true;
-		try {
 			const credential = await credentialFor(getFirebaseAuth());
 			pendingIdToken = await credential.user.getIdToken();
 
@@ -201,21 +186,20 @@
 				// and finishes the half that failed. Keeping the JS SDK session
 				// alive instead would be a second, invisible way to be signed in
 				// on a screen that shows a refusal (#745).
-				errors = refusal.errors;
 				await signOut(getFirebaseAuth());
-				return;
+				return refusal.errors;
 			}
 
 			await land(response);
-		} catch (error_) {
-			// Identity Platform refuses an address that already has an account
-			// and a password it thinks too weak, and both belong to a field on
-			// this page -- `authRefusal` is what turns its code into a message
-			// and a target (#467).
-			errors = [authRefusal(error_, { emailId, passwordId })];
-		} finally {
-			isSubmitting = false;
-		}
+		}, mapSignupRefusal);
+	}
+
+	// Identity Platform refuses an address that already has an account and a
+	// password it thinks too weak, and both belong to a field on this page --
+	// `authRefusal` is what turns its code into a message and a target
+	// (#467). `findRefusals`'s own array passes straight through.
+	function mapSignupRefusal(refusal: unknown): FormError[] {
+		return Array.isArray(refusal) ? refusal : [authRefusal(refusal, { emailId, passwordId })];
 	}
 
 	/*
@@ -224,20 +208,16 @@
 	 * produced.
 	 */
 	async function handleConfirmSignOut() {
-		errors = [];
-		isSubmitting = true;
-		try {
+		await submission.run(async () => {
 			const response = await postSignup(pendingIdToken, true);
 			if (!response.ok) {
-				errors = await refusalErrors(response, signupFieldIds);
+				const refusal = await refusalErrors(response, signupFieldIds);
 				step = 'form';
 				await signOut(getFirebaseAuth());
-				return;
+				return refusal;
 			}
 			await land(response);
-		} finally {
-			isSubmitting = false;
-		}
+		}, orServiceProblem);
 	}
 
 	/*
@@ -262,7 +242,7 @@
 </script>
 
 {#snippet errorSummary()}
-	<ErrorSummary {errors} />
+	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
 {#snippet content()}
@@ -278,7 +258,7 @@
 		<Button
 			type="button"
 			label="Continue and sign out"
-			loading={isSubmitting}
+			loading={submission.isSubmitting}
 			onClick={handleConfirmSignOut}
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
@@ -287,7 +267,7 @@
 	     top, rather than letting the browser's own bubble refuse the first
 	     empty field and say nothing about the other four (#467). -->
 	<form onsubmit={handleSubmit} novalidate>
-		<LabeledField id={practiceNameId} label="Practice name" error={errorFor(practiceNameId)}>
+		<LabeledField id={practiceNameId} label="Practice name" error={submission.errorFor(practiceNameId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -300,7 +280,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<LabeledField id={staffNameId} label="Your name" error={errorFor(staffNameId)}>
+		<LabeledField id={staffNameId} label="Your name" error={submission.errorFor(staffNameId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -313,8 +293,8 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<WorkStateField id={workStateId} bind:value={workStateName} error={errorFor(workStateId)} />
-		<LabeledField id={emailId} label="Email" error={errorFor(emailId)}>
+		<WorkStateField id={workStateId} bind:value={workStateName} error={submission.errorFor(workStateId)} />
+		<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -332,7 +312,7 @@
 			id={passwordId}
 			label="Password"
 			hint="Must be 6 characters or more"
-			error={errorFor(passwordId)}
+			error={submission.errorFor(passwordId)}
 		>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
@@ -348,13 +328,13 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button type="submit" label="Create Practice" loading={isSubmitting} />
+		<Button type="submit" label="Create Practice" loading={submission.isSubmitting} />
 	</form>
 	{/if}
 {/snippet}
 
 <EntryPage
 	title="Sign up your Practice"
-	errorSummary={errors.length > 0 ? errorSummary : undefined}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />
