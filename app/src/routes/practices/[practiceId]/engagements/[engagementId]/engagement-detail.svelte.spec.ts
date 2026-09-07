@@ -193,7 +193,16 @@ describe('the status-move controls (#253)', () => {
 		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
 
-		await expect.element(testPage.getByText('Select why this Engagement is ending')).toBeVisible();
+		// GOV.UK's own pattern says the message twice -- once in the error
+		// summary's link, once against the radio group itself. Both are
+		// role="alert" (the same disambiguation the sibling
+		// engagement-requests/new spec uses for its own refusal).
+		await expect
+			.element(testPage.getByRole('link', { name: 'Select why this Engagement is ending' }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('alert').last())
+			.toHaveTextContent('Select why this Engagement is ending');
 		expect(requests).toHaveLength(0);
 	});
 

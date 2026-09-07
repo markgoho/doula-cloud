@@ -134,17 +134,10 @@ func expectStatus(t *testing.T, resp response, want int) {
 // Client) doesn't cover.
 func seedEngagementInStatus(t *testing.T, db *testdb.DB, practiceID, clientID, status string) {
 	t.Helper()
-	// A status of "completed" also needs ending_reason -- #253's
-	// engagements_completed_has_reason CHECK demands one on every
-	// completed row.
-	var endingReason any
-	if status == "completed" {
-		endingReason = "care_complete"
-	}
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, kind, status, ending_reason)
 		 VALUES ($1, $2, 'birth', $3::engagement_status, $4)`,
-		clientID, practiceID, status, endingReason,
+		clientID, practiceID, status, testdb.EndingReasonForStatus(status),
 	); err != nil {
 		t.Fatalf("seed engagement: %v", err)
 	}

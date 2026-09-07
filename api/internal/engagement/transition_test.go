@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -125,19 +126,19 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 		to           string
 		endingReason string
 	}{
-		{"intake to active", "intake", "active", ""},
-		{"active to completed", "active", "completed", "care_complete"},
-		{"intake to completed", "intake", "completed", "care_complete"},
-		{"completed to active (reopen)", "completed", "active", ""},
+		{"intake to active", engagement.StatusIntake, engagement.StatusActive, ""},
+		{"active to completed", engagement.StatusActive, engagement.StatusCompleted, careCompleteReason},
+		{"intake to completed", engagement.StatusIntake, engagement.StatusCompleted, careCompleteReason},
+		{"completed to active (reopen)", engagement.StatusCompleted, engagement.StatusActive, ""},
 	}
 	roleKinds := []struct {
 		kind           string
 		roles          []string
 		employmentType string
 	}{
-		{"owner", []string{ownerRole}, "employee"},
-		{"admin", []string{adminRole}, "employee"},
-		{"employee doula", []string{doulaRole}, "employee"},
+		{"owner", []string{ownerRole}, employeeType},
+		{"admin", []string{adminRole}, employeeType},
+		{"employee doula", []string{doulaRole}, employeeType},
 		{"contractor doula", []string{doulaRole}, "contractor"},
 	}
 
@@ -150,8 +151,8 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 				_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", uid+"@example.com", move.from)
 				srv := newTransitionServer(t, db)
 
-				isReopen := move.from == "completed" && move.to == "active"
-				wantOK := rk.employmentType != "contractor" && !(isReopen && rk.kind == "employee doula")
+				isReopen := move.from == engagement.StatusCompleted && move.to == engagement.StatusActive
+				wantOK := rk.employmentType != "contractor" && (!isReopen || rk.kind != "employee doula")
 
 				status, body := transitionAs(t, db, srv, uid, practiceID, engagementID,
 					transitionBody(move.to, move.endingReason, ""))
@@ -180,21 +181,44 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 // are demanded again at the next completion (ADR-0015).
 func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "reopen-owner", []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "reopen@example.com", "completed")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "reopen-owner", []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "reopen@example.com", engagement.StatusCompleted)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE engagements SET ending_note = 'left the area' WHERE id = $1`, engagementID); err != nil {
 		t.Fatalf("seed ending note: %v", err)
 	}
 	srv := newTransitionServer(t, db)
 
-	status, _ := transitionAs(t, db, srv, "reopen-owner", practiceID, engagementID, transitionBody("active", "", ""))
+	status, _ := transitionAs(t, db, srv, "reopen-owner", practiceID, engagementID, transitionBody(engagement.StatusActive, "", ""))
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
 	}
 	gotStatus, endingReason, endingNote := readEngagementStatus(t, db, engagementID)
-	if gotStatus != "active" || endingReason != nil || endingNote != nil {
+	if gotStatus != engagement.StatusActive || endingReason != nil || endingNote != nil {
 		t.Fatalf("status=%q endingReason=%v endingNote=%v, want active with both cleared", gotStatus, endingReason, endingNote)
+	}
+}
+
+// TestTransitionHandler_CompletingPersistsEndingNote proves the optional
+// free-text note travels with the reason on completion -- not only the
+// reason enum itself.
+func TestTransitionHandler_CompletingPersistsEndingNote(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "note-owner", []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "note@example.com", engagement.StatusActive)
+	srv := newTransitionServer(t, db)
+
+	status, _ := transitionAs(t, db, srv, "note-owner", practiceID, engagementID,
+		transitionBody(engagement.StatusCompleted, careCompleteReason, "Baby arrived safely"))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	_, endingReason, endingNote := readEngagementStatus(t, db, engagementID)
+	if endingReason == nil || *endingReason != careCompleteReason {
+		t.Fatalf("ending_reason = %v, want care_complete", endingReason)
+	}
+	if endingNote == nil || *endingNote != "Baby arrived safely" {
+		t.Fatalf("ending_note = %v, want %q", endingNote, "Baby arrived safely")
 	}
 }
 
@@ -204,7 +228,7 @@ func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 // database's own CHECK.
 func TestTransitionHandler_CompletingRequiresEndingReason(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "reason-owner", []string{ownerRole}, "employee")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "reason-owner", []string{ownerRole}, employeeType)
 	srv := newTransitionServer(t, db)
 
 	cases := []struct {
@@ -216,9 +240,9 @@ func TestTransitionHandler_CompletingRequiresEndingReason(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", tc.name+"@example.com", "active")
+			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", tc.name+"@example.com", engagement.StatusActive)
 			status, _ := transitionAs(t, db, srv, "reason-owner", practiceID, engagementID,
-				transitionBody("completed", tc.endingReason, ""))
+				transitionBody(engagement.StatusCompleted, tc.endingReason, ""))
 			if status != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400", status)
 			}
@@ -232,20 +256,20 @@ func TestTransitionHandler_CompletingRequiresEndingReason(t *testing.T) {
 // nothing at this Practice.
 func TestTransitionHandler_RefusesInvalidStatusAndUnknownEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "invalid-owner", []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "invalid@example.com", "intake")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "invalid-owner", []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "invalid@example.com", engagement.StatusIntake)
 	srv := newTransitionServer(t, db)
 
-	status, _ := transitionAs(t, db, srv, "invalid-owner", practiceID, engagementID, transitionBody("intake", "", ""))
+	status, _ := transitionAs(t, db, srv, "invalid-owner", practiceID, engagementID, transitionBody(engagement.StatusIntake, "", ""))
 	if status != http.StatusBadRequest {
 		t.Fatalf("status(target intake) = %d, want 400", status)
 	}
 	status, _ = transitionAs(t, db, srv, "invalid-owner", practiceID, "11111111-1111-1111-1111-111111111111",
-		transitionBody("active", "", ""))
+		transitionBody(engagement.StatusActive, "", ""))
 	if status != http.StatusNotFound {
 		t.Fatalf("status(unknown engagement) = %d, want 404", status)
 	}
-	status, _ = transitionAs(t, db, srv, "invalid-owner", practiceID, "not-a-uuid", transitionBody("active", "", ""))
+	status, _ = transitionAs(t, db, srv, "invalid-owner", practiceID, "not-a-uuid", transitionBody(engagement.StatusActive, "", ""))
 	if status != http.StatusBadRequest {
 		t.Fatalf("status(bad uuid) = %d, want 400", status)
 	}
@@ -256,8 +280,8 @@ func TestTransitionHandler_RefusesInvalidStatusAndUnknownEngagement(t *testing.T
 // refused with apierr.DecodeJSON's own 400.
 func TestTransitionHandler_RefusesMalformedBody(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "malformed-owner", []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "malformed@example.com", "intake")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "malformed-owner", []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "malformed@example.com", engagement.StatusIntake)
 	srv := newTransitionServer(t, db)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
@@ -284,11 +308,11 @@ func TestTransitionHandler_RefusesMalformedBody(t *testing.T) {
 // closes.
 func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "noop-owner", []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "noop@example.com", "active")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "noop-owner", []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "noop@example.com", engagement.StatusActive)
 	srv := newTransitionServer(t, db)
 
-	status, _ := transitionAs(t, db, srv, "noop-owner", practiceID, engagementID, transitionBody("completed", "care_complete", ""))
+	status, _ := transitionAs(t, db, srv, "noop-owner", practiceID, engagementID, transitionBody(engagement.StatusCompleted, careCompleteReason, ""))
 	if status != http.StatusOK {
 		t.Fatalf("first completion status = %d, want 200", status)
 	}
@@ -309,11 +333,11 @@ func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 	}
 	testdb.SeedAttachment(t, db, engagementID, doulaID, "granted", false)
 
-	status, body := transitionAs(t, db, srv, "noop-owner", practiceID, engagementID, transitionBody("completed", "care_complete", ""))
+	status, body := transitionAs(t, db, srv, "noop-owner", practiceID, engagementID, transitionBody(engagement.StatusCompleted, careCompleteReason, ""))
 	if status != http.StatusOK {
 		t.Fatalf("re-request status = %d, want 200", status)
 	}
-	if body.Status != "completed" {
+	if body.Status != engagement.StatusCompleted {
 		t.Fatalf("re-request body status = %q, want completed", body.Status)
 	}
 	if n := countEngagementEvents(t, db, engagementID); n != 1 {
@@ -340,11 +364,11 @@ func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 // such row for a move that isn't intake -> active.
 func TestTransitionHandler_IntakeToActiveWritesCarePhaseChanged(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "phase-doula", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "phase@example.com", "intake")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "phase-doula", []string{doulaRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "phase@example.com", engagement.StatusIntake)
 	srv := newTransitionServer(t, db)
 
-	status, _ := transitionAs(t, db, srv, "phase-doula", practiceID, engagementID, transitionBody("active", "", ""))
+	status, _ := transitionAs(t, db, srv, "phase-doula", practiceID, engagementID, transitionBody(engagement.StatusActive, "", ""))
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
 	}
@@ -369,11 +393,11 @@ func TestTransitionHandler_IntakeToActiveWritesCarePhaseChanged(t *testing.T) {
 // contractor, rather than falling through to an allowed default.
 func TestTransitionHandler_RefusesBareStaffWithNoRole(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "bare-staff", []string{}, "employee")
-	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "bare@example.com", "intake")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "bare-staff", []string{}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "bare@example.com", engagement.StatusIntake)
 	srv := newTransitionServer(t, db)
 
-	status, _ := transitionAs(t, db, srv, "bare-staff", practiceID, engagementID, transitionBody("active", "", ""))
+	status, _ := transitionAs(t, db, srv, "bare-staff", practiceID, engagementID, transitionBody(engagement.StatusActive, "", ""))
 	if status != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", status)
 	}

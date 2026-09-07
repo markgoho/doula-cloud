@@ -276,7 +276,7 @@ func TestCreateHandler_RefusesCompletedOrMissingEngagement(t *testing.T) {
 
 	expectStatus(t, do(t, http.MethodPatch,
 		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/status",
-		f.ownerSession, map[string]string{"status": "completed", "endingReason": "care_complete"}), http.StatusOK)
+		f.ownerSession, completeStatusBody), http.StatusOK)
 	expectStatus(t, do(t, http.MethodPost, f.offersURL(), f.ownerSession, offerBody(f.doulaID, 45000)),
 		http.StatusConflict)
 }

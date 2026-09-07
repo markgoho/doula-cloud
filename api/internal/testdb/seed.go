@@ -173,19 +173,29 @@ func SeedEngagementWithKind(t *testing.T, db *DB, practiceID, name, email, kind 
 	return clientID, engagementID
 }
 
+// EndingReasonForStatus is 'care_complete' for status == "completed" and
+// nil for anything else -- #253's engagements_completed_has_reason CHECK
+// demands a non-null ending_reason on every completed row, and every
+// fixture across every package that seeds an Engagement directly (rather
+// than through SeedEngagementInStatus below) needs the identical
+// conditional to stay legal. One function so the "if completed, supply
+// any legal reason" decision lives in one place rather than copied at
+// each INSERT.
+func EndingReasonForStatus(status string) any {
+	if status == "completed" {
+		return "care_complete"
+	}
+	return nil
+}
+
 // SeedEngagementInStatus is SeedNamedEngagement with an explicit
 // Engagement status, for a test that needs the Engagement in a specific
 // state rather than the default "intake". A status of "completed" also
-// sets ending_reason to 'care_complete' -- #253's engagements_completed_has_reason
-// CHECK demands one on every completed row, and a fixture that does not
-// care which reason just needs any legal one.
+// sets ending_reason (EndingReasonForStatus) -- see its own doc comment.
 func SeedEngagementInStatus(t *testing.T, db *DB, practiceID, name, email, status string) (clientID, engagementID string) {
 	t.Helper()
 	clientID = SeedNamedClient(t, db, practiceID, name, email)
-	var endingReason any
-	if status == "completed" {
-		endingReason = "care_complete"
-	}
+	endingReason := EndingReasonForStatus(status)
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason) VALUES ($1, $2, $3, 'birth', $4) RETURNING id`,
 		clientID, practiceID, status, endingReason,

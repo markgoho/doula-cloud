@@ -17,6 +17,16 @@ import (
 // four legal moves; reopening (completed -> active) is Owner/Admin only.
 const doulaRole = "doula"
 
+// The three engagement_status enum members (00005_client_engagement.sql)
+// this file names, exported so a test in engagement_test can build its
+// own move tables against the same literals this file switches on,
+// rather than a second hand-copied set.
+const (
+	StatusIntake    = "intake"
+	StatusActive    = "active"
+	StatusCompleted = "completed"
+)
+
 // endingReasons is ADR-0015's fixed six-value vocabulary for
 // TransitionRequest.EndingReason, checked here so a caller gets a clean
 // 400 rather than the database's own enum-cast error.
@@ -48,13 +58,13 @@ func legalMoves(reader staffauth.Reader, current string) []string {
 		return none
 	}
 	switch current {
-	case "intake":
-		return []string{"active", "completed"}
-	case "active":
-		return []string{"completed"}
-	case "completed":
+	case StatusIntake:
+		return []string{StatusActive, StatusCompleted}
+	case StatusActive:
+		return []string{StatusCompleted}
+	case StatusCompleted:
 		if reader.IsOwnerOrAdmin() {
-			return []string{"active"}
+			return []string{StatusActive}
 		}
 	}
 	return none
@@ -149,11 +159,11 @@ func TransitionHandler() http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		if req.Status != "active" && req.Status != "completed" {
+		if req.Status != StatusActive && req.Status != StatusCompleted {
 			apierr.WriteError(w, "status must be 'active' or 'completed'", http.StatusBadRequest)
 			return
 		}
-		if req.Status == "completed" {
+		if req.Status == StatusCompleted {
 			if req.EndingReason == nil || !endingReasons[*req.EndingReason] {
 				apierr.WriteError(w, "endingReason is required to complete an Engagement", http.StatusBadRequest)
 				return
@@ -175,7 +185,7 @@ func TransitionHandler() http.Handler {
 		}
 
 		actorStaffID, _ := staffauth.StaffID(r.Context())
-		isReopen := current.status == "completed" && req.Status == "active"
+		isReopen := current.status == StatusCompleted && req.Status == StatusActive
 		isNoOp := current.status == req.Status
 
 		// Every (current, target) pair reaching this point is already
@@ -194,7 +204,7 @@ func TransitionHandler() http.Handler {
 		if !isNoOp {
 			newEndingReason, newEndingNote := current.endingReason, current.endingNote
 			switch {
-			case req.Status == "completed":
+			case req.Status == StatusCompleted:
 				newEndingReason, newEndingNote = req.EndingReason, req.EndingNote
 			case isReopen:
 				newEndingReason, newEndingNote = nil, nil
@@ -232,7 +242,7 @@ func TransitionHandler() http.Handler {
 				return
 			}
 
-			if current.status == "intake" && req.Status == "active" {
+			if current.status == StatusIntake && req.Status == StatusActive {
 				diff, err := json.Marshal(map[string]any{"statusBefore": current.status, "statusAfter": req.Status})
 				if err != nil {
 					// coverage:ignore reason: marshaling two strings never fails
@@ -252,7 +262,7 @@ func TransitionHandler() http.Handler {
 					return
 				}
 			}
-			if req.Status == "completed" {
+			if req.Status == StatusCompleted {
 				if err := activity.Record(r.Context(), tx, activity.Entry{
 					PracticeID:  practiceID,
 					SubjectKind: activity.SubjectEngagement,
@@ -272,7 +282,7 @@ func TransitionHandler() http.Handler {
 		// completed move above, and on a same-status re-request too, so
 		// anything a partial earlier run left behind still closes
 		// (CompleteHandler's own idempotence, carried over).
-		if req.Status == "completed" {
+		if req.Status == StatusCompleted {
 			if err := offer.CloseOnCompletion(r.Context(), tx, engagementID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
