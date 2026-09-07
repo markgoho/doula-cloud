@@ -156,6 +156,23 @@ func SeedNamedEngagement(t *testing.T, db *DB, practiceID, name, email string) (
 	return clientID, engagementID
 }
 
+// SeedEngagementWithKind is SeedNamedEngagement with an explicit
+// Engagement kind, for a test that needs a postpartum-only Engagement
+// rather than the hardcoded 'birth' every other seed helper here inserts
+// (#311's suppression rule is the first thing to need one).
+func SeedEngagementWithKind(t *testing.T, db *DB, practiceID, name, email, kind string) (clientID, engagementID string) {
+	t.Helper()
+	clientID = SeedNamedClient(t, db, practiceID, name, email)
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, $3) RETURNING id`,
+		clientID, practiceID, kind,
+	).Scan(&engagementID); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed engagement: %v", err)
+	}
+	return clientID, engagementID
+}
+
 // SeedEngagementInStatus is SeedNamedEngagement with an explicit
 // Engagement status, for a test that needs the Engagement in a specific
 // state rather than the default "intake".

@@ -125,6 +125,28 @@ func TestClientGetBirthPlanHandler_CarePlanNeverReturned(t *testing.T) {
 	}
 }
 
+// TestClientGetBirthPlanHandler_PostpartumEngagementRefused proves #311's
+// AC directly: the endpoint refuses a postpartum-only Engagement
+// independently of the portal's own nav/hub gating -- kind = postpartum
+// never offers a Birth Plan, even when reached straight by URL.
+func TestClientGetBirthPlanHandler_PostpartumEngagementRefused(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-postpartum-only"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Jordan Client", "jordan@example.com", "postpartum")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
+
+	srv, session := newPortalServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := getClientBirthPlan(t, srv, session, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
 func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-not-linked"

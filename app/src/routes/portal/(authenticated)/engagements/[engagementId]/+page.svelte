@@ -30,6 +30,7 @@
 		clientName: string;
 		status: string;
 		dueDate?: string;
+		offersBirthPlan: boolean;
 	};
 
 	let detail = $state<Detail | undefined>();
@@ -82,12 +83,15 @@
 {/snippet}
 
 {#snippet actions()}
-	<Link
-		href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', {
-			engagementId: page.params.engagementId!
-		})}
-		label="Birth plan"
-	/>
+	<!-- #311: offered only where the Engagement's kind calls for one. -->
+	{#if detail?.offersBirthPlan}
+		<Link
+			href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', {
+				engagementId: page.params.engagementId!
+			})}
+			label="Birth plan"
+		/>
+	{/if}
 	<Link
 		href={resolve('/portal/(authenticated)/engagements/[engagementId]/contract', {
 			engagementId: page.params.engagementId!

@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/engagement"
 )
 
 // birthPlanType is the only plan_type ClientGetBirthPlanHandler will ever
@@ -32,6 +33,21 @@ func ClientGetBirthPlanHandler() http.Handler {
 			return
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
+
+		kind, err := fetchEngagementKind(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !engagement.OffersBirthPlan(engagement.BirthPlanInputs{Kind: kind}) {
+			// ADR-0015: a Birth Plan is offered only where kind = birth.
+			// Refused at the API independently of the portal's own nav/hub
+			// gating (#311), so a direct request for a postpartum-only
+			// Engagement never sees an empty "not yet" document.
+			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+			return
+		}
 
 		fields, answers, clientAcknowledgedAt, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -140,4 +156,17 @@ func recordBirthPlanAcknowledged(ctx context.Context, tx *sql.Tx, engagementID, 
 		return fmt.Errorf("plans: record birth plan acknowledged: %w", err)
 	}
 	return nil
+}
+
+// fetchEngagementKind reads engagementID's kind -- clientauth.Middleware
+// has already confirmed the caller's Client owns this Engagement, so this
+// is a plain lookup rather than a second ownership check.
+func fetchEngagementKind(ctx context.Context, tx *sql.Tx, engagementID string) (engagement.Kind, error) {
+	var kind string
+	err := tx.QueryRowContext(ctx, `SELECT kind::text FROM engagements WHERE id = $1`, engagementID).Scan(&kind)
+	// coverage:ignore reason: clientauth.Middleware already confirmed the row exists; a query failure here is a DB-level fault, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("plans: fetch engagement kind: %w", err)
+	}
+	return engagement.Kind(kind), nil
 }

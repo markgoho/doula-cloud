@@ -101,6 +101,20 @@ describe('Client portal Engagement hub', () => {
 		await expect.element(page.getByText('Ongoing')).toBeVisible();
 		await expect.element(page.getByText(/due date/i)).not.toBeInTheDocument();
 	});
+
+	// #311: a postpartum-only Engagement offers no Birth Plan link on the
+	// hub, alongside the layout's own nav-item test. Not the happy path --
+	// the fixture's own detail offers one (see the first test above) -- so
+	// this is a departure from it, spread rather than restated.
+	it('offers no Birth plan link when the Engagement does not call for one', async () => {
+		mockFetch({ ...detail, offersBirthPlan: false });
+
+		await render(Hub);
+
+		await expect.element(page.getByText('Ongoing')).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Birth plan' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Contract' })).toBeVisible();
+	});
 });
 
 // #486 AC5: CONTEXT.md's own vocabulary for this to a Client -- "Everything

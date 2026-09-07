@@ -22,7 +22,8 @@ export const detail = {
 	practiceName,
 	clientName: 'Anne-Marie Ochieng-Whitfield',
 	status: 'active',
-	dueDate: '2027-03-01'
+	dueDate: '2027-03-01',
+	offersBirthPlan: true
 };
 
 export const fixture: RouteFixture = {

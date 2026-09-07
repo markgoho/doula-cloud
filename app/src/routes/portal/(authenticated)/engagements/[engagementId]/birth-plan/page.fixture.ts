@@ -44,7 +44,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { engagementId: 'engagement-1' },
 	url: 'https://example.test/portal/engagements/engagement-1/birth-plan',
-	pageData: { practiceName: 'Riverside Doula Collective' },
+	pageData: { practiceName: 'Riverside Doula Collective', offersBirthPlan: true },
 	respond: () => jsonResponse(instance),
 	readyText: 'Birth Plan'
 };
