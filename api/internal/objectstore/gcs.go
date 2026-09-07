@@ -69,11 +69,14 @@ func (s *GCSStore) Get(ctx context.Context, path string) (io.ReadCloser, error) 
 // mapping logic is testable without a real GCS bucket -- fed a canned
 // error instead of one from the network.
 //
-// #305: whether fake-gcs-server (the local e2e stack's stand-in, see
-// docs/testing.md) actually returns storage.ErrObjectNotExist the same
-// way real GCS does is unverified -- no test here, or in the e2e suite,
-// drives a not-found Get against either. If the two ever disagree, a
-// missing object would 500 against one and 404 against the other.
+// #305: app/e2e/message-attachment.e2e.ts's "attachment object is
+// missing from the store" spec drives this against the local e2e stack's
+// fake-gcs-server (see docs/testing.md) and confirms it does return
+// storage.ErrObjectNotExist for a missing object -- but that is the
+// emulator, not real GCS. Whether real GCS agrees stays unverified: no
+// test anywhere in this repo reaches a real bucket. If the two ever
+// disagree, a missing object would 404 against the emulator and 500
+// against production.
 func wrapGetError(path string, err error) error {
 	if errors.Is(err, storage.ErrObjectNotExist) {
 		return fmt.Errorf("objectstore: get %s: %w", path, ErrNotFound)

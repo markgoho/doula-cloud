@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { seedPortalClient } from './portalClient';
 import { enterPracticeAsEnrolled } from './mfa';
+import { seedMessageWithMissingAttachment } from './stack';
 
 // #305: contract-lifecycle.e2e.ts already proves a Signed PDF round-trips
 // through the real, fake-gcs-server-backed ObjectStore; no spec proved the
@@ -33,7 +34,15 @@ test('A Message attachment uploads and downloads through the real object store',
 		mimeType: 'image/png',
 		buffer: pngBytes
 	});
-	await page.getByRole('button', { name: 'Send', exact: true }).click();
+	const [createResponse] = await Promise.all([
+		page.waitForResponse(
+			(response) => response.url().includes('/messages') && response.request().method() === 'POST'
+		),
+		page.getByRole('button', { name: 'Send', exact: true }).click()
+	]);
+	expect(createResponse.ok(), `send failed: ${createResponse.status()}`).toBe(true);
+	const created: { messageId: string } = await createResponse.json();
+	const { messageId } = created;
 
 	// Sending re-downloads the attachment straight away to render its
 	// preview (refreshAttachmentPreviews) -- an image that decodes with a
@@ -44,4 +53,37 @@ test('A Message attachment uploads and downloads through the real object store',
 	await expect
 		.poll(() => preview.evaluate((img: HTMLImageElement) => img.naturalWidth))
 		.toBeGreaterThan(0);
+
+	// The preview only proves the browser's image decoder was satisfied;
+	// fetching the same endpoint directly proves the Content-Type header
+	// and the exact bytes both round-tripped, not just something
+	// image-shaped.
+	const dlResp = await page.request.get(
+		`/api/practices/${practiceId}/engagements/${engagementId}/messages/${messageId}/attachment`
+	);
+	expect(dlResp.ok(), `attachment fetch failed: ${dlResp.status()}`).toBe(true);
+	expect(dlResp.headers()['content-type']).toBe('image/png');
+	const downloadedBytes = await dlResp.body();
+	expect(downloadedBytes.equals(pngBytes)).toBe(true);
+});
+
+// #305's other half: a Message row whose attachment metadata points at
+// an object the real store never received -- seeded directly (the real
+// upload path can't produce this state) -- must 404 with an identifying
+// message, not the generic 500 every other store failure gets. Proven
+// against the real fake-gcs-server-backed store, not the MemoryStore fake
+// api/internal/message's own unit tests inject.
+test('A Message whose attachment object is missing from the store 404s', async ({ page }) => {
+	const { practiceId, engagementId, staffId, staffHeaders } = await seedPortalClient(
+		page.request,
+		'Riverside Doulas'
+	);
+	await enterPracticeAsEnrolled(page.context(), page, staffHeaders, practiceId);
+
+	const messageId = seedMessageWithMissingAttachment(engagementId, staffId, 'ghost.png');
+
+	const resp = await page.request.get(
+		`/api/practices/${practiceId}/engagements/${engagementId}/messages/${messageId}/attachment`
+	);
+	expect(resp.status(), `attachment fetch: ${resp.status()} ${await resp.text()}`).toBe(404);
 });

@@ -316,6 +316,21 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 	return engagementId;
 }
 
+// Seeds a Message whose attachment metadata points at an object never
+// Put to the store -- #305's not-found handling only differs from a
+// genuine storage failure once the DB row and the store disagree, which
+// the real upload path (Put then the row write) never leaves behind on
+// its own. Direct SQL, like seedEngagement, is what makes that
+// disagreement reachable at all.
+export function seedMessageWithMissingAttachment(engagementId: string, staffId: string, filename: string): string {
+	const messageId = randomUUID();
+	const objectPath = `messages/${engagementId}/${messageId}`;
+	execSQL(
+		`INSERT INTO messages (id, engagement_id, sender_type, sender_id, attachment_object_path, attachment_content_type, attachment_byte_size, attachment_filename) VALUES (${sqlLiteral(messageId)}, ${sqlLiteral(engagementId)}, 'staff', ${sqlLiteral(staffId)}, ${sqlLiteral(objectPath)}, 'image/png', 1, ${sqlLiteral(filename)})`
+	);
+	return messageId;
+}
+
 // Seeds a *pending* Engagement Request directly, the same way
 // seedEngagement seeds an Engagement directly: the real
 // POST .../engagement-requests endpoint collapses into an immediate
