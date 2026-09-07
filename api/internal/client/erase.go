@@ -133,7 +133,7 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		staffID, _ := staffauth.StaffID(r.Context())
-		out, err := erase(r.Context(), tx, practiceID, clientID, staffID, time.Now().UTC())
+		out, err := Erase(r.Context(), tx, practiceID, clientID, activity.StaffActor(staffID), time.Now().UTC())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -229,14 +229,20 @@ func EraseEligibilityHandler() http.Handler {
 	})
 }
 
-// erase is the act itself, in the order the pieces depend on each other:
+// Erase is the act itself, in the order the pieces depend on each other:
 // the record is redacted, the outside-world work is enqueued, the
 // erasure is recorded in plaintext, and only then is her key destroyed.
 // The key goes last because recordErasure's own row is written through
 // activity.Record directly rather than recordEvent -- but the ordering
 // still matters for any future write site that seals, and reads more
 // honestly: everything that needed her key has already happened.
-func erase(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffID string, now time.Time) (ErasureResponse, error) {
+//
+// Exported so a Practice-deletion cascade (#871) can erase every Client
+// under a Practice with the same act a single Owner-initiated erasure
+// runs, passing activity.SystemActor() for a day-30 finalization rather
+// than a Staff member's own id -- erase.go's caller (EraseHandler) is
+// the only place a request-scoped Staff actor exists.
+func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor activity.Actor, now time.Time) (ErasureResponse, error) {
 	if err := redactRecord(ctx, tx, clientID, now); err != nil {
 		// coverage:ignore reason: every step below fails only on a DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
@@ -265,7 +271,7 @@ func erase(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffID string
 		SessionsEnded:             sessionsEnded,
 		StripeRedactionEligibleAt: eligibleAt,
 	}
-	if err := recordErasure(ctx, tx, practiceID, clientID, staffID, scope); err != nil {
+	if err := recordErasure(ctx, tx, practiceID, clientID, actor, scope); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
@@ -586,7 +592,7 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 // plaintext, describing the act and its scope, never a value that was
 // erased. Without it, a Practice looking at an erased Client's history
 // would see only unreadable entries and no explanation of why.
-func recordErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffID string, scope erasureScope) error {
+func recordErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor activity.Actor, scope erasureScope) error {
 	diff, err := json.Marshal(scope)
 	if err != nil {
 		// coverage:ignore reason: a struct of ints, a bool and a time always marshals cleanly, not exercised by unit tests
@@ -598,7 +604,7 @@ func recordErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID, staffI
 		SubjectID:   clientID,
 		Action:      string(eventErased),
 		Diff:        diff,
-		Actor:       activity.StaffActor(staffID),
+		Actor:       actor,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("client: record erasure: %w", err)

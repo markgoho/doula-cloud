@@ -19,6 +19,9 @@ const (
 	// one above: two outbox tables, two workers, two schedules.
 	portalAddressChangeOutboxPath = "/api/internal/notifications/process-portal-address-change-outbox"
 	siteBuildOutboxPath           = "/api/internal/site/process-build-outbox"
+	// #871's Practice-deletion outbox, not nudged for the same reason as
+	// the two above.
+	practiceDeletionOutboxPath = "/api/internal/notifications/process-practice-deletion-outbox"
 )
 
 // outboxRegistrations is every outbox the BFF serves (ADR-0010), in one
@@ -148,6 +151,16 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Door:   outbox.NotificationDoor,
 			Nudge:  tasknudge.ClientErasure,
 			Worker: d.ClientErasureWorker,
+		},
+		{
+			// #871's Practice-deletion outbox: a day-23 reminder to every
+			// current Owner and the day-30 finalization itself. No Nudge,
+			// for the same reason as #613's and #617's mail outboxes above
+			// -- both acts are inherently weeks out, so there is nothing
+			// for an ADR-0013 nudge to move earlier.
+			Path:   practiceDeletionOutboxPath,
+			Door:   outbox.NotificationDoor,
+			Worker: d.PracticeDeletionWorker,
 		},
 		{
 			// #443's site rebuild, under /api/internal/site for the same

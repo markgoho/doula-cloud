@@ -21,6 +21,13 @@ type PracticeSessionResponse struct {
 	PracticeName string   `json:"practiceName"`
 	Roles        []string `json:"roles"`
 	IsContractor bool     `json:"isContractor"`
+	// PendingDeletion is #871's own addition: Middleware still lets this
+	// one route through while the Practice is mid-deletion (see
+	// isPracticeSessionRoute), so app/'s +layout.ts load needs this flag
+	// on the response itself to route an Owner to the restore screen and
+	// everyone else to an accurate locked message, rather than every
+	// other route under this Practice quietly refusing one at a time.
+	PendingDeletion bool `json:"pendingDeletion"`
 }
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
@@ -47,10 +54,11 @@ func PracticeSessionHandler() http.Handler {
 		}
 
 		resp := PracticeSessionResponse{
-			PracticeID:   practiceID,
-			PracticeName: name,
-			Roles:        reader.Roles(),
-			IsContractor: reader.IsContractor(),
+			PracticeID:      practiceID,
+			PracticeName:    name,
+			Roles:           reader.Roles(),
+			IsContractor:    reader.IsContractor(),
+			PendingDeletion: pendingDeletionFrom(r.Context()),
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})

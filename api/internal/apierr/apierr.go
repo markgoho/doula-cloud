@@ -50,6 +50,22 @@ const (
 	// ... does not send the browser to the login screen"). #842 moves it
 	// here from staffauth's own local APIError copy.
 	CodeMFARequired Code = "MFA_REQUIRED"
+	// CodePracticePendingDeletion is #871's Practice-scoped boundary
+	// refusal: a live, valid session, and a Practice whose deletion is
+	// pending. staffauth.Middleware writes it for every route under that
+	// Practice except two: an Owner's own reach into
+	// GET/DELETE .../deletion, and the plain identity read
+	// GET .../session, open to every role. The app never actually
+	// branches on this code -- .../session's own successful response now
+	// carries a `pendingDeletion` flag instead, which
+	// practices/[practiceId]/+layout.ts reads on every navigation to
+	// route an Owner to the restore screen and everyone else to that
+	// same screen's own locked notice. This code exists for the routes
+	// still refused: it distinguishes "this Practice is locked" from an
+	// ordinary CodeForbidden, the same reasoning CodeMFARequired's own
+	// comment gives, for any caller (a stale tab, a direct API client)
+	// that reaches one of them anyway.
+	CodePracticePendingDeletion Code = "PRACTICE_PENDING_DELETION"
 )
 
 // APIError is docs/api-design.md section 7's structured error shape.

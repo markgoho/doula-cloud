@@ -27,10 +27,11 @@ import (
 type contextKey string
 
 const (
-	staffIDKey    contextKey = "staffauth.staffID"
-	practiceIDKey contextKey = "staffauth.practiceID"
-	txKey         contextKey = "staffauth.tx"
-	readerKey     contextKey = "staffauth.reader"
+	staffIDKey         contextKey = "staffauth.staffID"
+	practiceIDKey      contextKey = "staffauth.practiceID"
+	txKey              contextKey = "staffauth.tx"
+	readerKey          contextKey = "staffauth.reader"
+	pendingDeletionKey contextKey = "staffauth.pendingDeletion"
 )
 
 // StaffID returns the resolved Staff id for the current request.
@@ -56,6 +57,15 @@ func PracticeID(ctx context.Context) (string, bool) {
 func ReaderFrom(ctx context.Context) (Reader, bool) {
 	reader, ok := ctx.Value(readerKey).(Reader)
 	return reader, ok
+}
+
+// pendingDeletionFrom returns whether Middleware found this request's
+// Practice mid-deletion -- PracticeSessionHandler's own read of it,
+// carried on context instead of a second practices query, since
+// Middleware already ran the one that knows.
+func pendingDeletionFrom(ctx context.Context) bool {
+	v, _ := ctx.Value(pendingDeletionKey).(bool)
+	return v
 }
 
 // Tx returns the request-scoped database transaction, with
@@ -145,7 +155,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			isMember, roles, employmentType, requireMFA, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
+			isMember, roles, employmentType, requireMFA, pendingDeletion, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -169,6 +179,31 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			if !secondFactor && (reader.Has(roleOwner) || requireMFA) {
 				writeMFARequired(w)
 				return
+			}
+
+			// #871: a Practice pending deletion refuses every request but
+			// two: an Owner's own reach into practicedeletion's
+			// status/restore routes (decision 3's "fully locked... except
+			// that any current Owner ... can still reach the
+			// pending-deletion screen to restore it"), and the plain
+			// identity read GET .../session -- open to every role, not
+			// only Owner, because the app/'s +layout.ts load runs it
+			// before it knows any role at all, and needs PendingDeletion
+			// on its response to route an Owner to the restore screen and
+			// a non-Owner to an accurate locked message, rather than
+			// misreading this 403 as a stale Membership. Checked after
+			// the MFA gate above, not before: an Owner already needs a
+			// second factor to reach anything, including this, so there
+			// is no ordering where skipping this check first would let
+			// her in sooner.
+			if pendingDeletion {
+				sessionRoute := isPracticeSessionRoute(r, practiceID)
+				deletionRoute := reader.Has(roleOwner) && isPracticeDeletionRoute(r, practiceID)
+				if !sessionRoute && !deletionRoute {
+					apierr.Write(w, http.StatusForbidden, apierr.CodePracticePendingDeletion,
+						"this practice's deletion is pending", nil)
+					return
+				}
 			}
 
 			// last_active_at rides along with last_practice_id because
@@ -205,6 +240,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, practiceIDKey, practiceID)
 			ctx = context.WithValue(ctx, txKey, tx)
 			ctx = context.WithValue(ctx, readerKey, reader)
+			ctx = context.WithValue(ctx, pendingDeletionKey, pendingDeletion)
 			ctx = tasknudge.Begin(ctx)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -257,37 +293,70 @@ func setIdentityAndResolveStaff(ctx context.Context, tx *sql.Tx, identityUID str
 // downstream handler querying the table again. Both session vars are set
 // only here, after identity resolution has already succeeded, so no RLS
 // policy that reads them can be satisfied before that check has passed.
-func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (isMember bool, roles []string, employmentType string, requireMFA bool, err error) {
+func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, practiceID string) (isMember bool, roles []string, employmentType string, requireMFA, pendingDeletion bool, err error) {
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		return false, nil, "", false, fmt.Errorf("staffauth: set current practice id: %w", err)
+		return false, nil, "", false, false, fmt.Errorf("staffauth: set current practice id: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		return false, nil, "", false, fmt.Errorf("staffauth: set current staff id: %w", err)
+		return false, nil, "", false, false, fmt.Errorf("staffauth: set current staff id: %w", err)
 	}
 
 	var rolesText, employmentTypeText sql.NullString
+	var deletedAt sql.NullTime
 	scanErr := tx.QueryRowContext(ctx,
-		`SELECT array_to_string(pm.roles, ','), pm.employment_type::text, p.require_mfa_for_all_staff
+		`SELECT array_to_string(pm.roles, ','), pm.employment_type::text, p.require_mfa_for_all_staff,
+		        p.deletion_requested_at IS NOT NULL, p.deleted_at
 		 FROM practices p
 		 LEFT JOIN practice_memberships pm ON pm.practice_id = p.id AND pm.staff_id = $2
 		 WHERE p.id = $1`,
 		practiceID, staffID,
-	).Scan(&rolesText, &employmentTypeText, &requireMFA)
+	).Scan(&rolesText, &employmentTypeText, &requireMFA, &pendingDeletion, &deletedAt)
 	if errors.Is(scanErr, sql.ErrNoRows) {
 		// No such Practice at all -- same outward result as no membership.
-		return false, nil, "", false, nil
+		return false, nil, "", false, false, nil
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if scanErr != nil {
-		return false, nil, "", false, fmt.Errorf("staffauth: check practice membership: %w", scanErr)
+		return false, nil, "", false, false, fmt.Errorf("staffauth: check practice membership: %w", scanErr)
+	}
+	if deletedAt.Valid {
+		// #871: a finalized Practice reads as though it never existed --
+		// ADR-0027's own "locks and hides the row" applied to the one
+		// gate every Staff-scoped request runs through. Its Activity and
+		// credit_ledger rows still exist for whoever is allowed to query
+		// them directly; nothing here or downstream reaches them through
+		// a live session.
+		return false, nil, "", false, false, nil
 	}
 	if !rolesText.Valid {
 		// The Practice exists but staffID holds no membership row there.
-		return false, nil, "", requireMFA, nil
+		return false, nil, "", requireMFA, pendingDeletion, nil
 	}
-	return true, splitRoles(rolesText.String), employmentTypeText.String, requireMFA, nil
+	return true, splitRoles(rolesText.String), employmentTypeText.String, requireMFA, pendingDeletion, nil
+}
+
+// isPracticeDeletionRoute reports whether r is GET or DELETE
+// /api/practices/{practiceId}/deletion -- practicedeletion's own
+// read/restore routes, the only reach an Owner keeps into a Practice
+// pending deletion. Not POST: re-initiating an already-pending deletion
+// is not one of decision 3's sanctioned actions, so that request is
+// refused here rather than reaching InitiateHandler's own (friendlier,
+// but not this ticket's word) 409.
+func isPracticeDeletionRoute(r *http.Request, practiceID string) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodDelete {
+		return false
+	}
+	return r.URL.Path == "/api/practices/"+practiceID+"/deletion"
+}
+
+// isPracticeSessionRoute reports whether r is GET
+// /api/practices/{practiceId}/session -- the one read every role keeps
+// through a pending deletion, so the frontend can tell an Owner from
+// everyone else before deciding where to send her.
+func isPracticeSessionRoute(r *http.Request, practiceID string) bool {
+	return r.Method == http.MethodGet && r.URL.Path == "/api/practices/"+practiceID+"/session"
 }
 
 // writeMFARequired writes the Practice-scoped boundary's MFA refusal: a

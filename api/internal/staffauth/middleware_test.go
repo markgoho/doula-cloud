@@ -530,3 +530,206 @@ func TestMiddleware_RecordsThatThePracticeWasHere(t *testing.T) {
 		t.Fatalf("last_active_at moved from %v to %v within the same day", first, second)
 	}
 }
+
+// deletionServer wires the middleware in front of both an ordinary ping
+// route and a stand-in for practicedeletion's own
+// GET/DELETE /api/practices/{practiceId}/deletion -- the one path
+// isPracticeDeletionRoute names -- so #871's lockout tests can tell an
+// Owner's exempted reach into that one route apart from every other
+// route, which stays refused.
+func deletionServer(db *testdb.DB) *httptest.Server {
+	mux := http.NewServeMux()
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(ok))
+	mux.Handle("GET /api/practices/{practiceId}/deletion", staffauth.Middleware(db.App)(ok))
+	mux.Handle("DELETE /api/practices/{practiceId}/deletion", staffauth.Middleware(db.App)(ok))
+	mux.Handle("POST /api/practices/{practiceId}/deletion", staffauth.Middleware(db.App)(ok))
+	mux.Handle("GET /api/practices/{practiceId}/session", staffauth.Middleware(db.App)(staffauth.PracticeSessionHandler()))
+	return httptest.NewServer(mux)
+}
+
+func markPracticePendingDeletion(t *testing.T, db *testdb.DB, practiceID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() + interval '30 days' WHERE id = $1`,
+		practiceID,
+	); err != nil {
+		t.Fatalf("mark pending deletion: %v", err)
+	}
+}
+
+func TestMiddleware_PendingDeletionLockout_BlocksOrdinaryRoutes(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-pending-blocked"
+	_, practiceID := seedOwnerMembership(t, db, identityUID)
+	markPracticePendingDeletion(t, db, practiceID)
+
+	srv := deletionServer(db)
+	defer srv.Close()
+
+	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusForbidden)
+
+	var body apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Code != string(apierr.CodePracticePendingDeletion) {
+		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
+	}
+}
+
+func TestMiddleware_PendingDeletionLockout_BlocksNonOwner(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-pending-blocked"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	markPracticePendingDeletion(t, db, practiceID)
+
+	srv := deletionServer(db)
+	defer srv.Close()
+
+	session := authntest.SeedSession(t, db.App, identityUID)
+	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusForbidden)
+
+	var body apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Code != string(apierr.CodePracticePendingDeletion) {
+		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
+	}
+}
+
+func TestMiddleware_PendingDeletionLockout_ExemptsOwnerOnDeletionRoutes(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-pending-exempt"
+	_, practiceID := seedOwnerMembership(t, db, identityUID)
+	markPracticePendingDeletion(t, db, practiceID)
+
+	srv := deletionServer(db)
+	defer srv.Close()
+	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+
+	getResp := get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer getResp.Body.Close()
+	assertStatus(t, getResp, http.StatusOK)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/deletion", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	deleteResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer deleteResp.Body.Close()
+	assertStatus(t, deleteResp, http.StatusOK)
+}
+
+// TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole proves
+// the one route the lockout leaves open regardless of role: app/'s
+// +layout.ts load needs GET .../session to succeed for an Owner (to
+// route her to the restore screen) and for a non-Owner (to show an
+// accurate locked message) alike, carrying PendingDeletion: true either
+// way -- unlike GET/DELETE .../deletion, which stays Owner-only.
+func TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-pending-session-read"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	markPracticePendingDeletion(t, db, practiceID)
+
+	srv := deletionServer(db)
+	defer srv.Close()
+	session := authntest.SeedSession(t, db.App, identityUID)
+
+	resp := get(t, srv.URL+"/api/practices/"+practiceID+"/session", func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusOK)
+
+	var body staffauth.PracticeSessionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if !body.PendingDeletion {
+		t.Fatal("PendingDeletion = false, want true")
+	}
+}
+
+// TestMiddleware_PendingDeletionLockout_RefusesOwnerPOSTOnDeletionRoute
+// pins isPracticeDeletionRoute's own stated exclusion: POST is not one
+// of decision 3's sanctioned actions, even for an Owner on the exact
+// .../deletion path -- unlike GET/DELETE, it stays refused here rather
+// than reaching InitiateHandler's own (friendlier, but not this
+// ticket's word) 409 for an already-pending Practice.
+func TestMiddleware_PendingDeletionLockout_RefusesOwnerPOSTOnDeletionRoute(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-pending-post-refused"
+	_, practiceID := seedOwnerMembership(t, db, identityUID)
+	markPracticePendingDeletion(t, db, practiceID)
+
+	srv := deletionServer(db)
+	defer srv.Close()
+	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusForbidden)
+
+	var body apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Code != string(apierr.CodePracticePendingDeletion) {
+		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
+	}
+}
+
+func TestMiddleware_DeletedPracticeReadsAsNoMembership(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-finalized-blocked"
+	_, practiceID := seedOwnerMembership(t, db, identityUID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET deletion_requested_at = now(), deleted_at = now() WHERE id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("mark deleted: %v", err)
+	}
+
+	srv := deletionServer(db)
+	defer srv.Close()
+	session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
+
+	resp := get(t, srv.URL+"/api/practices/"+practiceID+"/deletion", func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusForbidden)
+
+	var body apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Code == string(apierr.CodePracticePendingDeletion) {
+		t.Fatal("a finalized Practice must read as no membership, not as pending-deletion")
+	}
+}
