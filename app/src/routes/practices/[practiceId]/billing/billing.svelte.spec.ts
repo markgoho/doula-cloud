@@ -102,6 +102,26 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 	});
 });
 
+describe('what a Credit buys (#286)', () => {
+	it('states the settled sentence above the balance, matching CONTEXT.md and pilot-terms.md', async () => {
+		await render(Page, { params: fixture.params, data: dataWithSession });
+
+		await expect
+			.element(
+				testPage.getByText(
+					'One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care.'
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('defaults the purchase form Quantity to 5, not 1', async () => {
+		await render(Page, { params: fixture.params, data: dataWithSession });
+
+		await expect.element(testPage.getByLabelText('Quantity')).toHaveValue(5);
+	});
+});
+
 describe('billing ledger', () => {
 	it('right-aligns the Quantity column, header and body cell alike (#509)', async () => {
 		// DataTable's own content floor (#508) stacks it into a <dl> below
