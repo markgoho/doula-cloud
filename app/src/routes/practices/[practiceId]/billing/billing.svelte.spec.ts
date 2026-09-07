@@ -42,13 +42,16 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
-// The Owner-role gate itself comes off the fixture's own `pageData.session`
-// (#835) rather than a fetch this spec answers; apiFetchWithSession is
-// mocked only for the ledger's own reads (the "Load more" failure test
-// below).
+// The Owner-or-Admin role gate itself comes off the fixture's own
+// `pageData.session` (#835) rather than a fetch this spec answers;
+// apiFetchWithSession is mocked only for the ledger's own reads (the
+// "Load more" failure test below). Reset to the fixture's own owner
+// session before every test (#257), since `withRole` below mutates the
+// shared `pageState` in place for the tests that need a different role.
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	sessionStorage.clear();
+	Object.assign(pageState, toPageState(fixture));
 });
 
 const { practiceId } = fixture.params;
@@ -68,6 +71,14 @@ const sessionStub = {
 	isContractor: false
 };
 const dataWithSession = { ...data, session: sessionStub };
+
+// Overwrites the mocked page.data's session in place, since that -- not
+// the `data` prop -- is what the route reads its role from (see the
+// comment above dataWithSession). Restored to the fixture's own owner
+// session by beforeEach.
+function withRole(roles: string[]) {
+	pageState.data = { ...pageState.data, session: { ...sessionStub, roles } };
+}
 
 // SIFERS setup() for the price describe block below (#285) -- the rest of
 // this file's describe blocks predate that convention and repeat the same
@@ -154,6 +165,47 @@ describe('what a Credit costs (#285)', () => {
 		await expect.element(testPage.getByText('Credit price is unavailable right now.')).toBeVisible();
 		await expect.element(testPage.getByText(`Credit balance: ${data.balance}`)).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeVisible();
+	});
+});
+
+describe('who may buy Credits (#257)', () => {
+	// Names the same roles engagementrequest/approve.go's out-of-credits
+	// refusal does ("no credits remaining, ask a practice owner or admin
+	// to buy more"), so a person sent here by that wall finds the reason
+	// repeated rather than a silently dead control.
+	const explanation = 'Buying Credits is for a practice Owner or Admin.';
+
+	it('enables Buy credits for an Owner, with no explanation shown', async () => {
+		await renderBilling();
+
+		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeEnabled();
+		await expect.element(testPage.getByText(explanation)).not.toBeInTheDocument();
+	});
+
+	it('enables Buy credits for an Admin, matching an Owner (#257 -- was Owner-only)', async () => {
+		withRole(['admin']);
+		await renderBilling();
+
+		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeEnabled();
+		await expect.element(testPage.getByText(explanation)).not.toBeInTheDocument();
+	});
+
+	it('disables Buy credits for a Doula, and explains why in text a screen reader announces', async () => {
+		withRole(['doula']);
+		await renderBilling();
+
+		const button = testPage.getByRole('button', { name: 'Buy credits' });
+		await expect.element(button).toBeDisabled();
+		await expect.element(testPage.getByText(explanation)).toBeVisible();
+		await expect.element(button).toHaveAttribute('aria-describedby', 'buy-credits-help');
+	});
+
+	it('disables Buy credits, and explains why, for a session holding no role at all', async () => {
+		withRole([]);
+		await renderBilling();
+
+		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeDisabled();
+		await expect.element(testPage.getByText(explanation)).toBeVisible();
 	});
 });
 

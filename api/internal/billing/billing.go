@@ -6,10 +6,11 @@
 // packages. #76 adds ConsumeCredit, the seam #52's Engagement-creation flow
 // will invoke to spend one credit once it's wired in (a separate ticket --
 // this one only builds and tests the operation itself). #77 adds the
-// purchase side: PostPurchaseHandler (Owner-only, creates a Stripe
-// Checkout Session) and PostPurchaseWebhookHandler (credits the ledger
-// once Stripe confirms payment), plus the StripeClient seam the former
-// runs Stripe API calls through.
+// purchase side: PostPurchaseHandler (Owner or Admin, creates a Stripe
+// Checkout Session -- widened from Owner-only by ADR-0017) and
+// PostPurchaseWebhookHandler (credits the ledger once Stripe confirms
+// payment), plus the StripeClient seam the former runs Stripe API calls
+// through.
 package billing
 
 import (
@@ -21,8 +22,8 @@ import (
 
 // ErrNoCreditsRemaining is returned by ConsumeCredit when a Practice's
 // derived balance is 0 or less -- the caller (#52's Engagement-creation
-// handler) turns this into a "no credits left, ask an Owner to buy more"
-// response.
+// handler) turns this into a "no credits remaining, ask a practice owner
+// or admin to buy more" response.
 var ErrNoCreditsRemaining = errors.New("billing: no credits remaining")
 
 // ConsumeCredit spends one credit for practiceID, appending a -1
