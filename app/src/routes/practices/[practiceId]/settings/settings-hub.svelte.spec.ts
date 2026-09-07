@@ -40,6 +40,9 @@ describe('the Settings hub', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Blocked email addresses' }))
 			.not.toBeInTheDocument();
+		await expect
+			.element(testPage.getByRole('link', { name: "Export this Practice's data" }))
+			.not.toBeInTheDocument();
 	});
 
 	/*
@@ -72,5 +75,25 @@ describe('the Settings hub', () => {
 		await expect
 			.element(link)
 			.toHaveAttribute('href', '/practices/practice-1/settings/mfa');
+	});
+
+	// #288: the export control is Owner-only, the same seat as erasure --
+	// a whole-Practice export crosses every attachment and role boundary
+	// ADR-0008 draws, so it does not widen to Admin the way blocked
+	// addresses does.
+	it('adds the Owner-only export entry, linking to the BFF download route', async () => {
+		await setup(['owner']);
+
+		const link = testPage.getByRole('link', { name: "Export this Practice's data" });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', '/api/practices/practice-1/export');
+	});
+
+	it('withholds the export entry from an Admin', async () => {
+		await setup(['admin']);
+
+		await expect
+			.element(testPage.getByRole('link', { name: "Export this Practice's data" }))
+			.not.toBeInTheDocument();
 	});
 });

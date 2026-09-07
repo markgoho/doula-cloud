@@ -13,6 +13,7 @@
 	 */
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
+	import { apiBaseURL } from '#lib/api.js';
 	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -77,6 +78,18 @@
 						label: 'Multi-factor authentication',
 						description: 'Whether every Staff member must use a second factor to sign in, not only Owners.',
 						href: resolve('/practices/[practiceId]/settings/mfa', { practiceId })
+					},
+					// #288: a ZIP of every Client, Engagement, Contract, Invoice
+					// and the rest of what this Practice owns, as CSVs a
+					// spreadsheet opens without Doula Cloud. Owner-only, same
+					// seat as erasure -- a whole-Practice export is a bulk read
+					// across every attachment and role boundary ADR-0008 draws.
+					// Plain API href, not resolve(): this is not a page inside
+					// the app, it is a download the browser fetches on its own.
+					{
+						label: "Export this Practice's data",
+						description: 'Every record this Practice holds, as one ZIP of spreadsheet-ready files.',
+						href: `${apiBaseURL()}/api/practices/${practiceId}/export`
 					}
 				]
 			: [])

@@ -67,7 +67,7 @@ func PutMFARequiredHandler() http.Handler {
 			actorStaffID, _ := StaffID(r.Context())
 			if err := activity.Record(r.Context(), tx, activity.Entry{
 				PracticeID:  practiceID,
-				SubjectKind: "practice",
+				SubjectKind: activity.SubjectPractice,
 				SubjectID:   practiceID,
 				Action:      action,
 				Diff:        json.RawMessage("{}"),
