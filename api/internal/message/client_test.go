@@ -48,9 +48,9 @@ func newPortalServerWithPusher(t *testing.T, db *testdb.DB, uid string, pusher p
 func TestClientCreateHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-creating"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -78,9 +78,9 @@ func TestClientCreateHandler_Success(t *testing.T) {
 func TestClientCreateHandler_EmptyBodyRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-empty-body"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -97,9 +97,9 @@ func TestClientCreateHandler_EmptyBodyRejected(t *testing.T) {
 func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-bad-json"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -121,11 +121,11 @@ func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {
 // handler, by rls_test.go's TestRLS_MessagesClientTierScopedToOwnEngagement.
 func TestClientCreateHandler_NotLinkedToClientForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
 
-	unrelatedClientID, _ := seedClientEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
-	seedPortalUser(t, db, "client-elsewhere", unrelatedClientID)
+	unrelatedClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
+	testdb.SeedPortalUser(t, db, "client-elsewhere", unrelatedClientID)
 
 	srv, session := newPortalServer(t, db, "client-elsewhere")
 	defer srv.Close()
@@ -142,9 +142,9 @@ func TestClientCreateHandler_NotLinkedToClientForbidden(t *testing.T) {
 func TestClientListHandler_EmptyThread(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-empty-thread"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -167,9 +167,9 @@ func TestClientListHandler_EmptyThread(t *testing.T) {
 func TestClientListHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-bad-cursor"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -189,9 +189,9 @@ func TestClientListHandler_InvalidCursorRejected(t *testing.T) {
 func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-paging"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	const total = 35 // pageSize (30) + 5, to force a second page
 	for i := range total {
@@ -234,12 +234,12 @@ func TestClientListHandler_PaginatesNewestFirst(t *testing.T) {
 // TestClientCreateHandler_NotLinkedToClientForbidden for reads.
 func TestClientListHandler_NotLinkedToClientForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	ownerClientID, engagementID := seedClientEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	ownerClientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
 	seedMessage(t, db, engagementID, "client", ownerClientID, "not visible to other clients")
 
-	unrelatedClientID, _ := seedClientEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
-	seedPortalUser(t, db, "client-listing-elsewhere", unrelatedClientID)
+	unrelatedClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
+	testdb.SeedPortalUser(t, db, "client-listing-elsewhere", unrelatedClientID)
 
 	srv, session := newPortalServer(t, db, "client-listing-elsewhere")
 	defer srv.Close()
@@ -266,10 +266,10 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 	const bodyFromClient = "Thanks, see you then!"
 
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Shared Practice")
-	seedStaffAtPracticeNamed(t, db, practiceID, identityUIDStaff, "Jamie Doula")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUIDClient, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Shared Practice")
+	testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDStaff, "Jamie Doula", []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUIDClient, clientID)
 
 	staffSrv, staffSession := newServer(t, db, identityUIDStaff)
 	defer staffSrv.Close()
@@ -327,9 +327,9 @@ func TestSharedThread_StaffAndClientSeeOneContinuousThread(t *testing.T) {
 func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-attachment"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -367,9 +367,9 @@ func TestClientCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) 
 func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-bad-message-id"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -386,9 +386,9 @@ func TestClientAttachmentHandler_InvalidMessageID(t *testing.T) {
 // download route.
 func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	ownerClientID, engagementID := seedClientEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
-	seedPortalUser(t, db, "client-owner-of-thread", ownerClientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	ownerClientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Owner Client", "owner@example.com")
+	testdb.SeedPortalUser(t, db, "client-owner-of-thread", ownerClientID)
 
 	ownerSrv, ownerSession := newPortalServer(t, db, "client-owner-of-thread")
 	defer ownerSrv.Close()
@@ -400,8 +400,8 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 		t.Fatalf("decode create response: %v", err)
 	}
 
-	unrelatedClientID, _ := seedClientEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
-	seedPortalUser(t, db, "client-elsewhere-dl", unrelatedClientID)
+	unrelatedClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Unrelated Client", "unrelated@example.com")
+	testdb.SeedPortalUser(t, db, "client-elsewhere-dl", unrelatedClientID)
 
 	unrelatedSrv, unrelatedSession := newPortalServer(t, db, "client-elsewhere-dl")
 	defer unrelatedSrv.Close()

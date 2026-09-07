@@ -22,23 +22,10 @@ func newTestWorker(sender mail.Sender) sessionnotice.Worker {
 	return sessionnotice.NewWorker(outbox.Mailer{Sender: sender, Now: time.Now, From: "a@b.test", ReplyTo: "support@b.test"})
 }
 
-// seedStaff inserts a Staff row for identityUID with a fixed email, using
-// the superuser Admin connection. sessionnotice needs no Practice or
-// membership -- the recipient is the Staff member alone.
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY')`,
-		identityUID,
-	); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
-}
-
-// seedOutboxRow inserts an outbox row of kind for identityUID directly
+// seedSessionNoticeOutboxRow inserts an outbox row of kind for identityUID directly
 // (bypassing Queue*), for tests that need to control status,
 // attempt_count, next_attempt_at, or created_at precisely.
-func seedOutboxRow(t *testing.T, db *testdb.DB, identityUID, kind string, nextAttemptAt, createdAt time.Time) string {
+func seedSessionNoticeOutboxRow(t *testing.T, db *testdb.DB, identityUID, kind string, nextAttemptAt, createdAt time.Time) string {
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -110,7 +97,7 @@ func TestQueueNewSignInIfDue_SkipsNonStaffIdentity(t *testing.T) {
 func TestQueueNewSignInIfDue_QueuesFirstSignIn(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-first-signin"
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 
 	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, time.Now(), &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
@@ -126,9 +113,9 @@ func TestQueueNewSignInIfDue_QueuesFirstSignIn(t *testing.T) {
 func TestQueueNewSignInIfDue_SkipsWithinIdleWindow(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-second-device-same-day"
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 	now := time.Now()
-	seedOutboxRow(t, db, uid, "new_signin", now, now.Add(-time.Hour))
+	seedSessionNoticeOutboxRow(t, db, uid, "new_signin", now, now.Add(-time.Hour))
 
 	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
@@ -143,9 +130,9 @@ func TestQueueNewSignInIfDue_SkipsWithinIdleWindow(t *testing.T) {
 func TestQueueNewSignInIfDue_QueuesAgainAfterIdleWindow(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-returns-after-gap"
-	seedStaff(t, db, uid)
+	testdb.SeedStaff(t, db, uid)
 	now := time.Now()
-	seedOutboxRow(t, db, uid, "new_signin", now, now.Add(-8*24*time.Hour))
+	seedSessionNoticeOutboxRow(t, db, uid, "new_signin", now, now.Add(-8*24*time.Hour))
 
 	if err := sessionnotice.QueueNewSignInIfDue(t.Context(), db.App, uid, now, &tasknudge.FakeEnqueuer{}); err != nil {
 		t.Fatalf("QueueNewSignInIfDue: %v", err)
@@ -222,8 +209,8 @@ func TestQueueSessionRevoked_ConflictOnExistingPendingRowIsNoop(t *testing.T) {
 func TestWorker_ProcessPending_MailsNewSignInAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-signin"
-	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "new_signin", time.Now().Add(-time.Minute), time.Now())
+	testdb.SeedStaff(t, db, uid)
+	outboxID := seedSessionNoticeOutboxRow(t, db, uid, "new_signin", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
@@ -236,7 +223,7 @@ func TestWorker_ProcessPending_MailsNewSignInAndMarksSent(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("sent %d messages, want 1", len(sent))
 	}
-	if sent[0].To != "staff@example.com" {
+	if sent[0].To != uid+"@example.com" {
 		t.Fatalf("To = %q", sent[0].To)
 	}
 	if sent[0].Subject != "Doula Cloud: new sign-in to your account" {
@@ -247,8 +234,8 @@ func TestWorker_ProcessPending_MailsNewSignInAndMarksSent(t *testing.T) {
 func TestWorker_ProcessPending_MailsSessionRevoked(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-revoked"
-	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "session_revoked", time.Now().Add(-time.Minute), time.Now())
+	testdb.SeedStaff(t, db, uid)
+	outboxID := seedSessionNoticeOutboxRow(t, db, uid, "session_revoked", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
@@ -272,7 +259,7 @@ func TestWorker_ProcessPending_MailsSessionRevoked(t *testing.T) {
 func TestWorker_ProcessPending_NoStaffMarksSentWithNoMail(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-since-removed"
-	outboxID := seedOutboxRow(t, db, uid, "new_signin", time.Now().Add(-time.Minute), time.Now())
+	outboxID := seedSessionNoticeOutboxRow(t, db, uid, "new_signin", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
@@ -340,8 +327,8 @@ func TestQueueMFARecoveryCleared_ConflictOnExistingPendingRowIsNoop(t *testing.T
 func TestWorker_ProcessPending_MailsMFARecoveryCleared(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-worker-mfa-cleared"
-	seedStaff(t, db, uid)
-	outboxID := seedOutboxRow(t, db, uid, "mfa_recovery_cleared", time.Now().Add(-time.Minute), time.Now())
+	testdb.SeedStaff(t, db, uid)
+	outboxID := seedSessionNoticeOutboxRow(t, db, uid, "mfa_recovery_cleared", time.Now().Add(-time.Minute), time.Now())
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))

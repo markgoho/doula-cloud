@@ -16,8 +16,8 @@ import (
 func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-visits-bad-cursor"
-	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -37,8 +37,8 @@ func TestListHandler_InvalidCursorRejected(t *testing.T) {
 func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-visits-paging"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	const total = 31 // pageSize (30) + 1, to force a second page
 	for range total {
@@ -113,8 +113,8 @@ func authedBody(t *testing.T, session, method, url string, body []byte) *http.Re
 func TestCreateHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-creating"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -137,9 +137,9 @@ func TestCreateHandler_Success(t *testing.T) {
 func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "admin-creating"
-	practiceID := seedPractice(t, db)
-	seedStaffAtPracticeWithRoles(t, db, practiceID, identityUID, []string{adminRole})
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{adminRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -155,9 +155,9 @@ func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-wrong-practice"
-	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
-	otherPracticeID, _ := seedDoulaWithMembership(t, db, "doula-elsewhere")
-	engagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "doula-elsewhere", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -173,7 +173,7 @@ func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-bad-engagement"
-	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -189,8 +189,8 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-listing"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -214,9 +214,9 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 
 func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := seedDoulaWithMembership(t, db, "doula-creator")
-	seedStaffAtPracticeWithRoles(t, db, practiceID, "admin-bystander", []string{adminRole})
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-creator", []string{doulaRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-bystander", []string{adminRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, "admin-bystander")
@@ -235,10 +235,10 @@ func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 // gets the same "not found" response an out-of-practice Engagement gets.
 func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := seedDoulaWithMembership(t, db, "doula-owner-of-visits")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-visits", []string{doulaRole}, "employee")
 	contractorUID := "contractor-unattached-visits"
-	seedContractorAtPractice(t, db, practiceID, contractorUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, contractorUID)
@@ -256,12 +256,12 @@ func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 // other half: an open, granted attachment reaches.
 func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := seedDoulaWithMembership(t, db, "doula-owner-of-visits-2")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-visits-2", []string{doulaRole}, "employee")
 	contractorUID := "contractor-attached-visits"
-	contractorStaffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	contractorStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedVisit(t, db, engagementID, staffID)
-	seedGrantedAttachment(t, db, engagementID, contractorStaffID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, contractorStaffID)
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
@@ -277,9 +277,9 @@ func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-list-wrong-practice"
-	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
-	otherPracticeID, _ := seedDoulaWithMembership(t, db, "doula-list-elsewhere")
-	engagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "doula-list-elsewhere", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -295,7 +295,7 @@ func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 func TestListHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-list-bad-engagement"
-	practiceID, _ := seedDoulaWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -311,9 +311,9 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 func TestReassignHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassigning"
-	practiceID, creatorStaffID := seedDoulaWithMembership(t, db, identityUID)
-	targetStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "doula-target", []string{doulaRole})
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-target", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -341,9 +341,9 @@ func TestReassignHandler_Success(t *testing.T) {
 func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-wrong-practice"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	otherPracticeID, otherStaffID := seedDoulaWithMembership(t, db, "doula-reassign-elsewhere")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	otherPracticeID, otherStaffID := testdb.SeedStaffAtNewPractice(t, db, "doula-reassign-elsewhere", []string{doulaRole}, "employee")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -363,10 +363,10 @@ func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 
 func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedStaffAtPracticeWithRoles(t, db, practiceID, "admin-reassigning", []string{adminRole})
-	doulaStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "doula-bystander", []string{doulaRole})
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-reassigning", []string{adminRole}, "employee")
+	doulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-bystander", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, doulaStaffID)
 
 	srv, session := newServer(t, db, "admin-reassigning")
@@ -387,8 +387,8 @@ func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-unknown-target"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -409,9 +409,9 @@ func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-non-doula-target"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	nonDoulaStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "admin-target", []string{adminRole})
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	nonDoulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "admin-target", []string{adminRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -432,8 +432,8 @@ func TestReassignHandler_TargetNotDoula(t *testing.T) {
 func TestReassignHandler_VisitNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-missing-visit"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -453,8 +453,8 @@ func TestReassignHandler_VisitNotFound(t *testing.T) {
 func TestReassignHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-bad-body"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -471,8 +471,8 @@ func TestReassignHandler_InvalidBody(t *testing.T) {
 func TestReassignHandler_InvalidStaffID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-bad-staff-id"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -493,7 +493,7 @@ func TestReassignHandler_InvalidStaffID(t *testing.T) {
 func TestReassignHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-bad-engagement-id"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -513,8 +513,8 @@ func TestReassignHandler_InvalidEngagementID(t *testing.T) {
 func TestReassignHandler_InvalidVisitID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-bad-visit-id"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -537,9 +537,9 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-granting"
-	practiceID, creatorStaffID := seedDoulaWithMembership(t, db, identityUID)
-	targetStaffID := seedStaffAtPracticeWithRoles(t, db, practiceID, "doula-employee-target", []string{doulaRole})
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-employee-target", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -573,9 +573,9 @@ func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
 func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-to-contractor"
-	practiceID, creatorStaffID := seedDoulaWithMembership(t, db, identityUID)
-	targetStaffID := seedContractorAtPractice(t, db, practiceID, "contractor-target")
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	targetStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-target")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -608,11 +608,11 @@ func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
 func TestReassignHandler_AllowsAnAttachedContractor(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-to-attached"
-	practiceID, creatorStaffID := seedDoulaWithMembership(t, db, identityUID)
-	targetStaffID := seedContractorAtPractice(t, db, practiceID, "contractor-attached")
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	targetStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-attached")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
-	seedGrantedAttachment(t, db, engagementID, targetStaffID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, targetStaffID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -632,8 +632,8 @@ func TestReassignHandler_AllowsAnAttachedContractor(t *testing.T) {
 func TestCreateHandler_GrantsTheEmployeeWhoLoggedTheVisit(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-logging"
-	practiceID, staffID := seedDoulaWithMembership(t, db, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -672,10 +672,10 @@ func TestCreateHandler_GrantsTheEmployeeWhoLoggedTheVisit(t *testing.T) {
 func TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "contractor-logging"
-	practiceID := seedPractice(t, db)
-	staffID := seedContractorAtPractice(t, db, practiceID, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedGrantedAttachment(t, db, engagementID, staffID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, identityUID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -712,9 +712,9 @@ func TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit(t *testing.T) {
 func TestCreateHandler_RefusesAnUnattachedContractor(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "contractor-unattached-logging"
-	practiceID := seedPractice(t, db)
-	seedContractorAtPractice(t, db, practiceID, identityUID)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedContractorAtPractice(t, db, practiceID, identityUID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()

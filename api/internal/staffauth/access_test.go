@@ -25,30 +25,30 @@ func seedContractorMembership(t *testing.T, db *testdb.DB, practiceID, staffID s
 // attachment never reaches (#228).
 func TestReader_CanAccessEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Access Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "Access Test Practice")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
-	ownerID := seedStaff(t, db, "access-owner")
+	ownerID := testdb.SeedStaff(t, db, "access-owner")
 	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
 
-	adminID := seedStaff(t, db, "access-admin")
+	adminID := testdb.SeedStaff(t, db, "access-admin")
 	seedMembershipWithRoles(t, db, practiceID, adminID, "{admin}")
 
-	employeeID := seedStaff(t, db, "access-employee")
+	employeeID := testdb.SeedStaff(t, db, "access-employee")
 	seedMembershipWithRoles(t, db, practiceID, employeeID, "{doula}")
 
-	unattachedContractorID := seedStaff(t, db, "access-contractor-unattached")
+	unattachedContractorID := testdb.SeedStaff(t, db, "access-contractor-unattached")
 	seedContractorMembership(t, db, practiceID, unattachedContractorID)
 
-	accruedContractorID := seedStaff(t, db, "access-contractor-accrued")
+	accruedContractorID := testdb.SeedStaff(t, db, "access-contractor-accrued")
 	seedContractorMembership(t, db, practiceID, accruedContractorID)
 	testdb.SeedAttachment(t, db, engagementID, accruedContractorID, "accrued", false)
 
-	endedContractorID := seedStaff(t, db, "access-contractor-ended")
+	endedContractorID := testdb.SeedStaff(t, db, "access-contractor-ended")
 	seedContractorMembership(t, db, practiceID, endedContractorID)
 	testdb.SeedAttachment(t, db, engagementID, endedContractorID, "granted", true)
 
-	grantedContractorID := seedStaff(t, db, "access-contractor-granted")
+	grantedContractorID := testdb.SeedStaff(t, db, "access-contractor-granted")
 	seedContractorMembership(t, db, practiceID, grantedContractorID)
 	testdb.SeedAttachment(t, db, engagementID, grantedContractorID, "granted", false)
 
@@ -95,20 +95,20 @@ func TestReader_CanAccessEngagement(t *testing.T) {
 // Client's Engagements, not just one named one.
 func TestReader_CanAccessClient(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Client Access Test Practice")
+	practiceID := testdb.SeedPractice(t, db, "Client Access Test Practice")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	var clientID string
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT client_id FROM engagements WHERE id = $1`, engagementID).Scan(&clientID); err != nil {
 		t.Fatalf("read client id: %v", err)
 	}
 
-	ownerID := seedStaff(t, db, "client-access-owner")
+	ownerID := testdb.SeedStaff(t, db, "client-access-owner")
 	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
 
-	unattachedContractorID := seedStaff(t, db, "client-access-contractor-unattached")
+	unattachedContractorID := testdb.SeedStaff(t, db, "client-access-contractor-unattached")
 	seedContractorMembership(t, db, practiceID, unattachedContractorID)
 
-	attachedContractorID := seedStaff(t, db, "client-access-contractor-attached")
+	attachedContractorID := testdb.SeedStaff(t, db, "client-access-contractor-attached")
 	seedContractorMembership(t, db, practiceID, attachedContractorID)
 	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
 

@@ -54,57 +54,13 @@ const (
 	openInvoiceStatus = "open"
 )
 
-// seedStaffAtPractice seeds an employee Doula at practiceID.
-func seedStaffAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
-	t.Helper()
-	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
-}
-
-// seedContractorAtPractice mirrors seedStaffAtPractice but for a
-// contractor Doula -- ADR-0008's attachment-narrowed column.
-func seedContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
-	t.Helper()
-	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "contractor")
-}
-
-// seedOwnerContractorAtPractice seeds a Membership holding both the
-// owner role and a contractor employment type -- ADR-0017's "solo
-// Practice": someone who runs the Practice and also does the work,
-// billed as a contractor.
-func seedOwnerContractorAtPractice(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
-	t.Helper()
-	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole, doulaRole}, "contractor")
-}
-
-// seedStaffWithMembership inserts a new Practice plus a Staff member at
-// it, via seedStaffAtPractice.
-func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-
-	practiceID = testdb.SeedPractice(t, db, "Test Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	return practiceID
-}
-
-// seedClient inserts a bare Client row (no Engagement) under practiceID,
-// using the superuser Admin connection.
-func seedClient(t *testing.T, db *testdb.DB, practiceID, givenName, email string) (clientID string) {
-	t.Helper()
-
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, NULLIF($3, '')) RETURNING id`,
-		practiceID, givenName, email,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	return clientID
-}
-
 // seedClientFull inserts a Client row with given name, family name, email
 // and date of birth all set -- what #814's collision-predicate tests need
 // and seedClient's single given-name field can't provide (given_name
 // alone there carries a whole "Jane Doe"-shaped string, with family_name
-// left NULL). dateOfBirth is "" to leave it unset.
+// left NULL). dateOfBirth is "" to leave it unset. Stays local rather
+// than moving to testdb: family_name/date_of_birth are collision-check
+// fields only this package's own predicate tests read.
 func seedClientFull(t *testing.T, db *testdb.DB, practiceID, givenName, familyName, email, dateOfBirth string) (clientID string) {
 	t.Helper()
 
@@ -118,26 +74,14 @@ func seedClientFull(t *testing.T, db *testdb.DB, practiceID, givenName, familyNa
 	return clientID
 }
 
-// seedClientEngagement inserts a Client and an active Engagement linking
-// them to practiceID, using the superuser Admin connection.
-func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID, givenName, email string) (clientID, engagementID string) {
-	t.Helper()
-
-	clientID = seedClient(t, db, practiceID, givenName, email)
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'active', 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return clientID, engagementID
-}
-
-// seedEngagement inserts a second (or third) Engagement onto an
-// already-seeded clientID -- seedClientEngagement only ever seeds a
-// Client's first, so a test proving a Client can hold more than one
-// concurrent open Engagement (ADR-0017) needs this to add the rest.
-func seedEngagement(t *testing.T, db *testdb.DB, clientID, practiceID, status, kind string) (engagementID string) {
+// seedEngagementForClient inserts a second (or third) Engagement onto an
+// already-seeded clientID -- testdb.SeedEngagementInStatus only ever
+// seeds a Client's first, so a test proving a Client can hold more than
+// one concurrent open Engagement (ADR-0017) needs this to add the rest.
+// Stays local under this name rather than testdb: the "add another
+// Engagement to an existing Client" shape is this package's own, not
+// duplicated by any other package's fixture.
+func seedEngagementForClient(t *testing.T, db *testdb.DB, clientID, practiceID, status, kind string) (engagementID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, $3, $4) RETURNING id`,
@@ -191,19 +135,7 @@ func seedFieldTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON strin
 	}
 }
 
-// seedGrantedAttachment inserts an open, granted-origin
-// engagement_attachments row directly.
-func seedGrantedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $2)`,
-		engagementID, staffID,
-	); err != nil {
-		t.Fatalf("seed granted attachment: %v", err)
-	}
-}
-
-// seedGrantedAttachmentWithFee mirrors seedGrantedAttachment but also
+// seedGrantedAttachmentWithFee mirrors testdb.SeedGrantedAttachment but also
 // sets fee_amount_cents -- ADR-0008's own agreed fee, for the Clients
 // list rollup's contractor-only field (#264).
 func seedGrantedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID string, feeAmountCents int64) {
@@ -216,11 +148,14 @@ func seedGrantedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, sta
 	}
 }
 
-// seedContract inserts a Contract row for engagementID at status,
+// seedClientContract inserts a Contract row for engagementID at status,
 // bypassing contracts.PostContractHandler -- for a test that only needs
 // the status a Clients-list rollup line reads, not the merge-field
-// machinery around it.
-func seedContract(t *testing.T, db *testdb.DB, engagementID, status string) (contractID string) {
+// machinery around it. Stays local under this name rather than testdb:
+// contracts/template_test.go's own seedContract sets prose for a
+// template-rendering test, a different concern from this one status-only
+// rollup fixture.
+func seedClientContract(t *testing.T, db *testdb.DB, engagementID, status string) (contractID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO contracts (engagement_id, status, prose) VALUES ($1, $2, '') RETURNING id`,
@@ -231,11 +166,14 @@ func seedContract(t *testing.T, db *testdb.DB, engagementID, status string) (con
 	return contractID
 }
 
-// seedInvoice inserts an Invoice row against contractID at status,
+// seedClientInvoice inserts an Invoice row against contractID at status,
 // bypassing payments.PostInvoiceHandler and Stripe entirely --
 // stripe_invoice_id only needs to be a unique string here, never a real
-// Stripe id.
-func seedInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, status string, amountCents int64) {
+// Stripe id. Stays local under this name rather than testdb:
+// payments/invoice_test.go's own seedInvoice takes a created_at and
+// returns the invoiceID, both of which its ordering assertions need and
+// this package's rollup fixture doesn't.
+func seedClientInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, status string, amountCents int64) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents)

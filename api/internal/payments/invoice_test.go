@@ -22,26 +22,6 @@ import (
 // goconst's package-wide "open" repeat count crossed its threshold.
 const invoiceStatusOpen = "open"
 
-// seedEngagement inserts a Client (with the given name/email, so tests can
-// assert exactly what reaches the fake Stripe port) and an Engagement
-// linking them to practiceID, using the superuser Admin connection.
-func seedEngagement(t *testing.T, db *testdb.DB, practiceID, clientName, clientEmail string) (engagementID string) {
-	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, $2, $3) RETURNING id`, practiceID, clientName, clientEmail,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return engagementID
-}
-
 // seedContractWithStatus seeds a Contract row directly, bypassing the
 // contracts package's own handlers (this package has no dependency on
 // it), with an explicit status so tests can prove GetInvoicesHandler still
@@ -57,7 +37,12 @@ func seedContractWithStatus(t *testing.T, db *testdb.DB, engagementID, status st
 	return contractID
 }
 
-func seedContract(t *testing.T, db *testdb.DB, engagementID string) (contractID string) {
+// seedDraftContract is seedContractWithStatus at "draft", this package's
+// own most common fixture shape. Stays local: contracts/template_test.go's
+// own seedContract writes a caller-given status and prose for a
+// template-rendering test, a different concern from this package's
+// invoice-billing fixture.
+func seedDraftContract(t *testing.T, db *testdb.DB, engagementID string) (contractID string) {
 	t.Helper()
 	return seedContractWithStatus(t, db, engagementID, "draft")
 }
@@ -75,7 +60,10 @@ func seedConnectAccount(t *testing.T, db *testdb.DB, practiceID, accountID strin
 
 // seedInvoice inserts an invoices row directly at an explicit createdAt,
 // so listing-order tests are deterministic rather than racing against
-// now()'s resolution.
+// now()'s resolution. Stays local: testdb has no invoice export, and no
+// other package's tests need an invoice at a controlled timestamp --
+// client's seedClientInvoice covers a different shape (no explicit
+// createdAt).
 func seedInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, stripeInvoiceID, status string, amountCents int64, createdAt time.Time) (invoiceID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -165,9 +153,9 @@ func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID,
 func TestPostInvoiceHandler_NotConnectedOwnerGetsConnectRequired(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-gate-owner"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -207,9 +195,9 @@ func TestPostInvoiceHandler_NotConnectedOwnerGetsConnectRequired(t *testing.T) {
 func TestPostInvoiceHandler_NotConnectedNonOwnerGetsAskAnOwnerState(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-gate-non-owner"
-	practiceID := seedMember(t, db, uid) // doula role, not owner
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -245,9 +233,9 @@ func TestPostInvoiceHandler_NotConnectedNonOwnerGetsAskAnOwnerState(t *testing.T
 func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-create"
-	practiceID := seedMember(t, db, uid) // any Staff with practice access, no owner gating
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // any Staff with practice access, no owner gating
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
 		PracticeID:   practiceID,
@@ -338,9 +326,9 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-no-email"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "No Email Client", "")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "No Email Client", "")
+	seedDraftContract(t, db, engagementID)
 	fakeClient := payments.NewFakeClient()
 	accountID, err := fakeClient.CreateAccount(t.Context(), payments.AccountProfile{
 		PracticeID:   practiceID,
@@ -371,8 +359,8 @@ func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
 func TestPostInvoiceHandler_NoContractReturns404(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-no-contract"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -394,7 +382,7 @@ func TestPostInvoiceHandler_NoContractReturns404(t *testing.T) {
 func TestPostInvoiceHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-malformed-engagement"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -413,7 +401,7 @@ func TestPostInvoiceHandler_MalformedEngagementIDReturns400(t *testing.T) {
 func TestPostInvoiceHandler_EngagementNotFoundReturns404(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-unknown-engagement"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -432,9 +420,9 @@ func TestPostInvoiceHandler_EngagementNotFoundReturns404(t *testing.T) {
 func TestPostInvoiceHandler_InvalidAmountReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-invalid-amount"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
 		PracticeID:   practiceID,
@@ -466,9 +454,9 @@ func TestPostInvoiceHandler_InvalidAmountReturns400(t *testing.T) {
 func TestPostInvoiceHandler_InvalidBodyReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-invalid-body"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
 		PracticeID:   practiceID,
@@ -497,9 +485,9 @@ func TestPostInvoiceHandler_InvalidBodyReturns400(t *testing.T) {
 func TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-create-fail"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
 		PracticeID:   practiceID,
@@ -534,9 +522,9 @@ func TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing(t *
 func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-finalize-fail"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	client := payments.NewFakeClient()
 	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
 		PracticeID:   practiceID,
@@ -578,10 +566,10 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-across-void"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	voidedContractID := seedContractWithStatus(t, db, engagementID, "voided")
-	currentContractID := seedContract(t, db, engagementID)
+	currentContractID := seedDraftContract(t, db, engagementID)
 
 	base := time.Now().Add(-time.Hour)
 	oldInvoiceID := seedInvoice(t, db, practiceID, voidedContractID, "in_old", "paid", 10000, base)
@@ -620,9 +608,9 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-paid-at"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid", "paid", 10000, time.Now())
 	paidAt := time.Now().Round(time.Second)
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = $1 WHERE id = $2`, paidAt, invoiceID); err != nil {
@@ -653,7 +641,7 @@ func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 func TestGetInvoicesHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-malformed-engagement"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -672,7 +660,7 @@ func TestGetInvoicesHandler_MalformedEngagementIDReturns400(t *testing.T) {
 func TestGetInvoicesHandler_EngagementNotFoundReturns404(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-unknown-engagement"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -692,8 +680,8 @@ func TestGetInvoicesHandler_EngagementNotFoundReturns404(t *testing.T) {
 func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-no-contract"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -720,9 +708,9 @@ func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-paginate"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 
 	const total = 31
 	base := time.Now().Add(-time.Hour)
@@ -778,8 +766,8 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 func TestGetInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-bad-cursor"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)

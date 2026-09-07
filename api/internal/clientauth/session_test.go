@@ -120,16 +120,16 @@ func TestSessionHandler_SingleEngagement(t *testing.T) {
 func TestSessionHandler_MultipleEngagements(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "multi-engagement-client"
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	clientID, engagementA := seedClientEngagement(t, db, practiceA, "Shared Client", "shared@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	clientID, engagementA := testdb.SeedEngagementInStatus(t, db, practiceA, "Shared Client", "shared@example.com", "intake")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO engagements (client_id, practice_id, status, kind) VALUES ($1, $2, 'intake', 'birth')`,
 		clientID, practiceB,
 	); err != nil {
 		t.Fatalf("seed second engagement: %v", err)
 	}
-	seedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newSessionServer(t, db, identityUID)
 	defer srv.Close()

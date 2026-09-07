@@ -22,13 +22,15 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-// seedClientWithEngagement inserts a Practice, a Client with an
+// seedClientAtPracticeWithDueDate inserts a Practice, a Client with an
 // Engagement at it, and a client_portal_users row linking identityUID to
 // that Client, using the superuser Admin connection. dueDate is passed
 // straight to the insert, so "" leaves the nullable column
 // (ADR-0017: "nullable because a postpartum-only Engagement has none")
-// unset -- the null-due-date branch #505 asks for.
-func seedClientWithEngagement(t *testing.T, db *testdb.DB, identityUID, practiceName, dueDate string) (engagementID, status string) {
+// unset -- the null-due-date branch #505 asks for. Stays local rather
+// than moving to testdb: due_date is a fact only this package's own
+// detail-view tests care about, and no other package's fixture needs it.
+func seedClientAtPracticeWithDueDate(t *testing.T, db *testdb.DB, identityUID, practiceName, dueDate string) (engagementID, status string) {
 	t.Helper()
 
 	var practiceID string
@@ -68,7 +70,7 @@ func seedClientWithEngagement(t *testing.T, db *testdb.DB, identityUID, practice
 func TestDetailHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "portal-detail-uid"
-	engagementID, status := seedClientWithEngagement(t, db, identityUID, "Riverside Doulas", "2027-06-15")
+	engagementID, status := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -119,7 +121,7 @@ func TestDetailHandler_Success(t *testing.T) {
 func TestDetailHandler_NullDueDate(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "portal-detail-null-due-date-uid"
-	engagementID, _ := seedClientWithEngagement(t, db, identityUID, "Postpartum Only Doulas", "")
+	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Postpartum Only Doulas", "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -150,7 +152,7 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 
 func TestDetailHandler_NotLinkedToClient(t *testing.T) {
 	db := testdb.New(t)
-	_, _ = seedClientWithEngagement(t, db, "other-portal-uid", "Other Practice", "")
+	_, _ = seedClientAtPracticeWithDueDate(t, db, "other-portal-uid", "Other Practice", "")
 
 	srv, session := newServer(t, db, "unrelated-uid")
 	defer srv.Close()

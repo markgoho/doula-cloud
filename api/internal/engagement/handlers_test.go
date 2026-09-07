@@ -27,8 +27,8 @@ func authedGet(t *testing.T, session, url string) *http.Response {
 func TestDetailHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-viewing"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Detail Client", "detail@example.com", "active")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Detail Client", "detail@example.com", "active")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -55,8 +55,8 @@ func TestDetailHandler_Success(t *testing.T) {
 func TestDetailHandler_DueDate(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-viewing-due-date"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Due Date Client", "due-date@example.com", "active")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Due Date Client", "due-date@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE engagements SET due_date = '2027-06-15' WHERE id = $1`, engagementID,
 	); err != nil {
@@ -88,8 +88,8 @@ func TestDetailHandler_DueDate(t *testing.T) {
 func TestDetailHandler_NullDueDate(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-viewing-null-due-date"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "No Due Date Client", "no-due-date@example.com", "active")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "No Due Date Client", "no-due-date@example.com", "active")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -112,9 +112,9 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-wrong-practice"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	otherPracticeID := seedStaffWithMembership(t, db, "staff-owns-engagement")
-	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Elsewhere Client", "elsewhere@example.com", "intake")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owns-engagement", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, otherPracticeID, "Elsewhere Client", "elsewhere@example.com", "intake")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -134,9 +134,9 @@ func TestDetailHandler_NotFoundAtWrongPractice(t *testing.T) {
 func TestDetailHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const contractorUID = "contractor-unattached-detail"
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-of-practice-2")
-	seedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Unattached Detail Client", "unattached-detail@example.com", "intake")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-of-practice-2", []string{doulaRole}, "employee")
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Unattached Detail Client", "unattached-detail@example.com", "intake")
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
@@ -154,10 +154,10 @@ func TestDetailHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	db := testdb.New(t)
 	const contractorUID = "contractor-attached-detail"
-	practiceID := seedStaffWithMembership(t, db, "staff-owner-of-practice-3")
-	staffID := seedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Attached Detail Client", "attached-detail@example.com", "active")
-	seedGrantedAttachment(t, db, engagementID, staffID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-of-practice-3", []string{doulaRole}, "employee")
+	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Attached Detail Client", "attached-detail@example.com", "active")
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
@@ -173,7 +173,7 @@ func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-id"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()

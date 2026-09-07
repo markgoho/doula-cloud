@@ -9,31 +9,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedClientEngagement gives ConsumeCredit's tests an Engagement id to tag
-// consumption rows with -- #52 owns the real insert path, but this ticket
-// (#76) has no real caller yet (see billing.ConsumeCredit's doc comment),
-// so tests seed one directly, following the seedClientEngagement pattern
-// used by staffauth/engagement/plans/etc.'s own test helpers. Only the
-// Engagement id is returned -- unlike those packages, nothing here needs
-// the Client id back.
-func seedClientEngagement(t *testing.T, db *testdb.DB, practiceID string) (engagementID string) {
-	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return engagementID
-}
-
 // beginAsPractice opens a tx on db.App and sets app.current_practice_id --
 // the same contract staffauth.Middleware establishes before any real
 // handler runs (see billing.ConsumeCredit's doc comment) -- so these
@@ -65,9 +40,9 @@ func ledgerRowCount(t *testing.T, db *testdb.DB, practiceID string) int {
 // Engagement id.
 func TestConsumeCredit_AppendsConsumptionRowWhenBalancePositive(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
 	seedSignupBonus(t, db, practiceID)
-	engagementID := seedClientEngagement(t, db, practiceID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	tx := beginAsPractice(t, db, practiceID)
 	if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
@@ -99,8 +74,8 @@ func TestConsumeCredit_AppendsConsumptionRowWhenBalancePositive(t *testing.T) {
 // no credits gets ErrNoCreditsRemaining and no row is written.
 func TestConsumeCredit_FailsWhenBalanceIsZeroOrLess(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Broke Practice")
-	engagementID := seedClientEngagement(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Broke Practice")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	tx := beginAsPractice(t, db, practiceID)
 	err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID)
@@ -121,11 +96,11 @@ func TestConsumeCredit_FailsWhenBalanceIsZeroOrLess(t *testing.T) {
 // 4th call fails cleanly and writes nothing.
 func TestConsumeCredit_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Free Tier Practice")
+	practiceID := testdb.SeedPractice(t, db, "Free Tier Practice")
 	seedSignupBonus(t, db, practiceID)
 
 	for i := range 3 {
-		engagementID := seedClientEngagement(t, db, practiceID)
+		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 		tx := beginAsPractice(t, db, practiceID)
 		if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
 			t.Fatalf("ConsumeCredit call %d: %v", i+1, err)
@@ -138,7 +113,7 @@ func TestConsumeCredit_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
 		t.Fatalf("credit_ledger row count after 3 consumptions = %d, want 4 (signup_bonus + 3 consumption)", got)
 	}
 
-	engagementID := seedClientEngagement(t, db, practiceID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	tx := beginAsPractice(t, db, practiceID)
 	err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID)
 	if !errors.Is(err, billing.ErrNoCreditsRemaining) {
@@ -161,10 +136,10 @@ func TestConsumeCredit_SequenceExhaustsFreeCreditsThenFails(t *testing.T) {
 // the same way as a genuinely broke Practice, never a cross-tenant write.
 func TestConsumeCredit_CrossPracticeSessionCannotConsumeAnotherPracticesCredit(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	seedSignupBonus(t, db, practiceA)
-	engagementID := seedClientEngagement(t, db, practiceA)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceA)
 
 	tx := beginAsPractice(t, db, practiceB)
 	err := billing.ConsumeCredit(t.Context(), tx, practiceA, engagementID)

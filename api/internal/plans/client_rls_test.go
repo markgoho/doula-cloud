@@ -15,8 +15,8 @@ import (
 // session can read the Birth Plan instance on their own Engagement.
 func TestRLS_PlanInstancesClientCanReadOwnBirthPlan(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","order":0}]`, `{}`)
 
@@ -48,8 +48,8 @@ func TestRLS_PlanInstancesClientCanReadOwnBirthPlan(t *testing.T) {
 // acceptance criteria.
 func TestRLS_PlanInstancesClientCannotReadCarePlan(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedInstance(t, db, engagementID, carePlanType,
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{"f1":"secret"}`)
 
@@ -80,9 +80,9 @@ func TestRLS_PlanInstancesClientCannotReadCarePlan(t *testing.T) {
 // instance on an Engagement belonging to a different Client.
 func TestRLS_PlanInstancesClientCannotReadOtherClientsBirthPlan(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientA, _ := seedClientEngagement(t, db, practiceID, "Client A", "a@example.com")
-	_, engagementB := seedClientEngagement(t, db, practiceID, "Client B", "b@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Client A", "a@example.com")
+	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Client B", "b@example.com")
 	seedInstance(t, db, engagementB, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","order":0}]`, `{}`)
 
@@ -113,8 +113,8 @@ func TestRLS_PlanInstancesClientCannotReadOtherClientsBirthPlan(t *testing.T) {
 // TestRLS_PlanInstancesUpdateRejectedAcrossPractice.
 func TestRLS_PlanInstancesClientUpdateRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","order":0}]`, `{}`)
 

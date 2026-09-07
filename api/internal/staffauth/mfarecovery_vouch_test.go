@@ -49,7 +49,7 @@ func TestVouchHandler_MissingBearerUnauthorized(t *testing.T) {
 	const ownerUID = "owner-vouch-no-bearer"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 	const targetUID = "target-vouch-no-bearer"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 
 	session := authntest.SeedSession(t, db.App, ownerUID)
@@ -68,7 +68,7 @@ func TestVouchHandler_InvalidBearerTokenUnauthorized(t *testing.T) {
 	const ownerUID = "owner-vouch-invalid-bearer"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 	const targetUID = "target-vouch-invalid-bearer"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 
 	session := authntest.SeedSession(t, db.App, ownerUID)
@@ -87,7 +87,7 @@ func TestVouchHandler_StaleReauthUnauthorized(t *testing.T) {
 	const ownerUID = "owner-vouch-stale"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 	const targetUID = "target-vouch-stale"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 
 	session := authntest.SeedSession(t, db.App, ownerUID)
@@ -106,7 +106,7 @@ func TestVouchHandler_ReauthUIDMismatchUnauthorized(t *testing.T) {
 	const ownerUID = "owner-vouch-mismatch"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 	const targetUID = "target-vouch-mismatch"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 
 	session := authntest.SeedSession(t, db.App, ownerUID)
@@ -128,7 +128,7 @@ func TestVouchHandler_MissingConfirmationBadRequest(t *testing.T) {
 	const ownerUID = "owner-vouch-unconfirmed"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 	const targetUID = "target-vouch-unconfirmed"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 
 	session := authntest.SeedSession(t, db.App, ownerUID)
@@ -145,7 +145,7 @@ func TestVouchHandler_MissingConfirmationBadRequest(t *testing.T) {
 func TestVouchHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const doulaUID = "doula-vouching"
-	staffID, practiceID := seedStaffWithMembership(t, db, doulaUID) // '{doula}', not owner
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{doulaRole}, employeeType) // '{doula}', not owner
 
 	session := authntest.SeedSession(t, db.App, doulaUID)
 	srv := newVouchServer(t, db, authntest.Verifier{UID: doulaUID, AuthTime: time.Now()}, &tasknudge.FakeEnqueuer{})
@@ -199,7 +199,7 @@ func TestVouchHandler_Success(t *testing.T) {
 	const ownerUID = "owner-vouch-success"
 	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
 	const targetUID = "target-vouch-success"
-	targetID := seedStaff(t, db, targetUID)
+	targetID := testdb.SeedStaff(t, db, targetUID)
 	seedMembership(t, db, practiceID, targetID)
 
 	session := authntest.SeedSession(t, db.App, ownerUID)

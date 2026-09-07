@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/testdb"
 )
 
 func TestInboxHandler_ServesHerOwnOffersAndNobodyElses(t *testing.T) {
 	f := newFixture(t)
-	otherID := seedMember(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
+	otherID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
 	mine := f.makeOffer(t, offerBody(f.doulaID, 45000))
 	f.makeOffer(t, offerBody(otherID, 45000))
 
@@ -100,7 +101,7 @@ func TestCompleteHandler_RunsTheCascade(t *testing.T) {
 	accepted := f.makeOffer(t, offerBody(f.doulaID, 45000))
 	expectStatus(t, do(t, http.MethodPost, f.offerURL(accepted, "accept"), f.doulaSession, nil), http.StatusOK)
 
-	secondID := seedMember(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
+	secondID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
 	stillOpen := f.makeOffer(t, offerBody(secondID, 45000))
 
 	expectStatus(t, do(t, http.MethodPost,
@@ -171,7 +172,7 @@ func TestInboxHandler_PaginatesWithACursor(t *testing.T) {
 	f := newFixture(t)
 	// 31 Offers: one page of 30, and one row over.
 	for range 31 {
-		engagementID := seedEngagement(t, f.db, f.practiceID)
+		_, engagementID := testdb.SeedEngagement(t, f.db, f.practiceID)
 		decode(t, do(t, http.MethodPost,
 			f.srv+"/api/practices/"+f.practiceID+"/engagements/"+engagementID+"/offers",
 			f.ownerSession, offerBody(f.doulaID, 45000)), http.StatusCreated, nil)

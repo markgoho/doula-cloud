@@ -123,9 +123,9 @@ func fetchSignedRow(t *testing.T, db *testdb.DB, engagementID string) signedRow 
 func TestClientPostSignContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-signing-sent-contract"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -176,9 +176,9 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-spoofing-signed-at"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -209,9 +209,9 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-signing-no-xff"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -237,11 +237,11 @@ func TestClientPostSignContractHandler_NoXFFFallsBackToRemoteAddr(t *testing.T) 
 func TestClientPostSignContractHandler_OtherClientsEngagementRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-not-linked-sign"
-	practiceID := seedPractice(t, db, "Practice")
-	_, otherEngagementID := seedClientEngagement(t, db, practiceID, "Other Client", "other@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
 	seedContract(t, db, otherEngagementID, "sent", mergeFieldProse)
-	clientID, _ := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -275,9 +275,9 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 		t.Run(testCase.status, func(t *testing.T) {
 			db := testdb.New(t)
 			identityUID := "client-sign-non-sent-" + testCase.status
-			practiceID := seedPractice(t, db, "Practice")
-			clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-			seedPortalUser(t, db, identityUID, clientID)
+			practiceID := testdb.SeedPractice(t, db, "Practice")
+			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+			testdb.SeedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, testCase.status, mergeFieldProse)
 
 			srv, session := newPortalServer(t, db, identityUID)
@@ -298,9 +298,9 @@ func TestClientPostSignContractHandler_NonSentRejected(t *testing.T) {
 func TestClientPostSignContractHandler_NoContractYet404(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-sign-no-contract"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -318,9 +318,9 @@ func TestClientPostSignContractHandler_NoContractYet404(t *testing.T) {
 func TestClientPostSignContractHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-sign-invalid-body"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -352,9 +352,9 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			db := testdb.New(t)
 			identityUID := "client-sign-missing-" + testCase.name
-			practiceID := seedPractice(t, db, "Practice")
-			clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-			seedPortalUser(t, db, identityUID, clientID)
+			practiceID := testdb.SeedPractice(t, db, "Practice")
+			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+			testdb.SeedPortalUser(t, db, identityUID, clientID)
 			seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 			srv, session := newPortalServer(t, db, identityUID)
@@ -384,9 +384,9 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-signing-stores-pdf"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	store := objectstore.NewMemoryStore()
@@ -428,9 +428,9 @@ func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 func TestClientPostSignContractHandler_PDFStoreFailureRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-signing-store-failure"
-	practiceID := seedPractice(t, db, "Practice")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServerWithStore(t, db, identityUID, failingStore{})

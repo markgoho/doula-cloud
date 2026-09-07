@@ -19,42 +19,18 @@ const (
 	shortTextType    = "short_text"
 	firstFieldLabel  = "First"
 	secondFieldLabel = "Second"
+	// ownerRole and doulaRole are named once so golangci-lint's goconst
+	// check doesn't see repeated literals across this package's test
+	// surface.
+	ownerRole = "owner"
+	doulaRole = "doula"
 )
 
-func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
-	t.Helper()
-	return testdb.SeedPractice(t, db, "Test Practice")
-}
-
-// seedDoula seeds a Practice and a Staff member holding only the doula
-// role there -- the role PutHandler must refuse.
-func seedDoula(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db)
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "employee")
-	return practiceID
-}
-
-// seedOwner seeds a Practice and a Staff member holding the owner role.
-func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db)
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
-	return practiceID
-}
-
-// seedAdmin seeds a Practice and a Staff member holding the admin role --
-// the widened half of RequireOwnerOrAdmin plans/template.go's Owner-only
-// PutTemplateHandler doesn't need to prove.
-func seedAdmin(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db)
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"admin"}, "employee")
-	return practiceID
-}
-
 // seedTemplate seeds a client_field_templates row directly (bypassing the
-// handlers under test).
+// handlers under test). Stays local: testdb has no client-field-template
+// export, and plans and contracts each have their own same-shaped
+// seedPlanTemplate/seedContractTemplate against different tables -- no
+// shared behavior to hoist.
 func seedTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),

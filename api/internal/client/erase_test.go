@@ -13,15 +13,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedOwner seeds a Practice with an Owner at it, the only seat erasure
-// admits.
-func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID, staffID string) {
-	t.Helper()
-	practiceID = testdb.SeedPractice(t, db, "Erasure Practice")
-	staffID = testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
-	return practiceID, staffID
-}
-
 // seedFullClient seeds a Client with every identifying column filled in
 // -- the state an erasure has something to do to. staffID is unused
 // beyond making each caller state whose Practice she belongs to.
@@ -68,7 +59,7 @@ func postErasure(t *testing.T, session string, srv *httptest.Server, practiceID,
 func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-redacts"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
 	srv, session := newServer(t, db, uid)
@@ -126,7 +117,7 @@ func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-shreds"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
 	srv, session := newServer(t, db, uid)
@@ -233,7 +224,7 @@ func TestEraseHandler_RefusesEveryRoleButOwner(t *testing.T) {
 func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-twice"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
 	srv, session := newServer(t, db, uid)
@@ -262,7 +253,7 @@ func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 func TestEraseHandler_RefusesAnUnknownClient(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-other-practice"
-	practiceID, _ := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
 	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "other-owner", []string{ownerRole}, "employee")
 	otherClientID := seedFullClient(t, db, otherPracticeID, otherStaffID)
@@ -280,7 +271,7 @@ func TestEraseHandler_RefusesAnUnknownClient(t *testing.T) {
 func TestEraseHandler_RefusesAMalformedClientID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-bad-id"
-	practiceID, _ := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
@@ -297,7 +288,7 @@ func TestEraseHandler_RefusesAMalformedClientID(t *testing.T) {
 func TestEditHandler_RefusesAnErasedClient(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-erase-then-edit"
-	practiceID, staffID := seedOwner(t, db, uid)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID := seedFullClient(t, db, practiceID, staffID)
 
 	srv, session := newServer(t, db, uid)

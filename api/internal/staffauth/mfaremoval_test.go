@@ -46,7 +46,7 @@ func deleteSecondFactor(t *testing.T, srv *httptest.Server, session, bearer stri
 func TestRemoveSecondFactorHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-removes-own-factor"
-	staffID := seedStaff(t, db, identityUID)
+	staffID := testdb.SeedStaff(t, db, identityUID)
 
 	session := authntest.SeedSession(t, db.App, identityUID)
 	authntest.SeedSession(t, db.App, identityUID) // a second device's session
@@ -88,7 +88,7 @@ func TestRemoveSecondFactorHandler_Success(t *testing.T) {
 func TestRemoveSecondFactorHandler_MissingBearerUnauthorized(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-removes-no-bearer"
-	seedStaff(t, db, identityUID)
+	testdb.SeedStaff(t, db, identityUID)
 	session := authntest.SeedSession(t, db.App, identityUID)
 
 	srv := newRemoveSecondFactorServer(t, db, authntest.Verifier{UID: identityUID, AuthTime: time.Now()}, authntest.NewFakeAccountManager())
@@ -104,7 +104,7 @@ func TestRemoveSecondFactorHandler_MissingBearerUnauthorized(t *testing.T) {
 func TestRemoveSecondFactorHandler_StaleReauthUnauthorized(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-removes-stale-reauth"
-	seedStaff(t, db, identityUID)
+	testdb.SeedStaff(t, db, identityUID)
 	session := authntest.SeedSession(t, db.App, identityUID)
 
 	srv := newRemoveSecondFactorServer(t, db, authntest.Verifier{UID: identityUID, AuthTime: time.Now().Add(-time.Hour)}, authntest.NewFakeAccountManager())
@@ -120,7 +120,7 @@ func TestRemoveSecondFactorHandler_StaleReauthUnauthorized(t *testing.T) {
 func TestRemoveSecondFactorHandler_ReauthUIDMismatchUnauthorized(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-removes-uid-mismatch"
-	seedStaff(t, db, identityUID)
+	testdb.SeedStaff(t, db, identityUID)
 	session := authntest.SeedSession(t, db.App, identityUID)
 
 	srv := newRemoveSecondFactorServer(t, db, authntest.Verifier{UID: "someone-else", AuthTime: time.Now()}, authntest.NewFakeAccountManager())

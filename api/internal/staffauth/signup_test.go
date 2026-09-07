@@ -191,20 +191,16 @@ func TestSignupHandler_Success(t *testing.T) {
 	}
 
 	// #145: signup sets the session cookie on its own response, same
-	// name/attributes/lifetime as the create-session endpoint's (#144) --
-	// deliberately not asserting on the cookie's value.
+	// name as the create-session endpoint's (#144) -- deliberately not
+	// asserting on the cookie's value. Its attributes and lifetime are
+	// authn.MintSession's own contract, proved once in authn's test suite
+	// (#837's one session-mint seam) rather than re-proved at every caller.
 	c := sessionCookie(resp)
 	if c == nil {
 		t.Fatal("no __session cookie set on successful signup")
 	}
 	if c.Value == "" {
 		t.Fatal("cookie value is empty")
-	}
-	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != "/" {
-		t.Errorf("cookie attributes = %+v, want HttpOnly, Secure, SameSite=Lax, Path=/", c)
-	}
-	if wantMaxAge := int(session.Lifetime.Seconds()); c.MaxAge != wantMaxAge {
-		t.Errorf("MaxAge = %d, want %d", c.MaxAge, wantMaxAge)
 	}
 }
 

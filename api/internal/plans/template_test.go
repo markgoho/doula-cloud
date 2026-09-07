@@ -23,55 +23,20 @@ const shortTextType = "short_text"
 const carePlanType = "care_plan"
 const birthPlanType = "birth_plan"
 
-func seedPractice(t *testing.T, db *testdb.DB, name string) string {
-	t.Helper()
-	return testdb.SeedPractice(t, db, name)
-}
+// ownerRole and doulaRole are named once so golangci-lint's goconst
+// check doesn't see repeated "owner"/"doula" literals across this
+// package's whole test surface.
+const (
+	ownerRole = "owner"
+	doulaRole = "doula"
+)
 
-// seedMember seeds a Practice and a Staff member holding a doula (non-Owner)
-// role there.
-func seedMember(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "employee")
-	return practiceID
-}
-
-// seedOwner seeds a Practice and a Staff member holding the 'owner' role
-// there -- the only role PutTemplateHandler accepts.
-func seedOwner(t *testing.T, db *testdb.DB, identityUID string) (practiceID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
-	return practiceID
-}
-
-// seedContractorAtPractice seeds a Practice and a Staff member holding a
-// contractor Doula membership there -- ADR-0008's attachment-narrowed
-// column, distinct from seedMember's employee Doula.
-func seedContractorAtPractice(t *testing.T, db *testdb.DB, identityUID string) (practiceID, staffID string) {
-	t.Helper()
-	practiceID = seedPractice(t, db, "Test Practice")
-	staffID = testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "contractor")
-	return practiceID, staffID
-}
-
-// seedGrantedAttachment inserts an open, granted-origin
-// engagement_attachments row directly -- no handler in this codebase
-// writes one yet (#317 builds that).
-func seedGrantedAttachment(t *testing.T, db *testdb.DB, engagementID, staffID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $2)`,
-		engagementID, staffID,
-	); err != nil {
-		t.Fatalf("seed granted attachment: %v", err)
-	}
-}
-
-// seedTemplate seeds a Plan Template row directly (bypassing the handlers
-// under test).
-func seedTemplate(t *testing.T, db *testdb.DB, practiceID, planType, fieldsJSON string) {
+// seedPlanTemplate seeds a Plan Template row directly (bypassing the
+// handlers under test). Stays local under this name rather than testdb:
+// contracts/template_test.go's own seedTemplate writes contract_templates
+// (prose), and clientfieldtemplate's writes client_field_templates -- three
+// different tables sharing one generic old name.
+func seedPlanTemplate(t *testing.T, db *testdb.DB, practiceID, planType, fieldsJSON string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO plan_templates (practice_id, plan_type, fields) VALUES ($1, $2, $3)`,
@@ -79,27 +44,6 @@ func seedTemplate(t *testing.T, db *testdb.DB, practiceID, planType, fieldsJSON 
 	); err != nil {
 		t.Fatalf("seed template: %v", err)
 	}
-}
-
-// seedEngagement inserts a Client and an Engagement linking them to
-// practiceID, using the superuser Admin connection -- mirrors
-// visit/helpers_test.go's seedEngagement.
-func seedEngagement(t *testing.T, db *testdb.DB, practiceID string) (engagementID string) {
-	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Test Client', 'client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`,
-		clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	return engagementID
 }
 
 // seedInstance seeds a Plan Instance row directly (bypassing the handlers
@@ -220,7 +164,7 @@ func putInstance(t *testing.T, srv *httptest.Server, session string, practiceID,
 func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-unknown-plan-type"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -236,7 +180,7 @@ func TestGetTemplateHandler_UnknownPlanType(t *testing.T) {
 func TestGetTemplateHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-not-found"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -254,8 +198,8 @@ func TestGetTemplateHandler_NotFound(t *testing.T) {
 func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-any-member"
-	practiceID := seedMember(t, db, uid)
-	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -282,7 +226,7 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-non-owner"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -300,7 +244,7 @@ func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
 func TestPutTemplateHandler_UnknownPlanType(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-unknown-plan-type"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -318,7 +262,7 @@ func TestPutTemplateHandler_UnknownPlanType(t *testing.T) {
 func TestPutTemplateHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-invalid-body"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -354,7 +298,7 @@ func TestPutTemplateHandler_ValidationRejections(t *testing.T) {
 
 	db := testdb.New(t)
 	const uid = "put-validation"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
@@ -380,7 +324,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 
 	db := testdb.New(t)
 	const uid = "put-success"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -423,8 +367,8 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 func TestPutTemplateHandler_ReplacesExistingRow(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-replace"
-	practiceID := seedOwner(t, db, uid)
-	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"old","type":"short_text","label":"Old field","order":0}]`)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()

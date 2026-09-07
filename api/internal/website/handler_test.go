@@ -32,41 +32,6 @@ const (
 	ownSiteURL = "https://rochesterdoulas.com"
 )
 
-func seedPractice(t *testing.T, db *testdb.DB, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ($1) RETURNING id`, name,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
-}
-
-func seedStaff(t *testing.T, db *testdb.DB, identityUID, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state)
-		 VALUES ($1, $2, $1 || '@example.com', 'NY') RETURNING id`,
-		identityUID, name,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
-	return id
-}
-
-func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID, roles string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
-		 VALUES ($1, $2, $3::practice_role[], 'employee')`,
-		practiceID, staffID, roles,
-	); err != nil {
-		t.Fatalf("seed membership: %v", err)
-	}
-}
-
 // newServer mounts this package's whole surface through website.Mount,
 // the same call main.go makes on the real GatedRouter and
 // idempotency.Router -- so the Owner gate and the role gate are the real
@@ -129,12 +94,15 @@ func decodeError(t *testing.T, resp *http.Response) apierr.APIError {
 }
 
 // seedOwner seeds a Practice and an Owner at it -- the only role that
-// may write a website declaration.
+// may write a website declaration. Stays local under this name rather
+// than testdb: ownerName is a fixed persona this package's own tests
+// assert the response echoes back, which testdb's generic
+// "Test Staff "+identityUID convention doesn't give a caller a way to
+// pin down.
 func seedOwner(t *testing.T, db *testdb.DB, uid string) (practiceID, staffID string) {
 	t.Helper()
-	practiceID = seedPractice(t, db, "Rochester Doulas")
-	staffID = seedStaff(t, db, uid, ownerName)
-	seedMembership(t, db, practiceID, staffID, "{owner}")
+	practiceID = testdb.SeedPractice(t, db, "Rochester Doulas")
+	staffID = testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, ownerName, []string{"owner"}, "employee")
 	return practiceID, staffID
 }
 
@@ -358,9 +326,8 @@ func TestPutHandler_RepublishingTheSameWordsIsAnAct(t *testing.T) {
 func TestPutHandler_RefusesANonOwner(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "website-doula"
-	practiceID := seedPractice(t, db, "Rochester Doulas")
-	staffID := seedStaff(t, db, uid, "Ana Reyes")
-	seedMembership(t, db, practiceID, staffID, "{doula}")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
+	testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, "Ana Reyes", []string{"doula"}, "employee")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
@@ -389,11 +356,9 @@ func TestPutHandler_RefusesANonOwner(t *testing.T) {
 // outstanding rather than show an empty panel.
 func TestGetHandler_ADoulaMayRead(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Doulas")
-	ownerID := seedStaff(t, db, "website-read-owner", ownerName)
-	seedMembership(t, db, practiceID, ownerID, "{owner}")
-	doulaID := seedStaff(t, db, "website-read-doula", "Ana Reyes")
-	seedMembership(t, db, practiceID, doulaID, "{doula}")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
+	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "website-read-owner", ownerName, []string{"owner"}, "employee")
+	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "website-read-doula", "Ana Reyes", []string{"doula"}, "employee")
 
 	ownerSrv, ownerSession := newServer(t, db, "website-read-owner")
 	defer ownerSrv.Close()

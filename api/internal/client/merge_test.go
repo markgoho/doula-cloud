@@ -67,9 +67,9 @@ func setCreatedAt(t *testing.T, db *testdb.DB, clientID, createdAt string) {
 func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-absorb"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	survivorID, _ := seedClientEngagement(t, db, practiceID, "Maya Torres", "old@example.com")
-	stubID := seedClient(t, db, practiceID, testMaya, "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Maya Torres", "old@example.com", "active")
+	stubID := testdb.SeedNamedClient(t, db, practiceID, testMaya, "")
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET phone = '555-0142' WHERE id = $1`, stubID); err != nil {
 		t.Fatalf("seed stub phone: %v", err)
 	}
@@ -167,10 +167,10 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 	db := testdb.New(t)
 
 	t.Run("editing the younger record", func(t *testing.T) {
-		practiceID := seedStaffWithMembership(t, db, "staff-merge-younger-open")
-		olderID := seedClient(t, db, practiceID, "Robin Ellis", "")
+		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-merge-younger-open", []string{doulaRole}, "employee")
+		olderID := testdb.SeedNamedClient(t, db, practiceID, "Robin Ellis", "")
 		setCreatedAt(t, db, olderID, "2026-01-01T00:00:00Z")
-		youngerID := seedClient(t, db, practiceID, "Robin", "")
+		youngerID := testdb.SeedNamedClient(t, db, practiceID, "Robin", "")
 		setCreatedAt(t, db, youngerID, "2026-06-01T00:00:00Z")
 
 		srv, session := newServer(t, db, "staff-merge-younger-open")
@@ -193,10 +193,10 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 	})
 
 	t.Run("editing the older record", func(t *testing.T) {
-		practiceID := seedStaffWithMembership(t, db, "staff-merge-older-open")
-		olderID := seedClient(t, db, practiceID, "Robin Ellis", "")
+		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-merge-older-open", []string{doulaRole}, "employee")
+		olderID := testdb.SeedNamedClient(t, db, practiceID, "Robin Ellis", "")
 		setCreatedAt(t, db, olderID, "2026-01-01T00:00:00Z")
-		youngerID := seedClient(t, db, practiceID, "Robin", "")
+		youngerID := testdb.SeedNamedClient(t, db, practiceID, "Robin", "")
 		setCreatedAt(t, db, youngerID, "2026-06-01T00:00:00Z")
 
 		srv, session := newServer(t, db, "staff-merge-older-open")
@@ -226,9 +226,9 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 func TestMergeHandler_RefusesAttachedSource(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-attached-source"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	attachedID, _ := seedClientEngagement(t, db, practiceID, "Cora James", "cora@example.com")
-	otherID := seedClient(t, db, practiceID, "Cora", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	attachedID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Cora James", "cora@example.com", "active")
+	otherID := testdb.SeedNamedClient(t, db, practiceID, "Cora", "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -249,12 +249,12 @@ func TestMergeHandler_RefusesAttachedSource(t *testing.T) {
 func TestMergeHandler_RefusesErasedTarget(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-erased-target"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	erasedID := seedClient(t, db, practiceID, "Erased Client", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	erasedID := testdb.SeedNamedClient(t, db, practiceID, "Erased Client", "")
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET erased_at = now() WHERE id = $1`, erasedID); err != nil {
 		t.Fatalf("seed erased_at: %v", err)
 	}
-	stubID := seedClient(t, db, practiceID, testMaya, "")
+	stubID := testdb.SeedNamedClient(t, db, practiceID, testMaya, "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -272,8 +272,8 @@ func TestMergeHandler_RefusesErasedTarget(t *testing.T) {
 func TestMergeHandler_RefusesSelfMerge(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-self"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	soloID := seedClient(t, db, practiceID, "Solo Client", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	soloID := testdb.SeedNamedClient(t, db, practiceID, "Solo Client", "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -292,12 +292,12 @@ func TestMergeHandler_RefusesSelfMerge(t *testing.T) {
 func TestMergeHandler_RefusesErasedSource(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-erased-source"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	erasedID := seedClient(t, db, practiceID, "Erased Client", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	erasedID := testdb.SeedNamedClient(t, db, practiceID, "Erased Client", "")
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET erased_at = now() WHERE id = $1`, erasedID); err != nil {
 		t.Fatalf("seed erased_at: %v", err)
 	}
-	otherID := seedClient(t, db, practiceID, "Other", "")
+	otherID := testdb.SeedNamedClient(t, db, practiceID, "Other", "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -317,9 +317,9 @@ func TestMergeHandler_RefusesErasedSource(t *testing.T) {
 func TestMergeHandler_InvalidInput(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-invalid-input"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	stubID := seedClient(t, db, practiceID, testStub, "")
-	otherID := seedClient(t, db, practiceID, "Other", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	stubID := testdb.SeedNamedClient(t, db, practiceID, testStub, "")
+	otherID := testdb.SeedNamedClient(t, db, practiceID, "Other", "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -372,9 +372,9 @@ func TestMergeHandler_InvalidInput(t *testing.T) {
 // otherwise-valid source or target she simply cannot reach.
 func TestMergeHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-merge-not-found")
-	stubID := seedClient(t, db, practiceID, testStub, "")
-	otherID := seedClient(t, db, practiceID, "Other", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-merge-not-found", []string{doulaRole}, "employee")
+	stubID := testdb.SeedNamedClient(t, db, practiceID, testStub, "")
+	otherID := testdb.SeedNamedClient(t, db, practiceID, "Other", "")
 	const missingID = "00000000-0000-0000-0000-000000000000"
 
 	srv, session := newServer(t, db, "staff-merge-not-found")
@@ -399,7 +399,7 @@ func TestMergeHandler_NotFound(t *testing.T) {
 	})
 
 	const contractorUID = "contractor-merge-not-found"
-	seedContractorAtPractice(t, db, practiceID, contractorUID)
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 	contractorSrv, contractorSession := newServer(t, db, contractorUID)
 	defer contractorSrv.Close()
 
@@ -413,9 +413,9 @@ func TestMergeHandler_NotFound(t *testing.T) {
 	})
 
 	t.Run("contractor cannot reach the target", func(t *testing.T) {
-		attachedID, engagementID := seedClientEngagement(t, db, practiceID, "Attached To Contractor", "")
-		contractorStaffID := seedContractorAtPractice(t, db, practiceID, "contractor-merge-target-not-found")
-		seedGrantedAttachment(t, db, engagementID, contractorStaffID)
+		attachedID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Attached To Contractor", "", "active")
+		contractorStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-merge-target-not-found")
+		testdb.SeedGrantedAttachment(t, db, engagementID, contractorStaffID)
 		reachingSrv, reachingSession := newServer(t, db, "contractor-merge-target-not-found")
 		defer reachingSrv.Close()
 
@@ -436,15 +436,15 @@ func TestMergeHandler_NotFound(t *testing.T) {
 func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-email-fields"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	survivorID, _ := seedClientEngagement(t, db, practiceID, "Nia Okafor", "old@example.com")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Nia Okafor", "old@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE clients SET field_values = '{"insuranceProvider":"Old Co"}'::jsonb WHERE id = $1`, survivorID,
 	); err != nil {
 		t.Fatalf("seed survivor field_values: %v", err)
 	}
 	outboxID := seedPendingOutboxRow(t, db, survivorID)
-	stubID := seedClient(t, db, practiceID, "Nia", "")
+	stubID := testdb.SeedNamedClient(t, db, practiceID, "Nia", "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -493,10 +493,10 @@ func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *
 func TestMergeHandler_RefusesChainedAndRepeatedMerge(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-chain"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	survivorID, _ := seedClientEngagement(t, db, practiceID, "Root Survivor", "root@example.com")
-	firstStubID := seedClient(t, db, practiceID, "First Stub", "")
-	secondStubID := seedClient(t, db, practiceID, "Second Stub", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Root Survivor", "root@example.com", "active")
+	firstStubID := testdb.SeedNamedClient(t, db, practiceID, "First Stub", "")
+	secondStubID := testdb.SeedNamedClient(t, db, practiceID, "Second Stub", "")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()

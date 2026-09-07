@@ -13,19 +13,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedStaff inserts a Staff row for identityUID -- CreateHandler's
-// new-sign-in notice (#345) is Platform voice, Staff only, so a test
-// proving it fires needs a Staff row behind the signing-in identity.
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', 'staff@example.com', 'NY')`,
-		identityUID,
-	); err != nil {
-		t.Fatalf("seed staff %q: %v", identityUID, err)
-	}
-}
-
 func countNewSignInNotices(t *testing.T, db *testdb.DB, identityUID string) int {
 	t.Helper()
 	var count int
@@ -185,7 +172,7 @@ func TestCreateHandler_Success(t *testing.T) {
 func TestCreateHandler_QueuesNewSignInNoticeForStaff(t *testing.T) {
 	srv, db := newServer(t, authntest.Verifier{UID: staffUID})
 	defer srv.Close()
-	seedStaff(t, db, staffUID)
+	testdb.SeedStaff(t, db, staffUID)
 
 	resp := postCreate(t, srv, "good-token")
 	defer resp.Body.Close()

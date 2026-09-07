@@ -94,7 +94,9 @@ func post(t *testing.T, h http.Handler, secret string) *httptest.ResponseRecorde
 }
 
 // seedHostedPage creates a Practice with a published page under slug,
-// and returns its id.
+// and returns its id. Stays local: testdb has no hosted-page export, and
+// this package is the only one under test that reads a published page by
+// slug.
 func seedHostedPage(t *testing.T, db *testdb.DB, name, slug string) string {
 	t.Helper()
 	var id string

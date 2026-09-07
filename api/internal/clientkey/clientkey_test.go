@@ -12,27 +12,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func seedPractice(t *testing.T, db *testdb.DB) (practiceID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Test Practice') RETURNING id`,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("seed practice: %v", err)
-	}
-	return practiceID
-}
-
-func seedClient(t *testing.T, db *testdb.DB, practiceID string) (clientID string) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name) VALUES ($1, 'Test Client') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	return clientID
-}
-
 // begin opens a transaction on the admin connection -- these tests
 // exercise the package's own SQL, not the RLS policy, which
 // TestPolicy_KeyIsConfinedToItsPractice covers separately on db.App.
@@ -48,8 +27,8 @@ func begin(t *testing.T, db *testdb.DB) *sql.Tx {
 
 func TestSealAndOpen_RoundTrips(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 	tx := begin(t, db)
 
 	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
@@ -79,8 +58,8 @@ func TestSealAndOpen_RoundTrips(t *testing.T) {
 
 func TestSeal_IsNotDeterministic(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 	tx := begin(t, db)
 
 	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
@@ -104,8 +83,8 @@ func TestSeal_IsNotDeterministic(t *testing.T) {
 // updated or deleted in activity to make that so.
 func TestOpen_AfterDestroy(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 	tx := begin(t, db)
 
 	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
@@ -130,8 +109,8 @@ func TestOpen_AfterDestroy(t *testing.T) {
 
 func TestDestroy_IsIdempotent(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 	tx := begin(t, db)
 
 	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
@@ -150,8 +129,8 @@ func TestDestroy_IsIdempotent(t *testing.T) {
 // already be unreadable, which is erasure by accident.
 func TestEnsure_IsIdempotent(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 	tx := begin(t, db)
 
 	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
@@ -171,8 +150,8 @@ func TestEnsure_IsIdempotent(t *testing.T) {
 
 func TestSeal_WithoutAKeyRefuses(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 	tx := begin(t, db)
 
 	if _, err := clientkey.Seal(t.Context(), tx, clientID, []byte(`{"a":1}`)); !errors.Is(err, clientkey.ErrNoKey) {
@@ -194,8 +173,8 @@ func TestIsSealed_RejectsAPlaintextDiff(t *testing.T) {
 
 func TestOpen_RejectsATamperedEnvelope(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 	tx := begin(t, db)
 
 	if err := clientkey.Ensure(t.Context(), tx, practiceID, clientID); err != nil {
@@ -221,9 +200,9 @@ func TestOpen_RejectsATamperedEnvelope(t *testing.T) {
 // the app_runtime role, with a Practice set that is not the key's.
 func TestPolicy_KeyIsConfinedToItsPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	otherPracticeID := seedPractice(t, db)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	otherPracticeID := testdb.SeedPractice(t, db, "Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
 
 	mine := beginScoped(t, db, practiceID)
 	if err := clientkey.Ensure(t.Context(), mine, practiceID, clientID); err != nil {

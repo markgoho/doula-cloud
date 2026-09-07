@@ -90,7 +90,7 @@ func setRequirementsDue(t *testing.T, db *testdb.DB, practiceID string, requirem
 
 func TestQueuePayoutIncompleteNotification_InsertsPendingRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Queue Insert")
+	practiceID := testdb.SeedPractice(t, db, "Queue Insert")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -130,7 +130,7 @@ func TestQueuePayoutIncompleteNotification_InsertsPendingRow(t *testing.T) {
 // never mailed the moment requirements first appear.
 func TestQueuePayoutIncompleteNotification_GraceWindowDefersTheSend(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "owner-grace-window")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-grace-window", []string{ownerRole}, "employee")
 	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -163,7 +163,7 @@ func TestQueuePayoutIncompleteNotification_GraceWindowDefersTheSend(t *testing.T
 
 func TestQueuePayoutIncompleteNotification_ConflictOnExistingPendingRowIsNoop(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Queue Conflict")
+	practiceID := testdb.SeedPractice(t, db, "Queue Conflict")
 	seedPayoutOutboxRow(t, db, practiceID, 0, time.Now())
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -192,12 +192,10 @@ func TestQueuePayoutIncompleteNotification_ConflictOnExistingPendingRowIsNoop(t 
 
 func TestPayoutWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "owner-one")
-	secondOwnerStaffID := seedStaff(t, db, "owner-two")
-	seedMembership(t, db, practiceID, secondOwnerStaffID, "{owner}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-one", []string{ownerRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-two", []string{ownerRole}, "employee")
 	// A non-Owner Staff member at the same Practice should never be mailed.
-	doulaStaffID := seedStaff(t, db, "doula-bystander")
-	seedMembership(t, db, practiceID, doulaStaffID, "{doula}")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "doula-bystander", []string{doulaRole}, "employee")
 	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
 	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
 
@@ -213,22 +211,29 @@ func TestPayoutWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T) {
 		t.Fatalf("sent %d messages, want 2 (one per Owner)", len(sent))
 	}
 	wantLink := testPayoutAppBaseURL + "/practices/" + practiceID + "/settings/payments"
+	wantRecipients := map[string]bool{"owner-one@example.com": false, "owner-two@example.com": false}
 	for _, msg := range sent {
 		if msg.Subject != "Doula Cloud: your Practice's payout account needs more information" {
 			t.Fatalf("subject = %q", msg.Subject)
 		}
-		if msg.To != "staff@example.com" {
-			t.Fatalf("To = %q", msg.To)
+		if _, ok := wantRecipients[msg.To]; !ok {
+			t.Fatalf("To = %q, want one of the two Owners", msg.To)
 		}
+		wantRecipients[msg.To] = true
 		if !strings.Contains(msg.Text, wantLink) {
 			t.Fatalf("body %q does not contain link %q", msg.Text, wantLink)
+		}
+	}
+	for to, got := range wantRecipients {
+		if !got {
+			t.Fatalf("Owner %q was never mailed", to)
 		}
 	}
 }
 
 func TestPayoutWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "owner-not-due")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-not-due", []string{ownerRole}, "employee")
 	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
 	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(time.Hour))
 
@@ -246,7 +251,7 @@ func TestPayoutWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
 
 func TestPayoutWorker_ProcessPending_ZeroOwnersMarksSentWithNoMail(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Ownerless Practice")
+	practiceID := testdb.SeedPractice(t, db, "Ownerless Practice")
 	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
 	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
 
@@ -268,7 +273,7 @@ func TestPayoutWorker_ProcessPending_ZeroOwnersMarksSentWithNoMail(t *testing.T)
 // still sitting there pending.
 func TestPayoutWorker_ProcessPending_RequirementsAlreadyClearedSkipsMail(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "owner-cleared")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-cleared", []string{ownerRole}, "employee")
 	setRequirementsDue(t, db, practiceID, []string{})
 	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
 
@@ -286,7 +291,7 @@ func TestPayoutWorker_ProcessPending_RequirementsAlreadyClearedSkipsMail(t *test
 
 func TestPayoutWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "owner-retry")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-retry", []string{ownerRole}, "employee")
 	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
 	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
 
@@ -301,7 +306,7 @@ func TestPayoutWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
 
 func TestPayoutWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "owner-dead-letter")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-dead-letter", []string{ownerRole}, "employee")
 	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
 	// One attempt short of the schedule's length -- this failure is the
 	// last one before dead-letter.

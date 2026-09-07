@@ -57,30 +57,6 @@ func seedEngagementForActivity(t *testing.T, db *testdb.DB, identityUID, practic
 	return practiceID, engagementID
 }
 
-// seedActivity writes one activity row via the real activity.Record path,
-// against subject_kind 'engagement' -- the only kind this package's own
-// reader ever queries -- mirroring engagement_test.seedActivity (#706).
-func seedActivity(t *testing.T, db *testdb.DB, practiceID, engagementID, action string, actor activity.Actor) {
-	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   engagementID,
-		Action:      action,
-		Actor:       actor,
-	}); err != nil {
-		t.Fatalf("seed activity: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-}
-
 func authedActivityGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
@@ -104,7 +80,7 @@ func TestActivityHandler_ReturnsOwnEngagementActivity(t *testing.T) {
 	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Practice")
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-staff", []string{ownerRole}, "employee")
 
-	seedActivity(t, db, practiceID, engagementID, string(activity.ActionContractSent), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSent), activity.StaffActor(staffID))
 
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
@@ -137,8 +113,8 @@ func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
 	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Redact Practice")
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-redact-staff", []string{ownerRole}, "employee")
 
-	seedActivity(t, db, practiceID, engagementID, string(activity.ActionContractSent), activity.StaffActor(staffID))
-	seedActivity(t, db, practiceID, engagementID, string(activity.ActionPortalInviteSent), activity.SystemActor())
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSent), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionPortalInviteSent), activity.SystemActor())
 
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
@@ -171,7 +147,7 @@ func TestActivityHandler_KeepsMoneyEntries(t *testing.T) {
 	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Money Practice")
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-money-staff", []string{ownerRole}, "employee")
 
-	seedActivity(t, db, practiceID, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(staffID))
 
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
@@ -197,9 +173,9 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Staffing Practice")
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-staffing-staff", []string{ownerRole}, "employee")
 
-	seedActivity(t, db, practiceID, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(staffID))
-	seedActivity(t, db, practiceID, engagementID, string(activity.ActionOfferSent), activity.StaffActor(staffID))
-	seedActivity(t, db, practiceID, engagementID, string(activity.ActionVisitReassigned), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferSent), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitReassigned), activity.StaffActor(staffID))
 
 	srv, session := activityServer(t, db, identityUID)
 	defer srv.Close()
@@ -225,7 +201,7 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 
 	const total = 31 // activityPageSize (30) + 1, to force a second page
 	for range total {
-		seedActivity(t, db, practiceID, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(staffID))
+		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(staffID))
 	}
 
 	srv, session := activityServer(t, db, identityUID)

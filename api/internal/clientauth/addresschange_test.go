@@ -59,8 +59,8 @@ func postAddressJSON(t *testing.T, srv *httptest.Server, path, session, body str
 func seedSignedInClient(t *testing.T, db *testdb.DB, oldAddress string) (identifier, clientID, session string) {
 	t.Helper()
 	identifier = portalaccount.NewIdentifier()
-	practiceID := seedPractice(t, db, "Address Change Practice")
-	clientID, _ = seedClientEngagement(t, db, practiceID, "Test Client", "contact@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Address Change Practice")
+	clientID, _ = testdb.SeedEngagementInStatus(t, db, practiceID, "Test Client", "contact@example.com", "intake")
 	testdb.SeedPortalAccount(t, db, identifier, oldAddress)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`, identifier, clientID,

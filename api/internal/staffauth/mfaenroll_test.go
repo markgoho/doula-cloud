@@ -50,7 +50,7 @@ func postFinishEnrollmentWithSession(t *testing.T, srv *httptest.Server, session
 func TestFinishEnrollmentHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-finishes-enrolment"
-	staffID := seedStaff(t, db, identityUID)
+	staffID := testdb.SeedStaff(t, db, identityUID)
 
 	srv := newFinishEnrollmentServer(t, db, authntest.Verifier{UID: identityUID, SecondFactor: true})
 	defer srv.Close()
@@ -102,7 +102,7 @@ func TestFinishEnrollmentHandler_Success(t *testing.T) {
 func TestFinishEnrollmentHandler_TokenWithoutSecondFactorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-stale-token"
-	seedStaff(t, db, identityUID)
+	testdb.SeedStaff(t, db, identityUID)
 
 	srv := newFinishEnrollmentServer(t, db, authntest.Verifier{UID: identityUID, SecondFactor: false})
 	defer srv.Close()
@@ -152,7 +152,7 @@ func TestFinishEnrollmentHandler_InvalidToken(t *testing.T) {
 func TestFinishEnrollmentHandler_EndsPriorSession(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-enrols-mid-session"
-	seedStaff(t, db, identityUID)
+	testdb.SeedStaff(t, db, identityUID)
 	priorSession := authntest.SeedSession(t, db.App, identityUID)
 
 	srv := newFinishEnrollmentServer(t, db, authntest.Verifier{UID: identityUID, SecondFactor: true})

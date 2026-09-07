@@ -111,7 +111,7 @@ func sumLedger(t *testing.T, db *testdb.DB, practiceID string) int {
 // purchase row for the Practice named in its metadata.
 func TestPostPurchaseWebhookHandler_CreditsLedgerOnConfirmedCheckout(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Webhook Practice")
+	practiceID := testdb.SeedPractice(t, db, "Webhook Practice")
 	srv := newWebhookServer(db)
 	defer srv.Close()
 
@@ -143,7 +143,7 @@ func TestPostPurchaseWebhookHandler_CreditsLedgerOnConfirmedCheckout(t *testing.
 // event id must not double-credit.
 func TestPostPurchaseWebhookHandler_ReplayedEventCreditsExactlyOnce(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Replay Practice")
+	practiceID := testdb.SeedPractice(t, db, "Replay Practice")
 	srv := newWebhookServer(db)
 	defer srv.Close()
 
@@ -170,7 +170,7 @@ func TestPostPurchaseWebhookHandler_ReplayedEventCreditsExactlyOnce(t *testing.T
 // payload signed with the wrong secret is rejected and never credits.
 func TestPostPurchaseWebhookHandler_InvalidSignatureRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Bad Signature Practice")
+	practiceID := testdb.SeedPractice(t, db, "Bad Signature Practice")
 	srv := newWebhookServer(db)
 	defer srv.Close()
 
@@ -191,7 +191,7 @@ func TestPostPurchaseWebhookHandler_InvalidSignatureRejected(t *testing.T) {
 // method still pending) never credits the ledger.
 func TestPostPurchaseWebhookHandler_UnpaidPaymentNeverCredits(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Unpaid Practice")
+	practiceID := testdb.SeedPractice(t, db, "Unpaid Practice")
 	srv := newWebhookServer(db)
 	defer srv.Close()
 
@@ -214,7 +214,7 @@ func TestPostPurchaseWebhookHandler_UnpaidPaymentNeverCredits(t *testing.T) {
 // double-credit off the same purchase under two different event ids.
 func TestPostPurchaseWebhookHandler_OtherEventTypesAcknowledgedNotCredited(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Other Event Practice")
+	practiceID := testdb.SeedPractice(t, db, "Other Event Practice")
 	srv := newWebhookServer(db)
 	defer srv.Close()
 
@@ -331,7 +331,7 @@ func TestPostPurchaseWebhookHandler_NonexistentPracticeRejected(t *testing.T) {
 // non-numeric quantity in metadata is rejected.
 func TestPostPurchaseWebhookHandler_InvalidQuantityMetadataRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Bad Quantity Practice")
+	practiceID := testdb.SeedPractice(t, db, "Bad Quantity Practice")
 	srv := newWebhookServer(db)
 	defer srv.Close()
 
@@ -384,7 +384,7 @@ func pricedCheckoutPayload(t *testing.T, eventID, practiceID string, quantity in
 // on -- the three things a refund three years later is computed from.
 func TestPostPurchaseWebhookHandler_RecordsWhatTheLotCost(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Priced Webhook")
+	practiceID := testdb.SeedPractice(t, db, "Priced Webhook")
 	srv := newWebhookServer(db)
 
 	resp := postWebhook(t, srv, pricedCheckoutPayload(t, "evt_priced", practiceID, 5, 10000, 686, "pi_recorded"), webhookTestSecret)
@@ -412,7 +412,7 @@ func TestPostPurchaseWebhookHandler_RecordsWhatTheLotCost(t *testing.T) {
 // and nothing has been written.
 func TestPostPurchaseWebhookHandler_RefusesASessionItCannotPrice(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Unpriceable Webhook")
+	practiceID := testdb.SeedPractice(t, db, "Unpriceable Webhook")
 	srv := newWebhookServer(db)
 
 	for name, payload := range map[string][]byte{

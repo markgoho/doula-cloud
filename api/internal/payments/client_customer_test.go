@@ -67,9 +67,9 @@ func createdInvoice(t *testing.T, srv *httptest.Server, session, practiceID, eng
 func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-one-customer"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	const accountID = "acct_one_customer"
 	seedConnectAccount(t, db, practiceID, accountID)
 
@@ -112,9 +112,9 @@ func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 func TestPostInvoiceHandler_PreExistingMappingIsUsedUnchanged(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-preallocated"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	const accountID = "acct_preallocated"
 	seedConnectAccount(t, db, practiceID, accountID)
 
@@ -151,9 +151,9 @@ func TestPostInvoiceHandler_PreExistingMappingIsUsedUnchanged(t *testing.T) {
 func TestPostInvoiceHandler_CustomerFailureRaisesNoInvoice(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-customer-fails"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedContract(t, db, engagementID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedDraftContract(t, db, engagementID)
 	seedConnectAccount(t, db, practiceID, "acct_customer_fails")
 
 	client := payments.NewFakeClient()

@@ -45,7 +45,7 @@ func getStaffList(t *testing.T, srv *httptest.Server, session, practiceID string
 func TestListStaffHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-listing-staff"
-	_, practiceID := seedStaffWithMembership(t, db, identityUID) // '{doula}', not owner
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType) // '{doula}', not owner
 
 	srv, session := newStaffListServer(t, db, identityUID)
 	defer srv.Close()
@@ -65,8 +65,8 @@ func TestListStaffHandler_DoulaForbidden(t *testing.T) {
 func TestListStaffHandler_AdminSuccess(t *testing.T) {
 	db := testdb.New(t)
 	const adminUID = "admin-lists-staff"
-	practiceID := seedPractice(t, db, "Admin Roster Practice")
-	adminID := seedStaff(t, db, adminUID)
+	practiceID := testdb.SeedPractice(t, db, "Admin Roster Practice")
+	adminID := testdb.SeedStaff(t, db, adminUID)
 	seedMembershipWithRoles(t, db, practiceID, adminID, "{admin}")
 
 	srv, session := newStaffListServer(t, db, adminUID)
@@ -85,10 +85,10 @@ func TestListStaffHandler_Success(t *testing.T) {
 	const ownerUID = "owner-lists-staff"
 	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
 
-	doulaID := seedStaff(t, db, "doula-on-roster")
+	doulaID := testdb.SeedStaff(t, db, "doula-on-roster")
 	seedMembership(t, db, practiceID, doulaID) // seeds '{doula}'
 
-	zeroRoleID := seedStaff(t, db, "zero-role-on-roster")
+	zeroRoleID := testdb.SeedStaff(t, db, "zero-role-on-roster")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{}', 'employee')`,
 		practiceID, zeroRoleID,

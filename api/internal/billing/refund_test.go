@@ -41,7 +41,7 @@ func seedEngagements(t *testing.T, db *testdb.DB, practiceID string, n int) []st
 	t.Helper()
 	ids := make([]string, n)
 	for i := range ids {
-		ids[i] = seedClientEngagement(t, db, practiceID)
+		_, ids[i] = testdb.SeedEngagement(t, db, practiceID)
 	}
 	return ids
 }
@@ -71,7 +71,7 @@ func practiceTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
 // call to Stripe.
 func TestRefundable_PricesTheUnspentBalanceFromTheLedgerAlone(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Two Prices")
+	practiceID := testdb.SeedPractice(t, db, "Two Prices")
 	now := time.Now()
 	seedPurchase(t, db, practiceID, 4, 500, 40, "pi_old", now.AddDate(0, -6, 0))
 	seedPurchase(t, db, practiceID, 3, 2000, 165, "pi_new", now.AddDate(0, -1, 0))
@@ -108,7 +108,7 @@ func TestRefundable_PricesTheUnspentBalanceFromTheLedgerAlone(t *testing.T) {
 // one, and the consumption row names the lot it drew from.
 func TestConsumeCredit_DrawsTheOldestLotFirst(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "FIFO")
+	practiceID := testdb.SeedPractice(t, db, "FIFO")
 	grantID := seedSignupBonus(t, db, practiceID)
 	// An hour later, explicitly: the grant above is stamped with the
 	// database's clock and this one with Go's, and the order is the
@@ -158,7 +158,7 @@ func TestConsumeCredit_DrawsTheOldestLotFirst(t *testing.T) {
 // what makes Stripe Tax reverse the tax it reported to New York.
 func TestRefund_ReturnsPriceAndTaxAgainstTheOriginalPayment(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Refundable")
+	practiceID := testdb.SeedPractice(t, db, "Refundable")
 	lotID := seedPurchase(t, db, practiceID, 5, 2000, 686, "pi_original", time.Now().AddDate(0, -2, 0))
 	client := billing.NewFakeStripeClient()
 
@@ -203,7 +203,7 @@ func TestRefund_ReturnsPriceAndTaxAgainstTheOriginalPayment(t *testing.T) {
 // per-refund third of $1.00 would not.
 func TestRefund_PartialRefundsReturnExactlyTheTaxCharged(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Partial")
+	practiceID := testdb.SeedPractice(t, db, "Partial")
 	seedPurchase(t, db, practiceID, 3, 2000, 100, "pi_partial", time.Now())
 	client := billing.NewFakeStripeClient()
 
@@ -226,7 +226,7 @@ func TestRefund_PartialRefundsReturnExactlyTheTaxCharged(t *testing.T) {
 // not one. It is refused rather than refunded at $0.00.
 func TestRefund_RefusesCreditsGivenFreeOfCharge(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Granted Only")
+	practiceID := testdb.SeedPractice(t, db, "Granted Only")
 	seedSignupBonus(t, db, practiceID)
 
 	tx := practiceTx(t, db, practiceID)
@@ -240,10 +240,10 @@ func TestRefund_RefusesCreditsGivenFreeOfCharge(t *testing.T) {
 // Engagement has been used, and cannot also be given back.
 func TestRefund_RefusesCreditsAlreadySpent(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "All Spent")
+	practiceID := testdb.SeedPractice(t, db, "All Spent")
 	seedPurchase(t, db, practiceID, 1, 2000, 0, "pi_spent", time.Now())
 
-	engagementID := seedClientEngagement(t, db, practiceID)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	tx := practiceTx(t, db, practiceID)
 	if err := billing.ConsumeCredit(t.Context(), tx, practiceID, engagementID); err != nil {
@@ -259,7 +259,7 @@ func TestRefund_RefusesCreditsAlreadySpent(t *testing.T) {
 // window /support publishes is enforced against the purchase's own date.
 func TestRefund_RefusesAPurchaseOlderThanTheWindow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Stale")
+	practiceID := testdb.SeedPractice(t, db, "Stale")
 	now := time.Now()
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_stale", now.AddDate(-billing.RefundWindowYears, 0, -1))
 
@@ -288,7 +288,7 @@ func TestRefund_RefusesAPurchaseOlderThanTheWindow(t *testing.T) {
 // purchases: one refund reverses one payment.
 func TestRefund_RefusesMoreThanTheLotHolds(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Two Lots")
+	practiceID := testdb.SeedPractice(t, db, "Two Lots")
 	now := time.Now()
 	seedPurchase(t, db, practiceID, 2, 500, 0, "pi_first", now.AddDate(0, -2, 0))
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_second", now.AddDate(0, -1, 0))
@@ -303,7 +303,7 @@ func TestRefund_RefusesMoreThanTheLotHolds(t *testing.T) {
 // programming error, not a no-op that calls Stripe.
 func TestRefund_RefusesQuantityBelowOne(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Zero")
+	practiceID := testdb.SeedPractice(t, db, "Zero")
 	tx := practiceTx(t, db, practiceID)
 	if _, err := billing.Refund(t.Context(), tx, billing.NewFakeStripeClient(), practiceID, "req-zero", 0, time.Now()); err == nil {
 		t.Fatal("Refund accepted a quantity of 0")
@@ -314,7 +314,7 @@ func TestRefund_RefusesQuantityBelowOne(t *testing.T) {
 // money: if Stripe refuses the refund, nothing claims one happened.
 func TestRefund_StripeFailureWritesNoLedgerRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Stripe Down")
+	practiceID := testdb.SeedPractice(t, db, "Stripe Down")
 	seedPurchase(t, db, practiceID, 2, 2000, 0, "pi_down", time.Now())
 	client := billing.NewFakeStripeClient()
 	client.RefundPaymentErr = errStripeUnavailable
@@ -343,15 +343,15 @@ func TestDormantPractices_FindsBalancesNobodyHasTouched(t *testing.T) {
 	now := time.Now()
 	notSeenSince := now.AddDate(-billing.DormancyNoticeYears, 0, 0)
 
-	dormantID := seedPractice(t, db, "Dormant")
+	dormantID := testdb.SeedPractice(t, db, "Dormant")
 	seedPurchase(t, db, dormantID, 4, 2000, 0, "pi_dormant", now.AddDate(-3, 0, 0))
 	seedStaffLastActive(t, db, dormantID, "dormant-uid", now.AddDate(-3, 0, 0))
 
-	activeID := seedPractice(t, db, "Active")
+	activeID := testdb.SeedPractice(t, db, "Active")
 	seedPurchase(t, db, activeID, 4, 2000, 0, "pi_active", now.AddDate(-3, 0, 0))
 	seedStaffLastActive(t, db, activeID, "active-uid", now.AddDate(0, 0, -1))
 
-	spentID := seedPractice(t, db, "No Balance")
+	spentID := testdb.SeedPractice(t, db, "No Balance")
 	seedStaffLastActive(t, db, spentID, "spent-uid", now.AddDate(-3, 0, 0))
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -378,7 +378,7 @@ func TestDormantPractices_FindsBalancesNobodyHasTouched(t *testing.T) {
 func TestDormantPractices_CountsAPracticeNobodyHasEverVisited(t *testing.T) {
 	db := testdb.New(t)
 	now := time.Now()
-	practiceID := seedPractice(t, db, "Never Seen")
+	practiceID := testdb.SeedPractice(t, db, "Never Seen")
 	seedPurchase(t, db, practiceID, 1, 2000, 0, "pi_never", now.AddDate(-3, 0, 0))
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -400,8 +400,7 @@ func TestDormantPractices_CountsAPracticeNobodyHasEverVisited(t *testing.T) {
 // lastActive -- the durable contact record 00053 added.
 func seedStaffLastActive(t *testing.T, db *testdb.DB, practiceID, identityUID string, lastActive time.Time) {
 	t.Helper()
-	staffID := seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID, "{owner}")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE staff SET last_active_at = $1 WHERE id = $2`, lastActive, staffID); err != nil {
 		t.Fatalf("seed last_active_at: %v", err)
@@ -415,7 +414,7 @@ func seedStaffLastActive(t *testing.T, db *testdb.DB, practiceID, identityUID st
 // and no second negative row.
 func TestRefund_ARetriedRefundIsTheSameRefund(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Retried")
+	practiceID := testdb.SeedPractice(t, db, "Retried")
 	seedPurchase(t, db, practiceID, 4, 2000, 200, "pi_retried", time.Now())
 	client := billing.NewFakeStripeClient()
 
@@ -451,7 +450,7 @@ func TestRefund_ARetriedRefundIsTheSameRefund(t *testing.T) {
 // second, deliberate request carries its own name and is honoured.
 func TestRefund_ADifferentRequestIsADifferentRefund(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Twice Over")
+	practiceID := testdb.SeedPractice(t, db, "Twice Over")
 	seedPurchase(t, db, practiceID, 4, 2000, 0, "pi_twice", time.Now())
 	client := billing.NewFakeStripeClient()
 
@@ -473,7 +472,7 @@ func TestRefund_ADifferentRequestIsADifferentRefund(t *testing.T) {
 // first attempt's transaction never committed -- record one row, not two.
 func TestRefund_TheSameStripeRefundIsRecordedOnce(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "One Stripe Refund")
+	practiceID := testdb.SeedPractice(t, db, "One Stripe Refund")
 	seedPurchase(t, db, practiceID, 4, 2000, 0, "pi_once", time.Now())
 	client := billing.NewFakeStripeClient()
 	client.ReplayedRefundID = "re_replayed"

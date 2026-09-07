@@ -149,9 +149,9 @@ var pngBytes = []byte{
 func TestCreateHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-creating"
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPracticeNamed(t, db, practiceID, identityUID, "Jamie Doula")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, "Jamie Doula", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -179,9 +179,9 @@ func TestCreateHandler_Success(t *testing.T) {
 func TestCreateHandler_EmptyBodyRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-empty-body"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -198,9 +198,9 @@ func TestCreateHandler_EmptyBodyRejected(t *testing.T) {
 func TestCreateHandler_InvalidJSONBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-json"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -216,8 +216,8 @@ func TestCreateHandler_InvalidJSONBody(t *testing.T) {
 func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-engagement-id"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -240,11 +240,11 @@ func TestCreateHandler_InvalidEngagementID(t *testing.T) {
 // TestRLS_MessagesPracticeTierScopedToOwnPractice, added in #57.
 func TestCreateHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	db := testdb.New(t)
-	homePracticeID := seedPractice(t, db, "Home Practice")
-	seedStaffAtPractice(t, db, homePracticeID, "staff-elsewhere")
+	homePracticeID := testdb.SeedPractice(t, db, "Home Practice")
+	testdb.SeedStaffAtPractice(t, db, homePracticeID, "staff-elsewhere", []string{doulaRole}, "employee")
 
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 
 	srv, session := newServer(t, db, "staff-elsewhere")
 	defer srv.Close()
@@ -261,9 +261,9 @@ func TestCreateHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 func TestListHandler_EmptyThread(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-empty-thread"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -286,8 +286,8 @@ func TestListHandler_EmptyThread(t *testing.T) {
 func TestListHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-list-bad-id"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -307,12 +307,12 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 // this is the app-layer check, not messages' own RLS policy.
 func TestListHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 	db := testdb.New(t)
-	homePracticeID := seedPractice(t, db, "Home Practice")
-	seedStaffAtPractice(t, db, homePracticeID, "staff-listing-elsewhere")
+	homePracticeID := testdb.SeedPractice(t, db, "Home Practice")
+	testdb.SeedStaffAtPractice(t, db, homePracticeID, "staff-listing-elsewhere", []string{doulaRole}, "employee")
 
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherStaffID := seedStaffAtPractice(t, db, otherPracticeID, "staff-owns-thread")
-	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "staff-owns-thread", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 	seedMessage(t, db, engagementID, "staff", otherStaffID, "not visible across practices")
 
 	srv, session := newServer(t, db, "staff-listing-elsewhere")
@@ -329,9 +329,9 @@ func TestListHandler_NotFoundForEngagementAtDifferentPractice(t *testing.T) {
 func TestListHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-cursor"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -363,10 +363,10 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 	const messageFromA = "message from A"
 
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Shared Practice")
-	seedStaffAtPracticeNamed(t, db, practiceID, "staff-a", "Staff A")
-	seedStaffAtPracticeNamed(t, db, practiceID, "staff-b", "Staff B")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Shared Practice")
+	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-a", "Staff A", []string{doulaRole}, "employee")
+	testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-b", "Staff B", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srvA, sessionA := newServer(t, db, "staff-a")
 	defer srvA.Close()
@@ -420,9 +420,9 @@ func TestListHandler_AnyStaffAtSamePracticeSeesAndCanReplyToSameThread(t *testin
 // gets the same "not found" response an out-of-practice Engagement gets.
 func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Contractor Messages Practice")
-	seedContractorAtPractice(t, db, practiceID, "contractor-unattached-messages")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client-cm@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Contractor Messages Practice")
+	testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-unattached-messages")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client-cm@example.com")
 
 	srv, session := newServer(t, db, "contractor-unattached-messages")
 	defer srv.Close()
@@ -439,10 +439,10 @@ func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 // other half: an open, granted attachment reaches.
 func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Contractor Messages Practice 2")
-	staffID := seedContractorAtPractice(t, db, practiceID, "contractor-attached-messages")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client-cm2@example.com")
-	seedGrantedAttachment(t, db, engagementID, staffID)
+	practiceID := testdb.SeedPractice(t, db, "Contractor Messages Practice 2")
+	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-attached-messages")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client-cm2@example.com")
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newServer(t, db, "contractor-attached-messages")
 	defer srv.Close()
@@ -462,9 +462,9 @@ func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-paging"
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	const total = 35 // pageSize (30) + 5, to force a second page
 	for i := range total {
@@ -522,9 +522,9 @@ func TestListHandler_PaginatesNewestFirst(t *testing.T) {
 func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-attachment"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -569,9 +569,9 @@ func TestCreateHandler_AttachmentUploadAndDownloadRoundTrip(t *testing.T) {
 func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-multipart-text-only"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -597,9 +597,9 @@ func TestCreateHandler_MultipartTextOnlyNoAttachmentField(t *testing.T) {
 func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-attachment-only"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -624,9 +624,9 @@ func TestCreateHandler_AttachmentOnlyNoBody(t *testing.T) {
 func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-pdf"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -652,9 +652,9 @@ func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 func TestCreateHandler_AttachmentWrongTypeRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-wrong-type"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -673,9 +673,9 @@ func TestCreateHandler_AttachmentWrongTypeRejected(t *testing.T) {
 func TestCreateHandler_AttachmentOversizedRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-oversized"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -697,9 +697,9 @@ func TestCreateHandler_AttachmentOversizedRejected(t *testing.T) {
 func TestCreateHandler_RequestWayOversizedRejectedAtParse(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-way-oversized"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -719,9 +719,9 @@ func TestCreateHandler_RequestWayOversizedRejectedAtParse(t *testing.T) {
 func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-malformed-multipart"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -749,9 +749,9 @@ func TestCreateHandler_MalformedMultipartRejected(t *testing.T) {
 func TestCreateHandler_EmptyBodyAndNoAttachmentRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-empty-multipart"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -770,9 +770,9 @@ func TestCreateHandler_EmptyBodyAndNoAttachmentRejected(t *testing.T) {
 func TestCreateHandler_StorePutFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-store-put-fails"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServerWithStore(t, db, identityUID, failingStore{})
 	defer srv.Close()
@@ -792,9 +792,9 @@ func TestCreateHandler_StorePutFailureReturns500(t *testing.T) {
 func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-store-get-fails"
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 	messageID := seedMessageWithAttachment(t, db, engagementID, "staff", staffID,
 		"messages/whatever/path", pngContentType, "photo.png", int64(len(pngBytes)))
 
@@ -813,9 +813,9 @@ func TestAttachmentHandler_StoreGetFailureReturns500(t *testing.T) {
 func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-no-attachment"
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 	seedMessage(t, db, engagementID, "staff", staffID, "text only, no attachment")
 
 	var messageID string
@@ -838,9 +838,9 @@ func TestAttachmentHandler_NoAttachmentNotFound(t *testing.T) {
 func TestAttachmentHandler_InvalidMessageID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-message-id"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -857,8 +857,8 @@ func TestAttachmentHandler_InvalidMessageID(t *testing.T) {
 func TestAttachmentHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-engagement-attachment"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -876,11 +876,11 @@ func TestAttachmentHandler_InvalidEngagementID(t *testing.T) {
 // reach the Engagement at all, let alone its attachment.
 func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 	db := testdb.New(t)
-	homePracticeID := seedPractice(t, db, "Home Practice")
-	seedStaffAtPractice(t, db, homePracticeID, "staff-attachment-elsewhere")
+	homePracticeID := testdb.SeedPractice(t, db, "Home Practice")
+	testdb.SeedStaffAtPractice(t, db, homePracticeID, "staff-attachment-elsewhere", []string{doulaRole}, "employee")
 
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	_, engagementID := seedClientEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, otherPracticeID, "Other Client", "other@example.com")
 
 	srv, session := newServer(t, db, "staff-attachment-elsewhere")
 	defer srv.Close()
@@ -896,9 +896,9 @@ func TestAttachmentHandler_EngagementNotFoundAtDifferentPractice(t *testing.T) {
 // ADR-0008's attachment rule on the attachment-download route too.
 func TestAttachmentHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Contractor Attachment Practice")
-	seedContractorAtPractice(t, db, practiceID, "contractor-unattached-download")
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client-ca@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Contractor Attachment Practice")
+	testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-unattached-download")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client-ca@example.com")
 
 	srv, session := newServer(t, db, "contractor-unattached-download")
 	defer srv.Close()
@@ -917,10 +917,10 @@ func TestAttachmentHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-cross-engagement"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client One", "one@example.com")
-	_, otherEngagementID := seedClientEngagement(t, db, practiceID, "Client Two", "two@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client One", "one@example.com")
+	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client Two", "two@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -946,9 +946,9 @@ func TestAttachmentHandler_WrongEngagementNotFound(t *testing.T) {
 func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-json-unchanged"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()

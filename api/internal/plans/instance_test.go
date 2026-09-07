@@ -15,7 +15,7 @@ const jamieAnswer = "Jamie"
 func TestPostInstanceHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -31,8 +31,8 @@ func TestPostInstanceHandler_InvalidEngagementID(t *testing.T) {
 func TestPostInstanceHandler_UnknownPlanType(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-unknown-plan-type"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -51,9 +51,9 @@ func TestPostInstanceHandler_UnknownPlanType(t *testing.T) {
 func TestPostInstanceHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-no-engagement"
-	practiceID := seedMember(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -72,8 +72,8 @@ func TestPostInstanceHandler_EngagementNotFound(t *testing.T) {
 func TestPostInstanceHandler_NoTemplate(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-no-template"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -93,9 +93,9 @@ func TestPostInstanceHandler_NoTemplate(t *testing.T) {
 func TestPostInstanceHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-success"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -127,9 +127,9 @@ func TestPostInstanceHandler_Success(t *testing.T) {
 func TestPostInstanceHandler_Duplicate(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-duplicate"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, birthPlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedPlanTemplate(t, db, practiceID, birthPlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -150,7 +150,7 @@ func TestPostInstanceHandler_Duplicate(t *testing.T) {
 func TestGetInstanceHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -166,8 +166,8 @@ func TestGetInstanceHandler_InvalidEngagementID(t *testing.T) {
 func TestGetInstanceHandler_UnknownPlanType(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-unknown-plan-type"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -183,9 +183,9 @@ func TestGetInstanceHandler_UnknownPlanType(t *testing.T) {
 func TestGetInstanceHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-no-engagement"
-	practiceID := seedMember(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -201,8 +201,8 @@ func TestGetInstanceHandler_EngagementNotFound(t *testing.T) {
 func TestGetInstanceHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-not-found"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -222,8 +222,8 @@ func TestGetInstanceHandler_NotFound(t *testing.T) {
 func TestGetInstanceHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-contractor-unattached"
-	practiceID, _ := seedContractorAtPractice(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
 		`{"f1":"Jamie"}`,
@@ -245,13 +245,13 @@ func TestGetInstanceHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 func TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-contractor-attached"
-	practiceID, staffID := seedContractorAtPractice(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
 		`{"f1":"Jamie"}`,
 	)
-	seedGrantedAttachment(t, db, engagementID, staffID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -267,8 +267,8 @@ func TestGetInstanceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 func TestGetInstanceHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-success"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`,
 		`{"f1":"Jamie"}`,
@@ -299,7 +299,7 @@ func TestGetInstanceHandler_Success(t *testing.T) {
 func TestPutInstanceHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -315,8 +315,8 @@ func TestPutInstanceHandler_InvalidEngagementID(t *testing.T) {
 func TestPutInstanceHandler_UnknownPlanType(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-unknown-plan-type"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -332,9 +332,9 @@ func TestPutInstanceHandler_UnknownPlanType(t *testing.T) {
 func TestPutInstanceHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-no-engagement"
-	practiceID := seedMember(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -350,8 +350,8 @@ func TestPutInstanceHandler_EngagementNotFound(t *testing.T) {
 func TestPutInstanceHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-not-found"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
@@ -367,8 +367,8 @@ func TestPutInstanceHandler_NotFound(t *testing.T) {
 func TestPutInstanceHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-invalid-body"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
 	srv, session := newPlanServer(t, db, uid)
@@ -411,13 +411,13 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 
 	db := testdb.New(t)
 	const uid = "put-instance-validation"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			engagementID := seedEngagement(t, db, practiceID)
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 			seedInstance(t, db, engagementID, carePlanType, fieldsJSON, `{}`)
 
 			resp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{Answers: tc.answers})
@@ -437,8 +437,8 @@ func TestPutInstanceHandler_ValidationRejections(t *testing.T) {
 func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-omitted-answers"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
 
 	srv, session := newPlanServer(t, db, uid)
@@ -466,8 +466,8 @@ func TestPutInstanceHandler_OmittedAnswersNormalizesToEmptyObject(t *testing.T) 
 func TestPutInstanceHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-success"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedInstance(t, db, engagementID, carePlanType,
 		`[{"id":"name","type":"short_text","label":"Name","order":0},{"id":"consent","type":"checkbox","label":"Consent","order":1}]`,
 		`{}`,
@@ -523,9 +523,9 @@ func TestPutInstanceHandler_Success(t *testing.T) {
 func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "snapshot-owner"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
 
 	srv, session := newPlanServer(t, db, uid)
 	defer srv.Close()

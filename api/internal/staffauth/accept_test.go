@@ -170,7 +170,7 @@ func TestAcceptInviteHandler_ResolvesAnExistingStaffRow(t *testing.T) {
 	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "known@example.com", "{admin}", employeeType, time.Now().Add(time.Hour))
 
 	existingID := seedStaffWithEmail(t, db, "known-uid", "known@example.com")
-	elsewhere := seedPractice(t, db, "Her Other Practice")
+	elsewhere := testdb.SeedPractice(t, db, "Her Other Practice")
 	seedMembership(t, db, elsewhere, existingID)
 
 	srv := newAcceptServer(t, db, "known-uid", "known@example.com")

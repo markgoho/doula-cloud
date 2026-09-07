@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/testdb"
 )
 
 // attachment is one engagement_attachments row as these tests read it.
@@ -62,7 +63,7 @@ func TestAcceptHandler_MintsGrantedAttachmentWithFeeCopied(t *testing.T) {
 // superseded, named to the person whose acceptance closed it.
 func TestAcceptHandler_SupersedesEveryOtherOpenOffer(t *testing.T) {
 	f := newFixture(t)
-	secondID := seedMember(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
+	secondID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
 	secondSession := seedSessionFor(t, f.db, "uid-doula-2")
 
 	winner := f.makeOffer(t, offerBody(f.doulaID, 45000))
@@ -143,7 +144,7 @@ func TestDeclineHandler_RefusesSomeoneElsesOffer(t *testing.T) {
 // granted attachment opened without one.
 func TestAcceptHandler_EmployeeOfferCopiesNoFee(t *testing.T) {
 	f := newFixture(t)
-	employeeID := seedMember(t, f.db, f.practiceID, "uid-employee-doula", []string{doulaRole}, employeeType)
+	employeeID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-employee-doula", []string{doulaRole}, employeeType)
 	employeeSession := seedSessionFor(t, f.db, "uid-employee-doula")
 
 	body := offerBody(employeeID, 0)

@@ -76,7 +76,7 @@ func seedWorkStateEvent(t *testing.T, db *testdb.DB, staffID, previous, next str
 func TestListWorkStateHistory_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reading-work-state-history"
-	staffID, practiceID := seedStaffWithMembership(t, db, identityUID) // '{doula}'
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType) // '{doula}'
 
 	srv, session := newWorkStateHistoryServer(t, db, identityUID)
 	defer srv.Close()
@@ -98,7 +98,7 @@ func TestListWorkStateHistory_FirstAssertionAndChange(t *testing.T) {
 	const ownerUID = "owner-reads-work-state-history"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
-	doulaID := seedStaff(t, db, "doula-who-moved")
+	doulaID := testdb.SeedStaff(t, db, "doula-who-moved")
 	seedMembership(t, db, practiceID, doulaID)
 
 	joined := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
@@ -148,7 +148,7 @@ func TestListWorkStateHistory_ReAssertionIsNotAChange(t *testing.T) {
 	const ownerUID = "owner-reads-reassertions"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
-	doulaID := seedStaff(t, db, "doula-who-reasserted")
+	doulaID := testdb.SeedStaff(t, db, "doula-who-reasserted")
 	seedMembership(t, db, practiceID, doulaID)
 
 	seedWorkStateEvent(t, db, doulaID, "", "NY", time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC))
@@ -181,7 +181,7 @@ func TestListWorkStateHistory_MemberSinceDatesTheMembership(t *testing.T) {
 	const ownerUID = "owner-reads-inherited-history"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
-	doulaID := seedStaff(t, db, "contractor-on-two-rosters")
+	doulaID := testdb.SeedStaff(t, db, "contractor-on-two-rosters")
 	seedMembership(t, db, practiceID, doulaID)
 
 	assertedElsewhere := time.Date(2025, 5, 4, 12, 0, 0, 0, time.UTC)
@@ -211,7 +211,7 @@ func TestListWorkStateHistory_PaginatesOldestPagesLast(t *testing.T) {
 	const ownerUID = "owner-pages-work-state-history"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
-	doulaID := seedStaff(t, db, "doula-who-moved-often")
+	doulaID := testdb.SeedStaff(t, db, "doula-who-moved-often")
 	seedMembership(t, db, practiceID, doulaID)
 
 	// 25 alternating moves, so every row survives the changes-only
@@ -291,8 +291,8 @@ func TestListWorkStateHistory_StrangerIsNotFound(t *testing.T) {
 	const ownerUID = "owner-reads-a-stranger"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
 
-	otherPracticeID := seedPractice(t, db, "Someone Else's Practice")
-	strangerID := seedStaff(t, db, "stranger-elsewhere")
+	otherPracticeID := testdb.SeedPractice(t, db, "Someone Else's Practice")
+	strangerID := testdb.SeedStaff(t, db, "stranger-elsewhere")
 	seedMembership(t, db, otherPracticeID, strangerID)
 	seedWorkStateEvent(t, db, strangerID, "", "CA", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/session"
@@ -153,23 +152,16 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	}
 
 	// #145: accept-invite sets the session cookie on its own response, same
-	// name/attributes as the create-session endpoint's (#144) -- deliberately
-	// not asserting on the cookie's value. The lifetime is #618's portal one,
-	// not session.Lifetime (Staff's): the identity this handler mints a
-	// session for is a Portal Account identifier, never an Identity Platform
-	// uid.
+	// name as the create-session endpoint's (#144) -- deliberately not
+	// asserting on the cookie's value. Its attributes and lifetime are
+	// authn.MintSession's own contract, proved once in authn's test suite
+	// (#837's one session-mint seam) rather than re-proved at every caller.
 	c := sessionCookie(resp)
 	if c == nil {
 		t.Fatal("no __session cookie set on successful accept")
 	}
 	if c.Value == "" {
 		t.Fatal("cookie value is empty")
-	}
-	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != "/" {
-		t.Errorf("cookie attributes = %+v, want HttpOnly, Secure, SameSite=Lax, Path=/", c)
-	}
-	if wantMaxAge := int(authn.PortalSessionLifetime.Seconds()); c.MaxAge != wantMaxAge {
-		t.Errorf("MaxAge = %d, want %d", c.MaxAge, wantMaxAge)
 	}
 }
 
@@ -304,7 +296,7 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 	}
 	// The same Portal Account already reaches a different Client at this
 	// same Practice -- e.g. a second, mistaken invite for the same person.
-	otherClientID, _ := seedClientEngagement(t, db, practiceID, "Other Client Record", "other@example.com")
+	otherClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client Record", "other@example.com")
 	testdb.AttachPortalUser(t, db, "portal_existing-account", otherClientID)
 
 	srv := newAcceptServer(db)

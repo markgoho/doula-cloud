@@ -22,11 +22,11 @@ func detailURL(srvURL, practiceID, requestID string) string {
 // her note, and the Credit cost with the balance it leaves behind.
 func TestDetailHandler_ReturnsEveryFactTheApprovalScreenShows(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 	setRequestNote(t, db, requestID, "She asked for a home birth")
 
@@ -45,7 +45,7 @@ func TestDetailHandler_ReturnsEveryFactTheApprovalScreenShows(t *testing.T) {
 	if out.DueDate == nil || *out.DueDate != testDueDate {
 		t.Fatalf("dueDate = %v, want %s", out.DueDate, testDueDate)
 	}
-	if out.RequestedBy != doulaID || out.RequestedByName != "Staff doula-1" || out.RequestedAt.IsZero() {
+	if out.RequestedBy != doulaID || out.RequestedByName != "Test Staff doula-1" || out.RequestedAt.IsZero() {
 		t.Fatalf("requester = %s/%s at %v, want the seeded Doula", out.RequestedBy, out.RequestedByName, out.RequestedAt)
 	}
 	if out.Client.ClientID != clientID || !out.Client.IsNewToPractice {
@@ -65,13 +65,13 @@ func TestDetailHandler_ReturnsEveryFactTheApprovalScreenShows(t *testing.T) {
 // ADR-0017's second-live-Engagement warning reaches the approver's seat.
 func TestDetailHandler_KnownClientCarriesHerEngagementsAndTheLiveWarning(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "owner-1", []string{ownerRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
-	seedEngagement(t, db, practiceID, clientID, "completed")
-	seedEngagement(t, db, practiceID, clientID, "active")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	seedEngagementInStatus(t, db, practiceID, clientID, "completed")
+	seedEngagementInStatus(t, db, practiceID, clientID, "active")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindPostpartum, doulaID)
 
 	srv, session := newServer(t, db, "owner-1", &tasknudge.FakeEnqueuer{})
@@ -96,10 +96,10 @@ func TestDetailHandler_KnownClientCarriesHerEngagementsAndTheLiveWarning(t *test
 // counts the Request being decided against itself.
 func TestDetailHandler_AnEarlierRequestAloneMakesHerKnown(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	pendingRequest(t, db, practiceID, clientID, testKindPostpartum, doulaID)
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
@@ -121,9 +121,9 @@ func TestDetailHandler_AnEarlierRequestAloneMakesHerKnown(t *testing.T) {
 // Owner/Admin only, like the decision it exists to support.
 func TestDetailHandler_RefusesADoula(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
@@ -137,8 +137,8 @@ func TestDetailHandler_RefusesADoula(t *testing.T) {
 // the read, so another Practice's Request is indistinguishable from none.
 func TestDetailHandler_RejectsAMalformedOrUnknownRequestID(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -154,11 +154,11 @@ func TestDetailHandler_RejectsAMalformedOrUnknownRequestID(t *testing.T) {
 // approval screen for a decision that has been made.
 func TestDetailHandler_RefusesADecidedRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})

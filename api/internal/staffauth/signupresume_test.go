@@ -27,7 +27,7 @@ func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 	db := testdb.New(t)
 	srv := newSignupServer(authntest.Verifier{UID: resumeUID, Email: jamieEmail}, db)
 	defer srv.Close()
-	seeded := seedStaff(t, db, resumeUID)
+	seeded := testdb.SeedStaff(t, db, resumeUID)
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		WorkState:    "VT",
@@ -102,7 +102,7 @@ func TestSignupHandler_ResumeQueuesNoSecondVerificationMail(t *testing.T) {
 	db := testdb.New(t)
 	srv := newSignupServer(authntest.Verifier{UID: resumeUID, Email: jamieEmail}, db)
 	defer srv.Close()
-	seedStaff(t, db, resumeUID)
+	testdb.SeedStaff(t, db, resumeUID)
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		WorkState: "NY", PracticeName: "Quiet Practice", StaffName: jamieOwnerName,

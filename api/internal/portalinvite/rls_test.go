@@ -15,8 +15,8 @@ import (
 // a pending-row INSERT is rejected with no app.current_practice_id set.
 func TestRLS_ClientPortalUsersInviteInsertFailsClosedWithNoPracticeSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "No Session Practice")
-	clientID, _ := seedClientEngagement(t, db, practiceID, "No Session Client", "nosession@example.com")
+	practiceID := testdb.SeedPractice(t, db, "No Session Practice")
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "No Session Client", "nosession@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -38,9 +38,9 @@ func TestRLS_ClientPortalUsersInviteInsertFailsClosedWithNoPracticeSet(t *testin
 // not any Practice.
 func TestRLS_ClientPortalUsersInviteInsertFailsForClientAtOtherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	clientB, _ := seedClientEngagement(t, db, practiceB, "Client B", "clientb@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "clientb@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -66,8 +66,8 @@ func TestRLS_ClientPortalUsersInviteInsertFailsForClientAtOtherPractice(t *testi
 // case.
 func TestRLS_ClientPortalUsersInviteInsertSucceedsForClientAtOwnPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Own Practice")
-	clientID, _ := seedClientEngagement(t, db, practiceID, "Own Client", "own@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Own Practice")
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Own Client", "own@example.com")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -93,10 +93,10 @@ func TestRLS_ClientPortalUsersInviteInsertSucceedsForClientAtOwnPractice(t *test
 // duplicate-invite detection can't see across Practices.
 func TestRLS_ClientPortalUsersPracticeVisibilityScopedToOwnPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Visibility Practice A")
-	practiceB := seedPractice(t, db, "Visibility Practice B")
-	clientA, _ := seedClientEngagement(t, db, practiceA, "Client A", "cliana@example.com")
-	clientB, _ := seedClientEngagement(t, db, practiceB, "Client B", "clianb@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Visibility Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Visibility Practice B")
+	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "cliana@example.com")
+	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "clianb@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()), ($2, gen_random_uuid())`,
 		clientA, clientB,
@@ -137,8 +137,8 @@ func TestRLS_ClientPortalUsersPracticeVisibilityScopedToOwnPractice(t *testing.T
 // already-claimed row.
 func TestRLS_ClientPortalUsersInviteUpdateCannotTouchAcceptedRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Accepted Row Practice")
-	clientID, _ := seedClientEngagement(t, db, practiceID, "Accepted Row Client", "acceptedrow@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Accepted Row Practice")
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Accepted Row Client", "acceptedrow@example.com")
 	testdb.SeedPortalAccount(t, db, "already-accepted", "already-accepted@example.com")
 	var rowID string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -180,9 +180,9 @@ func TestRLS_ClientPortalUsersInviteUpdateCannotTouchAcceptedRow(t *testing.T) {
 // to the update door too.
 func TestRLS_ClientPortalUsersInviteUpdateCannotTouchCrossPracticeRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Update Cross Practice A")
-	practiceB := seedPractice(t, db, "Update Cross Practice B")
-	clientB, _ := seedClientEngagement(t, db, practiceB, "Client B", "clientb-update@example.com")
+	practiceA := testdb.SeedPractice(t, db, "Update Cross Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Update Cross Practice B")
+	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "clientb-update@example.com")
 	var rowID string
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,

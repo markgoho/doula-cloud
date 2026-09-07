@@ -15,24 +15,12 @@ import (
 // coincidence (e.g. a query returning zero rows because no row exists, not
 // because RLS hid it).
 
-func seedPractice(t *testing.T, db *testdb.DB, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(), `INSERT INTO practices (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
-		t.Fatalf("seed practice %q: %v", name, err)
-	}
-	return id
-}
-
-func seedStaff(t *testing.T, db *testdb.DB, identityUID string) string {
-	t.Helper()
-	// The address is derived from identityUID rather than fixed: #316
-	// matches an Invitation to a Practice against staff.email (staff has
-	// no unique constraint on it), so a shared fixture address would make
-	// every seeded person look like the same invitee.
-	return seedStaffWithEmail(t, db, identityUID, identityUID+"@example.com")
-}
-
+// seedStaffWithEmail inserts a bare Staff row with an explicit email,
+// unlike testdb.SeedStaff which always derives one from identityUID.
+// Stays local under this name rather than testdb: #316 matches an
+// Invitation to a Practice against staff.email (staff has no unique
+// constraint on it), so several tests across this package need a Staff
+// row whose email is independent of her identity_uid.
 func seedStaffWithEmail(t *testing.T, db *testdb.DB, identityUID, email string) string {
 	t.Helper()
 	var id string
@@ -45,6 +33,11 @@ func seedStaffWithEmail(t *testing.T, db *testdb.DB, identityUID, email string) 
 	return id
 }
 
+// seedMembership attaches a doula Membership to an already-seeded Staff
+// row. Stays local under this name rather than testdb: these RLS tests
+// need a Staff row to exist (and be visible or not under a session var)
+// before the Membership is added, a two-step sequence
+// testdb.SeedStaffAtPractice's single insert-both call doesn't offer.
 func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
@@ -61,8 +54,8 @@ func seedMembership(t *testing.T, db *testdb.DB, practiceID, staffID string) {
 // where a mistake in either policy could otherwise leak rows.
 func TestRLS_StaffFailsClosedWithNoSessionVarsSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Some Practice")
-	staffID := seedStaff(t, db, "fail-closed-staff-uid")
+	practiceID := testdb.SeedPractice(t, db, "Some Practice")
+	staffID := testdb.SeedStaff(t, db, "fail-closed-staff-uid")
 	seedMembership(t, db, practiceID, staffID)
 
 	var count int
@@ -80,10 +73,10 @@ func TestRLS_StaffFailsClosedWithNoSessionVarsSet(t *testing.T) {
 // to every staff row globally.
 func TestRLS_StaffPracticeVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	staffAtA := seedStaff(t, db, "staff-at-a")
-	staffAtB := seedStaff(t, db, "staff-at-b")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	staffAtA := testdb.SeedStaff(t, db, "staff-at-a")
+	staffAtB := testdb.SeedStaff(t, db, "staff-at-b")
 	seedMembership(t, db, practiceA, staffAtA)
 	seedMembership(t, db, practiceB, staffAtB)
 
@@ -125,8 +118,8 @@ func TestRLS_StaffPracticeVisibilityIsScopedToCurrentPractice(t *testing.T) {
 // not leak into a request scoped to a Practice they don't belong to.
 func TestRLS_StaffSelfVisibilityOnlyAppliesBeforePracticeIsChosen(t *testing.T) {
 	db := testdb.New(t)
-	unrelatedPractice := seedPractice(t, db, "Unrelated Practice")
-	staffID := seedStaff(t, db, "self-visibility-uid")
+	unrelatedPractice := testdb.SeedPractice(t, db, "Unrelated Practice")
+	staffID := testdb.SeedStaff(t, db, "self-visibility-uid")
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -163,10 +156,10 @@ func TestRLS_StaffSelfVisibilityOnlyAppliesBeforePracticeIsChosen(t *testing.T) 
 // app.current_practice_id, not every membership globally.
 func TestRLS_PracticeMembershipsVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := seedPractice(t, db, "Practice A")
-	practiceB := seedPractice(t, db, "Practice B")
-	staffA := seedStaff(t, db, "member-of-a")
-	staffB := seedStaff(t, db, "member-of-b")
+	practiceA := testdb.SeedPractice(t, db, "Practice A")
+	practiceB := testdb.SeedPractice(t, db, "Practice B")
+	staffA := testdb.SeedStaff(t, db, "member-of-a")
+	staffB := testdb.SeedStaff(t, db, "member-of-b")
 	seedMembership(t, db, practiceA, staffA)
 	seedMembership(t, db, practiceB, staffB)
 
@@ -195,9 +188,9 @@ func TestRLS_PracticeMembershipsVisibilityIsScopedToCurrentPractice(t *testing.T
 // Membership is exactly the kind of row a second Practice must not read.
 func TestRLS_MembershipEventsAreScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	mine := seedPractice(t, db, "My Practice")
-	theirs := seedPractice(t, db, "Their Practice")
-	staffID := seedStaff(t, db, "membership-events-rls")
+	mine := testdb.SeedPractice(t, db, "My Practice")
+	theirs := testdb.SeedPractice(t, db, "Their Practice")
+	staffID := testdb.SeedStaff(t, db, "membership-events-rls")
 	seedMembership(t, db, mine, staffID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)
@@ -241,8 +234,8 @@ func TestRLS_MembershipEventsAreScopedToCurrentPractice(t *testing.T) {
 // already holds its token, and never to one holding a different one.
 func TestRLS_InvitationAcceptLookupNeedsTheTokenDigest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Invite Lookup Practice")
-	ownerID := seedStaff(t, db, "invite-lookup-owner")
+	practiceID := testdb.SeedPractice(t, db, "Invite Lookup Practice")
+	ownerID := testdb.SeedStaff(t, db, "invite-lookup-owner")
 	seedMembership(t, db, practiceID, ownerID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_invitations (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)

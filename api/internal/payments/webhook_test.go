@@ -270,7 +270,7 @@ func paymentsForInvoice(t *testing.T, db *testdb.DB, invoiceID string) []payment
 
 func seedConnectedPractice(t *testing.T, db *testdb.DB, name, accountID string) string {
 	t.Helper()
-	practiceID := seedPractice(t, db, name)
+	practiceID := testdb.SeedPractice(t, db, name)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, accountID, practiceID,
 	); err != nil {
@@ -836,8 +836,8 @@ func TestPostConnectWebhookHandler_OtherEventTypesAcknowledgedNotProcessed(t *te
 func TestPostConnectWebhookHandler_InvoicePaidCreatesPaymentAndFlipsStatus(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Invoice Paid Practice", "acct_invoice_paid")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_test", invoiceStatusOpen, 5000, time.Now())
 	srv := newConnectWebhookServerWith(db, &referenceClient{
 		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
@@ -879,8 +879,8 @@ func TestPostConnectWebhookHandler_InvoicePaidCreatesPaymentAndFlipsStatus(t *te
 func TestPostConnectWebhookHandler_InvoicePaidQueuesPaymentReceivedOutboxRow(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Invoice Paid Outbox Practice", "acct_invoice_paid_outbox")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_outbox_test", invoiceStatusOpen, 5000, time.Now())
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
@@ -922,8 +922,8 @@ func TestPostConnectWebhookHandler_InvoicePaidQueuesPaymentReceivedOutboxRow(t *
 func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Invoice Paid Replay Practice", "acct_invoice_paid_replay")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_replay", invoiceStatusOpen, 5000, time.Now())
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
@@ -972,8 +972,8 @@ func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 func TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Invoice Paid Nudge Fail Practice", "acct_invoice_paid_nudge_fail")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_nudge_fail", invoiceStatusOpen, 5000, time.Now())
 	failingEnq := &tasknudge.FakeEnqueuer{Err: errors.New("cloud tasks unavailable")}
 	srv := newConnectWebhookServerWithEnqueuer(db, payments.NewStripeAPIClient("sk_test_unused", "https://app.test"), failingEnq)
@@ -998,8 +998,8 @@ func TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure(t *tes
 func TestPostConnectWebhookHandler_InvoicePaymentFailedFlipsStatusWithoutPayment(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Invoice Payment Failed Practice", "acct_invoice_failed")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_failed_test", invoiceStatusOpen, 5000, time.Now())
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
@@ -1027,8 +1027,8 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedFlipsStatusWithoutPayment
 func TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Invoice Payment Failed Replay Practice", "acct_invoice_failed_replay")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_failed_replay", invoiceStatusOpen, 5000, time.Now())
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
@@ -1098,8 +1098,8 @@ func TestPostConnectWebhookHandler_InvoicePaidUnknownInvoiceDroppedButAcknowledg
 func TestPostConnectWebhookHandler_InvoicePaidUnrecognizedAccountDroppedButAcknowledged(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Wrong Account Practice", "acct_right_owner")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_wrong_account", invoiceStatusOpen, 5000, time.Now())
 	srv := newConnectWebhookServer(db)
 	defer srv.Close()
@@ -1197,8 +1197,8 @@ func TestPostAccountWebhookHandler_FakeClientEventIsDroppedNotApplied(t *testing
 func TestPostConnectWebhookHandler_InvoicePaidRecordsFetchedPaymentReference(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Reference Practice", "acct_reference")
-	engagementID := seedEngagement(t, db, practiceID, "Ref Client", "ref@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ref Client", "ref@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_reference", invoiceStatusOpen, invoicePaidAmountCents, time.Now())
 	client := &referenceClient{
 		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
@@ -1233,8 +1233,8 @@ func TestPostConnectWebhookHandler_InvoicePaidRecordsFetchedPaymentReference(t *
 func TestPostConnectWebhookHandler_InvoicePaidSurvivesReferenceLookupFailure(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := seedConnectedPractice(t, db, "Reference Failure Practice", "acct_ref_fail")
-	engagementID := seedEngagement(t, db, practiceID, "Fail Client", "fail@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Fail Client", "fail@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_ref_fail", invoiceStatusOpen, invoicePaidAmountCents, time.Now())
 	client := &referenceClient{
 		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),

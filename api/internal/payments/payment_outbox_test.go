@@ -40,8 +40,8 @@ const seedPaymentOutboxAmountCents = 5000
 // Practice.
 func seedPaymentOutboxRow(t *testing.T, db *testdb.DB, practiceID, suffix string, attemptCount int, nextAttemptAt time.Time) string {
 	t.Helper()
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_outbox_fixture_"+practiceID+suffix, invoiceStatusOpen, seedPaymentOutboxAmountCents, time.Now())
 	var paymentID string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -94,9 +94,9 @@ func paymentOutboxRowState(t *testing.T, db *testdb.DB, id string) (status strin
 
 func TestQueuePaymentReceivedNotification_InsertsPendingRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Queue Payment Insert")
-	engagementID := seedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedContract(t, db, engagementID)
+	practiceID := testdb.SeedPractice(t, db, "Queue Payment Insert")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_queue_insert", invoiceStatusOpen, 5000, time.Now())
 	var paymentID string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -134,14 +134,12 @@ func TestQueuePaymentReceivedNotification_InsertsPendingRow(t *testing.T) {
 
 func TestPaymentWorker_ProcessPending_MailsEveryOwnerAndAdminMarksSent(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "payment-owner-one")
-	adminStaffID := seedStaff(t, db, "payment-admin-one")
-	seedMembership(t, db, practiceID, adminStaffID, "{admin}")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-one", []string{ownerRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "payment-admin-one", []string{"admin"}, "employee")
 	// A Doula at the same Practice should never be mailed -- ADR-0006's
 	// read table gives Contract money/Invoice history to Owner and Admin
 	// only.
-	doulaStaffID := seedStaff(t, db, "payment-doula-bystander")
-	seedMembership(t, db, practiceID, doulaStaffID, "{doula}")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "payment-doula-bystander", []string{doulaRole}, "employee")
 	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
@@ -156,15 +154,22 @@ func TestPaymentWorker_ProcessPending_MailsEveryOwnerAndAdminMarksSent(t *testin
 		t.Fatalf("sent %d messages, want 2 (one per Owner/Admin)", len(sent))
 	}
 	wantLink := testPaymentAppBaseURL + "/practices/" + practiceID
+	wantRecipients := map[string]bool{"payment-owner-one@example.com": false, "payment-admin-one@example.com": false}
 	for _, msg := range sent {
 		if msg.Subject != "Doula Cloud: a Payment arrived" {
 			t.Fatalf("subject = %q", msg.Subject)
 		}
-		if msg.To != "staff@example.com" {
-			t.Fatalf("To = %q", msg.To)
+		if _, ok := wantRecipients[msg.To]; !ok {
+			t.Fatalf("To = %q, want the Owner or the Admin", msg.To)
 		}
+		wantRecipients[msg.To] = true
 		if !strings.Contains(msg.Text, wantLink) {
 			t.Fatalf("body %q does not contain link %q", msg.Text, wantLink)
+		}
+	}
+	for to, got := range wantRecipients {
+		if !got {
+			t.Fatalf("recipient %q was never mailed", to)
 		}
 	}
 }
@@ -176,7 +181,7 @@ func TestPaymentWorker_ProcessPending_MailsEveryOwnerAndAdminMarksSent(t *testin
 // must both be mailed rather than one silently swallowing the other.
 func TestPaymentWorker_ProcessPending_TwoPaymentsForSamePracticeBothMailed(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "payment-owner-two-payments")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-two-payments", []string{ownerRole}, "employee")
 	firstID := seedPaymentOutboxRow(t, db, practiceID, "-first", 0, time.Now().Add(-time.Minute))
 	secondID := seedPaymentOutboxRow(t, db, practiceID, "-second", 0, time.Now().Add(-time.Minute))
 
@@ -195,7 +200,7 @@ func TestPaymentWorker_ProcessPending_TwoPaymentsForSamePracticeBothMailed(t *te
 
 func TestPaymentWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "payment-owner-not-due")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-not-due", []string{ownerRole}, "employee")
 	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(time.Hour))
 
 	sender := &mail.FakeSender{}
@@ -212,7 +217,7 @@ func TestPaymentWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
 
 func TestPaymentWorker_ProcessPending_ZeroOwnersOrAdminsMarksSentWithNoMail(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Payment Ownerless Practice")
+	practiceID := testdb.SeedPractice(t, db, "Payment Ownerless Practice")
 	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
@@ -229,7 +234,7 @@ func TestPaymentWorker_ProcessPending_ZeroOwnersOrAdminsMarksSentWithNoMail(t *t
 
 func TestPaymentWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "payment-owner-retry")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-retry", []string{ownerRole}, "employee")
 	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
@@ -243,7 +248,7 @@ func TestPaymentWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
 
 func TestPaymentWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedOwner(t, db, "payment-owner-dead-letter")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-dead-letter", []string{ownerRole}, "employee")
 	// One attempt short of the schedule's length -- this failure is the
 	// last one before dead-letter.
 	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 4, time.Now().Add(-time.Minute))

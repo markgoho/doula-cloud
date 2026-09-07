@@ -16,8 +16,8 @@ import (
 func TestAwaitingReplyHandler_EmptyPracticeHasNoEngagementsWaiting(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-awaiting-empty"
-	practiceID := seedPractice(t, db, "Awaiting Empty Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Empty Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -44,14 +44,14 @@ func TestAwaitingReplyHandler_EmptyPracticeHasNoEngagementsWaiting(t *testing.T)
 func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-awaiting-mixed"
-	practiceID := seedPractice(t, db, "Awaiting Mixed Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Mixed Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
-	waitingClientID, waitingEngagementID := seedClientEngagement(t, db, practiceID, "Priya", "priya@example.com")
+	waitingClientID, waitingEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Priya", "priya@example.com")
 	seedMessage(t, db, waitingEngagementID, "staff", staffID, "How are you feeling?")
 	seedMessage(t, db, waitingEngagementID, "client", waitingClientID, "A little tired today.")
 
-	repliedClientID, repliedEngagementID := seedClientEngagement(t, db, practiceID, "Renata", "renata@example.com")
+	repliedClientID, repliedEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Renata", "renata@example.com")
 	seedMessage(t, db, repliedEngagementID, "client", repliedClientID, "Question about my plan.")
 	seedMessage(t, db, repliedEngagementID, "staff", staffID, "Answered -- let me know if that helps.")
 
@@ -84,14 +84,14 @@ func TestAwaitingReplyHandler_OnlyEngagementsAwaitingReplyAppear(t *testing.T) {
 func TestAwaitingReplyHandler_ContractorSeesOnlyHerAttachedEngagements(t *testing.T) {
 	db := testdb.New(t)
 	const contractorUID = "contractor-awaiting-narrowed"
-	practiceID := seedPractice(t, db, "Awaiting Contractor Practice")
-	contractorID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Contractor Practice")
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 
-	attachedClientID, attachedEngagementID := seedClientEngagement(t, db, practiceID, "Attached Client", "attached@example.com")
-	seedGrantedAttachment(t, db, attachedEngagementID, contractorID)
+	attachedClientID, attachedEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Attached Client", "attached@example.com")
+	testdb.SeedGrantedAttachment(t, db, attachedEngagementID, contractorID)
 	seedMessage(t, db, attachedEngagementID, "client", attachedClientID, "Waiting on you.")
 
-	unattachedClientID, unattachedEngagementID := seedClientEngagement(t, db, practiceID, "Unattached Client", "unattached@example.com")
+	unattachedClientID, unattachedEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Unattached Client", "unattached@example.com")
 	seedMessage(t, db, unattachedEngagementID, "client", unattachedClientID, "Also waiting.")
 
 	srv, session := newServer(t, db, contractorUID)
@@ -113,8 +113,8 @@ func TestAwaitingReplyHandler_ContractorSeesOnlyHerAttachedEngagements(t *testin
 func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-awaiting-bad-cursor"
-	practiceID := seedPractice(t, db, "Awaiting Bad Cursor Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Bad Cursor Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -133,13 +133,13 @@ func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {
 func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-awaiting-pages"
-	practiceID := seedPractice(t, db, "Awaiting Pages Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Pages Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 
 	const total = 35 // awaitingPageSize (30) + 5, to force a second page
 	engagementIDs := make([]string, total)
 	for i := range total {
-		clientID, engagementID := seedClientEngagement(t, db, practiceID, fmt.Sprintf("Client %d", i), fmt.Sprintf("client-%d@example.com", i))
+		clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, fmt.Sprintf("Client %d", i), fmt.Sprintf("client-%d@example.com", i))
 		seedMessage(t, db, engagementID, "client", clientID, "Waiting.")
 		engagementIDs[i] = engagementID
 	}
@@ -190,14 +190,14 @@ func TestAwaitingReplyHandler_PaginatesAcrossPages(t *testing.T) {
 func TestAwaitingReplyHandler_ContractorPaginatesAcrossPages(t *testing.T) {
 	db := testdb.New(t)
 	const contractorUID = "contractor-awaiting-pages"
-	practiceID := seedPractice(t, db, "Awaiting Contractor Pages Practice")
-	contractorID := seedContractorAtPractice(t, db, practiceID, contractorUID)
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Contractor Pages Practice")
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 
 	const total = 35 // awaitingPageSize (30) + 5, to force a second page
 	engagementIDs := make([]string, total)
 	for i := range total {
-		clientID, engagementID := seedClientEngagement(t, db, practiceID, fmt.Sprintf("Attached Client %d", i), fmt.Sprintf("attached-%d@example.com", i))
-		seedGrantedAttachment(t, db, engagementID, contractorID)
+		clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, fmt.Sprintf("Attached Client %d", i), fmt.Sprintf("attached-%d@example.com", i))
+		testdb.SeedGrantedAttachment(t, db, engagementID, contractorID)
 		seedMessage(t, db, engagementID, "client", clientID, "Waiting.")
 		engagementIDs[i] = engagementID
 	}

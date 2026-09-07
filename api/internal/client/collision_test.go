@@ -15,7 +15,7 @@ import (
 // bug FindMatches' substring recall used to cause.
 func TestEditHandler_CollisionPredicate_TwoSarahsPostalCodeSavesFreely(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-two-sarahs")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-two-sarahs", []string{doulaRole}, "employee")
 	seedClientFull(t, db, practiceID, "Sarah", "Nguyen", "", "")
 	editingID := seedClientFull(t, db, practiceID, "Sarah", "Osei", "", "")
 
@@ -36,7 +36,7 @@ func TestEditHandler_CollisionPredicate_TwoSarahsPostalCodeSavesFreely(t *testin
 // recall used to fire on all three.
 func TestEditHandler_CollisionPredicate_AnnDoesNotCollideWithSubstringCousins(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-ann")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-ann", []string{doulaRole}, "employee")
 	seedClientFull(t, db, practiceID, "Joanna", "Reyes", "", "")
 	seedClientFull(t, db, practiceID, "Hannah", "Reyes", "", "")
 	seedClientFull(t, db, practiceID, "Deanna", "Reyes", "", "")
@@ -60,7 +60,7 @@ func TestEditHandler_CollisionPredicate_AnnDoesNotCollideWithSubstringCousins(t 
 // name word, block nothing.
 func TestEditHandler_CollisionPredicate_SharedDateOfBirthNoNameWordSavesFreely(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-shared-dob")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-shared-dob", []string{doulaRole}, "employee")
 	seedClientFull(t, db, practiceID, "Priya", "Chandra", "", "1990-05-01")
 	editingID := seedClientFull(t, db, practiceID, "Wren", testFletcher, "", "1990-05-01")
 
@@ -80,7 +80,7 @@ func TestEditHandler_CollisionPredicate_SharedDateOfBirthNoNameWordSavesFreely(t
 // whole name word is a possible duplicate -- gate two, not silence.
 func TestEditHandler_CollisionPredicate_SharedDateOfBirthWithNameWordAsks(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-dob-shared-word")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-dob-shared-word", []string{doulaRole}, "employee")
 	seedClientFull(t, db, practiceID, "Priya", "Chandra", "", "1990-05-01")
 	editingID := seedClientFull(t, db, practiceID, "Priya", testFletcher, "", "")
 
@@ -108,7 +108,7 @@ func TestEditHandler_CollisionPredicate_SharedDateOfBirthWithNameWordAsks(t *tes
 // matches exactly.
 func TestEditHandler_CollisionPredicate_ExactEmailAsksRegardlessOfName(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-exact-email")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-exact-email", []string{doulaRole}, "employee")
 	seedClientFull(t, db, practiceID, "Priya", "Chandra", "shared@example.com", "")
 	editingID := seedClientFull(t, db, practiceID, "Wren", testFletcher, "", "")
 
@@ -129,7 +129,7 @@ func TestEditHandler_CollisionPredicate_ExactEmailAsksRegardlessOfName(t *testin
 // does not equal Sarah Chen's, so gate one never fires.
 func TestEditHandler_CollisionPredicate_CorrectingToExistingFirstNameSaves(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-sara-to-sarah")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-sara-to-sarah", []string{doulaRole}, "employee")
 	seedClientFull(t, db, practiceID, "Sarah", "Chen", "", "")
 	editingID := seedClientFull(t, db, practiceID, "Sara", "Beck", "", "")
 
@@ -151,7 +151,7 @@ func TestEditHandler_CollisionPredicate_CorrectingToExistingFirstNameSaves(t *te
 // on it.
 func TestEditHandler_CollisionPredicate_SubstitutionBlocksWithSubstitutionFlag(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedStaffWithMembership(t, db, "staff-substitution")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-substitution", []string{doulaRole}, "employee")
 	existingID := seedClientFull(t, db, practiceID, testNadia, testHaddad, "", "")
 	editingID := seedClientFull(t, db, practiceID, "Sarah", "Beck", "", "")
 
@@ -185,9 +185,9 @@ func TestEditHandler_CollisionPredicate_SubstitutionBlocksWithSubstitutionFlag(t
 func TestEditHandler_RefusesEditingAMergedRecord(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-edit-merged"
-	practiceID := seedStaffWithMembership(t, db, identityUID)
-	survivorID := seedClient(t, db, practiceID, "Survivor", "")
-	absorbedID := seedClient(t, db, practiceID, "Absorbed", "")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	survivorID := testdb.SeedNamedClient(t, db, practiceID, "Survivor", "")
+	absorbedID := testdb.SeedNamedClient(t, db, practiceID, "Absorbed", "")
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET merged_into = $2 WHERE id = $1`, absorbedID, survivorID); err != nil {
 		t.Fatalf("seed merged_into: %v", err)
 	}

@@ -19,12 +19,12 @@ func TestPracticeHandler_SpansEverySubjectKindNewestFirst(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-spans-kinds"
 	practiceID := testdb.SeedPractice(t, db, "Feed Spans Kinds Practice")
-	ownerID := seedOwnerAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Feed Client", "feed-spans-kinds@example.com")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Feed Client", "feed-spans-kinds@example.com", "active")
 
-	seedActivity(t, db, practiceID, activity.SubjectClient, clientID, "created", activity.StaffActor(ownerID))
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectClient, clientID, "created", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -64,11 +64,11 @@ func TestPracticeHandler_ResolvesActorNameForEveryActorKind(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-actor-names"
 	practiceID := testdb.SeedPractice(t, db, "Feed Actor Names Practice")
-	seedOwnerAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Amara", "feed-actor-names@example.com")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Amara", "feed-actor-names@example.com", "active")
 
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSigned), activity.ClientActor(clientID))
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferSent), activity.SystemActor())
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSigned), activity.ClientActor(clientID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferSent), activity.SystemActor())
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -103,12 +103,12 @@ func TestPracticeHandler_BatchOverflowStillPaginatesCorrectly(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-batch-overflow"
 	practiceID := testdb.SeedPractice(t, db, "Feed Batch Overflow Practice")
-	ownerID := seedOwnerAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "feed-batch-overflow@example.com")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "feed-batch-overflow@example.com", "active")
 
 	const total = 125 // > practiceBatchSize (120), to force the sentinel row
 	for range total {
-		seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
+		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
 	}
 
 	srv, session := newServer(t, db, identityUID)
@@ -148,7 +148,7 @@ func TestPracticeHandler_InvalidCursorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-bad-cursor"
 	practiceID := testdb.SeedPractice(t, db, "Feed Bad Cursor Practice")
-	seedOwnerAtPractice(t, db, practiceID, identityUID)
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -167,7 +167,7 @@ func TestPracticeHandler_EmptyPracticeHasNoActivity(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-empty"
 	practiceID := testdb.SeedPractice(t, db, "Feed Empty Practice")
-	seedOwnerAtPractice(t, db, practiceID, identityUID)
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -192,11 +192,11 @@ func TestPracticeHandler_UnregisteredSubjectKindNeverAppears(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-unregistered-kind"
 	practiceID := testdb.SeedPractice(t, db, "Feed Unregistered Kind Practice")
-	ownerID := seedOwnerAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Feed Client", "feed-unregistered-kind@example.com")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Feed Client", "feed-unregistered-kind@example.com", "active")
 
-	seedActivity(t, db, practiceID, "client_field_template", practiceID, "template_saved", activity.StaffActor(ownerID))
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, "client_field_template", practiceID, "template_saved", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -221,11 +221,11 @@ func TestPracticeHandler_MoneyTierAppliedPerRow(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-feed-money-tier"
 	practiceID := testdb.SeedPractice(t, db, "Feed Money Tier Practice")
-	doulaID := seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Feed Client", "feed-money-tier@example.com")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Feed Client", "feed-money-tier@example.com", "active")
 
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(doulaID))
-	seedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(doulaID))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -255,10 +255,10 @@ func TestPracticeHandler_ContractorPageBoundaryNeverLeaksForbiddenRows(t *testin
 	db := testdb.New(t)
 	const contractorUID = "contractor-feed-page-boundary"
 	practiceID := testdb.SeedPractice(t, db, "Feed Page Boundary Practice")
-	contractorID := seedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, allowedEngagementID := seedClientEngagement(t, db, practiceID, "Allowed Client", "feed-boundary-allowed@example.com")
-	_, forbiddenEngagementID := seedClientEngagement(t, db, practiceID, "Forbidden Client", "feed-boundary-forbidden@example.com")
-	seedGrantedAttachment(t, db, allowedEngagementID, contractorID)
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+	_, allowedEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Allowed Client", "feed-boundary-allowed@example.com", "active")
+	_, forbiddenEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Forbidden Client", "feed-boundary-forbidden@example.com", "active")
+	testdb.SeedGrantedAttachment(t, db, allowedEngagementID, contractorID)
 
 	// Interleaved, oldest to newest: two allowed rows, then one not-allowed
 	// row (alternating forbidden-Engagement and unregistered-kind),
@@ -275,9 +275,9 @@ func TestPracticeHandler_ContractorPageBoundaryNeverLeaksForbiddenRows(t *testin
 	allowedSeeded, notAllowedSeeded := 0, 0
 	seedNotAllowed := func() {
 		if notAllowedSeeded%2 == 0 {
-			seedActivity(t, db, practiceID, activity.SubjectEngagement, forbiddenEngagementID, fmt.Sprintf("forbidden_visit_%d", notAllowedSeeded), activity.StaffActor(contractorID))
+			testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, forbiddenEngagementID, fmt.Sprintf("forbidden_visit_%d", notAllowedSeeded), activity.StaffActor(contractorID))
 		} else {
-			seedActivity(t, db, practiceID, "client_field_template", practiceID, fmt.Sprintf("hidden_template_%d", notAllowedSeeded), activity.StaffActor(contractorID))
+			testdb.SeedActivity(t, db, practiceID, "client_field_template", practiceID, fmt.Sprintf("hidden_template_%d", notAllowedSeeded), activity.StaffActor(contractorID))
 		}
 		notAllowedSeeded++
 	}
@@ -287,7 +287,7 @@ func TestPracticeHandler_ContractorPageBoundaryNeverLeaksForbiddenRows(t *testin
 				break
 			}
 			action := fmt.Sprintf("allowed_visit_%d", allowedSeeded)
-			seedActivity(t, db, practiceID, activity.SubjectEngagement, allowedEngagementID, action, activity.StaffActor(contractorID))
+			testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, allowedEngagementID, action, activity.StaffActor(contractorID))
 			wantAllowed[action] = true
 			allowedSeeded++
 		}

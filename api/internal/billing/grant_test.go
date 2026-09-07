@@ -20,7 +20,7 @@ const testGrantor = "mark@doula.cloud"
 func seedRoster(t *testing.T, db *testdb.DB, practiceID string, n int) {
 	t.Helper()
 	for i := range n {
-		testdb.SeedStaffAtPractice(t, db, practiceID, t.Name()+"-staff-"+string(rune('a'+i)), []string{"doula"}, "employee")
+		testdb.SeedStaffAtPractice(t, db, practiceID, t.Name()+"-staff-"+string(rune('a'+i)), []string{doulaRole}, "employee")
 	}
 }
 
@@ -42,7 +42,7 @@ func foundingGrantRow(t *testing.T, db *testdb.DB, practiceID string) (quantity 
 // has an answer on the row itself.
 func TestFoundingGrant_SizesTheGrantFromTheRosterAndNamesWhoIssuedIt(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Rochester Agency")
+	practiceID := testdb.SeedPractice(t, db, "Rochester Agency")
 	seedRoster(t, db, practiceID, 14)
 
 	tx := practiceTx(t, db, practiceID)
@@ -73,7 +73,7 @@ func TestFoundingGrant_SizesTheGrantFromTheRosterAndNamesWhoIssuedIt(t *testing.
 // rule at the other end of the pilot: one doula, three Credits.
 func TestFoundingGrant_GrantsThreePerStaffForASoloPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Solo Doula")
+	practiceID := testdb.SeedPractice(t, db, "Solo Doula")
 	seedRoster(t, db, practiceID, 1)
 
 	tx := practiceTx(t, db, practiceID)
@@ -91,7 +91,7 @@ func TestFoundingGrant_GrantsThreePerStaffForASoloPractice(t *testing.T) {
 // doubled.
 func TestFoundingGrant_RefusesASecondGrant(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Granted Twice")
+	practiceID := testdb.SeedPractice(t, db, "Granted Twice")
 	seedRoster(t, db, practiceID, 2)
 
 	tx := practiceTx(t, db, practiceID)
@@ -122,7 +122,7 @@ func TestFoundingGrant_RefusesASecondGrant(t *testing.T) {
 // told why rather than being handed a constraint violation.
 func TestFoundingGrant_RefusesAPracticeWithNoStaff(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Empty Roster")
+	practiceID := testdb.SeedPractice(t, db, "Empty Roster")
 
 	tx := practiceTx(t, db, practiceID)
 	if _, err := billing.FoundingGrant(t.Context(), tx, practiceID, testGrantor); !errors.Is(err, billing.ErrNoStaff) {
@@ -134,7 +134,7 @@ func TestFoundingGrant_RefusesAPracticeWithNoStaff(t *testing.T) {
 // be skipped, and that whitespace does not stand in for a name.
 func TestFoundingGrant_RefusesAnUnnamedGrantor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Nameless Grantor")
+	practiceID := testdb.SeedPractice(t, db, "Nameless Grantor")
 	seedRoster(t, db, practiceID, 1)
 
 	for _, grantedBy := range []string{"", "   "} {
@@ -152,7 +152,7 @@ func TestFoundingGrant_RefusesAnUnnamedGrantor(t *testing.T) {
 // instead of computing a $0.00 refund.
 func TestFoundingGrant_IsSpentBeforePurchasedCreditsAndIsNotRefundable(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Grant Then Purchase")
+	practiceID := testdb.SeedPractice(t, db, "Grant Then Purchase")
 	seedRoster(t, db, practiceID, 1)
 
 	grantTx := practiceTx(t, db, practiceID)
@@ -204,7 +204,7 @@ func TestFoundingGrant_IsSpentBeforePurchasedCreditsAndIsNotRefundable(t *testin
 // refund against a lot that was never paid for.
 func TestFoundingGrant_IsAllThatIsRefusedWhenOnlyAGrantIsHeld(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Grant Only")
+	practiceID := testdb.SeedPractice(t, db, "Grant Only")
 	seedRoster(t, db, practiceID, 1)
 
 	tx := practiceTx(t, db, practiceID)
@@ -225,7 +225,7 @@ func TestFoundingGrant_IsAllThatIsRefusedWhenOnlyAGrantIsHeld(t *testing.T) {
 // refund uses, sized from the roster, and recorded.
 func TestFoundingGrantHandler_IssuesTheGrant(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Grant Endpoint")
+	practiceID := testdb.SeedPractice(t, db, "Grant Endpoint")
 	seedRoster(t, db, practiceID, 4)
 	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
 
@@ -252,7 +252,7 @@ func TestFoundingGrantHandler_IssuesTheGrant(t *testing.T) {
 // command is answered with a conflict rather than a second grant.
 func TestFoundingGrantHandler_RefusesTheSecondRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Twice Over HTTP")
+	practiceID := testdb.SeedPractice(t, db, "Twice Over HTTP")
 	seedRoster(t, db, practiceID, 1)
 	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
 	body := `{"practiceId":"` + practiceID + `","grantedBy":"` + testGrantor + `"}`
@@ -282,9 +282,9 @@ func TestFoundingGrantHandler_RefusesTheSecondRequest(t *testing.T) {
 // secret at all.
 func TestFoundingGrantHandler_Refusals(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db, "Endpoint Refusals")
+	practiceID := testdb.SeedPractice(t, db, "Endpoint Refusals")
 	srv := newInternalBillingServer(db, billing.NewFakeStripeClient())
-	staffed := seedPractice(t, db, "Endpoint Refusals Staffed")
+	staffed := testdb.SeedPractice(t, db, "Endpoint Refusals Staffed")
 	seedRoster(t, db, staffed, 1)
 
 	for _, tc := range []struct {

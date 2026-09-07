@@ -16,7 +16,7 @@ import (
 func TestGetHandler_EmptyByDefault(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-empty-default"
-	practiceID := seedDoula(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
@@ -41,7 +41,7 @@ func TestGetHandler_EmptyByDefault(t *testing.T) {
 func TestGetHandler_AnyStaffAllowed(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-any-staff"
-	practiceID := seedDoula(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Intake note","order":0,"archived":false}]`)
 
 	srv, session := newServer(t, db, uid)
@@ -67,7 +67,7 @@ func TestGetHandler_AnyStaffAllowed(t *testing.T) {
 func TestPutHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-doula-forbidden"
-	practiceID := seedDoula(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
@@ -87,7 +87,7 @@ func TestPutHandler_DoulaForbidden(t *testing.T) {
 func TestPutHandler_AdminAllowed(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-admin-allowed"
-	practiceID := seedAdmin(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"admin"}, "employee")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
@@ -105,7 +105,7 @@ func TestPutHandler_AdminAllowed(t *testing.T) {
 func TestPutHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-invalid-body"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
@@ -144,7 +144,7 @@ func TestPutHandler_ValidationRejections(t *testing.T) {
 
 	db := testdb.New(t)
 	const uid = "put-validation"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
@@ -167,7 +167,7 @@ func TestPutHandler_ValidationRejections(t *testing.T) {
 func TestPutHandler_ShadowStructuralAllowsANonMatchingSynonym(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-shadow-non-match"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
@@ -188,7 +188,7 @@ func TestPutHandler_ShadowStructuralAllowsANonMatchingSynonym(t *testing.T) {
 func TestPutHandler_ExistingFieldCannotBeRemoved(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-cannot-remove"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Intake note","order":0,"archived":false}]`)
 
 	srv, session := newServer(t, db, uid)
@@ -211,7 +211,7 @@ func TestPutHandler_ExistingFieldCannotBeRemoved(t *testing.T) {
 func TestPutHandler_ExistingFieldTypeCannotChange(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-type-locked"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Intake note","order":0,"archived":false}]`)
 
 	srv, session := newServer(t, db, uid)
@@ -235,7 +235,7 @@ func TestPutHandler_ExistingFieldTypeCannotChange(t *testing.T) {
 func TestPutHandler_ArchiveThenUnarchiveRoundTrips(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-archive-round-trip"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
@@ -287,7 +287,7 @@ func TestPutHandler_ArchiveThenUnarchiveRoundTrips(t *testing.T) {
 func TestPutHandler_WritesOneAuditRowPerRealChange(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-audit-trail"
-	practiceID := seedOwner(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	var staffID string
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM staff WHERE identity_uid = $1`, uid).Scan(&staffID); err != nil {
 		t.Fatalf("read seeded staff id: %v", err)

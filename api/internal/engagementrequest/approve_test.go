@@ -16,11 +16,11 @@ import (
 // CHECK constraints demand.
 func TestApproveHandler_CreatesEngagementConsumesCreditAndStampsRequest(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
@@ -52,10 +52,10 @@ func TestApproveHandler_CreatesEngagementConsumesCreditAndStampsRequest(t *testi
 // stays pending, and the out-of-Credits Notification is queued.
 func TestApproveHandler_EmptyBalanceLeavesRequestPendingAndQueuesNotification(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
-	clientID := seedClient(t, db, practiceID)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
@@ -79,10 +79,10 @@ func TestApproveHandler_EmptyBalanceLeavesRequestPendingAndQueuesNotification(t 
 // TestApproveHandler_DoulaForbidden proves approve is Owner/Admin only.
 func TestApproveHandler_DoulaForbidden(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
@@ -96,11 +96,11 @@ func TestApproveHandler_DoulaForbidden(t *testing.T) {
 // the same Request is a 409, not a second Engagement.
 func TestApproveHandler_AlreadyDecidedConflict(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
@@ -116,8 +116,8 @@ func TestApproveHandler_AlreadyDecidedConflict(t *testing.T) {
 // TestApproveHandler_NotFound proves a bogus request id is a 404.
 func TestApproveHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -130,8 +130,8 @@ func TestApproveHandler_NotFound(t *testing.T) {
 // segment is a 400, not a query against a bogus id.
 func TestApproveHandler_InvalidRequestIDRejected(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
@@ -144,12 +144,12 @@ func TestApproveHandler_InvalidRequestIDRejected(t *testing.T) {
 // warning also appears at approval time.
 func TestApproveHandler_WarnsOnLiveEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := seedPractice(t, db)
-	doulaID := seedMember(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
-	seedMember(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-1", []string{doulaRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 	seedCredits(t, db, practiceID)
-	clientID := seedClient(t, db, practiceID)
-	seedEngagement(t, db, practiceID, clientID, "active")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	seedEngagementInStatus(t, db, practiceID, clientID, "active")
 	requestID := pendingRequest(t, db, practiceID, clientID, testKindPostpartum, doulaID)
 
 	srv, session := newServer(t, db, "admin-1", &tasknudge.FakeEnqueuer{})

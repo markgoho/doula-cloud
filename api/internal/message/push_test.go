@@ -30,10 +30,10 @@ type pushNotificationPayload struct {
 func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-notifies-client"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-recipient")
 
 	pusher := push.NewFakePusher()
 	srv, session := newServerWithPusher(t, db, identityUID, pusher)
@@ -73,13 +73,13 @@ func TestCreateHandler_NotifiesClientPushSubscription(t *testing.T) {
 func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-notifies-staff"
-	practiceID := seedPractice(t, db, "Practice")
-	staffAID := seedStaffAtPracticeNamed(t, db, practiceID, "staff-a-push", "Staff A")
-	staffBID := seedStaffAtPracticeNamed(t, db, practiceID, "staff-b-push", "Staff B")
-	seedPushSubscription(t, db, "staff", staffAID, "https://push.example.com/staff-a")
-	seedPushSubscription(t, db, "staff", staffBID, "https://push.example.com/staff-b")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPortalUser(t, db, identityUID, clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffAID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-a-push", "Staff A", []string{doulaRole}, "employee")
+	staffBID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "staff-b-push", "Staff B", []string{doulaRole}, "employee")
+	testdb.SeedPushSubscription(t, db, "staff", staffAID, "https://push.example.com/staff-a")
+	testdb.SeedPushSubscription(t, db, "staff", staffBID, "https://push.example.com/staff-b")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
 
 	pusher := push.NewFakePusher()
 	srv, session := newPortalServerWithPusher(t, db, identityUID, pusher)
@@ -118,9 +118,9 @@ func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-no-subs"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	pusher := push.NewFakePusher()
 	srv, session := newServerWithPusher(t, db, identityUID, pusher)
@@ -145,10 +145,10 @@ func TestCreateHandler_NoSubscriptionsMeansNoPushCalls(t *testing.T) {
 func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-push-fails"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/gone")
 
 	pusher := push.NewFakePusher()
 	pusher.Err = errors.New("simulated push service failure")
@@ -174,11 +174,11 @@ func TestCreateHandler_PushFailureDoesNotBlockMessageCreation(t *testing.T) {
 func TestCreateHandler_MutedEngagementReceivesNoClientPush(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-notifies-muted-client"
-	practiceID := seedPractice(t, db, "Practice")
-	seedStaffAtPractice(t, db, practiceID, identityUID)
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/muted-client")
-	seedPortalUser(t, db, "client-muted-portal-account", clientID)
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/muted-client")
+	testdb.SeedPortalUser(t, db, "client-muted-portal-account", clientID)
 	seedMutedPushPreference(t, db, "client-muted-portal-account", engagementID)
 
 	pusher := push.NewFakePusher()
@@ -203,11 +203,11 @@ func TestCreateHandler_MutedEngagementReceivesNoClientPush(t *testing.T) {
 func TestCreateHandler_DoesNotNotifyStaffSubscriptionsForClientRecipient(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-population-filter"
-	practiceID := seedPractice(t, db, "Practice")
-	staffID := seedStaffAtPractice(t, db, practiceID, identityUID)
-	seedPushSubscription(t, db, "staff", staffID, "https://push.example.com/staff-own")
-	clientID, engagementID := seedClientEngagement(t, db, practiceID, "Client", "client@example.com")
-	seedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-only")
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	testdb.SeedPushSubscription(t, db, "staff", staffID, "https://push.example.com/staff-own")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/client-only")
 
 	pusher := push.NewFakePusher()
 	srv, session := newServerWithPusher(t, db, identityUID, pusher)

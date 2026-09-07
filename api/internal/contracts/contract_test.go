@@ -105,7 +105,7 @@ func putContract(t *testing.T, srv *httptest.Server, session string, practiceID,
 func TestPostContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -124,9 +124,9 @@ func TestPostContractHandler_InvalidEngagementID(t *testing.T) {
 func TestPostContractHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-no-engagement"
-	practiceID := seedMember(t, db, uid)
-	otherPracticeID := seedPractice(t, db, "Other Practice")
-	otherEngagementID := seedEngagement(t, db, otherPracticeID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
+	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -145,8 +145,8 @@ func TestPostContractHandler_EngagementNotFound(t *testing.T) {
 func TestPostContractHandler_NoTemplate(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-no-template"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -167,9 +167,9 @@ func TestPostContractHandler_NoTemplate(t *testing.T) {
 func TestPostContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-success"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, mergeFieldProse)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -208,9 +208,9 @@ func TestPostContractHandler_Success(t *testing.T) {
 func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-no-client-name-field"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, "Agreement at {{price}}.")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, "Agreement at {{price}}.")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -233,9 +233,9 @@ func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
 func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-dedup"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, "Hello {{client_name}}, this agreement is for {{client_name}}.")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, "Hello {{client_name}}, this agreement is for {{client_name}}.")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -257,9 +257,9 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 func TestPostContractHandler_Duplicate(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-duplicate"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, mergeFieldProse)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -280,7 +280,7 @@ func TestPostContractHandler_Duplicate(t *testing.T) {
 func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -296,8 +296,8 @@ func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
 func TestGetContractHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-not-found"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -317,8 +317,8 @@ func TestGetContractHandler_NotFound(t *testing.T) {
 func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-contractor-unattached"
-	practiceID, _ := seedContractorAtPractice(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -338,10 +338,10 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-contractor-attached"
-	practiceID, staffID := seedContractorAtPractice(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
-	seedGrantedAttachment(t, db, engagementID, staffID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -364,7 +364,7 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 func TestPutContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-invalid-engagement-id"
-	practiceID := seedMember(t, db, uid)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -380,8 +380,8 @@ func TestPutContractHandler_InvalidEngagementID(t *testing.T) {
 func TestPutContractHandler_NotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-not-found"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -400,8 +400,8 @@ func TestPutContractHandler_NotFound(t *testing.T) {
 func TestPutContractHandler_NonDraftRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-non-draft"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -418,8 +418,8 @@ func TestPutContractHandler_NonDraftRejected(t *testing.T) {
 func TestPutContractHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-invalid-body"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -436,8 +436,8 @@ func TestPutContractHandler_InvalidBody(t *testing.T) {
 func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-unknown-key"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -457,8 +457,8 @@ func TestPutContractHandler_UnknownMergeFieldKeyRejected(t *testing.T) {
 func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-status-ignored"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -488,8 +488,8 @@ func TestPutContractHandler_StatusFieldIgnored(t *testing.T) {
 func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-empty-body"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -516,8 +516,8 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 func TestPutContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-success"
-	practiceID := seedMember(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
@@ -549,9 +549,9 @@ func TestPutContractHandler_Success(t *testing.T) {
 func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "snapshot-immutable"
-	practiceID := seedOwner(t, db, uid)
-	engagementID := seedEngagement(t, db, practiceID)
-	seedTemplate(t, db, practiceID, mergeFieldProse)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()

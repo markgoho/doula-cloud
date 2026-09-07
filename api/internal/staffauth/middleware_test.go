@@ -41,26 +41,15 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-// seedStaffWithMembership inserts a Practice, a Staff row bound to
-// identityUID, and a practice_memberships row linking them, using the
-// superuser Admin connection (which bypasses RLS) so fixture setup itself
-// isn't gated by the policies under test. It composes the seed* helpers
-// from rls_test.go.
-func seedStaffWithMembership(t *testing.T, db *testdb.DB, identityUID string) (staffID, practiceID string) {
-	t.Helper()
-
-	practiceID = seedPractice(t, db, "Test Practice")
-	staffID = seedStaff(t, db, identityUID)
-	seedMembership(t, db, practiceID, staffID)
-	return staffID, practiceID
-}
-
-// seedOwnerMembership mirrors seedStaffWithMembership but promotes the
-// seeded Staff member to the 'owner' role -- the only role
-// RequireOwner-gated actions accept as authorization.
+// seedOwnerMembership seeds a Practice and a Staff member via
+// testdb.SeedStaffAtNewPractice, then promotes that member to the 'owner'
+// role -- the only role RequireOwner-gated actions accept as
+// authorization. Stays local: the promotion UPDATE is a fact only this
+// package's owner-gated tests need, and testdb has no "seed an owner"
+// export.
 func seedOwnerMembership(t *testing.T, db *testdb.DB, identityUID string) (staffID, practiceID string) {
 	t.Helper()
-	staffID, practiceID = seedStaffWithMembership(t, db, identityUID)
+	practiceID, staffID = testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practice_memberships SET roles = '{owner}' WHERE staff_id = $1`, staffID); err != nil {
 		t.Fatalf("promote to owner: %v", err)
 	}
@@ -116,7 +105,7 @@ func TestMiddleware_MissingCredential(t *testing.T) {
 func TestMiddleware_BearerTokenAloneIsRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-holding-only-a-bearer-token"
-	_, practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
 	srv, _ := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -171,7 +160,7 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 func TestMiddleware_NoPracticeMembership(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-without-membership"
-	_, _ = seedStaffWithMembership(t, db, identityUID)
+	_, _ = testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
 	// A different, unrelated Practice: the caller is a known Staff member,
 	// but not of this Practice.
@@ -203,7 +192,7 @@ func TestMiddleware_NoPracticeMembership(t *testing.T) {
 func TestMiddleware_NoSuchPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-with-no-such-practice"
-	seedStaff(t, db, identityUID)
+	testdb.SeedStaff(t, db, identityUID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -218,7 +207,7 @@ func TestMiddleware_NoSuchPractice(t *testing.T) {
 func TestMiddleware_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-with-membership"
-	staffID, practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -253,7 +242,7 @@ func TestMiddleware_Success(t *testing.T) {
 // real data, even though the row genuinely exists.
 func TestMiddleware_FailClosedWithoutSessionVar(t *testing.T) {
 	db := testdb.New(t)
-	seedStaffWithMembership(t, db, "fail-closed-uid")
+	testdb.SeedStaffAtNewPractice(t, db, "fail-closed-uid", []string{doulaRole}, employeeType)
 
 	var count int
 	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_memberships`).Scan(&count); err != nil {
@@ -275,7 +264,7 @@ func TestRequireTx(t *testing.T) {
 			gotTx, gotPracticeID, gotOK = staffauth.RequireTx(w, r)
 		}))
 
-		_, practiceID := seedStaffWithMembership(t, db, someUID)
+		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, someUID, []string{doulaRole}, employeeType)
 		testReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/practices/"+practiceID+"/ping", nil)
 		testReq.SetPathValue("practiceId", practiceID)
 		authntest.AddSessionCookie(testReq, authntest.SeedSession(t, db.App, someUID))
@@ -375,7 +364,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 	t.Run("doula is never forced while the switch is off", func(t *testing.T) {
 		db := testdb.New(t)
 		const identityUID = "doula-no-mfa"
-		_, practiceID := seedStaffWithMembership(t, db, identityUID)
+		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
 		mux := http.NewServeMux()
 		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -395,7 +384,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 	t.Run("the switch bars an un-enrolled doula", func(t *testing.T) {
 		db := testdb.New(t)
 		const identityUID = "doula-switch-on"
-		_, practiceID := seedStaffWithMembership(t, db, identityUID)
+		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 		setRequireMFA(t, db, practiceID)
 
 		mux := http.NewServeMux()
@@ -416,7 +405,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 	t.Run("the switch admits an enrolled doula", func(t *testing.T) {
 		db := testdb.New(t)
 		const identityUID = "doula-switch-on-enrolled"
-		_, practiceID := seedStaffWithMembership(t, db, identityUID)
+		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 		setRequireMFA(t, db, practiceID)
 
 		mux := http.NewServeMux()
@@ -444,7 +433,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		db := testdb.New(t)
 		const identityUID = "contractor-split"
 		staffID, ownerPracticeID := seedOwnerMembership(t, db, identityUID)
-		doulaPracticeID := seedPractice(t, db, "Second Practice")
+		doulaPracticeID := testdb.SeedPractice(t, db, "Second Practice")
 		seedMembership(t, db, doulaPracticeID, staffID)
 
 		mux := http.NewServeMux()
@@ -509,7 +498,7 @@ func TestParseUUID(t *testing.T) {
 func TestMiddleware_RecordsThatThePracticeWasHere(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-recording-contact"
-	staffID, practiceID := seedStaffWithMembership(t, db, identityUID)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
