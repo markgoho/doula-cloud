@@ -235,8 +235,10 @@ func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time)
 }
 
 // unerasedClientIDs lists every Client under practiceID not already
-// erased -- an Owner may have erased one by hand before the window
-// closed, and finalize must not double-erase her.
+// erased -- an Owner may have erased one by hand before initiating
+// deletion (the only time a live request can reach client.EraseHandler
+// at all; the lockout refuses it for the whole window after), and
+// finalize must not double-erase her.
 func unerasedClientIDs(ctx context.Context, tx *sql.Tx, practiceID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id FROM clients WHERE practice_id = $1 AND erased_at IS NULL FOR UPDATE`,

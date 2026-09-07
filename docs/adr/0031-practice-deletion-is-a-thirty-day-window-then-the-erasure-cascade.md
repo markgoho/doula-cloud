@@ -22,7 +22,7 @@ A reminder mails every current Owner 7 days before the deadline. Finalization ru
 
 At day 30, three things happen in one transaction:
 
-1. Every Client still on file (an Owner may already have erased one by hand during the window) is erased through the exact path a single Owner-run erasure uses — `client.Erase`, ADR-0027's redact-in-place, key-shredding, Stripe-Customer-deletion act, run once per Client with `activity.SystemActor()` rather than the Staff actor a live request would carry.
+1. Every Client still on file (an Owner may already have erased one by hand before initiating deletion — the lockout below refuses every Client route, `client.EraseHandler` included, for the whole window after) is erased through the exact path a single Owner-run erasure uses — `client.Erase`, ADR-0027's redact-in-place, key-shredding, Stripe-Customer-deletion act, run once per Client with `activity.SystemActor()` rather than the Staff actor a live request would carry.
 2. Any unspent Credit balance is **forfeited, not refunded** — written as one `credit_ledger` row, `origin = 'forfeit'`, so the ledger still sums to zero and the act carries its own who-and-when the way every other origin does. Forfeiture happens only here, at finalization, never at initiation: nothing irreversible touches the ledger while the window is still open.
 3. `practices.deleted_at` is stamped, and one `activity` row records the finalization — subject the Practice, actor Doula Cloud (ADR-0022's third actor kind, "nobody asking").
 
