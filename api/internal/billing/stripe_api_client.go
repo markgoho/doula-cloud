@@ -71,6 +71,21 @@ func (c *StripeAPIClient) pricing(ctx context.Context) (creditPricing, error) {
 	return *c.cachedPricing, nil
 }
 
+// CreditPrice returns the configured credit Price's unit amount and
+// currency, for the Billing screen to show before a purchase is started
+// (#285). Shares pricing's cache with CreateCheckoutSession, so a Practice
+// that has already opened Checkout once triggers no second Stripe call.
+func (c *StripeAPIClient) CreditPrice(ctx context.Context) (int64, string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	pricing, err := c.pricing(ctx)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return 0, "", err
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return pricing.unitAmountCents, pricing.currency, nil
+}
+
 // CreateCustomer creates a Stripe Customer tagged with practiceID.
 func (c *StripeAPIClient) CreateCustomer(ctx context.Context, practiceID string) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests

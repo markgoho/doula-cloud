@@ -11,6 +11,7 @@
 		purchaseCredits,
 		type LedgerEntry
 	} from '#lib/billing.js';
+	import { formatMoney } from '#lib/money.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
 	import type { PracticeSession } from '../+layout.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -20,6 +21,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
@@ -74,6 +76,21 @@
 	let quantity = $state(5);
 	let purchaseError = $state('');
 	let isPurchasing = $state(false);
+
+	// Undefined, not zero, when the BFF couldn't read the Price off Stripe
+	// (#285) -- the price region below says so in words instead of
+	// pretending a Credit is free.
+	const priceItems = $derived(
+		data.price
+			? [
+					{ label: 'Price per Credit', value: formatMoney(data.price.unitAmountCents, data.price.currency) },
+					{
+						label: 'Subtotal',
+						value: formatMoney(data.price.unitAmountCents * quantity, data.price.currency)
+					}
+				]
+			: []
+	);
 
 	onMount(() => {
 		approvalReturn = readApprovalReturn();
@@ -147,6 +164,18 @@
 				/>
 			{/snippet}
 		</LabeledField>
+
+		{#if data.price}
+			<DescriptionList items={priceItems} />
+			<Text
+				text="New York sales tax is added at checkout where it applies."
+				step="body-sm"
+				tone="variant"
+			/>
+		{:else}
+			<Text text="Credit price is unavailable right now." step="body-sm" tone="variant" />
+		{/if}
+
 		<Button label="Buy credits" type="submit" disabled={!isPracticeOwner} loading={isPurchasing} />
 		{#if purchaseError}
 			<Notice message={purchaseError} variant="error" />

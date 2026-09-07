@@ -122,6 +122,36 @@ describe('what a Credit buys (#286)', () => {
 	});
 });
 
+describe('what a Credit costs (#285)', () => {
+	it('states the unit price and the subtotal for the default quantity', async () => {
+		await render(Page, { params: fixture.params, data: dataWithSession });
+
+		await expect.element(testPage.getByText('$20.00')).toBeVisible();
+		await expect.element(testPage.getByText('$100.00')).toBeVisible();
+		await expect
+			.element(testPage.getByText('New York sales tax is added at checkout where it applies.'))
+			.toBeVisible();
+	});
+
+	it('tracks the subtotal as the quantity changes', async () => {
+		await render(Page, { params: fixture.params, data: dataWithSession });
+
+		await testPage.getByLabelText('Quantity').fill('3');
+
+		await expect.element(testPage.getByText('$60.00')).toBeVisible();
+	});
+
+	it('says the price is unavailable, and still renders the balance and buy form, when Stripe could not be read', async () => {
+		const priceUnavailableData = { ...dataWithSession, price: undefined };
+
+		await render(Page, { params: fixture.params, data: priceUnavailableData });
+
+		await expect.element(testPage.getByText('Credit price is unavailable right now.')).toBeVisible();
+		await expect.element(testPage.getByText(`Credit balance: ${data.balance}`)).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeVisible();
+	});
+});
+
 describe('billing ledger', () => {
 	it('right-aligns the Quantity column, header and body cell alike (#509)', async () => {
 		// DataTable's own content floor (#508) stacks it into a <dl> below

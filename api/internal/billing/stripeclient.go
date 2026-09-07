@@ -38,6 +38,13 @@ type StripeClient interface {
 	// can credit the right Practice's ledger. Returns the Session's hosted
 	// checkout URL.
 	CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error)
+	// CreditPrice returns the configured credit Price's unit amount (in
+	// minor units, e.g. cents) and its ISO 4217 currency code, read back
+	// from Stripe rather than held as a second copy anywhere else (#285).
+	// Its failure -- no Stripe credentials, or Stripe unreachable -- is a
+	// value the billing read tolerates: the balance and ledger still
+	// answer, and the price region alone says it is unavailable.
+	CreditPrice(ctx context.Context) (unitAmountCents int64, currency string, err error)
 	// RefundPayment refunds amountCents against the PaymentIntent a
 	// credit purchase arrived on, and returns the Stripe Refund's id.
 	// idempotencyKey is what makes a retried request replay the first
