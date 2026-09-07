@@ -96,22 +96,27 @@
 
 <PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} />
 
+<!-- Shared by all three states below (#256): a fixed purpose sentence,
+     not data, so it renders the same way whether the fieldsets, a
+     Skeleton, or a load-failure Notice sit beneath it. -->
+{#snippet introRegion()}
+	{#if intro}
+		<div class="intro">{@render intro()}</div>
+	{/if}
+{/snippet}
+
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 		{#if loadError}
 			<stack-l space="var(--space-7)">
 				<Heading level={1} variant="page" text={title} />
-				{#if intro}
-					<div class="intro">{@render intro()}</div>
-				{/if}
+				{@render introRegion()}
 				<Notice variant="error" message={loadError} />
 			</stack-l>
 		{:else if loading}
 			<stack-l space="var(--space-7)">
 				<Heading level={1} variant="page" text={title} />
-				{#if intro}
-					<div class="intro">{@render intro()}</div>
-				{/if}
+				{@render introRegion()}
 				<Skeleton variant="text" lines={4} label={loading} />
 			</stack-l>
 		{:else}
@@ -122,9 +127,7 @@
 
 				<Heading level={1} variant="page" text={title} />
 
-				{#if intro}
-					<div class="intro">{@render intro()}</div>
-				{/if}
+				{@render introRegion()}
 
 				<!--
 					Keyed on index, not on the legend: two groups may share a
