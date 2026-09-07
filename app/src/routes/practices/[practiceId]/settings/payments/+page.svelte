@@ -24,7 +24,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { isOwner } from '#lib/roles.js';
+	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
 	import type { PracticeSession } from '../../+layout.js';
@@ -45,17 +45,28 @@
 	// once by practices/[practiceId]/+layout.ts (#835), not a fetch here.
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	let isPracticeOwner = $derived(isOwner(session));
+	// Reading the status is one notch wider than starting onboarding:
+	// ADR-0008's Stripe Connect state row is Owner and Admin (#267). This
+	// decides whether the screen asks the endpoint at all, so it mirrors
+	// `staffauth.OwnerAndAdmin` on the route exactly -- the BFF is what
+	// refuses, this only decides what to ask for and what to show.
+	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
 	let connectParameter = $derived(page.url.searchParams.get('connect'));
 
 	let connectError = $state('');
 	let isConnecting = $state(false);
 
 	onMount(async () => {
+		// A Doula is never asked (#267), the same guard the MFA settings
+		// screen already uses one notch narrower. Firing the request anyway
+		// would earn a 403 and paint the shared refusal string into this
+		// screen's load-error region -- a raw permission message where a
+		// plain sentence belongs. The website read goes with it: it is here
+		// only to decide whether the Connect button may be offered, and on
+		// this branch there is no button.
+		if (!isPracticeOwnerOrAdmin) return;
 		try {
 			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
-			// Every Staff member may read this (#440), so it loads for
-			// everyone: a Doula who opens this screen should see why Clients
-			// cannot pay yet rather than an unexplained missing button.
 			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
@@ -210,102 +221,117 @@
 </script>
 
 {#snippet body()}
-	<!--
-		A non-null assertion, not another `{#if status}`: `body` is one of
-		`FormPage`'s `fieldsets`, which only render once neither `loadError`
-		nor `loading` is active below, and `loading` is exactly `status ===
-		undefined` -- so `status` is always defined by the time this runs.
-		A second guard here would compile to a branch that never takes its
-		false path, which the coverage gate would then refuse.
-	-->
-	<cluster-l>
-		<Text text="Stripe Connect status:" />
-		<Badge label={statusCopy[status!.status].label} variant={statusCopy[status!.status].variant} />
-	</cluster-l>
-
-	{#if isBackFromStripeRestricted}
-		<Notice
-			variant="error"
-			message="Stripe still needs something from you before Clients can pay. Open the form again below and finish what it asks for."
-		/>
-	{:else if connectParameter === 'return'}
+	{#if !isPracticeOwnerOrAdmin}
+		<!--
+			A plain sentence about whose screen this is, never the BFF's own
+			refusal wording (#267). She is told what the screen is for and
+			who holds it, which is the whole of what there is to say -- the
+			status itself is not hers to see, so there is nothing further
+			here and no button to explain the absence of.
+		-->
 		<Notice
 			variant="status"
-			message="Stripe onboarding finished. Status updates once Stripe confirms your account is active."
+			message="Only a Practice Owner or Admin can see how this Practice gets paid."
 		/>
-	{:else if connectParameter === 'refresh'}
-		<Notice variant="status" message="Your Stripe onboarding link expired. Start again below." />
-	{/if}
-
-	<Text text={statusCopy[status!.status].explanation} />
-
-	<!-- The count, not the list. requirementsDue holds Stripe's own
-	machine-readable field paths ("configuration.merchant.mcc"), which
-	name nothing an Owner recognizes. The place those get asked in words
-	is Stripe's hosted form, which the button below opens; the paths stay
-	in the database for the audit trail. -->
-	{#if status!.requirementsDue.length > 0}
-		<Text
-			text={status!.requirementsDue.length === 1
-				? 'Stripe needs 1 more detail from you.'
-				: `Stripe needs ${status!.requirementsDue.length} more details from you.`}
-		/>
-	{/if}
-
-	{#if canStartOnboarding && !hasDeclaredWebsite}
+	{:else}
 		<!--
-			Block, do not warn. A disabled button with a tooltip would leave
-			her guessing what unlocks it; this names the missing thing and
-			links to where she supplies it. PostConnectHandler refuses the
-			request as well, which is what actually holds the line.
+			A non-null assertion, not another `{#if status}`: `body` is one of
+			`FormPage`'s `fieldsets`, which only render once neither `loadError`
+			nor `loading` is active below, and `loading` is exactly `status ===
+			undefined` for an Owner or Admin -- so `status` is always defined by
+			the time this branch runs. A second guard here would compile to a
+			branch that never takes its false path, which the coverage gate
+			would then refuse.
 		-->
-		<Notice
-			variant="info"
-			message="Stripe will not let you take Client payments until it can see where you are online. Tell us your website or let us publish a page for you, then come back here."
-		/>
-		<Link href={websiteHref} label="Answer the website question" />
-	{:else if canStartOnboarding && isPageFailed}
-		<!--
-			Block again, and name it as our problem rather than hers: she
-			wrote the words and we failed to put them anywhere. Same shape
-			as the gate above, and PostConnectHandler refuses the request
-			too, which is what actually holds the line.
-		-->
-		<Notice
-			variant="error"
-			message="The page we publish for you is not loading, so Stripe would find nothing at your web address. Open your website settings and publish it again."
-		/>
-		<Link href={websiteHref} label="Go to website settings" />
-	{:else if canStartOnboarding}
-		<!-- A heading and a list, with no <section> around them: the
-		     heading already puts this in the screen-reader outline, and a
-		     landmark that only repeats the heading is one more thing to
-		     skip past. -->
-		<stack-l space="var(--space-4)">
-			<Heading level={2} text="What Stripe will ask you for" />
-			<Text
-				text="This takes about fifteen minutes. Have your phone and your bank details with you before you start — Stripe does not save a half-finished form for long."
+		<cluster-l>
+			<Text text="Stripe Connect status:" />
+			<Badge label={statusCopy[status!.status].label} variant={statusCopy[status!.status].variant} />
+		</cluster-l>
+
+		{#if isBackFromStripeRestricted}
+			<Notice
+				variant="error"
+				message="Stripe still needs something from you before Clients can pay. Open the form again below and finish what it asks for."
 			/>
-			<ul>
-				{#each stripeAsksFor as item (item)}
-					<li>{item}</li>
-				{/each}
-				{#if willAskForProductDescription}
-					<li>A short description of what your Practice offers, for Stripe's own records.</li>
-				{/if}
-			</ul>
+		{:else if connectParameter === 'return'}
+			<Notice
+				variant="status"
+				message="Stripe onboarding finished. Status updates once Stripe confirms your account is active."
+			/>
+		{:else if connectParameter === 'refresh'}
+			<Notice variant="status" message="Your Stripe onboarding link expired. Start again below." />
+		{/if}
+
+		<Text text={statusCopy[status!.status].explanation} />
+
+		<!-- The count, not the list. requirementsDue holds Stripe's own
+		machine-readable field paths ("configuration.merchant.mcc"), which
+		name nothing an Owner recognizes. The place those get asked in words
+		is Stripe's hosted form, which the button below opens; the paths stay
+		in the database for the audit trail. -->
+		{#if status!.requirementsDue.length > 0}
+			<Text
+				text={status!.requirementsDue.length === 1
+					? 'Stripe needs 1 more detail from you.'
+					: `Stripe needs ${status!.requirementsDue.length} more details from you.`}
+			/>
+		{/if}
+
+		{#if canStartOnboarding && !hasDeclaredWebsite}
 			<!--
-				#421 watched Stripe put FACEBOOK.COM/ROCHESTER onto a walked
-				account's Clients' card statements, because it derives the
-				descriptor from the website URL when it is not told one. It is
-				told one now -- the Practice's own name, set when the account is
-				created (#442) -- so what she needs to know is not a warning but
-				where to change it.
+				Block, do not warn. A disabled button with a tooltip would leave
+				her guessing what unlocks it; this names the missing thing and
+				links to where she supplies it. PostConnectHandler refuses the
+				request as well, which is what actually holds the line.
 			-->
-			<Text
-				text="Stripe puts a short version of your Practice's name on your Clients' card statements. It shows you that text near the end, and you can change it there."
+			<Notice
+				variant="info"
+				message="Stripe will not let you take Client payments until it can see where you are online. Tell us your website or let us publish a page for you, then come back here."
 			/>
-		</stack-l>
+			<Link href={websiteHref} label="Answer the website question" />
+		{:else if canStartOnboarding && isPageFailed}
+			<!--
+				Block again, and name it as our problem rather than hers: she
+				wrote the words and we failed to put them anywhere. Same shape
+				as the gate above, and PostConnectHandler refuses the request
+				too, which is what actually holds the line.
+			-->
+			<Notice
+				variant="error"
+				message="The page we publish for you is not loading, so Stripe would find nothing at your web address. Open your website settings and publish it again."
+			/>
+			<Link href={websiteHref} label="Go to website settings" />
+		{:else if canStartOnboarding}
+			<!-- A heading and a list, with no <section> around them: the
+			     heading already puts this in the screen-reader outline, and a
+			     landmark that only repeats the heading is one more thing to
+			     skip past. -->
+			<stack-l space="var(--space-4)">
+				<Heading level={2} text="What Stripe will ask you for" />
+				<Text
+					text="This takes about fifteen minutes. Have your phone and your bank details with you before you start — Stripe does not save a half-finished form for long."
+				/>
+				<ul>
+					{#each stripeAsksFor as item (item)}
+						<li>{item}</li>
+					{/each}
+					{#if willAskForProductDescription}
+						<li>A short description of what your Practice offers, for Stripe's own records.</li>
+					{/if}
+				</ul>
+				<!--
+					#421 watched Stripe put FACEBOOK.COM/ROCHESTER onto a walked
+					account's Clients' card statements, because it derives the
+					descriptor from the website URL when it is not told one. It is
+					told one now -- the Practice's own name, set when the account is
+					created (#442) -- so what she needs to know is not a warning but
+					where to change it.
+				-->
+				<Text
+					text="Stripe puts a short version of your Practice's name on your Clients' card statements. It shows you that text near the end, and you can change it there."
+				/>
+			</stack-l>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -330,7 +356,9 @@
 	title="Payments"
 	fieldsets={[{ content: body }]}
 	{actions}
-	loading={!error && status === undefined ? 'Loading your Stripe Connect status' : undefined}
+	loading={isPracticeOwnerOrAdmin && !error && status === undefined
+		? 'Loading your Stripe Connect status'
+		: undefined}
 	loadError={error || undefined}
 />
 

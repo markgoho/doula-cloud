@@ -1,7 +1,9 @@
 /**
  * A Practice's Stripe Connect linkage (#79): an Owner starts hosted
- * onboarding via `connect`, and any Staff member reads the current status
- * via `loadConnectStatus`. Both are read live from Stripe -- see
+ * onboarding via `connect`, and an Owner or an Admin reads the current
+ * status via `loadConnectStatus` -- ADR-0008's Stripe Connect state row
+ * (#267), the same pair that reads Invoice history. Both are read live
+ * from Stripe -- see
  * api/internal/payments/connect.go's doc comments.
  */
 

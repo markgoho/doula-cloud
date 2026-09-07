@@ -297,6 +297,7 @@ Inside one Practice, RLS-fenced as ADR-0006 already established.
 | Contract — money, and Invoice history | ✓ | ✓ | ✗ | **her own agreed fee only, on her Engagements — never the Practice's price** | ✗ |
 | Plan Template and Contract Template | ✓ | ✓ | ✓ | ✓ | ✗ |
 | Credit balance and ledger | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Stripe Connect state — the status enum and capability flags, never the details Stripe holds | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Staff roster | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Her own Offer row | — | — | — | — | Client first initial, general area, exact due date, her fee, free-text terms |
 
@@ -326,6 +327,8 @@ also holding an open Offer. And a fifth-column ✗ is not a ceiling on an
 everything; the Offer settles her claim and nothing else
 ([#229](https://github.com/markgoho/doula-cloud/issues/229),
 [#230](https://github.com/markgoho/doula-cloud/issues/230)).
+
+**Stripe Connect state was added later**, on [#267](https://github.com/markgoho/doula-cloud/issues/267), and it is a placement rather than a new argument. The row sits with Invoice history and the Credit ledger because it is the same kind of fact: the state of the rail those Invoices are paid on. `CONTEXT.md` defines an Admin as covering the business side of a Practice — Clients, Contracts, Invoices and scheduling — so an Admin who cannot see that Stripe is refusing payouts cannot do the job the glossary gives her, which is the reason ADR-0006 already used to widen the roster cell to Admin. A Doula keeps ✗ under the same standard the table applies everywhere else: no journey has given her a reason to need it, and the three walks that raised this filed her seeing it as the gap. What the row covers is the status enum, the two capability flags, and the count of what Stripe is still waiting on — never the values behind them, which live at Stripe and never reach Doula Cloud. Reading widens to Admin; starting or resuming hosted onboarding stays the Owner's alone.
 
 ## The write table — new content; ADR-0006 covered reads only
 

@@ -32,6 +32,7 @@ const (
 	// check doesn't see repeated "owner"/"doula" literals across this
 	// package's whole test surface.
 	ownerRole = "owner"
+	adminRole = "admin"
 	doulaRole = "doula"
 )
 
@@ -302,14 +303,15 @@ func TestGetConnectStatusHandler_NotConnected(t *testing.T) {
 	}
 }
 
-// TestGetConnectStatusHandler_DoulaForbidden proves a non-Owner Staff
-// member cannot read the Practice's Stripe Connect status through the
-// real GatedRouter mount, mirroring PostConnectHandler's own Owner-only
-// gate.
-func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
+// TestGetConnectStatusHandler_AdminReadsStatus proves an Admin who holds
+// no Owner role reads the Practice's Stripe Connect status through the
+// real GatedRouter mount: ADR-0008's Stripe Connect state row is Owner
+// yes, Admin yes (#267), the same pair the Invoice-history row already
+// carries.
+func TestGetConnectStatusHandler_AdminReadsStatus(t *testing.T) {
 	db := testdb.New(t)
-	const uid = "status-doula-forbidden"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	const uid = "status-admin-reads"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
 	client := payments.NewFakeClient()
 
 	srv, session := newConnectServer(t, db, uid, client)
@@ -318,8 +320,67 @@ func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
 	resp := getConnectStatus(t, srv, session, practiceID)
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out payments.ConnectStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Status != payments.StatusNotConnected {
+		t.Fatalf("status = %q, want %q", out.Status, payments.StatusNotConnected)
+	}
+}
+
+// TestPostConnectHandler_AdminForbidden proves the write gate did not
+// widen with the read one: an Admin may read Connect state but may not
+// start or resume hosted onboarding, which stays the Owner's alone
+// (#267).
+func TestPostConnectHandler_AdminForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "connect-admin-forbidden"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
+	client := payments.NewFakeClient()
+
+	srv, session := newConnectServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postConnect(t, srv, session, practiceID)
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+	if got := client.AccountLinkCallCount(); got != 0 {
+		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
+	}
+}
+
+// TestGetConnectStatusHandler_DoulaForbidden proves a Doula cannot read
+// the Practice's Stripe Connect status through the real GatedRouter
+// mount: ADR-0008's Stripe Connect state row is a no for a Doula of
+// either employment type (#267).
+func TestGetConnectStatusHandler_DoulaForbidden(t *testing.T) {
+	// Both employment types, because the row says both: a contractor is
+	// confined to what she is attached to, and an employee Doula has no
+	// stake in the payment rail either.
+	for _, employmentType := range []string{"employee", "contractor"} {
+		t.Run(employmentType, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "status-doula-forbidden-" + employmentType
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employmentType)
+			client := payments.NewFakeClient()
+
+			srv, session := newConnectServer(t, db, uid, client)
+			defer srv.Close()
+
+			resp := getConnectStatus(t, srv, session, practiceID)
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			}
+		})
 	}
 }
 

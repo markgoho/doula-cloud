@@ -11,11 +11,14 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	ir.Exempt("POST /api/practices/{practiceId}/payments/connect",
 		"lazily creates the Stripe Connect account and reuses the stored account id on any retry, row-locked against a concurrent create; a duplicate call resumes the same account, not a second one",
 		false, PostConnectHandler(client))
-	// ADR-0008's read table has no row for Stripe Connect state; mirroring
-	// the write side's Owner-only gate (PostConnectHandler,
-	// staffauth.RequireOwner) is the narrowest defensible default until a
-	// real rule lands (#267 stays open for that rule).
-	g.Get("/api/practices/{practiceId}/payments/connect", staffauth.OwnerOnly, GetConnectStatusHandler(client))
+	// Connect state rides the same row as the money it carries: ADR-0008's
+	// read table gives "Stripe Connect state" to an Owner and an Admin and
+	// to nobody else (#267), for the reason it already gives Invoice
+	// history and the Credit ledger the same pair -- an Admin covers the
+	// business side of a Practice, and this is the state of the rail her
+	// Invoices are paid on. Reading is Owner-or-Admin; starting or
+	// resuming hosted onboarding stays Owner-only above.
+	g.Get("/api/practices/{practiceId}/payments/connect", staffauth.OwnerAndAdmin, GetConnectStatusHandler(client))
 	// Newly wrapped (2026 idempotency-stance review): every call
 	// unconditionally calls Stripe CreateInvoice + FinalizeInvoice and
 	// inserts a new invoices row, with no dedup guard -- a double-click

@@ -13,11 +13,12 @@
 	 * "Connect Stripe" button already uses for a consequential action with
 	 * nothing to confirm.
 	 *
-	 * The GET this reads is Owner-only server-side, unlike payments' and
-	 * website's own status endpoints, which any Staff member may read. So
-	 * a non-Owner is never asked for it: she sees a notice and nothing
-	 * about the setting itself, rather than a status everyone else's
-	 * settings screens show with only the button removed.
+	 * The GET this reads is Owner-only server-side, one notch narrower
+	 * than payments' status endpoint (Owner or Admin, #267) and narrower
+	 * still than website's, which any Staff member may read. So a
+	 * non-Owner is never asked for it: she sees a notice and nothing about
+	 * the setting itself, rather than a status everyone else's settings
+	 * screens show with only the button removed.
 	 */
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
@@ -49,9 +50,10 @@
 	let isSubmitting = $state(false);
 
 	onMount(async () => {
-		// The impact endpoint is Owner-only server-side (unlike payments'
-		// and website's own status reads); asking a non-Owner for it would
-		// only earn a 403 she has no use for, so this never asks.
+		// The impact endpoint is Owner-only server-side (narrower than
+		// payments' Owner-or-Admin status read, and than website's); asking
+		// a non-Owner for it would only earn a 403 she has no use for, so
+		// this never asks.
 		if (isOwner) {
 			await loadImpact();
 		}
