@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from './testResponse.js';
 import {
+	createVisit,
+	downloadAttachment,
 	loadAttachmentPreviews,
 	loadEngagement,
 	loadMessagesPage,
@@ -9,6 +11,9 @@ import {
 	loadVisitsPage,
 	messagesURL,
 	portalInviteURL,
+	reassignVisit,
+	sendMessage,
+	sendPortalInvite,
 	visitsURL,
 	type EngagementReference,
 	type Visit
@@ -206,6 +211,111 @@ describe('loadOffersSection', () => {
 		const loadOffers = vi.fn().mockResolvedValue([]);
 
 		expect(await loadOffersSection(fetcher, reference, loadOffers)).toBeUndefined();
+	});
+});
+
+describe('sendPortalInvite', () => {
+	it('posts and returns the invite token', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ inviteToken: 'tok-1' }));
+
+		const created = await sendPortalInvite(fetcher, reference);
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/portal-invite`, { method: 'POST' });
+		expect(created).toEqual({ inviteToken: 'tok-1' });
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(sendPortalInvite(fetcher, reference)).rejects.toThrow('nope');
+	});
+});
+
+describe('createVisit', () => {
+	it('posts to the Visits endpoint', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await createVisit(fetcher, reference);
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits`, { method: 'POST' });
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(createVisit(fetcher, reference)).rejects.toThrow('nope');
+	});
+});
+
+describe('reassignVisit', () => {
+	it('patches the Visit with the new staffId', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await reassignVisit(fetcher, reference, 'visit-1', 'staff-2');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits/visit-1`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ staffId: 'staff-2' })
+		});
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(reassignVisit(fetcher, reference, 'visit-1', 'staff-2')).rejects.toThrow('nope');
+	});
+});
+
+describe('sendMessage', () => {
+	it('sends a JSON body when there is no attachment', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ messageId: 'm1' }));
+
+		const created = await sendMessage(fetcher, reference, 'hello', undefined);
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/messages`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ body: 'hello' })
+		});
+		expect(created).toEqual({ messageId: 'm1' });
+	});
+
+	it('sends a multipart form when there is an attachment', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ messageId: 'm2' }));
+		const attachment = new File(['x'], 'photo.png', { type: 'image/png' });
+
+		await sendMessage(fetcher, reference, 'see this', attachment);
+
+		const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+		expect(path).toBe(`${base}/messages`);
+		expect(init.method).toBe('POST');
+		expect(init.body).toBeInstanceOf(FormData);
+		expect((init.body as FormData).get('body')).toBe('see this');
+		expect((init.body as FormData).get('attachment')).toBe(attachment);
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(sendMessage(fetcher, reference, 'hello', undefined)).rejects.toThrow('nope');
+	});
+});
+
+describe('downloadAttachment', () => {
+	it('returns the attachment as a Blob', async () => {
+		const fetcher = vi.fn().mockResolvedValue(blobResponse());
+
+		const blob = await downloadAttachment(fetcher, reference, 'm1');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/messages/m1/attachment`);
+		expect(blob).toBeInstanceOf(Blob);
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
+
+		await expect(downloadAttachment(fetcher, reference, 'm1')).rejects.toThrow('nope');
 	});
 });
 

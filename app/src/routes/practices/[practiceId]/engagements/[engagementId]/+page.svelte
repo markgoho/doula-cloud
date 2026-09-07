@@ -1,16 +1,20 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import { SectionState } from '#lib/sectionState.svelte.js';
 	import {
+		createVisit,
+		downloadAttachment,
 		loadAttachmentPreviews,
 		loadMessagesPage,
 		loadOffersSection as loadOffers,
 		loadVisitsPage,
-		messagesURL,
-		portalInviteURL,
-		visitsURL,
+		reassignVisit,
+		sendMessage,
+		sendPortalInvite,
+		type OffersSection,
 		type Visit
 	} from '#lib/engagementDetail.js';
 	import type { PageProps as PageProperties } from './$types';
@@ -81,14 +85,19 @@
 	// Visits are newest-first from the BFF (#446); a further page is
 	// appended to the end of what is already on screen rather than
 	// reversed, since this is a table read top-to-bottom, not a chat
-	// thread.
+	// thread. Loading the first page and adding a Visit are separate
+	// SectionState instances (#841) so neither action's busy flag lights
+	// up the other's control; both write the same Notice, so their errors
+	// are read together below.
 	const visits = new PaginatedList<Visit>({
 		first: { items: [], hasMore: false },
 		loadPage: (cursor) => loadVisitsPage(apiFetchWithSession, reference, cursor),
 		failureMessage: 'Failed to load more Visits'
 	});
-	let visitsError = $state('');
-	let isCreatingVisit = $state(false);
+	const visitsLoad = new SectionState<void>(undefined);
+	const visitsCreate = new SectionState<void>(undefined);
+	const visitsError = $derived(visitsLoad.error || visitsCreate.error);
+	const isCreatingVisit = $derived(visitsCreate.isBusy);
 
 	// #486 AC4: the same record-scoped ledger the practice-wide feed reuses,
 	// through engagement.ListActivityHandler (unchanged by #486) --
@@ -99,20 +108,36 @@
 		loadPage: (cursor) => loadEngagementActivityPage(apiFetchWithSession, reference, cursor),
 		failureMessage: 'Failed to load more activity'
 	});
-	let activityError = $state('');
+	const activityLoad = new SectionState<void>(undefined);
+	const activityError = $derived(activityLoad.error);
 
-	let portalInviteLink = $state('');
-	let portalInviteError = $state('');
-	let isSendingPortalInvite = $state(false);
+	const portalInvite = new SectionState('');
+	const portalInviteLink = $derived(portalInvite.value);
+	const portalInviteError = $derived(portalInvite.error);
+	const isSendingPortalInvite = $derived(portalInvite.isBusy);
+
 	let reassignStaffId = $state<Record<string, string>>({});
-	let reassignError = $state<Record<string, string>>({});
+	// One SectionState per Visit row, created the first time that row is
+	// reassigned (#841) -- reassignError was a Record before this too, but
+	// a per-section instance is the wrong shape for it: two rows reassigned
+	// at once must not share one error or one busy flag, which is exactly
+	// what a single SectionState would do.
+	let reassignSections = $state<Record<string, SectionState<void>>>({});
 
 	let messages = $state<Message[]>([]);
-	let messagesError = $state('');
 	let messagesCursor = $state('');
 	let isMessagesHasMore = $state(false);
-	let isLoadingOlderMessages = $state(false);
-	let isSendingMessage = $state(false);
+	// Load (including "load older") and send are separate SectionState
+	// instances so sending a Message never lights up the "Load older"
+	// spinner and vice versa; downloading an attachment is a third, so it
+	// never lights up either. All three still write the one Notice the
+	// thread renders.
+	const messagesLoad = new SectionState<void>(undefined);
+	const messagesSend = new SectionState<void>(undefined);
+	const messagesDownload = new SectionState<void>(undefined);
+	const messagesError = $derived(messagesLoad.error || messagesSend.error || messagesDownload.error);
+	const isLoadingOlderMessages = $derived(messagesLoad.isBusy);
+	const isSendingMessage = $derived(messagesSend.isBusy);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
 	// apiFetchWithSession since the attachment endpoint requires the
@@ -128,30 +153,46 @@
 		{ type: 'care_plan', heading: 'Care Plan' },
 		{ type: 'birth_plan', heading: 'Birth Plan' }
 	];
-	let planInstances = $state<Record<PlanType, Instance | undefined>>({
-		care_plan: undefined,
-		birth_plan: undefined
-	});
+	// One SectionState per plan type -- Care Plan and Birth Plan are two
+	// sections, not one, so a failure or a busy save in either never
+	// touches the other's.
+	const planState: Record<PlanType, SectionState<Instance | undefined>> = {
+		care_plan: new SectionState<Instance | undefined>(undefined),
+		birth_plan: new SectionState<Instance | undefined>(undefined)
+	};
+	// Distinct from planState[type].isBusy: this gates whether the section
+	// renders a Form or a Create button at all, and stays true once the
+	// first load has settled, success or failure -- same as isContractLoaded
+	// below.
 	let planLoaded = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
-	let planError = $state<Record<PlanType, string>>({ care_plan: '', birth_plan: '' });
-	let planBusy = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
 
-	let contract = $state<Contract | undefined>();
+	// Named contractState, not contractSection: that name is already the
+	// RecordDetail section snippet below (content: contractSection), and a
+	// script binding can't share it.
+	const contractState = new SectionState<Contract | undefined>(undefined);
+	const contract = $derived(contractState.value);
+	const contractError = $derived(contractState.error);
+	const isContractBusy = $derived(contractState.isBusy);
 	let isContractLoaded = $state(false);
-	let contractError = $state('');
-	let isContractBusy = $state(false);
 
-	let invoices = $state<Invoice[]>([]);
-	let invoicesError = $state('');
+	// Named invoicesState for the same reason as contractState above.
+	const invoicesState = new SectionState<Invoice[]>([]);
+	const invoices = $derived(invoicesState.value);
+	const invoicesError = $derived(invoicesState.error);
 	let connectGate = $state<{ isOwner: boolean } | undefined>();
 
 	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
 	// Doula's load simply fails and the section stays hidden -- the read
 	// table keeps who-was-asked away from her, and an error banner about
-	// it would only be noise on her own screen.
-	let offers = $state<Offer[]>([]);
-	let doulas = $state<{ staffId: string; name: string; employmentType: string }[]>([]);
-	let isOffersVisible = $state(false);
+	// it would only be noise on her own screen. loadOffersSection
+	// (engagementDetail.ts) already turns that refusal into `undefined`
+	// rather than a throw, so offersState.error is never rendered here on
+	// purpose -- the section's rule is silence, not a Notice. Named
+	// offersState for the same reason as contractState above.
+	const offersState = new SectionState<OffersSection | undefined>(undefined);
+	const isOffersVisible = $derived(offersState.value !== undefined);
+	const offers = $derived((offersState.value?.offers as Offer[] | undefined) ?? []);
+	const doulas = $derived(offersState.value?.doulas ?? []);
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -197,178 +238,137 @@
 	}
 
 	async function loadVisits() {
-		try {
+		await visitsLoad.load(async () => {
 			visits.reset(await loadVisitsPage(apiFetchWithSession, reference, ''));
-		} catch (error_) {
-			visitsError = error_ instanceof Error ? error_.message : 'Failed to load Visits';
-		}
+		}, 'Failed to load Visits');
 	}
 
 	async function loadActivity() {
-		try {
+		await activityLoad.load(async () => {
 			activity.reset(await loadEngagementActivityPage(apiFetchWithSession, reference, ''));
-		} catch (error_) {
-			activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
-		}
+		}, 'Failed to load activity');
 	}
 
 	async function loadMessages() {
-		try {
+		await messagesLoad.load(async () => {
 			const loaded = await loadMessagesPage<Message>(apiFetchWithSession, reference, '');
 			messages = loaded.items;
 			messagesCursor = loaded.nextCursor ?? '';
 			isMessagesHasMore = loaded.hasMore;
 			await refreshAttachmentPreviews(messages);
-		} catch (error_) {
-			messagesError = error_ instanceof Error ? error_.message : 'Failed to load Messages';
-		}
+		}, 'Failed to load Messages');
 	}
 
 	async function loadPlan(planType: PlanType) {
-		planError[planType] = '';
-		try {
-			planInstances[planType] = await loadInstance(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				page.params.engagementId!,
-				planType
-			);
-		} catch (error_) {
-			planError[planType] = error_ instanceof Error ? error_.message : 'Failed to load plan';
-		} finally {
-			planLoaded[planType] = true;
-		}
+		await planState[planType].load(
+			() => loadInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
+			'Failed to load plan'
+		);
+		planLoaded[planType] = true;
 	}
 
 	async function handleCreatePlan(planType: PlanType) {
-		planError[planType] = '';
-		planBusy[planType] = true;
-		try {
-			planInstances[planType] = await createInstance(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				page.params.engagementId!,
-				planType
-			);
-		} catch (error_) {
-			planError[planType] = error_ instanceof Error ? error_.message : 'Failed to create plan';
-		} finally {
-			planBusy[planType] = false;
-		}
+		await planState[planType].mutate(
+			() => createInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
+			'Failed to create plan'
+		);
 	}
 
 	function handlePlanAnswerChange(planType: PlanType, fieldId: string, value: unknown) {
-		const instance = planInstances[planType];
+		const instance = planState[planType].value;
 		if (!instance) return;
 		instance.answers = setAnswer(instance.answers, fieldId, value);
 	}
 
 	function handlePlanToggleOption(planType: PlanType, fieldId: string, option: string) {
-		const instance = planInstances[planType];
+		const instance = planState[planType].value;
 		if (!instance) return;
 		instance.answers = toggleMultiSelectOption(instance.answers, fieldId, option);
 	}
 
 	async function handleSavePlan(planType: PlanType) {
-		const instance = planInstances[planType];
+		const instance = planState[planType].value;
 		if (!instance) return;
-		planError[planType] = '';
-		planBusy[planType] = true;
-		try {
-			planInstances[planType] = await saveAnswers(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				page.params.engagementId!,
-				planType,
-				instance.answers
-			);
-		} catch (error_) {
-			planError[planType] = error_ instanceof Error ? error_.message : 'Failed to save plan';
-		} finally {
-			planBusy[planType] = false;
-		}
+		await planState[planType].mutate(
+			() =>
+				saveAnswers(
+					apiFetchWithSession,
+					page.params.practiceId!,
+					page.params.engagementId!,
+					planType,
+					instance.answers
+				),
+			'Failed to save plan'
+		);
 	}
 
 	async function loadContractSection() {
-		contractError = '';
-		try {
-			contract = await loadContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-		} catch (error_) {
-			contractError = error_ instanceof Error ? error_.message : 'Failed to load contract';
-		} finally {
-			isContractLoaded = true;
-		}
+		await contractState.load(
+			() => loadContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+			'Failed to load contract'
+		);
+		isContractLoaded = true;
 	}
 
 	async function handleCreateContract() {
-		contractError = '';
-		isContractBusy = true;
-		try {
-			contract = await createContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-		} catch (error_) {
-			contractError = error_ instanceof Error ? error_.message : 'Failed to create contract';
-		} finally {
-			isContractBusy = false;
-		}
+		await contractState.mutate(
+			() => createContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+			'Failed to create contract'
+		);
 	}
 
 	function handleContractValueChange(key: string, value: string) {
-		if (!contract) return;
-		contract.values = setMergeFieldValue(contract.values, key, value);
+		if (!contractState.value) return;
+		contractState.value.values = setMergeFieldValue(contractState.value.values, key, value);
 	}
 
 	async function handleSaveContract() {
-		if (!contract) return;
-		contractError = '';
-		isContractBusy = true;
-		try {
-			contract = await saveContractValues(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				page.params.engagementId!,
-				contract.values
-			);
-		} catch (error_) {
-			contractError = error_ instanceof Error ? error_.message : 'Failed to save contract';
-		} finally {
-			isContractBusy = false;
-		}
+		if (!contractState.value) return;
+		await contractState.mutate(
+			() =>
+				saveContractValues(
+					apiFetchWithSession,
+					page.params.practiceId!,
+					page.params.engagementId!,
+					contractState.value!.values
+				),
+			'Failed to save contract'
+		);
 	}
 
 	async function handleSendContract() {
-		if (!contract) return;
-		contractError = '';
-		isContractBusy = true;
-		try {
-			contract = await sendContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-		} catch (error_) {
-			contractError = error_ instanceof Error ? error_.message : 'Failed to send contract';
-		} finally {
-			isContractBusy = false;
-		}
+		if (!contractState.value) return;
+		await contractState.mutate(
+			() => sendContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+			'Failed to send contract'
+		);
 	}
 
 	// ContractStatus.svelte owns the error display for Void (it awaits
 	// the onVoid callback prop itself and renders whatever it throws) --
 	// unlike the other Contract handlers above, this one deliberately
-	// doesn't set contractError.
+	// doesn't touch contractState.error.
 	async function handleVoidContract() {
-		if (!contract) return;
-		contract = await voidContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+		if (!contractState.value) return;
+		contractState.value = await voidContract(
+			apiFetchWithSession,
+			page.params.practiceId!,
+			page.params.engagementId!
+		);
 	}
 
 	async function loadInvoicesSection() {
-		invoicesError = '';
-		try {
-			invoices = await loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-		} catch (error_) {
-			invoicesError = error_ instanceof Error ? error_.message : 'Failed to load invoices';
-		}
+		await invoicesState.load(
+			() => loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+			'Failed to load invoices'
+		);
 	}
 
 	// Reported by InvoiceSection's onCreate prop -- see its own doc comment
 	// for why it owns the resulting state change (invoices list vs.
-	// connectGate) rather than the component itself.
+	// connectGate) rather than the component itself. No catch here in the
+	// original either: a refused create is left to the component the same
+	// way Void Contract is (see above).
 	async function handleCreateInvoice(amountCents: number) {
 		const result = await createInvoice(
 			apiFetchWithSession,
@@ -378,7 +378,7 @@
 		);
 		connectGate = result.connectRequired ? { isOwner: result.isOwner ?? false } : undefined;
 		if (result.invoice) {
-			invoices = [result.invoice, ...invoices];
+			invoicesState.value = [result.invoice, ...invoicesState.value];
 		}
 	}
 
@@ -386,23 +386,23 @@
 	// refusing is what tells this page the caller is a Doula, so the
 	// section is left out rather than shown broken. The module answers
 	// undefined for exactly that, which says "not for you" in the type
-	// where this used to be a bare empty catch.
+	// where this used to be a bare empty catch -- so this never throws in
+	// practice, and offersState.error is never rendered (see its own
+	// declaration above).
 	async function loadOffersSection() {
-		const section = await loadOffers(apiFetchWithSession, reference, loadEngagementOffers);
-		if (!section) return;
-		offers = section.offers as Offer[];
-		doulas = section.doulas;
-		isOffersVisible = true;
+		await offersState.load(() => loadOffers(apiFetchWithSession, reference, loadEngagementOffers), '');
 	}
 
 	async function handleCreateOffer(offer: NewOffer) {
 		await createOffer(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, offer);
-		offers = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+		if (offersState.value) offersState.value = { ...offersState.value, offers: updated };
 	}
 
 	async function handleWithdrawOffer(offerId: string) {
 		await withdrawOffer(apiFetchWithSession, page.params.practiceId!, offerId);
-		offers = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+		if (offersState.value) offersState.value = { ...offersState.value, offers: updated };
 	}
 
 	async function handleConnectInvoicing() {
@@ -432,133 +432,62 @@
 	});
 
 	async function handleSendPortalInvite() {
-		portalInviteError = '';
-		isSendingPortalInvite = true;
-		try {
-			const response = await apiFetchWithSession(portalInviteURL(reference), { method: "POST" });
-			if (!response.ok) {
-				portalInviteError = await apiErrorMessage(response);
-				return;
-			}
-
-			const created: { inviteToken: string } = await response.json();
-			portalInviteLink = `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
-		} catch (error_) {
-			portalInviteError = error_ instanceof Error ? error_.message : 'Failed to send portal invite';
-		} finally {
-			isSendingPortalInvite = false;
-		}
+		await portalInvite.mutate(async () => {
+			const created = await sendPortalInvite(apiFetchWithSession, reference);
+			return `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
+		}, 'Failed to send portal invite');
 	}
 
 	async function handleCreateVisit() {
-		visitsError = '';
-		isCreatingVisit = true;
-		try {
-			const response = await apiFetchWithSession(visitsURL(reference), { method: 'POST' });
-			if (!response.ok) {
-				visitsError = await apiErrorMessage(response);
-				return;
-			}
-
+		if (await visitsCreate.mutate(() => createVisit(apiFetchWithSession, reference), 'Failed to add Visit')) {
 			await loadVisits();
-		} catch (error_) {
-			visitsError = error_ instanceof Error ? error_.message : 'Failed to add Visit';
-		} finally {
-			isCreatingVisit = false;
 		}
 	}
 
 	async function handleReassign(visitId: string, event: SubmitEvent) {
 		event.preventDefault();
-		reassignError[visitId] = '';
-		try {
-			const response = await apiFetchWithSession(`${visitsURL(reference)}/${visitId}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ staffId: reassignStaffId[visitId] ?? '' })
-			});
-			if (!response.ok) {
-				reassignError[visitId] = await apiErrorMessage(response);
-				return;
-			}
-
+		const section = (reassignSections[visitId] ??= new SectionState<void>(undefined));
+		const wasReassigned = await section.mutate(
+			() => reassignVisit(apiFetchWithSession, reference, visitId, reassignStaffId[visitId] ?? ''),
+			'Failed to reassign Visit'
+		);
+		if (wasReassigned) {
 			reassignStaffId[visitId] = '';
 			await loadVisits();
-		} catch (error_) {
-			reassignError[visitId] = error_ instanceof Error ? error_.message : 'Failed to reassign Visit';
 		}
 	}
 
+	// Reuses loadMessagesPage rather than re-fetching by hand: the query
+	// string and the newest-first-to-oldest-first reversal are exactly the
+	// same read, just prepended instead of replacing.
 	async function handleLoadOlderMessages() {
-		messagesError = '';
-		isLoadingOlderMessages = true;
-		try {
-			const response = await apiFetchWithSession(`${messagesURL(reference)}?cursor=${encodeURIComponent(messagesCursor)}`);
-			if (!response.ok) {
-				messagesError = await apiErrorMessage(response);
-				return;
-			}
-
-			const data = await response.json();
-			messages = [...data.items.toReversed(), ...messages];
-			messagesCursor = data.nextCursor ?? '';
-			isMessagesHasMore = data.hasMore;
+		await messagesLoad.mutate(async () => {
+			const older = await loadMessagesPage<Message>(apiFetchWithSession, reference, messagesCursor);
+			messages = [...older.items, ...messages];
+			messagesCursor = older.nextCursor ?? '';
+			isMessagesHasMore = older.hasMore;
 			await refreshAttachmentPreviews(messages);
-		} catch (error_) {
-			messagesError = error_ instanceof Error ? error_.message : 'Failed to load older messages';
-		} finally {
-			isLoadingOlderMessages = false;
-		}
+		}, 'Failed to load older messages');
 	}
 
 	async function didSendMessage(body: string, attachment: File | undefined): Promise<boolean> {
-		messagesError = '';
-		isSendingMessage = true;
-		try {
-			let response: Response;
-			if (attachment) {
-				const form = new FormData();
-				form.set('body', body);
-				form.set('attachment', attachment);
-				response = await apiFetchWithSession(messagesURL(reference), { method: 'POST', body: form });
-			} else {
-				response = await apiFetchWithSession(messagesURL(reference), {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ body })
-				});
-			}
-			if (!response.ok) {
-				messagesError = await apiErrorMessage(response);
-				return false;
-			}
-
-			const created = await response.json();
+		return messagesSend.mutate(async () => {
+			const created = await sendMessage<Message>(apiFetchWithSession, reference, body, attachment);
 			messages = [...messages, created];
 			await refreshAttachmentPreviews([created]);
-			return true;
-		} catch (error_) {
-			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
-			return false;
-		} finally {
-			isSendingMessage = false;
-		}
+		}, 'Failed to send message');
 	}
 
 	async function handleDownloadAttachment(messageId: string, filename: string) {
-		const response = await apiFetchWithSession(`${messagesURL(reference)}/${messageId}/attachment`);
-		if (!response.ok) {
-			messagesError = await apiErrorMessage(response);
-			return;
-		}
-
-		const blob = await response.blob();
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement('a');
-		link.href = url;
-		link.download = filename;
-		link.click();
-		URL.revokeObjectURL(url);
+		await messagesDownload.mutate(async () => {
+			const blob = await downloadAttachment(apiFetchWithSession, reference, messageId);
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = filename;
+			link.click();
+			URL.revokeObjectURL(url);
+		}, 'Failed to download attachment');
 	}
 </script>
 
@@ -632,8 +561,8 @@
 			>{visit.staffName}, {new Date(visit.createdAt).toLocaleDateString()}</span
 		>
 	</form>
-	{#if reassignError[visit.visitId]}
-		<Notice variant="error" message={reassignError[visit.visitId]} />
+	{#if reassignSections[visit.visitId]?.error}
+		<Notice variant="error" message={reassignSections[visit.visitId]!.error} />
 	{/if}
 {/snippet}
 
@@ -666,21 +595,21 @@
 	arguments, so each type gets a thin wrapper below rather than the loop.
 -->
 {#snippet planSectionBody(planType: PlanType, heading: string)}
-	{#if planError[planType]}
-		<Notice variant="error" message={planError[planType]} />
+	{#if planState[planType].error}
+		<Notice variant="error" message={planState[planType].error} />
 	{/if}
 
 	{#if planLoaded[planType]}
-		{#if planInstances[planType]}
+		{#if planState[planType].value}
 			<PlanInstanceForm
-				fields={planInstances[planType]!.fields}
-				answers={planInstances[planType]!.answers}
+				fields={planState[planType].value!.fields}
+				answers={planState[planType].value!.answers}
 				onAnswerChange={(fieldId, value) => handlePlanAnswerChange(planType, fieldId, value)}
 				onToggleOption={(fieldId, option) => handlePlanToggleOption(planType, fieldId, option)}
 			/>
-			<Button label="Save {heading}" onClick={() => handleSavePlan(planType)} loading={planBusy[planType]} />
+			<Button label="Save {heading}" onClick={() => handleSavePlan(planType)} loading={planState[planType].isBusy} />
 		{:else}
-			<Button label="Create {heading}" onClick={() => handleCreatePlan(planType)} loading={planBusy[planType]} />
+			<Button label="Create {heading}" onClick={() => handleCreatePlan(planType)} loading={planState[planType].isBusy} />
 		{/if}
 	{/if}
 {/snippet}

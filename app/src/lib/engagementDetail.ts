@@ -1,6 +1,6 @@
 /**
- * The reads behind the Staff Engagement page that the page itself used to
- * own (#695).
+ * The reads and writes behind the Staff Engagement page that the page
+ * itself used to own (#695, #841).
  *
  * That route is 780 lines and fetches seven sections, and its only
  * interface was the rendered page: a spec had to stub every endpoint and
@@ -10,6 +10,13 @@
  * reading a refusal, reversing a page of Messages, deciding that an Offers
  * refusal means "not permitted" rather than "broken". Each is now a
  * function a test can call.
+ *
+ * #841 moved the page's own writes in too -- sending a portal invite,
+ * adding and reassigning a Visit, sending a Message and downloading its
+ * attachment -- so the page holds no raw `apiFetchWithSession` call of its
+ * own; each is a `SectionState.load`/`mutate` callback around one of these
+ * functions instead of a hand-written `catch (error_) { ... instanceof
+ * Error ... }` block.
  *
  * What is deliberately *not* here: the Contract, Invoice and Plan
  * sections. Those already delegate to `contract.ts`, `invoice.ts` and
@@ -138,6 +145,87 @@ export async function loadMessagesPage<M>(
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
 	const page = (await response.json()) as CursorPage<M>;
 	return { ...page, items: page.items.toReversed() };
+}
+
+/**
+ * Sends a portal invite for this Engagement, returning the token the BFF
+ * minted -- the page turns that into the sharable link, since building a
+ * URL off `location.origin` belongs to the page, not this module.
+ */
+export async function sendPortalInvite(
+	fetcher: Fetcher,
+	reference: EngagementReference
+): Promise<{ inviteToken: string }> {
+	const response = await fetcher(portalInviteURL(reference), { method: 'POST' });
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	return (await response.json()) as { inviteToken: string };
+}
+
+/** Adds a Visit to this Engagement. The caller reloads the list itself --
+ * this only reports whether the add succeeded. */
+export async function createVisit(fetcher: Fetcher, reference: EngagementReference): Promise<void> {
+	const response = await fetcher(visitsURL(reference), { method: 'POST' });
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+}
+
+/**
+ * Reassigns visitId to staffId.
+ */
+export async function reassignVisit(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	visitId: string,
+	staffId: string
+): Promise<void> {
+	const response = await fetcher(`${visitsURL(reference)}/${visitId}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ staffId })
+	});
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+}
+
+/**
+ * Sends a Message, with or without an attachment -- the only two shapes
+ * `MessageThread`'s composer can produce. Returns the created Message so
+ * the caller can append it and fetch its attachment preview.
+ */
+export async function sendMessage<M>(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	body: string,
+	attachment: File | undefined
+): Promise<M> {
+	let response: Response;
+	if (attachment) {
+		const form = new FormData();
+		form.set('body', body);
+		form.set('attachment', attachment);
+		response = await fetcher(messagesURL(reference), { method: 'POST', body: form });
+	} else {
+		response = await fetcher(messagesURL(reference), {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ body })
+		});
+	}
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	return (await response.json()) as M;
+}
+
+/**
+ * Downloads a Message's attachment as a Blob. The caller turns it into an
+ * object URL and drives the browser's own download -- DOM work that has
+ * no place in a module tested without one.
+ */
+export async function downloadAttachment(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	messageId: string
+): Promise<Blob> {
+	const response = await fetcher(`${messagesURL(reference)}/${messageId}/attachment`);
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	return response.blob();
 }
 
 /**
