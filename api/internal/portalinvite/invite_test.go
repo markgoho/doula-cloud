@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
 )
@@ -206,5 +208,117 @@ func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 	}
 	if out.Code != "CONFLICT" {
 		t.Fatalf("code = %q, want %q", out.Code, "CONFLICT")
+	}
+}
+
+// TestInviteHandler_SuppressedAddressRefused is #789's AC: a portal
+// invite to a currently-suppressed address is refused at the endpoint,
+// names Blocked email addresses, and queues no outbox row.
+func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "invite-suppressed-staff"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	const email = "suppressed@example.com"
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Suppressed Client", email)
+	if err := mailsuppress.Record(t.Context(), db.Admin, email, mailsuppress.CauseBounce, "evt-789"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+
+	srv, session := newInviteServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := postInvite(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+
+	var out apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Code != "FAILED_PRECONDITION" {
+		t.Fatalf("code = %q, want %q", out.Code, "FAILED_PRECONDITION")
+	}
+	if !strings.Contains(out.Message, "Blocked email addresses") {
+		t.Fatalf("message = %q, want it to name Blocked email addresses", out.Message)
+	}
+	if out.Details["email"] == "" {
+		t.Fatalf("expected a field-keyed details entry for email, got %+v", out.Details)
+	}
+
+	var portalUserCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM client_portal_users pu JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email,
+	).Scan(&portalUserCount); err != nil {
+		t.Fatalf("count client_portal_users: %v", err)
+	}
+	if portalUserCount != 0 {
+		t.Fatalf("expected no client_portal_users row for a refused invite, got %d", portalUserCount)
+	}
+
+	var outboxCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM portal_invite_outbox o
+		 JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
+		 JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email,
+	).Scan(&outboxCount); err != nil {
+		t.Fatalf("count portal_invite_outbox: %v", err)
+	}
+	if outboxCount != 0 {
+		t.Fatalf("expected no portal_invite_outbox row for a refused invite, got %d", outboxCount)
+	}
+}
+
+// TestInviteHandler_ClearedSuppressionAllowsInvite is #789's AC: a
+// suppression that has been cleared (#744) lets the same invite through
+// unchanged.
+func TestInviteHandler_ClearedSuppressionAllowsInvite(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "invite-cleared-suppression-staff"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	const email = "cleared@example.com"
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Cleared Client", email)
+	if err := mailsuppress.Record(t.Context(), db.Admin, email, mailsuppress.CauseBounce, "evt-789-cleared"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`,
+		mailsuppress.Normalize(email),
+	); err != nil {
+		t.Fatalf("clear suppression: %v", err)
+	}
+
+	srv, session := newInviteServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := postInvite(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+}
+
+// TestInviteHandler_NoEmailOnFileSkipsSuppressionCheck is #789's other
+// edge of the same guard: a Client with no address on file (ADR-0017)
+// has nothing to check for suppression, so the invite proceeds exactly
+// as it did before this ticket -- the outbox dead-letters it later for
+// its own, separate reason ("client has no email on file").
+func TestInviteHandler_NoEmailOnFileSkipsSuppressionCheck(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "invite-no-email-staff"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "No Email Client", "")
+
+	srv, session := newInviteServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := postInvite(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 }
