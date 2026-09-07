@@ -12,17 +12,17 @@
 		downloadAttachment,
 		endingReasons,
 		loadAttachmentPreviews,
+		loadEngagementOffersOrNone as loadOffers,
 		loadMessagesPage,
-		loadOffersSection as loadOffers,
 		loadVisitsPage,
 		reassignVisit,
 		saveVisitNotes,
 		scheduleVisit,
 		sendMessage,
 		sendPortalInvite,
-		type OffersSection,
 		type Visit
 	} from '#lib/engagementDetail.js';
+	import { doulaOptions, loadDoulasOrNone, type Doula } from '#lib/staff.js';
 	import {
 		hasAcceptedPortalInvite,
 		hasNeverBeenInvited,
@@ -55,7 +55,7 @@
 		setMergeFieldValue,
 		type Contract
 	} from '#lib/contract.js';
-	import { isOwnerOrAdmin } from '#lib/roles.js';
+	import { isDoula, isOwnerOrAdmin } from '#lib/roles.js';
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
@@ -74,6 +74,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import Select from '#lib/components/atoms/Select.svelte';
 
 	type Detail = {
 		engagementId: string;
@@ -198,6 +199,11 @@
 	// #250: optional at creation, the same as it is afterward -- a Doula
 	// logging a meeting that already happened leaves this blank.
 	let newVisitScheduledAt = $state('');
+	// #268: who the new Visit is for. Empty until she picks somebody, and
+	// only ever rendered for a reader who has a roster to pick from -- a
+	// plain Doula sends no assignee at all and the Visit is logged for
+	// her, exactly as it was before this field existed.
+	let newVisitStaffId = $state('');
 
 	// #486 AC4: the same record-scoped ledger the practice-wide feed reuses,
 	// through engagement.ListActivityHandler (unchanged by #486) --
@@ -323,15 +329,35 @@
 	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
 	// Doula's load simply fails and the section stays hidden -- the read
 	// table keeps who-was-asked away from her, and an error banner about
-	// it would only be noise on her own screen. loadOffersSection
+	// it would only be noise on her own screen. loadEngagementOffersOrNone
 	// (engagementDetail.ts) already turns that refusal into `undefined`
 	// rather than a throw, so offersState.error is never rendered here on
 	// purpose -- the section's rule is silence, not a Notice. Named
 	// offersState for the same reason as contractState above.
-	const offersState = new SectionState<OffersSection | undefined>(undefined);
-	const isOffersVisible = $derived(offersState.value !== undefined);
-	const offers = $derived((offersState.value?.offers as Offer[] | undefined) ?? []);
-	const doulas = $derived(offersState.value?.doulas ?? []);
+	const offersState = new SectionState<unknown[] | undefined>(undefined);
+	const offers = $derived((offersState.value as Offer[] | undefined) ?? []);
+
+	// The Practice's Doulas, read once for the whole page (#268): the
+	// Offers section offers them, and so do the two Visit pickers. One
+	// read, so the two sections can never disagree about who is on the
+	// roster, and one place that decides what a refusal means.
+	//
+	// `undefined` is "this reader may not be offered a colleague at all"
+	// -- `GET .../staff` is Owner/Admin (ADR-0008), and loadDoulasOrNone
+	// answers a refusal with an absence rather than a throw. Every
+	// assign-shaped control on this page is drawn off that absence, which
+	// is #274: the screen must not offer a Visit write the reader's own
+	// role will refuse. It is drawing only, never the gate -- the BFF
+	// refuses the same call whether or not the control was rendered
+	// (api/internal/visit/roles.go).
+	const rosterState = new SectionState<Doula[] | undefined>(undefined);
+	const doulas = $derived(rosterState.value);
+	const canAssignVisits = $derived(doulas !== undefined);
+	// A Doula logging her own Visit needs no roster and no picker: an
+	// absent assignee means "me". An Owner or Admin who is not a Doula has
+	// no self to log, so for her the picker is the only way in.
+	const canLogOwnVisit = $derived(isDoula(data.session));
+	const isOffersVisible = $derived(offersState.value !== undefined && canAssignVisits);
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -595,16 +621,23 @@
 		await offersState.load(() => loadOffers(apiFetchWithSession, reference, loadEngagementOffers), '');
 	}
 
+	// Silent for the same reason the Offers load is: a refused roster read
+	// is this reader's role, not a failure, and loadDoulasOrNone already
+	// answers it with `undefined` rather than a throw.
+	async function loadRoster() {
+		await rosterState.load(() => loadDoulasOrNone(apiFetchWithSession, reference.practiceId), '');
+	}
+
 	async function handleCreateOffer(offer: NewOffer) {
 		await createOffer(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, offer);
 		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-		if (offersState.value) offersState.value = { ...offersState.value, offers: updated };
+		if (offersState.value) offersState.value = updated;
 	}
 
 	async function handleWithdrawOffer(offerId: string) {
 		await withdrawOffer(apiFetchWithSession, page.params.practiceId!, offerId);
 		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-		if (offersState.value) offersState.value = { ...offersState.value, offers: updated };
+		if (offersState.value) offersState.value = updated;
 	}
 
 	async function handleConnectInvoicing() {
@@ -620,6 +653,7 @@
 		await Promise.all(planSections.map((section) => loadPlan(section.type)));
 		await loadContractSection();
 		await loadInvoicesSection();
+		await loadRoster();
 		await loadOffersSection();
 		await loadActivity();
 
@@ -644,13 +678,21 @@
 		}, 'Failed to send portal invite');
 	}
 
+	// #268: an empty picker means "for me", which is what a Doula logging
+	// her own Visit sends -- the same absent assignee this route sent
+	// before the field existed.
 	async function handleCreateVisit(event: SubmitEvent) {
 		event.preventDefault();
 		const scheduledAt = newVisitScheduledAt ? new Date(newVisitScheduledAt).toISOString() : undefined;
+		const staffId = newVisitStaffId || undefined;
 		if (
-			await visitsCreate.mutate(() => createVisit(apiFetchWithSession, reference, scheduledAt), 'Failed to add Visit')
+			await visitsCreate.mutate(
+				() => createVisit(apiFetchWithSession, reference, scheduledAt, staffId),
+				'Failed to add Visit'
+			)
 		) {
 			newVisitScheduledAt = '';
+			newVisitStaffId = '';
 			await loadVisits();
 		}
 	}
@@ -870,29 +912,40 @@
 	<span class="visually-hidden" id="visit-{visit.visitId}-name"
 		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt)}</span
 	>
-	<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-		<LabeledField id={`reassign-staff-${visit.visitId}`} label="Reassign to Staff id">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					value={reassignStaffId[visit.visitId] ?? ''}
-					onInput={(value) => (reassignStaffId[visit.visitId] = value)}
-					required
-				/>
-			{/snippet}
-		</LabeledField>
-		<Button
-			label="Reassign"
-			type="submit"
-			size="sm"
-			variant="secondary"
-			describedBy="visit-{visit.visitId}-name"
-		/>
-	</form>
-	{#if reassignSections[visit.visitId]?.error}
-		<Notice variant="error" message={reassignSections[visit.visitId]!.error} />
+	<!--
+		#268: a person is picked by name, never by a staff id typed by hand
+		-- no screen in the product prints one, so the free-text field this
+		replaces could not be filled in. Rendered only where the roster
+		read succeeded, which is the same Owner/Admin rule the BFF applies
+		to the write itself (#274).
+	-->
+	{#if canAssignVisits}
+		<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
+			<LabeledField id={`reassign-staff-${visit.visitId}`} label="Reassign to">
+				{#snippet children({ id, describedBy, invalid })}
+					<Select
+						{id}
+						{describedBy}
+						{invalid}
+						options={doulaOptions(doulas ?? [])}
+						placeholder="Choose a Doula"
+						value={reassignStaffId[visit.visitId] ?? ''}
+						onChange={(value) => (reassignStaffId[visit.visitId] = value)}
+						required
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button
+				label="Reassign"
+				type="submit"
+				size="sm"
+				variant="secondary"
+				describedBy="visit-{visit.visitId}-name"
+			/>
+		</form>
+		{#if reassignSections[visit.visitId]?.error}
+			<Notice variant="error" message={reassignSections[visit.visitId]!.error} />
+		{/if}
 	{/if}
 
 	<!--
@@ -956,21 +1009,45 @@
 {/snippet}
 
 {#snippet visitsSection()}
-	<form onsubmit={handleCreateVisit}>
-		<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="datetime-local"
-					value={newVisitScheduledAt}
-					onInput={(value) => (newVisitScheduledAt = value)}
-				/>
-			{/snippet}
-		</LabeledField>
-		<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
-	</form>
+	<!--
+		#268/#274: the form is here for a reader who can actually complete
+		it -- an Owner or Admin, who picks the colleague it is for, or a
+		Doula, who logs her own. A reader who is neither is offered no
+		control rather than a button that 403s.
+	-->
+	{#if canAssignVisits || canLogOwnVisit}
+		<form onsubmit={handleCreateVisit}>
+			{#if canAssignVisits}
+				<LabeledField id="new-visit-staff" label="Who is this Visit for?">
+					{#snippet children({ id, describedBy, invalid })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							options={doulaOptions(doulas ?? [])}
+							placeholder="Choose a Doula"
+							value={newVisitStaffId}
+							onChange={(value) => (newVisitStaffId = value)}
+							required
+						/>
+					{/snippet}
+				</LabeledField>
+			{/if}
+			<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="datetime-local"
+						value={newVisitScheduledAt}
+						onInput={(value) => (newVisitScheduledAt = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
+		</form>
+	{/if}
 
 	{#if visitsError}
 		<Notice variant="error" message={visitsError} />
@@ -1107,7 +1184,7 @@
 {#snippet offersSection()}
 	<OfferSection
 		{offers}
-		{doulas}
+		doulas={doulas ?? []}
 		clientName={detail!.clientName}
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}

@@ -19,6 +19,9 @@ const (
 	// grantedOrigin is named once so golangci-lint's goconst check doesn't
 	// see three independent "granted" literals across this package's tests.
 	grantedOrigin = "granted"
+	// notAUUID is the malformed id every "reject a bad path segment or
+	// field" case sends, named here for the same goconst reason.
+	notAUUID = "not-a-uuid"
 )
 
 // newServer mounts this package's whole surface through visit.Mount, the

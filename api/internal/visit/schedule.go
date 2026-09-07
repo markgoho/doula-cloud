@@ -34,11 +34,21 @@ type ScheduleResponse struct {
 // unrelated fields, and forcing a caller who only wants to reschedule to
 // also restate who the Visit is assigned to (ReassignRequest.StaffID is
 // required) would be the wrong shape for this write. Must be mounted
-// behind staffauth.Middleware; the caller must hold the Doula role at the
-// current Practice.
+// behind staffauth.Middleware.
+//
+// No role gate of its own (#268). Setting the date of a Visit that
+// already exists is the Admin's own job -- ADR-0006 grants her the Staff
+// roster precisely because "booking a Visit means picking a Doula" -- so
+// gating it on the Doula role refused the one person whose job the
+// glossary says this is, while the screen offered her the control anyway.
+// What is left is NotesHandler's rule, which is ADR-0008's read rule:
+// staffauth.AttachingWrite has already refused any caller who may not
+// reach this Engagement at all. Who a Visit is *for* is a different act
+// with a stricter rule -- see assignee in roles.go.
 func ScheduleHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := requireDoula(w, r)
+		c, ok := requireVisitWrite(w, r)
+		// coverage:ignore reason: requireVisitWrite only reports false when staffauth.Middleware left no tx or no Reader on context, which cannot happen behind it
 		if !ok {
 			return
 		}
@@ -51,7 +61,7 @@ func ScheduleHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "visit", visitID) {
 			return
 		}
-		if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
+		if err := requireEngagementAtPractice(r.Context(), c.tx, engagementID, c.practiceID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 				return
@@ -82,7 +92,7 @@ func ScheduleHandler() http.Handler {
 		// actually belong together. Its NOT FOUND is this route's 404,
 		// same as ReassignHandler's own missing-Visit case.
 		var previous sql.NullTime
-		if err := tx.QueryRowContext(r.Context(),
+		if err := c.tx.QueryRowContext(r.Context(),
 			`SELECT scheduled_at FROM visits WHERE id = $1 AND engagement_id = $2`,
 			visitID, engagementID,
 		).Scan(&previous); err != nil {
@@ -99,7 +109,7 @@ func ScheduleHandler() http.Handler {
 			previousAt = &previous.Time
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
+		if _, err := c.tx.ExecContext(r.Context(),
 			`UPDATE visits SET scheduled_at = $1 WHERE id = $2 AND engagement_id = $3`,
 			scheduledAt, visitID, engagementID,
 		); err != nil {
@@ -114,14 +124,13 @@ func ScheduleHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
+		if err := activity.Record(r.Context(), c.tx, activity.Entry{
+			PracticeID:  c.practiceID,
 			SubjectKind: activity.SubjectEngagement,
 			SubjectID:   engagementID,
 			Action:      string(activity.ActionVisitScheduled),
 			Diff:        diff,
-			Actor:       activity.StaffActor(staffID),
+			Actor:       activity.StaffActor(c.staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

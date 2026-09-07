@@ -7,8 +7,8 @@ import {
 	downloadAttachment,
 	loadAttachmentPreviews,
 	loadEngagement,
+	loadEngagementOffersOrNone,
 	loadMessagesPage,
-	loadOffersSection,
 	loadVisitsPage,
 	messagesURL,
 	portalInviteURL,
@@ -177,43 +177,25 @@ describe('loadAttachmentPreviews', () => {
 	});
 });
 
-describe('loadOffersSection', () => {
-	const roster = {
-		members: [
-			{ staffId: 's1', name: 'Maya', employmentType: 'contractor', roles: ['doula'] },
-			{ staffId: 's2', name: 'Ada', employmentType: 'employee', roles: ['owner'] },
-			{ staffId: 's3', name: 'Bess', employmentType: 'employee', roles: ['doula', 'admin'] }
-		]
-	};
-
-	it('returns the offers and only the roster members holding the Doula role', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse(roster));
+describe('loadEngagementOffersOrNone', () => {
+	it('returns the offers the injected read answers with', async () => {
+		const fetcher = vi.fn();
 		const loadOffers = vi.fn().mockResolvedValue([{ offerId: 'o1' }]);
 
-		const section = await loadOffersSection(fetcher, reference, loadOffers);
-
-		expect(section?.offers).toEqual([{ offerId: 'o1' }]);
-		expect(section?.doulas).toEqual([
-			{ staffId: 's1', name: 'Maya', employmentType: 'contractor' },
-			{ staffId: 's3', name: 'Bess', employmentType: 'employee' }
+		expect(await loadEngagementOffersOrNone(fetcher, reference, loadOffers)).toEqual([
+			{ offerId: 'o1' }
 		]);
+		expect(loadOffers).toHaveBeenCalledWith(fetcher, 'practice-1', 'engagement-1');
 	});
 
-	// Both reads are Owner/Admin. Either refusing is what tells the page
-	// the caller is a Doula, and a Doula may not read who else was offered
-	// her work -- so the section is left out rather than shown broken.
+	// The read is Owner/Admin. Its refusal is what tells the page the
+	// caller is a Doula, and a Doula may not read who else was offered her
+	// work -- so the section is left out rather than shown broken.
 	it('answers undefined when the Offers read refuses', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse(roster));
+		const fetcher = vi.fn();
 		const loadOffers = vi.fn().mockRejectedValue(new Error('not permitted to read this'));
 
-		expect(await loadOffersSection(fetcher, reference, loadOffers)).toBeUndefined();
-	});
-
-	it('answers undefined when the roster read refuses', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
-		const loadOffers = vi.fn().mockResolvedValue([]);
-
-		expect(await loadOffersSection(fetcher, reference, loadOffers)).toBeUndefined();
+		expect(await loadEngagementOffersOrNone(fetcher, reference, loadOffers)).toBeUndefined();
 	});
 });
 
@@ -282,7 +264,7 @@ describe('createVisit', () => {
 		expect(fetcher).toHaveBeenCalledWith(`${base}/visits`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ scheduledAt: undefined })
+			body: JSON.stringify({ scheduledAt: undefined, staffId: undefined })
 		});
 	});
 
@@ -294,7 +276,21 @@ describe('createVisit', () => {
 		expect(fetcher).toHaveBeenCalledWith(`${base}/visits`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ scheduledAt: '2027-03-15T14:30:00Z' })
+			body: JSON.stringify({ scheduledAt: '2027-03-15T14:30:00Z', staffId: undefined })
+		});
+	});
+
+	// #268: naming a colleague at creation, with no reassign step after
+	// it. An absent assignee still means "for me" -- the case above.
+	it('posts the named assignee', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await createVisit(fetcher, reference, undefined, 'staff-7');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/visits`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ scheduledAt: undefined, staffId: 'staff-7' })
 		});
 	});
 

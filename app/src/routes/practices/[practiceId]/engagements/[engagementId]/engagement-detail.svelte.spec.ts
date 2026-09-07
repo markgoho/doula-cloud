@@ -126,6 +126,23 @@ async function renderWithFixtureResponder(
 	});
 }
 
+// #268: the fixture responder, with the roster read answered separately
+// -- a 200 is the Owner or Admin who may be offered a colleague to pick,
+// a 403 is the plain Doula the endpoint refuses. At the outer scope
+// because eslint's unicorn/consistent-function-scoping asks for it there.
+async function setupWithRoster(rosterResponse?: Response, roles: string[] = ['owner', 'doula']) {
+	await testPage.viewport(1440, 900);
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string) => {
+		if (rosterResponse && path.endsWith('/staff')) return Promise.resolve(rosterResponse);
+		return respond(path);
+	});
+	await render(Page, {
+		data: { ...fixtureDetail, session: sessionFor(roles) },
+		params: fixture.params
+	});
+}
+
 describe('Staff Engagement detail summary', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
@@ -345,12 +362,16 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 			return Promise.resolve(jsonResponse({ visitId: 'visit-3', staffId: 'staff-1' }, 201));
 		});
 
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
 		await testPage.getByLabelText('Scheduled date and time (optional)').fill('2027-05-20T10:15');
 		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.path).toContain('/visits');
-		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-05-20T10:15').toISOString() });
+		expect(requests[0]!.body).toEqual({
+			scheduledAt: new Date('2027-05-20T10:15').toISOString(),
+			staffId: 'staff-2'
+		});
 	});
 });
 
@@ -669,5 +690,114 @@ describe('the Birth Plan PDF download (#306)', () => {
 		await expect
 			.element(testPage.getByRole('alert'))
 			.toHaveTextContent('no plan instance found for this engagement and plan type');
+	});
+});
+
+/*
+ * #268/#274: choosing who a Visit is for is picking a person by name, at
+ * create and at reassign alike, and the control is only ever drawn for a
+ * reader whose role can actually complete it.
+ *
+ * The roster read is what decides that, so these tests drive it directly:
+ * a 200 is an Owner or Admin, a 403 is the plain Doula the endpoint
+ * refuses. The BFF refuses the write on its own either way -- see
+ * api/internal/visit/assign_test.go, which asserts the refusal by role
+ * with no screen involved at all.
+ */
+describe('choosing who a Visit is for (#268, #274)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('offers the Practice\'s Doulas by name when adding a Visit', async () => {
+		await setupWithRoster();
+
+		const picker = testPage.getByLabelText('Who is this Visit for?');
+		await expect.element(picker).toBeVisible();
+		await expect.element(picker.getByRole('option', { name: 'Kanyakumari Balasubramanian' })).toBeInTheDocument();
+	});
+
+	// The bookkeeper holds the Admin role and no Doula role, so she can
+	// never be named on a Visit -- offering her would be offering a choice
+	// the BFF refuses.
+	it('leaves a Staff member who holds no Doula role out of the picker', async () => {
+		await setupWithRoster();
+
+		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
+		expect(
+			testPage.getByRole('option', { name: 'Winifred Abernathy-Castellano' }).elements()
+		).toHaveLength(0);
+	});
+
+	it('offers a select, not a free-text staff id, for reassigning a Visit', async () => {
+		await setupWithRoster();
+
+		const picker = testPage.getByLabelText('Reassign to').first();
+		await expect.element(picker).toBeVisible();
+		expect(picker.element().tagName).toBe('SELECT');
+	});
+
+	// The defect this replaces: no screen in the product prints a staff
+	// id, so a field asking for one could not be filled in.
+	it('offers no staff-id text field anywhere on the page', async () => {
+		await setupWithRoster();
+
+		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
+		expect(testPage.getByLabelText(/staff id/i).elements()).toHaveLength(0);
+	});
+
+	// #274's own criterion: absent, not broken and not erroring. A plain
+	// Doula may not read the roster (ADR-0008), so she is offered no
+	// assign control at all -- and still logs her own Visit, which needs
+	// no roster.
+	it('leaves both pickers out for a reader the roster read refuses, and still lets her log her own Visit', async () => {
+		await setupWithRoster(jsonResponse('not permitted to read this', 403), ['doula']);
+
+		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toBeVisible();
+		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
+		expect(testPage.getByLabelText('Reassign to').elements()).toHaveLength(0);
+		expect(testPage.getByRole('alert').elements()).toHaveLength(0);
+	});
+
+	// An Owner or Admin who is not a Doula has no self to log, so the
+	// picker is the only way in for her -- and it is there.
+	it('offers the picker to an Admin who holds no Doula role', async () => {
+		await setupWithRoster(undefined, ['admin']);
+
+		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
+	});
+
+	// A reader who can neither pick a colleague nor log her own Visit is
+	// offered no create control at all, rather than a button that 403s.
+	it('offers no add control at all to a reader who can do neither', async () => {
+		await setupWithRoster(jsonResponse('not permitted to read this', 403), ['admin']);
+
+		await expect.element(testPage.getByRole('heading', { name: 'Visits' })).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Add a Visit' }).elements()).toHaveLength(0);
+	});
+
+	it('sends the chosen colleague on the create request', async () => {
+		await setupWithRoster();
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/engagement-1/visits',
+			expect.objectContaining({
+				method: 'POST',
+				body: JSON.stringify({ scheduledAt: undefined, staffId: 'staff-2' })
+			})
+		);
+	});
+
+	it('sends the chosen colleague on the reassign request', async () => {
+		await setupWithRoster();
+		await testPage.getByLabelText('Reassign to').first().selectOptions('Jordan Reyes');
+		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/engagement-1/visits/visit-1',
+			expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ staffId: 'staff-2' }) })
+		);
 	});
 });

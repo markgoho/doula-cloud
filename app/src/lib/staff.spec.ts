@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	doulaOptions,
 	endSessions,
+	loadDoulas,
+	loadDoulasOrNone,
 	loadStaff,
 	loadWorkStateHistory,
 	removeMember,
@@ -178,5 +181,81 @@ describe('endSessions', () => {
 		await expect(endSessions(fetcher, 'practice-1', 'staff-1')).rejects.toThrow(
 			'Failed to end sessions'
 		);
+	});
+});
+
+
+// One roster row, with only the three fields `loadDoulas` reads spelled
+// out per case -- at the outer scope because eslint's
+// unicorn/consistent-function-scoping asks for it there.
+function member(staffId: string, name: string, roles: string[], employmentType: string) {
+	return {
+		staffId,
+		name,
+		email: `${staffId}@example.test`,
+		roles,
+		employmentType,
+		workState: 'NY',
+		workStateReportedAt: '2026-01-01T00:00:00Z'
+	};
+}
+
+describe('loadDoulas', () => {
+	const roster = {
+		members: [
+			member('staff-1', 'Maya Oyelaran-Fitzgerald', ['doula'], 'contractor'),
+			member('staff-2', 'Ada Brennan', ['owner'], 'employee'),
+			member('staff-3', 'Bess Nakamura-Oduya', ['admin', 'doula'], 'employee')
+		],
+		invitations: { items: [] }
+	};
+
+	it('keeps only the roster members holding the Doula role', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response(roster));
+
+		expect(await loadDoulas(fetcher, 'practice-1')).toEqual([
+			{ staffId: 'staff-1', name: 'Maya Oyelaran-Fitzgerald', employmentType: 'contractor' },
+			{ staffId: 'staff-3', name: 'Bess Nakamura-Oduya', employmentType: 'employee' }
+		]);
+	});
+
+	it('throws the refusal, the same as loadStaff', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('not permitted to read this', 403));
+
+		await expect(loadDoulas(fetcher, 'practice-1')).rejects.toThrow('not permitted to read this');
+	});
+
+	// A Practice with no Doulas on its roster yet is an empty list, which
+	// is a different answer from `undefined` below -- the picker renders
+	// with nothing in it rather than not rendering at all.
+	it('answers an empty list for a roster with no Doulas on it', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ members: [], invitations: { items: [] } }));
+
+		expect(await loadDoulasOrNone(fetcher, 'practice-1')).toEqual([]);
+	});
+
+	// The refusal a plain Doula gets: "not for you", said in the type, so
+	// the screen leaves the picker out rather than showing it broken.
+	it('answers undefined when the roster read refuses', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('not permitted to read this', 403));
+
+		expect(await loadDoulasOrNone(fetcher, 'practice-1')).toBeUndefined();
+	});
+});
+
+describe('doulaOptions', () => {
+	// Keyed on the staff id, never on the name: two Doulas at one agency
+	// can share a name, and keying on the word would silently narrow to
+	// the wrong person.
+	it('pairs each staff id with the name shown for it', () => {
+		expect(
+			doulaOptions([
+				{ staffId: 'staff-1', name: 'Maya Oyelaran-Fitzgerald', employmentType: 'contractor' },
+				{ staffId: 'staff-9', name: 'Maya Oyelaran-Fitzgerald', employmentType: 'employee' }
+			])
+		).toEqual([
+			{ value: 'staff-1', label: 'Maya Oyelaran-Fitzgerald' },
+			{ value: 'staff-9', label: 'Maya Oyelaran-Fitzgerald' }
+		]);
 	});
 });

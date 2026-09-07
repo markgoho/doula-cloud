@@ -336,6 +336,50 @@ everything; the Offer settles her claim and nothing else
 | --- | --- | --- |
 | Engagements, Visits, Messages, Plan Instances, Contract actions | every Engagement at the Practice | only those she is attached to |
 
+### Who may assign a Visit to whom
+
+Added on [#268](https://github.com/markgoho/doula-cloud/issues/268), which also
+closed [#274](https://github.com/markgoho/doula-cloud/issues/274). Assigning is a
+second axis on the Visit writes above: the table's two columns say *which
+Engagements* a Doula may write under, and this one says *whose name* may go on the
+Visit she writes.
+
+| | Owner | Admin | Doula (employee) | Doula (contractor) |
+| --- | --- | --- | --- | --- |
+| Log a Visit for **herself** — create with no assignee | ✓ if she also holds the Doula role | ✓ if she also holds the Doula role | ✓ | ✓, on her attached Engagements |
+| Name a **colleague** on a Visit — at create, and at reassign | ✓ | ✓ | ✗ | ✗ |
+| Set or clear a Visit's **date**, and write its **notes** | ✓ | ✓ | ✓ | ✓, on her attached Engagements |
+
+Three things this settles, none of them a new argument:
+
+- **Naming a colleague is scheduling, which is the Admin's job.** ADR-0006 widened
+  the Staff-roster read to the Admin on exactly this reasoning — "booking a Visit
+  means picking a Doula — an Admin who cannot read the roster cannot do the job the
+  glossary gives her" — and `CONTEXT.md`'s **Attachment** entry says an Admin may
+  attach an employee directly, "naming her on a Visit is granted". Both statements
+  were already true of the product's intent while the code refused her, which is the
+  defect #274 recorded: the button rendered for her and then 403'd.
+- **A plain Doula may name only herself.** She cannot read the Staff roster (the read
+  table above keeps that cell ✗), so she has no list to pick a colleague from. Moving
+  that cell is [#268](https://github.com/markgoho/doula-cloud/issues/268)'s recorded
+  out-of-scope and stays "a cheap cell to move" once a journey asks for it.
+- **An Owner or Admin who is not a Doula has no self to log**, so a create with no
+  assignee is a refusal for her rather than a silent self-assignment. She names
+  somebody, or she writes nothing.
+
+Setting a Visit's date carries no Doula requirement of its own, for the same reason
+its notes never did: both edit a Visit that already exists, and the only gate either
+needs is the one `AttachingWrite` already applies — may this caller reach this
+Engagement at all. Gating a reschedule on the Doula role refused the one person
+whose job scheduling is.
+
+A named **employee** gets a granted attachment written explicitly, with the acting
+person recorded as who attached her. A named **contractor** gets none: she may only
+be named at all if she already holds the open granted attachment her own acceptance
+of an Offer opened, so there is nothing left to grant. Both are enforced in
+`api/internal/visit` by one helper the create and reassign paths share, so the two
+moments of the one act cannot drift apart.
+
 Settled on [#227](https://github.com/markgoho/doula-cloud/issues/227), opened as a
 real disagreement with the user's initial position (attached-only for every Doula)
 and closed in ADR-0006's favour on citation of its own 3am-coverage argument

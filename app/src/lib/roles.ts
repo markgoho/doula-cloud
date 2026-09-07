@@ -94,6 +94,16 @@ export function isOwner(session: Pick<RoleSession, 'roles'>): boolean {
 }
 
 /**
+ * Whether the session's caller holds the 'doula' role -- the role that
+ * puts a person on a birth, and so the one that decides whether she has a
+ * Visit of her own to log (#268). An Owner or Admin who does not hold it
+ * schedules other people's Visits and has none of her own.
+ */
+export function isDoula(session: Pick<RoleSession, 'roles'>): boolean {
+	return session.roles.includes('doula');
+}
+
+/**
  * Whether the session's caller holds the 'owner' or 'admin' role.
  */
 export function isOwnerOrAdmin(session: Pick<RoleSession, 'roles'>): boolean {

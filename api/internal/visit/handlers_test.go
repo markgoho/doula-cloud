@@ -137,6 +137,10 @@ func TestCreateHandler_Success(t *testing.T) {
 	}
 }
 
+// An Admin who is not a Doula has no self to put on a birth, so a create
+// with no assignee is a refusal for her rather than a silent
+// self-assignment (#268). Naming a colleague is what she does instead --
+// TestCreateHandler_AdminWhoIsNotADoulaNamesAColleague, in assign_test.go.
 func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "admin-creating"
@@ -314,7 +318,7 @@ func TestListHandler_InvalidEngagementID(t *testing.T) {
 func TestReassignHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassigning"
-	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
 	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-target", []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
@@ -364,7 +368,10 @@ func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
 	}
 }
 
-func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
+// An Admin who is not herself a Doula is the person whose job scheduling
+// is (ADR-0006, ADR-0008), so handing a Visit to a colleague is hers to
+// do -- #268 replaced the Doula-only guard that used to refuse her.
+func TestReassignHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-reassigning", []string{adminRole}, "employee")
@@ -382,15 +389,15 @@ func TestReassignHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
 
 func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-unknown-target"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
 
@@ -412,7 +419,7 @@ func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
 func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-non-doula-target"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
 	nonDoulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "admin-target", []string{adminRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, staffID)
@@ -481,7 +488,7 @@ func TestReassignHandler_InvalidStaffID(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: "not-a-uuid"})
+	body, err := json.Marshal(visit.ReassignRequest{StaffID: notAUUID})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
@@ -540,7 +547,7 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-granting"
-	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
 	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-employee-target", []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
@@ -576,7 +583,7 @@ func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {
 func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-to-contractor"
-	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
 	targetStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-target")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
@@ -611,7 +618,7 @@ func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
 func TestReassignHandler_AllowsAnAttachedContractor(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-to-attached"
-	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
 	targetStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-attached")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, creatorStaffID)
@@ -977,7 +984,9 @@ func TestScheduleHandler_InvalidFormat(t *testing.T) {
 	}
 }
 
-func TestScheduleHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
+// Setting a Visit's date is the Admin's own job, not something the Doula
+// role gates (#268) -- see ScheduleHandler's doc comment.
+func TestScheduleHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-scheduling", []string{adminRole}, "employee")
@@ -994,8 +1003,8 @@ func TestScheduleHandler_ForbiddenForNonDoulaCaller(t *testing.T) {
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
 
@@ -1300,12 +1309,12 @@ func TestNotesHandler_ChangesThenClearsNotes(t *testing.T) {
 	}
 }
 
-// TestNotesHandler_AllowedForNonDoulaCaller is the deliberate contrast
-// with TestScheduleHandler_ForbiddenForNonDoulaCaller and
-// TestReassignHandler_ForbiddenForNonDoulaCaller: the triage brief's read
-// rule is "any Staff member who may read a Visit may also write its
-// notes", so an Admin -- who holds no Doula role at all -- succeeds here
-// where the sibling writes refuse her.
+// TestNotesHandler_AllowedForNonDoulaCaller states the rule notes,
+// schedule and reassign now share (#268): any Staff member who may read a
+// Visit may also write its notes and its date, and an Owner or Admin may
+// additionally say who it is for. An Admin holding no Doula role at all
+// succeeds at all three; only logging a Visit for *herself* is still
+// closed to her, because she has no self on a birth to log.
 func TestNotesHandler_AllowedForNonDoulaCaller(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
@@ -1451,7 +1460,7 @@ func TestNotesHandler_InvalidVisitID(t *testing.T) {
 // unattached contractor before NotesHandler's own body ever runs, the same
 // shape TestScheduleHandler_RefusesAnUnattachedContractor proves for
 // schedule -- proving the read-parity rule holds even though NotesHandler
-// calls no requireDoula of its own.
+// asserts no role of its own.
 func TestNotesHandler_RefusesAnUnattachedContractor(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-notes", []string{doulaRole}, "employee")

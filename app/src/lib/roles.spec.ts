@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	isDoula,
 	isOwner,
 	isOwnerOrAdmin,
 	isAmbientContractor,
@@ -130,5 +131,17 @@ describe('employmentTypeLabel', () => {
 
 	it('capitalizes an unrecognized employment type rather than throwing', () => {
 		expect(employmentTypeLabel('apprentice')).toBe('Apprentice');
+	});
+});
+
+describe('isDoula', () => {
+	it('is true for a Staff member holding the doula role', () => {
+		expect(isDoula({ roles: ['admin', 'doula'] })).toBe(true);
+	});
+
+	// The Owner or Admin who is not a Doula: she schedules other people's
+	// Visits and has none of her own to log (#268).
+	it('is false for an Owner or Admin who does not hold it', () => {
+		expect(isDoula({ roles: ['owner', 'admin'] })).toBe(false);
 	});
 });
