@@ -15,6 +15,8 @@ import Page from './+page.svelte';
 export const practiceName =
 	'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake';
 
+export const createdAt = '2026-03-12T20:00:00Z';
+
 export const detail = {
 	engagementId: 'engagement-1',
 	practiceName,
@@ -28,7 +30,10 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { engagementId: 'engagement-1' },
 	url: 'https://example.test/portal/engagements/engagement-1',
-	pageData: { practiceName },
+	// #310: the ancestor `+layout.ts` load now carries `createdAt` too --
+	// `+page.svelte` builds `RecordDetail`'s `serviceName` from it via
+	// `engagementLabel`, the same way the real load chain does.
+	pageData: { practiceName, createdAt },
 	// #486: the Activity ledger's own read shares this route's one mocked
 	// fetcher, and needs the cursor-list envelope docs/api-design.md
 	// section 4 asks for -- the bare `detail` shape above has no `items`,

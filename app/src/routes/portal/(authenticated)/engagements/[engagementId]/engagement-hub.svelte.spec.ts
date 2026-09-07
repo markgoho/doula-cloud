@@ -11,7 +11,8 @@ import Hub from './+page.svelte';
 // table-view/record-view switch.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
-import { detail, fixture } from './page.fixture.js';
+import { createdAt, detail, fixture, practiceName } from './page.fixture.js';
+import { engagementLabel } from '#lib/clientRegister.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -64,6 +65,22 @@ describe('Client portal Engagement hub', () => {
 		await expect.element(page.getByText('Due date')).toBeVisible();
 		await expect.element(page.getByText('Mar 1, 2027')).toBeVisible();
 		await expect.element(page.getByText('Created')).not.toBeInTheDocument();
+	});
+
+	// #310's own "a change of Engagement is announced" AC: SvelteKit's
+	// built-in navigation announcer reads `document.title` aloud after a
+	// client-side route change, so the title has to carry the same
+	// distinguishing fact the chrome's switcher does -- two Engagements at
+	// the same Practice must not announce the same words. `serviceName`
+	// builds `engagementLabel` from the ancestor layout's `practiceName`
+	// and `createdAt` rather than the bare Practice name.
+	it('titles the tab with the same distinguishing label the switcher uses (#310)', async () => {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+
+		await render(Hub);
+
+		await expect.element(page.getByText('Due date')).toBeVisible();
+		expect(document.title).toContain(engagementLabel({ practiceName, createdAt }));
 	});
 
 	// ADR-0017: a postpartum-only Engagement has no due date. #505 asks for

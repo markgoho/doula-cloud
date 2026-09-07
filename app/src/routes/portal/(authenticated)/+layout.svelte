@@ -41,11 +41,13 @@
 
 	// #310: the persistent way back to the portal root reads as the same
 	// words the root list and the login/accept-invite choosers use --
-	// engagementLabel, one function, so all of them agree. Falls back to
-	// the bare Practice name while the identity load hasn't resolved yet
-	// (`still draws the bar when the Practice's identity is not yet
-	// known`, portal-authenticated-layout.svelte.spec.ts) rather than
-	// formatting an empty createdAt into "Invalid Date".
+	// engagementLabel, one function, so all of them agree. `detail` is
+	// only ever both fields or neither (`EngagementIdentity`'s load
+	// resolves the whole object or the route errors/redirects first), so
+	// this falls back to an empty string in the one state that reaches
+	// it unresolved (`still draws the bar when the Practice's identity is
+	// not yet known`, portal-authenticated-layout.svelte.spec.ts) rather
+	// than calling `engagementLabel` on data that hasn't arrived.
 	const switcherLabel = $derived(
 		detail.practiceName && detail.createdAt
 			? engagementLabel({ practiceName: detail.practiceName, createdAt: detail.createdAt })

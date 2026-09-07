@@ -17,7 +17,7 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { activityLedgerColumns, loadPortalActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
-	import { engagementStatusLabel } from '#lib/clientRegister.js';
+	import { engagementLabel, engagementStatusLabel } from '#lib/clientRegister.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -127,9 +127,19 @@
 	its first section: everything else here is the record's own summary
 	and the way to its documents.
 -->
+<!--
+	#310: `serviceName` is what `PageTitle` folds into `<title>`, and
+	SvelteKit's own client-side navigation announcer reads that title
+	aloud after every route change -- it is how "a change of Engagement
+	is announced" gets met without a bespoke live region. `engagementLabel`
+	rather than the bare Practice name so switching between two
+	Engagements at the same Practice still announces something that
+	differs; the greeting heading above stays plain, since a distinguishing
+	fact belongs in what is spoken, not necessarily in what is read.
+-->
 <RecordDetail
 	title={detail ? `Welcome to ${detail.practiceName}` : ''}
-	serviceName={page.data.practiceName}
+	serviceName={engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })}
 	{summary}
 	{actions}
 	sections={detail ? [{ heading: 'Everything that has happened', content: activitySection }] : []}
