@@ -39,6 +39,17 @@ type Detail struct {
 	// renders exactly the controls the write endpoint will accept without
 	// copying the role table into Svelte.
 	StatusMoves []string `json:"statusMoves"`
+
+	// ClientPortalInviteStatus/ClientEmailSuppressed/ClientHasEmail
+	// (#255) are the Client's portal-invite state, using
+	// client.FetchPortalInviteState -- the same derivation the Clients
+	// list's own PortalInviteStatus/EmailSuppressed carry, reinstated
+	// here so the Engagement hub can state it as standing information
+	// (never invited / pending / accepted, and whether the address can
+	// even be invited) rather than only as feedback after a Send.
+	ClientPortalInviteStatus *string `json:"clientPortalInviteStatus,omitempty"`
+	ClientEmailSuppressed    bool    `json:"clientEmailSuppressed"`
+	ClientHasEmail           bool    `json:"clientHasEmail"`
 }
 
 // DetailHandler views one Engagement's basic detail: every Staff role
@@ -99,6 +110,16 @@ func DetailHandler() http.Handler {
 			d.DueDate = &dueDate.String
 		}
 		d.StatusMoves = legalMoves(reader, d.Status)
+
+		portalState, err := client.FetchPortalInviteState(r.Context(), tx, d.ClientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		d.ClientPortalInviteStatus = portalState.Status
+		d.ClientEmailSuppressed = portalState.EmailSuppressed
+		d.ClientHasEmail = portalState.HasEmail
 
 		apierr.WriteJSON(w, http.StatusOK, d)
 	})

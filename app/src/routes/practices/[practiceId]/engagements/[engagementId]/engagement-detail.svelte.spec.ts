@@ -48,6 +48,9 @@ interface Detail {
 	createdAt: string;
 	dueDate?: string;
 	statusMoves: string[];
+	clientPortalInviteStatus?: string;
+	clientEmailSuppressed?: boolean;
+	clientHasEmail?: boolean;
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -438,6 +441,114 @@ function pdfBlobResponse(): Response {
 // what this page owns is deciding whether that prop is passed at all --
 // Owner/Admin per the endpoint's own OwnerAndAdmin gate (ADR-0008's money
 // row), never rendered for a role the endpoint would 403.
+// #255: the Client's portal-invite state, shown as standing information
+// on the summary, and the Contract section's own block while she has
+// never been invited.
+describe("the Client's portal-invite state and the Contract section's block (#255)", () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	const draftContract = {
+		engagementId: 'engagement-1',
+		status: 'draft',
+		prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
+		mergeFields: [],
+		values: {}
+	};
+
+	function mockDraftContract() {
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftContract));
+			return respond(path);
+		});
+	}
+
+	it('reads "Never invited" on the summary when the Client has never been invited', async () => {
+		await setup(fixtureDetail);
+
+		await expect.element(testPage.getByText('Portal invite', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Never invited')).toBeVisible();
+	});
+
+	it('reads the pending word once the fixture reports a pending invite', async () => {
+		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'pending' });
+
+		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
+	});
+
+	it('offers "Send portal invite" while never invited', async () => {
+		await setup(fixtureDetail);
+
+		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).toBeVisible();
+	});
+
+	it('withholds "Send portal invite" once the Client has accepted one', async () => {
+		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'accepted' });
+
+		expect(testPage.getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
+	});
+
+	it('disables Send Contract and names the ordering while the Client has never been invited', async () => {
+		mockDraftContract();
+		await render(Page, {
+			data: { ...fixtureDetail, session: sessionFor() },
+			params: fixture.params
+		});
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
+		await expect
+			.element(testPage.getByText(/send a portal invite to this client before sending the contract/i))
+			.toBeVisible();
+	});
+
+	it('enables Send Contract once the Client has a pending or accepted invite', async () => {
+		mockDraftContract();
+		await render(Page, {
+			data: { ...fixtureDetail, clientPortalInviteStatus: 'pending', session: sessionFor() },
+			params: fixture.params
+		});
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+		expect(
+			testPage
+				.getByText(/send a portal invite to this client before sending the contract/i)
+				.elements()
+		).toHaveLength(0);
+	});
+
+	it('disables "Send portal invite" and states the reason once the Client has no email on file', async () => {
+		await setup({ ...fixtureDetail, clientHasEmail: false });
+
+		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).toBeDisabled();
+		await expect
+			.element(testPage.getByText(/no email on file, so the client cannot be invited yet/i))
+			.toBeVisible();
+	});
+
+	it('lifts the Contract section\'s block in one click once a portal invite is sent, without a reload', async () => {
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftContract));
+			if (path.endsWith('/portal-invite') && init?.method === 'POST') {
+				return Promise.resolve(jsonResponse({ inviteToken: 'a-fresh-token' }));
+			}
+			return respond(path);
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, session: sessionFor() },
+			params: fixture.params
+		});
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
+
+		await testPage.getByRole('button', { name: 'Send portal invite' }).click();
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
+	});
+});
+
 describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', () => {
 	const signedContract = {
 		engagementId: 'engagement-1',

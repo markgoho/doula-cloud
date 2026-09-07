@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
+	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -59,49 +60,6 @@
 		// stay up until the new filter's first page arrives.
 		clients.abandon();
 		await goto(clientsPath(checked));
-	}
-
-	// #346: labels for portal_invite_outbox's states, plus "accepted"
-	// (from client_portal_users.identity_uid) and the absent-key
-	// fallback below for a Client never invited at all. "complained"
-	// reads as informational -- the mail arrived, re-inviting will not
-	// help -- unlike "bounced"/"dead_lettered", which ask for one.
-	const portalInviteStatusLabel: Record<string, string> = {
-		pending: 'Invite pending',
-		sent: 'Invite sent',
-		bounced: 'Bounced — needs re-invite',
-		dead_lettered: 'Dead-lettered — needs re-invite',
-		complained: 'Marked as spam (no action needed)',
-		accepted: 'Accepted'
-	};
-
-	// #785: the same two failed states read differently once the address
-	// is suppressed (ADR-0029). The map above predates #733's send-time
-	// guard and was correct when it was written: a re-invite was worth a
-	// try. It no longer is -- a send to a suppressed address is refused
-	// before Mailgun is asked and dead-letters immediately, so the only
-	// move that changes anything is lifting the block on **Blocked email
-	// addresses**. Keyed on the suppression rather than folded into the
-	// map above because the outbox status does not change when Staff
-	// clear one: the row stays 'bounced'/'dead_lettered' afterwards, and
-	// re-invite becomes the right answer again.
-	const suppressedPortalInviteStatusLabel: Record<string, string> = {
-		bounced: 'Bounced — unblock the address to invite again',
-		dead_lettered: 'Not sent — unblock the address to invite again'
-	};
-
-	// True when this row's words are the suppressed pair above, so the
-	// cell also offers the screen those words name.
-	function isBlockedInvite(client: ClientListItem): boolean {
-		if (!client.emailSuppressed || !client.portalInviteStatus) return false;
-		return Object.hasOwn(suppressedPortalInviteStatusLabel, client.portalInviteStatus);
-	}
-
-	function portalInviteStatusText(client: ClientListItem): string {
-		const status = client.portalInviteStatus;
-		if (!status) return 'Never invited';
-		if (isBlockedInvite(client)) return suppressedPortalInviteStatusLabel[status];
-		return portalInviteStatusLabel[status] ?? 'Never invited';
 	}
 
 	// ADR-0017: a pending Engagement Request shows on its Client's row.

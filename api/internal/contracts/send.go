@@ -5,14 +5,26 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 )
+
+// msgNoPortalInvite is what a Staff member sees when Send is refused
+// because the Engagement's Client has never been sent a portal invite
+// (#255): a Contract that moves to 'sent' is reachable only through the
+// Client portal, and the portal is reachable only by accepting an
+// invite, so sending one to a Client with none would produce a Contract
+// nothing could move out of 'sent'. Named as the reason directly, per
+// the ticket's "a reason a person can act on" -- the Engagement page's
+// own "Send portal invite" action is the way out.
+const msgNoPortalInvite = "this client has not been invited to the portal yet"
 
 // sendPushPayload is the content-free payload delivered to the Client's
 // push subscription(s) on Send -- per the ticket's "no Contract content
@@ -26,7 +38,14 @@ type sendPushPayload struct {
 
 // PostSendContractHandler transitions the Contract for :engagementId from
 // 'draft' to 'sent' -- the only transition it permits; any other current
-// status 409s. On success it notifies the Client's registered push
+// status 409s. It also refuses (409, failed-precondition) once the
+// Contract is otherwise sendable if the Engagement's Client has never
+// been sent a portal invite (#255) -- pending or accepted both satisfy
+// it, since a pending Client can still accept and reach the Contract;
+// only "never invited at all" is refused. That check runs before any
+// write, so a refused Send leaves the Contract a draft, writes no
+// activity entry, and sends no push -- identical to the not-a-draft
+// refusal above. On success it notifies the Client's registered push
 // subscription(s) with sendPushPayload via pusher, the #61 Pusher
 // interface. Must be mounted behind staffauth.Middleware.
 func PostSendContractHandler(pusher push.Pusher) http.Handler {
@@ -48,6 +67,17 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 		}
 		if ok, refusal := TransitionSend.Check(Status(status)); !ok {
 			apierr.WriteError(w, refusal, http.StatusConflict)
+			return
+		}
+
+		invited, err := clientHasPortalInvite(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !invited {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgNoPortalInvite, nil)
 			return
 		}
 
@@ -84,6 +114,30 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
+}
+
+// clientHasPortalInvite reports whether engagementID's Client has ever
+// been sent a portal invite -- client.FetchPortalInviteState's Status
+// being non-nil, the same "pending or accepted, never invited is the
+// only refusal" rule the shared derivation already encodes (#255). Using
+// that function rather than a bare EXISTS keeps this check and the
+// Engagement page's own "never invited" readout answering from the one
+// place, per the ticket's "do not fork it".
+func clientHasPortalInvite(ctx context.Context, tx *sql.Tx, engagementID string) (bool, error) {
+	var clientID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT client_id FROM engagements WHERE id = $1`,
+		engagementID,
+	).Scan(&clientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveContractRequest already proved the Engagement exists
+		return false, fmt.Errorf("contracts: resolve engagement client: %w", err)
+	}
+	state, err := client.FetchPortalInviteState(ctx, tx, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("contracts: fetch client portal invite state: %w", err)
+	}
+	return state.Status != nil, nil
 }
 
 // notifyClient sends sendPushPayload to every push subscription

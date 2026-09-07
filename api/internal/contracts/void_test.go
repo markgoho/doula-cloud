@@ -177,7 +177,8 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-after-void"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedPendingPortalInvite(t, db, clientID)
 	seedContractTemplate(t, db, practiceID, mergeFieldProse)
 	oldObjectPath := contracts.SignedPDFObjectPath(engagementID)
 	seedSignedContract(t, db, engagementID, oldObjectPath)

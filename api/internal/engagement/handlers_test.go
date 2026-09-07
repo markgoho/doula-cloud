@@ -220,6 +220,60 @@ func TestDetailHandler_StatusMoves(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_ClientPortalState proves Detail's #255 fields --
+// ClientPortalInviteStatus/ClientEmailSuppressed/ClientHasEmail -- read
+// client.FetchPortalInviteState exactly, the same derivation the Clients
+// list's own PortalInviteStatus/EmailSuppressed use, reinstated on the
+// Engagement hub as standing information.
+func TestDetailHandler_ClientPortalState(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "staff-client-portal-state"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+
+	_, neverInvitedEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Never Invited", "never-invited@example.com", "active")
+
+	pendingClientID, pendingEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Pending Client", "pending-client@example.com", "active")
+	testdb.SeedPendingPortalInvite(t, db, pendingClientID)
+
+	acceptedClientID, acceptedEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Accepted Client", "accepted-client@example.com", "active")
+	testdb.SeedPortalUser(t, db, "client-portal-state-accepted", acceptedClientID)
+
+	_, noEmailEngagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "No Email Client", "", "active")
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	fetchDetail := func(engagementID string) engagement.Detail {
+		t.Helper()
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		var d engagement.Detail
+		if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return d
+	}
+
+	if d := fetchDetail(neverInvitedEngagementID); d.ClientPortalInviteStatus != nil || !d.ClientHasEmail {
+		t.Fatalf("never-invited detail = %+v, want nil status and hasEmail true", d)
+	}
+
+	if d := fetchDetail(pendingEngagementID); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "pending" {
+		t.Fatalf("pending detail status = %v, want \"pending\"", d.ClientPortalInviteStatus)
+	}
+
+	if d := fetchDetail(acceptedEngagementID); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "accepted" {
+		t.Fatalf("accepted detail status = %v, want \"accepted\"", d.ClientPortalInviteStatus)
+	}
+
+	if d := fetchDetail(noEmailEngagementID); d.ClientHasEmail {
+		t.Fatal("no-email detail hasEmail = true, want false")
+	}
+}
+
 func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-id"
