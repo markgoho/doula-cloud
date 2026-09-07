@@ -1,6 +1,7 @@
 package testdb_test
 
 import (
+	"database/sql"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -449,6 +450,40 @@ func TestSeedPortalUser(t *testing.T) {
 	}
 	if identityUID != "seed-portal-user-uid" {
 		t.Fatalf("identity_uid = %q, want %q", identityUID, "seed-portal-user-uid")
+	}
+}
+
+// TestSeedPendingPortalInvite proves both rows land: client_portal_users
+// with no identity_uid, and its own portal_invite_outbox row -- the pair
+// portalinvite.invite() leaves behind, distinct from TestSeedPortalUser's
+// accepted (identity_uid set) shape above.
+func TestSeedPendingPortalInvite(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Pending Portal Invite Test Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Pending Invite Client", "pending-invite-client@example.com")
+
+	clientPortalUserID := testdb.SeedPendingPortalInvite(t, db, clientID)
+
+	var identityUID sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT identity_uid FROM client_portal_users WHERE id = $1 AND client_id = $2`,
+		clientPortalUserID, clientID,
+	).Scan(&identityUID); err != nil {
+		t.Fatalf("read seeded client_portal_users row: %v", err)
+	}
+	if identityUID.Valid {
+		t.Fatalf("identity_uid = %q, want NULL (pending, not accepted)", identityUID.String)
+	}
+
+	var outboxCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM portal_invite_outbox WHERE client_portal_user_id = $1`,
+		clientPortalUserID,
+	).Scan(&outboxCount); err != nil {
+		t.Fatalf("count seeded outbox rows: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Fatalf("outbox rows = %d, want 1", outboxCount)
 	}
 }
 
