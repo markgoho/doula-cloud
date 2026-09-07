@@ -30,6 +30,14 @@ import (
 // changes nothing that decision depends on -- Replayable stays correct
 // for the same reason it was correct before this field existed.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
+	// The Practice-wide schedule (#263): every scheduled Visit at the
+	// Practice in one read, soonest first, rather than one Engagement page
+	// per Client. AnyStaff, not OwnerAndAdmin -- unlike the money and
+	// Contract roll-ups, ADR-0008's read table does have a row for this
+	// noun, and the handler applies its contractor half itself as a row
+	// filter rather than as a refusal. See PracticeScheduleHandler's own
+	// doc comment.
+	g.Get("/api/practices/{practiceId}/visits", staffauth.AnyStaff, PracticeScheduleHandler())
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, ListHandler())
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits", true, CreateHandler())
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",

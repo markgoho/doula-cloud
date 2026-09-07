@@ -56,6 +56,12 @@
 		const items = [
 			{ label: 'Overview', href: overview, current: path === overview },
 			{ label: 'Clients', href: resolve('/practices/[practiceId]/clients', { practiceId }) },
+			// The Practice-wide schedule (#263). Outside the admin block on
+			// purpose: `GET .../visits` is `anyStaff`, ADR-0008's
+			// Engagements/Visits/Messages row, and a contractor Doula gets a
+			// shorter list rather than a refusal -- so offering it to every
+			// role is a promise the endpoint keeps.
+			{ label: 'Schedule', href: resolve('/practices/[practiceId]/schedule', { practiceId }) },
 			...(isAdmin
 				? [
 						// Invoices is the Practice's money in, Billing its money

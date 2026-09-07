@@ -148,7 +148,17 @@ describe('Staff authenticated layout', () => {
 });
 
 describe('the nav', () => {
-	it.each(['Overview', 'Clients', 'Invoices', 'Contracts', 'Billing', 'Staff', 'Offers', 'Settings'])(
+	it.each([
+		'Overview',
+		'Clients',
+		'Schedule',
+		'Invoices',
+		'Contracts',
+		'Billing',
+		'Staff',
+		'Offers',
+		'Settings'
+	])(
 		'offers %s to an Owner',
 		async (label) => {
 			await setup({ roles: ['owner'] });
@@ -170,7 +180,7 @@ describe('the nav', () => {
 		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
 	});
 
-	it.each(['Overview', 'Clients', 'Offers', 'Settings'])(
+	it.each(['Overview', 'Clients', 'Schedule', 'Offers', 'Settings'])(
 		'still offers %s to a Doula',
 		async (label) => {
 			await setup({ roles: ['doula'] });

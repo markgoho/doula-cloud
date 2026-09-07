@@ -1,10 +1,11 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import type { LabeledValue } from '#lib/roles.js';
 import Select from './Select.svelte';
 
 interface SetupOptions {
-	options?: string[];
+	options?: readonly (string | LabeledValue)[];
 	value?: string;
 	placeholder?: string;
 	disabled?: boolean;
@@ -40,6 +41,27 @@ describe('Select.svelte', () => {
 		await expect
 			.element(page.getByRole('combobox').getByRole('option', { name: 'Birth center' }))
 			.toBeInTheDocument();
+	});
+
+	// #263: the Practice-wide schedule's Doula filter stores a staff id and
+	// shows a person's name, and two Doulas at one agency can share a name
+	// -- so an option's stored value and its word are not always the same
+	// string.
+	it('takes a value/label pair as well as a bare string, storing the value and showing the label', async () => {
+		const onChange = vi.fn();
+		await setup({
+			options: [
+				{ value: 'staff-1', label: 'Bo Ng' },
+				{ value: 'staff-2', label: 'Bo Ng (postpartum)' }
+			],
+			onChange
+		});
+
+		await expect
+			.element(page.getByRole('combobox').getByRole('option', { name: 'Bo Ng', exact: true }))
+			.toBeInTheDocument();
+		await page.getByRole('combobox').selectOptions('Bo Ng (postpartum)');
+		expect(onChange).toHaveBeenCalledWith('staff-2');
 	});
 
 	it('selects the option matching the bound value', async () => {
