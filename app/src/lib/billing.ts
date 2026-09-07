@@ -23,9 +23,22 @@ export interface LedgerPage {
 	hasMore: boolean;
 }
 
+/** What one credit currently costs, mirroring billing.CreditPrice (#285):
+ * an integer minor unit plus an ISO 4217 currency code, read live off the
+ * configured Stripe Price -- never a float, never a pre-formatted string,
+ * and never a second copy of the number. */
+export interface CreditPrice {
+	unitAmountCents: number;
+	currency: string;
+}
+
 export interface Balance {
 	balance: number;
 	ledger: LedgerPage;
+	/** Absent, not zero, when the BFF couldn't read it from Stripe -- no
+	 * credentials, or Stripe unreachable. The Billing screen's price
+	 * region reads that as "unavailable", never as "free". */
+	price?: CreditPrice;
 }
 
 /** What each `credit_ledger` origin is called on the Billing screen.

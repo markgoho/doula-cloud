@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -36,12 +37,24 @@ type LedgerPage struct {
 	HasMore    bool          `json:"hasMore"`
 }
 
+// CreditPrice is what one credit currently costs, read live off the
+// configured Stripe Price rather than held anywhere else (#285) --
+// UnitAmountCents and Currency mirror Stripe's own unit_amount and
+// currency fields.
+type CreditPrice struct {
+	UnitAmountCents int64  `json:"unitAmountCents"`
+	Currency        string `json:"currency"`
+}
+
 // BalanceResponse is the body of GetBalanceHandler's response: a Practice's
 // current derived balance plus one page of the ledger rows that produced
-// it, most recent first.
+// it, most recent first, and the current credit Price if Stripe could be
+// reached. Price is absent, not zero, when it couldn't -- the Billing
+// screen reads that as "unavailable", never as "free" (#285).
 type BalanceResponse struct {
-	Balance int        `json:"balance"`
-	Ledger  LedgerPage `json:"ledger"`
+	Balance int          `json:"balance"`
+	Ledger  LedgerPage   `json:"ledger"`
+	Price   *CreditPrice `json:"price,omitempty"`
 }
 
 // Balance returns a Practice's current billing credit balance, derived by
@@ -100,11 +113,17 @@ func ledgerHistory(ctx context.Context, tx *sql.Tx, practiceID string, after *pa
 }
 
 // GetBalanceHandler reads a Practice's billing credit balance and ledger
-// history. Owner and Admin only (ADR-0008's read table) -- a Doula never
-// reaches it, enforced by the "owner","admin" role declaration on this
-// route's GatedRouter mount in main.go, not inside this handler. Must be
-// mounted behind staffauth.Middleware.
-func GetBalanceHandler() http.Handler {
+// history, plus the current credit Price. Owner and Admin only (ADR-0008's
+// read table) -- a Doula never reaches it, enforced by the "owner","admin"
+// role declaration on this route's GatedRouter mount in main.go, not
+// inside this handler. Must be mounted behind staffauth.Middleware.
+//
+// client.CreditPrice's failure -- no Stripe credentials, or Stripe
+// unreachable -- never fails this read: the balance and ledger are the
+// Practice's own data and owe nothing to Stripe being up, so Price is
+// simply left off the response and logged instead of returned as an
+// error.
+func GetBalanceHandler(client StripeClient) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -147,6 +166,13 @@ func GetBalanceHandler() http.Handler {
 			ledger.NextCursor = &next
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, BalanceResponse{Balance: balance, Ledger: ledger})
+		var price *CreditPrice
+		if creditPrice, err := client.CreditPrice(r.Context()); err != nil {
+			log.Printf("billing: read credit price: %v", err)
+		} else {
+			price = &creditPrice
+		}
+
+		apierr.WriteJSON(w, http.StatusOK, BalanceResponse{Balance: balance, Ledger: ledger, Price: price})
 	})
 }

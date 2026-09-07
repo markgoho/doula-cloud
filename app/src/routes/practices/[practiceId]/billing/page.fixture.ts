@@ -23,7 +23,8 @@ export const data: Balance = {
 			{ origin: 'consumption', quantity: -8, createdAt: '2026-03-01T00:00:00Z' }
 		],
 		hasMore: false
-	}
+	},
+	price: { unitAmountCents: 2000, currency: 'usd' }
 };
 
 export const fixture: RouteFixture<RouteParameters> = {

@@ -24,6 +24,16 @@ type FakeStripeClient struct {
 	CreateCheckoutSessionErr error
 	RefundPaymentErr         error
 
+	// CreditPriceUnitAmountCents and CreditPriceCurrency are what
+	// CreditPrice returns by default -- the live $20.00 USD Price (#448) --
+	// so a test that doesn't care about the exact figure still gets a
+	// realistic one. CreditPriceErr, when set, makes CreditPrice fail
+	// instead, the way it does with no Stripe credentials or an
+	// unreachable Stripe.
+	CreditPriceUnitAmountCents int64
+	CreditPriceCurrency        string
+	CreditPriceErr             error
+
 	// ReplayedRefundID, when set, is returned by every RefundPayment
 	// call -- what Stripe does when a retry carries an idempotency key
 	// it has already seen.
@@ -38,9 +48,26 @@ type RefundCall struct {
 	AmountCents     int64
 }
 
-// NewFakeStripeClient returns a FakeStripeClient with no recorded calls.
+// fakeCreditPriceUnitAmountCents is NewFakeStripeClient's default
+// CreditPrice -- the live $20.00 USD credit Price (#448), mirrored in
+// balance_test.go's own seedUnitPriceCents for the same reason.
+const fakeCreditPriceUnitAmountCents = 2000
+
+// NewFakeStripeClient returns a FakeStripeClient with no recorded calls,
+// its CreditPrice defaulted to the live $20.00 USD credit Price (#448).
 func NewFakeStripeClient() *FakeStripeClient {
-	return &FakeStripeClient{}
+	return &FakeStripeClient{CreditPriceUnitAmountCents: fakeCreditPriceUnitAmountCents, CreditPriceCurrency: "usd"}
+}
+
+// CreditPrice returns a CreditPrice built from CreditPriceUnitAmountCents
+// and CreditPriceCurrency, or CreditPriceErr if a test set one.
+func (f *FakeStripeClient) CreditPrice(_ context.Context) (CreditPrice, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.CreditPriceErr != nil {
+		return CreditPrice{}, f.CreditPriceErr
+	}
+	return CreditPrice{UnitAmountCents: f.CreditPriceUnitAmountCents, Currency: f.CreditPriceCurrency}, nil
 }
 
 // CreateCustomer returns a deterministic fake Stripe Customer id, or

@@ -69,6 +69,13 @@ const sessionStub = {
 };
 const dataWithSession = { ...data, session: sessionStub };
 
+// SIFERS setup() for the price describe block below (#285) -- the rest of
+// this file's describe blocks predate that convention and repeat the same
+// render() call inline; left as-is rather than retrofitted here.
+async function renderBilling(overrides: Partial<typeof dataWithSession> = {}) {
+	await render(Page, { params: fixture.params, data: { ...dataWithSession, ...overrides } });
+}
+
 describe('the way back to an approval an empty balance interrupted (#502)', () => {
 	it('offers the remembered approval screen', async () => {
 		sessionStorage.setItem('engagement-request-approval-return', approvalReturnPath);
@@ -119,6 +126,34 @@ describe('what a Credit buys (#286)', () => {
 		await render(Page, { params: fixture.params, data: dataWithSession });
 
 		await expect.element(testPage.getByLabelText('Quantity')).toHaveValue(5);
+	});
+});
+
+describe('what a Credit costs (#285)', () => {
+	it('states the unit price and the subtotal for the default quantity', async () => {
+		await renderBilling();
+
+		await expect.element(testPage.getByText('$20.00')).toBeVisible();
+		await expect.element(testPage.getByText('$100.00')).toBeVisible();
+		await expect
+			.element(testPage.getByText('New York sales tax is added at checkout where it applies.'))
+			.toBeVisible();
+	});
+
+	it('tracks the subtotal as the quantity changes', async () => {
+		await renderBilling();
+
+		await testPage.getByLabelText('Quantity').fill('3');
+
+		await expect.element(testPage.getByText('$60.00')).toBeVisible();
+	});
+
+	it('says the price is unavailable, and still renders the balance and buy form, when Stripe could not be read', async () => {
+		await renderBilling({ price: undefined });
+
+		await expect.element(testPage.getByText('Credit price is unavailable right now.')).toBeVisible();
+		await expect.element(testPage.getByText(`Credit balance: ${data.balance}`)).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeVisible();
 	});
 });
 
