@@ -9,6 +9,7 @@ import type { Fetcher } from './fetcher.js';
 
 import type { Field,  } from './planTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { fetchBlob } from './blobDownload.js';
 
 
 
@@ -154,6 +155,26 @@ export async function acknowledgeClientBirthPlan(fetcher: Fetcher, engagementId:
 		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
+}
+
+/** Downloads a rendered PDF of the Birth Plan for engagementId from the
+ * Client-portal route (#306) -- a Blob, not JSON, mirroring contract.ts's
+ * downloadClientSignedContractPdf. Built fresh on every request, never
+ * stored server-side, so this always reflects the Birth Plan's current
+ * answers. Throws with the response body text on a non-2xx response
+ * (e.g. no Birth Plan created yet). */
+export async function downloadClientBirthPlanPdf(fetcher: Fetcher, engagementId: string): Promise<Blob> {
+	return fetchBlob(fetcher, `${clientBirthPlanPath(engagementId)}/pdf`);
+}
+
+/** Downloads a rendered PDF of the Birth Plan for engagementId from the
+ * Practice route (#306) -- mirrors downloadClientBirthPlanPdf above.
+ * Birth Plan only, not generic over plan type: Care Plan has no
+ * Client-facing surface for this PDF to mirror, so the BFF route itself
+ * refuses anything but birth_plan (api/internal/plans/pdf.go), and this
+ * function never gives a caller the chance to ask for another type. */
+export async function downloadBirthPlanPdf(fetcher: Fetcher, practiceId: string, engagementId: string): Promise<Blob> {
+	return fetchBlob(fetcher, `${instancePath(practiceId, engagementId, 'birth_plan')}/pdf`);
 }
 
 /** Sets or clears the answer for fieldId within answers, returning a new

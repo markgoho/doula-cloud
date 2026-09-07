@@ -26,23 +26,27 @@ import (
 // ever reaches Postgres.
 var validPlanTypes = map[string]bool{"care_plan": true, "birth_plan": true}
 
-// fieldTypeSingleSelect and fieldTypeMultiSelect are shared between
-// selectFieldTypes below and instance.go's validateAnswers, which needs to
-// tell a select field's answer shape apart from the others.
+// fieldTypeSingleSelect, fieldTypeMultiSelect, fieldTypeCheckbox,
+// fieldTypeShortText, and fieldTypeSectionHeader are shared across this
+// package -- validFieldTypes below, instance.go's validateAnswers, and
+// pdf.go's rendering, which all need to tell one field type from another.
 const (
-	fieldTypeSingleSelect = "single_select"
-	fieldTypeMultiSelect  = "multi_select"
+	fieldTypeShortText     = "short_text"
+	fieldTypeSingleSelect  = "single_select"
+	fieldTypeMultiSelect   = "multi_select"
+	fieldTypeCheckbox      = "checkbox"
+	fieldTypeSectionHeader = "section_header"
 )
 
 // validFieldTypes is the field-type palette from ADR-0001: the only kinds
 // of field a Plan Template may contain.
 var validFieldTypes = map[string]bool{
-	"short_text":          true,
-	"long_text":           true,
-	fieldTypeSingleSelect: true,
-	fieldTypeMultiSelect:  true,
-	"checkbox":            true,
-	"section_header":      true,
+	fieldTypeShortText:     true,
+	"long_text":            true,
+	fieldTypeSingleSelect:  true,
+	fieldTypeMultiSelect:   true,
+	fieldTypeCheckbox:      true,
+	fieldTypeSectionHeader: true,
 }
 
 var selectFieldTypes = map[string]bool{fieldTypeSingleSelect: true, fieldTypeMultiSelect: true}

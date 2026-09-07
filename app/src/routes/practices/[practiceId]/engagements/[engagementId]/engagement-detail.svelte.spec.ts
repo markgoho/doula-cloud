@@ -397,3 +397,69 @@ describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', ()
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('signed PDF not found');
 	});
 });
+
+// #306: the same PDF a Client can download from the portal, mirrored on
+// this side -- built fresh on every request from the plan's current
+// answers, never a stored snapshot. Birth Plan only, not Care Plan: the
+// decision recorded on #306 scoped the download to Birth Plan alone.
+describe('the Birth Plan PDF download (#306)', () => {
+	const birthPlanInstance = {
+		engagementId: fixture.params.engagementId,
+		planType: 'birth_plan',
+		fields: [
+			{ id: 'location', type: 'single_select', label: 'Planned birth location', options: ['Home', 'Hospital'], order: 0 }
+		],
+		answers: { location: 'Hospital' }
+	};
+
+	async function setupWithBirthPlan(pdfResponse: Response) {
+		await testPage.viewport(1440, 900);
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.endsWith('/plans/birth_plan/pdf')) return Promise.resolve(pdfResponse);
+			if (path.endsWith('/plans/birth_plan')) return Promise.resolve(jsonResponse(birthPlanInstance));
+			return respond(path);
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, session: sessionFor() },
+			params: fixture.params
+		});
+	}
+
+	it('offers no download before a Birth Plan has been created', async () => {
+		await testPage.viewport(1440, 900);
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
+
+		expect(testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).elements()).toHaveLength(0);
+	});
+
+	it('offers a download once a Birth Plan exists', async () => {
+		await setupWithBirthPlan(pdfBlobResponse());
+
+		await expect.element(testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' })).toBeVisible();
+	});
+
+	it('never offers a Care Plan download, even once a Birth Plan exists', async () => {
+		await setupWithBirthPlan(pdfBlobResponse());
+
+		expect(testPage.getByRole('button', { name: 'Download Care Plan (PDF)' }).elements()).toHaveLength(0);
+	});
+
+	it('fetches the pdf path when clicked', async () => {
+		await setupWithBirthPlan(pdfBlobResponse());
+		await testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			`/api/practices/${fixture.params.practiceId}/engagements/${fixture.params.engagementId}/plans/birth_plan/pdf`
+		);
+	});
+
+	it('reports a failed pdf fetch in words', async () => {
+		await setupWithBirthPlan(new Response('no plan instance found for this engagement and plan type', { status: 500 }));
+		await testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
+
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('no plan instance found for this engagement and plan type');
+	});
+});

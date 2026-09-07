@@ -3,7 +3,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { loadClientBirthPlan, acknowledgeClientBirthPlan, type Instance } from '#lib/planInstance.js';
+	import { loadClientBirthPlan, acknowledgeClientBirthPlan, downloadClientBirthPlanPdf, type Instance } from '#lib/planInstance.js';
+	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { formatInstant } from '#lib/dates.js';
 	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -18,6 +19,8 @@
 	let error = $state('');
 	let isAcknowledging = $state(false);
 	let acknowledgeError = $state('');
+	let isDownloadingPdf = $state(false);
+	let downloadError = $state('');
 
 	onMount(async () => {
 		// #311: not applicable, per ADR-0015's suppression rule -- skip the
@@ -45,6 +48,24 @@
 			acknowledgeError = error_ instanceof Error ? error_.message : 'Failed to confirm you read this Birth Plan';
 		} finally {
 			isAcknowledging = false;
+		}
+	}
+
+	// #306: a file she can keep, built fresh from the plan's current
+	// answers rather than a stored snapshot -- there is no "final" Birth
+	// Plan the way a signed Contract has one. A fetch that fails is
+	// reported in words (mirrors contract's own handleDownloadSignedContractPdf),
+	// since triggerBlobDownload's anchor never reaches the DOM tree.
+	async function handleDownloadPdf() {
+		downloadError = '';
+		isDownloadingPdf = true;
+		try {
+			const blob = await downloadClientBirthPlanPdf(apiFetchWithSession, page.params.engagementId!);
+			triggerBlobDownload(blob, 'birth-plan.pdf');
+		} catch (error_) {
+			downloadError = error_ instanceof Error ? error_.message : 'Failed to download Birth Plan';
+		} finally {
+			isDownloadingPdf = false;
 		}
 	}
 </script>
@@ -80,6 +101,16 @@
 		<Heading level={1} text="Birth Plan" />
 		<div class="no-print">
 			<Button label="Print" onClick={() => print()} />
+			<Button
+				label="Download Birth Plan (PDF)"
+				icon="file-text"
+				variant="secondary"
+				onClick={handleDownloadPdf}
+				loading={isDownloadingPdf}
+			/>
+			{#if downloadError}
+				<p role="alert">{downloadError}</p>
+			{/if}
 			{#if instance.clientAcknowledgedAt}
 				<Notice variant="status" message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}." />
 			{:else}

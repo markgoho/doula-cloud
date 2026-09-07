@@ -79,3 +79,40 @@ describe('Client-portal Birth Plan (#311)', () => {
 		pageState.data = { ...pageState.data, offersBirthPlan: true };
 	});
 });
+
+// #306: a file she can keep, built fresh on every request from the plan's
+// current answers -- never a stored snapshot, since a Birth Plan has no
+// "final" event the way a signed Contract does. Mirrors contract.svelte.spec.ts's
+// own download describe block: `fixture`'s own `respond` answers the
+// initial load, and the pdf path is a second fetch this route's own
+// handler makes only once the download button is clicked.
+describe('Client-portal Birth Plan PDF download (#306)', () => {
+	it('offers a download of the Birth Plan, reachable by keyboard and naming the PDF', async () => {
+		apiFetchWithSession.mockImplementation((path: string) =>
+			path.endsWith('/pdf')
+				? Promise.resolve(new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 }))
+				: toApiResponder(fixture)(path)
+		);
+
+		await render(Page);
+		const download = page.getByRole('button', { name: 'Download Birth Plan (PDF)' });
+		await expect.element(download).toBeVisible();
+
+		await download.click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/engagements/engagement-1/birth-plan/pdf');
+	});
+
+	it('reports a failed PDF fetch in words rather than swallowing it', async () => {
+		apiFetchWithSession.mockImplementation((path: string) =>
+			path.endsWith('/pdf')
+				? Promise.resolve(new Response('no birth plan found for this engagement', { status: 500 }))
+				: toApiResponder(fixture)(path)
+		);
+
+		await render(Page);
+		await page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('no birth plan found for this engagement');
+	});
+});

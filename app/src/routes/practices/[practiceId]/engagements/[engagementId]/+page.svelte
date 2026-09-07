@@ -29,6 +29,7 @@
 		loadInstance,
 		createInstance,
 		saveAnswers,
+		downloadBirthPlanPdf,
 		setAnswer,
 		toggleMultiSelectOption,
 		type Instance
@@ -197,6 +198,11 @@
 	// first load has settled, success or failure -- same as isContractLoaded
 	// below.
 	let planLoaded = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+	// #306: Birth Plan only, not Care Plan -- the Client-facing side of
+	// this same download has no Care Plan page to mirror yet, and the
+	// ticket's own decision scoped the PDF to Birth Plan alone.
+	let isDownloadingBirthPlanPdf = $state(false);
+	let downloadBirthPlanPdfError = $state('');
 
 	// Named contractState, not contractSection: that name is already the
 	// RecordDetail section snippet below (content: contractSection), and a
@@ -342,6 +348,23 @@
 				),
 			'Failed to save plan'
 		);
+	}
+
+	// #306: built fresh from the Birth Plan's current answers, never a
+	// stored snapshot -- the same PDF a Client can download from the
+	// portal, mirrored on this side (#280 later moves this control onto
+	// its own Doula-facing page).
+	async function handleDownloadBirthPlanPdf() {
+		downloadBirthPlanPdfError = '';
+		isDownloadingBirthPlanPdf = true;
+		try {
+			const blob = await downloadBirthPlanPdf(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+			triggerBlobDownload(blob, 'birth-plan.pdf');
+		} catch (error_) {
+			downloadBirthPlanPdfError = error_ instanceof Error ? error_.message : 'Failed to download Birth Plan';
+		} finally {
+			isDownloadingBirthPlanPdf = false;
+		}
 	}
 
 	async function loadContractSection() {
@@ -793,6 +816,18 @@
 
 {#snippet birthPlanSection()}
 	{@render planSectionBody('birth_plan', 'Birth Plan')}
+	{#if planLoaded.birth_plan && planState.birth_plan.value}
+		<Button
+			label="Download Birth Plan (PDF)"
+			icon="file-text"
+			variant="secondary"
+			onClick={handleDownloadBirthPlanPdf}
+			loading={isDownloadingBirthPlanPdf}
+		/>
+		{#if downloadBirthPlanPdfError}
+			<p role="alert">{downloadBirthPlanPdfError}</p>
+		{/if}
+	{/if}
 {/snippet}
 
 {#snippet contractSection()}
