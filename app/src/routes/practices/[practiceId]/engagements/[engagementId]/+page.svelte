@@ -45,6 +45,7 @@
 	} from '#lib/planInstance.js';
 	import ContractForm from '#lib/components/molecules/ContractForm.svelte';
 	import ContractStatus from '#lib/components/molecules/ContractStatus.svelte';
+	import ContractView from '#lib/components/molecules/ContractView.svelte';
 	import {
 		loadContract,
 		createContract,
@@ -53,6 +54,8 @@
 		voidContract,
 		downloadSignedContractPdf,
 		setMergeFieldValue,
+		mergeFieldLabel,
+		missingMergeFieldKeys,
 		type Contract
 	} from '#lib/contract.js';
 	import { isDoula, isOwnerOrAdmin } from '#lib/roles.js';
@@ -319,6 +322,16 @@
 	const contractError = $derived(contractState.error);
 	const isContractBusy = $derived(contractState.isBusy);
 	let isContractLoaded = $state(false);
+
+	// #258: block over warn -- the same precondition PostSendContractHandler
+	// enforces server-side, checked here so the Send control never offers a
+	// click that the server would refuse anyway. `contract.values` already
+	// carries the union of scope and money values (contract.ts's
+	// normalizeContract folds moneyValues in at load time), so an Owner/Admin
+	// seeing a filled money field never sees it flagged as missing.
+	const missingMergeFields = $derived(
+		contract ? missingMergeFieldKeys(contract.mergeFields, contract.values) : []
+	);
 
 	// Named invoicesState for the same reason as contractState above.
 	const invoicesState = new SectionState<Invoice[]>([]);
@@ -1130,6 +1143,14 @@
 				onVoid={handleVoidContract}
 				onDownloadPdf={isPracticeOwnerOrAdmin ? handleDownloadSignedContractPdf : undefined}
 			/>
+			<!--
+				#258: Staff reads the same filled document the Client will,
+				before sending it -- the fill-and-render component used to be
+				mounted only on the Client-portal Contract page, so a Doula
+				sent a document she had never seen.
+			-->
+			<Text text="Contract text" />
+			<ContractView prose={contract.prose} values={contract.values} />
 			<ContractForm
 				mergeFields={contract.mergeFields}
 				values={contract.values}
@@ -1139,6 +1160,10 @@
 			{#if contract.status === 'draft'}
 				<Button label="Save Contract" onClick={handleSaveContract} loading={isContractBusy} variant="secondary" />
 				<!--
+					#258: block over warn -- a blank merge field is a legal
+					document defect, so the Send control is withheld with the
+					reason and the offending fields stated, rather than
+					reporting the server's refusal after the click.
 					#255: a Contract sent to a never-invited Client would land
 					in 'sent' with nothing able to move it back out -- reachable
 					only through the portal, which is reachable only by
@@ -1151,7 +1176,15 @@
 					click, which is what lifts the block without a reload
 					(clientPortalOverride above).
 				-->
-				{#if hasNeverInvitedClient}
+				{#if missingMergeFields.length > 0}
+					<Notice
+						variant="info"
+						message={`Fill in every merge field before sending the Contract. Missing: ${missingMergeFields
+							.map((key) => mergeFieldLabel(key))
+							.join(', ')}.`}
+					/>
+					<Button label="Send Contract" disabled loading={isContractBusy} />
+				{:else if hasNeverInvitedClient}
 					<Notice
 						variant="info"
 						message="Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists."

@@ -32,10 +32,18 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	await page.getByRole('button', { name: 'Create Draft Contract' }).click();
 	await expect(page.getByText('Status: draft')).toBeVisible();
 
-	// client_name is prefilled by createContract (contract.go's
-	// prefillClientName); practice_name is not, so filling it in is what
-	// proves the form's own values round-trip through Save.
-	await page.getByLabel('Practice name').fill('Riverside Doulas');
+	// #258: client_name and practice_name are both resolved by
+	// createContract (contract.go's resolveMergeFieldValues) from data the
+	// product already holds, and practice_name already reads Riverside
+	// Doulas -- proven directly, rather than filled in here. The default
+	// seeded template's other three merge fields (scope_of_service, the two
+	// engagement dates, price) have no such column backing them, so Send's
+	// completeness check refuses until they're filled by hand.
+	await expect(page.getByLabel('Practice name')).toHaveValue('Riverside Doulas');
+	await page.getByLabel('Scope of service').fill('12 prenatal visits');
+	await page.getByLabel('Engagement start date').fill('2027-01-01');
+	await page.getByLabel('Engagement end date').fill('2027-06-01');
+	await page.getByLabel('Price').fill('$1,200');
 	await page.getByRole('button', { name: 'Save Contract' }).click();
 
 	await page.getByRole('button', { name: 'Send Contract' }).click();

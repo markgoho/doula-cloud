@@ -570,6 +570,104 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	});
 });
 
+// Mocks the Practice-side GET .../contract response to contract, letting
+// every other section respond from the fixture as normal -- shared by
+// the #258 describe block below.
+function mockContract(contract: Record<string, unknown>) {
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string) => {
+		if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(contract));
+		return respond(path);
+	});
+}
+
+describe("the Contract's merge-field completeness block and filled-text render (#258)", () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	// clientPortalInviteStatus: 'accepted' throughout, so #255's own block
+	// never engages here -- this block is only about #258's own precondition.
+	it('renders the Contract prose with merge values substituted, on the Staff side', async () => {
+		mockContract({
+			engagementId: 'engagement-1',
+			status: 'draft',
+			prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
+			mergeFields: ['practice_name', 'client_name'],
+			values: { practice_name: 'Riverside Doulas', client_name: 'Jamie Rivera' }
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
+			params: fixture.params
+		});
+
+		await expect
+			.element(testPage.getByText('This Contract is between Riverside Doulas and Jamie Rivera.'))
+			.toBeVisible();
+	});
+
+	it('disables Send Contract and names the blank fields while any merge field is unfilled', async () => {
+		mockContract({
+			engagementId: 'engagement-1',
+			status: 'draft',
+			prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
+			mergeFields: ['practice_name', 'client_name'],
+			values: { client_name: 'Jamie Rivera' }
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
+			params: fixture.params
+		});
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
+		await expect
+			.element(
+				testPage.getByText(/fill in every merge field before sending the contract\. missing: practice name\./i)
+			)
+			.toBeVisible();
+	});
+
+	it('enables Send Contract once every merge field has a value', async () => {
+		mockContract({
+			engagementId: 'engagement-1',
+			status: 'draft',
+			prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
+			mergeFields: ['practice_name', 'client_name'],
+			values: { practice_name: 'Riverside Doulas', client_name: 'Jamie Rivera' }
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
+			params: fixture.params
+		});
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+	});
+
+	// #258: for an Owner/Admin reader, GetContractHandler's response splits
+	// a money-tagged key (ADR-0008) into a separate moneyValues field
+	// rather than including it in values -- reading values alone would
+	// render this filled field as blank and flag it as missing.
+	it('renders a filled money-tagged field substituted and does not count it as missing, for an Owner/Admin reader', async () => {
+		mockContract({
+			engagementId: 'engagement-1',
+			status: 'draft',
+			prose: 'This Contract is between {{practice_name}} and {{client_name}} for {{money_price}}.',
+			mergeFields: ['practice_name', 'client_name', 'money_price'],
+			values: { practice_name: 'Riverside Doulas', client_name: 'Jamie Rivera' },
+			moneyValues: { money_price: '$1,200' }
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
+			params: fixture.params
+		});
+
+		await expect
+			.element(testPage.getByText('This Contract is between Riverside Doulas and Jamie Rivera for $1,200.'))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+	});
+});
+
 describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', () => {
 	const signedContract = {
 		engagementId: 'engagement-1',

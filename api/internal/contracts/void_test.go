@@ -205,6 +205,18 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 		t.Fatalf("new contract status = %q, want draft", created.Status)
 	}
 
+	// #258: Send now refuses a Contract with any blank merge field.
+	// client_name is already prefilled from the Engagement's Client, but
+	// mergeFieldProse's other field, price, is still Staff-typed, so it
+	// has to be filled in before Send for this test's own concern (the
+	// recreate-after-void flow) to reach the assertions below.
+	putResp := putContract(t, srv, session, practiceID, engagementID,
+		contracts.MergeFieldValues{clientNameKey: created.Values[clientNameKey], priceKey: testPriceValue})
+	defer putResp.Body.Close()
+	if putResp.StatusCode != http.StatusOK {
+		t.Fatalf("put status = %d, want %d", putResp.StatusCode, http.StatusOK)
+	}
+
 	sendResp := postSendContract(t, srv, session, practiceID, engagementID)
 	defer sendResp.Body.Close()
 	if sendResp.StatusCode != http.StatusOK {
