@@ -621,6 +621,30 @@ describe("the Contract's merge-field completeness block and filled-text render (
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 	});
+
+	// #258: for an Owner/Admin reader, GetContractHandler's response splits
+	// a money-tagged key (ADR-0008) into a separate moneyValues field
+	// rather than including it in values -- reading values alone would
+	// render this filled field as blank and flag it as missing.
+	it('renders a filled money-tagged field substituted and does not count it as missing, for an Owner/Admin reader', async () => {
+		mockContract({
+			engagementId: 'engagement-1',
+			status: 'draft',
+			prose: 'This Contract is between {{practice_name}} and {{client_name}} for {{money_price}}.',
+			mergeFields: ['practice_name', 'client_name', 'money_price'],
+			values: { practice_name: 'Riverside Doulas', client_name: 'Jamie Rivera' },
+			moneyValues: { money_price: '$1,200' }
+		});
+		await render(Page, {
+			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
+			params: fixture.params
+		});
+
+		await expect
+			.element(testPage.getByText('This Contract is between Riverside Doulas and Jamie Rivera for $1,200.'))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+	});
 });
 
 describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', () => {
