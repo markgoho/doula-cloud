@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
@@ -42,6 +43,21 @@ func seedVisit(t *testing.T, db *testdb.DB, engagementID, staffID string) (visit
 		engagementID, staffID,
 	).Scan(&visitID); err != nil {
 		t.Fatalf("seed visit: %v", err)
+	}
+	return visitID
+}
+
+// seedScheduledVisit is seedVisit plus an already-set scheduled_at, for a
+// test that needs to prove ScheduleHandler changes or clears an existing
+// value rather than only ever setting one from nothing.
+func seedScheduledVisit(t *testing.T, db *testdb.DB, engagementID, staffID string, scheduledAt time.Time) (visitID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, $3) RETURNING id`,
+		engagementID, staffID, scheduledAt,
+	).Scan(&visitID); err != nil {
+		t.Fatalf("seed scheduled visit: %v", err)
 	}
 	return visitID
 }

@@ -42,7 +42,16 @@ export const fixture: RouteFixture<RouteParameters> = {
 		if (/\/engagements\/engagement-1$/.test(path)) return jsonResponse(detail);
 		if (path.includes('/visits')) {
 			return jsonResponse({
-				items: [{ visitId: 'visit-1', staffId: 'staff-1', staffName: 'Anne-Marie Ochieng-Whitfield', createdAt: '2026-08-05T00:00:00Z' }],
+				items: [
+					{
+						visitId: 'visit-1',
+						staffId: 'staff-1',
+						staffName: 'Anne-Marie Ochieng-Whitfield',
+						createdAt: '2026-08-05T00:00:00Z',
+						scheduledAt: '2027-03-15T14:30:00Z'
+					},
+					{ visitId: 'visit-2', staffId: 'staff-2', staffName: 'Jordan Reyes', createdAt: '2026-08-06T00:00:00Z' }
+				],
 				hasMore: false
 			});
 		}

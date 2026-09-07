@@ -39,8 +39,12 @@
 		 * names the field as a whole, not each segment. Arrow keys move
 		 * within a segment, Tab moves between them, and a screen reader
 		 * announces each segment's name and value as it is focused.
+		 *
+		 * type="datetime-local" is the same case, plus a time: a Visit's
+		 * scheduled instant (#250) is chosen, not memorized, and carries a
+		 * time of day GOV.UK's three-box Dates pattern has no room for.
 		 */
-		type?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search' | 'number' | 'date';
+		type?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search' | 'number' | 'date' | 'datetime-local';
 		name?: string;
 		placeholder?: string;
 		required?: boolean;

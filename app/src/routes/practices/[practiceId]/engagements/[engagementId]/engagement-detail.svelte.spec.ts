@@ -90,6 +90,35 @@ async function setup(detail: Detail, activityResponse?: Response) {
 	});
 }
 
+// Renders directly rather than through setup(): that helper's own
+// activityResponse-less branch always overwrites apiFetchWithSession
+// with a blanket 403 (its "everything refuses by default" default),
+// which would erase the fixture responder a caller sets up itself -- the
+// #841 test below takes the same direct-render path for the same reason.
+async function renderWithFixtureResponder(
+	respondOverride?: (path: string, init?: RequestInit) => Promise<Response> | undefined
+) {
+	await testPage.viewport(1440, 900);
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+		const overridden = respondOverride?.(path, init);
+		if (overridden) return overridden;
+		return respond(path);
+	});
+	await render(Page, {
+		data: {
+			...fixtureDetail,
+			session: {
+				practiceId: fixture.params.practiceId,
+				practiceName: 'Riverside Doula Collective',
+				roles: [],
+				isContractor: false
+			}
+		},
+		params: fixture.params
+	});
+}
+
 describe('Staff Engagement detail summary', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
@@ -158,6 +187,68 @@ describe('the Activity ledger section (#486)', () => {
 		await setup(fixtureDetail, jsonResponse('nope', 403));
 
 		await expect.element(testPage.getByText('nope')).toBeVisible();
+	});
+});
+
+// #250: a Visit's own scheduled date, distinct from createdAt.
+describe('the Visits section Date column and schedule control (#250)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('shows a formatted date for a scheduled Visit and "Not yet scheduled" for one without', async () => {
+		await renderWithFixtureResponder();
+
+		// The fixture's own two rows (page.fixture.ts): visit-1 carries
+		// scheduledAt, visit-2 carries none. The expected cell text is built
+		// from the same Date methods formatScheduledVisit itself uses
+		// (dates.spec.ts's own reason) rather than a literal UTC string, so
+		// this passes regardless of the runner's own time zone.
+		const scheduled = new Date('2027-03-15T14:30:00Z');
+		const hour12 = scheduled.getHours() % 12 === 0 ? 12 : scheduled.getHours() % 12;
+		const minute = scheduled.getMinutes().toString().padStart(2, '0');
+		const suffix = scheduled.getHours() < 12 ? 'am' : 'pm';
+		const expected = `${scheduled.getDate()} ${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
+		await expect.element(testPage.getByRole('cell', { name: expected, exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Not yet scheduled', exact: true })).toBeVisible();
+	});
+
+	it('sets an unscheduled Visit schedule from its own row control', async () => {
+		const requests: { path: string; body: unknown }[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'PATCH' || !path.endsWith('/schedule')) return;
+			requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+			return Promise.resolve(jsonResponse({ visitId: 'visit-2', scheduledAt: '2027-04-01T09:00:00Z' }));
+		});
+
+		// Jordan Reyes is visit-2, the fixture's unscheduled row (#250) --
+		// its own field is scoped by that row's unique label id. `exact`
+		// excludes the "Add a Visit" form's own field just above the
+		// table, whose label ("...(optional)") contains this one's as a
+		// substring.
+		const field = testPage.getByLabelText('Scheduled date and time', { exact: true }).nth(1);
+		await field.fill('2027-04-01T09:00');
+		await testPage.getByRole('button', { name: 'Update schedule' }).nth(1).click();
+
+		await expect.poll(() => requests).toHaveLength(1);
+		expect(requests[0]!.path).toContain('/visits/visit-2/schedule');
+		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-04-01T09:00').toISOString() });
+	});
+
+	it('creates a Visit already scheduled from the Add a Visit form', async () => {
+		const requests: { path: string; body: unknown }[] = [];
+		await renderWithFixtureResponder((path, init) => {
+			if (!init || init.method !== 'POST' || !path.endsWith('/visits')) return;
+			requests.push({ path, body: init.body ? JSON.parse(init.body as string) : undefined });
+			return Promise.resolve(jsonResponse({ visitId: 'visit-3', staffId: 'staff-1' }, 201));
+		});
+
+		await testPage.getByLabelText('Scheduled date and time (optional)').fill('2027-05-20T10:15');
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+
+		await expect.poll(() => requests).toHaveLength(1);
+		expect(requests[0]!.path).toContain('/visits');
+		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-05-20T10:15').toISOString() });
 	});
 });
 

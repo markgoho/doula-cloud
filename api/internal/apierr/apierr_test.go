@@ -173,3 +173,63 @@ func TestDecodeJSON(t *testing.T) {
 		}
 	})
 }
+
+func TestDecodeJSONOptional(t *testing.T) {
+	type reqBody struct {
+		Name string `json:"name"`
+	}
+
+	t.Run("valid body decodes", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"name":"`+testPayloadName+`"}`))
+
+		var out reqBody
+		if ok := apierr.DecodeJSONOptional(rec, req, &out); !ok {
+			t.Fatalf("DecodeJSONOptional returned false, want true")
+		}
+		if out.Name != testPayloadName {
+			t.Fatalf("decoded = %+v, want {%s}", out, testPayloadName)
+		}
+	})
+
+	t.Run("empty body leaves the zero value and reports success", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", http.NoBody)
+
+		var out reqBody
+		if ok := apierr.DecodeJSONOptional(rec, req, &out); !ok {
+			t.Fatalf("DecodeJSONOptional returned false, want true")
+		}
+		if out.Name != "" {
+			t.Fatalf("decoded = %+v, want the zero value", out)
+		}
+	})
+
+	t.Run("malformed body writes 400 and returns false", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{not json`))
+
+		var out reqBody
+		if ok := apierr.DecodeJSONOptional(rec, req, &out); ok {
+			t.Fatalf("DecodeJSONOptional returned true, want false")
+		}
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("oversized body writes 413 payload-too-large and returns false", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		oversized := bytes.Repeat([]byte("a"), apierr.MaxRequestBodyBytes+1)
+		body := append([]byte(`{"name":"`), append(oversized, []byte(`"}`)...)...)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", bytes.NewReader(body))
+
+		var out reqBody
+		if ok := apierr.DecodeJSONOptional(rec, req, &out); ok {
+			t.Fatalf("DecodeJSONOptional returned true, want false")
+		}
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+		}
+	})
+}

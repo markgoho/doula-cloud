@@ -93,7 +93,8 @@ _Avoid_: Assignment (the product's other word, and it carries no agreement — a
 
 **Visit**:
 A scheduled meeting between a Doula and a Client within an Engagement. May be the birth itself. A Visit's `staff_id` is who is doing *that meeting*; an **Attachment** is who is on the *Engagement*. They are different facts and neither replaces the other — naming a Doula on a Visit is one of the things that attaches her.
-_Client says_: **visits** — "Your visits" as a heading, her own phrasing ("when she comes over", "when Maya came"). Settled on [#433](https://github.com/markgoho/doula-cloud/issues/433): a Client sees the visits on her own Engagement, past and scheduled, with who is coming. There is no client-facing surface yet and a Visit still carries no date ([#250](https://github.com/markgoho/doula-cloud/issues/250)), so the word is decided ahead of the screen rather than after it.
+A Visit's own scheduled instant is a nullable field distinct from `created_at` — settable at creation and changeable (or clearable) afterward by a Doula at the Practice, recorded in the Activity log as its own action. Decided on [#250](https://github.com/markgoho/doula-cloud/issues/250); the richer time model (an end time, a status, a location) stays with [Calendar: scheduling, booking, and availability for Visits (#330)](https://github.com/markgoho/doula-cloud/issues/330).
+_Client says_: **visits** — "Your visits" as a heading, her own phrasing ("when she comes over", "when Maya came"). Settled on [#433](https://github.com/markgoho/doula-cloud/issues/433): a Client sees the visits on her own Engagement, past and scheduled, with who is coming. There is still no client-facing surface, so the word is decided ahead of the screen rather than after it.
 _Avoid_: Appointment (reads clinical/medical-provider)
 
 **Care Plan**:
