@@ -7,6 +7,7 @@
  * unit-tested directly -- mirrors planInstance.ts.
  */
 import type { Fetcher } from './fetcher.js';
+import type { CursorPage } from './paginatedList.svelte.js';
 
 import { MERGE_FIELDS } from './contractTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
@@ -210,4 +211,60 @@ export function setMergeFieldValue(
 	value: string
 ): Record<string, string> {
 	return { ...values, [key]: value };
+}
+
+/** One row of the Practice-wide "Contracts awaiting signature" list
+ * (#273) -- a Draft or Sent Contract, the Engagement it belongs to and
+ * the Client whose signature is outstanding. Mirrors the Go BFF's
+ * AwaitingItem (api/internal/contracts/awaiting.go). `createdAt` is the
+ * Contract's own creation instant, which is also the moment it started
+ * waiting -- the endpoint's own ordering already treats it that way
+ * ("the Contract that has been waiting longest ... belongs at the
+ * top"), so this reuses it rather than tracking a separate per-status
+ * timestamp the BFF does not keep. */
+export interface AwaitingContract {
+	engagementId: string;
+	contractId: string;
+	clientId: string;
+	clientName: string;
+	status: string;
+	createdAt: string;
+}
+
+/** The Practice-wide "Contracts awaiting signature" list's path --
+ * mirrors practiceInvoicesPath in invoice.ts. */
+export function practiceAwaitingContractsPath(practiceId: string, cursor?: string): string {
+	const path = `/api/practices/${practiceId}/contracts/awaiting-signature`;
+	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+}
+
+/** Loads one page of every Contract at the Practice that is Draft or
+ * Sent, oldest first -- mirrors loadWaitingOnReplyPage in
+ * practiceLanding.ts. Throws with the response body text on a non-2xx
+ * response; the route's `load` maps status codes to SvelteKit errors
+ * before calling this, so a throw here is only ever an unexpected
+ * failure. */
+export async function loadPracticeAwaitingContracts(
+	fetcher: Fetcher,
+	practiceId: string,
+	cursor?: string
+): Promise<CursorPage<AwaitingContract>> {
+	const response = await fetcher(practiceAwaitingContractsPath(practiceId, cursor));
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/** The two statuses this list ever shows, in the words a person reads --
+ * "draft" is work the Practice still owes, "sent" is work the Client
+ * still owes. An unknown status falls through to itself rather than to
+ * a blank, mirroring invoiceStatusLabel. */
+const awaitingContractStatusLabels: Record<string, string> = {
+	draft: 'Draft',
+	sent: 'Sent'
+};
+
+export function awaitingContractStatusLabel(status: string): string {
+	return awaitingContractStatusLabels[status] ?? status;
 }

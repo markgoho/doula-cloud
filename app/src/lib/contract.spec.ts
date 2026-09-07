@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	awaitingContractStatusLabel,
 	createContract,
 	downloadClientSignedContractPdf,
 	downloadSignedContractPdf,
 	fillProse,
 	loadClientContract,
 	loadContract,
+	loadPracticeAwaitingContracts,
 	mergeFieldLabel,
+	practiceAwaitingContractsPath,
 	saveContractValues,
 	sendContract,
 	setMergeFieldValue,
@@ -307,5 +310,69 @@ describe('mergeFieldLabel', () => {
 
 	it('falls back to the raw key for an unknown merge field', () => {
 		expect(mergeFieldLabel('some_ad_hoc_token')).toBe('some_ad_hoc_token');
+	});
+});
+
+describe('practiceAwaitingContractsPath', () => {
+	it('addresses the Practice-wide awaiting-signature roll-up', () => {
+		expect(practiceAwaitingContractsPath('practice-1')).toBe(
+			'/api/practices/practice-1/contracts/awaiting-signature'
+		);
+	});
+
+	it('carries an encoded cursor when there is one', () => {
+		expect(practiceAwaitingContractsPath('practice-1', 'a+b/c=')).toBe(
+			'/api/practices/practice-1/contracts/awaiting-signature?cursor=a%2Bb%2Fc%3D'
+		);
+	});
+});
+
+describe('loadPracticeAwaitingContracts', () => {
+	const row = {
+		engagementId: 'eng-1',
+		contractId: 'contract-1',
+		clientId: 'client-1',
+		clientName: 'Ada',
+		status: 'draft',
+		createdAt: '2026-01-01T00:00:00Z'
+	};
+
+	it('fetches the Practice-wide path and returns the page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false }));
+
+		const result = await loadPracticeAwaitingContracts(fetcher, 'practice-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts/awaiting-signature');
+		expect(result).toEqual({ items: [row], hasMore: false });
+	});
+
+	it('carries the cursor to the next page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+
+		await loadPracticeAwaitingContracts(fetcher, 'practice-1', 'cursor-1');
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/contracts/awaiting-signature?cursor=cursor-1'
+		);
+	});
+
+	it('throws with the response body text on a non-2xx response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not permitted', 403));
+
+		await expect(loadPracticeAwaitingContracts(fetcher, 'practice-1')).rejects.toThrow('not permitted');
+	});
+});
+
+describe('awaitingContractStatusLabel', () => {
+	it('labels a draft Contract as work the Practice still owes', () => {
+		expect(awaitingContractStatusLabel('draft')).toBe('Draft');
+	});
+
+	it('labels a sent Contract as work the Client still owes', () => {
+		expect(awaitingContractStatusLabel('sent')).toBe('Sent');
+	});
+
+	it('falls back to the raw status for anything unrecognized', () => {
+		expect(awaitingContractStatusLabel('signed')).toBe('signed');
 	});
 });

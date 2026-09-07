@@ -65,6 +65,12 @@
 						// Both endpoints are `ownerAndAdmin`, so both sit behind
 						// the same flag.
 						{ label: 'Invoices', href: resolve('/practices/[practiceId]/invoices', { practiceId }) },
+						// The Contract half of the same question (#273): who is
+						// still owed a signature, rather than a payment. Same
+						// `ownerAndAdmin` declaration the endpoint's own doc
+						// comment argues (ADR-0008 has no Practice-wide row), so
+						// it sits behind the same flag rather than a new one.
+						{ label: 'Contracts', href: resolve('/practices/[practiceId]/contracts', { practiceId }) },
 						{ label: 'Billing', href: resolve('/practices/[practiceId]/billing', { practiceId }) },
 						{ label: 'Staff', href: resolve('/practices/[practiceId]/staff', { practiceId }) }
 					]
