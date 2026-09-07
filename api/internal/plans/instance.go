@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
@@ -30,6 +31,13 @@ type InstanceResponse struct {
 	PlanType     string  `json:"planType"`
 	Fields       []Field `json:"fields"`
 	Answers      Answers `json:"answers"`
+
+	// ClientAcknowledgedAt is when the Client last confirmed she has read
+	// this Plan Instance (#301, v1: Birth Plan only -- always nil for a
+	// Care Plan, which never reaches a Client-portal write). Nil means
+	// never acknowledged, or acknowledged before a Staff edit since
+	// cleared it (PutInstanceHandler).
+	ClientAcknowledgedAt *time.Time `json:"clientAcknowledgedAt,omitempty"`
 }
 
 // PutInstanceRequest is the body of a PUT Plan Instance request: a full
@@ -129,7 +137,7 @@ func GetInstanceHandler() http.Handler {
 			return
 		}
 
-		fields, answers, err := fetchInstance(r.Context(), tx, engagementID, planType)
+		fields, answers, clientAcknowledgedAt, err := fetchInstance(r.Context(), tx, engagementID, planType)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
 			return
@@ -140,7 +148,7 @@ func GetInstanceHandler() http.Handler {
 			return
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers.nonEmpty()}
+		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers.nonEmpty(), ClientAcknowledgedAt: clientAcknowledgedAt}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
@@ -156,7 +164,7 @@ func PutInstanceHandler() http.Handler {
 			return
 		}
 
-		fields, _, err := fetchInstance(r.Context(), tx, engagementID, planType)
+		fields, _, _, err := fetchInstance(r.Context(), tx, engagementID, planType)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no plan instance found for this engagement and plan type", http.StatusNotFound)
 			return
@@ -185,10 +193,21 @@ func PutInstanceHandler() http.Handler {
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE plan_instances SET answers = $1 WHERE engagement_id = $2 AND plan_type = $3`,
+		// A Staff edit that actually changes the stored answers resets
+		// the Client's acknowledgement (#301's decision): the CASE
+		// compares the row's pre-update `answers` -- every SET expression
+		// in one UPDATE statement sees the same pre-update row -- against
+		// the incoming value, atomically, rather than a separate read-then-
+		// write that could race a concurrent PUT or acknowledge.
+		var clientAcknowledgedAt sql.NullTime
+		if err := tx.QueryRowContext(r.Context(),
+			`UPDATE plan_instances
+			 SET answers = $1::jsonb,
+			     client_acknowledged_at = CASE WHEN answers IS DISTINCT FROM $1::jsonb THEN NULL ELSE client_acknowledged_at END
+			 WHERE engagement_id = $2 AND plan_type = $3
+			 RETURNING client_acknowledged_at`,
 			answersJSON, engagementID, planType,
-		); err != nil {
+		).Scan(&clientAcknowledgedAt); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -214,40 +233,52 @@ func PutInstanceHandler() http.Handler {
 			return
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers}
+		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
 
-// fetchInstance reads the field snapshot and answers stored for
-// engagementID + planType, reporting sql.ErrNoRows (wrapped, so
-// errors.Is still matches) if no Plan Instance exists yet -- callers
+// fetchInstance reads the field snapshot, answers, and Client
+// acknowledgement (#301) stored for engagementID + planType, reporting
+// sql.ErrNoRows (wrapped, so errors.Is still matches) if no Plan Instance
+// exists yet -- callers
 // translate that into a 404.
-func fetchInstance(ctx context.Context, tx *sql.Tx, engagementID, planType string) ([]Field, Answers, error) {
+func fetchInstance(ctx context.Context, tx *sql.Tx, engagementID, planType string) ([]Field, Answers, *time.Time, error) {
 	var rawFields, rawAnswers []byte
+	var clientAcknowledgedAt sql.NullTime
 	err := tx.QueryRowContext(ctx,
-		`SELECT fields, answers FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`,
+		`SELECT fields, answers, client_acknowledged_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`,
 		engagementID, planType,
-	).Scan(&rawFields, &rawAnswers)
+	).Scan(&rawFields, &rawAnswers, &clientAcknowledgedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil, fmt.Errorf("plans: fetch instance: %w", err)
+		return nil, nil, nil, fmt.Errorf("plans: fetch instance: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, nil, fmt.Errorf("plans: fetch instance: %w", err)
+		return nil, nil, nil, fmt.Errorf("plans: fetch instance: %w", err)
 	}
 
 	var fields []Field
 	if err := json.Unmarshal(rawFields, &fields); err != nil {
 		// coverage:ignore reason: stored JSON is always written by PostInstanceHandler, not exercised by unit tests
-		return nil, nil, fmt.Errorf("plans: unmarshal instance fields: %w", err)
+		return nil, nil, nil, fmt.Errorf("plans: unmarshal instance fields: %w", err)
 	}
 	var answers Answers
 	if err := json.Unmarshal(rawAnswers, &answers); err != nil {
 		// coverage:ignore reason: stored JSON is always written by PutInstanceHandler, not exercised by unit tests
-		return nil, nil, fmt.Errorf("plans: unmarshal instance answers: %w", err)
+		return nil, nil, nil, fmt.Errorf("plans: unmarshal instance answers: %w", err)
 	}
-	return fields, answers, nil
+	return fields, answers, nullTimePtr(clientAcknowledgedAt), nil
+}
+
+// nullTimePtr converts a scanned sql.NullTime to a *time.Time, the shape
+// InstanceResponse.ClientAcknowledgedAt marshals -- nil rather than a
+// zero time.Time when the column is NULL.
+func nullTimePtr(t sql.NullTime) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Time
 }
 
 // validateAnswers checks each entry in answers against the field it

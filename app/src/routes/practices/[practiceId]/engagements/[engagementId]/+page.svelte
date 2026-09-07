@@ -18,7 +18,7 @@
 		type Visit
 	} from '#lib/engagementDetail.js';
 	import type { PageProps as PageProperties } from './$types';
-	import { formatCalendarDay } from '#lib/dates.js';
+	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import { activityLedgerColumns, loadEngagementActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
@@ -257,6 +257,16 @@
 			isMessagesHasMore = loaded.hasMore;
 			await refreshAttachmentPreviews(messages);
 		}, 'Failed to load Messages');
+	}
+
+	/** #301's Staff visibility (AC4): whether the Client has read her
+	 * Birth Plan since it last changed. Only ever called for
+	 * planType === 'birth_plan' -- a Care Plan instance never carries
+	 * clientAcknowledgedAt. */
+	function birthPlanReviewStatus(instance: Instance): string {
+		return instance.clientAcknowledgedAt
+			? `Reviewed by client on ${formatInstant(instance.clientAcknowledgedAt)}`
+			: 'Not yet reviewed by client';
 	}
 
 	async function loadPlan(planType: PlanType) {
@@ -601,6 +611,9 @@
 
 	{#if planLoaded[planType]}
 		{#if planState[planType].value}
+			{#if planType === 'birth_plan'}
+				<p>{birthPlanReviewStatus(planState[planType].value!)}</p>
+			{/if}
 			<PlanInstanceForm
 				fields={planState[planType].value!.fields}
 				answers={planState[planType].value!.answers}

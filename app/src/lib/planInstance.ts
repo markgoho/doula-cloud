@@ -26,6 +26,11 @@ export interface Instance {
 	planType: string;
 	fields: Field[];
 	answers: Answers;
+	/** When the Client last confirmed she has read this Plan Instance
+	 * (#301, v1: Birth Plan only -- always absent for a Care Plan).
+	 * Absent/undefined means never acknowledged, or acknowledged before a
+	 * Staff edit since cleared it. */
+	clientAcknowledgedAt?: string;
 }
 
 /** Reads fieldId's raw stored value out of answers as a string, or '' if
@@ -57,6 +62,10 @@ function instancePath(practiceId: string, engagementId: string, planType: string
 
 function clientBirthPlanPath(engagementId: string): string {
 	return `/api/portal/engagements/${engagementId}/birth-plan`;
+}
+
+function clientAcknowledgeBirthPlanPath(engagementId: string): string {
+	return `/api/portal/engagements/${engagementId}/birth-plan/acknowledge`;
 }
 
 /** Loads the Plan Instance for engagementId + planType, or null if none
@@ -129,6 +138,18 @@ export async function loadClientBirthPlan(fetcher: Fetcher, engagementId: string
 		// eslint-disable-next-line unicorn/no-null
 		return null;
 	}
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/** Confirms the Client-portal caller has read her Birth Plan for
+ * engagementId (#301, v1: acknowledgement only). Repeatable -- calling it
+ * again after already acknowledging just refreshes clientAcknowledgedAt.
+ * Throws with the response body text on a non-2xx response. */
+export async function acknowledgeClientBirthPlan(fetcher: Fetcher, engagementId: string): Promise<Instance> {
+	const response = await fetcher(clientAcknowledgeBirthPlanPath(engagementId), { method: 'POST' });
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}

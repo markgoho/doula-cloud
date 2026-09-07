@@ -26,4 +26,11 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 
 	g.OpenGet("/api/portal/engagements/{engagementId}/birth-plan", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetBirthPlanHandler()))
+	// No idempotency.Wrap: idempotency.Router keys retries off a Staff
+	// id, which a Client-portal request never carries (see
+	// contracts.Mount's own client/contract/sign route, the same shape).
+	// Re-acknowledging is harmless anyway -- it only refreshes
+	// client_acknowledged_at, never anything a duplicate would corrupt.
+	g.Write("POST /api/portal/engagements/{engagementId}/birth-plan/acknowledge",
+		clientauth.Middleware(db)(ClientAcknowledgeBirthPlanHandler()))
 }
