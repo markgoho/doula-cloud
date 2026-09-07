@@ -12,6 +12,7 @@
 	} from '#lib/pushRegistration.js';
 	import { apiBaseURL } from '#lib/api.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
+	import { engagementLabel } from '#lib/clientRegister.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import PortalTopBar from '#lib/components/organisms/PortalTopBar.svelte';
 	import type { NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
@@ -32,9 +33,24 @@
 	 * to remove from the tab title. `engagements/[engagementId]/+layout.ts`
 	 * now loads it before first paint, so it is read here instead.
 	 */
-	const detail = $derived(page.data as { practiceName?: string; clientName?: string });
+	const detail = $derived(
+		page.data as { practiceName?: string; clientName?: string; createdAt?: string }
+	);
 
 	const engagementId = $derived(page.params.engagementId!);
+
+	// #310: the persistent way back to the portal root reads as the same
+	// words the root list and the login/accept-invite choosers use --
+	// engagementLabel, one function, so all of them agree. Falls back to
+	// the bare Practice name while the identity load hasn't resolved yet
+	// (`still draws the bar when the Practice's identity is not yet
+	// known`, portal-authenticated-layout.svelte.spec.ts) rather than
+	// formatting an empty createdAt into "Invalid Date".
+	const switcherLabel = $derived(
+		detail.practiceName && detail.createdAt
+			? engagementLabel({ practiceName: detail.practiceName, createdAt: detail.createdAt })
+			: (detail.practiceName ?? '')
+	);
 
 	onMount(() => {
 		// Push registration lives here rather than on the hub page (#61's
@@ -126,6 +142,7 @@
 <Link href="#main" label="Skip to main content" variant="skip" />
 <PortalTopBar
 	practiceName={detail?.practiceName ?? ''}
+	{switcherLabel}
 	{navItems}
 	name={detail?.clientName ?? ''}
 	accountHref={resolve('/portal/(authenticated)/engagements/[engagementId]/sign-in-address', {

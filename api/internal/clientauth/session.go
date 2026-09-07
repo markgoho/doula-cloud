@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
@@ -13,11 +14,15 @@ import (
 
 // EngagementSummary is one Engagement a Client has, and the Practice it's
 // at -- enough for the frontend to decide where to land the Client after
-// login.
+// login, and (#310) to tell two Engagements at the same Practice apart:
+// CreatedAt is when the Engagement itself began, the one fact the register
+// can label honestly for every Client, including one whose care ended in
+// loss -- unlike a due date or a birth outcome.
 type EngagementSummary struct {
-	EngagementID string `json:"engagementId"`
-	PracticeName string `json:"practiceName"`
-	Status       string `json:"status"`
+	EngagementID string    `json:"engagementId"`
+	PracticeName string    `json:"practiceName"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 // SessionResponse is what the frontend needs to decide where to land a
@@ -122,7 +127,7 @@ func setIdentityAndCheckClient(ctx context.Context, tx *sql.Tx, identityUID stri
 // WHERE clause of its own to get wrong.
 func listEngagementsForIdentity(ctx context.Context, tx *sql.Tx) ([]EngagementSummary, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT e.id, p.name, e.status
+		`SELECT e.id, p.name, e.status, e.created_at
 		 FROM engagements e
 		 JOIN practices p ON p.id = e.practice_id
 		 ORDER BY e.created_at`,
@@ -136,7 +141,7 @@ func listEngagementsForIdentity(ctx context.Context, tx *sql.Tx) ([]EngagementSu
 	engagements := []EngagementSummary{}
 	for rows.Next() {
 		var e EngagementSummary
-		if err := rows.Scan(&e.EngagementID, &e.PracticeName, &e.Status); err != nil {
+		if err := rows.Scan(&e.EngagementID, &e.PracticeName, &e.Status, &e.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("clientauth: scan engagement row: %w", err)
 		}

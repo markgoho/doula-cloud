@@ -16,9 +16,15 @@ export const session: PortalSessionInfo = {
 		{
 			engagementId: 'engagement-1',
 			practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
-			status: 'active'
+			status: 'active',
+			createdAt: '2026-01-15T20:00:00Z'
 		},
-		{ engagementId: 'engagement-2', practiceName: 'Anne-Marie Ochieng-Whitfield Doula Care', status: 'active' }
+		{
+			engagementId: 'engagement-2',
+			practiceName: 'Anne-Marie Ochieng-Whitfield Doula Care',
+			status: 'active',
+			createdAt: '2026-03-12T20:00:00Z'
+		}
 	]
 };
 

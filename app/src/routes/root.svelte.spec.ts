@@ -49,16 +49,31 @@ describe('/+page.svelte', () => {
 		const data: RootLanding = {
 			type: 'portal-picker',
 			engagements: [
-				{ engagementId: 'engagement-1', practiceName: 'Riverside Doulas', status: 'active' },
-				{ engagementId: 'engagement-2', practiceName: 'Hilltop Doulas', status: 'completed' }
+				{
+					engagementId: 'engagement-1',
+					practiceName: 'Riverside Doulas',
+					status: 'active',
+					createdAt: '2026-01-15T20:00:00Z'
+				},
+				{
+					engagementId: 'engagement-2',
+					practiceName: 'Hilltop Doulas',
+					status: 'completed',
+					createdAt: '2026-03-12T20:00:00Z'
+				}
 			]
 		};
 		await render(Page, { params: fixture.params, data });
 
-		const link = testPage.getByRole('link', { name: 'Riverside Doulas' });
+		// engagementLabel (#310): the Practice name plus when the Engagement
+		// began, which is also what tells two Engagements at one Practice
+		// apart -- see clientRegister.spec.ts for that case directly.
+		const link = testPage.getByRole('link', { name: 'Riverside Doulas, started Jan 15, 2026' });
 		await expect.element(link).toBeVisible();
 		expect(link.element()).toHaveAttribute('href', '/portal/engagements/engagement-1');
-		await expect.element(testPage.getByRole('link', { name: 'Hilltop Doulas' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Hilltop Doulas, started Mar 12, 2026' }))
+			.toBeVisible();
 
 		// The Client register's fixed labels (ADR-0015), not the raw
 		// `active`/`completed` enum values -- a `completed` Engagement

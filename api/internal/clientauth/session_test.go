@@ -230,10 +230,12 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 }
 
 // TestSessionHandler_NoStaffOnlyFact locks the response shape to exactly
-// the three Client-facing fields #312's acceptance criteria name -- the
-// Engagement's id, the Practice's name, and the raw status
-// (clientRegister.ts labels it client-side, per #212). kind, birthOutcome
-// and endingReason are staff-only (ADR-0015) and must never reach this DTO.
+// the four Client-facing fields #312 and #310's acceptance criteria name
+// -- the Engagement's id, the Practice's name, the raw status
+// (clientRegister.ts labels it client-side, per #212), and when the
+// Engagement began (#310, clientRegister.ts's engagementLabel). kind,
+// birthOutcome and endingReason are staff-only (ADR-0015) and must never
+// reach this DTO.
 func TestSessionHandler_NoStaffOnlyFact(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "no-staff-fact-client"
@@ -257,7 +259,7 @@ func TestSessionHandler_NoStaffOnlyFact(t *testing.T) {
 	if !ok {
 		t.Fatalf("engagement entry = %+v, want an object", engagements[0])
 	}
-	wantKeys := map[string]bool{"engagementId": true, "practiceName": true, "status": true}
+	wantKeys := map[string]bool{"engagementId": true, "practiceName": true, "status": true, "createdAt": true}
 	for key := range entry {
 		if !wantKeys[key] {
 			t.Fatalf("engagement entry carries %q -- staff-only facts (kind, birthOutcome, endingReason) must never reach the portal root read", key)

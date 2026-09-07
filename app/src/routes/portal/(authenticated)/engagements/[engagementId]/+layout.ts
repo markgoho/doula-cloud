@@ -6,6 +6,10 @@ import type { LayoutLoad } from './$types';
 export interface EngagementIdentity {
 	practiceName: string;
 	clientName: string;
+	/** When the Engagement began (#310) -- the authenticated chrome's own
+	 * way back to the portal root needs it to build the same
+	 * `engagementLabel` the root list and the choosers use. */
+	createdAt: string;
 }
 
 /**
@@ -19,8 +23,9 @@ export interface EngagementIdentity {
  * is the wrong tool mid-`load` (#471's rule, same as `billing/+page.ts`).
  *
  * This does not replace the hub page's own fetch of the same endpoint for
- * `status`/`createdAt` -- that duplication predates this ticket and is out
- * of scope here.
+ * `status` -- that duplication predates this ticket and is out of scope
+ * here. `createdAt` is additionally read off this same response, not a
+ * second fetch, for the chrome's own switcher label (#310).
  */
 export const load: LayoutLoad = async ({ params }): Promise<EngagementIdentity> => {
 	const response = await apiFetch(`/api/portal/engagements/${params.engagementId}`);

@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
@@ -33,11 +34,15 @@ type Detail struct {
 	ClientName string `json:"clientName"`
 	Status     string `json:"status"`
 	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
-	// postpartum-only Engagement has none (#505). `created_at` used to sit
-	// here instead -- a fact about the record, not one the Client asked
-	// for -- and is dropped rather than kept alongside, since the portal
-	// page had no other use for it.
+	// postpartum-only Engagement has none (#505).
 	DueDate *string `json:"dueDate,omitempty"`
+	// CreatedAt is when the Engagement itself began (#310): the portal's
+	// authenticated chrome names the Engagement she is in by it, the one
+	// fact that tells two Engagements at this same Practice apart and
+	// stays true for her whatever became of the pregnancy. It was dropped
+	// from this DTO once before (#505, when the portal page had no use
+	// for it) and is back now that the chrome does.
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // DetailHandler views the caller's Engagement's basic detail. Must be
@@ -58,13 +63,13 @@ func DetailHandler() http.Handler {
 		err := tx.QueryRowContext(r.Context(),
 			`SELECT e.id, p.name,
 			        trim(concat_ws(' ', coalesce(c.preferred_name, c.given_name), c.family_name)),
-			        e.status, e.due_date::text
+			        e.status, e.due_date::text, e.created_at
 			 FROM engagements e
 			 JOIN practices p ON p.id = e.practice_id
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &dueDate)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &d.Status, &dueDate, &d.CreatedAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)

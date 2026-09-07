@@ -15,7 +15,8 @@
 			| 'sheet'
 			| 'skip'
 			| 'step'
-			| 'error';
+			| 'error'
+			| 'brand';
 		icon?: IconName;
 		current?: boolean;
 		/*
@@ -27,6 +28,16 @@
 		 * there is anything to go back for.
 		 */
 		describedBy?: string;
+		/*
+		 * Overrides the accessible name `label` would otherwise give the
+		 * link, without changing what is drawn. `PortalTopBar`'s own
+		 * portal-root link needs it (#310): its visible text stays the
+		 * Practice name, so the bar's measured content floor (#564) does
+		 * not move, while its accessible name carries the fuller
+		 * `engagementLabel` words a screen-reader user needs to tell this
+		 * link's destination apart from the "Your care" nav item beside it.
+		 */
+		ariaLabel?: string;
 	}
 
 	let {
@@ -35,7 +46,8 @@
 		variant = 'primary',
 		icon,
 		current = false,
-		describedBy
+		describedBy,
+		ariaLabel
 	}: Properties = $props();
 
 	// Absolute (http(s)) or protocol-relative hrefs leave the app; every
@@ -51,6 +63,7 @@
 	class:has-icon={Boolean(icon)}
 	aria-current={current ? 'page' : undefined}
 	aria-describedby={describedBy}
+	aria-label={ariaLabel}
 	target={isExternal ? '_blank' : undefined}
 	rel={isExternal ? 'noopener noreferrer' : undefined}
 >
@@ -142,6 +155,21 @@
 		}
 
 		a.secondary:hover {
+			color: var(--color-primary);
+		}
+
+		/* A shell's own name, doubling as a link back to its root
+		   (`PortalTopBar`, #310) -- plain text at rest, so it reads as the
+		   identity it always was rather than as ordinary prose, with a
+		   hover/focus treatment because it is a control now. */
+		a.brand {
+			color: var(--color-on-surface);
+			font-size: var(--text-subheading-size);
+			font-weight: var(--font-weight-semibold);
+			text-decoration: none;
+		}
+
+		a.brand:hover {
 			color: var(--color-primary);
 		}
 

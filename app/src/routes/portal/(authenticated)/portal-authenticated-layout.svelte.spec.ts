@@ -15,7 +15,7 @@ import Layout from './+layout.svelte';
 const pageState = vi.hoisted(() => ({
 	params: { engagementId: 'engagement-1' },
 	url: new URL('http://localhost/portal/engagements/engagement-1'),
-	data: {} as { practiceName?: string; clientName?: string }
+	data: {} as { practiceName?: string; clientName?: string; createdAt?: string }
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
@@ -63,7 +63,11 @@ async function setup({
 	pageState.url = new URL(`http://localhost${pathname}`);
 	pageState.data = identityUnknown
 		? {}
-		: { practiceName: 'Riverside Doula Collective', clientName: 'Tasha Bell' };
+		: {
+				practiceName: 'Riverside Doula Collective',
+				clientName: 'Tasha Bell',
+				createdAt: '2026-03-12T20:00:00Z'
+			};
 	goto.mockReset();
 	invalidateAll.mockReset();
 	registerPushSubscriptionIfEnabled.mockReset();
@@ -99,6 +103,23 @@ describe('Client portal authenticated layout', () => {
 		await setup();
 
 		await expect.element(page.getByText('Riverside Doula Collective')).toBeVisible();
+	});
+
+	/*
+	 * #310: reachable from every authenticated screen, not only the hub --
+	 * this spec's own `setup` renders the layout at
+	 * /portal/engagements/engagement-1/contract by default, and the link
+	 * is still there. Its accessible name is engagementLabel's own words
+	 * (built from the same `createdAt` `+layout.ts` now loads), so it
+	 * reads the same as the root list's and the choosers' link for the
+	 * same Engagement.
+	 */
+	it('offers a persistent way to the portal root, named the way the root list names it', async () => {
+		await setup();
+
+		const link = page.getByRole('link', { name: 'Riverside Doula Collective, started Mar 12, 2026' });
+		await expect.element(link).toBeVisible();
+		expect(link.element()).toHaveAttribute('href', '/');
 	});
 
 	/*

@@ -26,13 +26,16 @@
 	<p>
 		Deliberately not the Staff answer. The Practice's name is the portal's identity rather than
 		<code>Doula Cloud</code>, because a Client's relationship is with her doula's practice and not
-		with the software it runs on; there is no Practice switcher, because a Client belongs to exactly
-		one Practice. Narrow, the four items become a full-width second row rather than a hamburger —
-		four items need no container.
+		with the software it runs on; there is no Practice switcher dropdown, because a Client's own
+		Client record belongs to exactly one Practice. The Practice name is instead a plain link to the
+		portal root, her way between Engagements when her Portal Account reaches more than one. Narrow,
+		the four items become a full-width second row rather than a hamburger — four items need no
+		container.
 	</p>
 
 	<PortalTopBar
 		practiceName="Highland Midwifery &amp; Birth Support Collective of Western New York"
+		switcherLabel="Highland Midwifery &amp; Birth Support Collective of Western New York, started Mar 12, 2026"
 		{navItems}
 		name="Anne-Marie Ochieng-Whitfield"
 		accountHref="#sign-in-address"
