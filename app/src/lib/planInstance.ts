@@ -156,6 +156,38 @@ export async function acknowledgeClientBirthPlan(fetcher: Fetcher, engagementId:
 	return response.json();
 }
 
+/** Downloads a rendered PDF of the Birth Plan for engagementId from the
+ * Client-portal route (#306) -- a Blob, not JSON, mirroring contract.ts's
+ * downloadClientSignedContractPdf. Built fresh on every request, never
+ * stored server-side, so this always reflects the Birth Plan's current
+ * answers. Throws with the response body text on a non-2xx response
+ * (e.g. no Birth Plan created yet). */
+export async function downloadClientBirthPlanPdf(fetcher: Fetcher, engagementId: string): Promise<Blob> {
+	const response = await fetcher(`${clientBirthPlanPath(engagementId)}/pdf`);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.blob();
+}
+
+/** Downloads a rendered PDF of the Plan Instance for engagementId +
+ * planType from the Practice route (#306) -- mirrors
+ * downloadClientBirthPlanPdf above, generic over plan type the same way
+ * loadInstance/saveAnswers already are. Throws with the response body
+ * text on a non-2xx response. */
+export async function downloadPlanPdf(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string,
+	planType: string
+): Promise<Blob> {
+	const response = await fetcher(`${instancePath(practiceId, engagementId, planType)}/pdf`);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.blob();
+}
+
 /** Sets or clears the answer for fieldId within answers, returning a new
  * object (answers is never mutated) -- an empty string or an empty array
  * clears the answer entirely, so a field left blank doesn't round-trip as

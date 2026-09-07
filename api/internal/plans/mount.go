@@ -10,7 +10,8 @@ import (
 
 // Mount registers the Plan Template (every Staff role, ADR-0008, no
 // attachment narrowing -- a Template isn't Engagement-scoped) and Plan
-// Instance surface, plus the Client portal's own birth-plan read.
+// Instance surface, its rendered PDF (#306), plus the Client portal's own
+// birth-plan read, acknowledge, and PDF.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 	g.Get("/api/practices/{practiceId}/plan-templates/{planType}", staffauth.AnyStaff, GetTemplateHandler())
 	ir.Exempt("PUT /api/practices/{practiceId}/plan-templates/{planType}",
@@ -23,9 +24,15 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}",
 		"full-replace UPDATE of the Plan Instance's answers; re-sending the same body is a no-op",
 		true, PutInstanceHandler())
+	// Rendered fresh on every request, never stored (#306): a Plan
+	// Instance has no "final" event the way a signed Contract does, so
+	// there is nothing to cache and no staleness to manage server-side.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}/pdf", staffauth.AnyStaff, GetInstancePDFHandler())
 
 	g.OpenGet("/api/portal/engagements/{engagementId}/birth-plan", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetBirthPlanHandler()))
+	g.OpenGet("/api/portal/engagements/{engagementId}/birth-plan/pdf", clientauth.PortalPopulation,
+		clientauth.Middleware(db)(ClientGetBirthPlanPDFHandler()))
 	// No idempotency.Wrap: idempotency.Router keys retries off a Staff
 	// id, which a Client-portal request never carries (see
 	// contracts.Mount's own client/contract/sign route, the same shape).

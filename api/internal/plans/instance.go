@@ -298,9 +298,9 @@ func validateAnswers(fields []Field, answers Answers) string {
 		}
 
 		switch f.Type {
-		case "section_header":
+		case fieldTypeSectionHeader:
 			return "field " + id + " of type section_header cannot have an answer"
-		case "checkbox":
+		case fieldTypeCheckbox:
 			if _, ok := val.(bool); !ok {
 				return "field " + id + " requires a boolean answer"
 			}
