@@ -90,11 +90,26 @@ jobs:
             exit 1
           fi
 
+      # skip-cache is deliberate and must stay (#1005). golangci-lint's
+      # cache stores analyzer facts, including the NoReturn fact for
+      # (*testing.common).Fatal that tells staticcheck's SA5011 the nil
+      # branch terminates. Restore a cache built against a different build
+      # graph and that fact is missing, so SA5011 fires on the ordinary
+      # `if x == nil { t.Fatal(...) }` test idiom in files the branch never
+      # touched. The action makes this reachable by design: its key ends in
+      # a hash of go.mod, but its restore-keys drop that hash, so a missed
+      # key falls back to a cache from a different dependency state. The
+      # same commit then lints clean or dirty depending on which blob the
+      # runner restored -- measured on #967, four runs, three results.
+      # An uncached run of this module takes ~8s, so the cache buys nothing
+      # worth a lint result nobody can trust. #587 fixed the same hazard
+      # for local worktree runs; this is its CI half.
       - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           working-directory: api
+          skip-cache: true
 
       # The testdb harness (internal/testdb) starts a real Postgres
       # container and applies the goose migrations against it — this is
