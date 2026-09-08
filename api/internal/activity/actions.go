@@ -109,6 +109,17 @@ const (
 	// PutRateHandler's reprice pass excludes all three.
 	ActionContractAmountRepriced EngagementAction = "contract_amount_repriced"
 
+	// ActionContractVoidRequested and ActionContractVoidDeclined record
+	// #971's own two acts: a Doula (employed or, on a granted attachment,
+	// a contractor) asking for a Signed Contract to be voided, and an
+	// Owner or Admin refusing that ask with a reason of their own --
+	// distinct from ActionContractVoided, which is the Owner/Admin acting
+	// on the ask by actually voiding. Never fired by the same request:
+	// PostVoidRequestHandler only ever writes the first, the decline
+	// handler only ever the second.
+	ActionContractVoidRequested EngagementAction = "contract_void_requested"
+	ActionContractVoidDeclined  EngagementAction = "contract_void_declined"
+
 	ActionVisitLogged     EngagementAction = "visit_logged"
 	ActionVisitReassigned EngagementAction = "visit_reassigned"
 
@@ -216,11 +227,23 @@ var moneyActions = map[EngagementAction]bool{
 	ActionContractVoided:           true,
 	ActionContractAmountOverridden: true,
 	ActionContractAmountRepriced:   true,
-	ActionInvoiceRaised:            true,
-	ActionInvoicePaid:              true,
-	ActionPaymentRecorded:          true,
-	ActionInvoiceVoided:            true,
-	ActionInvoiceWrittenOff:        true,
+	// ActionContractVoidRequested and ActionContractVoidDeclined join the
+	// rest of the Contract lifecycle here, not because either names a
+	// dollar figure -- a request's reason and a decline's reason carry
+	// none -- but because every entry above already groups by *entity*
+	// (any ledger row about the Contract) rather than by whether that
+	// specific row happens to show a price, and a contractor's own
+	// ledger read hides the whole entity the same way (ADR-0008: "Money
+	// entries in the activity ledger ... contractor: ✗"). Splitting these
+	// two out as the one Contract action a contractor can read would be
+	// the drift, not the consistency.
+	ActionContractVoidRequested: true,
+	ActionContractVoidDeclined:  true,
+	ActionInvoiceRaised:         true,
+	ActionInvoicePaid:           true,
+	ActionPaymentRecorded:       true,
+	ActionInvoiceVoided:         true,
+	ActionInvoiceWrittenOff:     true,
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,

@@ -44,6 +44,14 @@ type ContractResponse struct {
 	// gate the "price" merge-field value itself is read through --
 	// ADR-0008's money tier as amended by #282.
 	AmountChangedAt *time.Time `json:"amountChangedAt,omitempty"`
+	// VoidRequests is #971's own addition: every void request against
+	// this Contract row, newest first, regardless of who asked or who is
+	// reading -- unlike Values, a request's reason and outcome carry no
+	// price, so nothing here needs ADR-0008's contractor redaction.
+	// Populated by GetContractHandler and by every void-request write
+	// handler's own response; omitted (not merely empty) for a Contract
+	// nobody has ever asked to void, which is the common case.
+	VoidRequests []VoidRequestSummary `json:"voidRequests,omitempty"`
 }
 
 // PutContractRequest is the body of a PUT Contract request: a full
@@ -234,7 +242,7 @@ func GetContractHandler() http.Handler {
 			return
 		}
 
-		_, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -254,6 +262,13 @@ func GetContractHandler() http.Handler {
 			amountChangedAt = nil
 		}
 
+		voidRequests, err := listVoidRequests(r.Context(), tx, id)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		full := ContractResponse{
 			EngagementID:    engagementID,
 			Status:          status,
@@ -261,6 +276,7 @@ func GetContractHandler() http.Handler {
 			MergeFields:     mergeFields,
 			Values:          priceForReader(reader, mergeFields, values.nonEmpty(), amountCents),
 			AmountChangedAt: amountChangedAt,
+			VoidRequests:    voidRequests,
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, full)

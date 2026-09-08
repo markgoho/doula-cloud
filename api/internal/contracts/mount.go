@@ -11,20 +11,22 @@ import (
 )
 
 // Mount registers the Contract Template, the Practice-wide
-// "awaiting-signature" roll-up (#426), the per-Engagement Contract's
-// scope-vs-money split (ADR-0008) and its lifecycle writes, the Signed
-// PDF, and the Client portal's own contract read, sign, and PDF.
+// "awaiting-signature" and "void requests awaiting" roll-ups (#426,
+// #971), the per-Engagement Contract's scope-vs-money split (ADR-0008)
+// and its lifecycle writes, the Signed PDF, and the Client portal's own
+// contract read, sign, and PDF.
 //
 // Every Contract write below carries a role declaration at the mount
 // (#970), registered through ir.ExemptGated rather than the role-free
 // ir.Exempt, which panics if the role list is ever left empty, the same
-// guarantee a GET's role list already carries. Create, set values and
-// send are staffauth.AnyStaff -- #282's write table gives them to
-// whoever reaches the Engagement at all (Owner, Admin, an employed
-// Doula, or a contractor on a granted attachment), so the mount adds no
-// role restriction beyond the AttachingWrite reach test attaching=true
-// already applies. Void and the Template's own write are narrower --
-// OwnerAndAdmin and OwnerOnly.
+// guarantee a GET's role list already carries. Create, set values, send
+// and #971's own void-request are staffauth.AnyStaff -- #282's write
+// table gives them to whoever reaches the Engagement at all (Owner,
+// Admin, an employed Doula, or a contractor on a granted attachment), so
+// the mount adds no role restriction beyond the AttachingWrite reach
+// test attaching=true already applies. Void, the void-request decline,
+// and the Template's own write are narrower -- OwnerAndAdmin and
+// OwnerOnly.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher) {
 	g.Get("/api/practices/{practiceId}/contract-template", staffauth.AnyStaff, GetTemplateHandler())
 	// Owner-only (not Admin): #970 moved this rule from an in-handler
@@ -40,6 +42,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	// opened in turn. Owner and Admin, the same declaration the credit
 	// balance and the Practice-wide Invoice list carry.
 	g.Get("/api/practices/{practiceId}/contracts/awaiting-signature", staffauth.OwnerAndAdmin, AwaitingSignatureHandler())
+	// #971: the mirror roll-up for a void a Doula has asked for but
+	// nobody has decided yet -- same reach as the row above, since void
+	// itself is Owner/Admin-only (#970).
+	g.Get("/api/practices/{practiceId}/contracts/void-requests", staffauth.OwnerAndAdmin, VoidRequestsAwaitingHandler())
 	ir.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
 		"guarded by contracts' unique constraint on engagement_id; a retry after the first succeeds hits the constraint and 409s rather than creating a duplicate Contract",
 		true, staffauth.AnyStaff, PostContractHandler())
@@ -68,6 +74,27 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	ir.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
 		"state-guarded (status != 'signed' -> 409); a retry after the first commit 409s instead of voiding twice",
 		true, staffauth.OwnerAndAdmin, PostVoidContractHandler())
+	// #971: a Doula who reaches the Engagement at all -- the same AnyStaff
+	// reach Create/Send/Edit already carry -- asks for a Signed Contract
+	// to be voided instead of voiding it herself, which #970 refuses her.
+	// State-guarded (status != 'signed' -> 409) and guarded again by the
+	// one-open-per-requester unique index (-> 409), so a retry after the
+	// first commit never opens a second request.
+	ir.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void-request",
+		"state-guarded (status != 'signed' -> 409) and unique-constraint-guarded (one open request per requester -> 409)",
+		true, staffauth.AnyStaff, PostVoidRequestHandler())
+	// The other half of #971's ask: an Owner or an Admin declines one
+	// specific open request. Owner and Admin only, same as Void itself;
+	// attaching=true the same way Void's own mount line is -- an Owner or
+	// Admin reaches every Engagement regardless, so AttachingWrite's
+	// reach test is always satisfied for them and never mints an
+	// accrued attachment (attachActor is a no-op for anyone but a plain
+	// Doula), but registering it keeps write_gate_guardrail_test.go's
+	// "every mutating {engagementId} route accounted for" sweep honest
+	// without a second exemption entry.
+	ir.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void-request/{requestId}/decline",
+		"state-guarded (status != 'open' -> 404, naming a request already decided or unknown)",
+		true, staffauth.OwnerAndAdmin, PostVoidRequestDeclineHandler())
 	// The Signed PDF is a rendered, unredactable document -- it can't be
 	// split into scope/money views the way the JSON Contract read can, so
 	// it follows the money row wholesale: Owner, Admin, and an employed
