@@ -299,6 +299,7 @@ Inside one Practice, RLS-fenced as ADR-0006 already established.
 | Credit balance and ledger | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Stripe Connect state — the status enum and capability flags, never the details Stripe holds | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Whether the Practice can raise an Invoice at all — a plain boolean fact, never Stripe's account detail | all | all | all at the Practice | on her Engagements | ✗ |
+| Billing mode — Stripe or by hand | all | all | all at the Practice | on her Engagements | ✗ |
 | Staff roster | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Her own Offer row | — | — | — | — | Client first initial, general area, exact due date, her fee, free-text terms |
 
@@ -333,11 +334,26 @@ everything; the Offer settles her claim and nothing else
 
 **Whether the Practice can raise an Invoice at all was added on [#270](https://github.com/markgoho/doula-cloud/issues/270), and it is a second row rather than a widening of Stripe Connect state's.** They read as the same fact until tested the way #267 itself tests every row: who needs it and why. Stripe Connect state carries a requirements count about the Owner's own identity documents — an errand, and one only an Owner or Admin has a reason to read. This row carries nothing about anybody: it is a plain yes/no a Doula meets the moment she opens the Invoice section on an Engagement she may already see, the same row every other Engagement-scoped fact above it follows (Engagements/Visits/Messages, Plan Instances, Contract scope). Gating it to Owner/Admin would not protect anything Stripe holds — the boolean carries none of Stripe's own account detail — it would only reproduce DW-G2, the exact confusion #270 exists to remove, one level down: a Doula meeting a raw permission refusal in place of the fact that nobody has connected Stripe yet.
 
+**Amended on [#271](https://github.com/markgoho/doula-cloud/issues/271): "whether the Practice can raise an Invoice at all" stopped being a standing fact about Stripe alone.** #270's own row read as though a Practice Owner always has to connect Stripe before an Invoice can be sent — true when Stripe was the only rail. #271 gives a Practice a second one: billing by hand, which raises an Invoice with no Connect account, no card-payments capability, and no Client email requirement at all. The row above keeps its meaning (can *this* Invoice be raised, on whichever rail governs it) but is no longer read alongside an implicit "and that always means Stripe."
+
+**Billing mode is the new row #271 adds, and it is a third row rather than a widening of either fact above it.** It is not Stripe Connect state (no requirements count, no Owner errand) and it is not "can this Practice raise an Invoice at all" (a Practice with no chosen mode yet still cannot raise one, the same ✗ an unconnected Stripe Practice gets — mode and capability are two different gates that happen to block the same button). It reads exactly like its neighbor: all Staff, because a Doula meets it the same way she meets #270's row, on the Invoice section of an Engagement she may already see. Writing it is not this row's concern — see the write table below, where the Owner-only "change an established mode" sits beside the one-time set that rides an Invoice-raise request itself, open to whichever Staff member happens to raise the Practice's first Invoice (not gated in this table at all, since it is a value carried on an otherwise-ungated write, not a read).
+
 ## The write table — new content; ADR-0006 covered reads only
 
 | | Doula (employee) | Doula (contractor) |
 | --- | --- | --- |
 | Engagements, Visits, Messages, Plan Instances, Contract actions | every Engagement at the Practice | only those she is attached to |
+
+### Recording a Payment, voiding, writing off, and changing billing mode
+
+Added on [#271](https://github.com/markgoho/doula-cloud/issues/271) — the write table above has no row for a write on Invoice or Payment money at all, and this closes that gap. The reasoning mirrors the read table's own Contract-money row rather than restating it: recording a Payment is closer in kind to reading Invoice money (ADR-0008's "Contract — money, and Invoice history" row, Owner and Admin only) than to raising an Invoice, which stays ungated by design (#68). A write gated more loosely than the read of the same data would be the harder position to defend, so recording a Payment, voiding a by-hand Invoice, and writing one off all sit with the read row that already narrows to Owner and Admin. Changing an already-established billing mode is the Owner's alone, by analogy to Connect onboarding (the row above this table, "starting or resuming hosted onboarding stays the Owner's alone"). A Doula, employed or contractor, never reaches any of the four — the same ✗ her Contract-money read row already carries.
+
+| | Owner | Admin | Doula (employee) | Doula (contractor) |
+| --- | --- | --- | --- | --- |
+| Record a Payment against an open Invoice | ✓ | ✓ | ✗ | ✗ |
+| Void a by-hand Invoice | ✓ | ✓ | ✗ | ✗ |
+| Write off a by-hand Invoice | ✓ | ✓ | ✗ | ✗ |
+| Change an already-established billing mode | ✓ | ✗ | ✗ | ✗ |
 
 ### Who may assign a Visit to whom
 
