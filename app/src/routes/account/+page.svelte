@@ -330,12 +330,21 @@
 		try {
 			await deleteOwnLogin(apiFetchWithSession);
 		} catch (error) {
-			// The last-Owner refusal names the Practices in the way, so it is
-			// rendered verbatim rather than replaced with a generic sentence.
+			/*
+			 * The last-Owner refusal names the Practices in the way, so it is
+			 * rendered verbatim rather than replaced with a generic sentence.
+			 *
+			 * Swallowed rather than rethrown, which is the same choice the
+			 * portal's own "Sign out of every device" makes. ConfirmDialog
+			 * offers to stay open over a failure, and taking that offer would
+			 * put this Notice behind the dialog's own backdrop -- leaving her
+			 * looking at a Cancel button and a confirm that will refuse again,
+			 * with the reason hidden behind them. Letting it close puts the
+			 * named Practices in front of her, which is the only thing she can
+			 * act on.
+			 */
 			deleteLoginError = error instanceof Error ? error.message : SERVICE_PROBLEM;
-			// Rethrown so ConfirmDialog leaves itself open over a failure --
-			// its own documented contract for a caller that renders the error.
-			throw error;
+			return;
 		} finally {
 			isDeletingLogin = false;
 		}

@@ -500,7 +500,10 @@ describe('deleting your own login', () => {
 		await deleteButton().first().click();
 		await deleteButton().last().click();
 
+		// The dialog closes on a refusal she cannot fix by retrying, so the
+		// named Practices are in front of her rather than behind a backdrop.
 		await expect.element(testPage.getByText(/only Owner of Riverside Doula Collective/)).toBeVisible();
+		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
 		expect(goto).not.toHaveBeenCalled();
 	});
 
