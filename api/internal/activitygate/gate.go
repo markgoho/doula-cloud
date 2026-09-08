@@ -36,12 +36,15 @@ type Rule struct {
 	RestrictedActions []string
 }
 
-// bypassesRestriction is ADR-0008's one money-tier role rule, applied the
-// same way to every subject kind that has any RestrictedActions: an
-// Owner or Admin sees them, nobody else does, regardless of employment
-// type. "This ticket moves that rule, it does not change it" (#485).
+// bypassesRestriction is ADR-0008's money-tier rule, as amended by #282,
+// applied the same way to every subject kind that has any
+// RestrictedActions: an Owner, an Admin, and an employed Doula see them;
+// only a plain contractor Doula does not. Employment type is the
+// boundary and the only one -- an employee is inside the business and
+// reads what the Practice charges; a contractor reads her own agreed fee
+// elsewhere, never this.
 func bypassesRestriction(reader staffauth.Reader) bool {
-	return reader.IsOwnerOrAdmin()
+	return !reader.IsAmbientContractor()
 }
 
 // registry is the one place a subject kind's Rule is stated -- AC6's
@@ -130,7 +133,8 @@ func RestrictedActions(subjectKind string) []string {
 }
 
 // Bypasses reports whether reader sees every subject kind's restricted
-// actions regardless -- ADR-0008's Owner/Admin money tier. Exposed
+// actions regardless -- ADR-0008's money tier, as amended by #282, which
+// admits an employed Doula alongside an Owner and an Admin. Exposed
 // alongside RestrictedActions for a caller (engagement.ListActivityHandler)
 // building a SQL boolean parameter rather than calling CanSeeAction per
 // row.

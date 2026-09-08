@@ -21,12 +21,11 @@ const signedPDFBytes = "%PDF-1.4 fake signed contract pdf"
 // route resolved to.
 const priorSignedPDFBytes = "%PDF-1.4 fake superseded contract pdf"
 
-// TestGetSignedContractPDFHandler_Success proves an Owner or Admin can
-// retrieve the stored Signed PDF for a signed Contract -- #836 mounted
-// this route through contracts.Mount's real OwnerAndAdmin declaration,
-// which the old test mux never enforced; a plain Doula 403s now (this
-// package carries no separate test for that 403, since gate_test.go-shaped
-// role coverage lives at the api/ package's own guardrail level).
+// TestGetSignedContractPDFHandler_Success proves an Owner can retrieve
+// the stored Signed PDF for a signed Contract -- #836 mounted this route
+// through contracts.Mount's real declaration, which the old test mux
+// never enforced. TestGetSignedContractPDFHandler_ContractorForbidden
+// below proves the one role this route still refuses, per #282.
 func TestGetSignedContractPDFHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-success"
@@ -352,18 +351,45 @@ func TestGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.T) {
 	}
 }
 
-// TestGetSignedContractPDFHandler_VoidedContractStaysOwnerAndAdmin
-// proves the void does not widen who may read the PDF: a plain Doula is
-// still refused by the route's OwnerAndAdmin declaration (mount.go),
-// which follows ADR-0008's money row because a rendered PDF cannot be
-// split into a scope view and a money view.
-func TestGetSignedContractPDFHandler_VoidedContractStaysOwnerAndAdmin(t *testing.T) {
+// TestGetSignedContractPDFHandler_VoidedContractStillOpensToEmployedDoula
+// proves the void changes nothing about who may read the PDF: an
+// employed Doula reads it, per ADR-0008's money row as amended by #282.
+func TestGetSignedContractPDFHandler_VoidedContractStillOpensToEmployedDoula(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-voided-doula"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	contractID, _ := seedSignedContract(t, db, engagementID)
+	contractID, objectPath := seedSignedContract(t, db, engagementID)
 	voidContractRow(t, db, contractID)
+
+	store := objectstore.NewMemoryStore()
+	if err := store.Put(t.Context(), objectPath, "application/pdf", bytes.NewReader([]byte(signedPDFBytes))); err != nil {
+		t.Fatalf("seed stored pdf: %v", err)
+	}
+
+	srv, session := newContractServerWithStore(t, db, uid, store)
+	defer srv.Close()
+
+	resp := getContractPDF(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+// TestGetSignedContractPDFHandler_ContractorForbidden proves the one
+// role ADR-0008's money row as amended by #282 still refuses: a
+// contractor Doula, even one holding a granted attachment on the
+// Engagement -- the whole PDF is money-bearing and cannot be split, so
+// she is refused outright rather than given a partial view.
+func TestGetSignedContractPDFHandler_ContractorForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-pdf-contractor"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	seedSignedContract(t, db, engagementID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()

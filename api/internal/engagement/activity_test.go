@@ -41,10 +41,11 @@ func TestListActivityHandler_OwnerSeesEveryEntry(t *testing.T) {
 	}
 }
 
-// TestListActivityHandler_EmployeeDoulaExcludesMoneyEntries proves the
-// employee-Doula column: Invoice/payment (and Contract-money) entries
-// never reach her, per ADR-0008.
-func TestListActivityHandler_EmployeeDoulaExcludesMoneyEntries(t *testing.T) {
+// TestListActivityHandler_EmployeeDoulaSeesMoneyEntries proves the
+// employee-Doula column as amended by #282: Invoice/payment and
+// Contract-money entries reach her the same as an Owner or Admin, since
+// employment type -- not role -- is now the boundary.
+func TestListActivityHandler_EmployeeDoulaSeesMoneyEntries(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-activity-money"
 	practiceID := testdb.SeedPractice(t, db, "Doula Activity Money")
@@ -69,22 +70,16 @@ func TestListActivityHandler_EmployeeDoulaExcludesMoneyEntries(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got.Items) != 2 {
-		t.Fatalf("employee Doula got %d items, want 2 (engagement_created, visit_logged only)", len(got.Items))
-	}
-	for _, item := range got.Items {
-		if item.Action == string(activity.ActionInvoiceRaised) || item.Action == string(activity.ActionInvoicePaid) || item.Action == string(activity.ActionContractSent) {
-			t.Fatalf("employee Doula's result set contained money action %q", item.Action)
-		}
+	if len(got.Items) != 5 {
+		t.Fatalf("employee Doula got %d items, want 5 (no filtering)", len(got.Items))
 	}
 }
 
 // TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice proves
-// the contractor column: same exclusion set as an employee -- neither
-// Invoice/payment nor the Practice's Contract price ever reach her,
-// per ADR-0008 ("her own agreed fee only ... never the Practice's
-// price"). Her own Offer acceptance is not in the money set and stays
-// visible.
+// the contractor column: neither Invoice/payment nor the Practice's
+// Contract price ever reach her, per ADR-0008 as amended by #282 ("her
+// own agreed fee only ... never the Practice's price"). Her own Offer
+// acceptance is not in the money set and stays visible.
 func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "contractor-activity-money"

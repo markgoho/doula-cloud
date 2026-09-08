@@ -53,26 +53,6 @@ describe('loadContract', () => {
 
 		await expect(loadContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('server error');
 	});
-
-	// #258: an Owner/Admin reader's GET response splits money-tagged merge
-	// fields into a separate moneyValues field (ADR-0008), so the Staff
-	// Engagement page and its Send-completeness check would otherwise read
-	// a filled money field as missing.
-	it('folds moneyValues into values for an Owner/Admin reader', async () => {
-		const contract = {
-			engagementId: 'eng-1',
-			status: 'draft',
-			prose: 'Agreement for {{client_name}} at {{money_price}}.',
-			mergeFields: ['client_name', 'money_price'],
-			values: { client_name: 'Jamie' },
-			moneyValues: { money_price: '$1,200' }
-		};
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
-
-		const result = await loadContract(fetcher, 'practice-1', 'eng-1');
-
-		expect(result?.values).toEqual({ client_name: 'Jamie', money_price: '$1,200' });
-	});
 });
 
 describe('createContract', () => {

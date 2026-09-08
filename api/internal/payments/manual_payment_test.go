@@ -525,6 +525,29 @@ func TestPostWriteOffInvoiceHandler_RefusedOnStripeBacked(t *testing.T) {
 	}
 }
 
+// TestPostWriteOffInvoiceHandler_DoulaForbidden proves the write-off act
+// stays Owner/Admin only under #282: an employed Doula is refused, the
+// same as TestPostVoidInvoiceHandler_DoulaForbidden proves for void --
+// AC7's "a test for each refusal" named write-off separately even though
+// it shares transitionByHandInvoice with void.
+func TestPostWriteOffInvoiceHandler_DoulaForbidden(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "write-off-invoice-doula-forbidden"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedSignedContract(t, db, engagementID)
+	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
+	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
+	defer srv.Close()
+
+	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "write-off")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
 // TestPostWriteOffInvoiceHandler_InvoiceNotFound proves a nonexistent
 // Invoice id 404s.
 func TestPostWriteOffInvoiceHandler_InvoiceNotFound(t *testing.T) {

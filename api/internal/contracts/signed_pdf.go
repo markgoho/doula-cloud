@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/staffauth"
 )
 
 // MsgNoSignedContract is the 404 body both Signed-PDF routes answer with
@@ -45,17 +46,28 @@ func SignedPDFObjectPath(engagementID, contractID string) string {
 // that has since been voided still serves: voiding cancels an agreement,
 // it does not withdraw the evidence that the agreement was made (#299).
 //
-// Who may read it, per ADR-0006's read-follows-the-role rule as ADR-0008
-// now carries it: Owner and Admin, never a Doula of either employment
-// type. The JSON Contract read splits scope from money at the type
-// level, but a rendered PDF cannot be split that way, so this route
-// follows ADR-0008's money row wholesale -- the declaration mount.go
-// already makes. Voiding changes none of that. Must be mounted behind
-// staffauth.Middleware.
+// Who may read it, per ADR-0008's money row as amended by #282: Owner,
+// Admin, and an employed Doula. The JSON Contract read no longer splits
+// scope from money at all (#282 retired that split), but a rendered PDF
+// was never split that way to begin with, so this route follows the
+// money row wholesale -- refusing a contractor Doula regardless of any
+// attachment she holds, since the whole document is money-bearing and
+// her own fee is never on it. Voiding changes none of that. Must be
+// mounted behind staffauth.Middleware.
 func GetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)
 		if !ok {
+			return
+		}
+		reader, has := staffauth.ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if reader.IsAmbientContractor() {
+			apierr.WriteError(w, "a contractor Doula cannot read the Practice's money -- only her own agreed fee, on an Engagement she holds a granted attachment on", http.StatusForbidden)
 			return
 		}
 		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)

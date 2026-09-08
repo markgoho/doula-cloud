@@ -398,15 +398,33 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	}
 }
 
-// TestGetPracticeInvoicesHandler_RefusesADoula proves the handler's
-// internal staffauth.RequireOwnerOrAdmin check actually rejects a
-// non-Owner/Admin caller -- not just declares the role at the
-// GatedRouter mount, which api/gate_guardrail_test.go already covers but
-// cannot behaviorally test.
-func TestGetPracticeInvoicesHandler_RefusesADoula(t *testing.T) {
+// TestGetPracticeInvoicesHandler_EmployedDoulaSees proves ADR-0008's
+// money row as amended by #282: an employed Doula reaches the
+// Practice-wide Invoice book the same as an Owner or Admin.
+func TestGetPracticeInvoicesHandler_EmployedDoulaSees(t *testing.T) {
 	db := testdb.New(t)
-	const uid = "practice-invoices-doula"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner/admin
+	const uid = "practice-invoices-employee"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+
+	srv, session := newPracticeInvoiceServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getPracticeInvoices(t, srv, session, practiceID, "", false)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+// TestGetPracticeInvoicesHandler_RefusesAContractor proves the handler's
+// internal staffauth.RequireNotAmbientContractor check actually rejects
+// a contractor caller -- not just declares the role at the GatedRouter
+// mount, which api/gate_guardrail_test.go already covers but cannot
+// behaviorally test.
+func TestGetPracticeInvoicesHandler_RefusesAContractor(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "practice-invoices-contractor"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
 
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()

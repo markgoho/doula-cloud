@@ -76,20 +76,19 @@ type ListItem struct {
 //
 // InvoiceStatus/InvoiceAmountCents and FeeCents are populated in SQL
 // regardless of who is asking, then shaped away entirely (never merely
-// blanked) by shapeOpenEngagement for a Reader ADR-0006/ADR-0008 bar from
-// them -- the same "fetch full, shape by role" split
-// contracts.ReadContract already uses for the same reason: Go, not SQL,
-// is where the role check is easiest to see and to test.
+// blanked) by shapeOpenEngagement for a Reader ADR-0008 bars from them --
+// a "fetch full, shape by role" split: Go, not SQL, is where the role
+// check is easiest to see and to test.
 type OpenEngagement struct {
 	EngagementID     string  `json:"engagementId"`
 	EngagementStatus string  `json:"engagementStatus"`
 	ContractStatus   *string `json:"contractStatus,omitempty"`
 	DoulaName        *string `json:"doulaName,omitempty"`
 
-	// InvoiceStatus/InvoiceAmountCents: Owner and Admin only (ADR-0006).
-	// Never set for an employee or contractor Doula, even when a
-	// contractor is attached to this exact Engagement -- ADR-0008 gives
-	// her only her own fee, never the Practice's Invoice.
+	// InvoiceStatus/InvoiceAmountCents: Owner, Admin, and an employed
+	// Doula (ADR-0008 as amended by #282). Never set for a contractor
+	// Doula, even when she is attached to this exact Engagement -- she
+	// gets only her own fee, never the Practice's Invoice.
 	InvoiceStatus      *string `json:"invoiceStatus,omitempty"`
 	InvoiceAmountCents *int64  `json:"invoiceAmountCents,omitempty"`
 
@@ -402,8 +401,8 @@ const openEngagementRollupQueryTemplate = `
 // attached to") -- false lets every open Engagement on the Client
 // through regardless of attachment, for every other role. Which of the
 // fetched fields actually reach the caller is shapeOpenEngagement's job,
-// not this query's: fetching InvoiceStatus/FeeCents unconditionally
-// mirrors contracts.ReadContract's own "fetch full, shape by role" split.
+// not this query's: fetching InvoiceStatus/FeeCents unconditionally is
+// its own "fetch full, shape by role" split.
 func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, staffID string, attachedOnly bool) ([]rawOpenEngagement, error) {
 	placeholders := make([]string, len(clientIDs))
 	args := make([]any, 0, len(clientIDs)+2)
@@ -444,12 +443,16 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 }
 
 // shapeOpenEngagement is the one place raw's Invoice and fee fields turn
-// into what reader is actually entitled to see, per ADR-0006/ADR-0008:
-// Invoice status/money reaches an Owner or Admin only; a contractor's own
-// fee reaches a contractor only (raw.feeCents is already staffID's own
-// row, never another Doula's, by construction of fetchOpenEngagements'
-// join). Contract status, Doula name, and Engagement status carry no
-// gate -- every role on ADR-0006's table may read them.
+// into what reader is actually entitled to see, per ADR-0008 as amended
+// by #282: Invoice status/money reaches an Owner, an Admin, and an
+// employed Doula -- only a plain contractor is refused. Before #282, an
+// employed Doula fell through both branches below and got neither an
+// Invoice status nor a fee, a silent gap #282's own mapping found rather
+// than a rule. A contractor's own fee reaches a contractor only
+// (raw.feeCents is already staffID's own row, never another Doula's, by
+// construction of fetchOpenEngagements' join). Contract status, Doula
+// name, and Engagement status carry no gate -- every role on ADR-0006's
+// table may read them.
 func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEngagement {
 	oe := OpenEngagement{
 		EngagementID:     raw.engagementID,
@@ -463,7 +466,7 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEng
 		name := raw.doulaName.String
 		oe.DoulaName = &name
 	}
-	if reader.IsOwnerOrAdmin() {
+	if !reader.IsAmbientContractor() {
 		if raw.invoiceStatus.Valid {
 			status := raw.invoiceStatus.String
 			oe.InvoiceStatus = &status

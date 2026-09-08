@@ -55,8 +55,9 @@ export interface OpenEngagement {
 	 * Engagement -- rendered as an explicit "no Doula" state, the same
 	 * pattern as `portalInviteStatus`'s own absence ("Never invited"). */
 	doulaName?: string;
-	/** Owner/Admin only (ADR-0006) -- absent for every other role, even
-	 * when a contractor is attached to this Engagement. */
+	/** Owner, Admin, or an employed Doula (ADR-0008's money row as
+	 * amended by #282) -- absent for a contractor Doula, even one
+	 * attached to this Engagement. */
 	invoiceStatus?: string;
 	invoiceAmountCents?: number;
 	/** The reader's own agreed fee (ADR-0008) -- present only when she is

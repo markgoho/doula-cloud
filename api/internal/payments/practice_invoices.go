@@ -83,26 +83,17 @@ type PracticeInvoicesResponse struct {
 // unpaid, $450 outstanding" needs both numbers to agree with the list
 // underneath it, not with whatever page the reader happens to be on.
 //
-// Who may read it: Owner and Admin only. ADR-0006 put "Contract -- money,
-// and Invoice history" on the Owner/Admin row of its read table, and
-// ADR-0008 (which supersedes that table) keeps it there, adding that a
-// contractor Doula may read the money on her own Engagements and an
-// employee Doula never may. Aggregating the whole Practice's book cannot
-// be narrowed to "her own Engagements" without becoming a different
-// screen, so this endpoint takes the unambiguous half of the row and is
-// mounted Owner/Admin -- the same declaration the per-Engagement
-// GetInvoicesHandler mount carries. A contractor's own-fee view stays
+// Who may read it: Owner, Admin, and an employed Doula (ADR-0008's money
+// row as amended by #282). Aggregating the whole Practice's book cannot
+// be narrowed to "her own Engagements", so a contractor is refused
+// outright rather than given a partial view -- her own-fee view stays
 // where the per-Engagement Contract read already puts it.
 //
 // Must be mounted behind staffauth.Middleware.
 func GetPracticeInvoicesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireNotAmbientContractor(w, r)
 		if !ok {
-			// coverage:ignore reason: belt-and-braces -- payments.Mount's own
-			// OwnerAndAdmin declaration (g.Get) already refuses a non-owner/admin
-			// caller before this handler runs, so !ok is unreachable through the
-			// real mount.
 			return
 		}
 

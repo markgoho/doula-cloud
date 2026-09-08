@@ -1370,11 +1370,14 @@ func TestListHandler_OpenEngagementsRollup_ZeroOpenEngagementsShowsNoLines(t *te
 	}
 }
 
-// TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney
-// proves ADR-0006/ADR-0008: an employee Doula reads Contract status,
-// Doula name, and Engagement status, but Invoice status/money is omitted
-// entirely from the wire, not merely blanked.
-func TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney(t *testing.T) {
+// TestListHandler_OpenEngagementsRollup_EmployeeDoulaSeesInvoiceAndMoney
+// proves ADR-0008 as amended by #282: an employee Doula reads Contract
+// status, Doula name, Engagement status, and now Invoice status/money
+// too -- the same as an Owner or Admin -- since employment type, not
+// role, is the boundary. #282's own mapping found this exact rollup
+// silently giving an employee neither an Invoice status nor a fee; this
+// proves that gap is closed.
+func TestListHandler_OpenEngagementsRollup_EmployeeDoulaSeesInvoiceAndMoney(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")
 	const employeeUID = "employee-doula-rollup"
@@ -1409,8 +1412,11 @@ func TestListHandler_OpenEngagementsRollup_EmployeeDoulaNeverSeesInvoiceOrMoney(
 	if line.DoulaName == nil {
 		t.Fatalf("doula name = nil, want the attached Doula's name")
 	}
-	if line.InvoiceStatus != nil || line.InvoiceAmountCents != nil {
-		t.Fatalf("invoice = %v/%v, want both nil -- an employee Doula never reads Invoice money", line.InvoiceStatus, line.InvoiceAmountCents)
+	if line.InvoiceStatus == nil || *line.InvoiceStatus != "paid" {
+		t.Fatalf("invoice status = %v, want \"paid\" -- an employee Doula reads it now", line.InvoiceStatus)
+	}
+	if line.InvoiceAmountCents == nil || *line.InvoiceAmountCents != 75000 {
+		t.Fatalf("invoice amount = %v, want 75000", line.InvoiceAmountCents)
 	}
 	if line.FeeCents != nil {
 		t.Fatalf("fee = %v, want nil -- an employee Doula has no fee", line.FeeCents)

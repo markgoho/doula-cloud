@@ -21,8 +21,7 @@ const (
 
 	// Shared across contracts_test files: goconst flags repeated literals
 	// package-wide, not just within one file.
-	testPriceValue     = "$1,200"
-	testScopeOfService = "12 prenatal visits"
+	testPriceValue = "$1,200"
 	// testClientName is SeedEngagement's default Client given name
 	// (testdb.SeedNamedEngagement's own "Test Client" argument), and
 	// therefore the value resolveMergeFieldValues resolves client_name to
@@ -430,6 +429,35 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 	}
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
+	}
+}
+
+// TestGetContractHandler_EmployedDoulaSeesMoney proves ADR-0008's money
+// row as amended by #282: #969 deleted the ContractScope/ContractFull
+// split, and an employed Doula now reads the Contract's price merge
+// field the same as an Owner or Admin -- previously withheld entirely.
+func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-employee-money"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Values[priceKey] != testPriceValue {
+		t.Fatalf("Values[price] = %q, want %q -- an employed Doula reads Contract money now", out.Values[priceKey], testPriceValue)
 	}
 }
 

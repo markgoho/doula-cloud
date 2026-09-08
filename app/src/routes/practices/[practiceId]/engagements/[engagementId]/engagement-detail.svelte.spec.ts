@@ -73,13 +73,13 @@ interface Detail {
 // `['owner', 'doula']` in the fixture -- the Doula-Owner this ticket is
 // about, and the reader the picker opens on. A test about somebody the
 // roster does not contain passes an id of its own.
-function sessionFor(roles: string[] = [], staffId = 'staff-1') {
+function sessionFor(roles: string[] = [], staffId = 'staff-1', isContractor = false) {
 	return {
 		practiceId: fixture.params.practiceId,
 		staffId,
 		practiceName: 'Riverside Doula Collective',
 		roles,
-		isContractor: false
+		isContractor
 	};
 }
 
@@ -714,33 +714,9 @@ describe("the Contract's merge-field completeness block and filled-text render (
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 	});
-
-	// #258: for an Owner/Admin reader, GetContractHandler's response splits
-	// a money-tagged key (ADR-0008) into a separate moneyValues field
-	// rather than including it in values -- reading values alone would
-	// render this filled field as blank and flag it as missing.
-	it('renders a filled money-tagged field substituted and does not count it as missing, for an Owner/Admin reader', async () => {
-		mockContract({
-			engagementId: 'engagement-1',
-			status: 'draft',
-			prose: 'This Contract is between {{practice_name}} and {{client_name}} for {{money_price}}.',
-			mergeFields: ['practice_name', 'client_name', 'money_price'],
-			values: { practice_name: 'Riverside Doulas', client_name: 'Jamie Rivera' },
-			moneyValues: { money_price: '$1,200' }
-		});
-		await render(Page, {
-			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
-			params: fixture.params
-		});
-
-		await expect
-			.element(testPage.getByText('This Contract is between Riverside Doulas and Jamie Rivera for $1,200.'))
-			.toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
-	});
 });
 
-describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', () => {
+describe('the Contract PDF download is gated on the page (#302, amended by #969)', () => {
 	const signedContract = {
 		engagementId: 'engagement-1',
 		status: 'signed',
@@ -758,11 +734,11 @@ describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', ()
 		});
 	}
 
-	async function setupWithRoles(roles: string[], pdfResponse: Response) {
+	async function setupWithRoles(roles: string[], pdfResponse: Response, isContractor = false) {
 		await testPage.viewport(1440, 900);
 		mockSignedContract(pdfResponse);
 		await render(Page, {
-			data: { ...fixtureDetail, session: sessionFor(roles) },
+			data: { ...fixtureDetail, session: sessionFor(roles, 'staff-1', isContractor) },
 			params: fixture.params
 		});
 	}
@@ -775,8 +751,16 @@ describe('the Contract PDF download is Owner/Admin-gated on the page (#302)', ()
 			.toBeVisible();
 	});
 
-	it('does not render the download for a Doula, the role the endpoint refuses', async () => {
+	it('offers the download to an employed Doula (#969)', async () => {
 		await setupWithRoles(['doula'], pdfBlobResponse());
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+	});
+
+	it('does not render the download for a contractor Doula, the role the endpoint still refuses', async () => {
+		await setupWithRoles(['doula'], pdfBlobResponse(), true);
 
 		await expect.element(testPage.getByText('Status: signed')).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
