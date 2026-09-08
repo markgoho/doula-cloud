@@ -149,6 +149,23 @@ func TestPostVoidRequestHandler_Success(t *testing.T) {
 	if got.Status != "open" || got.Reason != "the client's plan changed" || got.RequestedBy != staffID {
 		t.Fatalf("voidRequest = %+v, want open, reasoned, and attributed to %q", got, staffID)
 	}
+
+	// #1012's own AC: the request lands in the activity ledger too, not
+	// just the response body -- a direct SELECT, mirroring
+	// amount_test.go's own TestPutContractAmountHandler_Success, so this
+	// stays independent of #972's read-side money filter, which dropped
+	// this action from the money set without changing what row is
+	// written.
+	var actorStaffID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT actor_staff_id FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_void_requested'`,
+		engagementID,
+	).Scan(&actorStaffID); err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	if actorStaffID != staffID {
+		t.Fatalf("actor_staff_id = %q, want %q (the requester)", actorStaffID, staffID)
+	}
 }
 
 // TestPostVoidRequestHandler_DuplicateOpenRefused proves the same person
@@ -278,9 +295,13 @@ func TestPostVoidRequestDeclineHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-decline-success"
 	practiceID, adminID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
+	// A distinct requester from the decliner: #1012's own activity
+	// assertion below needs actor_staff_id to name the decliner and
+	// nobody else, which a single-person fixture can't discriminate.
+	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, uid+"-doula", []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusSigned, mergeFieldProse)
-	requestID := seedVoidRequest(t, db, engagementID, adminID, "asking")
+	requestID := seedVoidRequest(t, db, engagementID, doulaID, "asking")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -298,6 +319,19 @@ func TestPostVoidRequestDeclineHandler_Success(t *testing.T) {
 	got := out.VoidRequests[0]
 	if got.Status != "declined" || got.DeclineReason != "not yet" {
 		t.Fatalf("voidRequest = %+v, want declined with the decliner's reason", got)
+	}
+
+	// #1012's own AC: the decline lands in the activity ledger too, actor
+	// the decliner (adminID) rather than the original requester.
+	var actorStaffID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT actor_staff_id FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_void_declined'`,
+		engagementID,
+	).Scan(&actorStaffID); err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	if actorStaffID != adminID {
+		t.Fatalf("actor_staff_id = %q, want %q (the decliner)", actorStaffID, adminID)
 	}
 }
 
