@@ -83,7 +83,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		objectPath := SignedPDFObjectPath(engagementID)
+		objectPath := SignedPDFObjectPath(engagementID, id)
 		if err := store.Put(r.Context(), objectPath, contentTypePDF, bytes.NewReader(pdfBytes)); err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

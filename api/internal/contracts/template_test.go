@@ -80,17 +80,66 @@ func seedContractWithValues(t *testing.T, db *testdb.DB, engagementID string, va
 // at mergeFieldProse, the same prose every caller needs), with
 // signed_pdf_object_path set -- exercising GetSignedContractPDFHandler /
 // ClientGetSignedContractPDFHandler's DB read without going through the
-// full Sign transition. Callers separately Put matching bytes into the
-// objectstore.ObjectStore the test server was built with, at
-// contracts.SignedPDFObjectPath(engagementID), unless the test wants the "PDF row
-// found but object missing" case.
-func seedSignedContract(t *testing.T, db *testdb.DB, engagementID, pdfObjectPath string) {
+// full Sign transition. It returns the row's id and the object-store key
+// its Signed PDF belongs at; the key is derived from the id (#299), so
+// the caller cannot compute it before the INSERT and the helper hands it
+// back rather than taking it. Callers separately Put matching bytes into
+// the objectstore.ObjectStore the test server was built with, at that
+// key, unless the test wants the "PDF row found but object missing" case.
+func seedSignedContract(t *testing.T, db *testdb.DB, engagementID string) (contractID, pdfObjectPath string) {
+	t.Helper()
+	return seedSignedContractRow(t, db, engagementID, "signed", "now()")
+}
+
+// seedPriorSignedContract seeds an *older* Contract on the same
+// Engagement that was signed and has since been voided -- the
+// void-then-recreate history #72's partial unique index permits, and the
+// only way an Engagement comes to hold two rows with a stored Signed PDF.
+// created_at is pushed an hour back explicitly rather than left to a
+// second now(): "the most recently created signed Contract" must be
+// decided by the fixture, not by two clock reads a microsecond apart.
+func seedPriorSignedContract(t *testing.T, db *testdb.DB, engagementID string) (contractID, pdfObjectPath string) {
+	t.Helper()
+	return seedSignedContractRow(t, db, engagementID, "voided", "now() - interval '1 hour'")
+}
+
+// seedSignedContractRow is the shared body of the two helpers above. It
+// inserts, reads the generated id back, and only then writes the object
+// path, because contracts.SignedPDFObjectPath is keyed on that id.
+// status and createdAt are SQL fragments rather than bind parameters:
+// both are fixture-controlled constants named at the two call sites
+// above, never test input.
+func seedSignedContractRow(t *testing.T, db *testdb.DB, engagementID, status, createdAt string) (contractID, pdfObjectPath string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO contracts (engagement_id, status, prose, created_at)
+		 VALUES ($1, '`+status+`'::contract_status, $2, `+createdAt+`) RETURNING id`,
+		engagementID, mergeFieldProse,
+	).Scan(&contractID); err != nil {
+		t.Fatalf("seed signed contract: %v", err)
+	}
+	pdfObjectPath = contracts.SignedPDFObjectPath(engagementID, contractID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE contracts SET signed_pdf_object_path = $1 WHERE id = $2`,
+		pdfObjectPath, contractID,
+	); err != nil {
+		t.Fatalf("seed signed contract pdf path: %v", err)
+	}
+	return contractID, pdfObjectPath
+}
+
+// voidContractRow moves a seeded signed Contract to 'voided' directly,
+// without going through PostVoidContractHandler -- a test about the
+// *read* should not depend on the write route's own role gate, and the
+// row-level effect (status moves, signed_pdf_object_path does not) is
+// exactly what PostVoidContractHandler produces, asserted in its own
+// test.
+func voidContractRow(t *testing.T, db *testdb.DB, contractID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, signed_pdf_object_path) VALUES ($1, 'signed'::contract_status, $2, $3)`,
-		engagementID, mergeFieldProse, pdfObjectPath,
+		`UPDATE contracts SET status = 'voided'::contract_status WHERE id = $1`, contractID,
 	); err != nil {
-		t.Fatalf("seed signed contract: %v", err)
+		t.Fatalf("void contract row: %v", err)
 	}
 }
 
