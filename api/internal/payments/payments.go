@@ -174,8 +174,21 @@ type Client interface {
 	// erasure schedules it rather than attempting it (ADR-0027).
 	CreateRedactionJob(ctx context.Context, accountID, customerID string) (jobID string, err error)
 	// FinalizeInvoice finalizes invoiceID on accountID's connected
-	// account, making it payable, and returns its hosted payment page URL.
-	FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (hostedInvoiceURL string, err error)
+	// account, making it payable, and returns its hosted payment page URL
+	// and Stripe's own human-readable `number` -- assigned only at
+	// finalization, which is why #271's by-hand Invoice reference and this
+	// one are captured at two different points in PostInvoiceHandler
+	// rather than both up front.
+	FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (hostedInvoiceURL, number string, err error)
+	// PayOutOfBand marks invoiceID paid on accountID's connected account
+	// with no charge, via Stripe's own paid_out_of_band flag (#271) -- how
+	// recording a manual Payment against a Stripe-backed Invoice keeps
+	// Stripe's own copy in step with Doula Cloud's rather than leaving a
+	// live hosted link a Client could still pay a second time. Firing this
+	// schedules Stripe's own invoice.paid webhook echo back at
+	// PostConnectWebhookHandler; handleInvoicePaid's already-paid guard is
+	// what keeps that echo from writing a second payments row.
+	PayOutOfBand(ctx context.Context, accountID, invoiceID string) error
 	// RetrieveInvoicePaymentReference reports the Stripe id that identifies
 	// how invoiceID was actually paid -- the PaymentIntent id -- for the
 	// payments row's audit trail.

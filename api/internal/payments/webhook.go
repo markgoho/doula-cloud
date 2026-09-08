@@ -288,6 +288,29 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		return
 	}
 
+	// #271's already-paid guard: FOR UPDATE locks the row against a
+	// concurrent writer -- specifically PostManualPaymentHandler's own
+	// paid_out_of_band call, whose own invoice.paid echo can arrive here
+	// while that handler's transaction is still in flight -- and the
+	// status check itself catches the ordinary double-delivery case too
+	// (a real card payment webhook redelivered outside claimEvent's own
+	// dedup window is not the only way this event type can repeat). A
+	// no-op commit-and-ack, same shape as the alreadyProcessed branch
+	// above: this is not an error, just nothing left to do.
+	var currentStatus string
+	if err := tx.QueryRowContext(r.Context(),
+		`SELECT status FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID,
+	).Scan(&currentStatus); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceForEvent already proved this row exists
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if currentStatus == "paid" {
+		log.Printf("payments: connect webhook: invoice.paid for %q already paid, skipping (event id %s)", inv.ID, event.ID)
+		commitAndAck(w, tx, &committed)
+		return
+	}
+
 	paidAt := time.Unix(inv.StatusTransitions.PaidAt, 0).UTC()
 
 	// The reference is what makes a payments row traceable back to Stripe,
@@ -302,7 +325,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 
 	var paymentID string
 	if err := tx.QueryRowContext(r.Context(),
-		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, $2, $3, $4) RETURNING id`,
+		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, $2, $3, $4, 'stripe') RETURNING id`,
 		invoiceID, reference, inv.AmountPaid, paidAt,
 	).Scan(&paymentID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

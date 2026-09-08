@@ -96,7 +96,7 @@ func TestRLS_InvoicesCannotInsertForAnotherPractice(t *testing.T) {
 	}
 
 	_, err = tx.ExecContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, amount_cents) VALUES ($1, $2, 'in_rls_insert', 5000)`,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, amount_cents, reference) VALUES ($1, $2, 'in_rls_insert', 5000, 'in_rls_insert')`,
 		practiceA, contractA,
 	)
 	if err == nil {

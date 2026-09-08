@@ -20,6 +20,7 @@ const (
 	colEngagementID   = "engagement_id"
 	colAmountCents    = "amount_cents"
 	colStaffID        = "staff_id"
+	colKind           = "kind"
 )
 
 // entity is one file in the archive: a name, a one-line description of
@@ -117,7 +118,7 @@ func entities() []entity {
 		{
 			file:        "engagement.csv",
 			description: "Every Engagement -- a Client's episode of care -- this Practice has run.",
-			header:      []string{"id", "client_id", "kind", colStatus, colDueDate, colCreatedAt},
+			header:      []string{"id", "client_id", colKind, colStatus, colDueDate, colCreatedAt},
 			query: `SELECT id::text, client_id::text, kind::text, status::text, due_date::text, created_at::text
 			          FROM engagements WHERE practice_id = $1
 			         ORDER BY created_at`,
@@ -125,7 +126,7 @@ func entities() []entity {
 		{
 			file:        "engagement_request.csv",
 			description: "Every Client's request for an Engagement, decided or still pending.",
-			header:      []string{"id", "client_id", "kind", colDueDate, "note", "state", "requested_by_staff_id", "requested_at", "decided_by_staff_id", "decided_at", "reason", colEngagementID},
+			header:      []string{"id", "client_id", colKind, colDueDate, "note", "state", "requested_by_staff_id", "requested_at", "decided_by_staff_id", "decided_at", "reason", colEngagementID},
 			query: `SELECT id::text, client_id::text, kind::text, due_date::text, note, state::text,
 			               requested_by::text, requested_at::text, decided_by::text, decided_at::text,
 			               reason, engagement_id::text
@@ -214,18 +215,24 @@ func entities() []entity {
 		{
 			file:        "invoice.csv",
 			description: "Every Invoice this Practice has raised against a Contract.",
-			header:      []string{"id", "contract_id", "stripe_invoice_id", "stripe_customer_id", colStatus, colAmountCents, "currency", colCreatedAt, "paid_at"},
-			query: `SELECT id::text, contract_id::text, stripe_invoice_id, stripe_customer_id, status::text,
+			header:      []string{"id", "contract_id", "stripe_invoice_id", "stripe_customer_id", "reference", colStatus, colAmountCents, "currency", colCreatedAt, "paid_at"},
+			query: `SELECT id::text, contract_id::text, stripe_invoice_id, stripe_customer_id, reference, status::text,
 			               amount_cents::text, currency, created_at::text, paid_at::text
 			          FROM invoices WHERE practice_id = $1
 			         ORDER BY created_at`,
 		},
 		{
+			// note (#271) is a Staff-typed free-text field, only ever set
+			// on a manually recorded ('manual' kind) row -- included here
+			// like every other personal-data-bearing column this export
+			// carries, and covered by the same erasure sweep
+			// (client.redactPaymentNotes) that empties a Contract's merge
+			// fields.
 			file:        "payment.csv",
 			description: "Every Payment recorded against one of this Practice's Invoices.",
-			header:      []string{"id", "invoice_id", "stripe_payment_reference", colAmountCents, "paid_at", colCreatedAt},
-			query: `SELECT p.id::text, p.invoice_id::text, p.stripe_payment_reference, p.amount_cents::text,
-			               p.paid_at::text, p.created_at::text
+			header:      []string{"id", "invoice_id", "stripe_payment_reference", colKind, "method", "note", colAmountCents, "paid_at", colCreatedAt},
+			query: `SELECT p.id::text, p.invoice_id::text, p.stripe_payment_reference, p.kind::text, p.method::text, p.note,
+			               p.amount_cents::text, p.paid_at::text, p.created_at::text
 			          FROM payments p
 			          JOIN invoices i ON i.id = p.invoice_id
 			         WHERE i.practice_id = $1

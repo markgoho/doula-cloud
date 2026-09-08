@@ -20,7 +20,7 @@ import (
 func seedPayment(t *testing.T, db *testdb.DB, invoiceID, stripePaymentReference string, amountCents int64, paidAt time.Time) (paymentID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, $2, $3, $4) RETURNING id`,
+		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, $2, $3, $4, 'stripe') RETURNING id`,
 		invoiceID, stripePaymentReference, amountCents, paidAt,
 	).Scan(&paymentID); err != nil {
 		t.Fatalf("seed payment: %v", err)
@@ -118,7 +118,7 @@ func TestRLS_PaymentsCannotInsertForAnotherPracticesInvoice(t *testing.T) {
 	}
 
 	_, err = tx.ExecContext(t.Context(),
-		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, 'pi_rls_insert', 5000, now())`,
+		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, 'pi_rls_insert', 5000, now(), 'stripe')`,
 		invoiceA,
 	)
 	if err == nil {

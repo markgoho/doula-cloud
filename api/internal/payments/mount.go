@@ -37,4 +37,39 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	// view of her own Engagements -- so it stays where the per-Engagement
 	// Contract read already puts it.
 	g.Get("/api/practices/{practiceId}/invoices", staffauth.OwnerAndAdmin, GetPracticeInvoicesHandler())
+
+	// Billing mode (#271): a Practice-level choice between billing through
+	// Stripe and billing by hand. Reading is any Staff -- a Doula meets
+	// this fact on the Invoice section, the same reasoning #270 already
+	// applies to "whether the Practice can raise an Invoice at all".
+	// Writing an already-established mode is Owner-only, by analogy to
+	// Connect onboarding; the one-time initial set instead rides
+	// PostInvoiceHandler's own request (billing_mode.go's own comment).
+	// PUT is a full replacement, inherently idempotent (docs/api-design.md
+	// section 3), so it goes through Exempt rather than Replayable.
+	g.Get("/api/practices/{practiceId}/payments/billing-mode", staffauth.AnyStaff, GetBillingModeHandler())
+	ir.Exempt("PUT /api/practices/{practiceId}/payments/billing-mode",
+		"full-replacement PUT, inherently idempotent (docs/api-design.md section 3); no Idempotency-Key applies",
+		false, PutBillingModeHandler())
+
+	// Recording a Payment that did not come through Stripe (#271): Owner
+	// and Admin only, matching ADR-0008's Contract-money read row and this
+	// Mount's own Owner/Admin invoice-history routes above -- a write
+	// gated more loosely than the read of the same data is the harder
+	// position to defend. Money-creating, so Replayable like Invoice
+	// creation above: a double-click must not record the same check twice.
+	ir.Replayable("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments", false, PostManualPaymentHandler(client))
+
+	// Void and write-off (#271) exist only so a by-hand Invoice -- which
+	// nothing else in the model ever moves out of 'open' -- is not stuck
+	// there forever on a mistyped amount. Both are state-guarded
+	// transitions, refused unless the Invoice is still 'open' and by-hand,
+	// so a retry after the first success 409s rather than repeating the
+	// effect -- Exempt, not Replayable.
+	ir.Exempt("POST /api/practices/{practiceId}/invoices/{invoiceId}/void",
+		"refuses unless the Invoice is open and by-hand, so a retry 409s instead of voiding twice",
+		false, PostVoidInvoiceHandler())
+	ir.Exempt("POST /api/practices/{practiceId}/invoices/{invoiceId}/write-off",
+		"refuses unless the Invoice is open and by-hand, so a retry 409s instead of writing off twice",
+		false, PostWriteOffInvoiceHandler())
 }

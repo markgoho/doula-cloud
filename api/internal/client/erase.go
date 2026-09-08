@@ -67,6 +67,10 @@ type erasureScope struct {
 	PortalAccount             bool       `json:"portalAccount"`
 	SessionsEnded             int        `json:"sessionsEnded"`
 	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
+	// PaymentNotes counts manually recorded Payments (#271) whose note
+	// this erasure emptied -- the same "count, never the value" rule
+	// erasureScope already applies to Contracts.
+	PaymentNotes int `json:"paymentNotes"`
 }
 
 // EraseHandler erases one Client's personal data at the Owner's
@@ -252,6 +256,11 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
+	paymentNotes, err := redactPaymentNotes(ctx, tx, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
 
 	customers, eligibleAt, err := enqueueStripeErasure(ctx, tx, practiceID, clientID, now)
 	if err != nil {
@@ -270,6 +279,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		PortalAccount:             portalQueued,
 		SessionsEnded:             sessionsEnded,
 		StripeRedactionEligibleAt: eligibleAt,
+		PaymentNotes:              paymentNotes,
 	}
 	if err := recordErasure(ctx, tx, practiceID, clientID, actor, scope); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -342,6 +352,37 @@ func redactContractMergeFields(ctx context.Context, tx *sql.Tx, clientID string)
 	if err != nil {
 		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
 		return 0, fmt.Errorf("client: count redacted contracts: %w", err)
+	}
+	return int(n), nil
+}
+
+// redactPaymentNotes empties the free-text note on every manually
+// recorded Payment (#271) against one of clientID's Invoices -- a Staff
+// member can type anything in there, including a check number that
+// carries her name or address, so it is a personal-data surface the same
+// way a Contract's merge fields are. Only manual rows ever carry a note
+// (payments_method_matches_kind's own CHECK), so this reaches nothing a
+// Stripe-webhook-written row holds.
+func redactPaymentNotes(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE payments SET note = NULL
+		 WHERE note IS NOT NULL
+		   AND invoice_id IN (
+		       SELECT i.id FROM invoices i
+		       JOIN contracts c ON c.id = i.contract_id
+		       JOIN engagements e ON e.id = c.engagement_id
+		       WHERE e.client_id = $1
+		   )`,
+		clientID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("client: redact payment notes: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
+		return 0, fmt.Errorf("client: count redacted payment notes: %w", err)
 	}
 	return int(n), nil
 }

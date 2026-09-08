@@ -45,7 +45,7 @@ func seedPaymentOutboxRow(t *testing.T, db *testdb.DB, practiceID, suffix string
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_outbox_fixture_"+practiceID+suffix, invoiceStatusOpen, seedPaymentOutboxAmountCents, time.Now())
 	var paymentID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, 'pi_fixture', $2, now()) RETURNING id`,
+		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, 'pi_fixture', $2, now(), 'stripe') RETURNING id`,
 		invoiceID, seedPaymentOutboxAmountCents,
 	).Scan(&paymentID); err != nil {
 		t.Fatalf("seed payments row: %v", err)
@@ -100,7 +100,7 @@ func TestQueuePaymentReceivedNotification_InsertsPendingRow(t *testing.T) {
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_queue_insert", invoiceStatusOpen, 5000, time.Now())
 	var paymentID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at) VALUES ($1, 'pi_queue_insert', 5000, now()) RETURNING id`,
+		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, 'pi_queue_insert', 5000, now(), 'stripe') RETURNING id`,
 		invoiceID,
 	).Scan(&paymentID); err != nil {
 		t.Fatalf("seed payments row: %v", err)
