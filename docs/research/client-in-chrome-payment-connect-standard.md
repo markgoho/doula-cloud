@@ -48,7 +48,7 @@ It needs exactly three things, and no more:
 
 **Observed, not just read.** A 25-line page served from `http://localhost:8931/pay.html` did `Stripe(pk_test_51U7N3e..., { stripeAccount: 'acct_1UDCmj1rKosUjGsh' })`, `stripe.elements({ clientSecret: 'pi_3UDRIw...secret_dM4LPxIV9Sk8VBdgSuyCmX3x5' })`, `elements.create('payment').mount('#pe')`, and driven in a real Chrome the Payment Element fired its `ready` event — the page printed `ELEMENT_READY`. The console warnings it emitted are themselves evidence the Element resolved the *connected* account's payment-method configuration, not the platform's: it named `cashapp` and `klarna` as "not activated" and `apple_pay` as blocked pending domain registration, and the account's own `capabilities` list carries `klarna_payments: active` but no Cash App. Stripe.js also warned "You may test your Stripe.js integration over HTTP. However, live Stripe.js integrations must use HTTPS."
 
-Confirming the same PaymentIntent — the call `stripe.confirmPayment` makes — succeeded on the first try:
+The browser-side `stripe.confirmPayment` was **not** exercised in this run: the automation relay could not fill the Element's cross-origin iframe, so the confirm was made from the API instead, with `pm_card_visa` and the platform secret key under `Stripe-Account`. The Element's `ready` event is what proves the publishable-key + `stripeAccount` + client-secret path authenticates against the connected account's PaymentIntent; the confirm below proves that PaymentIntent is payable as a direct charge. Read them together, and read the docs citation above for the browser-side call itself.
 
 ```
 POST /v1/payment_intents/pi_3UDRIw1rKosUjGsh0EpGvpzg/confirm
@@ -128,7 +128,7 @@ Four differences, none of which change the answer:
 
 1. **The "Sandbox" badge** on the hosted invoice page. Live mode does not render it.
 2. **Test cards.** `pm_card_visa` / `4242 4242 4242 4242` only work in test mode.
-3. **Invoice emails.** Test-mode finalization does not deliver mail to a real inbox, so the Sandbox cannot demonstrate what a Client actually receives when `FinalizeInvoice` runs; the Dashboard's Invoice settings checkbox "Include a link to a payment page in the invoice email" governs whether the hosted link is even in that email in live mode.
+3. **Invoice emails.** Not exercised in this run — whether test-mode finalization delivers mail to a real inbox was not verified, so the Sandbox has not been shown to demonstrate what a Client actually receives when `FinalizeInvoice` runs. What is documented either way is that the Dashboard's Invoice settings checkbox "Include a link to a payment page in the invoice email" governs whether the hosted link is in that email at all — [Hosted invoice page](https://docs.stripe.com/invoicing/hosted-invoice-page).
 4. **Apple Pay / Google Pay** need domain registration and HTTPS in both modes, and the local test page had neither — Stripe.js said so explicitly. Cards, Link and the rest rendered anyway.
 
 ## What it costs to build the in-chrome surface
