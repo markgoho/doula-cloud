@@ -62,7 +62,7 @@ function runGit(args: string[]): string {
 	}).trim();
 }
 
-function createWorktree(name: string): string {
+async function createWorktree(name: string): Promise<string> {
 	const slug = sanitizeSlug(name);
 	if (!slug) throw new Error('missing usable worktree name');
 
@@ -77,7 +77,7 @@ function createWorktree(name: string): string {
 		runGit(['worktree', 'add', worktreePath]);
 	}
 
-	provisionWorktree(worktreePath);
+	await provisionWorktree(worktreePath);
 	return worktreePath;
 }
 
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
 	const name = getNestedString(payload, 'name');
 	if (!name) throw new Error('missing worktree name');
 
-	const createdPath = createWorktree(name);
+	const createdPath = await createWorktree(name);
 	process.stdout.write(`${createdPath}\n`);
 }
 

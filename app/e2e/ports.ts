@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 // 100 is deliberate: the tightest gap between two base ports below is
 // 1000 (4173 -> 5173), so any offset under 1000 is collision-free. Ten
 // concurrent worktrees (offsets 0-9) is ample.
-const PORT_STEP = 100;
+export const PORT_STEP = 100;
 
 function findPortOffset(): number {
 	// import.meta.dir is Bun-only; vite.config.ts loads this file under
@@ -76,3 +76,23 @@ export const PREVIEW_SERVER_PORT = shift(4173);
 // header on state-changing requests.
 export const DEV_SERVER_ORIGIN = `http://localhost:${DEV_SERVER_PORT}`;
 export const PREVIEW_SERVER_ORIGIN = `http://localhost:${PREVIEW_SERVER_PORT}`;
+
+// Every port the local stack binds, unshifted -- i.e. what offset 0 uses.
+// Derived by undoing shift() rather than restating the numbers, so this
+// list cannot drift from the definitions above and is correct no matter
+// which worktree's .port-offset findPortOffset() happened to land on.
+//
+// The worktree provisioning hook (.claude/hooks/worktree-provision.ts)
+// reads this to check whether an offset's ports are actually free on the
+// machine before assigning it: "not claimed by another worktree" is not
+// the same as "available" when an unrelated local process holds one of
+// them (#927).
+export const BASE_PORTS: readonly number[] = [
+	E2E_API_PORT,
+	E2E_EMULATOR_PORT,
+	DB_PORT,
+	GCS_PORT,
+	MAILBOX_PORT,
+	DEV_SERVER_PORT,
+	PREVIEW_SERVER_PORT,
+].map(port => port - PORT_OFFSET * PORT_STEP);
