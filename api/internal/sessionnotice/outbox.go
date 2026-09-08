@@ -273,8 +273,11 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 // compose resolves the target Staff member's current email at send time
 // (not stored on the row, same reasoning as billing.Worker.ownerEmails,
 // which is why it needs tx) and resolves to ErrAlreadyDone for a row
-// whose identity no longer names a Staff member -- an offboarded account
-// deleted between queuing and send has no address left to notify.
+// whose identity no longer names a live Staff member -- an offboarded
+// account deleted between queuing and send has no address left to
+// notify, and neither does a person who deleted her own login (#892)
+// after this notice was queued. Both land in the same branch, and both
+// mean the same thing here: mark sent, mail nothing.
 func compose(ctx context.Context, tx *sql.Tx, r pendingRow, _ time.Time) (string, string, string, error) {
 	email, found, err := staffEmail(ctx, tx, r.identityUID)
 	if err != nil {
@@ -299,9 +302,21 @@ func compose(ctx context.Context, tx *sql.Tx, r pendingRow, _ time.Time) (string
 	return email, subject, text, nil
 }
 
-// staffEmail returns the email of the Staff member holding identityUID.
+// staffEmail returns the email of the live Staff member holding
+// identityUID -- live meaning she has not deleted her own login.
+//
+// The deleted_at predicate is deliberately belt-and-braces rather than
+// load-bearing, and saying so is worth more than leaving a reader to
+// work it out: staffauth.DeleteLoginHandler rewrites identity_uid to a
+// 'deleted:<id>' sentinel in the same UPDATE that stamps deleted_at, so
+// the uid this row carries already matches nothing by the time a
+// deleted person's notice is claimed. What the predicate buys is that
+// the rule is spelled where the read happens rather than inferred from
+// a sentinel two packages away, and that this query keeps refusing a
+// redacted row if that sentinel is ever dropped.
 func staffEmail(ctx context.Context, tx *sql.Tx, identityUID string) (email string, found bool, err error) {
-	err = tx.QueryRowContext(ctx, `SELECT email FROM staff WHERE identity_uid = $1`, identityUID).Scan(&email)
+	err = tx.QueryRowContext(ctx,
+		`SELECT email FROM staff WHERE identity_uid = $1 AND deleted_at IS NULL`, identityUID).Scan(&email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}

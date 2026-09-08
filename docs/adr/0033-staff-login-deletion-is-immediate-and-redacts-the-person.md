@@ -77,9 +77,16 @@ Retroactive shredding across the database backup retention window is out of reac
 
 ## Queued mail rechecks her live state rather than dead-lettering
 
-Outbox rows naming her can already be queued when she deletes her login, and her Identity Platform account going would make each one fail its `GetAccount` call and dead-letter. Each affected worker — `staff_token_mail_outbox`, `staff_email_change_outbox`, `staff_mfa_recovery_outbox`, `session_notice_outbox` — instead rechecks her live `deleted_at` immediately before acting, and marks a row for a deleted person sent having done nothing.
+Outbox rows naming her can already be queued when she deletes her login, and her Identity Platform account going would make each one fail its `GetAccount` call and dead-letter. Two mechanisms cover this, and they are not redundant with each other.
 
-This is ADR-0031's skip-at-send recheck, unchanged in shape and for the same stated reason: these tables carry no `DELETE` grant, so a queued row cannot be cancelled, only made a no-op at the moment it fires.
+**Resolved at source.** The deletion transaction itself marks every *pending* row addressed to her uid sent, having sent nothing — `staff_token_mail_outbox`, `staff_email_change_outbox`, `session_notice_outbox` (keyed on `identity_uid`) and `staff_mfa_recovery_outbox` (on `recipient_identity_uid`). It runs before the sentinel is written, for the same reason the session delete does: every one of these tables addresses a person by her uid, so a row becomes unfindable the moment it changes. This is also the only thing that can resolve a queued *password reset*: that row's identity was resolved through Identity Platform, which holds Client Portal accounts too, so a worker that saw no `staff` row could not tell a deleted Staff person from a Client and must not guess.
+
+**Rechecked at send.** Each affected worker also rechecks her live state immediately before acting, and marks a row for a deleted person sent having done nothing. This is ADR-0031's skip-at-send recheck, unchanged in shape and for the same stated reason: these tables carry no `DELETE` grant, so a queued row cannot be cancelled, only made a no-op at the moment it fires. It covers what resolve-at-source structurally cannot — a row queued by a request that was already in flight, which no statement in the deletion's own transaction can see.
+
+Two facts about that recheck, recorded because neither is obvious from the code:
+
+- **On three of the four tables, the recheck is on absence, not on `deleted_at`.** The redaction rewrites `identity_uid` in the same `UPDATE` that stamps `deleted_at`, so a `WHERE identity_uid = $1` lookup afterwards matches no row at all and never reaches the column. Absence of a live `staff` row is the signal, and it is only sound because every queue site on those tables is Staff-gated. `staff_mfa_recovery_outbox`'s *subject* is the exception — it is keyed on `subject_staff_id`, so that one reads `deleted_at` for real.
+- **`staff_email_change_outbox` needed no recheck at all**, and does not have one. It resolves no Staff person at send time — the notice is composed from the `old_email` captured on the row — so it cannot hit `ErrAccountNotFound`, and the notice it carries is still true and still worth delivering. Resolve-at-source covers it anyway.
 
 ## The endpoint is self-only, by shape
 

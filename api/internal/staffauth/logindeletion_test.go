@@ -50,7 +50,7 @@ func deleteLogin(t *testing.T, srv *httptest.Server, session string, confirmed b
 // is no longer its last one.
 func seedCoOwner(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
 	t.Helper()
-	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
+	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
 }
 
 // readStaffRow reads the redaction's four columns straight out of the
@@ -82,7 +82,7 @@ func countRows(t *testing.T, db *testdb.DB, query string, args ...any) int {
 func TestDeleteLoginHandler_RedactsRowAndDestroysAccount(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-deletes-her-own-login"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "contractor")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, contractorType)
 	seedCoOwner(t, db, practiceID, "owner-who-stays-put")
 
 	accounts := authntest.NewFakeAccountManager()
@@ -130,10 +130,10 @@ func TestDeleteLoginHandler_RedactsRowAndDestroysAccount(t *testing.T) {
 func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-at-two-practices"
-	firstPractice, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "contractor")
+	firstPractice, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, contractorType)
 	seedCoOwner(t, db, firstPractice, "owner-of-the-first")
 	secondPractice := testdb.SeedPractice(t, db, "Second Practice")
-	testdb.SeedStaffAtPractice(t, db, secondPractice, "owner-of-the-second", []string{"owner"}, "employee")
+	testdb.SeedStaffAtPractice(t, db, secondPractice, "owner-of-the-second", []string{ownerRole}, employeeType)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
 		 VALUES ($1, $2, '{doula,admin}', 'contractor')`,
@@ -171,7 +171,7 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 	).Scan(&diff); err != nil {
 		t.Fatalf("read removal diff: %v", err)
 	}
-	if !strings.Contains(diff, "admin") || !strings.Contains(diff, "contractor") {
+	if !strings.Contains(diff, "admin") || !strings.Contains(diff, contractorType) {
 		t.Fatalf("removal diff = %s, want the roles and employment type the membership held", diff)
 	}
 }
@@ -183,7 +183,7 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 func TestDeleteLoginHandler_EndsEverySession(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-signed-in-two-places"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "employee")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
 	seedCoOwner(t, db, practiceID, "owner-of-the-only-practice")
 
 	accounts := authntest.NewFakeAccountManager()
@@ -217,7 +217,7 @@ func TestDeleteLoginHandler_EndsEverySession(t *testing.T) {
 func TestDeleteLoginHandler_RefusesWhileSoleOwner(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "sole-owner-tries-to-leave"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"owner"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE practices SET name = 'Rochester Birth Collective' WHERE id = $1`, practiceID,
 	); err != nil {
@@ -256,7 +256,7 @@ func TestDeleteLoginHandler_RefusesWhileSoleOwner(t *testing.T) {
 func TestDeleteLoginHandler_RefusesWhileSoleOwnerOfPracticePendingDeletion(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "sole-owner-of-a-practice-winding-down"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"owner"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE practices
 		    SET name = 'Winding Down Doulas', deletion_requested_at = now(),
@@ -292,7 +292,7 @@ func TestDeleteLoginHandler_RefusesWhileSoleOwnerOfPracticePendingDeletion(t *te
 func TestDeleteLoginHandler_AllowsSoleOwnerOfFinalizedPractice(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "sole-owner-of-a-finished-practice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"owner"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE practices SET deleted_at = now() WHERE id = $1`, practiceID,
 	); err != nil {
@@ -320,7 +320,7 @@ func TestDeleteLoginHandler_AllowsSoleOwnerOfFinalizedPractice(t *testing.T) {
 func TestDeleteLoginHandler_AllowsOwnerWithACoOwner(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "owner-with-a-co-owner"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"owner"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
 	coOwnerID := seedCoOwner(t, db, practiceID, "the-remaining-owner")
 
 	accounts := authntest.NewFakeAccountManager()
@@ -351,7 +351,7 @@ func TestDeleteLoginHandler_AllowsOwnerWithACoOwner(t *testing.T) {
 func TestDeleteLoginHandler_RequiresConfirmation(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-forgets-to-confirm"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
 	seedCoOwner(t, db, practiceID, "owner-untouched-by-an-unconfirmed-request")
 
 	accounts := authntest.NewFakeAccountManager()
@@ -417,7 +417,7 @@ func TestDeleteLoginHandler_RefusesASessionWithNoStaffRow(t *testing.T) {
 func TestDeleteLoginHandler_RefusesASecondDelete(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-deletes-twice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
 	seedCoOwner(t, db, practiceID, "owner-watching-a-double-delete")
 
 	accounts := authntest.NewFakeAccountManager()
@@ -450,7 +450,7 @@ func TestDeleteLoginHandler_RefusesASecondDelete(t *testing.T) {
 func TestDeleteLoginHandler_IdentityPlatformFailureRollsEverythingBack(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-whose-idp-call-fails"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
 	seedCoOwner(t, db, practiceID, "owner-untouched-by-a-failed-delete")
 
 	accounts := authntest.NewFakeAccountManager()
@@ -481,7 +481,7 @@ func TestDeleteLoginHandler_IdentityPlatformFailureRollsEverythingBack(t *testin
 func TestDeleteLoginHandler_AbsentIdentityPlatformAccountIsSuccess(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-with-no-idp-account-left"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
 	seedCoOwner(t, db, practiceID, "owner-of-a-practice-with-a-ghost")
 
 	// Seeded nowhere: the fake holds no account for this uid at all.
@@ -505,7 +505,7 @@ func TestDeleteLoginHandler_AbsentIdentityPlatformAccountIsSuccess(t *testing.T)
 func TestDeleteLoginHandler_KeepsHerAuthoredWork(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "doula-with-a-history"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
 	seedCoOwner(t, db, practiceID, "owner-of-a-practice-with-history")
 	clientID, _ := testdb.SeedEngagement(t, db, practiceID)
 	testdb.SeedActivity(t, db, practiceID, "client", clientID, "created", activity.StaffActor(staffID))
@@ -526,4 +526,60 @@ func TestDeleteLoginHandler_KeepsHerAuthoredWork(t *testing.T) {
 		  WHERE a.subject_id = $1 AND a.action = 'created'`, clientID); n != 1 {
 		t.Fatalf("resolvable authored rows = %d, want her work to still resolve to the redacted row", n)
 	}
+}
+
+// TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer covers the four
+// outbox tables keyed on her Identity Platform uid. Each is resolved at
+// source, before the sentinel makes the row unfindable -- without it a
+// verification link, an address-change notice, a sign-in notice and a
+// recovery code all dead-letter on an account Identity Platform no longer
+// holds.
+func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "doula-with-mail-in-flight"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
+	seedCoOwner(t, db, practiceID, "owner-whose-mail-is-unaffected")
+
+	seedPendingMail(t, db, uid, staffID)
+
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed(uid, "tasha@example.com", true)
+	srv := newDeleteLoginServer(t, db, accounts)
+	defer srv.Close()
+
+	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
+	for _, table := range []string{
+		"staff_token_mail_outbox",
+		"staff_email_change_outbox",
+		"session_notice_outbox",
+		"staff_mfa_recovery_outbox",
+	} {
+		//nolint:gosec // the table name is this test's own literal, from the slice above
+		if n := countRows(t, db,
+			`SELECT count(*) FROM `+table+` WHERE status = 'pending'`); n != 0 {
+			t.Fatalf("%s: pending rows = %d, want every one addressed to her resolved", table, n)
+		}
+	}
+}
+
+// seedPendingMail queues one pending row addressed to uid in each of the
+// four outbox tables the deletion has to resolve.
+func seedPendingMail(t *testing.T, db *testdb.DB, uid, staffID string) {
+	t.Helper()
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.Admin.ExecContext(t.Context(), query, args...); err != nil {
+			t.Fatalf("seed pending mail: %v", err)
+		}
+	}
+	exec(`INSERT INTO staff_token_mail_outbox (identity_uid, kind, token) VALUES ($1, 'email_verification', 'a-token')`, uid)
+	exec(`INSERT INTO staff_email_change_outbox (identity_uid, old_email) VALUES ($1, 'old@example.com')`, uid)
+	exec(`INSERT INTO session_notice_outbox (identity_uid, kind) VALUES ($1, 'new_signin')`, uid)
+	exec(`INSERT INTO staff_mfa_recovery_outbox (recipient_identity_uid, subject_staff_id, token)
+	      VALUES ($1, $2, '12345678')`, uid, staffID)
 }

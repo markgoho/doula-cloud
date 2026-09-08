@@ -175,6 +175,37 @@ func TestSeedStaff(t *testing.T) {
 	}
 }
 
+// TestRedactDeletedLogin proves the fixture leaves behind exactly the
+// row shape staffauth.DeleteLoginHandler's own redaction does: the same
+// row id, a 'deleted:<id>' identity_uid, a stamped deleted_at, and the
+// two replacement strings. The outbox workers' skip-at-send rechecks
+// (#892) are all written against this shape, so a drift between this
+// fixture and the handler would make three packages' tests agree with
+// each other and with nothing real.
+func TestRedactDeletedLogin(t *testing.T) {
+	db := testdb.New(t)
+	staffID := testdb.SeedStaff(t, db, "seed-test-deleted-login")
+
+	testdb.RedactDeletedLogin(t, db, staffID)
+
+	var identityUID, name, email string
+	var deleted bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT identity_uid, name, email, deleted_at IS NOT NULL FROM staff WHERE id = $1`, staffID,
+	).Scan(&identityUID, &name, &email, &deleted); err != nil {
+		t.Fatalf("read redacted staff: %v", err)
+	}
+	if identityUID != "deleted:"+staffID {
+		t.Fatalf("identity_uid = %q, want the deleted:<id> sentinel", identityUID)
+	}
+	if !deleted {
+		t.Fatal("deleted_at is still NULL, want it stamped")
+	}
+	if name != "Deleted Staff Member" || email != "deleted@deleted.invalid" {
+		t.Fatalf("name/email = %q/%q, want the redaction's replacements", name, email)
+	}
+}
+
 // TestSeedStaffAtNewPractice proves it seeds one fresh Practice and one
 // Staff member on it with the roles and employment type given.
 func TestSeedStaffAtNewPractice(t *testing.T) {

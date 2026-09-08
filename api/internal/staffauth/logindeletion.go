@@ -391,6 +391,11 @@ func redactStaffRow(ctx context.Context, tx *sql.Tx, staffID, uid string, now ti
 		return fmt.Errorf("staffauth: delete own sessions: %w", err)
 	}
 
+	if err := resolveQueuedMail(ctx, tx, uid, now); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+
 	res, err := tx.ExecContext(ctx,
 		`UPDATE staff
 		    SET name = $1, email = $2, identity_uid = $3, deleted_at = $4
@@ -418,6 +423,47 @@ func redactStaffRow(ctx context.Context, tx *sql.Tx, staffID, uid string, now ti
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("staffauth: record login deletion: %w", err)
+	}
+	return nil
+}
+
+// mailAddressedTo is one outbox table's "every pending row for this uid"
+// statement. Written out one per table rather than built from a table
+// name and a column name: the interpolation that would take would be a
+// SQL string this file assembles at runtime, which is the shape gosec
+// refuses on sight and which no reader can check by eye. Four literals
+// are longer and are exactly what they appear to be.
+var mailAddressedTo = []string{
+	`UPDATE staff_token_mail_outbox   SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
+	`UPDATE staff_email_change_outbox SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
+	`UPDATE session_notice_outbox     SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
+	`UPDATE staff_mfa_recovery_outbox SET status = 'sent', sent_at = $1 WHERE recipient_identity_uid = $2 AND status = 'pending'`,
+}
+
+// resolveQueuedMail marks every pending outbox row addressed to her sent,
+// having sent nothing -- ADR-0033's skip-at-send recheck, moved to the
+// source. It runs before the sentinel is written, for the same reason the
+// session delete does: every table here is keyed on identity_uid, so a
+// row addressed to the old uid becomes unfindable the moment it changes.
+//
+// Each worker also rechecks her live state at send time, and that recheck
+// is not redundant with this. This resolves what is queued at the moment
+// she deletes her login; the recheck covers a row queued by a request
+// already in flight, which no statement in this transaction can see.
+// Between them, a row naming her can neither be mailed nor dead-lettered.
+//
+// It also closes the one case the send-time recheck cannot: a queued
+// password reset. That row's identity was resolved through Identity
+// Platform, which holds Client Portal accounts too, so a worker seeing no
+// staff row cannot tell a deleted Staff person from a Client and must not
+// guess. Here there is no guess to make -- this uid is hers, and she just
+// asked for it to stop existing.
+func resolveQueuedMail(ctx context.Context, tx *sql.Tx, uid string, now time.Time) error {
+	for _, statement := range mailAddressedTo {
+		if _, err := tx.ExecContext(ctx, statement, now, uid); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return fmt.Errorf("staffauth: resolve queued mail: %w", err)
+		}
 	}
 	return nil
 }

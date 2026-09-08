@@ -98,8 +98,23 @@ func scanTokenMailRow(rows *sql.Rows) (outbox.RowMeta, tokenMailRow, error) {
 // is a network call). ErrAccountNotFound is terminal (dead-lettered, no
 // account left to notify); any other AccountManager error retries per
 // BackoffSchedule, same as a Mailgun failure would.
+//
+// A verification row is rechecked against `staff` first (#892), which is
+// what makes this Compose need tx as well. See verificationStaffIsLive
+// for why the recheck reaches only this kind and not a reset.
 func composeTokenMail(mailer outbox.Mailer, accounts authn.AccountManager) func(context.Context, *sql.Tx, tokenMailRow, time.Time) (string, string, string, error) {
-	return func(ctx context.Context, _ *sql.Tx, r tokenMailRow, _ time.Time) (string, string, string, error) {
+	return func(ctx context.Context, tx *sql.Tx, r tokenMailRow, _ time.Time) (string, string, string, error) {
+		if r.kind == KindEmailVerification {
+			live, err := verificationStaffIsLive(ctx, tx, r.identityUID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return "", "", "", err
+			}
+			if !live {
+				return "", "", "", outbox.ErrAlreadyDone
+			}
+		}
+
 		account, err := accounts.GetAccount(ctx, r.identityUID)
 		if errors.Is(err, authn.ErrAccountNotFound) {
 			return "", "", "", &outbox.DeadLetterError{Reason: "no Identity Platform account for this identity"}
@@ -124,6 +139,50 @@ func composeTokenMail(mailer outbox.Mailer, accounts authn.AccountManager) func(
 		subject, text := tokenMailCopy(r.kind, mailer.AppBaseURL, r.token.String)
 		return account.Email, subject, text, nil
 	}
+}
+
+// verificationStaffIsLive reports whether identityUID still names a
+// Staff person who has not deleted her own login (#892) -- the
+// skip-at-send recheck for this table, and the reason it reads `staff`
+// at all.
+//
+// It answers for a verification row and nothing else, which is the one
+// asymmetry in this file worth spelling out. Both kinds are keyed on an
+// identity_uid, and a deleted login leaves no identity_uid behind to
+// match: staffauth.DeleteLoginHandler rewrites it to a 'deleted:<id>'
+// sentinel in the same UPDATE that stamps deleted_at. So the only
+// signal available at send time is the absence of a live row, and
+// absence only means "deleted" where a live row was guaranteed at queue
+// time.
+//
+// For a verification row it was: signup inserts the staff row before
+// queueing (signup.go), and the other two write sites --
+// RequestVerificationHandler and ChangeEmailHandler -- both run behind
+// a Staff session. For a reset row it was not. RequestResetHandler is
+// public and resolves its identity through accounts.GetAccountByEmail
+// against Identity Platform, which also holds every Client Portal
+// account (client_portal_users.identity_uid), so a reset row can name a
+// uid that never had a staff row at all. Reading that absence as
+// deletion would silently swallow mail this package has no grounds to
+// swallow, so a reset row falls through to GetAccount unchanged and a
+// deleted person's queued reset still dead-letters on
+// ErrAccountNotFound -- no mail either way, but recorded as a
+// dead-letter rather than as sent.
+//
+// The deleted_at predicate cannot be what catches her on its own, for
+// the sentinel reason above. It is written where the read happens so
+// the rule is legible, and so this query keeps refusing a redacted row
+// if that sentinel is ever dropped.
+func verificationStaffIsLive(ctx context.Context, tx *sql.Tx, identityUID string) (bool, error) {
+	var live bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM staff WHERE identity_uid = $1 AND deleted_at IS NULL)`,
+		identityUID,
+	).Scan(&live); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("authmail: check staff login: %w", err)
+	}
+	return live, nil
 }
 
 // tokenMailCopy is verification and reset mail's fixed, content-free
@@ -212,6 +271,16 @@ const emailChangeText = "Hello,\n\n" +
 	"The email address on your Doula Cloud account was changed.\n\n" +
 	"If you made this change, no action is needed. If you did not, reply to this email right away.\n"
 
+// composeEmailChange carries no #892 skip-at-send recheck, and the
+// absence is a decision rather than an oversight. This is the one Staff
+// mail kind that resolves no Staff person at send time: the address is
+// captured on the row at request time (the whole reason 00061 gave this
+// kind its own table), nothing here reads `staff` or Identity Platform,
+// and so nothing here can fail on a deleted login the way its three
+// siblings would. The notice is also still true and still worth
+// delivering -- somebody changed the address on an account, and the
+// person who used to own that mailbox is exactly who needs to hear it,
+// whatever became of the account afterwards.
 func composeEmailChange(_ context.Context, _ *sql.Tx, r emailChangeRow, _ time.Time) (string, string, string, error) {
 	return r.oldEmail, emailChangeSubject, emailChangeText, nil
 }
