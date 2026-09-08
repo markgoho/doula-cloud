@@ -230,4 +230,12 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// gives for a low-risk, already-signed-in self-service action.
 	g.Write("DELETE /api/staff/mfa",
 		ratelimit.Wrap(db, "staff_mfa_remove", verifyRequestRules)(RemoveSecondFactorHandler(verifier, accounts, db)))
+	// #892: deleting her own login. Self-only by the same shape as every
+	// route above it -- no {practiceId}, no staff id, so there is no path
+	// parameter that could redirect it at another person. Rate limited
+	// with verifyRequestRules, the same sizing every signed-in
+	// self-service act here takes: it is gated by a live session and by
+	// RequireConfirmed, and it can only ever succeed once.
+	g.Write("DELETE /api/staff/account",
+		ratelimit.Wrap(db, "staff_login_delete", verifyRequestRules)(DeleteLoginHandler(accounts, db)))
 }

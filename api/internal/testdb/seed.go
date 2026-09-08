@@ -71,6 +71,34 @@ func SeedStaff(t *testing.T, db *DB, identityUID string) (staffID string) {
 	return staffID
 }
 
+// RedactDeletedLogin does to a seeded Staff row exactly what
+// staffauth.DeleteLoginHandler's own redaction does to a real one
+// (#892): the sentinel identity_uid, the deleted_at stamp, and the
+// replacement name and address, in one UPDATE through the superuser
+// Admin connection.
+//
+// It lives here rather than in each outbox package's own test file for
+// the reason every fixture in this file does: five test files across
+// three packages need the same "she deleted her login after this row was
+// queued" starting state, and one copy is easier to keep in step with
+// the handler than five. Written as a fixture rather than a call into
+// staffauth so a mail package's tests do not have to stand up an HTTP
+// request, a session, and an authn.AccountManager to reach the one row
+// state they are actually about.
+func RedactDeletedLogin(t *testing.T, db *DB, staffID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE staff
+		    SET identity_uid = 'deleted:' || id, deleted_at = now(),
+		        name = 'Deleted Staff Member', email = 'deleted@deleted.invalid'
+		  WHERE id = $1`,
+		staffID,
+	); err != nil {
+		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
+		t.Fatalf("testdb: redact deleted login %q: %v", staffID, err)
+	}
+}
+
 // SeedStaffAtNewPractice creates a fresh Practice and a Staff member on
 // it in one call, for the "give me an authenticated caller at her own
 // Practice" fixture shape a dozen package tests repeated as their own

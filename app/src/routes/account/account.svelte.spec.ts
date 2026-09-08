@@ -431,3 +431,90 @@ describe('removing a second factor (#606)', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 });
+
+/*
+ * #892: deleting her own login. Its own describe rather than an option on
+ * mockApi -- every test here needs the DELETE routed on its own, and the
+ * refusal case needs the session read to keep working while the delete
+ * fails, which one shared `saveResponse` cannot express.
+ */
+function mockDeleteLogin(deleteResponse: Response | Error) {
+	apiFetchWithSession.mockImplementation((path: string) => {
+		if (path === '/api/staff/session') return Promise.resolve(jsonResponse(session));
+		if (path === '/api/staff/account') {
+			return deleteResponse instanceof Error
+				? Promise.reject(deleteResponse)
+				: Promise.resolve(deleteResponse);
+		}
+		return Promise.resolve(jsonResponse({}));
+	});
+}
+
+// Both the section's own button and the ConfirmDialog's confirm button
+// carry this label on purpose -- ConfirmDialog names the act rather than
+// saying "OK" -- so `.first()` is the one that opens and `.last()` the
+// one that commits.
+const deleteButton = () => testPage.getByRole('button', { name: 'Delete your login' });
+
+describe('deleting your own login', () => {
+	it('names what deletion destroys and what it keeps, before she presses anything', async () => {
+		mockDeleteLogin(new Response(undefined, { status: 204 }));
+		await render(Page, {});
+
+		await expect.element(testPage.getByText(/ends your access to Doula Cloud everywhere/)).toBeVisible();
+		await expect.element(testPage.getByText(/membership of every practice you work at/).first()).toBeVisible();
+		await expect.element(testPage.getByText(/Everything you did stays with the practices/).first()).toBeVisible();
+	});
+
+	it('sends the delete only after the confirmation, and lands her on the sign-in screen', async () => {
+		mockDeleteLogin(new Response(undefined, { status: 204 }));
+		await render(Page, {});
+
+		await deleteButton().first().click();
+		// The dialog's own confirm button carries the same label, so the act
+		// is the second one -- pressing the first has sent nothing yet.
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/account', expect.anything());
+
+		await deleteButton().last().click();
+		await vi.waitFor(() => {
+			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/account', {
+				method: 'DELETE',
+				headers: { 'X-Confirmed': 'true' }
+			});
+		});
+		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
+		// #167's shared-device rule: no client-side Identity Platform session
+		// is left behind in this tab.
+		expect(signOut).toHaveBeenCalled();
+	});
+
+	it('shows the last-Owner refusal with the practices in the way named, and stays put', async () => {
+		mockDeleteLogin(
+			refusal(
+				409,
+				'cannot delete your login while you are the only Owner of Riverside Doula Collective: hand ownership to someone else, or delete the practice first'
+			)
+		);
+		await render(Page, {});
+
+		await deleteButton().first().click();
+		await deleteButton().last().click();
+
+		// The dialog closes on a refusal she cannot fix by retrying, so the
+		// named Practices are in front of her rather than behind a backdrop.
+		await expect.element(testPage.getByText(/only Owner of Riverside Doula Collective/)).toBeVisible();
+		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('shows a service problem when the request never lands', async () => {
+		mockDeleteLogin(new Error('The network dropped'));
+		await render(Page, {});
+
+		await deleteButton().first().click();
+		await deleteButton().last().click();
+
+		await expect.element(testPage.getByText('The network dropped')).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
+});

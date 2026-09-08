@@ -61,14 +61,14 @@ func seedMFARecoveryOutboxRow(t *testing.T, db *testdb.DB, recipientIdentityUID,
 	return id
 }
 
-func rowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int, token sql.NullString) {
+func rowState(t *testing.T, db *testdb.DB, id string) (status string, token sql.NullString) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count, token FROM staff_mfa_recovery_outbox WHERE id = $1`, id,
-	).Scan(&status, &attemptCount, &token); err != nil {
+		`SELECT status, token FROM staff_mfa_recovery_outbox WHERE id = $1`, id,
+	).Scan(&status, &token); err != nil {
 		t.Fatalf("query outbox row: %v", err)
 	}
-	return status, attemptCount, token
+	return status, token
 }
 
 // runTx mirrors outbox.ProcessHandler's own transaction setup: the real
@@ -117,6 +117,10 @@ func TestQueueVouchedCodeMail_InsertsPendingRow(t *testing.T) {
 func TestWorker_ProcessPending_SendsToRecipientAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	subjectID := seedStaffRow(t, db, "subject-1", "Priya Raman")
+	// The vouching Owner needs a staff row of her own, not only an
+	// Identity Platform account: #892's recheck reads her live row before
+	// the Admin SDK is reached at all.
+	seedStaffRow(t, db, "owner-uid-1", "Renata Alves")
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed("owner-uid-1", "owner@example.com", true)
 	rowID := seedMFARecoveryOutboxRow(t, db, "owner-uid-1", subjectID, "87654321", time.Now().Add(-time.Minute))
@@ -124,7 +128,7 @@ func TestWorker_ProcessPending_SendsToRecipientAndMarksSent(t *testing.T) {
 	sender := &mail.FakeSender{}
 	runTx(t, db, newWorker(sender, accounts).ProcessPending)
 
-	status, _, token := rowState(t, db, rowID)
+	status, token := rowState(t, db, rowID)
 	if status != statusSent {
 		t.Fatalf("status = %q, want sent", status)
 	}
@@ -137,5 +141,32 @@ func TestWorker_ProcessPending_SendsToRecipientAndMarksSent(t *testing.T) {
 	}
 	if !strings.Contains(sent[0].Text, "Priya Raman") || !strings.Contains(sent[0].Text, "87654321") {
 		t.Fatalf("mail body = %q, want it to name the subject and carry the code", sent[0].Text)
+	}
+}
+
+// TestWorker_ProcessPending_DeletedRecipientMarksSentWithNoMail is
+// #892's skip-at-send recheck seen from the worker rather than from
+// Compose: the vouching Owner deleted her own login between approving
+// the request and this row being claimed. Her Identity Platform account
+// went with it, so the row would otherwise dead-letter on
+// ErrAccountNotFound; instead it is marked sent, with nothing mailed.
+func TestWorker_ProcessPending_DeletedRecipientMarksSentWithNoMail(t *testing.T) {
+	db := testdb.New(t)
+	subjectID := seedStaffRow(t, db, "subject-2", "Priya Raman")
+	ownerStaffID := seedStaffRow(t, db, "owner-uid-2", "Renata Alves")
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed("owner-uid-2", "owner@example.com", true)
+	rowID := seedMFARecoveryOutboxRow(t, db, "owner-uid-2", subjectID, "24682468", time.Now().Add(-time.Minute))
+	testdb.RedactDeletedLogin(t, db, ownerStaffID)
+
+	sender := &mail.FakeSender{}
+	runTx(t, db, newWorker(sender, accounts).ProcessPending)
+
+	status, _ := rowState(t, db, rowID)
+	if status != statusSent {
+		t.Fatalf("status = %q, want sent", status)
+	}
+	if len(sender.Sent()) != 0 {
+		t.Fatalf("expected no mail for an Owner who deleted her login, got %d", len(sender.Sent()))
 	}
 }

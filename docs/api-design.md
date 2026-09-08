@@ -154,6 +154,7 @@ Every public unauthenticated endpoint that existed when this landed, and its dis
 | `POST /api/staff/mfa-recovery/saved-codes/rotate` | Session digest 10/hr, IP 50/hr | #615. Signed-in self-service re-request, same shape as `verify-email/request`: revokes and re-mints a sole Owner's whole saved-code set, so it gets the same self-inflicted-spam guard that pure state reads (`PUT /api/staff/work-state`) do not need. |
 | `POST /api/staff/mfa` | Bearer-token digest 30/hr, IP 100/hr | #606. Finishes a TOTP enrolment by exchanging a just-enrolled ID token for a session -- same shape and same limits as `POST /api/session`, because it is an ordinary sign-in path (the enrolment flow's own re-sign-in) rather than a once-per-person bootstrap event. |
 | `DELETE /api/staff/mfa` | Session digest 10/hr, IP 50/hr | #606. Signed-in voluntary removal of her own factor, guarded by `RequireRecentAuth`'s step-up rather than by a tight limit -- same shape as `verify-email/request`, a low-risk self-service action already gated by a live session. |
+| `DELETE /api/staff/account` | Session digest 10/hr, IP 50/hr | #892 (ADR-0033). Deleting her own login. Same sizing as the two rows above, and for a stronger version of the same reason: it is gated by a live session and by `RequireConfirmed`, and it can only ever succeed once — the session it was authorized by is deleted by the act itself. The limit is there for the refusal path, where a sole Owner can retry a 409 as often as she likes. |
 
 Deliberately not limited:
 

@@ -47,14 +47,14 @@ func seedTokenMailRow(t *testing.T, db *testdb.DB, identityUID string, kind auth
 	return id
 }
 
-func tokenMailRowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int, token sql.NullString) {
+func tokenMailRowState(t *testing.T, db *testdb.DB, id string) (status string, token sql.NullString) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count, token FROM staff_token_mail_outbox WHERE id = $1`, id,
-	).Scan(&status, &attemptCount, &token); err != nil {
+		`SELECT status, token FROM staff_token_mail_outbox WHERE id = $1`, id,
+	).Scan(&status, &token); err != nil {
 		t.Fatalf("query token mail row: %v", err)
 	}
-	return status, attemptCount, token
+	return status, token
 }
 
 func seedEmailChangeRow(t *testing.T, db *testdb.DB, identityUID, oldEmail string, attemptCount int, nextAttemptAt time.Time) string {
@@ -80,6 +80,11 @@ func emailChangeRowState(t *testing.T, db *testdb.DB, id string) (status string,
 	return status, attemptCount
 }
 
+// runTx mirrors outbox.ProcessHandler's own transaction setup, including
+// the app.notification_worker_trusted flag it sets after its secret
+// check: staff_notification_worker (00033) is what lets the token-mail
+// worker's #892 recheck read `staff` at all, so a test calling
+// ProcessPending directly has to open the same door.
 func runTx(t *testing.T, db *testdb.DB, fn func(ctx context.Context, tx *sql.Tx) error) {
 	t.Helper()
 	tx, err := db.App.BeginTx(t.Context(), nil)
@@ -87,6 +92,9 @@ func runTx(t *testing.T, db *testdb.DB, fn func(ctx context.Context, tx *sql.Tx)
 		t.Fatalf("begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
+		t.Fatalf("set trusted flag: %v", err)
+	}
 	if err := fn(t.Context(), tx); err != nil {
 		t.Fatalf("tx func: %v", err)
 	}
@@ -97,6 +105,7 @@ func runTx(t *testing.T, db *testdb.DB, fn func(ctx context.Context, tx *sql.Tx)
 
 func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
+	testdb.SeedStaff(t, db, "uid-1")
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed("uid-1", "person@example.com", false)
 	rowID := seedTokenMailRow(t, db, "uid-1", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(-time.Minute))
@@ -104,7 +113,7 @@ func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing
 	sender := &mail.FakeSender{}
 	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
 
-	status, _, token := tokenMailRowState(t, db, rowID)
+	status, token := tokenMailRowState(t, db, rowID)
 	if status != statusSent {
 		t.Fatalf("status = %q, want sent", status)
 	}
@@ -114,6 +123,32 @@ func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing
 	sent := sender.Sent()
 	if len(sent) != 1 || sent[0].To != "person@example.com" {
 		t.Fatalf("sent = %+v, want one message to person@example.com", sent)
+	}
+}
+
+// TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail is
+// #892's skip-at-send recheck seen from the worker rather than from
+// Compose: a verification link queued while she still had a login,
+// claimed after she deleted it. The row is marked sent with nothing
+// mailed, rather than dead-lettered on an Identity Platform account that
+// no longer exists.
+func TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail(t *testing.T) {
+	db := testdb.New(t)
+	staffID := testdb.SeedStaff(t, db, "uid-deleted")
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed("uid-deleted", "person@example.com", false)
+	rowID := seedTokenMailRow(t, db, "uid-deleted", authmail.KindEmailVerification, "verify-token", 0, time.Now().Add(-time.Minute))
+	testdb.RedactDeletedLogin(t, db, staffID)
+
+	sender := &mail.FakeSender{}
+	runTx(t, db, newTokenMailWorker(sender, accounts).ProcessPending)
+
+	status, _ := tokenMailRowState(t, db, rowID)
+	if status != statusSent {
+		t.Fatalf("status = %q, want sent", status)
+	}
+	if len(sender.Sent()) != 0 {
+		t.Fatalf("expected no mail for a Staff person who deleted her login, got %d", len(sender.Sent()))
 	}
 }
 

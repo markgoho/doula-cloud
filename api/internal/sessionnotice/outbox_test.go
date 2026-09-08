@@ -273,6 +273,31 @@ func TestWorker_ProcessPending_NoStaffMarksSentWithNoMail(t *testing.T) {
 	}
 }
 
+// TestWorker_ProcessPending_DeletedLoginMarksSentWithNoMail is #892's
+// skip-at-send recheck: a notice queued while she still had a login,
+// claimed after she deleted it. Her Identity Platform account is gone
+// and her staff row names nobody, so there is nothing to deliver -- the
+// row is marked sent with no mail, never retried and never
+// dead-lettered.
+func TestWorker_ProcessPending_DeletedLoginMarksSentWithNoMail(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "staff-deleted-own-login"
+	staffID := testdb.SeedStaff(t, db, uid)
+	outboxID := seedSessionNoticeOutboxRow(t, db, uid, "session_revoked", time.Now().Add(-time.Minute), time.Now())
+	testdb.RedactDeletedLogin(t, db, staffID)
+
+	sender := &mail.FakeSender{}
+	runWorker(t, db, newTestWorker(sender))
+
+	status := outboxRowState(t, db, outboxID)
+	if status != testStatusSent {
+		t.Fatalf("status = %q, want %s", status, testStatusSent)
+	}
+	if len(sender.Sent()) != 0 {
+		t.Fatalf("expected no mail sent for a Staff person who deleted her login, got %d", len(sender.Sent()))
+	}
+}
+
 func TestQueueMFARecoveryCleared_InsertsPendingRow(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "staff-mfa-cleared"

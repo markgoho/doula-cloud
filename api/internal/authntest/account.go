@@ -41,6 +41,13 @@ type FakeAccountManager struct {
 	// spend-handler tests prove clearEnrolmentAndRecord's own failure
 	// branch, distinct from the account-lookup failure that precedes it.
 	ClearSecondFactorsErr error
+
+	// DeleteAccountErr, when set, is returned by DeleteAccount
+	// specifically, without disturbing the reads that precede it -- how
+	// #892's deletion tests prove the Identity Platform half failing on
+	// its own rolls the whole transaction back, leaving her row, her
+	// Memberships and her sessions exactly as they were.
+	DeleteAccountErr error
 }
 
 var _ authn.AccountManager = (*FakeAccountManager)(nil)
@@ -203,5 +210,30 @@ func (f *FakeAccountManager) ClearSecondFactors(_ context.Context, uid string) e
 		return authn.ErrAccountNotFound
 	}
 	a.mfaEnrolled = false
+	return nil
+}
+
+// Exists reports whether uid still holds an account, so a test can
+// assert DeleteAccount actually destroyed it.
+func (f *FakeAccountManager) Exists(uid string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.accounts[uid]
+	return ok
+}
+
+// DeleteAccount implements authn.AccountManager. An absent account is a
+// success, never ErrAccountNotFound -- the interface's own contract, and
+// the reason a retried Staff login deletion can finish.
+func (f *FakeAccountManager) DeleteAccount(_ context.Context, uid string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.DeleteAccountErr != nil {
+		return f.DeleteAccountErr
+	}
+	if f.Err != nil {
+		return f.Err
+	}
+	delete(f.accounts, uid)
 	return nil
 }

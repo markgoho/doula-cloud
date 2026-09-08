@@ -1,7 +1,9 @@
 package staffauth_test
 
 import (
+	"database/sql"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -276,4 +278,159 @@ func TestRLS_InvitationAcceptLookupNeedsTheTokenDigest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// asHerself runs body on a connection standing in exactly the context
+// DeleteLoginHandler runs in: her own identity, no Practice chosen, and
+// 00033's trusted-worker flag set. The flag is not decoration here -- see
+// TestRLS_LoginDeletionNeedsTheTrustedFlagToSeeItsOwnNewRow.
+func asHerself(t *testing.T, db *testdb.DB, identityUID string, body func(tx *sql.Tx)) {
+	t.Helper()
+	inSelfWindow(t, db, identityUID, true, body)
+}
+
+// inSelfWindow is asHerself with the trusted flag made optional, so one
+// test can prove what happens without it.
+func inSelfWindow(t *testing.T, db *testdb.DB, identityUID string, trusted bool, body func(tx *sql.Tx)) {
+	t.Helper()
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: DB connection failure, not exercised by unit tests
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(),
+		`SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		t.Fatalf("set identity: %v", err)
+	}
+	if trusted {
+		if _, err := tx.ExecContext(t.Context(),
+			`SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			t.Fatalf("set trusted flag: %v", err)
+		}
+	}
+	body(tx)
+}
+
+// redactingUpdate is the UPDATE redactStaffRow runs, with each column a
+// caller controls left as a parameter so a test can bend one of them out
+// of shape and watch the policies refuse.
+const redactingUpdate = `UPDATE staff SET name = $1, email = $2, identity_uid = $3, deleted_at = $4 WHERE id = $5`
+
+// TestRLS_LoginDeletionPolicyAdmitsTheRedaction pins what 00101's
+// staff_self_login_deletion admits and refuses, as herself, in the
+// pre-Practice window it is scoped to -- including the one shape it
+// cannot refuse, which is worth a test precisely because the migration
+// would otherwise read as promising more than it delivers.
+func TestRLS_LoginDeletionPolicyAdmitsTheRedaction(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "rls-login-deletion"
+	staffID := testdb.SeedStaff(t, db, uid)
+	sentinel := "deleted:" + staffID
+
+	// Refused: the sentinel without the deleted_at stamp. A row that walks
+	// away from its own identity while still reading as live is exactly
+	// what 00101's WITH CHECK exists to refuse, and 00044 refuses it too.
+	asHerself(t, db, uid, func(tx *sql.Tx) {
+		if _, err := tx.ExecContext(t.Context(), redactingUpdate,
+			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail, sentinel, nil, staffID); err == nil {
+			t.Fatal("the policies admitted a sentinel with no deleted_at stamp")
+		}
+	})
+
+	// Admitted, and this is the limit of what 00101 can promise, recorded
+	// here rather than left as a surprise: deleted_at stamped with her
+	// identity_uid kept goes through, because 00044's staff_self_update
+	// admits it. That policy is row-level by its own stated design ("this
+	// permits her to update any column of her own row"), Postgres ORs
+	// permissive policies, and narrowing it to close this would take the
+	// work-state self-edit down with it, for a write no route exposes.
+	//
+	// So the pairing of the sentinel and the stamp is redactStaffRow's
+	// guarantee -- both in one statement, checked to have affected exactly
+	// one row -- and what 00101 adds is the only thing 00044 cannot:
+	// admitting the sentinel at all.
+	asHerself(t, db, uid, func(tx *sql.Tx) {
+		if _, err := tx.ExecContext(t.Context(), redactingUpdate,
+			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail, uid, time.Now(), staffID); err != nil {
+			t.Fatalf("00044's own whole-row self-update stopped admitting a plain column write: %v", err)
+		}
+	})
+
+	// Admitted: the whole redaction, the exact shape redactStaffRow writes.
+	asHerself(t, db, uid, func(tx *sql.Tx) {
+		res, err := tx.ExecContext(t.Context(), redactingUpdate,
+			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail, sentinel, time.Now(), staffID)
+		if err != nil {
+			t.Fatalf("the policy refused the redaction it exists to admit: %v", err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			// coverage:ignore reason: driver failure, not exercised by unit tests
+			t.Fatalf("rows affected: %v", err)
+		}
+		if affected != 1 {
+			t.Fatalf("rows affected = %d, want 1", affected)
+		}
+	})
+}
+
+// TestRLS_LoginDeletionNeedsTheTrustedFlagToSeeItsOwnNewRow pins the one
+// coupling in this act that nothing else would record, and that a
+// reasonable cleanup would break.
+//
+// DeleteLoginHandler sets 00033's app.notification_worker_trusted for
+// what looks like an unrelated reason -- reading across every Practice
+// she belongs to, which no per-Practice policy admits. It turns out the
+// redaction cannot commit without it either. Postgres checks this table's
+// SELECT policies against the *new* row, and the new row's identity_uid
+// is the sentinel, which staff_self_visibility (00006) does not match;
+// staff_notification_worker (00033) is the only SELECT policy left that
+// admits it, and it admits every row regardless of content.
+//
+// Without this test, dropping the flag as "only needed for the reads"
+// would turn every login deletion into a 500 nothing here explains.
+func TestRLS_LoginDeletionNeedsTheTrustedFlagToSeeItsOwnNewRow(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "rls-login-deletion-untrusted"
+	staffID := testdb.SeedStaff(t, db, uid)
+
+	inSelfWindow(t, db, uid, false, func(tx *sql.Tx) {
+		if _, err := tx.ExecContext(t.Context(), redactingUpdate,
+			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail,
+			"deleted:"+staffID, time.Now(), staffID); err == nil {
+			t.Fatal("the redaction committed with no trusted flag set -- see this test's comment; the handler's own set_config may have become load-bearing somewhere else, or a new SELECT policy now admits the redacted row")
+		}
+	})
+}
+
+// TestRLS_LoginDeletionPolicyRefusesAnotherPersonsRow is the USING half:
+// the endpoint carries no staff id, and neither does the policy admit
+// one. A caller who found some other way to name a row still cannot
+// reach it.
+func TestRLS_LoginDeletionPolicyRefusesAnotherPersonsRow(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "rls-login-deletion-caller"
+	testdb.SeedStaff(t, db, uid)
+	victimID := testdb.SeedStaff(t, db, "rls-login-deletion-victim")
+
+	asHerself(t, db, uid, func(tx *sql.Tx) {
+		res, err := tx.ExecContext(t.Context(), redactingUpdate,
+			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail,
+			"deleted:"+victimID, time.Now(), victimID)
+		if err != nil {
+			// coverage:ignore reason: a refusal here arrives as zero rows rather than an error -- USING filters the row out before any WITH CHECK is consulted
+			return
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			// coverage:ignore reason: driver failure, not exercised by unit tests
+			t.Fatalf("rows affected: %v", err)
+		}
+		if affected != 0 {
+			t.Fatalf("rows affected = %d, want the policy to refuse another person's row entirely", affected)
+		}
+	})
 }
