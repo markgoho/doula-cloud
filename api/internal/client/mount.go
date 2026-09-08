@@ -37,14 +37,13 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, nudge tasknudge.Enq
 	// own gate, per the payments/connect precedent.
 	g.Get("/api/practices/{practiceId}/clients/{clientId}/erasure", staffauth.OwnerOnly, EraseEligibilityHandler())
 	// #394's erasure, ADR-0027: the one act in the product that destroys
-	// a fact, so Owner-only -- declared here at the mount (#1016,
-	// following #970 and #990) rather than checked inside the handler,
-	// the same seat as the MFA switch and as the eligibility read just
-	// above -- and the
-	// one route here whose repeat is a mistake worth naming -- it locks
-	// the row FOR UPDATE and 409s on an erased_at that is already set,
-	// so a retry after the first commit refuses rather than erasing
-	// twice or double-calling Stripe.
+	// a fact, so Owner-only -- the same seat as the MFA switch and as the
+	// eligibility read just above, declared here at the mount (#1016,
+	// following #970 and #990) rather than checked inside the handler.
+	// It is also the one route here whose repeat is a mistake worth
+	// naming: it locks the row FOR UPDATE and 409s on an erased_at that
+	// is already set, so a retry after the first commit refuses rather
+	// than erasing twice or double-calling Stripe.
 	ir.ExemptGated("POST /api/practices/{practiceId}/clients/{clientId}/erasure",
 		"erase() locks the clients row FOR UPDATE and refuses a row whose erased_at is already set; a retry after the first commit 409s instead of enqueuing a second set of Stripe and Identity Platform acts",
 		false, staffauth.OwnerOnly, EraseHandler(nudge))
