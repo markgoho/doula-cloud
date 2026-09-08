@@ -19,12 +19,6 @@ export default defineConfig({
 	],
 	test: {
 		expect: { requireAssertions: true },
-		// This scaffold ships no application logic yet -- #158 onward add
-		// the +server.ts routes and lib code that will carry real specs.
-		// Without this, a project with zero test files exits 1 and the
-		// coverage gate below (vacuously 100% over an empty src/lib) never
-		// gets the chance to report anything.
-		passWithNoTests: true,
 		coverage: {
 			provider: 'v8',
 			include: ['src/lib/**/*.{ts,svelte}'],
