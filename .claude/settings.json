@@ -79,6 +79,12 @@
             "statusMessage": "Reaping orphaned testcontainers Postgres containers",
             "timeout": 30,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/announce-trunk-red.ts\"",
+            "statusMessage": "Checking whether trunk is red",
+            "timeout": 30
           }
         ]
       }

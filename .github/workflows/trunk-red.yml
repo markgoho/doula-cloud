@@ -1,0 +1,92 @@
+# Trunk red alarm (#1021).
+#
+# CI on trunk runs jobs no pull request ever runs -- `migrate` against the
+# real doula-cloud-pg, then `deploy-api` and `deploy-app`. A PR cannot go
+# red on any of them, so trunk is the only place those failures appear,
+# and nothing used to announce them. #967 broke `migrate` and trunk stayed
+# red across seven merges with no deploy, because every PR in that window
+# was green and nobody looked past it.
+#
+# This turns that silence into an assigned, labelled issue within a minute
+# of the failure, and closes it again the moment trunk goes green, so the
+# open issue is always the live state rather than a backlog to sift.
+name: Trunk red
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [trunk]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: trunk-red
+  cancel-in-progress: false
+
+jobs:
+  alarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Open or update the trunk-red issue
+        if: github.event.workflow_run.conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          TITLE: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -euo pipefail
+          # Which jobs actually failed, and which step inside each. This is
+          # the part that is expensive to reconstruct by hand later, so it
+          # goes in the issue body rather than a link to go read.
+          failed=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" \
+            --jq '.jobs[] | select(.conclusion=="failure") | "- **\(.name)** - failed at step _\(.steps[] | select(.conclusion=="failure") | .name)_"' \
+            | sort -u)
+          [ -n "$failed" ] || failed="- (no job reported a failure conclusion; see the run)"
+
+          subject=$(printf '%s' "$TITLE" | head -1)
+          short=$(printf '%s' "$SHA" | cut -c1-8)
+
+          {
+            printf 'Trunk CI failed on **%s**.\n\n' "$short"
+            printf '%s\n\n' "$failed"
+            printf '**Commit:** %s\n\n' "$subject"
+            printf '**Run:** %s\n\n' "$RUN_URL"
+            printf 'The migrate, deploy-api and deploy-app jobs run ONLY on trunk, so a green pull request says nothing about them. While this issue is open, **no deploy is reaching the environment** and trunk is not a safe base to branch from.\n\n'
+            printf 'This issue is opened automatically by .github/workflows/trunk-red.yml and closes itself when trunk goes green again. Do not close it by hand while trunk is still failing - it will reopen on the next run.\n'
+          } > body.md
+
+          existing=$(gh issue list --repo "$REPO" --label trunk-red --state open \
+            --json number --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body-file body.md
+            echo "commented on existing #${existing}"
+          else
+            gh issue create --repo "$REPO" \
+              --title "Trunk is red: CI failed on ${short}" \
+              --label trunk-red \
+              --assignee markgoho \
+              --body-file body.md
+          fi
+
+      - name: Close the trunk-red issue
+        if: github.event.workflow_run.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          short=$(printf '%s' "$SHA" | cut -c1-8)
+          for n in $(gh issue list --repo "$REPO" --label trunk-red --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --repo "$REPO" --reason completed \
+              --comment "Trunk is green again as of ${short} - ${RUN_URL}. Closed automatically by .github/workflows/trunk-red.yml."
+          done
