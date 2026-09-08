@@ -69,33 +69,51 @@ func ReassignHandler() http.Handler {
 			return
 		}
 
+		// The Visit row is locked before it is read, so the staff_id this
+		// records as the "before" is the one the UPDATE below actually
+		// overwrites. A plain SELECT would not give that: under READ
+		// COMMITTED two concurrent reassignments could both read the
+		// same original assignee and one would log a move that never
+		// happened. SELECT ... FOR UPDATE blocks on a competing writer
+		// and then re-reads the row it committed, so the pair is always
+		// a move that really took place.
+		//
 		// engagement_id is filtered explicitly, on top of the RLS scoping
 		// staffauth.Middleware already set up on tx, so a Visit can't be
 		// reassigned via an engagementId/visitId pair that don't actually
 		// belong together.
-		result, err := c.tx.ExecContext(r.Context(),
-			`UPDATE visits SET staff_id = $1 WHERE id = $2 AND engagement_id = $3`,
-			staffID, visitID, engagementID,
-		)
-		if err != nil {
+		var previousStaffID string
+		if err := c.tx.QueryRowContext(r.Context(),
+			`SELECT staff_id FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
+			visitID, engagementID,
+		).Scan(&previousStaffID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				apierr.WriteError(w, "visit not found", http.StatusNotFound)
+				return
+			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
+		if _, err := c.tx.ExecContext(r.Context(),
+			`UPDATE visits SET staff_id = $1 WHERE id = $2 AND engagement_id = $3`,
+			staffID, visitID, engagementID,
+		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if rows == 0 {
-			apierr.WriteError(w, "visit not found", http.StatusNotFound)
-			return
-		}
-		// See CreateHandler's own diff comment: who the Visit was put on
-		// rides every entry, so "who acted, who it went to, and when" is
-		// readable off one row.
-		diff, err := json.Marshal(map[string]string{"assignedStaffId": staffID})
+		// A reassignment is a move, so it records both ends of it -- the
+		// Staff member the Visit came off as well as the one it went to,
+		// under the same before/after key convention a rescheduling
+		// already uses. CreateHandler's visit_logged entry keeps its
+		// single-sided assignedStaffId on purpose: a creation has no
+		// "before", and writing a null one would say the Visit had
+		// previously been on nobody rather than that it did not exist.
+		diff, err := json.Marshal(map[string]string{
+			activity.DiffKeyAssignedStaffIDBefore: previousStaffID,
+			activity.DiffKeyAssignedStaffIDAfter:  staffID,
+		})
 		if err != nil {
 			// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -116,8 +134,8 @@ func ReassignHandler() http.Handler {
 
 		// The attachment the employee handed this Visit gets is
 		// grantAssignee's rule, shared with the create path. It runs
-		// only here, below the rows == 0 404, so a reassign that matched
-		// no Visit attaches nobody.
+		// only here, below the locking read's own sql.ErrNoRows 404, so a
+		// reassign that matched no Visit attaches nobody.
 		if !grantAssignee(w, r, c, engagementID, staffID, isEmployee) {
 			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
 			return

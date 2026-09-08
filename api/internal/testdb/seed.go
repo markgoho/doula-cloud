@@ -1,6 +1,7 @@
 package testdb
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -244,6 +245,15 @@ func SeedGrantedAttachment(t *testing.T, db *DB, engagementID, staffID string) {
 // in portal, activityfeed and engagement's own tests.
 func SeedActivity(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action string, actor activity.Actor) {
 	t.Helper()
+	SeedActivityWithDiff(t, db, practiceID, subjectKind, subjectID, action, actor, nil)
+}
+
+// SeedActivityWithDiff is SeedActivity for a row whose diff is the point
+// of the test -- a visit_reassigned entry naming both ends of the move,
+// for instance. A nil diff takes activity.Record's own default, which is
+// what SeedActivity passes.
+func SeedActivityWithDiff(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action string, actor activity.Actor, diff json.RawMessage) {
+	t.Helper()
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
 	if err != nil {
 		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
@@ -255,6 +265,7 @@ func SeedActivity(t *testing.T, db *DB, practiceID, subjectKind, subjectID, acti
 		SubjectKind: subjectKind,
 		SubjectID:   subjectID,
 		Action:      action,
+		Diff:        diff,
 		Actor:       actor,
 	}); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test

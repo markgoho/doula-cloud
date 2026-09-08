@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
@@ -66,7 +67,10 @@ func countVisits(t *testing.T, db *testdb.DB, engagementID string) int {
 // assignedStaffID reads the assignee back off the newest activity row for
 // action -- the audit-trail assertion, made through the stored diff rather
 // than the handler's own response.
-func assignedStaffID(t *testing.T, db *testdb.DB, engagementID, action string) string {
+// key names which of the diff's own keys the caller is asking for: a
+// creation carries one, `assignedStaffId`, and a reassignment carries
+// both ends of the move under activity's before/after keys (#887).
+func assignedStaffID(t *testing.T, db *testdb.DB, engagementID, action, key string) string {
 	t.Helper()
 	var diff []byte
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -76,13 +80,11 @@ func assignedStaffID(t *testing.T, db *testdb.DB, engagementID, action string) s
 	).Scan(&diff); err != nil {
 		t.Fatalf("read activity entry: %v", err)
 	}
-	var decoded struct {
-		AssignedStaffID string `json:"assignedStaffId"`
-	}
+	decoded := map[string]string{}
 	if err := json.Unmarshal(diff, &decoded); err != nil {
 		t.Fatalf("decode diff: %v", err)
 	}
-	return decoded.AssignedStaffID
+	return decoded[key]
 }
 
 // attachment reads the open attachment for a pair, or reports that there
@@ -381,7 +383,7 @@ func TestVisitWrites_RecordTheAssignee(t *testing.T) {
 	created := createVisit(t, session, url, "", visit.CreateRequest{StaffID: &firstStaffID})
 	defer created.Body.Close()
 	out := decodeCreate(t, created)
-	if got := assignedStaffID(t, db, engagementID, "visit_logged"); got != firstStaffID {
+	if got := assignedStaffID(t, db, engagementID, "visit_logged", "assignedStaffId"); got != firstStaffID {
 		t.Fatalf("visit_logged assignee = %q, want %q", got, firstStaffID)
 	}
 
@@ -394,8 +396,11 @@ func TestVisitWrites_RecordTheAssignee(t *testing.T) {
 	if reassigned.StatusCode != http.StatusOK {
 		t.Fatalf("reassign status = %d, want %d", reassigned.StatusCode, http.StatusOK)
 	}
-	if got := assignedStaffID(t, db, engagementID, "visit_reassigned"); got != secondStaffID {
+	if got := assignedStaffID(t, db, engagementID, "visit_reassigned", activity.DiffKeyAssignedStaffIDAfter); got != secondStaffID {
 		t.Fatalf("visit_reassigned assignee = %q, want %q", got, secondStaffID)
+	}
+	if got := assignedStaffID(t, db, engagementID, "visit_reassigned", activity.DiffKeyAssignedStaffIDBefore); got != firstStaffID {
+		t.Fatalf("visit_reassigned previous assignee = %q, want %q", got, firstStaffID)
 	}
 }
 

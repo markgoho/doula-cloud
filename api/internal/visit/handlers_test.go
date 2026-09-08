@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
@@ -342,6 +343,62 @@ func TestReassignHandler_Success(t *testing.T) {
 	}
 	if out.VisitID != visitID || out.StaffID != targetStaffID {
 		t.Fatalf("unexpected response: %+v", out)
+	}
+
+	// A reassignment is a move, so the entry names both ends of it: the
+	// Staff member the Visit came off as well as the one it went to
+	// (#887). The "before" is read under a row lock, so it is the value
+	// the write actually overwrote.
+	var rawDiff []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity WHERE subject_id = $1 AND action = $2`,
+		engagementID, string(activity.ActionVisitReassigned),
+	).Scan(&rawDiff); err != nil {
+		t.Fatalf("read the reassignment's activity row: %v", err)
+	}
+	var diff map[string]string
+	if err := json.Unmarshal(rawDiff, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if diff[activity.DiffKeyAssignedStaffIDBefore] != creatorStaffID {
+		t.Fatalf("%s = %q, want the Staff member the Visit came off (%q)", activity.DiffKeyAssignedStaffIDBefore, diff[activity.DiffKeyAssignedStaffIDBefore], creatorStaffID)
+	}
+	if diff[activity.DiffKeyAssignedStaffIDAfter] != targetStaffID {
+		t.Fatalf("%s = %q, want the Staff member the Visit went to (%q)", activity.DiffKeyAssignedStaffIDAfter, diff[activity.DiffKeyAssignedStaffIDAfter], targetStaffID)
+	}
+}
+
+// TestCreateHandler_LogsOnlyTheAssignee holds visit_logged's own diff to
+// its single-sided shape: a creation has no "before", so it never grows
+// the reassignment's two keys (#887).
+func TestCreateHandler_LogsOnlyTheAssignee(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-create-diff"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	created := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &staffID})
+	defer created.Body.Close()
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
+	}
+
+	var rawDiff []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity WHERE subject_id = $1 AND action = $2`,
+		engagementID, string(activity.ActionVisitLogged),
+	).Scan(&rawDiff); err != nil {
+		t.Fatalf("read the creation's activity row: %v", err)
+	}
+	var diff map[string]string
+	if err := json.Unmarshal(rawDiff, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if len(diff) != 1 || diff["assignedStaffId"] != staffID {
+		t.Fatalf("visit_logged diff = %v, want only assignedStaffId = %q", diff, staffID)
 	}
 }
 

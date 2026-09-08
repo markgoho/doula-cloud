@@ -31,7 +31,13 @@ type ActivityEntry struct {
 	Diff      json.RawMessage `json:"diff"`
 	ActorKind string          `json:"actorKind"`
 	ActorName string          `json:"actorName"`
-	CreatedAt time.Time       `json:"createdAt"`
+	// Detail is one sentence describing what the diff says, already in
+	// people's names -- present only for an action that has something
+	// to add beyond its own name, absent for every other one, so a
+	// reader falls back to the generic description it renders today.
+	// Today only visit_reassigned carries it (#887).
+	Detail    string    `json:"detail,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // ActivityListResponse is docs/api-design.md section 4's envelope.
@@ -145,29 +151,38 @@ func ListActivityHandler() http.Handler {
 // activity.SubjectEngagement and moneyActionsNotIn -- both compile-time
 // constants this package itself wrote (see moneyActionsNotIn's own doc
 // comment), never request input, so gosec's G201 (SQL query built from a
-// format string) does not apply to the fmt.Sprintf calls below.
+// format string) does not apply to the fmt.Sprintf calls below. The two
+// staff joins on the diff resolve a visit_reassigned entry's two ids to
+// names the same way the actor join resolves actor_staff_id -- keyed on
+// activity's own DiffKeyAssignedStaffID* constants, so the write side
+// names those keys once (#887). Both templates carry the identical
+// SELECT list and joins; only the cursor predicate differs.
 const listEngagementActivityQueryTemplate = `SELECT a.id, a.action, a.diff, a.actor_kind::text,
-	       s.name, c.given_name, c.preferred_name, a.created_at
+	       s.name, c.given_name, c.preferred_name, before_staff.name, after_staff.name, a.created_at
 	FROM activity a
 	LEFT JOIN staff s ON s.id = a.actor_staff_id
 	LEFT JOIN clients c ON c.id = a.actor_client_id
+	LEFT JOIN staff before_staff ON before_staff.id = (a.diff ->> '%[3]s')::uuid
+	LEFT JOIN staff after_staff  ON after_staff.id  = (a.diff ->> '%[4]s')::uuid
 	WHERE a.practice_id = $1 AND a.subject_kind = '%[1]s' AND a.subject_id = $2
 	  AND ($3 OR a.action NOT IN (%[2]s))
 	ORDER BY a.created_at DESC, a.id DESC LIMIT $4`
 
 const listEngagementActivityAfterQueryTemplate = `SELECT a.id, a.action, a.diff, a.actor_kind::text,
-	       s.name, c.given_name, c.preferred_name, a.created_at
+	       s.name, c.given_name, c.preferred_name, before_staff.name, after_staff.name, a.created_at
 	FROM activity a
 	LEFT JOIN staff s ON s.id = a.actor_staff_id
 	LEFT JOIN clients c ON c.id = a.actor_client_id
+	LEFT JOIN staff before_staff ON before_staff.id = (a.diff ->> '%[3]s')::uuid
+	LEFT JOIN staff after_staff  ON after_staff.id  = (a.diff ->> '%[4]s')::uuid
 	WHERE a.practice_id = $1 AND a.subject_kind = '%[1]s' AND a.subject_id = $2
 	  AND ($3 OR a.action NOT IN (%[2]s))
 	  AND (a.created_at, a.id) < ($4, $5)
 	ORDER BY a.created_at DESC, a.id DESC LIMIT $6`
 
-var listEngagementActivityQuery = fmt.Sprintf(listEngagementActivityQueryTemplate, activity.SubjectEngagement, moneyActionsNotIn) //nolint:gosec // both interpolated values are package-internal constants, not request input
+var listEngagementActivityQuery = fmt.Sprintf(listEngagementActivityQueryTemplate, activity.SubjectEngagement, moneyActionsNotIn, activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter) //nolint:gosec // every interpolated value is a package-internal constant, not request input
 
-var listEngagementActivityAfterQuery = fmt.Sprintf(listEngagementActivityAfterQueryTemplate, activity.SubjectEngagement, moneyActionsNotIn) //nolint:gosec // both interpolated values are package-internal constants, not request input
+var listEngagementActivityAfterQuery = fmt.Sprintf(listEngagementActivityAfterQueryTemplate, activity.SubjectEngagement, moneyActionsNotIn, activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter) //nolint:gosec // every interpolated value is a package-internal constant, not request input
 
 // activityRow is ActivityEntry plus the row id ListActivityHandler needs
 // to mint a cursor but never puts in the response -- activity rows have
@@ -208,8 +223,10 @@ func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagem
 		var diff []byte
 		var actorKind string
 		var staffName, clientGivenName, clientPreferredName sql.NullString
+		var beforeStaffName, afterStaffName sql.NullString
 		if err := rows.Scan(&row.cursorID, &row.Action, &diff, &actorKind,
-			&staffName, &clientGivenName, &clientPreferredName, &row.CreatedAt); err != nil {
+			&staffName, &clientGivenName, &clientPreferredName,
+			&beforeStaffName, &afterStaffName, &row.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("engagement: scan activity row: %w", err)
 		}
@@ -223,6 +240,7 @@ func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagem
 		default:
 			row.ActorName = activity.SystemActorName
 		}
+		row.Detail = reassignmentDetail(row.Action, beforeStaffName, afterStaffName)
 		items = append(items, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -230,4 +248,31 @@ func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagem
 		return nil, fmt.Errorf("engagement: iterate activity rows: %w", err)
 	}
 	return items, nil
+}
+
+// departedStaffName is what a reassignment reads as when one side of it
+// names a Staff member the LEFT JOIN no longer reaches. A name is what
+// the reader came for and a bare uuid tells her nothing, so the entry
+// says plainly that the person is gone rather than showing her the id
+// (#887).
+const departedStaffName = "a former colleague"
+
+// reassignmentDetail renders a visit_reassigned entry as the move it
+// records, in the two people's names -- the ids in the diff resolved by
+// the query's own LEFT JOINs, the same way actorName is resolved, so no
+// reader has to look either of them up. Every other action returns "",
+// which the JSON omits: those entries render through the generic
+// description the app already gives them.
+func reassignmentDetail(action string, before, after sql.NullString) string {
+	if action != string(activity.ActionVisitReassigned) {
+		return ""
+	}
+	return fmt.Sprintf("Visit reassigned from %s to %s", staffDisplayName(before), staffDisplayName(after))
+}
+
+func staffDisplayName(name sql.NullString) string {
+	if !name.Valid {
+		return departedStaffName
+	}
+	return name.String
 }

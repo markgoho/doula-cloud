@@ -92,6 +92,19 @@ const (
 	ActionVisitLogged     EngagementAction = "visit_logged"
 	ActionVisitReassigned EngagementAction = "visit_reassigned"
 
+	// DiffKeyAssignedStaffIDBefore and DiffKeyAssignedStaffIDAfter are
+	// the two keys an ActionVisitReassigned diff carries, naming the
+	// Staff member the Visit came off and the one it went to -- the
+	// same before/after convention ActionVisitScheduled's
+	// scheduledAtBefore/scheduledAtAfter already uses, not a third one.
+	// Both hold ids; a reader resolves them to names on the read, the
+	// way actorName is resolved (#887). They live here rather than in
+	// visit/ because the write side and the Engagement ledger's read
+	// both name them, and one constant is what keeps the two from
+	// drifting apart.
+	DiffKeyAssignedStaffIDBefore = "assignedStaffIdBefore"
+	DiffKeyAssignedStaffIDAfter  = "assignedStaffIdAfter"
+
 	// ActionVisitScheduled records a Visit's scheduled date/time being
 	// set, changed or cleared (#250) -- its own action, distinct from
 	// ActionVisitLogged (the row being typed) and ActionVisitReassigned
