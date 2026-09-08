@@ -1,0 +1,58 @@
+name: gcp-dashboard CI
+
+# gcp-dashboard/ is a personal, local-only tool -- never deployed anywhere
+# -- so this workflow only ever lints, typechecks, builds and tests it. It
+# stays out of ci.yml (and off the trunk ruleset's required-checks list,
+# per docs/agents/worktree-flow.md) the same way the Firebase preview
+# workflows do: a standalone workflow gated by its own `paths:` filter, so
+# it runs only when this directory actually changes.
+on:
+  push:
+    branches: [trunk]
+    paths:
+      - "gcp-dashboard/**"
+      - ".github/workflows/gcp-dashboard-ci.yml"
+  pull_request:
+    paths:
+      - "gcp-dashboard/**"
+      - ".github/workflows/gcp-dashboard-ci.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-gcp-dashboard-${{ runner.os }}-${{ hashFiles('gcp-dashboard/bun.lock') }}
+          restore-keys: bun-gcp-dashboard-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: gcp-dashboard
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: gcp-dashboard
+        run: bun run check
+
+      - name: Lint
+        working-directory: gcp-dashboard
+        run: bun run lint
+
+      - name: Unit test with coverage gate
+        working-directory: gcp-dashboard
+        run: bun run test:unit:coverage
+
+      - name: Build
+        working-directory: gcp-dashboard
+        run: bun run build
