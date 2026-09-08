@@ -51,5 +51,5 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 	await page.getByRole('button', { name: 'Continue' }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
-	await expect(page.locator('h1')).toHaveText('Welcome to Riverside Doulas');
+	await expect(page.locator('h1')).toHaveText('Your care');
 });

@@ -3,10 +3,14 @@
  * (#595).
  *
  * `practiceName` reaches this screen two ways at once: through the
- * ancestor `+layout.ts`'s `page.data` (the title, `RecordDetail`'s
- * `serviceName`) and through this route's own `onMount` fetch (the
- * summary's facts). Both carry #530's own URL, since a Practice's
- * registered name is exactly the value that broke a grid track there.
+ * ancestor `+layout.ts`'s `page.data` (`RecordDetail`'s `serviceName`,
+ * which is also what `<title>` is folded from) and through this route's
+ * own `onMount` fetch (the summary's facts). Both carry #530's own URL,
+ * since a Practice's registered name is exactly the value that broke a
+ * grid track there. It no longer reaches the `<h1>`: #296 made that a
+ * literal, so the hostile URL is measured here through `serviceName`
+ * rather than through the heading, and `practices/[practiceId]`'s
+ * fixture still puts it in an `<h1>` for `Heading`'s own sake.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
@@ -42,5 +46,5 @@ export const fixture: RouteFixture = {
 	// every path with it alike.
 	respond: (path) =>
 		jsonResponse(path.includes('/activity') ? { items: [], hasMore: false } : detail),
-	readyText: `Welcome to ${practiceName}`
+	readyText: 'Your care'
 };

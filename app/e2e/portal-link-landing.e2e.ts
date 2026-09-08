@@ -40,5 +40,5 @@ test('a signed-in Client following a portal link from another site arrives authe
 	await page.click('#link');
 
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
-	await expect(page.getByRole('heading', { name: `Welcome to ${practiceName}` })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Your care' })).toBeVisible();
 });

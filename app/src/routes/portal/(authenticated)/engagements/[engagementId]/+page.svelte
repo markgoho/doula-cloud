@@ -138,11 +138,32 @@
 	is announced" gets met without a bespoke live region. `engagementLabel`
 	rather than the bare Practice name so switching between two
 	Engagements at the same Practice still announces something that
-	differs; the greeting heading above stays plain, since a distinguishing
-	fact belongs in what is spoken, not necessarily in what is read.
+	differs; the `<h1>` stays the same words on every Engagement, since a
+	distinguishing fact belongs in what is spoken, not necessarily in what
+	is read.
+-->
+<!--
+	#296: the heading is CONTEXT.md's own Client word for an Engagement --
+	the Engagement entry's `_Client says_:` line reads `my care ("Your
+	care" as a heading)`. It was `Welcome to {practiceName}`, a first-visit
+	greeting rendered on every visit for the life of the Engagement, which
+	on the loss journey is what the screen said to a woman coming back
+	three weeks after her pregnancy ended.
+
+	A literal, not an expression, and that is the whole fix: the heading
+	consults nothing -- not the record, not a visit count, not an outcome
+	-- because "Your care" is true on the first visit and the four
+	hundredth, for an `intake`, `active` or `completed` Engagement, and
+	for a Client after a loss. The register's own rule is that a word which
+	cannot be kind to every Client is the wrong word, never a word wanting
+	a condition, so there is no branch here to keep true.
+
+	The Practice's name has not gone anywhere: `serviceName` below folds it
+	into `<title>` and the page renders it in its service-name slot, so a
+	Client still knows whose portal she is in.
 -->
 <RecordDetail
-	title={detail ? `Welcome to ${detail.practiceName}` : ''}
+	title="Your care"
 	serviceName={engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })}
 	{summary}
 	{actions}

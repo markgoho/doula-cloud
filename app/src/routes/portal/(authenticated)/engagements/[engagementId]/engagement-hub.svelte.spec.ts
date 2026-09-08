@@ -117,6 +117,72 @@ describe('Client portal Engagement hub', () => {
 	});
 });
 
+/*
+ * #296. The hub used to head itself `Welcome to {practiceName}` -- a
+ * first-visit greeting rendered on every visit for the life of the
+ * Engagement, which on the loss journey is the first thing the screen
+ * says to a woman coming back three weeks after her pregnancy ended.
+ *
+ * It is now CONTEXT.md's own Client word for an Engagement: the entry's
+ * `_Client says_:` line reads `my care ("Your care" as a heading)`.
+ *
+ * There is deliberately no first-visit-versus-returning test here,
+ * because there is deliberately no such branch to test: the heading is a
+ * literal in `+page.svelte` and consults nothing -- not the record, not a
+ * visit count, not an outcome. What these tests prove instead is that
+ * claim from the outside -- the same words across every Engagement state
+ * the DTO can be in, including the shape a Client comes back to after a
+ * loss -- so a conditional reintroduced later fails here rather than
+ * passing quietly.
+ */
+describe("the hub's heading (#296)", () => {
+	it("names the page with the register's own word, and greets nobody", async () => {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+
+		const { container } = await render(Hub);
+
+		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		// Still exactly one <h1>, so the document outline and where a screen
+		// reader lands are unchanged by the rewording.
+		expect(container.querySelectorAll('h1')).toHaveLength(1);
+		expect(container.textContent).not.toMatch(/welcome/i);
+	});
+
+	it("keeps the Practice's name in the tab title", async () => {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+
+		await render(Hub);
+
+		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		expect(document.title).toContain(practiceName);
+	});
+
+	// The three values CONTEXT.md's Engagement entry defines, plus the
+	// record a Client comes back to after a loss. That last one is a
+	// `completed` Engagement with no due date left to speak of and a Birth
+	// Plan she still owns -- shaped from the DTO alone, because this ticket
+	// must not read `birth_outcome` (#294 owns the surface that does) and
+	// the point here is precisely that the heading reads no such fact.
+	const records = [
+		{ name: 'an Engagement in intake', detail: { ...detail, status: 'intake' } },
+		{ name: 'an active Engagement', detail: { ...detail, status: 'active' } },
+		{ name: 'a completed Engagement', detail: { ...detail, status: 'completed' } },
+		{
+			name: 'a Client returning after a loss',
+			detail: { ...detail, status: 'completed', dueDate: undefined }
+		}
+	];
+
+	it.each(records)('says the same words to $name', async ({ detail: record }) => {
+		mockFetch(record);
+
+		const { container } = await render(Hub);
+
+		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		expect(container.textContent).not.toMatch(/welcome/i);
+	});
+});
+
 // #486 AC5: CONTEXT.md's own vocabulary for this to a Client -- "Everything
 // that has happened" -- behind a closed disclosure, per the design brief's
 // own #433 amendment for the Client portal.
