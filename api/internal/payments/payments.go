@@ -15,7 +15,10 @@
 // APIs, which accept a v2 account id unchanged.
 package payments
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // InvoiceLineItemDescription is the fixed line-item description and
 // Stripe statement descriptor every Invoice uses -- unconditional, not a
@@ -159,7 +162,15 @@ type Client interface {
 	//
 	// customerID is resolved by the caller, never created here: see
 	// CreateCustomer.
-	CreateInvoice(ctx context.Context, accountID, customerID, description string, amountCents int64) (invoiceID string, err error)
+	//
+	// dueAt (#768) is the exact instant the Invoice falls due, computed
+	// once by the caller from the Practice's payment terms and stored on
+	// the invoices row unchanged. It is passed as a date rather than a
+	// day count on purpose: a day count would let Stripe derive its own
+	// due date from its own clock, so the date printed on the Client's
+	// hosted invoice and the date the Practice's book ages against could
+	// differ by a day and neither would be wrong.
+	CreateInvoice(ctx context.Context, accountID, customerID, description string, amountCents int64, dueAt time.Time) (invoiceID string, err error)
 	// DeleteCustomer deletes customerID on accountID's connected account.
 	// #394's erasure calls it first, before any redaction: Stripe's own
 	// recommendation, because a deleted Customer cannot take on new

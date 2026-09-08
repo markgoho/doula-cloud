@@ -15,11 +15,13 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
 		clientsCannotPayMessage,
+		dueLabel,
 		formatAmount,
 		invoiceStatusLabel,
 		loadPracticeInvoices,
 		type PracticeInvoice
 	} from '#lib/invoice.js';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
@@ -41,7 +43,11 @@
 		// untrack because capturing the load's page once is the whole point:
 		// re-deriving from `data` would drop every page appended since.
 		first: untrack(() => data),
-		loadPage: (cursor) => loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor),
+		// Every later page asks for the same narrowing the first one did
+		// (#768) -- otherwise "load more" on an overdue list would append
+		// the whole book underneath it.
+		loadPage: (cursor) =>
+			loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, data.isNarrowedToOverdue),
 		failureMessage: 'Failed to load more invoices'
 	});
 
@@ -56,8 +62,25 @@
 			label: 'Unpaid invoices',
 			value: String(data.outstandingCount)
 		},
-		{ label: 'Paid', value: formatAmount(data.paidCents) }
+		{ label: 'Paid', value: formatAmount(data.paidCents) },
+		// #768: the ageing figure sits beside the outstanding one it is a
+		// slice of, so "who owes me, and for how long" is answered by the
+		// same block rather than by opening a second screen.
+		{ label: 'Overdue', value: formatAmount(data.overdueCents) },
+		{ label: 'Overdue invoices', value: String(data.overdueCount) }
 	]);
+
+	/*
+	 * #768: the narrowing is two links, not a control this page holds in
+	 * memory -- the URL is the state, so it survives a reload and a back
+	 * button, and the page needs no client-side JavaScript to offer it.
+	 * The Practice's own overdue count is on the link, because a filter
+	 * that shows nothing and a filter nobody needs look identical until
+	 * the number is said.
+	 */
+	const invoicesHref = $derived(
+		resolve('/practices/[practiceId]/invoices', { practiceId: page.params.practiceId! })
+	);
 
 	const columns = [
 		{ label: 'Client', accessor: (invoice: PracticeInvoice) => invoice.clientName },
@@ -83,6 +106,14 @@
 		{
 			label: 'Billed',
 			accessor: (invoice: PracticeInvoice) => new Date(invoice.createdAt).toLocaleDateString()
+		},
+		{
+			// #768. "Payment due", not "Due date": a due date in this domain
+			// is the pregnancy's (ADR-0015), and the two must not share a
+			// word. The lateness is derived here, from the row's own date
+			// against now, so it stays right in a tab left open overnight.
+			label: 'Payment due',
+			accessor: (invoice: PracticeInvoice) => dueLabel(invoice, new Date())
 		},
 		{
 			// An em dash rather than a blank, so an unpaid row reads as
@@ -111,6 +142,14 @@
 
 <DescriptionList items={summary} />
 
+<Link href={invoicesHref} label="All invoices" variant="chip" current={!data.isNarrowedToOverdue} />
+<Link
+	href="{invoicesHref}?overdue=true"
+	label="Overdue ({data.overdueCount})"
+	variant="chip"
+	current={data.isNarrowedToOverdue}
+/>
+
 <!--
 	#270: a standing fact about the Practice, from the same aggregate
 	field the totals above already carry -- an empty book looks identical
@@ -129,7 +168,9 @@
 	hasMore={invoices.hasMore}
 	onLoadMore={() => invoices.loadMore()}
 	isLoadingMore={invoices.isLoadingMore}
-	emptyMessage="No invoices yet. One appears here as soon as a contract is billed."
+	emptyMessage={data.isNarrowedToOverdue
+		? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
+		: 'No invoices yet. One appears here as soon as a contract is billed.'}
 />
 
 {#if invoices.loadMoreError}

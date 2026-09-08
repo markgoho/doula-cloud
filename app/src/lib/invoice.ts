@@ -27,6 +27,12 @@ export interface Invoice {
 	/** Which rail this Invoice was raised on (#271) -- fixed at creation,
 	 * independent of the Practice's current billingMode. */
 	billingMode: BillingMode;
+	/** When this Invoice falls due (#768), written onto it when it was
+	 * raised from the Practice's payment terms of that moment -- so
+	 * changing the terms later never moves an Invoice already billed. The
+	 * date, never a day count: `daysOverdue` derives the count here, at
+	 * read, so it stays right in a tab left open overnight. */
+	dueAt: string;
 }
 
 /** A Practice's choice of billing rail (#271): Stripe-hosted Invoicing,
@@ -57,6 +63,12 @@ export interface PracticeInvoicePage {
 	outstandingCents: number;
 	outstandingCount: number;
 	paidCents: number;
+	/** The part of the outstanding book that is past its due date (#768)
+	 * -- a narrowing of the two figures above, never a book beside them,
+	 * so an overdue Invoice is counted in both. Whole-book, like every
+	 * total here. */
+	overdueCents: number;
+	overdueCount: number;
 	/** Whether Clients can pay this Practice at all (#270) -- an aggregate
 	 * fact alongside the three totals above, not derived from them: an
 	 * empty book looks the same whether nobody has billed anything yet or
@@ -64,13 +76,30 @@ export interface PracticeInvoicePage {
 	clientsCanPay: boolean;
 }
 
+/** What the Practice-wide Invoice route's `load` hands its page: one page
+ * of the book, plus which narrowing it was read under (#768). The
+ * narrowing lives in the URL rather than in the page's memory, and the
+ * page needs it for two things -- which filter link reads as current, and
+ * which narrowing every later page asks for. */
+export interface PracticeInvoiceListData extends PracticeInvoicePage {
+	isNarrowedToOverdue: boolean;
+}
+
 /** The Practice-wide Invoice list's path -- exported so the route's
  * `load` can call `apiFetch` on it directly and handle 401/403 the way
  * SvelteKit needs (see the billing route's `+page.ts` for why a
  * role-gated read loads there rather than in `onMount`). */
-export function practiceInvoicesPath(practiceId: string, cursor?: string): string {
+export function practiceInvoicesPath(practiceId: string, cursor?: string, isNarrowedToOverdue = false): string {
 	const path = `/api/practices/${practiceId}/invoices`;
-	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+	const query = new URLSearchParams();
+	if (isNarrowedToOverdue) {
+		query.set('overdue', 'true');
+	}
+	if (cursor) {
+		query.set('cursor', cursor);
+	}
+	const search = query.toString();
+	return search ? `${path}?${search}` : path;
 }
 
 /** Loads one page of every Invoice the Practice has billed, newest
@@ -80,9 +109,10 @@ export function practiceInvoicesPath(practiceId: string, cursor?: string): strin
 export async function loadPracticeInvoices(
 	fetcher: Fetcher,
 	practiceId: string,
-	cursor?: string
+	cursor?: string,
+	isNarrowedToOverdue = false
 ): Promise<PracticeInvoicePage> {
-	const response = await fetcher(practiceInvoicesPath(practiceId, cursor));
+	const response = await fetcher(practiceInvoicesPath(practiceId, cursor, isNarrowedToOverdue));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
@@ -322,3 +352,90 @@ export const clientsCannotPayMessage =
  * per #255's own principle: state it as standing information rather than
  * only as feedback after a Send. */
 export const clientHasNoEmailMessage = 'This Client has no email address on file. Add one before creating an Invoice.';
+
+/** How many whole days past its due date an Invoice is, at `now` -- 0
+ * when it is not late yet (#768).
+ *
+ * The count is derived here rather than sent by the BFF on purpose: the
+ * row carries the date, so the number is right at every instant, not
+ * only at the instant the page loaded. Whole days from the due instant,
+ * so an Invoice due at 09:00 is not "1 day late" at 09:01.
+ *
+ * `now` is a parameter, not `Date.now()` read inside: it is what lets a
+ * test move the comparison time instead of waiting for one to arrive,
+ * which is the only way "overdue" can be proven without a clock, a
+ * webhook or a scheduled sweep. */
+export function daysOverdue(dueAt: string, now: Date): number {
+	const dueMs = new Date(dueAt).getTime();
+	const elapsed = now.getTime() - dueMs;
+	if (!Number.isFinite(elapsed) || elapsed <= 0) {
+		return 0;
+	}
+	return Math.floor(elapsed / MS_PER_DAY);
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** What the Practice-wide list's "Payment due" cell reads (#768): the due
+ * date, and how late it is when it is late.
+ *
+ * Only an Invoice still awaiting payment can be late. A paid, voided or
+ * written-off Invoice keeps its due date on the row and is never called
+ * overdue, because none of the three is money still owed -- the same rule
+ * the BFF's own overdue totals use, said once here so the screen and the
+ * figure above it cannot disagree.
+ *
+ * "Payment due", never "due date": in this domain a due date is the
+ * pregnancy's (ADR-0015), and the two must not share a word. */
+export function dueLabel(invoice: Invoice, now: Date): string {
+	const due = new Date(invoice.dueAt).toLocaleDateString();
+	if (invoice.status !== 'open') {
+		return due;
+	}
+	const late = daysOverdue(invoice.dueAt, now);
+	if (late === 0) {
+		return due;
+	}
+	return `${due} — ${late} ${late === 1 ? 'day' : 'days'} overdue`;
+}
+
+/** A Practice's payment terms (#768): how many days after an Invoice is
+ * raised it falls due. `isDefault` is true when the Practice has never
+ * set any of its own and is running on Doula Cloud's 30 days. */
+export interface PaymentTerms {
+	netDays: number;
+	isDefault: boolean;
+}
+
+function paymentTermsPath(practiceId: string): string {
+	return `/api/practices/${practiceId}/payments/payment-terms`;
+}
+
+/** Loads a Practice's payment terms. Any Staff member may read them --
+ * she meets the due date on every Invoice she looks at. */
+export async function loadPaymentTerms(fetcher: Fetcher, practiceId: string): Promise<PaymentTerms> {
+	const response = await fetcher(paymentTermsPath(practiceId));
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/** Sets a Practice's payment terms -- Owner and Admin only. An Invoice
+ * already raised keeps the terms it was billed under; this changes only
+ * what the next one is due. */
+export async function setPaymentTerms(
+	fetcher: Fetcher,
+	practiceId: string,
+	netDays: number
+): Promise<PaymentTerms> {
+	const response = await fetcher(paymentTermsPath(practiceId), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ netDays })
+	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}

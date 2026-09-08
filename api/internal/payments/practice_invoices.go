@@ -35,6 +35,12 @@ type PracticeInvoiceView struct {
 	Currency     string     `json:"currency"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	PaidAt       *time.Time `json:"paidAt,omitempty"`
+	// DueAt (#768) is the date this Invoice falls due -- see InvoiceView's
+	// own field, which carries the same value for the same reason. The
+	// row says when the money was due, never how many days late it is:
+	// the day count is derived where it is read, so it is right at every
+	// instant rather than right at the moment the page loaded.
+	DueAt time.Time `json:"dueAt"`
 	// Reference and BillingMode are #271's additions -- see InvoiceView's
 	// own doc comment; the same two facts, on the Practice-wide row.
 	Reference   string `json:"reference"`
@@ -61,6 +67,18 @@ type PracticeInvoicesResponse struct {
 	OutstandingCents int64                 `json:"outstandingCents"`
 	OutstandingCount int                   `json:"outstandingCount"`
 	PaidCents        int64                 `json:"paidCents"`
+	// OverdueCents and OverdueCount (#768) are the part of the
+	// outstanding book that is past its due date: 'open' and due_at <
+	// now(), evaluated by Postgres at read. They are a narrowing of the
+	// outstanding figures beside them, never a separate book -- an
+	// overdue Invoice is counted in both pairs, because it is still money
+	// billed and not yet collected.
+	//
+	// Whole-book, like every total here, and for the same reason: a
+	// Practice reading "4 overdue" under a list showing three of them has
+	// been told the truth about its book and can page to find the fourth.
+	OverdueCents int64 `json:"overdueCents"`
+	OverdueCount int   `json:"overdueCount"`
 	// ClientsCanPay (#270) is ClientsCanPay's own charges-active test --
 	// an aggregate fact about the Practice's book, alongside the three
 	// totals above, not one more per-row field. It lets the list say
@@ -82,6 +100,12 @@ type PracticeInvoicesResponse struct {
 // stay whole-book regardless: a Practice landing block that shows "3
 // unpaid, $450 outstanding" needs both numbers to agree with the list
 // underneath it, not with whatever page the reader happens to be on.
+//
+// ?overdue=true (#768) narrows further, to the open Invoices whose own
+// due_at has passed -- the Invoices making up OverdueCents/OverdueCount,
+// by the same rule, so the list and the figure above it cannot disagree.
+// It is a narrowing of ?unpaid=true, not an alternative to it, and wins
+// when a caller passes both.
 //
 // Who may read it: Owner, Admin, and an employed Doula (ADR-0008's money
 // row as amended by #282). Aggregating the whole Practice's book cannot
@@ -106,9 +130,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			}
 			after = &c
 		}
-		unpaidOnly := r.URL.Query().Get("unpaid") == "true"
-
-		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, unpaidOnly)
+		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowingFor(r))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -135,6 +157,8 @@ func GetPracticeInvoicesHandler() http.Handler {
 			OutstandingCents: totals.outstandingCents,
 			OutstandingCount: totals.outstandingCount,
 			PaidCents:        totals.paidCents,
+			OverdueCents:     totals.overdueCents,
+			OverdueCount:     totals.overdueCount,
 			ClientsCanPay:    clientsCanPay,
 		}
 		if hasMore {
@@ -157,31 +181,63 @@ func GetPracticeInvoicesHandler() http.Handler {
 // Client's name here exactly as they keep their place in the per-
 // Engagement list (#72).
 const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name,
-		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.reference, i.stripe_invoice_id
+		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	JOIN engagements e ON e.id = c.engagement_id
 	JOIN clients cl ON cl.id = e.client_id
 	WHERE i.practice_id = $1`
 
-// practiceInvoiceUnpaidFilter is appended for ?unpaid=true -- 'open' is
-// the same "billed and not yet collected" definition
-// practiceInvoiceTotalsQuery's outstanding totals already use.
-const practiceInvoiceUnpaidFilter = ` AND i.status = 'open'`
+// invoiceNarrowing is which slice of the book a read asks for. The zero
+// value is the whole book, so a request that names no narrowing needs no
+// special case.
+type invoiceNarrowing string
 
-const listPracticeInvoicesQuery = practiceInvoiceColumns + `
+// The three narrowings the Practice-wide list offers. Overdue is a
+// narrowing of unpaid, not a sibling of it: it repeats the 'open' test
+// and adds the due-date comparison, so the two can never disagree about
+// what "still owed" means.
+const (
+	narrowAll     invoiceNarrowing = ""
+	narrowUnpaid  invoiceNarrowing = ` AND i.status = 'open'`
+	narrowOverdue invoiceNarrowing = ` AND i.status = 'open' AND i.due_at < now()`
+)
+
+// narrowingFor reads the two query parameters the list accepts. ?overdue
+// wins when both are set, because it is the narrower of the two and a
+// caller asking for both means the narrower one.
+//
+// now() is Postgres's, not Go's: it is the same clock that stamped
+// created_at and computed due_at at raise (payment_terms.go's
+// invoiceDueAt), and the one simclock shifts when a sandbox runs
+// compressed time. Nothing is stored, nothing is swept, and no webhook
+// is involved -- Stripe emits no event when a due date passes, so this
+// comparison is the only thing that can be true at every instant.
+func narrowingFor(r *http.Request) invoiceNarrowing {
+	switch {
+	case r.URL.Query().Get("overdue") == "true":
+		return narrowOverdue
+	case r.URL.Query().Get("unpaid") == "true":
+		return narrowUnpaid
+	default:
+		return narrowAll
+	}
+}
+
+// listPracticeInvoicesQuery and its after-cursor twin take the narrowing
+// as a fixed clause from invoiceNarrowing rather than as a parameter --
+// it is never request text, so no interpolation of a caller's input can
+// reach the SQL.
+func listPracticeInvoicesQuery(narrowing invoiceNarrowing) string {
+	return practiceInvoiceColumns + string(narrowing) + `
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
+}
 
-const listPracticeInvoicesUnpaidQuery = practiceInvoiceColumns + practiceInvoiceUnpaidFilter + `
-	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
-
-const listPracticeInvoicesAfterQuery = practiceInvoiceColumns + `
+func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
+	return practiceInvoiceColumns + string(narrowing) + `
 	AND (i.created_at, i.id) < ($2, $3)
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
-
-const listPracticeInvoicesUnpaidAfterQuery = practiceInvoiceColumns + practiceInvoiceUnpaidFilter + `
-	AND (i.created_at, i.id) < ($2, $3)
-	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
+}
 
 // listPracticeInvoices fetches one page of the Practice's Invoices,
 // filtered explicitly on practice_id on top of the RLS scoping
@@ -192,18 +248,13 @@ const listPracticeInvoicesUnpaidAfterQuery = practiceInvoiceColumns + practiceIn
 // (00056_invoices_practice_listing_index.sql), so the page is an index
 // scan of at most invoicePageSize+1 rows rather than a sort of the
 // Practice's whole book.
-func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, unpaidOnly bool) ([]PracticeInvoiceView, bool, error) {
+func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, narrowing invoiceNarrowing) ([]PracticeInvoiceView, bool, error) {
 	var rows *sql.Rows
 	var err error
-	switch {
-	case after != nil && unpaidOnly:
-		rows, err = tx.QueryContext(ctx, listPracticeInvoicesUnpaidAfterQuery, practiceID, after.createdAt, after.invoiceID, invoicePageSize+1)
-	case after != nil:
-		rows, err = tx.QueryContext(ctx, listPracticeInvoicesAfterQuery, practiceID, after.createdAt, after.invoiceID, invoicePageSize+1)
-	case unpaidOnly:
-		rows, err = tx.QueryContext(ctx, listPracticeInvoicesUnpaidQuery, practiceID, invoicePageSize+1)
-	default:
-		rows, err = tx.QueryContext(ctx, listPracticeInvoicesQuery, practiceID, invoicePageSize+1)
+	if after != nil {
+		rows, err = tx.QueryContext(ctx, listPracticeInvoicesAfterQuery(narrowing), practiceID, after.createdAt, after.invoiceID, invoicePageSize+1)
+	} else {
+		rows, err = tx.QueryContext(ctx, listPracticeInvoicesQuery(narrowing), practiceID, invoicePageSize+1)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
@@ -219,7 +270,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		var paidAt sql.NullTime
 		var stripeInvoiceID sql.NullString
 		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName,
-			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.Reference, &stripeInvoiceID); err != nil {
+			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}
@@ -248,6 +299,8 @@ type invoiceTotals struct {
 	outstandingCents int64
 	outstandingCount int
 	paidCents        int64
+	overdueCents     int64
+	overdueCount     int
 }
 
 // practiceInvoiceTotalsQuery reads all three totals in one pass with
@@ -256,7 +309,9 @@ type invoiceTotals struct {
 const practiceInvoiceTotalsQuery = `SELECT
 		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open'), 0),
 		COUNT(*) FILTER (WHERE status = 'open'),
-		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)
+		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0),
+		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open' AND due_at < now()), 0),
+		COUNT(*) FILTER (WHERE status = 'open' AND due_at < now())
 	FROM invoices WHERE practice_id = $1`
 
 // practiceInvoiceTotals sums the Practice's outstanding and paid money.
@@ -267,7 +322,7 @@ const practiceInvoiceTotalsQuery = `SELECT
 func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string) (invoiceTotals, error) {
 	var t invoiceTotals
 	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID).
-		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents); err != nil {
+		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents, &t.overdueCents, &t.overdueCount); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return invoiceTotals{}, fmt.Errorf("payments: practice invoice totals: %w", err)
 	}

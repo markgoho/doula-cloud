@@ -112,10 +112,20 @@ func seedConnectAccountWithCardStatus(t *testing.T, db *testdb.DB, practiceID, a
 // createdAt).
 func seedInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, stripeInvoiceID, status string, amountCents int64, createdAt time.Time) (invoiceID string) {
 	t.Helper()
+	return seedInvoiceDue(t, db, practiceID, contractID, stripeInvoiceID, status, amountCents, createdAt,
+		createdAt.AddDate(0, 0, payments.DefaultPaymentTermsDays))
+}
+
+// seedInvoiceDue is seedInvoice with the due date said out loud (#768) --
+// what an overdue test needs, since being late is a fact about due_at
+// against the comparison instant and nothing else. A due date in the past
+// is how a test moves that comparison without waiting for one to arrive.
+func seedInvoiceDue(t *testing.T, db *testdb.DB, practiceID, contractID, stripeInvoiceID, status string, amountCents int64, createdAt, dueAt time.Time) (invoiceID string) {
+	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, created_at, reference)
-		 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $6, $3) RETURNING id`,
-		practiceID, contractID, stripeInvoiceID, status, amountCents, createdAt,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, created_at, reference, due_at)
+		 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $6, $3, $7) RETURNING id`,
+		practiceID, contractID, stripeInvoiceID, status, amountCents, createdAt, dueAt,
 	).Scan(&invoiceID); err != nil {
 		t.Fatalf("seed invoice: %v", err)
 	}

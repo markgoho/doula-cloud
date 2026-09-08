@@ -13,8 +13,8 @@
  * `overflow-wrap: anywhere`. So this entry is not only a subject: it is
  * the regression test for #542, on a real screen rather than a demo.
  */
-import type { PracticeInvoicePage } from '#lib/invoice.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { PracticeInvoiceListData } from '#lib/invoice.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
@@ -23,7 +23,7 @@ import Page from './+page.svelte';
  * it carries #537's vocabulary: the hyphenated double-barrelled name, and
  * the URL that has no break opportunity a browser will take.
  */
-export const data: PracticeInvoicePage = {
+export const data: PracticeInvoiceListData = {
 	items: [
 		{
 			id: 'inv-1',
@@ -37,7 +37,11 @@ export const data: PracticeInvoicePage = {
 			// #271: the by-hand rail's own reference, on the row already
 			// carrying #537's hostile client-name value.
 			reference: 'INV-0042',
-			billingMode: 'by_hand'
+			billingMode: 'by_hand',
+			// #768: overdue since well before this fixture's own "now", so the
+			// "Payment due" cell renders its longest form -- a date plus a day
+			// count -- at every width the continuum sweeps.
+			dueAt: '2026-08-31T00:00:00Z'
 		},
 		{
 			id: 'inv-2',
@@ -54,18 +58,38 @@ export const data: PracticeInvoicePage = {
 			// rows realize both billing-mode states the "Billed via" column
 			// renders.
 			reference: 'DC-0092',
-			billingMode: 'stripe'
+			billingMode: 'stripe',
+			// Paid, so its due date reads plainly however long ago it passed.
+			dueAt: '2026-07-31T00:00:00Z'
 		}
 	],
 	hasMore: false,
 	outstandingCents: 450_000,
 	outstandingCount: 1,
 	paidCents: 250_000,
-	clientsCanPay: true
+	overdueCents: 450_000,
+	overdueCount: 1,
+	clientsCanPay: true,
+	// #768: the unnarrowed list, so the fixture sweeps the "Payment due"
+	// column and both filter links in the state a Practice meets first.
+	isNarrowedToOverdue: false
+};
+
+/*
+ * #768: the narrowed screen is a different tree, not a shorter one -- the
+ * other filter link reads as current, and an empty narrowed list says
+ * something the unnarrowed one never says. It is swept as its own subject
+ * so the state a Practice reaches by pressing "Overdue" is measured too.
+ */
+export const narrowedToOverdue: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, narrowed to overdue',
+	url: 'https://example.test/practices/practice-1/invoices?overdue=true',
+	props: { data: { ...data, items: [data.items[0]], isNarrowedToOverdue: true } }
 };
 
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
+	variants: [narrowedToOverdue],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/invoices',

@@ -35,10 +35,23 @@ func newPracticeInvoiceServer(t *testing.T, db *testdb.DB, uid string) (srv *htt
 
 func getPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string, unpaidOnly bool) *http.Response {
 	t.Helper()
+	narrowing := ""
+	if unpaidOnly {
+		narrowing = "unpaid=true"
+	}
+	return getPracticeInvoicesNarrowed(t, srv, session, practiceID, cursor, narrowing)
+}
+
+// getPracticeInvoicesNarrowed is getPracticeInvoices with the narrowing
+// written as the query parameter itself, so #768's ?overdue=true reads
+// the same way #427's ?unpaid=true does without a second boolean that
+// only one of the two callers ever sets.
+func getPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, practiceID, cursor, narrowing string) *http.Response {
+	t.Helper()
 	url := srv.URL + "/api/practices/" + practiceID + "/invoices"
 	params := make([]string, 0, 2)
-	if unpaidOnly {
-		params = append(params, "unpaid=true")
+	if narrowing != "" {
+		params = append(params, narrowing)
 	}
 	if cursor != "" {
 		params = append(params, "cursor="+cursor)
@@ -65,7 +78,19 @@ func getPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID
 // body, uses getPracticeInvoices directly.
 func readPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string, unpaidOnly bool) payments.PracticeInvoicesResponse {
 	t.Helper()
-	resp := getPracticeInvoices(t, srv, session, practiceID, cursor, unpaidOnly)
+	narrowing := ""
+	if unpaidOnly {
+		narrowing = "unpaid=true"
+	}
+	return readPracticeInvoicesNarrowed(t, srv, session, practiceID, cursor, narrowing)
+}
+
+// readPracticeInvoicesNarrowed is readPracticeInvoices over an explicit
+// query-parameter narrowing -- #768's ?overdue=true, and the both-set
+// case that proves overdue wins.
+func readPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, practiceID, cursor, narrowing string) payments.PracticeInvoicesResponse {
+	t.Helper()
+	resp := getPracticeInvoicesNarrowed(t, srv, session, practiceID, cursor, narrowing)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)

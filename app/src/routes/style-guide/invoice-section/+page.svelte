@@ -16,6 +16,7 @@
 			currency: 'usd',
 			createdAt: '2027-09-14T00:00:00Z',
 			paidAt: '2027-09-28T00:00:00Z',
+			dueAt: '2027-10-14T00:00:00Z',
 			reference: 'DC-0014',
 			billingMode: 'stripe'
 		},
@@ -26,6 +27,7 @@
 			amountCents: 425_000,
 			currency: 'usd',
 			createdAt: '2027-11-30T00:00:00Z',
+			dueAt: '2027-12-30T00:00:00Z',
 			reference: 'INV-0002',
 			billingMode: 'by_hand'
 		}

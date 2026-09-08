@@ -64,8 +64,8 @@ const seedByHandInvoiceAmountCents = 15000
 func seedByHandInvoice(t *testing.T, db *testdb.DB, practiceID, contractID string) (invoiceID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, status, amount_cents, currency, reference)
-		 VALUES ($1, $2, 'open', $3, 'usd', 'INV-TEST') RETURNING id`,
+		`INSERT INTO invoices (practice_id, contract_id, status, amount_cents, currency, reference, due_at)
+		 VALUES ($1, $2, 'open', $3, 'usd', 'INV-TEST', now() + interval '30 days') RETURNING id`,
 		practiceID, contractID, seedByHandInvoiceAmountCents,
 	).Scan(&invoiceID); err != nil {
 		t.Fatalf("seed by-hand invoice: %v", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // FakeAccountLinkCall records one CreateAccountLink call, for tests to
@@ -33,6 +34,11 @@ type FakeCreateInvoiceCall struct {
 	CustomerID  string
 	Description string
 	AmountCents int64
+	// DueAt (#768) is the instant the handler told Stripe the Invoice
+	// falls due. A test asserts it against the due_at the same request
+	// stored, which is what pins "the Stripe-rail date is not derived
+	// twice".
+	DueAt time.Time
 }
 
 // FakeCustomerCall records one Customer-scoped call -- which connected
@@ -182,9 +188,10 @@ func (f *FakeClient) CreateCustomer(_ context.Context, accountID, customerEmail,
 }
 
 // CreateInvoice records the call -- accountID, customerID, description,
-// amountCents, exactly as PostInvoiceHandler passed them -- and returns a
-// deterministic fake invoice id, or CreateInvoiceErr if a test set one.
-func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerID, description string, amountCents int64) (string, error) {
+// amountCents, dueAt, exactly as PostInvoiceHandler passed them -- and
+// returns a deterministic fake invoice id, or CreateInvoiceErr if a test
+// set one.
+func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerID, description string, amountCents int64, dueAt time.Time) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.CreateInvoiceErr != nil {
@@ -195,6 +202,7 @@ func (f *FakeClient) CreateInvoice(_ context.Context, accountID, customerID, des
 		CustomerID:  customerID,
 		Description: description,
 		AmountCents: amountCents,
+		DueAt:       dueAt,
 	})
 	f.nextID++
 	return fmt.Sprintf("in_fake_%d", f.nextID), nil

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/stripe/stripe-go/v86"
 )
@@ -288,21 +289,23 @@ func (c *StripeAPIClient) CreateCustomer(ctx context.Context, accountID, custome
 // (Client, connected account) and reused by every later Invoice, so a
 // Client's whole billing history sits under one Customer rather than one
 // per bill.
-func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customerID, description string, amountCents int64) (string, error) {
+func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customerID, description string, amountCents int64, dueAt time.Time) (string, error) {
 	onBehalfOf := stripe.Params{StripeAccount: stripe.String(accountID)}
 
-	// DaysUntilDue is not a Doula Cloud payment-terms policy -- Stripe's
-	// API rejects collection_method=send_invoice without either
-	// days_until_due or due_date set, so a value is mandatory here purely
-	// to satisfy that constraint. 30 is a fixed, non-configurable
-	// placeholder; unlike the "Professional services" description, #78/#81
-	// make no claim about what this should be.
+	// DueDate, not DaysUntilDue (#768). Stripe's API rejects
+	// collection_method=send_invoice without one of the two, and this used
+	// to be a hardcoded days_until_due=30 that was explicitly not a Doula
+	// Cloud policy. It is now the Practice's own payment terms, resolved
+	// to a single instant by the caller and sent verbatim, so the date
+	// Stripe prints on the Client's hosted invoice is the same date the
+	// invoices row carries rather than a second one derived from Stripe's
+	// clock.
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	inv, err := c.client.V1Invoices.Create(ctx, &stripe.InvoiceCreateParams{
 		Params:              onBehalfOf,
 		Customer:            stripe.String(customerID),
 		CollectionMethod:    stripe.String(string(stripe.InvoiceCollectionMethodSendInvoice)),
-		DaysUntilDue:        stripe.Int64(30),
+		DueDate:             new(dueAt.Unix()),
 		StatementDescriptor: stripe.String(description),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
