@@ -33,7 +33,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		setup({
 			'/api/practices/practice-1/session': {
 				status: 200,
-				body: { practiceName: 'Riverside Doula Collective', roles: ['owner'], isContractor: false }
+				body: { staffId: 'staff-9', practiceName: 'Riverside Doula Collective', roles: ['owner'], isContractor: false }
 			}
 		});
 
@@ -42,6 +42,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		expect(result).toEqual({
 			session: {
 				practiceId: 'practice-1',
+				staffId: 'staff-9',
 				practiceName: 'Riverside Doula Collective',
 				roles: ['owner'],
 				isContractor: false
@@ -153,6 +154,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 			'/api/practices/practice-1/session': {
 				status: 200,
 				body: {
+					staffId: 'staff-9',
 					practiceName: 'Riverside Doula Collective',
 					roles: ['owner'],
 					isContractor: false,
@@ -173,6 +175,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 			'/api/practices/practice-1/session': {
 				status: 200,
 				body: {
+					staffId: 'staff-9',
 					practiceName: 'Riverside Doula Collective',
 					roles: ['owner'],
 					isContractor: false,
@@ -189,6 +192,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		expect(result).toEqual({
 			session: {
 				practiceId: 'practice-1',
+				staffId: 'staff-9',
 				practiceName: 'Riverside Doula Collective',
 				roles: ['owner'],
 				isContractor: false,

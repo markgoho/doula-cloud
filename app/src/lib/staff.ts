@@ -267,10 +267,59 @@ function isRosterRefusal(error: unknown): boolean {
 	return error instanceof Error && (error.cause === 401 || error.cause === 403);
 }
 
+/**
+ * What a *particular* Visit picker knows on top of the roster (#909).
+ *
+ * Both Visit pickers on the Engagement page are built from one roster
+ * read, and each narrows it differently: the create picker knows who the
+ * caller is, the reassign picker also knows who already holds the Visit.
+ * Carrying those as an options bag rather than as two functions is what
+ * keeps the two pickers from drifting apart -- and what leaves room for
+ * a further axis without changing either call site's shape.
+ *
+ * Every field is optional, so the Practice-wide schedule's Doula filter
+ * -- which is a filter, not a question about a Visit -- keeps calling
+ * `doulaOptions(doulas)` with nothing at all.
+ */
+export interface DoulaPickerContext {
+	/** The signed-in Staff member's own id, off
+	 * `page.data.session.staffId`. Her entry is moved to the front and
+	 * marked as hers; absent, or absent from the roster, and nothing is
+	 * marked. */
+	callerStaffId?: string;
+	/** For a reassign picker only: the Staff member this Visit is already
+	 * assigned to, who is left out. Reassigning a Visit to the person who
+	 * already holds it is a no-op that still writes an activity entry for
+	 * a move that did not happen. */
+	currentAssigneeStaffId?: string;
+}
+
+/** The marker on the caller's own option, so a standing preselected
+ * answer reads as an answer rather than as an arbitrary first name. */
+const SELF_SUFFIX = ' (you)';
+
 /** The same people as `Select` options -- the staff id stored, the name
  * shown. Two Doulas at one agency can share a name, so the option is
  * always keyed on her id and never on the word (see `Select`'s own
- * `LabeledValue` comment). */
-export function doulaOptions(doulas: readonly Doula[]): LabeledValue[] {
-	return doulas.map((doula) => ({ value: doula.staffId, label: doula.name }));
+ * `LabeledValue` comment).
+ *
+ * `context` narrows and orders the list for one Visit picker (#909).
+ * Exclusions run first and marking runs second, deliberately: a caller
+ * who has been filtered out is not a caller this picker can offer, so
+ * she must not be marked or hoisted either. That order is also what lets
+ * a further exclusion compose with this one rather than fight it. */
+export function doulaOptions(
+	doulas: readonly Doula[],
+	context: DoulaPickerContext = {}
+): LabeledValue[] {
+	const offered = doulas.filter((doula) => doula.staffId !== context.currentAssigneeStaffId);
+	const isCaller = (doula: Doula) => doula.staffId === context.callerStaffId;
+	const ordered = [
+		...offered.filter((doula) => isCaller(doula)),
+		...offered.filter((doula) => !isCaller(doula))
+	];
+	return ordered.map((doula) => ({
+		value: doula.staffId,
+		label: isCaller(doula) ? `${doula.name}${SELF_SUFFIX}` : doula.name
+	}));
 }

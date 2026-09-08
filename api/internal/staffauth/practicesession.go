@@ -17,7 +17,20 @@ import (
 // UX-only mirror of a BFF role gate this endpoint's Roles field already
 // is for the Owner/Admin screens that read it.
 type PracticeSessionResponse struct {
-	PracticeID   string   `json:"practiceId"`
+	PracticeID string `json:"practiceId"`
+	// StaffID is the caller's own Staff id at this Practice (#909).
+	// `/api/staff/session` already hands the app the same fact -- #437
+	// widened SessionInfo with it on the argument that a second round
+	// trip to learn what the first could have carried is a round trip
+	// nobody needs -- so this is not a new disclosure. It is that same
+	// fact carried here, on the one response every route under this
+	// Practice already resolves in a `load` before first paint, so a
+	// route reads it without a second call. The screen that needs it is
+	// the Add-a-Visit picker, which has to know which roster entry is
+	// the caller: the same UX-only mirror of a BFF rule Roles and
+	// IsContractor already are, the rule here being visit.assignee's --
+	// an absent assignee means the caller.
+	StaffID      string   `json:"staffId"`
 	PracticeName string   `json:"practiceName"`
 	Roles        []string `json:"roles"`
 	IsContractor bool     `json:"isContractor"`
@@ -53,8 +66,11 @@ func PracticeSessionHandler() http.Handler {
 			return
 		}
 
+		staffID, _ := StaffID(r.Context())
+
 		resp := PracticeSessionResponse{
 			PracticeID:      practiceID,
+			StaffID:         staffID,
 			PracticeName:    name,
 			Roles:           reader.Roles(),
 			IsContractor:    reader.IsContractor(),

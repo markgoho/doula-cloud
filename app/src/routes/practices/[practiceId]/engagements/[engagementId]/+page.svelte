@@ -206,7 +206,12 @@
 	// only ever rendered for a reader who has a roster to pick from -- a
 	// plain Doula sends no assignee at all and the Visit is logged for
 	// her, exactly as it was before this field existed.
-	let newVisitStaffId = $state('');
+	// `undefined` is "she has not touched the picker" (#909), which is what
+	// falls back to the standing answer below; anything she chooses herself
+	// is kept as-is, including after the roster finishes loading. The same
+	// Owner also books her colleagues' Visits, so a default that overwrote
+	// her own choice would be worse than no default at all.
+	let newVisitStaffId = $state<string | undefined>();
 
 	// #486 AC4: the same record-scoped ledger the practice-wide feed reuses,
 	// through engagement.ListActivityHandler (unchanged by #486) --
@@ -370,6 +375,23 @@
 	// absent assignee means "me". An Owner or Admin who is not a Doula has
 	// no self to log, so for her the picker is the only way in.
 	const canLogOwnVisit = $derived(isDoula(data.session));
+	// #909: which roster entry is the reader herself. Off the practice
+	// session `practices/[practiceId]/+layout.ts` already resolved before
+	// first paint -- not a second fetch of `/api/staff/session`, which
+	// lands after it.
+	const callerStaffId = $derived(data.session.staffId);
+	// The standing answer to "Who is this Visit for?" for a reader who is
+	// herself on the roster: a Doula-Owner is being asked a question the
+	// service can already answer -- `assignee` in api/internal/visit reads
+	// an absent assignee as the caller, which is exactly why a plain Doula
+	// is never asked at all. Derived from the loaded roster rather than
+	// from her roles, so the value is always an option the picker really
+	// offers: an Owner or Admin who holds no Doula role is not on this
+	// list, gets `''`, and must answer for herself.
+	const defaultVisitStaffId = $derived(
+		doulas?.some((doula) => doula.staffId === callerStaffId) ? callerStaffId : ''
+	);
+	const visitStaffId = $derived(newVisitStaffId ?? defaultVisitStaffId);
 	// The Offers section turns on the Offers read alone, not on the roster.
 	// The two happen to be the same pair of roles today (both Owner and
 	// Admin), so tying Offers to `canAssignVisits` looked free -- but it
@@ -710,7 +732,7 @@
 	async function handleCreateVisit(event: SubmitEvent) {
 		event.preventDefault();
 		const scheduledAt = newVisitScheduledAt ? new Date(newVisitScheduledAt).toISOString() : undefined;
-		const staffId = newVisitStaffId || undefined;
+		const staffId = visitStaffId || undefined;
 		if (
 			await visitsCreate.mutate(
 				() => createVisit(apiFetchWithSession, reference, scheduledAt, staffId),
@@ -718,7 +740,9 @@
 			)
 		) {
 			newVisitScheduledAt = '';
-			newVisitStaffId = '';
+			// Back to untouched, not to empty: the next Visit she logs
+			// starts on the same standing answer this one did.
+			newVisitStaffId = undefined;
 			await loadVisits();
 		}
 	}
@@ -946,29 +970,44 @@
 		to the write itself (#274).
 	-->
 	{#if canAssignVisits}
-		<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-			<LabeledField id={`reassign-staff-${visit.visitId}`} label="Reassign to">
-				{#snippet children({ id, describedBy, invalid })}
-					<Select
-						{id}
-						{describedBy}
-						{invalid}
-						options={doulaOptions(doulas ?? [])}
-						placeholder="Choose a Doula"
-						value={reassignStaffId[visit.visitId] ?? ''}
-						onChange={(value) => (reassignStaffId[visit.visitId] = value)}
-						required
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button
-				label="Reassign"
-				type="submit"
-				size="sm"
-				variant="secondary"
-				describedBy="visit-{visit.visitId}-name"
-			/>
-		</form>
+		<!--
+			#909: the person this Visit already belongs to is not a
+			reassignment, so she is not offered. Once she was the only
+			eligible name, there is no move left to make, and the control
+			says so rather than presenting an empty picker with a
+			placeholder and no explanation.
+		-->
+		{@const reassignOptions = doulaOptions(doulas ?? [], {
+			callerStaffId,
+			currentAssigneeStaffId: visit.staffId
+		})}
+		{#if reassignOptions.length === 0}
+			<p>There is nobody else to reassign this Visit to.</p>
+		{:else}
+			<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
+				<LabeledField id={`reassign-staff-${visit.visitId}`} label="Reassign to">
+					{#snippet children({ id, describedBy, invalid })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							options={reassignOptions}
+							placeholder="Choose a Doula"
+							value={reassignStaffId[visit.visitId] ?? ''}
+							onChange={(value) => (reassignStaffId[visit.visitId] = value)}
+							required
+						/>
+					{/snippet}
+				</LabeledField>
+				<Button
+					label="Reassign"
+					type="submit"
+					size="sm"
+					variant="secondary"
+					describedBy="visit-{visit.visitId}-name"
+				/>
+			</form>
+		{/if}
 		{#if reassignSections[visit.visitId]?.error}
 			<Notice variant="error" message={reassignSections[visit.visitId]!.error} />
 		{/if}
@@ -1044,15 +1083,23 @@
 	{#if canAssignVisits || canLogOwnVisit}
 		<form onsubmit={handleCreateVisit}>
 			{#if canAssignVisits}
+				<!--
+					#909: this picker opens on the reader herself when she is on
+					the roster, with her own option first and marked "(you)".
+					GOV.UK's Select guidance says not to pre-select an option for
+					a question, and this departs from it on purpose -- the reason
+					is recorded in docs/design/govuk-alignment.md, on the commit
+					that departed.
+				-->
 				<LabeledField id="new-visit-staff" label="Who is this Visit for?">
 					{#snippet children({ id, describedBy, invalid })}
 						<Select
 							{id}
 							{describedBy}
 							{invalid}
-							options={doulaOptions(doulas ?? [])}
+							options={doulaOptions(doulas ?? [], { callerStaffId })}
 							placeholder="Choose a Doula"
-							value={newVisitStaffId}
+							value={visitStaffId}
 							onChange={(value) => (newVisitStaffId = value)}
 							required
 						/>

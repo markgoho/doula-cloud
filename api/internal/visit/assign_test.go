@@ -133,6 +133,27 @@ func TestCreateHandler_AssignsToTheNamedColleague(t *testing.T) {
 	}
 }
 
+// The rule the Add-a-Visit picker leans on, guarded here so it cannot
+// move under the screen (#909): a request that names nobody is a Visit
+// for the caller. It is why a plain Doula is never asked the question at
+// all, and therefore why a Doula who owns her Practice is offered her own
+// name as a standing answer rather than an empty required field.
+func TestCreateHandler_AnAbsentAssigneeIsTheCaller(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-logging-her-own"
+	practiceID, callerStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{})
+	defer resp.Body.Close()
+	if out := decodeCreate(t, resp); out.StaffID != callerStaffID {
+		t.Fatalf("staffId = %q, want the caller %q", out.StaffID, callerStaffID)
+	}
+}
+
 // A plain Doula may log her own Visit and nobody else's: she cannot read
 // the Staff roster at all (ADR-0008), so she has no colleague to pick.
 func TestCreateHandler_RefusesAColleagueNamedByAPlainDoula(t *testing.T) {
