@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from './testResponse.js';
 import {
+	activityLedgerColumns,
 	describeActivityAction,
 	loadEngagementActivityPage,
 	loadPortalActivityPage,
-	loadPracticeActivityPage
+	loadPracticeActivityPage,
+	type ActivityEntry
 } from './activityLedger.js';
 import type { EngagementReference } from './engagementDetail.js';
 
@@ -93,5 +95,29 @@ describe('loadPortalActivityPage', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
 
 		await expect(loadPortalActivityPage(fetcher, 'engagement-1', '')).rejects.toThrow('nope');
+	});
+});
+
+const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
+	action: 'visit_reassigned',
+	actorKind: 'staff',
+	actorName: 'Renata Ruiz',
+	createdAt: '2026-03-04T10:00:00Z',
+	...overrides
+});
+
+describe('activityLedgerColumns', () => {
+	it('shows the reassignment as a move between two named people', () => {
+		const what = activityLedgerColumns()[1];
+
+		expect(what.accessor(entry({ detail: 'Visit reassigned from Ana Silva to Mira Osei' }))).toBe(
+			'Visit reassigned from Ana Silva to Mira Osei'
+		);
+	});
+
+	it('falls back to the generic description for an entry carrying no detail', () => {
+		const what = activityLedgerColumns()[1];
+
+		expect(what.accessor(entry({ action: 'invoice_raised' }))).toBe('Invoice raised');
 	});
 });

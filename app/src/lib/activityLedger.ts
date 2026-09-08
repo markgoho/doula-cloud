@@ -3,7 +3,9 @@
  * the practice-wide feed on the hub, the record-scoped ledger on the
  * staff Engagement page, and the same record-scoped read behind the
  * Client portal's own closed disclosure. One DTO
- * (activityfeed.Entry, api/internal/activityfeed/activityfeed.go), one
+ * (activityfeed.Entry, api/internal/activityfeed/activityfeed.go --
+ * engagement.ActivityEntry is the same shape plus the optional `detail`
+ * sentence #887 added, which the other two readers never send), one
  * set of columns (dates.ts's formatActivityTimestamp for the meta
  * column, describeActivityAction for the body column, actorName already
  * resolved server-side for the muted column) -- three routes never build
@@ -32,6 +34,16 @@ export interface ActivityEntry {
 	action: string;
 	actorKind: string;
 	actorName: string;
+	/**
+	 * One sentence the server already wrote about what this entry's diff
+	 * says, in people's names -- a reassignment reads "Visit reassigned
+	 * from <one Doula> to <another>" (#887). Optional because only an
+	 * action with something to add beyond its own name carries it, and
+	 * because engagement.ActivityEntry is the one reader that sends it:
+	 * activityfeed.Entry has no diff to describe. An entry without one
+	 * renders through describeActivityAction exactly as it does today.
+	 */
+	detail?: string;
 	createdAt: string;
 }
 
@@ -66,6 +78,10 @@ interface LedgerColumn {
  * order -- When, What, Who -- built once so the hub feed, the staff
  * Engagement ledger and the Client portal's own disclosure render the
  * identical treatment rather than three hand-typed literals free to drift.
+ * The What column prefers the server's own `detail` sentence when the
+ * entry carries one and falls back to the generic description otherwise
+ * (#887) -- still no per-action label table here, for the reason
+ * describeActivityAction's own comment gives.
  * The When column's `datetimeAccessor` is ADR-0022's own requirement:
  * `row.createdAt` is already the raw instant, so the rendered `<time>`
  * carries it as its machine-readable value even while accessor shows the
@@ -79,7 +95,11 @@ export function activityLedgerColumns(): LedgerColumn[] {
 			variant: 'meta',
 			datetimeAccessor: (row) => row.createdAt
 		},
-		{ label: 'What', accessor: (row) => describeActivityAction(row.action), variant: 'body' },
+		{
+			label: 'What',
+			accessor: (row) => row.detail ?? describeActivityAction(row.action),
+			variant: 'body'
+		},
 		{ label: 'Who', accessor: (row) => row.actorName, variant: 'muted' }
 	];
 }

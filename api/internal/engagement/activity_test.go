@@ -3,6 +3,7 @@ package engagement_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -238,5 +239,131 @@ func TestListActivityHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// reassignDiff is the diff a reassignment writes, built through the same
+// constants the write side uses so this fixture cannot drift from it.
+func reassignDiff(t *testing.T, before, after string) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]string{
+		activity.DiffKeyAssignedStaffIDBefore: before,
+		activity.DiffKeyAssignedStaffIDAfter:  after,
+	})
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals cleanly
+		t.Fatalf("marshal diff: %v", err)
+	}
+	return raw
+}
+
+func readActivity(t *testing.T, db *testdb.DB, practiceID, engagementID, identityUID string) engagement.ActivityListResponse {
+	t.Helper()
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var got engagement.ActivityListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		// coverage:ignore reason: decode failure of a response this handler just wrote
+		t.Fatalf("decode: %v", err)
+	}
+	return got
+}
+
+// TestListActivityHandler_ReassignmentNamesBothPeople is #887's read
+// side: the ledger reads the two ids out of the diff and resolves them
+// to names server-side, the way actorName is already resolved, so a
+// reader is told which Doula the Visit left and which one it reached.
+func TestListActivityHandler_ReassignmentNamesBothPeople(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-reassign"
+	practiceID := testdb.SeedPractice(t, db, "Reassignment Names")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	fromID := testdb.SeedStaffAtPractice(t, db, practiceID, "reassign-from", []string{doulaRole}, "employee")
+	toID := testdb.SeedStaffAtPractice(t, db, practiceID, "reassign-to", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "reassign-names-client@example.com", "active")
+
+	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionVisitReassigned), activity.StaffActor(ownerID), reassignDiff(t, fromID, toID))
+
+	got := readActivity(t, db, practiceID, engagementID, identityUID)
+	if len(got.Items) != 1 {
+		t.Fatalf("got %d items, want 1", len(got.Items))
+	}
+	// SeedStaffAtPractice names a Staff row "Test Staff "+identityUID, so
+	// the two names asserted here are the ones the query resolved out of
+	// the ids in the diff, not values this test wrote into it.
+	want := "Visit reassigned from Test Staff reassign-from to Test Staff reassign-to"
+	if got.Items[0].Detail != want {
+		t.Fatalf("detail = %q, want %q", got.Items[0].Detail, want)
+	}
+}
+
+// TestListActivityHandler_ReassignmentFromSomebodyGone holds the entry
+// readable when one end of the move no longer resolves to a Staff row:
+// a reader is told a colleague has gone, never shown a bare uuid (#887).
+func TestListActivityHandler_ReassignmentFromSomebodyGone(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-reassign-gone"
+	const departedID = "11111111-2222-3333-4444-555555555555"
+	practiceID := testdb.SeedPractice(t, db, "Reassignment Gone")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	toID := testdb.SeedStaffAtPractice(t, db, practiceID, "reassign-gone-to", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "reassign-gone-client@example.com", "active")
+
+	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionVisitReassigned), activity.StaffActor(ownerID), reassignDiff(t, departedID, toID))
+
+	got := readActivity(t, db, practiceID, engagementID, identityUID)
+	if len(got.Items) != 1 {
+		t.Fatalf("got %d items, want 1", len(got.Items))
+	}
+	detail := got.Items[0].Detail
+	if strings.Contains(detail, departedID) {
+		t.Fatalf("detail = %q, which shows a bare uuid", detail)
+	}
+	want := "Visit reassigned from a former colleague to Test Staff reassign-gone-to"
+	if detail != want {
+		t.Fatalf("detail = %q, want %q", detail, want)
+	}
+}
+
+// TestListActivityHandler_OtherActionsCarryNoDetail holds every other
+// action to the rendering it has today: no detail field at all, so the
+// app falls back to its own generic description (#887).
+func TestListActivityHandler_OtherActionsCarryNoDetail(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-no-detail"
+	practiceID := testdb.SeedPractice(t, db, "No Detail")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "no-detail-client@example.com", "active")
+
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+
+	// Decoded loosely rather than into ActivityEntry, because what is
+	// asserted is the key's absence, which the struct cannot show.
+	var raw struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		// coverage:ignore reason: decode failure of a response this handler just wrote
+		t.Fatalf("decode: %v", err)
+	}
+	if len(raw.Items) != 1 {
+		t.Fatalf("got %d items, want 1", len(raw.Items))
+	}
+	if _, has := raw.Items[0]["detail"]; has {
+		t.Fatalf("a visit_logged entry carried a detail field: %v", raw.Items[0])
 	}
 }
