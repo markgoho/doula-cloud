@@ -701,6 +701,24 @@ describe('payments settings screen: billing mode (#271)', () => {
 			.toBe(true);
 	});
 
+	it('reports a failed billing mode change through the same Notice error pattern as the load failure', async () => {
+		mockApi({ roles: ['owner'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
+		await testPage.getByLabelText('By hand').click();
+
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (path.endsWith('/payments/billing-mode') && init?.method === 'PUT') {
+				return Promise.resolve(new Response('could not save billing mode', { status: 500 }));
+			}
+			return Promise.resolve(jsonResponse({ billingMode: 'stripe' }));
+		});
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toBeVisible();
+	});
+
 	it('names the not-yet-chosen state rather than a raw null', async () => {
 		mockApi({ roles: ['owner'] });
 		apiFetchWithSession.mockImplementation((path: string) => {

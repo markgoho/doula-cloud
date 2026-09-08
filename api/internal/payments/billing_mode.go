@@ -64,34 +64,39 @@ func fetchBillingMode(ctx context.Context, tx *sql.Tx, practiceID string) (mode 
 }
 
 // resolveBillingMode returns practiceID's billing mode for the purpose of
-// raising an Invoice. If a mode is already set, requested is ignored --
-// #271: changing an established mode happens only afterward, from
-// Payments settings, by an Owner. If none is set yet, requested must name
-// a valid mode -- this is the one path any Staff member (not only an
-// Owner) may set billing_mode for the first time, since #271 asks for the
-// choice "inline, the first time any Staff raises an Invoice." The chosen
-// mode is persisted and recorded to the Activity log before this returns.
-func resolveBillingMode(ctx context.Context, tx *sql.Tx, practiceID string, requested *string, staffID string) (BillingMode, error) {
+// raising an Invoice, and whether that mode was already established. If a
+// mode is already set, requested is ignored -- #271: changing an
+// established mode happens only afterward, from Payments settings, by an
+// Owner. If none is set yet, requested must name a valid mode -- this is
+// the one path any Staff member (not only an Owner) may set billing_mode
+// for the first time, since #271 asks for the choice "inline, the first
+// time any Staff raises an Invoice."
+//
+// resolveBillingMode itself never writes: it only validates and reports.
+// The caller persists a first-time choice via setBillingMode once the
+// Invoice it was requested for actually succeeds -- Middleware commits
+// this package's tx even when a handler writes a non-2xx response
+// (staffauth/middleware.go's Commit runs unconditionally after
+// ServeHTTP), so writing the mode here would durably lock in a choice
+// made on an Invoice that a downstream refusal (no Client email, Connect
+// not onboarded) then threw away.
+func resolveBillingMode(ctx context.Context, tx *sql.Tx, practiceID string, requested *string) (mode BillingMode, alreadySet bool, err error) {
 	current, ok, err := fetchBillingMode(ctx, tx, practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", err
+		return "", false, err
 	}
 	if ok {
-		return current, nil
+		return current, true, nil
 	}
 	if requested == nil {
-		return "", errBillingModeRequired
+		return "", false, errBillingModeRequired
 	}
-	mode := BillingMode(*requested)
+	mode = BillingMode(*requested)
 	if mode != BillingModeStripe && mode != BillingModeByHand {
-		return "", errBillingModeInvalid
+		return "", false, errBillingModeInvalid
 	}
-	if err := setBillingMode(ctx, tx, practiceID, mode, staffID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", err
-	}
-	return mode, nil
+	return mode, false, nil
 }
 
 // setBillingMode writes practiceID's billing_mode and records the change

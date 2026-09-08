@@ -1399,6 +1399,9 @@
 	{#if invoicesError}
 		<Notice variant="error" message={invoicesError} />
 	{/if}
+	{#if billingModeState.error}
+		<Notice variant="error" message={billingModeState.error} />
+	{/if}
 
 	<InvoiceSection
 		{invoices}

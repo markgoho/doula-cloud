@@ -1016,6 +1016,58 @@ func TestPostInvoiceHandler_BillingModeInvalidValueRefused(t *testing.T) {
 	}
 }
 
+// TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode
+// proves a Practice's first-ever billing_mode choice is not persisted
+// when the Invoice it was named on then fails downstream --
+// staffauth.Middleware commits this package's tx even on a non-2xx
+// response, so a naive "persist as soon as chosen" would durably lock in
+// a mode nobody's Invoice ever actually used.
+func TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-billing-mode-not-locked-in"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "No Email Client", "")
+	seedSignedContract(t, db, engagementID)
+	fakeClient := payments.NewFakeClient()
+	accountID, err := fakeClient.CreateAccount(t.Context(), payments.AccountProfile{
+		PracticeID:   practiceID,
+		PracticeName: fixturePracticeName,
+		BusinessURL:  fixtureOwnSiteURL,
+	})
+	if err != nil {
+		t.Fatalf("fixture CreateAccount: %v", err)
+	}
+	// Connected and card-payments-active, but billing_mode left unset --
+	// unlike seedConnectAccount, which stands in a billing_mode=stripe
+	// row for every other test's convenience.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET stripe_connect_account_id = $1, stripe_connect_card_payments_status = 'active' WHERE id = $2`,
+		accountID, practiceID,
+	); err != nil {
+		t.Fatalf("seed connect account: %v", err)
+	}
+
+	srv, session := newInvoiceServer(t, db, uid, fakeClient)
+	defer srv.Close()
+
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
+	}
+	if got := invoiceCount(t, db); got != 0 {
+		t.Fatalf("invoices row count = %d, want 0", got)
+	}
+	_, ok, err := billingModeOfPractice(t, db, practiceID)
+	if err != nil {
+		t.Fatalf("query billing mode: %v", err)
+	}
+	if ok {
+		t.Fatalf("billing_mode was persisted even though the Invoice it was chosen for failed -- want it left unset")
+	}
+}
+
 // TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall proves
 // #271's by-hand rail: raised 'open' immediately, no Stripe call at all,
 // a sequence-derived reference, and the Practice's billing_mode is

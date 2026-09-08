@@ -352,7 +352,14 @@
 						{ label: 'Amount', value: formatAmount(invoice.amountCents) },
 						{ label: 'Method', value: paymentMethodLabels[paymentMethod] },
 						{ label: 'Note', value: paymentNote.trim() === '' ? '—' : paymentNote },
-						{ label: 'Date received', value: paymentDate }
+						{
+							label: 'Date received',
+							// The date input's own "YYYY-MM-DD" parses as UTC midnight
+							// -- appending a local midnight time before formatting
+							// keeps a Rochester, NY recorder's chosen date from
+							// rendering back one day earlier.
+							value: new Date(`${paymentDate}T00:00:00`).toLocaleDateString()
+						}
 					]}
 				/>
 				<Button label="Confirm and record" onClick={confirmPayment} loading={isRecordingPayment} />

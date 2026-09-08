@@ -136,7 +136,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 
 		staffID, _ := staffauth.StaffID(r.Context())
 
-		mode, err := resolveBillingMode(r.Context(), tx, practiceID, req.BillingMode, staffID)
+		mode, billingModeAlreadySet, err := resolveBillingMode(r.Context(), tx, practiceID, req.BillingMode)
 		if errors.Is(err, errBillingModeRequired) {
 			apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeFailedPrecondition, MsgBillingModeRequired, nil)
 			return
@@ -168,6 +168,17 @@ func PostInvoiceHandler(client Client) http.Handler {
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
+		}
+
+		// Only persist a first-time billing mode once the Invoice it was
+		// requested for has actually been created -- see
+		// resolveBillingMode's comment on why this cannot happen earlier.
+		if !billingModeAlreadySet {
+			if err := setBillingMode(r.Context(), tx, practiceID, mode, staffID); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		diff, err := json.Marshal(map[string]int64{"amountCents": req.AmountCents})

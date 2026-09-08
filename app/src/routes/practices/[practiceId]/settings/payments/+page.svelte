@@ -385,7 +385,7 @@
 				disabled={chosenBillingMode === billingMode}
 			/>
 			{#if billingModeSaveError}
-				<p role="alert">{billingModeSaveError}</p>
+				<Notice variant="error" message={billingModeSaveError} />
 			{/if}
 		{/if}
 	{/if}
