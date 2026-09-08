@@ -262,26 +262,37 @@ func TestRLS_ClientsUpdateFollowsSelectScope(t *testing.T) {
 	}
 }
 
-// TestEngagementsCompletedHasReason_CHECKRejectsNullReason proves
-// engagements_completed_has_reason (00090) is a real database CHECK, not
-// only TransitionHandler's own guard: a direct UPDATE to 'completed'
-// with no ending_reason is rejected by Postgres itself, superuser
-// connection and all -- a CHECK applies regardless of role or RLS.
-func TestEngagementsCompletedHasReason_CHECKRejectsNullReason(t *testing.T) {
+// TestEngagementsCompletedIsExplained_CHECKDemandsBothFacts proves
+// engagements_completed_is_explained (00094) is a real database CHECK,
+// not only TransitionHandler's own guards: a direct UPDATE to
+// 'completed' missing either of ADR-0015's two facts is rejected by
+// Postgres itself, superuser connection and all -- a CHECK applies
+// regardless of role or RLS. Both halves are asserted separately,
+// because #253 landed only the ending_reason one and a CHECK that had
+// silently dropped back to it would still pass a single-case test.
+func TestEngagementsCompletedIsExplained_CHECKDemandsBothFacts(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "check-staff", []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "check@example.com", "active")
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET status = 'completed' WHERE id = $1`, engagementID,
-	); err == nil {
-		t.Fatal("expected the CHECK to reject a completed row with no ending_reason, got no error")
+	for _, missing := range []struct{ name, statement string }{
+		{"neither fact",
+			`UPDATE engagements SET status = 'completed' WHERE id = $1`},
+		{"no ending_reason",
+			`UPDATE engagements SET status = 'completed', birth_outcome = 'unknown' WHERE id = $1`},
+		{"no birth_outcome",
+			`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete' WHERE id = $1`},
+	} {
+		if _, err := db.Admin.ExecContext(t.Context(), missing.statement, engagementID); err == nil {
+			t.Fatalf("expected the CHECK to reject a completed row with %s, got no error", missing.name)
+		}
 	}
 
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete' WHERE id = $1`, engagementID,
+		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown'
+		  WHERE id = $1`, engagementID,
 	); err != nil {
-		t.Fatalf("expected a completed row with a reason to be accepted, got: %v", err)
+		t.Fatalf("expected a completed row carrying both facts to be accepted, got: %v", err)
 	}
 }
 

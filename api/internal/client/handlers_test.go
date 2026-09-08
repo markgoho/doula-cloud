@@ -584,7 +584,8 @@ func TestListHandler_ClientShapedDefaultFiltersToWork(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	withTwoEngagements, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Two Engagements", "two@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason) VALUES ($1, $2, 'completed', 'postpartum', 'care_complete')`,
+		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason, birth_outcome)
+		 VALUES ($1, $2, 'completed', 'postpartum', 'care_complete', 'unknown')`,
 		withTwoEngagements, practiceID,
 	); err != nil {
 		t.Fatalf("seed second engagement: %v", err)
@@ -1345,7 +1346,8 @@ func TestListHandler_OpenEngagementsRollup_ZeroOpenEngagementsShowsNoLines(t *te
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{doulaRole}, "employee")
 	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Done Client", "done@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete' WHERE id = $1`, engagementID,
+		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown'
+		  WHERE id = $1`, engagementID,
 	); err != nil {
 		t.Fatalf("complete engagement: %v", err)
 	}

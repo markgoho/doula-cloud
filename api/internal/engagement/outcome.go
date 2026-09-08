@@ -71,6 +71,11 @@ type BirthOutcomeResponse struct {
 type birthOutcomeRow struct {
 	outcome *string
 	endedOn *string
+	// status is read only so a clear can be refused by name on a
+	// 'completed' Engagement, which 00094's
+	// engagements_completed_is_explained forbids -- see
+	// refuseClearOnCompleted.
+	status string
 }
 
 // RecordBirthOutcomeHandler records ADR-0015's birth outcome and the
@@ -125,10 +130,10 @@ func RecordBirthOutcomeHandler() http.Handler {
 
 		var current birthOutcomeRow
 		err := tx.QueryRowContext(r.Context(),
-			`SELECT birth_outcome::text, pregnancy_ended_on::text
+			`SELECT birth_outcome::text, pregnancy_ended_on::text, status
 			   FROM engagements WHERE id = $1 AND practice_id = $2`,
 			engagementID, practiceID,
-		).Scan(&current.outcome, &current.endedOn)
+		).Scan(&current.outcome, &current.endedOn, &current.status)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
@@ -146,6 +151,9 @@ func RecordBirthOutcomeHandler() http.Handler {
 			return
 		}
 		if refuseFrozenWrite(w, reader, current.outcome != nil, req.Correction) {
+			return
+		}
+		if refuseClearOnCompleted(w, current.status, req.BirthOutcome) {
 			return
 		}
 		if req.Correction {
@@ -254,6 +262,30 @@ func sameString(a, b *string) bool {
 // with a 403. A correction offered where nothing is recorded is refused
 // too: there is nothing to correct, and accepting it would let the
 // deliberate act be the caller's default.
+// refuseClearOnCompleted guards the one write on this endpoint that
+// 00094's engagements_completed_is_explained forbids outright: clearing
+// the outcome off an Engagement that has already reached 'completed'.
+// The correction hatch stays open on a completed Engagement for every
+// other move it makes -- a `loss` recorded where a `live_birth` belongs
+// is still correctable in place -- because only the null case can leave
+// a 'completed' row with no outcome at all.
+//
+// Named here rather than left to the database, because the constraint
+// would surface as a raw violation and a 500. The reader is told the
+// order that works: reopening (completed -> active, Owner/Admin) frees
+// the row, and it can be completed again afterwards. That order is safe
+// for the reason ADR-0015 gives -- reopening unfreezes nothing, so the
+// clear still costs a deliberate correction.
+func refuseClearOnCompleted(w http.ResponseWriter, status string, outcome *string) bool {
+	if outcome != nil || status != StatusCompleted {
+		return false
+	}
+	apierr.WriteError(w,
+		"a completed Engagement must keep a birth outcome. Reopen it first, then remove the record.",
+		http.StatusConflict)
+	return true
+}
+
 func refuseFrozenWrite(w http.ResponseWriter, reader staffauth.Reader, frozen, correction bool) bool {
 	switch {
 	case frozen && !correction:

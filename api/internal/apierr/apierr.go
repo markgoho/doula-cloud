@@ -76,6 +76,20 @@ const (
 	// press-through at all, and a caller that told the two apart by
 	// their prose would be doing what #692 forbids.
 	CodeBirthOutcomeFrozen Code = "BIRTH_OUTCOME_FROZEN"
+	// CodeBirthOutcomeRequired is #940's completion refusal: ADR-0015's
+	// engagements_completed_is_explained (00094) will not let an
+	// Engagement reach 'completed' while its birth outcome is null, and
+	// the status-transition endpoint says so by name rather than letting
+	// the caller meet a raw constraint violation as a 500. Nothing is
+	// written on the refusal, and it is answered by recording the outcome
+	// through PUT .../birth-outcome -- never by re-sending the same
+	// transition, which is what makes it a different thing from
+	// CodeBirthOutcomeFrozen's press-through. Its own code rather than
+	// the generic CodeConflict, because a caller that told this apart
+	// from any other 409 by its prose would be doing what #692 forbids,
+	// and this is the one 409 whose fix is a control on a different part
+	// of the same screen.
+	CodeBirthOutcomeRequired Code = "BIRTH_OUTCOME_REQUIRED"
 )
 
 // APIError is docs/api-design.md section 7's structured error shape.

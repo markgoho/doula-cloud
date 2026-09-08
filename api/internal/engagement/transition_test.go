@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/testdb"
@@ -70,6 +71,79 @@ func transitionAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practi
 		}
 	}
 	return resp.StatusCode, out
+}
+
+// transitionRefusal sends a transition it expects to be refused and
+// reports the status code with apierr's own envelope, whose Code a
+// caller is required to branch on rather than on the prose beside it
+// (docs/api-design.md section 7). transitionAs decodes only the success
+// DTO, so a refusal's code has nowhere to land there.
+func transitionRefusal(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, practiceID, engagementID string, body map[string]any) (statusCode int, code, message string) {
+	t.Helper()
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
+		srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/status", bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, uid))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var out apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	return resp.StatusCode, out.Code, out.Message
+}
+
+// countOutcomeEvents counts the 'birth_outcome_recorded' rows on
+// engagementID -- the audit trail the completion path must neither write
+// to nor duplicate.
+func countOutcomeEvents(t *testing.T, db *testdb.DB, engagementID string) int {
+	t.Helper()
+	var n int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM engagement_events
+		  WHERE engagement_id = $1 AND event_type = 'birth_outcome_recorded'`, engagementID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count outcome events: %v", err)
+	}
+	return n
+}
+
+// seedRecordedOutcome puts a birth outcome on engagementID by hand, the
+// state #940's engagements_completed_is_explained demands before any
+// completion is allowed through. A direct write rather than a call to
+// RecordBirthOutcomeHandler: what that endpoint does with the fact is
+// outcome_test.go's subject, and a completion test that had to drive it
+// first would be asserting two endpoints at once. 'unknown' with no date
+// is used because it is the pair engagements_outcome_is_dated accepts
+// without one.
+func seedRecordedOutcome(t *testing.T, db *testdb.DB, engagementID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET birth_outcome = 'unknown' WHERE id = $1`, engagementID); err != nil {
+		t.Fatalf("seed birth outcome: %v", err)
+	}
+}
+
+// readBirthOutcome reads the frozen pair back, for the assertions that
+// prove the completion path never touches it.
+func readBirthOutcome(t *testing.T, db *testdb.DB, engagementID string) (outcome, endedOn *string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT birth_outcome::text, pregnancy_ended_on::text FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&outcome, &endedOn); err != nil {
+		t.Fatalf("read birth outcome: %v", err)
+	}
+	return outcome, endedOn
 }
 
 // readEngagementStatus is the raw row TestTransitionHandler_* assertions
@@ -149,6 +223,9 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 				uid := "legal-moves-" + move.name + "-" + rk.kind
 				practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, rk.roles, rk.employmentType)
 				_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", uid+"@example.com", move.from)
+				if move.to == engagement.StatusCompleted {
+					seedRecordedOutcome(t, db, engagementID)
+				}
 				srv := newTransitionServer(t, db)
 
 				isReopen := move.from == engagement.StatusCompleted && move.to == engagement.StatusActive
@@ -197,6 +274,135 @@ func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 	if gotStatus != engagement.StatusActive || endingReason != nil || endingNote != nil {
 		t.Fatalf("status=%q endingReason=%v endingNote=%v, want active with both cleared", gotStatus, endingReason, endingNote)
 	}
+	// ADR-0015: "Reopening unfreezes nothing." The two facts the ending
+	// carries are cleared and asked for again; the birth outcome is not
+	// one of them, and #940 must not have turned reopening into a way to
+	// shed it.
+	if outcome, _ := readBirthOutcome(t, db, engagementID); outcome == nil {
+		t.Fatal("reopening cleared the birth outcome, which the freeze rule says it never does")
+	}
+}
+
+// TestTransitionHandler_CompletingRefusesWithNoBirthOutcome is #940's
+// own refusal: ADR-0015's engagements_completed_is_explained (00094)
+// will not let an Engagement reach 'completed' while its birth outcome
+// is null, and a caller meets that as a named 409 rather than a raw
+// constraint violation. Nothing is written on the refusal -- not the
+// status, not an audit row, not the completion cascade's own
+// attachment close.
+func TestTransitionHandler_CompletingRefusesWithNoBirthOutcome(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "no-outcome-owner"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "no-outcome@example.com", engagement.StatusActive)
+	testdb.SeedAttachment(t, db, engagementID, staffID, "granted", false)
+	srv := newTransitionServer(t, db)
+
+	status, code, message := transitionRefusal(t, db, srv, uid, practiceID, engagementID,
+		transitionBody(engagement.StatusCompleted, careCompleteReason, ""))
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if code != "BIRTH_OUTCOME_REQUIRED" {
+		t.Fatalf("code = %q, want BIRTH_OUTCOME_REQUIRED", code)
+	}
+	if message == "" {
+		t.Fatal("refusal carried no message")
+	}
+
+	gotStatus, endingReason, _ := readEngagementStatus(t, db, engagementID)
+	if gotStatus != engagement.StatusActive || endingReason != nil {
+		t.Fatalf("status=%q endingReason=%v, want the row untouched", gotStatus, endingReason)
+	}
+	if n := countEngagementEvents(t, db, engagementID); n != 0 {
+		t.Fatalf("engagement_events = %d, want 0 on a refusal", n)
+	}
+	if n := countActivityActions(t, db, engagementID, "engagement_completed"); n != 0 {
+		t.Fatalf("engagement_completed activity rows = %d, want 0 on a refusal", n)
+	}
+	var openAttachments int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND ended_at IS NULL`,
+		engagementID,
+	).Scan(&openAttachments); err != nil {
+		t.Fatalf("count attachments: %v", err)
+	}
+	if openAttachments != 1 {
+		t.Fatalf("open attachments = %d, want 1: the completion cascade must not run on a refusal", openAttachments)
+	}
+}
+
+// TestTransitionHandler_CompletingWithUnknownOutcomeAndNoDate is the
+// cost ADR-0015 accepts, proved reachable: a Client who vanished during
+// intake is completed on an 'unknown' outcome carrying no date at all,
+// which engagements_outcome_is_dated (00093) is written to allow so that
+// no Practice has to invent one. The recorded pair survives the move
+// untouched, and the completion writes no second
+// 'birth_outcome_recorded' event on top of the one that recorded it.
+func TestTransitionHandler_CompletingWithUnknownOutcomeAndNoDate(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "unknown-outcome-owner"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Vanished Client", "vanished@example.com", engagement.StatusIntake)
+	srv := newTransitionServer(t, db)
+
+	if status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+		outcomeBody(engagement.OutcomeUnknown, "", false)); status != http.StatusOK {
+		t.Fatalf("recording 'unknown' status = %d, want 200", status)
+	}
+
+	status, _ := transitionAs(t, db, srv, uid, practiceID, engagementID,
+		transitionBody(engagement.StatusCompleted, "no_response", ""))
+	if status != http.StatusOK {
+		t.Fatalf("completion status = %d, want 200", status)
+	}
+	gotStatus, _, _ := readEngagementStatus(t, db, engagementID)
+	if gotStatus != engagement.StatusCompleted {
+		t.Fatalf("status = %q, want completed", gotStatus)
+	}
+	outcome, endedOn := readBirthOutcome(t, db, engagementID)
+	if outcome == nil || *outcome != engagement.OutcomeUnknown || endedOn != nil {
+		t.Fatalf("outcome=%v endedOn=%v, want unknown with no date", outcome, endedOn)
+	}
+	if n := countOutcomeEvents(t, db, engagementID); n != 1 {
+		t.Fatalf("birth_outcome_recorded events = %d, want 1: completing writes none of its own", n)
+	}
+}
+
+// TestTransitionHandler_CompletingLeavesARecordedOutcomeAlone is the
+// other half of the same rule (#940): a completion never silently
+// overwrites an outcome already recorded, which holds here because the
+// completion path never writes the column at all. A 'live_birth' with a
+// date goes into a completion and comes out unchanged, with no second
+// audit row claiming otherwise.
+func TestTransitionHandler_CompletingLeavesARecordedOutcomeAlone(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "frozen-outcome-owner"
+	const endedOnDate = "2026-03-14"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "frozen-complete@example.com", engagement.StatusActive)
+	srv := newTransitionServer(t, db)
+
+	if status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+		outcomeBody(engagement.OutcomeLiveBirth, endedOnDate, false)); status != http.StatusOK {
+		t.Fatalf("recording status = %d, want 200", status)
+	}
+
+	status, _ := transitionAs(t, db, srv, uid, practiceID, engagementID,
+		transitionBody(engagement.StatusCompleted, careCompleteReason, ""))
+	if status != http.StatusOK {
+		t.Fatalf("completion status = %d, want 200", status)
+	}
+	outcome, endedOn := readBirthOutcome(t, db, engagementID)
+	if outcome == nil || *outcome != engagement.OutcomeLiveBirth {
+		t.Fatalf("birth_outcome = %v, want live_birth", outcome)
+	}
+	if endedOn == nil || *endedOn != endedOnDate {
+		t.Fatalf("pregnancy_ended_on = %v, want %s", endedOn, endedOnDate)
+	}
+	if n := countOutcomeEvents(t, db, engagementID); n != 1 {
+		t.Fatalf("birth_outcome_recorded events = %d, want still 1", n)
+	}
 }
 
 // TestTransitionHandler_CompletingPersistsEndingNote proves the optional
@@ -206,6 +412,7 @@ func TestTransitionHandler_CompletingPersistsEndingNote(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "note-owner", []string{ownerRole}, employeeType)
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "note@example.com", engagement.StatusActive)
+	seedRecordedOutcome(t, db, engagementID)
 	srv := newTransitionServer(t, db)
 
 	status, _ := transitionAs(t, db, srv, "note-owner", practiceID, engagementID,
@@ -310,6 +517,7 @@ func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "noop-owner", []string{ownerRole}, employeeType)
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "noop@example.com", engagement.StatusActive)
+	seedRecordedOutcome(t, db, engagementID)
 	srv := newTransitionServer(t, db)
 
 	status, _ := transitionAs(t, db, srv, "noop-owner", practiceID, engagementID, transitionBody(engagement.StatusCompleted, careCompleteReason, ""))

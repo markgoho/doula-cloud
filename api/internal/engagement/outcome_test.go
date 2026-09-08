@@ -485,6 +485,43 @@ func TestRecordBirthOutcomeHandler_AnOwnerCanUnrecord(t *testing.T) {
 	}
 }
 
+// TestRecordBirthOutcomeHandler_ClearingIsRefusedOnACompletedEngagement
+// is the other side of #940's constraint: once an Engagement is
+// 'completed', engagements_completed_is_explained (00094) forbids a row
+// that carries no outcome, so the un-recording above cannot be applied
+// where it would leave one. The caller is told the order that works
+// rather than meeting the raw constraint as a 500, and the recorded pair
+// is left exactly as it was.
+func TestRecordBirthOutcomeHandler_ClearingIsRefusedOnACompletedEngagement(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "unrecord-completed-owner"
+	srv, practiceID, engagementID := newOutcomeServer(t, db, uid, []string{ownerRole}, employeeType)
+	if status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+		outcomeBody(engagement.OutcomeLoss, lossOn, false)); status != http.StatusOK {
+		t.Fatalf("first record status = %d, want 200", status)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete' WHERE id = $1`,
+		engagementID); err != nil {
+		t.Fatalf("complete engagement: %v", err)
+	}
+
+	status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID, outcomeBody("", "", true))
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	gotOutcome, gotEndedOn := readEngagementOutcome(t, db, engagementID)
+	if gotOutcome == nil || *gotOutcome != engagement.OutcomeLoss || gotEndedOn == nil {
+		t.Fatalf("row = (%v, %v), want the recorded loss left alone", gotOutcome, gotEndedOn)
+	}
+	// Correcting in place is untouched by that refusal: only the null
+	// case can leave a 'completed' row with no outcome at all.
+	if status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+		outcomeBody(engagement.OutcomeUnknown, "", true)); status != http.StatusOK {
+		t.Fatalf("correcting a completed Engagement's outcome status = %d, want 200", status)
+	}
+}
+
 // TestRecordBirthOutcomeHandler_ClearingIsAlwaysACorrection proves a
 // null outcome is refused unless the caller says it is a correction, and
 // that it cannot carry a date -- engagements_outcome_is_dated's own rule,

@@ -271,20 +271,24 @@ func TestSeedEngagementInStatus(t *testing.T) {
 	}
 }
 
-// TestSeedEngagementInStatus_CompletedSetsEndingReason proves a
-// "completed" status also sets ending_reason to 'care_complete' --
-// #253's engagements_completed_has_reason CHECK demands a non-null
-// reason on every completed row, so a caller of this fixture must not
-// have to know that just to get one.
-func TestSeedEngagementInStatus_CompletedSetsEndingReason(t *testing.T) {
+// TestSeedEngagementInStatus_CompletedSetsBothFacts proves a "completed"
+// status also sets ending_reason to 'care_complete' and birth_outcome to
+// 'unknown' -- #940's engagements_completed_is_explained CHECK demands
+// both on every completed row, so a caller of this fixture must not have
+// to know that just to get one. 'unknown' with no date is the pair the
+// CHECK's neighbor engagements_outcome_is_dated (00093) accepts without
+// a pregnancy_ended_on, which is why the fixture invents no date.
+func TestSeedEngagementInStatus_CompletedSetsBothFacts(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Seed Completed Engagement Test Practice")
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Sam Client", "sam@example.com", "completed")
 
-	var status, endingReason string
+	var status, endingReason, birthOutcome string
+	var endedOn *string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status::text, ending_reason::text FROM engagements WHERE id = $1`, engagementID,
-	).Scan(&status, &endingReason); err != nil {
+		`SELECT status::text, ending_reason::text, birth_outcome::text, pregnancy_ended_on::text
+		   FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&status, &endingReason, &birthOutcome, &endedOn); err != nil {
 		t.Fatalf("read seeded engagement: %v", err)
 	}
 	if status != "completed" {
@@ -292,6 +296,12 @@ func TestSeedEngagementInStatus_CompletedSetsEndingReason(t *testing.T) {
 	}
 	if endingReason != "care_complete" {
 		t.Fatalf("ending_reason = %q, want care_complete", endingReason)
+	}
+	if birthOutcome != "unknown" {
+		t.Fatalf("birth_outcome = %q, want unknown", birthOutcome)
+	}
+	if endedOn != nil {
+		t.Fatalf("pregnancy_ended_on = %q, want no date", *endedOn)
 	}
 }
 

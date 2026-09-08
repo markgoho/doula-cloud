@@ -192,10 +192,10 @@ func SeedEngagementWithKind(t *testing.T, db *DB, practiceID, name, email, kind 
 }
 
 // EndingReasonForStatus is 'care_complete' for status == "completed" and
-// nil for anything else -- #253's engagements_completed_has_reason CHECK
-// demands a non-null ending_reason on every completed row, and every
-// fixture across every package that seeds an Engagement directly (rather
-// than through SeedEngagementInStatus below) needs the identical
+// nil for anything else -- #940's engagements_completed_is_explained
+// CHECK demands a non-null ending_reason on every completed row, and
+// every fixture across every package that seeds an Engagement directly
+// (rather than through SeedEngagementInStatus below) needs the identical
 // conditional to stay legal. One function so the "if completed, supply
 // any legal reason" decision lives in one place rather than copied at
 // each INSERT.
@@ -206,17 +206,32 @@ func EndingReasonForStatus(status string) any {
 	return nil
 }
 
+// BirthOutcomeForStatus is EndingReasonForStatus's twin for the second
+// half of the same CHECK (#940): a 'completed' row carries a birth
+// outcome too. 'unknown' is the fixture's answer because it is the one
+// value engagements_outcome_is_dated (00093) lets stand with no
+// pregnancy_ended_on, so a fixture that only needs a completed
+// Engagement does not have to invent a date to get one -- which is
+// exactly the cost ADR-0015 accepts for a real Practice as well.
+func BirthOutcomeForStatus(status string) any {
+	if status == "completed" {
+		return "unknown"
+	}
+	return nil
+}
+
 // SeedEngagementInStatus is SeedNamedEngagement with an explicit
 // Engagement status, for a test that needs the Engagement in a specific
 // state rather than the default "intake". A status of "completed" also
-// sets ending_reason (EndingReasonForStatus) -- see its own doc comment.
+// sets ending_reason and birth_outcome (EndingReasonForStatus,
+// BirthOutcomeForStatus) -- see their own doc comments.
 func SeedEngagementInStatus(t *testing.T, db *DB, practiceID, name, email, status string) (clientID, engagementID string) {
 	t.Helper()
 	clientID = SeedNamedClient(t, db, practiceID, name, email)
-	endingReason := EndingReasonForStatus(status)
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason) VALUES ($1, $2, $3, 'birth', $4) RETURNING id`,
-		clientID, practiceID, status, endingReason,
+		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason, birth_outcome)
+		 VALUES ($1, $2, $3, 'birth', $4, $5) RETURNING id`,
+		clientID, practiceID, status, EndingReasonForStatus(status), BirthOutcomeForStatus(status),
 	).Scan(&engagementID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed engagement: %v", err)
