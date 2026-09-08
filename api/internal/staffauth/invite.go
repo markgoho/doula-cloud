@@ -79,7 +79,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		address := NormalizeAddress(req.Email)
 		if address == "" {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "email is required",
-				map[string]string{"email": MsgInviteAddressNeeded})
+				map[string]string{fieldEmail: MsgInviteAddressNeeded})
 			return
 		}
 		invited, ok := parseMembership(w, req.Roles, req.EmploymentType)
@@ -115,7 +115,7 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 		// this address into one control, and the summary entry has to be
 		// able to send her back to it.
 		return InviteResponse{}, http.StatusConflict, "that address already holds a membership at this practice",
-			map[string]string{"email": MsgMembershipAlreadyHeld}
+			map[string]string{fieldEmail: MsgMembershipAlreadyHeld}
 	}
 
 	invitationID, token, expiresAt, rotating, err := MintInvitation(ctx, tx, practiceID, actorStaffID, address, invited.rolesLiteral, invited.employmentType)

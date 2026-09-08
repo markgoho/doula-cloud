@@ -121,6 +121,10 @@ func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 	}
 }
 
+// newOwnerUID is the identity the signup-validation tests sign in as --
+// one literal, since none of them gets far enough to write a row.
+const newOwnerUID = "new-owner"
+
 func TestSignupHandler_InvalidBody(t *testing.T) {
 	db := testdb.New(t)
 	srv := newSignupServer(authntest.Verifier{UID: "bad-body-uid"}, db)
@@ -145,7 +149,7 @@ func TestSignupHandler_InvalidBody(t *testing.T) {
 
 func TestSignupHandler_MissingFields(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "", StaffName: "S"})
@@ -170,7 +174,7 @@ func TestSignupHandler_MissingFields(t *testing.T) {
 // together, so answering only the first would send her back twice.
 func TestSignupHandler_MissingBothNames(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY"})
@@ -191,7 +195,7 @@ func TestSignupHandler_MissingBothNames(t *testing.T) {
 // reading the API, the detail is for the person looking at the control.
 func TestSignupHandler_MissingWorkState(t *testing.T) {
 	db := testdb.New(t)
-	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
+	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "P", StaffName: "S", WorkState: "ZZ"})

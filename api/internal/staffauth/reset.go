@@ -43,7 +43,7 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 		address := NormalizeAddress(req.Email)
 		if address == "" {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "email is required",
-				map[string]string{"email": MsgOwnAddressNeeded})
+				map[string]string{fieldEmail: MsgOwnAddressNeeded})
 			return
 		}
 

@@ -20,6 +20,10 @@ import (
 // match below is whole-word.
 var bannedDetailWords = []string{"please", "valid", "invalid", "required"}
 
+// apiModuleRoot is the api module root relative to this package's own
+// directory -- what every AST gate in this package walks.
+const apiModuleRoot = "../.."
+
 // TestDetailsWording is #488's Go half of the wording gate
 // app/src/lib/formErrors.usage.spec.ts already runs over the client.
 //
@@ -42,7 +46,7 @@ var bannedDetailWords = []string{"please", "valid", "invalid", "required"}
 // rather than guessed at, so the gate only ever reports a string it
 // actually read.
 func TestDetailsWording(t *testing.T) {
-	root := "../.."
+	root := apiModuleRoot
 
 	byDir := map[string][]string{}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

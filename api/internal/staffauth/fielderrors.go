@@ -15,6 +15,11 @@ package staffauth
 // comment gives: the same refusal has to read the same way wherever it
 // happens, and a person who trips the client check and then the server
 // one should not be told off in two different wordings.
+// fieldEmail is the DTO json tag every address field in this package
+// carries, and so the Details key each of their refusals is written
+// under.
+const fieldEmail = "email"
+
 const (
 	// MsgPracticeNameNeeded is signup's practiceName field.
 	MsgPracticeNameNeeded = "Enter the name of your Practice"

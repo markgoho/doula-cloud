@@ -20,7 +20,7 @@ import (
 // call http.Error are mock handlers standing in for a third party
 // (mailgun) or for middleware under test, not production API responses.
 func TestNoDirectHTTPError(t *testing.T) {
-	root := "../.."
+	root := apiModuleRoot
 
 	var offenses []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -95,7 +95,7 @@ var jsonUsageExceptions = map[string]bool{
 // which #859 swept away -- this is what stops that sweep from silently
 // regressing one file at a time.
 func TestNoDirectJSONUsage(t *testing.T) {
-	root := "../.."
+	root := apiModuleRoot
 
 	var offenses []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
