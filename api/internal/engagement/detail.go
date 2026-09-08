@@ -33,6 +33,13 @@ type Detail struct {
 	// field (#505) -- same nullable-column read, same omitted-when-null
 	// shape (#538).
 	DueDate *string `json:"dueDate,omitempty"`
+	// BirthOutcome/PregnancyEndedOn (#293) are ADR-0015's staff-only
+	// birth outcome and the date the pregnancy ended, both absent from
+	// the JSON until recorded. They are on this Staff-side DTO and
+	// deliberately not on portal.Detail: ADR-0015 binds them as never
+	// Client-facing, and portal.Detail's own read is what enforces it.
+	BirthOutcome     *string `json:"birthOutcome,omitempty"`
+	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
 	// StatusMoves (#253) is legalMoves(reader, Status) -- exactly the
 	// target statuses this caller may move to from Status, per ADR-0015's
 	// six-move table narrowed by its role table. TransitionHandler
@@ -100,12 +107,14 @@ func DetailHandler() http.Handler {
 		var preferredName sql.NullString
 		var dueDate sql.NullString
 		err = tx.QueryRowContext(r.Context(),
-			`SELECT e.id, c.id, c.given_name, c.preferred_name, e.status, e.created_at, e.due_date::text
+			`SELECT e.id, c.id, c.given_name, c.preferred_name, e.status, e.created_at, e.due_date::text,
+			        e.birth_outcome::text, e.pregnancy_ended_on::text
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,
 			engagementID, practiceID,
-		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt, &dueDate)
+		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt, &dueDate,
+			&d.BirthOutcome, &d.PregnancyEndedOn)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return

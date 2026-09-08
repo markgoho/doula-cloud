@@ -38,3 +38,12 @@ const employeeType = "employee"
 // transition test that completes an Engagement without caring which of
 // the six legal ending reasons it carries.
 const careCompleteReason = "care_complete"
+
+// contractorType is named once for the same reason, shared by every test
+// that seeds ADR-0008's other employment type.
+const contractorType = "contractor"
+
+// employeeDoulaKind is the role-table case label an employee Doula's row
+// carries, named once for the same reason -- two role tables in this
+// package name her, and one of them branches on the label.
+const employeeDoulaKind = "employee doula"

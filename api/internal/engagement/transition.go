@@ -70,6 +70,26 @@ func legalMoves(reader staffauth.Reader, current string) []string {
 	return none
 }
 
+// refuseFactWrite is ADR-0015's outer role gate on writing any mutable
+// Engagement fact: a contractor Doula is refused outright, and everyone
+// else must be an Owner, an Admin or a Doula. It writes the 403 itself
+// and reports whether the request was refused, so TransitionHandler and
+// RecordBirthOutcomeHandler share one predicate rather than a
+// hand-copied pair of role checks. contractorMsg is the caller's own
+// because the refusal names the act being refused, which differs; the
+// second message does not name an act at all.
+func refuseFactWrite(w http.ResponseWriter, reader staffauth.Reader, contractorMsg string) bool {
+	if reader.IsAmbientContractor() {
+		apierr.WriteError(w, contractorMsg, http.StatusForbidden)
+		return true
+	}
+	if !reader.IsOwnerOrAdmin() && !reader.Has(doulaRole) {
+		apierr.WriteError(w, "only a Practice Owner, Admin or Doula can do that", http.StatusForbidden)
+		return true
+	}
+	return false
+}
+
 // TransitionRequest carries an Engagement's target status and, when that
 // target is 'completed', the ending reason ADR-0015 requires (an
 // optional free-text note beside it). EndingReason/EndingNote are
@@ -146,12 +166,7 @@ func TransitionHandler() http.Handler {
 		// before the request body is even decoded -- the same ordering
 		// CompleteHandler's RequireOwnerOrAdmin already used for its own
 		// role gate.
-		if reader.IsAmbientContractor() {
-			apierr.WriteError(w, "a contractor Doula cannot change an Engagement's status", http.StatusForbidden)
-			return
-		}
-		if !reader.IsOwnerOrAdmin() && !reader.Has(doulaRole) {
-			apierr.WriteError(w, "only a Practice Owner, Admin or Doula can do that", http.StatusForbidden)
+		if refuseFactWrite(w, reader, "a contractor Doula cannot change an Engagement's status") {
 			return
 		}
 

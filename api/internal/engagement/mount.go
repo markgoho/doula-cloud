@@ -23,4 +23,7 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/status",
 		"documented idempotent by construction: re-requesting the status an Engagement already holds is a no-op that only closes anything a partial earlier completion cascade left behind",
 		false, TransitionHandler())
+	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/birth-outcome",
+		"naturally idempotent (docs/api-design.md rule 4): a PUT of the birth outcome the Engagement already holds writes nothing and returns the same 200",
+		false, RecordBirthOutcomeHandler())
 }

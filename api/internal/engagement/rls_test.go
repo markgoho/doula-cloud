@@ -170,7 +170,7 @@ func TestRLS_ClientsInsertAllowedForOwnerWithContractorEmploymentType(t *testing
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)
 	}
-	ownerContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "owner-contractor-inserting", []string{"owner", doulaRole}, "contractor")
+	ownerContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "owner-contractor-inserting", []string{ownerRole, doulaRole}, contractorType)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
