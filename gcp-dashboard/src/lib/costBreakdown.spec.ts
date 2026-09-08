@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { NO_USAGE_DETAIL_SERVICES, summarizeCost } from './costBreakdown.ts';
+import {
+	CLOUD_RUN_SERVICE_DESCRIPTION,
+	findServiceCost,
+	NO_USAGE_DETAIL_SERVICES,
+	summarizeCost
+} from './costBreakdown.ts';
 import type { CostQueryRow } from './server/costQuery.ts';
 
 function row(partial: Partial<CostQueryRow> & { service: string; cost: number }): CostQueryRow {
@@ -74,5 +79,26 @@ describe('summarizeCost', () => {
 		const breakdown = summarizeCost([row({ service: 'Cloud Run', cost: 1 })]);
 
 		expect(breakdown.services[0].usageDetailAvailable).toBe(true);
+	});
+});
+
+describe('findServiceCost', () => {
+	it('finds what the service the usage panel reports on actually cost', () => {
+		const breakdown = summarizeCost([
+			row({ service: 'Cloud Run', cost: 18.4 }),
+			row({ service: 'Cloud SQL', cost: 14.1 })
+		]);
+
+		expect(findServiceCost(breakdown, CLOUD_RUN_SERVICE_DESCRIPTION)).toBe(18.4);
+	});
+
+	it('reports nothing for a service this period did not bill for', () => {
+		const breakdown = summarizeCost([row({ service: 'Cloud SQL', cost: 14.1 })]);
+
+		expect(findServiceCost(breakdown, CLOUD_RUN_SERVICE_DESCRIPTION)).toBeUndefined();
+	});
+
+	it('reports nothing before the first sync, when there is no breakdown at all', () => {
+		expect(findServiceCost(undefined, CLOUD_RUN_SERVICE_DESCRIPTION)).toBeUndefined();
 	});
 });

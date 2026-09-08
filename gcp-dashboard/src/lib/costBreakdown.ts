@@ -28,6 +28,12 @@ export const USAGE_DETAIL_UNAVAILABLE_LABEL = 'usage detail not available — bi
 export const EXPORT_FRESHNESS_CAVEAT = 'the billing export lags usage by about 24 hours';
 
 /**
+ * How the billing export names Cloud Run, which is what pairs the Cloud Run
+ * usage panel with the cost that produced it.
+ */
+export const CLOUD_RUN_SERVICE_DESCRIPTION = 'Cloud Run';
+
+/**
  * One SKU's share of a service's cost.
  */
 export interface SkuCost {
@@ -106,4 +112,16 @@ export function summarizeCost(rows: readonly CostQueryRow[]): CostBreakdown {
 		.toSorted((a, b) => b.cost - a.cost);
 
 	return { total, services, costsThrough };
+}
+
+/**
+ * What one service cost this period, or `undefined` when nothing has been
+ * synced yet or the export billed nothing for it. A usage panel reads this to
+ * show the cost its figures produced.
+ */
+export function findServiceCost(
+	breakdown: CostBreakdown | undefined,
+	service: string
+): number | undefined {
+	return breakdown?.services.find((entry) => entry.service === service)?.cost;
 }
