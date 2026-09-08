@@ -11,7 +11,7 @@ import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { apiFetchWithSession } from '#lib/api.js';
 import { createClient } from '#lib/client.js';
-import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { CHANGE_PARAMETER, CHANGE_VALUE } from '#lib/intakeJourney.js';
 
@@ -117,7 +117,8 @@ export function checkOr(
  */
 export async function saveIntake(
 	practiceId: string,
-	shouldOverride: boolean
+	shouldOverride: boolean,
+	fieldIds: Record<string, string> = {}
 ): Promise<FormError[] | undefined> {
 	try {
 		const result = await createClient(
@@ -136,6 +137,12 @@ export async function saveIntake(
 		await goto(detailHref(practiceId, clientId));
 		return undefined;
 	} catch (error) {
-		return [{ message: error instanceof Error && error.message ? error.message : SERVICE_PROBLEM }];
+		// A server refusal that names fields becomes one entry each
+		// (#488), each pointed at the control the caller says holds it.
+		// Callers away from the field pass nothing, and those entries
+		// stay untargeted for the reason `givenNameRefusal` gives: GOV.UK
+		// renders an entry with nowhere useful to send the reader as
+		// plain text rather than as a link that goes nowhere.
+		return errorsFromCause(error, fieldIds);
 	}
 }

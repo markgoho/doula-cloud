@@ -196,7 +196,16 @@ type APIError struct {
    * `429 Too Many Requests`: Rate limit reached.
    * `500 Internal Server Error`: Unhandled server or database error (log details internally, do not leak raw stack traces to caller).
 3. **A refusal that can be pressed through**: three sign-in endpoints — `POST /api/session`, `POST /api/portal/magic-link` and `POST /api/portal/accept-invite` — answer `409 SESSION_EVICTION_UNCONFIRMED` when the caller already holds a live session in the *other* population, because minting would end it (#610, ADR-0026). Nothing is written on that refusal; the same request repeated with `X-Confirmed: true` goes through and deletes the other session. The message names the population being left and nothing else about the session behind the cookie. A client tells this 409 apart by its code, never by its prose (#692) — its own code, not `FAILED_PRECONDITION`, which three unrelated 409s already carry.
-4. **One Writer**: `api/internal/apierr` is the only place this shape is written from. Every handler calls `apierr.Write` (or `apierr.WriteError` for the common status+message case) rather than `http.Error` or a package-local helper; a new endpoint that needs a `Code` not yet in `apierr.Code`'s enumerated set adds one there (#529). The success body has the same rule: every handler calls `apierr.WriteJSON(w, status, v)` rather than setting `Content-Type` and calling `json.NewEncoder(w).Encode` itself, and every request-body decode calls `apierr.DecodeJSON(w, r, &v)`, which wraps the body in `http.MaxBytesReader` at `apierr.MaxRequestBodyBytes` (1 MiB) before decoding (#842).
+4. **`details` is keyed by the request DTO's own JSON field name** (#488), so a client maps a key onto a control with no translation table. A 4xx a person can cause by filling in a form names the field at fault; where a refusal genuinely belongs to no field (an expired link, a rule about server state), `details` is absent and `message` carries it, which the app renders as an untargeted summary entry. A `details` value is read by a person, not by a program, so it follows the same GOV.UK error-message rules `app/src/lib/formErrors.ts` is gated on — say what to do, start with the field's own noun, and never write "please", "valid", "invalid" or "required" <!-- spelling:ignore: the rule has to name the words it forbids -->. `apierr`'s `TestDetailsWording` fails the build on one that does; `APIError.Message` is the summary a *caller* reads and is not held to those rules.
+```jsonc
+// POST /api/practices/{practiceId}/invitations, 409
+{
+  "code": "CONFLICT",
+  "message": "that address already holds a membership at this practice",
+  "details": { "email": "That address already holds a membership at this Practice" }
+}
+```
+5. **One Writer**: `api/internal/apierr` is the only place this shape is written from. Every handler calls `apierr.Write` (or `apierr.WriteError` for the common status+message case) rather than `http.Error` or a package-local helper; a new endpoint that needs a `Code` not yet in `apierr.Code`'s enumerated set adds one there (#529). The success body has the same rule: every handler calls `apierr.WriteJSON(w, status, v)` rather than setting `Content-Type` and calling `json.NewEncoder(w).Encode` itself, and every request-body decode calls `apierr.DecodeJSON(w, r, &v)`, which wraps the body in `http.MaxBytesReader` at `apierr.MaxRequestBodyBytes` (1 MiB) before decoding (#842).
 
 ---
 
@@ -213,4 +222,4 @@ When adding or modifying an HTTP endpoint in `api/`:
 | **Idempotency** | Non-idempotent mutating `POST` actions accept `Idempotency-Key`. |
 | **Pagination** | Lists use cursor pagination with a standard `PaginatedResponse[T]` envelope. |
 | **Lean Payloads** | Expensive relations are opt-in via `?include=`. |
-| **Errors** | Handlers return consistent structured JSON errors matching `APIError`. |
+| **Errors** | Refusals go through `apierr.Write`/`apierr.WriteError`, never `http.Error` or a package-local helper. A 4xx a form can cause carries `details` keyed by the DTO's `json:` tag, worded for a person. |

@@ -36,7 +36,7 @@
 	import { journeySteps, nextStepHref, previousStepHref, type StepId } from '#lib/intakeJourney.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import IntakeActions from './IntakeActions.svelte';
-	import { JOURNEY, basePath, checkOr, saveIntake, searchHref } from './intake.js';
+	import { GIVEN_NAME_ID, JOURNEY, basePath, checkOr, saveIntake, searchHref } from './intake.js';
 
 	interface Properties {
 		stepId: StepId;
@@ -98,7 +98,13 @@
 
 	async function handleSaveForLater() {
 		if (isRefused()) return;
-		await submission.run(() => saveIntake(practiceId, false), orServiceProblem);
+		// Only the name step has a control the BFF's `givenName` refusal
+		// can point at (#488); every other step is a page away from it,
+		// so it passes nothing and the entry stays plain text.
+		await submission.run(
+			() => saveIntake(practiceId, false, stepId === 'name' ? { givenName: GIVEN_NAME_ID } : {}),
+			orServiceProblem
+		);
 	}
 </script>
 

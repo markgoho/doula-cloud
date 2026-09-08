@@ -47,11 +47,15 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
+	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const KIND_NAME = 'engagement-request-kind';
 	const kindFieldId = `${KIND_NAME}-birth`;
 	const dueDateId = 'engagement-request-due-date';
+	// The BFF's own field names (engagementrequest.RequestBody's json
+	// tags) mapped onto this form's controls, so a refusal it names lands
+	// on the right one (#488).
+	const requestFieldIds = { kind: kindFieldId, dueDate: dueDateId };
 	const noteId = 'engagement-request-note';
 
 	let detail = $state<ClientDetail | undefined>();
@@ -197,7 +201,7 @@
 			}
 			clearDraft();
 			await goto(detailHref());
-		}, orThrownMessage);
+		}, orThrownErrors(requestFieldIds));
 	}
 </script>
 

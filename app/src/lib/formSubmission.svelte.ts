@@ -49,7 +49,7 @@
 
 export type { FormError } from './components/molecules/ErrorSummary.svelte';
 
-import { SERVICE_PROBLEM } from './formErrors.js';
+import { errorsFromCause, SERVICE_PROBLEM } from './formErrors.js';
 import type { FormError } from './components/molecules/ErrorSummary.svelte';
 
 /**
@@ -76,6 +76,23 @@ export function orServiceProblem(refusal: unknown): FormError[] {
 export function orThrownMessage(refusal: unknown): FormError[] {
 	if (Array.isArray(refusal)) return refusal;
 	return [{ message: refusal instanceof Error && refusal.message ? refusal.message : SERVICE_PROBLEM }];
+}
+
+/**
+ * As {@link orThrownMessage}, but a thrown `RefusalError` (formErrors.ts)
+ * carrying `APIError.details` becomes one entry per field, each targeted
+ * at the control `fieldIds` maps its key to (#488, #754).
+ *
+ * A factory rather than a plain mapper because the map is the route's own
+ * knowledge: only the screen knows which of its controls the BFF's
+ * `givenName` or `dueDate` key names. A refusal that names no field, or a
+ * key with no entry in `fieldIds`, still reports its message untargeted --
+ * exactly what `orThrownMessage` shows today -- so a route can pass this
+ * before its endpoint populates `details` and gain the targeting for free
+ * when it does.
+ */
+export function orThrownErrors(fieldIds: Record<string, string>): RefusalMapper {
+	return (refusal: unknown) => (Array.isArray(refusal) ? refusal : errorsFromCause(refusal, fieldIds));
 }
 
 export class FormSubmission {

@@ -116,6 +116,18 @@ func CreateHandler() http.Handler {
 // GivenName (the only required fact -- ADR-0017) and, if set, that
 // DateOfBirth parses as YYYY-MM-DD. Writes its own 400 and returns false
 // on failure.
+// The sentences this package puts in APIError.Details (#488), following
+// the GOV.UK rules app/src/lib/formErrors.ts is already gated on and
+// apierr's TestDetailsWording holds this side to.
+const (
+	// MsgGivenNameNeeded is the givenName field, the one part of a Client
+	// record that cannot be left out.
+	MsgGivenNameNeeded = "Enter the Client's first name"
+	// MsgDateOfBirthMalformed is the dateOfBirth field, which may be left
+	// empty but has to be a real date when it is given at all.
+	MsgDateOfBirthMalformed = "Enter a date of birth as a real date, like 1990-04-23"
+)
+
 func normalizeAndValidate(w http.ResponseWriter, rec *Record) bool {
 	rec.GivenName = strings.TrimSpace(rec.GivenName)
 	rec.FamilyName = strings.TrimSpace(rec.FamilyName)
@@ -132,13 +144,19 @@ func normalizeAndValidate(w http.ResponseWriter, rec *Record) bool {
 		rec.FieldValues = json.RawMessage("{}")
 	}
 
+	// Both refusals name the field they are about in Details
+	// (docs/api-design.md section 7, #488): the Client form and the Client
+	// edit form both reach here, and each has a control the summary entry
+	// has to be able to send the reader back to.
 	if rec.GivenName == "" {
-		apierr.WriteError(w, "givenName is required", http.StatusBadRequest)
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "givenName is required",
+			map[string]string{"givenName": MsgGivenNameNeeded})
 		return false
 	}
 	if rec.DateOfBirth != "" {
 		if _, err := time.Parse(time.DateOnly, rec.DateOfBirth); err != nil {
-			apierr.WriteError(w, "dateOfBirth must be YYYY-MM-DD", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "dateOfBirth must be YYYY-MM-DD",
+				map[string]string{"dateOfBirth": MsgDateOfBirthMalformed})
 			return false
 		}
 	}

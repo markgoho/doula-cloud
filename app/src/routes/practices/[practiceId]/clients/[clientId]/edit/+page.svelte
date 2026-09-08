@@ -40,7 +40,8 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
-	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
+	import { errorsFromCause } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
 	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 
 	const givenNameId = 'client-edit-given-name';
@@ -54,6 +55,10 @@
 	const addressRegionId = 'client-edit-address-region';
 	const addressPostalCodeId = 'client-edit-address-postal-code';
 	const dateOfBirthId = 'client-edit-date-of-birth';
+	// The BFF's own field names (client.Record's json tags) mapped onto
+	// this form's controls, so a refusal it names lands on the right one
+	// (#488). Only these two can be refused server-side.
+	const editFieldIds = { givenName: givenNameId, dateOfBirth: dateOfBirthId };
 
 	let detail = $state<ClientDetail | undefined>();
 	let loadError = $state('');
@@ -180,7 +185,7 @@
 				return;
 			}
 			await goto(detailHref());
-		}, orThrownMessage);
+		}, orThrownErrors(editFieldIds));
 	}
 
 	// The single deliberate override -- ConfirmDialog's onConfirm, reached
@@ -206,7 +211,7 @@
 			await goto(detailHref());
 		} catch (error_) {
 			if (submission.errors.length === 0) {
-				submission.errors = orThrownMessage(error_);
+				submission.errors = errorsFromCause(error_, editFieldIds);
 			}
 			throw error_;
 		}

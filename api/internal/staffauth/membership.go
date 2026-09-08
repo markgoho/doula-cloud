@@ -98,17 +98,21 @@ type membership struct {
 // way RequireOwner writes its own 403.
 func parseMembership(w http.ResponseWriter, roles []string, employmentType string) (membership, bool) {
 	if len(roles) == 0 {
-		apierr.WriteError(w, "at least one role is required", http.StatusBadRequest)
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "at least one role is required",
+			map[string]string{"roles": MsgRoleNeeded})
 		return membership{}, false
 	}
 	for _, role := range roles {
 		if !validRoles[role] {
-			apierr.WriteError(w, "unknown role: "+role, http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "unknown role: "+role,
+				map[string]string{"roles": MsgUnknownRole})
 			return membership{}, false
 		}
 	}
 	if !validEmploymentTypes[employmentType] {
-		apierr.WriteError(w, "employmentType must be employee or contractor", http.StatusBadRequest)
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+			"employmentType must be employee or contractor",
+			map[string]string{"employmentType": MsgEmploymentTypeNeeded})
 		return membership{}, false
 	}
 	// Every role here is a known enum member, so this literal is safe to

@@ -156,13 +156,90 @@ function toErrors(
 ): FormError[] {
 	if (parsed === undefined) return [{ message: SERVICE_PROBLEM }];
 
-	if (parsed.details) {
-		return Object.entries(parsed.details).map(([field, message]) => ({
-			message,
+	return targetedErrors(parsed.message ?? parsed.text, parsed.details, fieldIds);
+}
+
+/*
+ * The one mapping from a refusal onto the list `ErrorSummary` wants:
+ * `details` becomes one entry per field, and a refusal that names no
+ * field stays the single untargeted entry it has always been. Shared by
+ * `toErrors` and `errorsFromCause` so the two ways a refusal reaches a
+ * screen -- read straight off a `Response`, or thrown by a lib module and
+ * caught -- cannot come to disagree about what a `details` map means.
+ */
+function targetedErrors(
+	message: string,
+	details: Record<string, string> | undefined,
+	fieldIds: Record<string, string>
+): FormError[] {
+	if (details) {
+		return Object.entries(details).map(([field, detail]) => ({
+			message: detail,
 			targetId: fieldIds[field]
 		}));
 	}
-	return [{ message: parsed.message ?? parsed.text }];
+	return [{ message }];
+}
+
+/*
+ * A refusal a lib module throws rather than returns (#754).
+ *
+ * `client.ts` and `engagementRequest.ts` do their fetching for a screen
+ * and report a refusal by throwing, which is what let their three
+ * `ErrorSummary` routes -- `clients/new`, `clients/[clientId]/edit` and
+ * `engagement-requests/new` -- lose `details` before they could ever read
+ * it: an `Error` carries one string. This carries the field map beside
+ * the message, so those routes can target a refusal the same way the
+ * `refusalErrors` routes already do.
+ *
+ * A subclass rather than a second return shape on every one of those
+ * functions: the throwing is the existing contract those modules' many
+ * callers are written against, and most of them (a load that fails, a
+ * withdrawal) have no form to target anything onto. `errorsFromCause`
+ * degrades to the message for every one of those, so nothing else has to
+ * change.
+ */
+export class RefusalError extends Error {
+	readonly details?: Record<string, string>;
+
+	constructor(message: string, details?: Record<string, string>) {
+		super(message);
+		this.name = 'RefusalError';
+		this.details = details;
+	}
+}
+
+/*
+ * Reads a refused response into the `RefusalError` a lib module throws.
+ *
+ * `opaque5xx: false`, matching `apiErrorMessage` -- the function this
+ * replaces at those call sites -- so a 5xx still reports its own sentence
+ * where it has one rather than collapsing to `SERVICE_PROBLEM`. A 5xx
+ * carries no `details`, so nothing is targeted off one either way.
+ */
+export async function refusalError(response: Response): Promise<RefusalError> {
+	const parsed = await parseRefusal(response, { opaque5xx: false });
+	return new RefusalError(parsed.message ?? parsed.text, parsed.details);
+}
+
+/*
+ * Reads whatever a `catch` caught into the list `ErrorSummary` wants.
+ *
+ * A `RefusalError` naming fields becomes one targeted entry each; any
+ * other `Error` -- including a `RefusalError` for a refusal that named no
+ * field -- stays the single untargeted entry those screens show today.
+ * Something thrown that is not an `Error` at all is ours rather than
+ * hers, and says so.
+ */
+export function errorsFromCause(
+	cause: unknown,
+	fieldIds: Record<string, string> = {}
+): FormError[] {
+	if (cause instanceof RefusalError) {
+		return targetedErrors(cause.message, cause.details, fieldIds);
+	}
+	if (cause instanceof Error) return [{ message: cause.message }];
+	return [{ message: SERVICE_PROBLEM }];
 }
 
 /*

@@ -42,7 +42,8 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 		}
 		address := NormalizeAddress(req.Email)
 		if address == "" {
-			apierr.WriteError(w, "email is required", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "email is required",
+				map[string]string{"email": MsgOwnAddressNeeded})
 			return
 		}
 
@@ -126,7 +127,9 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 			return
 		}
 		if len(req.NewPassword) < minPasswordLength {
-			apierr.WriteError(w, fmt.Sprintf("newPassword must be at least %d characters", minPasswordLength), http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				fmt.Sprintf("newPassword must be at least %d characters", minPasswordLength),
+				map[string]string{"newPassword": fmt.Sprintf("Password must be %d characters or more", minPasswordLength)})
 			return
 		}
 

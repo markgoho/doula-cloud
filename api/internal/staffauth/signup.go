@@ -94,12 +94,24 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		req.PracticeName = strings.TrimSpace(req.PracticeName)
 		req.StaffName = strings.TrimSpace(req.StaffName)
 		if req.PracticeName == "" || req.StaffName == "" {
-			apierr.WriteError(w, "practiceName and staffName are required", http.StatusBadRequest)
+			// One refusal, one entry per empty field (#488): the two are
+			// asked for on one screen and can be missing together, so
+			// answering only the first would send her back twice.
+			details := map[string]string{}
+			if req.PracticeName == "" {
+				details["practiceName"] = MsgPracticeNameNeeded
+			}
+			if req.StaffName == "" {
+				details["staffName"] = MsgStaffNameNeeded
+			}
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"practiceName and staffName are required", details)
 			return
 		}
 		workState, ok := NormalizeWorkState(req.WorkState)
 		if !ok {
-			apierr.WriteError(w, MsgWorkStateRequired, http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgWorkStateRequired,
+				map[string]string{"workState": MsgWorkStateNeeded})
 			return
 		}
 		req.WorkState = workState

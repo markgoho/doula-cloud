@@ -78,7 +78,8 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 		address := NormalizeAddress(req.Email)
 		if address == "" {
-			apierr.WriteError(w, "email is required", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "email is required",
+				map[string]string{"email": MsgInviteAddressNeeded})
 			return
 		}
 		invited, ok := parseMembership(w, req.Roles, req.EmploymentType)
@@ -86,9 +87,9 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		resp, status, msg := invite(r.Context(), tx, practiceID, actorStaffID, address, invited)
+		resp, status, msg, details := invite(r.Context(), tx, practiceID, actorStaffID, address, invited)
 		if status != http.StatusCreated && status != http.StatusOK {
-			apierr.WriteError(w, msg, status)
+			apierr.Write(w, status, apierr.CodeForStatus(status), msg, details)
 			return
 		}
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.StaffInvite))
@@ -103,20 +104,24 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 // differ from the first attempt. Rotating rather than inserting is what
 // practice_invitations_one_pending (00039) enforces, so two concurrent
 // invites to one address cannot both win.
-func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address string, invited membership) (InviteResponse, int, string) {
+func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address string, invited membership) (InviteResponse, int, string, map[string]string) {
 	alreadyMember, err := AddressHoldsMembership(ctx, tx, practiceID, address)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
 	}
 	if alreadyMember {
-		return InviteResponse{}, http.StatusConflict, "that address already holds a membership at this practice"
+		// The refusal names the field it is about (#488): the Owner typed
+		// this address into one control, and the summary entry has to be
+		// able to send her back to it.
+		return InviteResponse{}, http.StatusConflict, "that address already holds a membership at this practice",
+			map[string]string{"email": MsgMembershipAlreadyHeld}
 	}
 
 	invitationID, token, expiresAt, rotating, err := MintInvitation(ctx, tx, practiceID, actorStaffID, address, invited.rolesLiteral, invited.employmentType)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
 	}
 	status := http.StatusCreated
 	if rotating {
@@ -125,10 +130,10 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 
 	if err := staffinvite.Queue(ctx, tx, invitationID, token); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return InviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
 	}
 
-	return InviteResponse{InvitationID: invitationID, ExpiresAt: expiresAt.UTC().Format(time.RFC3339)}, status, ""
+	return InviteResponse{InvitationID: invitationID, ExpiresAt: expiresAt.UTC().Format(time.RFC3339)}, status, "", nil
 }
 
 // MintInvitation upserts the pending practice_invitations row for address

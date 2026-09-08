@@ -154,6 +154,66 @@ func TestSignupHandler_MissingFields(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
+	// #488: the refusal names the field at fault, keyed by the DTO's own
+	// json tag, and names only that one -- staffName was sent.
+	details := decodeDetails(t, resp)
+	if details["practiceName"] != staffauth.MsgPracticeNameNeeded {
+		t.Fatalf("details = %v, want practiceName entry", details)
+	}
+	if _, ok := details["staffName"]; ok {
+		t.Fatalf("details = %v, want no staffName entry", details)
+	}
+}
+
+// TestSignupHandler_MissingBothNames is the other half of the same
+// refusal: the two names are asked for on one screen and can be missing
+// together, so answering only the first would send her back twice.
+func TestSignupHandler_MissingBothNames(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY"})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	details := decodeDetails(t, resp)
+	if details["practiceName"] != staffauth.MsgPracticeNameNeeded || details["staffName"] != staffauth.MsgStaffNameNeeded {
+		t.Fatalf("details = %v, want both name entries", details)
+	}
+}
+
+// TestSignupHandler_MissingWorkState is the third field the same screen
+// asks for, and the one whose Details sentence differs from the Message
+// beside it: the message names the JSON field and the format for a caller
+// reading the API, the detail is for the person looking at the control.
+func TestSignupHandler_MissingWorkState(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(authntest.Verifier{UID: "new-owner"}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "P", StaffName: "S", WorkState: "ZZ"})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if details := decodeDetails(t, resp); details["workState"] != staffauth.MsgWorkStateNeeded {
+		t.Fatalf("details = %v, want workState entry", details)
+	}
+}
+
+// decodeDetails reads APIError.Details off a refusal, so a test can
+// assert which field the BFF said was at fault (#488).
+func decodeDetails(t *testing.T, resp *http.Response) map[string]string {
+	t.Helper()
+	var body apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	return body.Details
 }
 
 func TestSignupHandler_Success(t *testing.T) {
