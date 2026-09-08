@@ -1,8 +1,17 @@
+import { availableParallelism } from 'node:os';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { E2E_API_HOST, E2E_API_PORT, DEV_SERVER_PORT, PREVIEW_SERVER_PORT } from './e2e/ports.ts';
+
+// How many headless Chromium renderers the `client` project may open at
+// once. Six rather than Vitest's own `Math.min(12, ncpu - 1)`, and
+// clamped rather than constant -- see the `maxWorkers` comment below for
+// both halves of that. `Math.max(..., 1)` only guards a single-core box,
+// where `availableParallelism() - 1` would otherwise be zero.
+const cpuBudget = Math.max(availableParallelism() - 1, 1);
+const BROWSER_WORKERS = Math.min(6, cpuBudget);
 
 export default defineConfig({
 	plugins: [
@@ -50,6 +59,22 @@ export default defineConfig({
 				extends: './vite.config.ts',
 				test: {
 					name: 'client',
+					// Vitest sizes the browser pool as `Math.min(12, ncpu - 1)`
+					// -- a guard against the main thread choking, with nothing
+					// in it that asks what memory is free. On a 14-CPU laptop
+					// that is 12 headless Chromium renderers and a ~7GB peak,
+					// and every commit pays it (see scripts/hooks/pre-commit).
+					// Two sessions committing at once exhausted 24GB of RAM and
+					// the harness killed the commit -- #935. Six renderers peak
+					// at ~4.9GB and finish *faster* than twelve, because twelve
+					// oversubscribes 14 cores. `--maxWorkers` on the command
+					// line cannot override this: the pool reads the project's
+					// own config, not the root's.
+					//
+					// Clamped rather than constant so CI is untouched: its
+					// 4-vCPU runner already resolves to 3, and a bare 6 would
+					// *raise* the parallelism there.
+					maxWorkers: BROWSER_WORKERS,
 					browser: {
 						enabled: true,
 						provider: playwright(),
@@ -68,6 +93,13 @@ export default defineConfig({
 				test: {
 					name: 'server',
 					environment: 'node',
+					// Vitest refuses two projects that share a groupOrder but
+					// disagree on maxWorkers, so capping the browser project
+					// above forces this one into its own group. That is a
+					// second memory win, not just a formality: the Node forks
+					// no longer overlap the Chromium renderers, so the run has
+					// one peak instead of two stacked on each other.
+					sequence: { groupOrder: 1 },
 					include: ['src/**/*.{test,spec}.{js,ts}'],
 					exclude: [
 						'src/**/*.svelte.{test,spec}.{js,ts}',
