@@ -97,6 +97,18 @@ const (
 	// AC, "a signed Contract's amount never changes for any reason").
 	ActionContractAmountOverridden EngagementAction = "contract_amount_overridden"
 
+	// ActionContractAmountRepriced records a Contract's amount moving
+	// because the Practice's rate card changed underneath it (#968) --
+	// Diff carries amountCentsBefore and amountCentsAfter, the same
+	// shape ActionContractAmountOverridden's diff already uses. Always a
+	// SystemActor (ADR-0022): nobody performed this, practicerate's
+	// PutRateHandler did, as a side effect of the rate change a Staff
+	// member actually made (which gets its own practice_rate_changed
+	// entry against the Practice, not this one). Never fired for a
+	// Contract that is signed, voided, or has amount_overridden set --
+	// PutRateHandler's reprice pass excludes all three.
+	ActionContractAmountRepriced EngagementAction = "contract_amount_repriced"
+
 	ActionVisitLogged     EngagementAction = "visit_logged"
 	ActionVisitReassigned EngagementAction = "visit_reassigned"
 
@@ -203,6 +215,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionContractSigned:           true,
 	ActionContractVoided:           true,
 	ActionContractAmountOverridden: true,
+	ActionContractAmountRepriced:   true,
 	ActionInvoiceRaised:            true,
 	ActionInvoicePaid:              true,
 	ActionPaymentRecorded:          true,

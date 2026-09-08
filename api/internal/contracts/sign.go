@@ -62,7 +62,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -108,11 +108,12 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 		}
 
 		out := ContractResponse{
-			EngagementID: engagementID,
-			Status:       string(StatusSigned),
-			Prose:        prose,
-			MergeFields:  extractMergeFields(prose),
-			Values:       values.nonEmpty(),
+			EngagementID:    engagementID,
+			Status:          string(StatusSigned),
+			Prose:           prose,
+			MergeFields:     extractMergeFields(prose),
+			Values:          values.nonEmpty(),
+			AmountChangedAt: amountChangedAt,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})

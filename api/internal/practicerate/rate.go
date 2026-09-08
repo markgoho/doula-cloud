@@ -213,6 +213,17 @@ func PutRateHandler() http.Handler {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
+
+			// #968: re-price every unsigned Contract for this kind to
+			// the rate that just took effect -- a signed Contract, a
+			// voided one, and one whose amount an Owner/Admin
+			// overrode are all left alone (see
+			// repriceUnsignedContracts's own doc comment).
+			if err := repriceUnsignedContracts(r.Context(), tx, practiceID, kind, req.AmountCents); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		amountCents := req.AmountCents

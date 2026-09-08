@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Button from '#lib/components/atoms/Button.svelte';
+	import { formatActivityTimestamp } from '#lib/dates.js';
 
 	/**
 	 * Status display for a Contract on the Staff Engagement view: the raw
@@ -11,13 +12,22 @@
 	 * reads `clientRegister.ts`'s own label and voided notice, never this
 	 * component's Staff wording -- its own download control (#302) is
 	 * built directly into that route instead.
+	 *
+	 * amountChangedAt (#968) surfaces here rather than only in the
+	 * Engagement's activity ledger -- CLAUDE.md's "without hunting for
+	 * it" AC -- the same `formatActivityTimestamp` relative-or-absolute
+	 * rendering ADR-0022 gives every ledger entry, so a reader who has
+	 * never opened the ledger still reads the same time format they
+	 * would there.
 	 */
 	let {
 		status,
+		amountChangedAt,
 		onVoid,
 		onDownloadPdf
 	}: {
 		status: string;
+		amountChangedAt?: string;
 		onVoid?: () => Promise<void>;
 		onDownloadPdf?: () => Promise<void>;
 	} = $props();
@@ -59,6 +69,12 @@
 </script>
 
 <p>Status: {status}</p>
+
+{#if amountChangedAt}
+	<p role="status">
+		Price changed on <time datetime={amountChangedAt}>{formatActivityTimestamp(amountChangedAt)}</time>.
+	</p>
+{/if}
 
 {#if status === 'voided'}
 	<p role="status">Voided — this Contract is no longer active.</p>

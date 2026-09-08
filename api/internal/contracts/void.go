@@ -37,7 +37,7 @@ func PostVoidContractHandler() http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -76,11 +76,12 @@ func PostVoidContractHandler() http.Handler {
 
 		mergeFields := extractMergeFields(prose)
 		out := ContractResponse{
-			EngagementID: engagementID,
-			Status:       string(StatusVoided),
-			Prose:        prose,
-			MergeFields:  mergeFields,
-			Values:       withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
+			EngagementID:    engagementID,
+			Status:          string(StatusVoided),
+			Prose:           prose,
+			MergeFields:     mergeFields,
+			Values:          withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
+			AmountChangedAt: amountChangedAt,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})

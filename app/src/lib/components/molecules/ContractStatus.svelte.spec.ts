@@ -5,12 +5,13 @@ import ContractStatus from './ContractStatus.svelte';
 
 interface SetupOptions {
 	status?: string;
+	amountChangedAt?: string;
 	onVoid?: () => Promise<void>;
 	onDownloadPdf?: () => Promise<void>;
 }
 
-async function setup({ status = 'draft', onVoid, onDownloadPdf }: SetupOptions = {}) {
-	await render(ContractStatus, { status, onVoid, onDownloadPdf });
+async function setup({ status = 'draft', amountChangedAt, onVoid, onDownloadPdf }: SetupOptions = {}) {
+	await render(ContractStatus, { status, amountChangedAt, onVoid, onDownloadPdf });
 }
 
 describe('ContractStatus.svelte', () => {
@@ -30,6 +31,18 @@ describe('ContractStatus.svelte', () => {
 		await setup({ status: 'signed' });
 
 		await expect.element(page.getByRole('status')).not.toBeInTheDocument();
+	});
+
+	it('shows no price-changed notice when amountChangedAt is absent', async () => {
+		await setup({ status: 'draft' });
+
+		await expect.element(page.getByText('Price changed on')).not.toBeInTheDocument();
+	});
+
+	it('shows a price-changed notice, with the machine-readable instant, when amountChangedAt is set (#968)', async () => {
+		await setup({ status: 'draft', amountChangedAt: '2026-09-08T12:00:00Z' });
+
+		await expect.element(page.getByText('Price changed on')).toBeInTheDocument();
 	});
 
 	it('offers no Void action when there is no onVoid callback (Client-portal caller)', async () => {
