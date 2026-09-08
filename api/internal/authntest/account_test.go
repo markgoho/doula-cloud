@@ -238,3 +238,67 @@ func TestFakeAccountManager_ClearSecondFactorsErr_TakesPrecedenceOverErr(t *test
 		t.Fatalf("GetAccountByEmail err = %v, want nil -- ClearSecondFactorsErr must not disturb other methods", err)
 	}
 }
+
+// TestFakeAccountManager_DeleteAccount_RemovesTheAccount is #892's own
+// need: Exists is how a deletion test asserts the account is actually
+// gone rather than merely reported gone.
+func TestFakeAccountManager_DeleteAccount_RemovesTheAccount(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	f.Seed("uid-10", "leaving@example.com", true)
+	if !f.Exists("uid-10") {
+		t.Fatal("Exists = false for a seeded account, want true")
+	}
+
+	if err := f.DeleteAccount(t.Context(), "uid-10"); err != nil {
+		t.Fatalf("DeleteAccount: %v", err)
+	}
+	if f.Exists("uid-10") {
+		t.Fatal("Exists = true after DeleteAccount, want false")
+	}
+}
+
+// TestFakeAccountManager_DeleteAccount_AbsentAccountIsSuccess is
+// authn.AccountManager's own contract, not a convenience: an already-absent
+// account must not answer ErrAccountNotFound, because that is what lets a
+// retried login deletion finish rather than dead-end on the half that
+// already ran.
+func TestFakeAccountManager_DeleteAccount_AbsentAccountIsSuccess(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	if err := f.DeleteAccount(t.Context(), "nobody"); err != nil {
+		t.Fatalf("DeleteAccount on an absent account = %v, want nil", err)
+	}
+}
+
+// TestFakeAccountManager_DeleteAccountErr_TakesPrecedenceOverErr mirrors
+// the SetEmailErr and ClearSecondFactorsErr cases: an isolated failure of
+// the Identity Platform half, without disturbing the reads that precede
+// it -- what proves DeleteLoginHandler rolls its whole transaction back.
+func TestFakeAccountManager_DeleteAccountErr_TakesPrecedenceOverErr(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	f.Seed("uid-11", "staying@example.com", true)
+	wantErr := errors.New("identity platform unreachable")
+	f.DeleteAccountErr = wantErr
+
+	if err := f.DeleteAccount(t.Context(), "uid-11"); !errors.Is(err, wantErr) {
+		t.Fatalf("DeleteAccount err = %v, want %v", err, wantErr)
+	}
+	if !f.Exists("uid-11") {
+		t.Fatal("a refused DeleteAccount removed the account anyway")
+	}
+	if _, err := f.GetAccountByEmail(t.Context(), "staying@example.com"); err != nil {
+		t.Fatalf("GetAccountByEmail err = %v, want nil -- DeleteAccountErr must not disturb other methods", err)
+	}
+}
+
+// TestFakeAccountManager_DeleteAccount_ErrApplies covers the whole-fake
+// Err, the "Admin SDK is unreachable" switch every method here honors.
+func TestFakeAccountManager_DeleteAccount_ErrApplies(t *testing.T) {
+	f := authntest.NewFakeAccountManager()
+	f.Seed("uid-12", "person@example.com", true)
+	wantErr := errors.New("admin sdk unreachable")
+	f.Err = wantErr
+
+	if err := f.DeleteAccount(t.Context(), "uid-12"); !errors.Is(err, wantErr) {
+		t.Fatalf("DeleteAccount err = %v, want %v", err, wantErr)
+	}
+}
