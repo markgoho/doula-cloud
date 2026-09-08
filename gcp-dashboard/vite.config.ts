@@ -32,6 +32,13 @@ export default defineConfig({
 				100: true
 			}
 		},
+		// No `client` (browser-mode) project yet, unlike app/vite.config.ts --
+		// there is no Svelte component here to render a `.svelte.spec.ts`
+		// against. `coverage.include` above still matches `src/lib/**/*.svelte`,
+		// so the gate does not go quiet if one is added without this project:
+		// an unexercised .svelte file reports 0% and fails the 100% threshold
+		// rather than passing vacuously, forcing whoever adds the first real
+		// component to add the client project too (verified empirically).
 		projects: [
 			{
 				extends: './vite.config.ts',

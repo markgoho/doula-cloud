@@ -1,6 +1,7 @@
 import path from 'node:path';
 import js from '@eslint/js';
 import svelte from 'eslint-plugin-svelte';
+import unicorn from 'eslint-plugin-unicorn';
 import { defineConfig, includeIgnoreFile } from 'eslint/config';
 import globals from 'globals';
 import ts from 'typescript-eslint';
@@ -12,12 +13,16 @@ export default defineConfig(
 	js.configs.recommended,
 	ts.configs.recommended,
 	svelte.configs.recommended,
+	unicorn.configs.recommended,
 	{
 		languageOptions: { globals: { ...globals.browser, ...globals.node } },
 		rules: {
 			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
 			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
-			"no-undef": 'off'
+			'no-undef': 'off',
+			// Matches app/eslint.config.js: camelCase for modules, kebab-case for
+			// most files, PascalCase for Svelte components.
+			'unicorn/filename-case': ['error', { cases: { camelCase: true, pascalCase: true, kebabCase: true } }]
 		}
 	},
 	{
@@ -28,6 +33,17 @@ export default defineConfig(
 				extraFileExtensions: ['.svelte'],
 				parser: ts.parser
 			}
+		},
+		rules: {
+			// Svelte 5 runes mutate top-level $state from onMount/event handlers by design -- same override app/ carries.
+			'unicorn/no-top-level-assignment-in-function': 'off'
+		}
+	},
+	{
+		// SvelteKit route filenames (+page.svelte, +layout.svelte, [param]/) are framework-mandated.
+		files: ['src/routes/**'],
+		rules: {
+			'unicorn/filename-case': 'off'
 		}
 	}
 );

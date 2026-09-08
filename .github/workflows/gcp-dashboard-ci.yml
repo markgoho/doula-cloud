@@ -37,6 +37,12 @@ jobs:
           key: bun-gcp-dashboard-${{ runner.os }}-${{ hashFiles('gcp-dashboard/bun.lock') }}
           restore-keys: bun-gcp-dashboard-${{ runner.os }}-
 
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: gcp-dashboard/node_modules
+          key: node-modules-gcp-dashboard-${{ runner.os }}-${{ hashFiles('gcp-dashboard/bun.lock') }}
+
       - name: Install dependencies
         working-directory: gcp-dashboard
         run: bun install --frozen-lockfile
