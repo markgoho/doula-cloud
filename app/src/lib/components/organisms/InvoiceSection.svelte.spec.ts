@@ -35,6 +35,7 @@ const invoiceOpen: Invoice = {
 	amountCents: 15_000,
 	currency: 'usd',
 	createdAt: '2026-01-01T00:00:00Z',
+	dueAt: '2026-01-31T00:00:00Z',
 	reference: 'STRIPE-in_1',
 	billingMode: 'stripe'
 };
@@ -47,6 +48,7 @@ const invoicePaid: Invoice = {
 	currency: 'usd',
 	createdAt: '2026-01-02T00:00:00Z',
 	paidAt: '2026-01-05T00:00:00Z',
+	dueAt: '2026-02-01T00:00:00Z',
 	reference: 'STRIPE-in_2',
 	billingMode: 'stripe'
 };

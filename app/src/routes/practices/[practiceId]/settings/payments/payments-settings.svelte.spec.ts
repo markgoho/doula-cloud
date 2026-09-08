@@ -79,6 +79,12 @@ function mockApi({
 		if (path.endsWith('/payments/billing-mode')) {
 			return Promise.resolve(jsonResponse({ billingMode: 'stripe' }));
 		}
+		// #768: payment terms are read by any Staff member too, for the
+		// same reason, and are outside the connect-status sequencing
+		// below in exactly the same way.
+		if (path.endsWith('/payments/payment-terms')) {
+			return Promise.resolve(jsonResponse({ netDays: 30, isDefault: true }));
+		}
 		if (!isOwnerOrAdmin) {
 			return Promise.resolve(new Response('not permitted to read this', { status: 403 }));
 		}
@@ -123,7 +129,11 @@ afterEach(() => {
 function connectCallCount(): number {
 	return apiFetchWithSession.mock.calls.filter((call: unknown[]) => {
 		const path = call[0] as string;
-		return !path.endsWith('/website') && !path.endsWith('/payments/billing-mode');
+		return (
+			!path.endsWith('/website') &&
+			!path.endsWith('/payments/billing-mode') &&
+			!path.endsWith('/payments/payment-terms')
+		);
 	}).length;
 }
 
@@ -142,10 +152,14 @@ function mockApiSequence(replies: StatusReply[], { roles = ['owner'] }: { roles?
 	};
 	let call = 0;
 	apiFetchWithSession.mockImplementation((path: string) => {
-		// #271: see the same guard in mockApi above -- must not consume a
-		// slot from this mock's connect-status reply sequence.
+		// #271 and #768: see the same guards in mockApi above -- neither
+		// may consume a slot from this mock's connect-status reply
+		// sequence.
 		if (path.endsWith('/payments/billing-mode')) {
 			return Promise.resolve(jsonResponse({ billingMode: 'stripe' }));
+		}
+		if (path.endsWith('/payments/payment-terms')) {
+			return Promise.resolve(jsonResponse({ netDays: 30, isDefault: true }));
 		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(

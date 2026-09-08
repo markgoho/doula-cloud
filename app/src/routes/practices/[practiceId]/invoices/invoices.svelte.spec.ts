@@ -2,7 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { PracticeInvoicePage } from '#lib/invoice.js';
+import type { PracticeInvoiceListData } from '#lib/invoice.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts.
 import '#lib/styles/app.css';
@@ -51,7 +51,7 @@ const sessionStub = {
 	isContractor: false
 };
 
-async function setup(page: PracticeInvoicePage = data) {
+async function setup(page: PracticeInvoiceListData = data) {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
 	// its content floor stacks into below 46rem (#508) -- the same call the
 	// Billing ledger's spec makes for the same reason. What the list says

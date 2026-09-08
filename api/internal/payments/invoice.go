@@ -47,8 +47,15 @@ type InvoiceView struct {
 	Currency    string     `json:"currency"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	PaidAt      *time.Time `json:"paidAt,omitempty"`
-	Reference   string     `json:"reference"`
-	BillingMode string     `json:"billingMode"`
+	// DueAt (#768) is the date this Invoice falls due, written onto the
+	// row when it was raised from the Practice's payment terms of that
+	// moment -- so changing the terms later never moves an Invoice
+	// already billed. It is the date, never a day count: how late an
+	// Invoice is has to be true at every instant, and a pre-baked integer
+	// goes stale in a tab left open overnight.
+	DueAt       time.Time `json:"dueAt"`
+	Reference   string    `json:"reference"`
+	BillingMode string    `json:"billingMode"`
 }
 
 // CreateInvoiceRequest is the body of a POST to PostInvoiceHandler.
@@ -152,11 +159,23 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
+		// #768: one due date, computed once from the Practice's own
+		// payment terms, before either rail runs -- the Stripe rail sends
+		// this exact instant to Stripe and stores the same one, so the
+		// date on the Client's hosted invoice and the date the Practice's
+		// book ages against cannot drift.
+		dueAt, err := invoiceDueAt(r.Context(), tx, practiceID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		var view InvoiceView
 		if mode == BillingModeByHand {
-			view, err = createByHandInvoice(r.Context(), tx, practiceID, contractID, amountCents)
+			view, err = createByHandInvoice(r.Context(), tx, practiceID, contractID, amountCents, dueAt)
 		} else {
-			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, amountCents)
+			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, amountCents, dueAt)
 		}
 		if errors.Is(err, errClientNoEmail) {
 			apierr.WriteError(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
@@ -213,7 +232,7 @@ var errClientsCannotPay = errors.New("payments: clients cannot pay this practice
 // no Stripe call, no Connect gate, no Client-email requirement. Its
 // reference is claimed from the Practice's own per-Practice sequence,
 // atomically, so two concurrent by-hand Invoices can never collide.
-func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID string, amountCents int64) (InvoiceView, error) {
+func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID string, amountCents int64, dueAt time.Time) (InvoiceView, error) {
 	var seq int
 	if err := tx.QueryRowContext(ctx,
 		`UPDATE practices SET next_invoice_sequence = next_invoice_sequence + 1 WHERE id = $1 RETURNING next_invoice_sequence - 1`,
@@ -227,9 +246,9 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 	var invoiceID string
 	var createdAt time.Time
 	if err := tx.QueryRowContext(ctx,
-		`INSERT INTO invoices (practice_id, contract_id, status, amount_cents, currency, reference)
-		 VALUES ($1, $2, 'open', $3, 'usd', $4) RETURNING id, created_at`,
-		practiceID, contractID, amountCents, reference,
+		`INSERT INTO invoices (practice_id, contract_id, status, amount_cents, currency, reference, due_at)
+		 VALUES ($1, $2, 'open', $3, 'usd', $4, $5) RETURNING id, created_at`,
+		practiceID, contractID, amountCents, reference, dueAt,
 	).Scan(&invoiceID, &createdAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return InvoiceView{}, fmt.Errorf("payments: create by-hand invoice: %w", err)
@@ -242,6 +261,7 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
+		DueAt:       dueAt,
 		Reference:   reference,
 		BillingMode: string(BillingModeByHand),
 	}, nil
@@ -258,7 +278,7 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 // property the pre-#271 code had. Once Finalize succeeds, the row is
 // updated to 'open' with Stripe's own human-readable `number` as its
 // real reference.
-func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practiceID, engagementID, contractID string, amountCents int64) (InvoiceView, error) {
+func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practiceID, engagementID, contractID string, amountCents int64, dueAt time.Time) (InvoiceView, error) {
 	canPay, err := ClientsCanPay(ctx, tx, practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -292,7 +312,7 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 		return InvoiceView{}, err
 	}
 
-	stripeInvoiceID, err := client.CreateInvoice(ctx, accountID, stripeCustomerID, InvoiceLineItemDescription, amountCents)
+	stripeInvoiceID, err := client.CreateInvoice(ctx, accountID, stripeCustomerID, InvoiceLineItemDescription, amountCents, dueAt)
 	if err != nil {
 		return InvoiceView{}, fmt.Errorf("payments: create stripe invoice: %w", err)
 	}
@@ -300,9 +320,9 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 	var invoiceID string
 	var createdAt time.Time
 	if err := tx.QueryRowContext(ctx,
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, stripe_customer_id, status, amount_cents, currency, reference)
-		 VALUES ($1, $2, $3, $4, 'draft', $5, 'usd', $3) RETURNING id, created_at`,
-		practiceID, contractID, stripeInvoiceID, stripeCustomerID, amountCents,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, stripe_customer_id, status, amount_cents, currency, reference, due_at)
+		 VALUES ($1, $2, $3, $4, 'draft', $5, 'usd', $3, $6) RETURNING id, created_at`,
+		practiceID, contractID, stripeInvoiceID, stripeCustomerID, amountCents, dueAt,
 	).Scan(&invoiceID, &createdAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return InvoiceView{}, fmt.Errorf("payments: create stripe invoice row: %w", err)
@@ -331,6 +351,7 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
+		DueAt:       dueAt,
 		Reference:   number,
 		BillingMode: string(BillingModeStripe),
 	}, nil
@@ -607,13 +628,13 @@ func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client,
 // direct contract_id = $1 filter) so an Invoice created against a
 // since-voided Contract still lists under the Engagement that Contract
 // belonged to.
-const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.reference, i.stripe_invoice_id
+const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	WHERE c.engagement_id = $1
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
-const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.reference, i.stripe_invoice_id
+const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	WHERE c.engagement_id = $1 AND (i.created_at, i.id) < ($2, $3)
@@ -642,7 +663,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		var it InvoiceView
 		var paidAt sql.NullTime
 		var stripeInvoiceID sql.NullString
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.Reference, &stripeInvoiceID); err != nil {
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}

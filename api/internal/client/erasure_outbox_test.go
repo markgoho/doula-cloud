@@ -69,8 +69,8 @@ func seedInvoicedClient(t *testing.T, db *testdb.DB, practiceID, clientID, custo
 		t.Fatalf("seed contract: %v", err)
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, stripe_customer_id, status, amount_cents, created_at, reference)
-		 VALUES ($1, $2, $3, $4, $5::invoice_status, 150000, now() - $6::interval, $3)`,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, stripe_customer_id, status, amount_cents, created_at, reference, due_at)
+		 VALUES ($1, $2, $3, $4, $5::invoice_status, 150000, now() - $6::interval, $3, now() - $6::interval + interval '30 days')`,
 		practiceID, contractID, "in_"+customerID, customerID, status, age.String(),
 	); err != nil {
 		t.Fatalf("seed invoice: %v", err)

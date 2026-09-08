@@ -19,7 +19,9 @@ const emptyBook = {
 	hasMore: false,
 	outstandingCents: 0,
 	outstandingCount: 0,
-	paidCents: 0
+	paidCents: 0,
+	overdueCents: 0,
+	overdueCount: 0
 };
 
 describe('invoices/+page.ts load', () => {
@@ -27,13 +29,31 @@ describe('invoices/+page.ts load', () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyBook);
 
-		const result = await load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0]);
+		const result = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
 
 		expect(fetchMock).toHaveBeenCalledWith(
 			'/api/practices/practice-1/invoices',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		expect(result).toEqual(emptyBook);
+		expect(result).toEqual({ ...emptyBook, isNarrowedToOverdue: false });
+	});
+
+	// #768: the narrowing is in the URL, so the load reads it there and
+	// asks the BFF for the same slice the link named.
+	it('carries an overdue narrowing from the URL through to the BFF', async () => {
+		const { load } = await import('./+page.js');
+		const { fetchMock } = setup(200, emptyBook);
+
+		const result = await load({
+			params: { practiceId: 'practice-1' },
+			url: new URL('https://example.test/practices/practice-1/invoices?overdue=true')
+		} as Parameters<typeof load>[0]);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/practices/practice-1/invoices?overdue=true',
+			expect.objectContaining({ credentials: 'include' })
+		);
+		expect(result).toEqual({ ...emptyBook, isNarrowedToOverdue: true });
 	});
 
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
@@ -41,7 +61,7 @@ describe('invoices/+page.ts load', () => {
 		setup(401, 'no session');
 
 		await expect(
-			load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])
+			load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0])
 		).rejects.toMatchObject({ status: 303, location: '/login?sessionEnded=true' });
 	});
 
@@ -50,7 +70,7 @@ describe('invoices/+page.ts load', () => {
 		setup(403, 'not permitted to read this');
 
 		await expect(
-			load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])
+			load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0])
 		).rejects.toMatchObject({ status: 403 });
 	});
 
@@ -59,7 +79,7 @@ describe('invoices/+page.ts load', () => {
 		setup(500, 'boom');
 
 		await expect(
-			load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])
+			load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0])
 		).rejects.toMatchObject({ status: 500 });
 	});
 });

@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { apiFetch, apiErrorMessage } from '#lib/api.js';
-import { practiceInvoicesPath, type PracticeInvoicePage } from '#lib/invoice.js';
+import { practiceInvoicesPath, type PracticeInvoiceListData } from '#lib/invoice.js';
 import type { PageLoad } from './$types';
 
 /**
@@ -14,8 +14,17 @@ import type { PageLoad } from './$types';
  * `apiFetchWithSession`: that helper's 401 handling calls `goto()`, which
  * is the wrong tool mid-`load`.
  */
-export const load: PageLoad = async ({ params }): Promise<PracticeInvoicePage> => {
-	const response = await apiFetch(practiceInvoicesPath(params.practiceId));
+export const load: PageLoad = async ({
+	params,
+	url
+}): Promise<PracticeInvoiceListData> => {
+	// #768: the overdue narrowing is a link, not a control the page holds
+	// in memory -- the URL is the state, so it survives a reload, a back
+	// button and a link a Practice sends to itself. The load reads it and
+	// carries it through, because every later page of the same narrowed
+	// list has to ask for the same narrowing.
+	const isNarrowedToOverdue = url.searchParams.get('overdue') === 'true';
+	const response = await apiFetch(practiceInvoicesPath(params.practiceId, undefined, isNarrowedToOverdue));
 
 	if (response.status === 401) {
 		redirect(303, `${resolve('/(signed-out)/login')}?sessionEnded=true`);
@@ -25,5 +34,5 @@ export const load: PageLoad = async ({ params }): Promise<PracticeInvoicePage> =
 		error(response.status, await apiErrorMessage(response));
 	}
 
-	return response.json();
+	return { ...(await response.json()), isNarrowedToOverdue };
 };

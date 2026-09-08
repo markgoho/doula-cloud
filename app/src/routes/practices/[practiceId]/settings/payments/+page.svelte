@@ -36,7 +36,17 @@
 		type ConnectStatusPollHandle
 	} from '#lib/payments.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
-	import { loadBillingMode, setBillingMode, type BillingMode } from '#lib/invoice.js';
+	import {
+		loadBillingMode,
+		setBillingMode,
+		loadPaymentTerms,
+		setPaymentTerms,
+		MIN_PAYMENT_TERMS_DAYS,
+		MAX_PAYMENT_TERMS_DAYS,
+		netDaysOutOfRangeMessage,
+		type BillingMode,
+		type PaymentTerms
+	} from '#lib/invoice.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -45,6 +55,9 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 
 	let status = $state<ConnectStatusResult | undefined>();
@@ -111,6 +124,68 @@
 			billingModeLoadError = error_ instanceof Error ? error_.message : 'Failed to load billing mode';
 		}
 	});
+
+	/*
+	 * #768: how many days after an Invoice is raised it falls due, and so
+	 * what this Practice's own book calls late. Every Staff member reads
+	 * it; an Owner or an Admin sets it. A Practice that has never set one
+	 * runs on 30 days, and the screen says so rather than showing an
+	 * empty field a reader has to interpret.
+	 */
+	let paymentTerms = $state<PaymentTerms | undefined>();
+	let paymentTermsLoadError = $state('');
+	let typedNetDays = $state('');
+	let isSavingPaymentTerms = $state(false);
+	let paymentTermsError = $state('');
+
+	/*
+	 * GOV.UK's Recover from validation errors pattern (ADR-0021,
+	 * docs/design/govuk-alignment.md): a refused value is said twice --
+	 * once at the top of the page, where ErrorSummary takes focus and
+	 * announces it, and once beside the field itself. This is the first
+	 * field on this screen a person can get wrong, so the summary is
+	 * earned here and was not before. The id is fixed rather than
+	 * generated so the summary's own `<a href="#id">` can reach the input
+	 * -- an anchor, not a click handler, per the Rule of Least Power.
+	 */
+	const netDaysFieldId = 'payment-terms-net-days';
+	const paymentTermsErrors = $derived(
+		paymentTermsError ? [{ message: paymentTermsError, targetId: netDaysFieldId }] : []
+	);
+
+	onMount(async () => {
+		try {
+			paymentTerms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
+			typedNetDays = String(paymentTerms.netDays);
+		} catch (error_) {
+			paymentTermsLoadError = error_ instanceof Error ? error_.message : 'Failed to load payment terms';
+		}
+	});
+
+	async function handleSavePaymentTerms() {
+		// Refused client-side before it is refused at the boundary, so the
+		// reader is told what is wrong in the words of the field rather
+		// than in the words of an API. The BFF refuses the same range.
+		const netDays = Number(typedNetDays);
+		if (
+			!Number.isSafeInteger(netDays) ||
+			netDays < MIN_PAYMENT_TERMS_DAYS ||
+			netDays > MAX_PAYMENT_TERMS_DAYS
+		) {
+			paymentTermsError = netDaysOutOfRangeMessage;
+			return;
+		}
+		isSavingPaymentTerms = true;
+		paymentTermsError = '';
+		try {
+			paymentTerms = await setPaymentTerms(apiFetchWithSession, page.params.practiceId!, netDays);
+			typedNetDays = String(paymentTerms.netDays);
+		} catch (error_) {
+			paymentTermsError = error_ instanceof Error ? error_.message : 'Failed to save payment terms';
+		} finally {
+			isSavingPaymentTerms = false;
+		}
+	}
 
 	// Owner-only (#271, by analogy to Connect onboarding) -- changing an
 	// already-established mode. The initial "ask once" instead rides
@@ -391,6 +466,57 @@
 	{/if}
 {/snippet}
 
+{#snippet errorSummary()}
+	<ErrorSummary errors={paymentTermsErrors} />
+{/snippet}
+
+{#snippet paymentTermsSection()}
+	<!--
+		#768: an Invoice falls due this many days after it is raised, on
+		both rails. Changing it never moves an Invoice already raised --
+		each one keeps the terms it was billed under -- so the sentence
+		below says "the next invoice", not "invoices".
+	-->
+	{#if paymentTermsLoadError}
+		<Notice variant="error" message={paymentTermsLoadError} />
+	{:else if paymentTerms === undefined}
+		<Text text="Loading payment terms…" />
+	{:else}
+		<Text
+			text={paymentTerms.isDefault
+				? 'Invoices are due 30 days after they are raised. That is the default; this Practice has not set terms of its own.'
+				: `Invoices are due ${paymentTerms.netDays} days after they are raised.`}
+		/>
+		{#if isPracticeOwnerOrAdmin}
+			<LabeledField
+				id={netDaysFieldId}
+				label="Days to pay"
+				hint="Applies to the next invoice raised. An invoice already raised keeps the terms it was billed under."
+				error={paymentTermsError || undefined}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="number"
+						min={MIN_PAYMENT_TERMS_DAYS}
+						inputmode="numeric"
+						value={typedNetDays}
+						onInput={(value) => (typedNetDays = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button
+				label="Update payment terms"
+				onClick={handleSavePaymentTerms}
+				loading={isSavingPaymentTerms}
+				disabled={typedNetDays === String(paymentTerms.netDays) && !paymentTerms.isDefault}
+			/>
+		{/if}
+	{/if}
+{/snippet}
+
 {#snippet intro()}
 	<!--
 		#256: this screen used to say nothing about itself until the Connect
@@ -594,7 +720,12 @@
 <FormPage
 	title="Getting paid"
 	{intro}
-	fieldsets={[{ legend: 'Billing mode', content: billingModeSection }, { content: body }]}
+	errorSummary={paymentTermsErrors.length > 0 ? errorSummary : undefined}
+	fieldsets={[
+		{ legend: 'Billing mode', content: billingModeSection },
+		{ legend: 'Payment terms', content: paymentTermsSection },
+		{ content: body }
+	]}
 	{actions}
 	loading={isPracticeOwnerOrAdmin && !error && status === undefined
 		? 'Loading your Stripe Connect status'

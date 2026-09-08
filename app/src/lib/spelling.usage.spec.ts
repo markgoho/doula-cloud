@@ -44,7 +44,12 @@ const RULES: readonly Rule[] = [
 	{ british: 'olo\u{75}r', american: 'color' },
 	{ british: 'ehavio\u{75}r', american: 'behavior' },
 	{ british: 'ecogni\u{73}', american: 'recognize' },
-	{ british: 'cent\u{72}e', american: 'center' }
+	{ british: 'cent\u{72}e', american: 'center' },
+	// #768 wrote "ageing" of an Invoice past its due date and the sweep had
+	// nothing to say, because this list is the rule's whole reach: a
+	// spelling absent from it is unenforced, not allowed. Added with the
+	// word that found it rather than left for the next one.
+	{ british: 'ag\u{65}ing', american: 'aging' }
 ];
 
 interface Offense {

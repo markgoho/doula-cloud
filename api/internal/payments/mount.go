@@ -67,6 +67,19 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 		"full-replacement PUT, inherently idempotent (docs/api-design.md section 3); no Idempotency-Key applies",
 		false, staffauth.OwnerOnly, PutBillingModeHandler())
 
+	// Payment terms (#768): how many days after an Invoice is raised it
+	// falls due, and so what the Practice's own book calls late. Reading
+	// is any Staff, for the reason billing mode above gives -- a Doula
+	// meets the due date on every Invoice she looks at. Writing is Owner
+	// and Admin, the pair #282's write table already gives every other
+	// money decision; declared here, not in-handler (#990). PUT is a full
+	// replacement, inherently idempotent (docs/api-design.md section 3),
+	// so ExemptGated rather than Replayable.
+	g.Get("/api/practices/{practiceId}/payments/payment-terms", staffauth.AnyStaff, GetPaymentTermsHandler())
+	ir.ExemptGated("PUT /api/practices/{practiceId}/payments/payment-terms",
+		"full-replacement PUT, inherently idempotent (docs/api-design.md section 3); no Idempotency-Key applies",
+		false, staffauth.OwnerAndAdmin, PutPaymentTermsHandler())
+
 	// Recording a Payment that did not come through Stripe (#271): Owner
 	// and Admin only -- narrower than the read above, which #282 opened
 	// to an employed Doula too. Reading a number and being allowed to set
