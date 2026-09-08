@@ -15,7 +15,7 @@ import (
 // this package cares about. It is the role that puts a person on a birth:
 // a Visit can only ever be assigned to a holder of it, and a Staff member
 // logging a Visit for *herself* must hold it. Naming somebody else is a
-// different act with a different rule -- see assignee below.
+// different act with a different rule -- see resolveAssignee below.
 const doulaRole = "doula"
 
 // visitWriteContext is the per-request state every Visit write needs:
@@ -33,7 +33,7 @@ type visitWriteContext struct {
 // itself if any of it is missing. It asserts no role of its own: who may
 // write a Visit is decided per act, not per endpoint -- reaching the
 // Engagement at all is already gated by staffauth.AttachingWrite, and
-// naming a person is gated by assignee below.
+// naming a person is gated by resolveAssignee below.
 func requireVisitWrite(w http.ResponseWriter, r *http.Request) (visitWriteContext, bool) {
 	tx, practiceID, ok := staffauth.RequireTx(w, r)
 	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -50,8 +50,11 @@ func requireVisitWrite(w http.ResponseWriter, r *http.Request) (visitWriteContex
 	return visitWriteContext{tx: tx, practiceID: practiceID, reader: reader, staffID: staffID}, true
 }
 
-// assignee decides who a Visit is for and whether this caller may say so,
-// writing the refusal itself when she may not (#268).
+// resolveAssignee decides who a Visit is for, whether this caller may say
+// so, and whether that person is to be granted an attachment -- writing
+// the refusal itself when she may not (#268, #914). It is the one place
+// the assignment is decided, so the create and the reassign path cannot
+// drift apart on who may be named, who is eligible, or who gets attached.
 //
 // Two different acts hide behind one field. Logging a Visit for yourself
 // is the Doula's own act, and needs the Doula role -- an Owner or Admin
@@ -68,19 +71,29 @@ func requireVisitWrite(w http.ResponseWriter, r *http.Request) (visitWriteContex
 // explicit id equal to the caller's own takes the self path too, so an
 // Admin who is also a Doula naming herself is not held to the stricter
 // rule for no reason.
-func assignee(w http.ResponseWriter, c visitWriteContext, requested *string) (staffID string, isSelf, ok bool) {
+//
+// isEmployee turns on the employment type of the person the Visit lands
+// on, never the caller's: for a colleague, requireEligibleAssignee reads
+// it off her Membership; for the caller herself, her own Reader already
+// carries it and no second query is needed. Only an employee is granted
+// an attachment -- see grantAssignee.
+func resolveAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID string, requested *string) (staffID string, isEmployee, ok bool) {
 	if requested == nil || *requested == c.staffID {
 		if !c.reader.Has(doulaRole) {
 			apierr.WriteError(w, "only a Staff member with the Doula role can log a Visit for herself -- name the colleague this Visit is for instead", http.StatusForbidden)
 			return "", false, false
 		}
-		return c.staffID, true, true
+		return c.staffID, !c.reader.IsContractor(), true
 	}
 	if !c.reader.IsOwnerOrAdmin() {
 		apierr.WriteError(w, "only an Owner or an Admin can assign a Visit to another Staff member", http.StatusForbidden)
 		return "", false, false
 	}
-	return *requested, false, true
+	isEmployee, eligible := requireEligibleAssignee(w, r, c, engagementID, *requested)
+	if !eligible {
+		return "", false, false
+	}
+	return *requested, isEmployee, true
 }
 
 // requireEligibleAssignee runs the three rules a *named* Staff member has
@@ -90,44 +103,47 @@ func assignee(w http.ResponseWriter, c visitWriteContext, requested *string) (st
 // granted attachment her own acceptance of an Offer opened. Each refusal
 // carries its own message, so the caller learns which rule she failed.
 //
-// Shared verbatim by create (#268) and reassign: the two are the same act
-// at two moments, and a second copy of these rules is exactly how the
-// create path would drift more permissive than the reassign path.
+// Reached only through resolveAssignee, so create (#268) and reassign
+// share it by construction: the two are the same act at two moments, and
+// a second copy of these rules is exactly how the create path would
+// drift more permissive than the reassign path.
 //
-// Returns the named Staff member's employment type, which decides whether
-// the caller must go on to Grant her an attachment.
-func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string) (employmentType string, ok bool) {
+// Reports whether the named Staff member is an employee, which is what
+// decides whether she goes on to be granted an attachment. The string
+// comparison against employeeType lives here and nowhere else (#914).
+func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string) (isEmployee, ok bool) {
 	hasMembership, isDoula, employmentType, err := doulaMembership(r.Context(), c.tx, c.practiceID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return "", false
+		return false, false
 	}
 	if !hasMembership {
 		apierr.WriteError(w, "staff member not found at this practice", http.StatusBadRequest)
-		return "", false
+		return false, false
 	}
 	if !isDoula {
 		apierr.WriteError(w, "staff member does not hold the Doula role at this practice", http.StatusBadRequest)
-		return "", false
+		return false, false
 	}
+	isEmployee = employmentType == employeeType
 	// A contractor is put on a birth by her own acceptance of an Offer
 	// and by nothing else (CONTEXT.md's Attachment entry), so handing
 	// her a Visit is refused unless she already holds the attachment
 	// that says she agreed.
-	if employmentType != employeeType {
+	if !isEmployee {
 		attached, err := hasGrantedAttachment(r.Context(), c.tx, engagementID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return "", false
+			return false, false
 		}
 		if !attached {
 			apierr.WriteError(w, "that contractor has not accepted an offer on this engagement", http.StatusBadRequest)
-			return "", false
+			return false, false
 		}
 	}
-	return employmentType, true
+	return isEmployee, true
 }
 
 // doulaMembership reports whether staffID holds a practice_memberships row
@@ -181,4 +197,38 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 		return false, fmt.Errorf("visit: check granted attachment: %w", err)
 	}
 	return attached, nil
+}
+
+// grantAssignee writes the granted attachment the Visit's assignee gets,
+// when she is one to get it. Naming a Doula on a Visit puts her on this
+// birth, which is a granted attachment, not the accrual
+// staffauth.AttachingWrite's seam mints -- ADR-0008 names Visit-create
+// and Visit-reassign as the two places granted is written explicitly. No
+// fee rides it: a fee is only ever copied from an Offer. attached_by is
+// the acting person, who is the caller whether she named herself or a
+// colleague.
+//
+// Only for an employee, though. CONTEXT.md's Attachment entry gives a
+// contractor exactly one way onto a birth -- her own acceptance of an
+// Offer -- so granting here would let her hand herself the reach an
+// Offer exists to ask for. Logging her own Visit gets her the seam's
+// accrued record instead, which is a record of work and never a key;
+// being *named* by an Owner or Admin needs no grant at all, because
+// resolveAssignee has already proved she holds the one her acceptance
+// opened.
+//
+// Both handlers call this once, after their own row write and their own
+// activity entry (#914), so the reassign path's rows == 0 404 still
+// returns before any attachment is written. It writes the error response
+// itself and reports that it did.
+func grantAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string, isEmployee bool) bool {
+	if !isEmployee {
+		return true
+	}
+	if err := staffauth.Grant(r.Context(), c.tx, engagementID, staffID, c.staffID, nil, nil); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
 }

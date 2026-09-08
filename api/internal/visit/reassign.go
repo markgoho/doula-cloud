@@ -27,10 +27,10 @@ type ReassignResponse struct {
 // separate coverage entity. Must be mounted behind staffauth.Middleware.
 //
 // Naming somebody else here is the same act CreateHandler performs at
-// creation time, held to the same two rules: `assignee` decides whether
-// this caller may name that person (an Owner or an Admin may; a plain
-// Doula may only ever name herself), and `requireEligibleAssignee`
-// decides whether that person may be named.
+// creation time, decided by the same seam: `resolveAssignee` settles
+// whether this caller may name that person (an Owner or an Admin may; a
+// plain Doula may only ever name herself), whether that person may be
+// named, and whether she is granted an attachment for it.
 func ReassignHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, ok := requireVisitWrite(w, r)
@@ -64,17 +64,9 @@ func ReassignHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "staff", req.StaffID) {
 			return
 		}
-		staffID, isSelf, ok := assignee(w, c, &req.StaffID)
+		staffID, isEmployee, ok := resolveAssignee(w, r, c, engagementID, &req.StaffID)
 		if !ok {
 			return
-		}
-		isEmployee := !c.reader.IsContractor()
-		if !isSelf {
-			employmentType, eligible := requireEligibleAssignee(w, r, c, engagementID, staffID)
-			if !eligible {
-				return
-			}
-			isEmployee = employmentType == employeeType
 		}
 
 		// engagement_id is filtered explicitly, on top of the RLS scoping
@@ -122,19 +114,13 @@ func ReassignHandler() http.Handler {
 			return
 		}
 
-		// The employee the Visit was handed to is now on this birth, so
-		// she gets a granted attachment even though she is not the actor
-		// -- ADR-0008's "an Admin scheduling her onto a Visit ... that is
-		// a granted attachment, written explicitly". attached_by is the
-		// person who did the handing, not the person handed to. A
-		// contractor needs none: the check above already proved she holds
-		// the one her own acceptance opened.
-		if isEmployee {
-			if err := staffauth.Grant(r.Context(), c.tx, engagementID, staffID, c.staffID, nil, nil); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
+		// The attachment the employee handed this Visit gets is
+		// grantAssignee's rule, shared with the create path. It runs
+		// only here, below the rows == 0 404, so a reassign that matched
+		// no Visit attaches nobody.
+		if !grantAssignee(w, r, c, engagementID, staffID, isEmployee) {
+			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
+			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, ReassignResponse{VisitID: visitID, StaffID: staffID})
