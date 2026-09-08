@@ -169,10 +169,32 @@ func PostContractHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		// #972: ActionContractCreated carries no price -- it is no longer
+		// in the money set (an employed Doula performs this act herself
+		// under #282), so any diff here is unrestricted and readable by
+		// a contractor too. The price this Contract was created with is
+		// recorded separately below, as ActionContractPriced, which
+		// stays in the money set.
 		staffID, _ := staffauth.StaffID(r.Context())
-		createdDiff, err := json.Marshal(map[string]int64{"amountCents": amountCents})
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionContractCreated),
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// ActionContractPriced: amountCentsBefore is always 0 here --
+		// nothing existed to have carried a price before this Contract
+		// did -- mirroring the shape PutContractAmountHandler's own
+		// contractAmountDiff already uses for an override.
+		pricedDiff, err := json.Marshal(contractAmountDiff{AmountCentsBefore: 0, AmountCentsAfter: amountCents})
 		if err != nil {
-			// coverage:ignore reason: a fixed, always-serializable map never fails
+			// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
@@ -180,8 +202,8 @@ func PostContractHandler() http.Handler {
 			PracticeID:  practiceID,
 			SubjectKind: activity.SubjectEngagement,
 			SubjectID:   engagementID,
-			Action:      string(activity.ActionContractCreated),
-			Diff:        createdDiff,
+			Action:      string(activity.ActionContractPriced),
+			Diff:        pricedDiff,
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

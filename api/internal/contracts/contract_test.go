@@ -218,6 +218,68 @@ func TestPostContractHandler_Success(t *testing.T) {
 	}
 }
 
+// TestPostContractHandler_RecordsCreatedAndPricedSeparately proves #972's
+// split: creation writes both a contract_created row (the entity's own
+// lifecycle, no price -- no longer in the money set, so its diff must
+// never carry one) and a separate contract_priced row (the money set)
+// naming the acting Staff member, the time, and the rate-card-derived
+// amount as amountCentsAfter, with amountCentsBefore 0 since nothing
+// existed to have carried a price before this Contract did.
+func TestPostContractHandler_RecordsCreatedAndPricedSeparately(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "post-created-and-priced"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+
+	var createdActorStaffID string
+	var createdDiff []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT actor_staff_id, diff FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_created'`,
+		engagementID,
+	).Scan(&createdActorStaffID, &createdDiff); err != nil {
+		t.Fatalf("query contract_created activity: %v", err)
+	}
+	if createdActorStaffID != staffID {
+		t.Fatalf("contract_created actor_staff_id = %q, want %q", createdActorStaffID, staffID)
+	}
+	if string(createdDiff) != "{}" {
+		t.Fatalf("contract_created diff = %q, want no price carried -- it left the money set (#972)", createdDiff)
+	}
+
+	var pricedActorStaffID string
+	var pricedDiff []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT actor_staff_id, diff FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_priced'`,
+		engagementID,
+	).Scan(&pricedActorStaffID, &pricedDiff); err != nil {
+		t.Fatalf("query contract_priced activity: %v", err)
+	}
+	if pricedActorStaffID != staffID {
+		t.Fatalf("contract_priced actor_staff_id = %q, want %q", pricedActorStaffID, staffID)
+	}
+	var parsedDiff struct {
+		AmountCentsBefore int64 `json:"amountCentsBefore"`
+		AmountCentsAfter  int64 `json:"amountCentsAfter"`
+	}
+	if err := json.Unmarshal(pricedDiff, &parsedDiff); err != nil {
+		t.Fatalf("unmarshal contract_priced diff: %v", err)
+	}
+	if parsedDiff.AmountCentsBefore != 0 || parsedDiff.AmountCentsAfter != testRateAmountCents {
+		t.Fatalf("contract_priced diff = %+v, want before=0 after=%d", parsedDiff, testRateAmountCents)
+	}
+}
+
 // TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty proves
 // resolveMergeFieldValues's other branch: a Template whose prose never
 // asks for client_name or practice_name gets no prefill at all. Prose

@@ -16,6 +16,7 @@ const (
 	employeeType         = "employee"
 	contractorType       = "contractor"
 	contractSignedAction = "contract_signed"
+	contractPricedAction = "contract_priced"
 	invoicePaidAction    = "invoice_paid"
 )
 
@@ -124,8 +125,7 @@ func TestCanAccessSubject_Engagement(t *testing.T) {
 // activity.MoneyActions() (which would just restate the production code).
 func TestRestrictedActions_Engagement(t *testing.T) {
 	want := []string{
-		"contract_created", "contract_sent", contractSignedAction, "contract_voided", "contract_amount_overridden",
-		"contract_amount_repriced", "contract_void_requested", "contract_void_declined",
+		contractPricedAction, "contract_amount_overridden", "contract_amount_repriced",
 		"invoice_raised", invoicePaidAction, "payment_recorded", "invoice_voided", "invoice_written_off",
 	}
 	got := activitygate.RestrictedActions(activity.SubjectEngagement)
@@ -174,13 +174,17 @@ func TestCanSeeAction_Engagement(t *testing.T) {
 		want           bool
 	}{
 		{"owner sees invoice_paid", ownerID, []string{ownerRole}, employeeType, invoicePaidAction, true},
-		{"owner sees contract_signed", ownerID, []string{ownerRole}, employeeType, contractSignedAction, true},
+		{"owner sees contract_priced", ownerID, []string{ownerRole}, employeeType, contractPricedAction, true},
 		{"employee sees invoice_paid", employeeID, []string{doulaRole}, employeeType, invoicePaidAction, true},
-		{"employee sees contract_signed", employeeID, []string{doulaRole}, employeeType, contractSignedAction, true},
+		{"employee sees contract_priced", employeeID, []string{doulaRole}, employeeType, contractPricedAction, true},
 		{"employee sees visit_logged", employeeID, []string{doulaRole}, employeeType, "visit_logged", true},
 		{"contractor denied invoice_paid", contractorID, []string{doulaRole}, contractorType, invoicePaidAction, false},
-		{"contractor denied contract_signed", contractorID, []string{doulaRole}, contractorType, contractSignedAction, false},
+		{"contractor denied contract_priced", contractorID, []string{doulaRole}, contractorType, contractPricedAction, false},
 		{"contractor sees offer_accepted", contractorID, []string{doulaRole}, contractorType, "offer_accepted", true},
+		// #972: the Contract entity's own lifecycle actions leave the
+		// money set -- a contractor now reads contract_signed same as
+		// anyone else, since it carries no price.
+		{"contractor sees contract_signed", contractorID, []string{doulaRole}, contractorType, contractSignedAction, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
