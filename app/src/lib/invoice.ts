@@ -20,7 +20,18 @@ export interface Invoice {
 	currency: string;
 	createdAt: string;
 	paidAt?: string;
+	/** A human-readable identifier (#271) -- a by-hand Invoice's own
+	 * per-Practice sequence, or Stripe's own `number` -- so a check "for
+	 * invoice ___" can be matched against it on paper. */
+	reference: string;
+	/** Which rail this Invoice was raised on (#271) -- fixed at creation,
+	 * independent of the Practice's current billingMode. */
+	billingMode: BillingMode;
 }
+
+/** A Practice's choice of billing rail (#271): Stripe-hosted Invoicing,
+ * or an Invoice the Practice raises and collects by hand. */
+export type BillingMode = 'stripe' | 'by_hand';
 
 /** One row of the Practice-wide Invoice list (#265) -- the same Invoice,
  * plus who it is for and the Engagement it is a way in to. It extends
@@ -105,22 +116,147 @@ export async function loadInvoices(fetcher: Fetcher, practiceId: string, engagem
  * checks before ever showing the form that calls this -- so a refusal
  * here (409, e.g. Stripe still not connected) is always thrown like any
  * other non-2xx response, with the response body text, never a routed
- * gate state. */
+ * gate state.
+ *
+ * billingMode (#271) is read only the first time this Practice ever
+ * raises an Invoice -- the backend ignores it once a mode is already
+ * set, so callers pass it only from the inline "how does this Practice
+ * bill?" ask InvoiceSection shows exactly then. */
 export async function createInvoice(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string,
-	amountCents: number
+	amountCents: number,
+	billingMode?: BillingMode
 ): Promise<Invoice> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ amountCents })
+		body: JSON.stringify({ amountCents, billingMode })
 	});
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
+}
+
+function billingModePath(practiceId: string): string {
+	return `/api/practices/${practiceId}/payments/billing-mode`;
+}
+
+/** Loads a Practice's current billing mode, undefined when it has never
+ * chosen one (#271). Any Staff member may read this -- #270's own
+ * reasoning for the sibling "can this Practice raise an Invoice at all"
+ * fact. */
+export async function loadBillingMode(fetcher: Fetcher, practiceId: string): Promise<BillingMode | undefined> {
+	const response = await fetcher(billingModePath(practiceId));
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	const body: { billingMode?: BillingMode } = await response.json();
+	return body.billingMode;
+}
+
+/** Changes a Practice's already-established billing mode -- Owner-only
+ * (#271), unlike the first-ever set, which rides createInvoice's own
+ * request. */
+export async function setBillingMode(
+	fetcher: Fetcher,
+	practiceId: string,
+	billingMode: BillingMode
+): Promise<BillingMode> {
+	const response = await fetcher(billingModePath(practiceId), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ billingMode })
+	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	const body: { billingMode: BillingMode } = await response.json();
+	return body.billingMode;
+}
+
+/** The closed set of ways a manually recorded Payment (#271) arrived.
+ * "other" requires a note -- see RecordPaymentInput. */
+export type PaymentMethod = 'check' | 'bank_transfer' | 'cash' | 'other';
+
+/**
+A manually recorded Payment, as returned by recordPayment.
+*/
+export interface Payment {
+	id: string;
+	invoiceId: string;
+	amountCents: number;
+	method: PaymentMethod;
+	note?: string;
+	paidAt: string;
+	createdAt: string;
+}
+
+/** What recordPayment sends: the method, an optional note (required by
+ * the backend when method is "other"), and the date the recorder says
+ * the money arrived ("YYYY-MM-DD"). The amount is never supplied -- it
+ * is always the Invoice's own full amount (#271). */
+export interface RecordPaymentInput {
+	method: PaymentMethod;
+	note?: string;
+	paidOn: string;
+}
+
+function invoiceActionPath(practiceId: string, invoiceId: string, action: string): string {
+	return `/api/practices/${practiceId}/invoices/${invoiceId}/${action}`;
+}
+
+/** Records a Payment that did not come through Stripe against invoiceId
+ * (#271) -- Owner and Admin only; refused (409) unless the Invoice is
+ * currently 'open'. Against a Stripe-backed Invoice this also marks
+ * Stripe's own copy paid_out_of_band, so a Stripe-side refusal (502)
+ * fails the whole record closed and nothing is saved. */
+export async function recordPayment(
+	fetcher: Fetcher,
+	practiceId: string,
+	invoiceId: string,
+	input: RecordPaymentInput
+): Promise<Payment> {
+	const response = await fetcher(invoiceActionPath(practiceId, invoiceId, 'payments'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/** voidInvoice and writeOffInvoice (#271) move an open by-hand Invoice
+ * off the book without a Payment -- a mistyped amount, or one the
+ * Practice has given up on collecting. Both are Owner/Admin only and
+ * refused on a Stripe-backed Invoice or one that is not 'open'. */
+async function transitionInvoice(
+	fetcher: Fetcher,
+	practiceId: string,
+	invoiceId: string,
+	action: 'void' | 'write-off'
+): Promise<{ status: string }> {
+	const response = await fetcher(invoiceActionPath(practiceId, invoiceId, action), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: '{}'
+	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+export function voidInvoice(fetcher: Fetcher, practiceId: string, invoiceId: string): Promise<{ status: string }> {
+	return transitionInvoice(fetcher, practiceId, invoiceId, 'void');
+}
+
+export function writeOffInvoice(fetcher: Fetcher, practiceId: string, invoiceId: string): Promise<{ status: string }> {
+	return transitionInvoice(fetcher, practiceId, invoiceId, 'write-off');
 }
 
 /** Formats amountCents as a USD currency string (e.g. "$150.00") for

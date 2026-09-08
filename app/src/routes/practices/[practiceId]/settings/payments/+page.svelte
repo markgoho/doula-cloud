@@ -36,6 +36,7 @@
 		type ConnectStatusPollHandle
 	} from '#lib/payments.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
+	import { loadBillingMode, setBillingMode, type BillingMode } from '#lib/invoice.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -43,6 +44,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 
 	let status = $state<ConnectStatusResult | undefined>();
@@ -86,6 +88,44 @@
 	// this screen before either fetch resolves must not start a poll
 	// that nothing will ever be left to stop.
 	let isDestroyed = false;
+
+	// #271: read by any Staff member (#270's own reasoning for the
+	// sibling "can this Practice raise an Invoice at all" fact), so this
+	// runs unconditionally rather than behind the Owner/Admin guard the
+	// Connect status fetch below uses. billingMode undefined is
+	// ambiguous on its own -- still loading, or loaded and never
+	// chosen -- so isBillingModeLoaded tells the two apart.
+	let billingMode = $state<BillingMode | undefined>();
+	let isBillingModeLoaded = $state(false);
+	let billingModeLoadError = $state('');
+	let chosenBillingMode = $state<BillingMode>('stripe');
+	let isSavingBillingMode = $state(false);
+	let billingModeSaveError = $state('');
+
+	onMount(async () => {
+		try {
+			billingMode = await loadBillingMode(apiFetchWithSession, page.params.practiceId!);
+			chosenBillingMode = billingMode ?? 'stripe';
+			isBillingModeLoaded = true;
+		} catch (error_) {
+			billingModeLoadError = error_ instanceof Error ? error_.message : 'Failed to load billing mode';
+		}
+	});
+
+	// Owner-only (#271, by analogy to Connect onboarding) -- changing an
+	// already-established mode. The initial "ask once" instead rides
+	// InvoiceSection's own first-Invoice request, never this screen.
+	async function handleChangeBillingMode() {
+		isSavingBillingMode = true;
+		billingModeSaveError = '';
+		try {
+			billingMode = await setBillingMode(apiFetchWithSession, page.params.practiceId!, chosenBillingMode);
+		} catch (error_) {
+			billingModeSaveError = error_ instanceof Error ? error_.message : 'Failed to change billing mode';
+		} finally {
+			isSavingBillingMode = false;
+		}
+	}
 
 	onMount(async () => {
 		// A Doula is never asked (#267), the same guard the MFA settings
@@ -309,6 +349,48 @@
 	);
 </script>
 
+{#snippet billingModeSection()}
+	<!--
+		#271: a Practice-level choice between Stripe-hosted Invoicing and
+		billing by hand -- readable by any Staff member, changeable only by
+		an Owner, and never asked here for the first time (that rides
+		InvoiceSection's own inline ask on the first Invoice raised).
+	-->
+	{#if billingModeLoadError}
+		<Notice variant="error" message={billingModeLoadError} />
+	{:else if !isBillingModeLoaded}
+		<Text text="Loading billing mode…" />
+	{:else if billingMode === undefined}
+		<Text text="Not chosen yet -- this is asked the first time Staff raises an Invoice." />
+	{:else}
+		<Text
+			text={billingMode === 'by_hand'
+				? 'This Practice bills Clients by hand.'
+				: 'This Practice bills Clients through Stripe.'}
+		/>
+		{#if isPracticeOwner}
+			<RadioGroup
+				legend="Change billing mode"
+				options={[
+					{ value: 'stripe' as const, label: 'Stripe' },
+					{ value: 'by_hand' as const, label: 'By hand' }
+				]}
+				value={chosenBillingMode}
+				onChange={(value) => (chosenBillingMode = value)}
+			/>
+			<Button
+				label="Save"
+				onClick={handleChangeBillingMode}
+				loading={isSavingBillingMode}
+				disabled={chosenBillingMode === billingMode}
+			/>
+			{#if billingModeSaveError}
+				<p role="alert">{billingModeSaveError}</p>
+			{/if}
+		{/if}
+	{/if}
+{/snippet}
+
 {#snippet intro()}
 	<!--
 		#256: this screen used to say nothing about itself until the Connect
@@ -512,7 +594,7 @@
 <FormPage
 	title="Getting paid"
 	{intro}
-	fieldsets={[{ content: body }]}
+	fieldsets={[{ legend: 'Billing mode', content: billingModeSection }, { content: body }]}
 	{actions}
 	loading={isPracticeOwnerOrAdmin && !error && status === undefined
 		? 'Loading your Stripe Connect status'

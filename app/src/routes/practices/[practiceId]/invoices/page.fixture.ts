@@ -33,7 +33,11 @@ export const data: PracticeInvoicePage = {
 			status: 'open',
 			amountCents: 450_000,
 			currency: 'usd',
-			createdAt: '2026-08-01T00:00:00Z'
+			createdAt: '2026-08-01T00:00:00Z',
+			// #271: the by-hand rail's own reference, on the row already
+			// carrying #537's hostile client-name value.
+			reference: 'INV-0042',
+			billingMode: 'by_hand'
 		},
 		{
 			id: 'inv-2',
@@ -45,7 +49,12 @@ export const data: PracticeInvoicePage = {
 			amountCents: 250_000,
 			currency: 'usd',
 			createdAt: '2026-07-01T00:00:00Z',
-			paidAt: '2026-07-04T00:00:00Z'
+			paidAt: '2026-07-04T00:00:00Z',
+			// #271: the Stripe rail's own reference, so this fixture's two
+			// rows realize both billing-mode states the "Billed via" column
+			// renders.
+			reference: 'DC-0092',
+			billingMode: 'stripe'
 		}
 	],
 	hasMore: false,

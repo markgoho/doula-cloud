@@ -72,6 +72,13 @@ function mockApi({
 	// rather than passing on a fabricated 200.
 	const isOwnerOrAdmin = roles.includes('owner') || roles.includes('admin');
 	apiFetchWithSession.mockImplementation((path: string) => {
+		// #271: read by any Staff member, unconditionally, before the
+		// Owner/Admin gate below -- so it must not consume a slot from
+		// this mock's connect-status sequencing, nor trip the not-permitted
+		// tripwire the Doula tests below rely on.
+		if (path.endsWith('/payments/billing-mode')) {
+			return Promise.resolve(jsonResponse({ billingMode: 'stripe' }));
+		}
 		if (!isOwnerOrAdmin) {
 			return Promise.resolve(new Response('not permitted to read this', { status: 403 }));
 		}
@@ -114,8 +121,10 @@ afterEach(() => {
 /** How many times the connect-status endpoint itself has been asked --
  * excludes the website read, which every test below leaves fixed. */
 function connectCallCount(): number {
-	return apiFetchWithSession.mock.calls.filter((call: unknown[]) => !(call[0] as string).endsWith('/website'))
-		.length;
+	return apiFetchWithSession.mock.calls.filter((call: unknown[]) => {
+		const path = call[0] as string;
+		return !path.endsWith('/website') && !path.endsWith('/payments/billing-mode');
+	}).length;
 }
 
 type StatusReply = 'error' | { status: string; requirementsDue?: string[] };
@@ -133,6 +142,11 @@ function mockApiSequence(replies: StatusReply[], { roles = ['owner'] }: { roles?
 	};
 	let call = 0;
 	apiFetchWithSession.mockImplementation((path: string) => {
+		// #271: see the same guard in mockApi above -- must not consume a
+		// slot from this mock's connect-status reply sequence.
+		if (path.endsWith('/payments/billing-mode')) {
+			return Promise.resolve(jsonResponse({ billingMode: 'stripe' }));
+		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(
 				jsonResponse({
@@ -205,14 +219,17 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Answer the website question' })).not.toBeInTheDocument();
 	});
 
-	it('asks the BFF nothing for a Doula, and never prints its refusal', async () => {
+	it('asks the BFF nothing for Connect status for a Doula, and never prints its refusal', async () => {
 		mockApi({ status: 'not_connected', roles: ['doula'] });
 		await render(Page, {});
 
 		await expect
 			.element(testPage.getByText('Only a Practice Owner or Admin can see how this Practice gets paid.'))
 			.toBeVisible();
-		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		// #271: billing mode is the one exception -- readable by any Staff
+		// member, so this is the only call a Doula's session makes here.
+		expect(connectCallCount()).toBe(0);
+		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
 		await expect.element(testPage.getByText('not permitted to read this')).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('Stripe Connect status:')).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('Loading your Stripe Connect status')).not.toBeInTheDocument();
@@ -650,5 +667,68 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		await expect.element(testPage.getByText(CONNECT_STATUS_CHECK_FAILED_MESSAGE)).toBeVisible();
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
+	});
+});
+
+// #271: a Practice-level billing rail choice, readable by any Staff
+// member and changeable only by an Owner -- a second fact this screen
+// carries alongside Stripe Connect status, not gated by it.
+describe('payments settings screen: billing mode (#271)', () => {
+	it('shows the current mode with no change control for an Admin', async () => {
+		mockApi({ roles: ['admin'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
+		await expect.element(testPage.getByRole('radio', { name: 'By hand' })).not.toBeInTheDocument();
+	});
+
+	it('lets an Owner submit a change to an already-established mode', async () => {
+		mockApi({ roles: ['owner'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
+		await testPage.getByLabelText('By hand').click();
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect
+			.poll(() =>
+				apiFetchWithSession.mock.calls.some(
+					(call: unknown[]) =>
+						call[0] === '/api/practices/practice-1/payments/billing-mode' &&
+						(call[1] as RequestInit | undefined)?.method === 'PUT'
+				)
+			)
+			.toBe(true);
+	});
+
+	it('names the not-yet-chosen state rather than a raw null', async () => {
+		mockApi({ roles: ['owner'] });
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.endsWith('/payments/billing-mode')) return Promise.resolve(jsonResponse({}));
+			if (path.endsWith('/website')) {
+				return Promise.resolve(
+					jsonResponse({
+						mode: 'own',
+						ownUrl: 'https://rochesterdoulas.com',
+						serviceDescription: '',
+						cancellationPolicy: '',
+						updatedBy: '',
+						updatedAt: '',
+						pageState: '',
+						pageCheckedAt: '',
+						pageCheckDetail: '',
+						pageUrl: ''
+					})
+				);
+			}
+			return Promise.resolve(
+				jsonResponse({ status: 'not_connected', cardPaymentsStatus: 'unsupported', payoutsStatus: 'unsupported', requirementsDue: [] })
+			);
+		});
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('Not chosen yet -- this is asked the first time Staff raises an Invoice.'))
+			.toBeVisible();
 	});
 });

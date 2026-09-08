@@ -15,7 +15,9 @@
 			amountCents: 425_000,
 			currency: 'usd',
 			createdAt: '2027-09-14T00:00:00Z',
-			paidAt: '2027-09-28T00:00:00Z'
+			paidAt: '2027-09-28T00:00:00Z',
+			reference: 'DC-0014',
+			billingMode: 'stripe'
 		},
 		{
 			id: 'in_2',
@@ -23,7 +25,9 @@
 			status: 'open',
 			amountCents: 425_000,
 			currency: 'usd',
-			createdAt: '2027-11-30T00:00:00Z'
+			createdAt: '2027-11-30T00:00:00Z',
+			reference: 'INV-0002',
+			billingMode: 'by_hand'
 		}
 	];
 
@@ -41,8 +45,13 @@
 			clientsCanPay={true}
 			hasClientEmail={true}
 			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode="stripe"
 			{paymentsSettingsHref}
 			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
 		/>
 	</section>
 
@@ -54,8 +63,13 @@
 			clientsCanPay={true}
 			hasClientEmail={true}
 			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode="stripe"
 			{paymentsSettingsHref}
 			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
 		/>
 	</section>
 
@@ -71,8 +85,13 @@
 			clientsCanPay={false}
 			hasClientEmail={true}
 			isOwner={true}
+			isOwnerOrAdmin={true}
+			billingMode="stripe"
 			{paymentsSettingsHref}
 			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
 		/>
 	</section>
 
@@ -84,8 +103,13 @@
 			clientsCanPay={false}
 			hasClientEmail={true}
 			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode="stripe"
 			{paymentsSettingsHref}
 			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
 		/>
 	</section>
 
@@ -97,8 +121,13 @@
 			clientsCanPay={true}
 			hasClientEmail={false}
 			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode="stripe"
 			{paymentsSettingsHref}
 			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
 		/>
 	</section>
 
@@ -112,8 +141,13 @@
 			clientsCanPay={true}
 			hasClientEmail={true}
 			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode="stripe"
 			{paymentsSettingsHref}
 			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
 		/>
 	</section>
 
@@ -125,8 +159,55 @@
 			clientsCanPay={true}
 			hasClientEmail={true}
 			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode="stripe"
 			{paymentsSettingsHref}
 			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+		/>
+	</section>
+
+	<!-- #271: the Practice has never chosen a rail -- asked inline, on the
+	     first Invoice raise, rather than assumed from an absent Stripe
+	     Connect account. -->
+	<section>
+		<h2>Billing mode not yet chosen</h2>
+		<InvoiceSection
+			invoices={[]}
+			contractStatus="signed"
+			clientsCanPay={true}
+			hasClientEmail={true}
+			isOwner={false}
+			isOwnerOrAdmin={false}
+			billingMode={undefined}
+			{paymentsSettingsHref}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+		/>
+	</section>
+
+	<!-- #271: Owner/Admin, an open by-hand Invoice -- Record payment, Void
+	     and Write off all offered; a Stripe-backed open Invoice below
+	     offers only Record payment. -->
+	<section>
+		<h2>Owner or Admin: recording a Payment, voiding, or writing off</h2>
+		<InvoiceSection
+			{invoices}
+			contractStatus="signed"
+			clientsCanPay={true}
+			hasClientEmail={true}
+			isOwner={true}
+			isOwnerOrAdmin={true}
+			billingMode="by_hand"
+			{paymentsSettingsHref}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
 		/>
 	</section>
 </stack-l>
