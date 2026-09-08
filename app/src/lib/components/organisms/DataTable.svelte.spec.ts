@@ -42,6 +42,39 @@ const numericColumns = [
 	{ label: 'Quantity', accessor: (row: Row) => row.status, numeric: true }
 ];
 
+/*
+ * #905: the row link and the per-column seams that share its cell. The
+ * first column carries `rowHref` in both fixtures below -- one also
+ * declaring `datetimeAccessor` (honored: a `<time>` wraps the link), one
+ * also declaring `content` (refused: the link wins).
+ */
+const LINKED_INSTANT = '2026-09-12T14:30:00Z';
+
+const linkedDatetimeColumns = [
+	{
+		label: 'Name',
+		accessor: (row: Row) => row.name,
+		datetimeAccessor: () => LINKED_INSTANT
+	},
+	{ label: 'Status', accessor: (row: Row) => row.status }
+];
+
+function markerSnippet() {
+	return createRawSnippet<[Row]>(() => ({
+		render: () => `<span data-testid="column-content">A snippet</span>`
+	}));
+}
+
+const linkedContentColumns = [
+	{ label: 'Name', accessor: (row: Row) => row.name, content: markerSnippet() },
+	{ label: 'Status', accessor: (row: Row) => row.status }
+];
+
+const trailingContentColumns = [
+	{ label: 'Name', accessor: (row: Row) => row.name },
+	{ label: 'Status', accessor: (row: Row) => row.status, content: markerSnippet() }
+];
+
 interface SetupOptions {
 	columns?: typeof columns;
 	rows?: Row[];
@@ -132,6 +165,55 @@ describe('DataTable.svelte', () => {
 		// Scoped to .table-view: the record view links the same rows, and
 		// counting the whole container would count both trees' anchors.
 		expect(container.querySelector('.table-view')!.querySelectorAll('a')).toHaveLength(rows.length);
+	});
+
+	/*
+	 * #905, ADR-0022: the row link used to swallow its column's
+	 * `datetimeAccessor`, so the instant "carried underneath and never
+	 * replaced" was dropped with no error. Both facts are asserted at
+	 * once here -- the link is exactly what it was, and the instant is on
+	 * the `<time>` that wraps it.
+	 */
+	it('keeps a first column its ISO instant while it carries the row link', async () => {
+		const { container } = await setup({
+			columns: linkedDatetimeColumns,
+			rowHref: (row) => `/clients/${row.name}`
+		});
+
+		const link = page.getByRole('link', { name: 'Ada Lovelace' });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', '/clients/Ada Lovelace');
+
+		const time = container.querySelector(':scope .table-view time')!;
+		expect(time).toHaveAttribute('datetime', LINKED_INSTANT);
+		expect(time).toHaveTextContent('Ada Lovelace');
+		expect(time.querySelector('a')).toHaveAttribute('href', '/clients/Ada Lovelace');
+	});
+
+	// #905: the documented refusal -- arbitrary caller markup cannot be
+	// wrapped in one row link, so the link wins and the snippet is skipped.
+	it('renders the row link and not the snippet when a first column declares content', async () => {
+		const { container } = await setup({
+			columns: linkedContentColumns,
+			rowHref: (row) => `/clients/${row.name}`
+		});
+
+		const link = page.getByRole('link', { name: 'Ada Lovelace' });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', '/clients/Ada Lovelace');
+		expect(container.querySelector('[data-testid="column-content"]')).toBeNull();
+	});
+
+	it('renders a column snippet in place of its accessor when the column carries no row link', async () => {
+		const { container } = await setup({
+			columns: trailingContentColumns,
+			rowHref: (row) => `/clients/${row.name}`
+		});
+
+		expect(
+			container.querySelectorAll(':scope .table-view [data-testid="column-content"]')
+		).toHaveLength(rows.length);
+		expect(container.querySelector(':scope .table-view tbody')!.textContent).not.toContain('Active');
 	});
 
 	it('renders plain cells with no links when rowHref is omitted', async () => {
@@ -387,6 +469,37 @@ describe('the record view (#508, ADR-0024)', () => {
 		const link = recordView.getByRole('link', { name: 'Ada Lovelace' });
 		await expect.element(link).toBeVisible();
 		await expect.element(link).toHaveAttribute('href', '/clients/Ada Lovelace');
+	});
+
+	// #905: the record view renders the same cell snippet as the <table>,
+	// so the linked first column carries its instant here too.
+	it('keeps a linked first column its ISO instant in the record view', async () => {
+		const { container } = await setup({
+			columns: linkedDatetimeColumns,
+			rowHref: (row) => `/clients/${row.name}`
+		});
+		await page.viewport(...NARROW);
+
+		const recordView = page.elementLocator(container.querySelector('.record-view')!);
+		const link = recordView.getByRole('link', { name: 'Ada Lovelace' });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', '/clients/Ada Lovelace');
+
+		const time = container.querySelector(':scope .record-view time')!;
+		expect(time).toHaveAttribute('datetime', LINKED_INSTANT);
+		expect(time.querySelector('a')).toHaveAttribute('href', '/clients/Ada Lovelace');
+	});
+
+	it('renders the row link and not the snippet for a content first column in the record view', async () => {
+		const { container } = await setup({
+			columns: linkedContentColumns,
+			rowHref: (row) => `/clients/${row.name}`
+		});
+		await page.viewport(...NARROW);
+
+		const recordView = page.elementLocator(container.querySelector('.record-view')!);
+		await expect.element(recordView.getByRole('link', { name: 'Ada Lovelace' })).toBeVisible();
+		expect(container.querySelector('[data-testid="column-content"]')).toBeNull();
 	});
 
 	it('keeps rowActions present and operable in the record view', async () => {

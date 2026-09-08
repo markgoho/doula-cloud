@@ -41,6 +41,14 @@
 		 * returns; datetimeAccessor is the same row's ISO instant, wrapping
 		 * the cell in a native `<time datetime>` rather than plain text.
 		 * Optional because most columns are not a timestamp at all.
+		 *
+		 * Honored on the first column while `rowHref` is set, too (#905):
+		 * the `<time>` wraps the row link rather than replacing it, so the
+		 * link's destination, its visible text and its accessible name are
+		 * exactly what they would be without this property. A `<time>` that
+		 * carries a `datetime` attribute takes phrasing content, and an
+		 * `<a>` is phrasing content, so nothing about the link has to bend
+		 * for the instant to ride along.
 		 */
 		datetimeAccessor?: (row: T) => string;
 		/*
@@ -56,6 +64,14 @@
 		 * required on a `content` column (never called, but non-optional
 		 * so every other column's call site is untouched, with no new
 		 * "what if this is missing" branch to test).
+		 *
+		 * NOT rendered on the first column while `rowHref` is set (#905):
+		 * the row link wins there, and the snippet is skipped. This is a
+		 * refusal, not an oversight -- a `content` snippet is arbitrary
+		 * caller markup, and wrapping arbitrary markup in one row link is
+		 * not a promise this component can keep, unlike a formatted
+		 * timestamp string, which is exactly the shape `<time>` expects.
+		 * A column that needs both puts its snippet anywhere but first.
 		 */
 		content?: Snippet<[row: T]>;
 	}
@@ -68,6 +84,18 @@
 	interface Properties<T> {
 		columns: Column<T>[];
 		rows: T[];
+		/**
+		 * Turns each row into a destination, reached from the FIRST
+		 * column's cell only -- one link per row, named by that column's
+		 * `accessor(row)`, in the `<table>` and in the record view alike.
+		 * The Clients route states the same rule from the caller's side;
+		 * it belongs here, where every caller can read it.
+		 *
+		 * What it does to the other per-column seams on that first column
+		 * (#905): `datetimeAccessor` is still honored -- a `<time>` wraps
+		 * the link -- while `content` is not rendered at all, the link
+		 * winning over it. Each property's own comment above says so.
+		 */
 		rowHref?: (row: T) => string;
 		rowActions?: RowActions<T>;
 		hasMore?: boolean;
@@ -100,6 +128,34 @@
 	}: Properties<T> = $props();
 </script>
 
+<!--
+	One cell's content, rendered by the `<table>` body cell and by the
+	record view's `<dd>` alike (#905). It used to be the same `{#if}` chain
+	written out twice, which made "the two copies stay in agreement" a
+	discipline; a single snippet makes it a structural fact instead.
+
+	The first branch is the row link carrying its column's instant: a
+	`<time>` with a `datetime` attribute takes phrasing content, so it
+	legally wraps the `<a>`, and the link's href, text and accessible name
+	come out identical to the bare-link branch below it. `content` on a
+	linked first column is deliberately unreachable -- see `Column.content`.
+-->
+{#snippet cell(column: Column<T>, columnIndex: number, row: T)}
+	{#if columnIndex === 0 && rowHref && column.datetimeAccessor}
+		<time datetime={column.datetimeAccessor(row)}
+			><Link href={rowHref(row)} label={column.accessor(row)} /></time
+		>
+	{:else if columnIndex === 0 && rowHref}
+		<Link href={rowHref(row)} label={column.accessor(row)} />
+	{:else if column.content}
+		{@render column.content(row)}
+	{:else if column.datetimeAccessor}
+		<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
+	{:else}
+		{column.accessor(row)}
+	{/if}
+{/snippet}
+
 {#snippet ledgerContent()}
 <stack-l class="frame">
 	<table class="table-view">
@@ -128,15 +184,7 @@
 								class:variant-body={column.variant === 'body'}
 								class:muted={column.variant === 'muted'}
 							>
-								{#if columnIndex === 0 && rowHref}
-									<Link href={rowHref(row)} label={column.accessor(row)} />
-								{:else if column.content}
-									{@render column.content(row)}
-								{:else if column.datetimeAccessor}
-									<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
-								{:else}
-									{column.accessor(row)}
-								{/if}
+								{@render cell(column, columnIndex, row)}
 							</td>
 						{/each}
 						{#if rowActions}
@@ -176,15 +224,7 @@
 							class:variant-body={column.variant === 'body'}
 							class:muted={column.variant === 'muted'}
 						>
-							{#if columnIndex === 0 && rowHref}
-								<Link href={rowHref(row)} label={column.accessor(row)} />
-							{:else if column.content}
-								{@render column.content(row)}
-							{:else if column.datetimeAccessor}
-								<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
-							{:else}
-								{column.accessor(row)}
-							{/if}
+							{@render cell(column, columnIndex, row)}
 						</dd>
 					{/each}
 					{#if rowActions}

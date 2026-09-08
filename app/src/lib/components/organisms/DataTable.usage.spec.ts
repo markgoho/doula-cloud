@@ -19,6 +19,17 @@ import { describe, expect, it } from 'vitest';
  *
  * `DataTable.performance.svelte.spec.ts` holds the other half -- what one
  * row is allowed to cost once the count is bounded.
+ *
+ * Not a home for #905's two first-column rules, checked and recorded
+ * rather than left unstated. A consumer-side gate here would need to see
+ * a column's shape, and it cannot: this file reads the `<DataTable ... />`
+ * ATTRIBUTE text, while `columns` is a `<script>` constant naming an
+ * array of objects the regex above never opens. Even with that reach,
+ * neither rule is a caller error to catch. `datetimeAccessor` on a linked
+ * first column is now honored by the component, so the hazard the rule
+ * described is gone; `content` there is a documented precedence -- the
+ * row link wins -- stated on `Column.content` and asserted in
+ * `DataTable.svelte.spec.ts`, not a mistake a route can make silently.
  */
 
 const ROUTES_ROOT = new URL('../../../routes/', import.meta.url).pathname;

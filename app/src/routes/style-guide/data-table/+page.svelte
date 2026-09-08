@@ -43,6 +43,47 @@
 		{ origin: 'Engagement started with Anne-Marie Ochieng-Whitfield', quantity: -1 }
 	];
 
+	/*
+	 * #905: the row link and the machine-readable instant on one column.
+	 * A first column carrying `rowHref` used to render a bare link and
+	 * drop its `datetimeAccessor` silently, so the combination is drawn
+	 * here rather than only asserted in a spec -- inspect the first cell
+	 * and the `<time datetime>` is around the link, with the link itself
+	 * unchanged.
+	 *
+	 * This demonstrates the component's contract, NOT a recommended
+	 * column order: a link named "12 Sep 2026, 10:30am" says nothing
+	 * about where it goes (#513), which is why the real Practice-wide
+	 * schedule leads with the Client and keeps When second.
+	 */
+	interface Occurrence {
+		display: string;
+		instant: string;
+		client: string;
+	}
+
+	const occurrenceColumns = [
+		{
+			label: 'When',
+			accessor: (row: Occurrence) => row.display,
+			datetimeAccessor: (row: Occurrence) => row.instant
+		},
+		{ label: 'Client', accessor: (row: Occurrence) => row.client }
+	];
+
+	const occurrences: Occurrence[] = [
+		{
+			display: '12 Sep 2026, 10:30am',
+			instant: '2026-09-12T14:30:00Z',
+			client: 'Persephone Adeyemi-Wollstonecraft'
+		},
+		{
+			display: '14 Sep 2026, 09:00am',
+			instant: '2026-09-14T13:00:00Z',
+			client: 'Anne-Marie Ochieng-Whitfield'
+		}
+	];
+
 	let hasMore = $state(true);
 
 	function onLoadMore() {
@@ -194,6 +235,16 @@
 			rows={clients}
 			rowHref={(client) => `#${client.name}`}
 			emptyMessage="No Clients yet. Add one and it appears here."
+		/>
+	</section>
+
+	<section>
+		<h2>Navigable rows whose first column is a timestamp</h2>
+		<DataTable
+			columns={occurrenceColumns}
+			rows={occurrences}
+			rowHref={(occurrence) => `#${occurrence.instant}`}
+			emptyMessage="No Visits yet."
 		/>
 	</section>
 
