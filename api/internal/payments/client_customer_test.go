@@ -47,14 +47,11 @@ func createdInvoice(t *testing.T, srv *httptest.Server, session, practiceID, eng
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
-	var out payments.PostInvoiceResponse
+	var out payments.InvoiceView
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.Invoice == nil {
-		t.Fatal("invoice is nil, want a created Invoice")
-	}
-	return *out.Invoice
+	return out
 }
 
 // TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer proves #780's

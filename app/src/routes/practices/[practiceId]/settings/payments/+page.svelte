@@ -185,32 +185,32 @@
 		not_connected: {
 			label: 'Not connected',
 			variant: 'neutral',
-			explanation: 'Connect Stripe so Clients can pay their invoices.',
+			explanation: 'Clients cannot pay their invoices yet.',
 			onboarding: 'always'
 		},
 		onboarding_incomplete: {
 			label: 'Onboarding incomplete',
 			variant: 'warning',
-			explanation: 'Stripe still needs some details before Clients can pay you.',
+			explanation: 'Stripe still needs some details before Clients can pay this Practice.',
 			onboarding: 'always'
 		},
 		pending: {
 			label: 'Awaiting Stripe review',
 			variant: 'warning',
-			explanation: 'Stripe is reviewing the details you submitted. Nothing is needed from you.',
+			explanation: 'Stripe is reviewing the details already submitted. Nothing more is needed right now.',
 			onboarding: 'never'
 		},
 		payouts_restricted: {
 			label: 'Taking payments, payouts on hold',
 			variant: 'warning',
 			explanation:
-				'Clients can pay their invoices, but Stripe cannot send the money to your bank yet.',
+				"Clients can pay their invoices, but Stripe cannot send the money to this Practice's bank yet.",
 			onboarding: 'if-outstanding'
 		},
 		active: {
 			label: 'Active',
 			variant: 'success',
-			explanation: 'Clients can pay their invoices and payouts reach your bank.',
+			explanation: "Clients can pay their invoices, and payouts reach this Practice's bank.",
 			onboarding: 'never'
 		}
 	};
@@ -365,7 +365,7 @@
 		{#if isBackFromStripeRestricted}
 			<Notice
 				variant="error"
-				message="Stripe still needs something from you before Clients can pay. Open the form again below and finish what it asks for."
+				message="Stripe still needs something before Clients can pay this Practice. Finish the form below."
 			/>
 		{:else if connectParameter === 'return' && isPolling}
 			<!-- The banner's wording matches what the screen actually does
@@ -381,7 +381,7 @@
 			     this stops short of promising an update that is not coming. -->
 			<Notice variant="status" message="Stripe onboarding finished." />
 		{:else if connectParameter === 'refresh'}
-			<Notice variant="status" message="Your Stripe onboarding link expired. Start again below." />
+			<Notice variant="status" message="The Stripe onboarding link expired. Start again below." />
 		{/if}
 
 		<stack-l space="var(--space-2)" aria-live="polite">
@@ -421,16 +421,14 @@
 
 		{#if canStartOnboarding && !isPracticeOwner}
 			<!--
-				Everything below this branch is written to the person who will
-				sit through Stripe's form: "have your phone and your bank
-				details with you", "your date of birth", "answer the website
-				question". None of it is the Admin's to do -- PostConnectHandler
-				is Owner-only (staffauth.RequireOwner) -- so she gets the one
-				sentence that is true for her instead of a checklist she cannot
-				act on. #267 gave her the *state* of the rail her Invoices are
-				paid on, not the Owner's half-finished errand.
+				A fact about the Practice and the role that clears it (#270),
+				not a refusal aimed at her: PostConnectHandler is Owner-only
+				(staffauth.RequireOwner), so she gets the one sentence that is
+				true for her instead of a checklist she cannot act on. #267
+				gave her the *state* of the rail her Invoices are paid on, not
+				the Owner's half-finished errand.
 			-->
-			<Text text="Ask a Practice Owner to connect Stripe." />
+			<Text text="A Practice Owner has to connect Stripe." />
 		{:else if canStartOnboarding && !hasDeclaredWebsite}
 			<!--
 				Block, do not warn. A disabled button with a tooltip would leave
@@ -440,7 +438,7 @@
 			-->
 			<Notice
 				variant="info"
-				message="Stripe will not let you take Client payments until it can see where you are online. Tell us your website or let us publish a page for you, then come back here."
+				message="Stripe will not process Client payments until it can see this Practice online. The website question needs an answer before Stripe can be connected."
 			/>
 			<Link href={websiteHref} label="Answer the website question" />
 		{:else if canStartOnboarding && isPageFailed}
@@ -452,7 +450,7 @@
 			-->
 			<Notice
 				variant="error"
-				message="The page we publish for you is not loading, so Stripe would find nothing at your web address. Open your website settings and publish it again."
+				message="The page published for this Practice is not loading, so Stripe would find nothing at its web address. Publish the website again."
 			/>
 			<Link href={websiteHref} label="Go to website settings" />
 		{:else if canStartOnboarding}

@@ -274,6 +274,46 @@ func TestDetailHandler_ClientPortalState(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_ClientsCanPay proves ClientsCanPay (#270) reads
+// practices.stripe_connect_card_payments_status directly rather than
+// GetConnectStatusHandler's own live Stripe retrieve: false by default
+// (the column's own default is 'unsupported'), and true only once the
+// column reads 'active', the same webhook-synced state PostInvoiceHandler
+// gates on.
+func TestDetailHandler_ClientsCanPay(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "staff-clients-can-pay"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Pay Client", "pay-client@example.com", "active")
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	fetchDetail := func() engagement.Detail {
+		t.Helper()
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		var d engagement.Detail
+		if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		return d
+	}
+
+	if d := fetchDetail(); d.ClientsCanPay {
+		t.Fatal("clientsCanPay = true before Stripe Connect is active, want false")
+	}
+
+	testdb.SeedClientsCanPay(t, db, practiceID)
+
+	if d := fetchDetail(); !d.ClientsCanPay {
+		t.Fatal("clientsCanPay = false once card_payments is active, want true")
+	}
+}
+
 func TestDetailHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-bad-id"

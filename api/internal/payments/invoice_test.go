@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
@@ -61,11 +62,26 @@ func seedSignedContract(t *testing.T, db *testdb.DB, engagementID string) (contr
 }
 
 // seedConnectAccount sets practiceID's stored Stripe Connect account id
-// directly, bypassing PostConnectHandler.
+// and marks card_payments active, bypassing both PostConnectHandler and
+// the webhook that ordinarily flips that column -- the shape every
+// PostInvoiceHandler happy-path fixture wants: an account that can
+// actually take a Client's payment, not merely one that exists (#270
+// tightened the gate from "a row exists" to this).
 func seedConnectAccount(t *testing.T, db *testdb.DB, practiceID, accountID string) {
 	t.Helper()
+	seedConnectAccountWithCardStatus(t, db, practiceID, accountID, "active")
+}
+
+// seedConnectAccountWithCardStatus is seedConnectAccount with an explicit
+// card_payments status, for the tests proving PostInvoiceHandler's gate
+// consults that column rather than only whether an account id is stored
+// (e.g. an account left 'restricted' after an abandoned or reviewed-and-
+// declined onboarding).
+func seedConnectAccountWithCardStatus(t *testing.T, db *testdb.DB, practiceID, accountID, cardStatus string) {
+	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, accountID, practiceID,
+		`UPDATE practices SET stripe_connect_account_id = $1, stripe_connect_card_payments_status = $2 WHERE id = $3`,
+		accountID, cardStatus, practiceID,
 	); err != nil {
 		t.Fatalf("seed connect account: %v", err)
 	}
@@ -159,13 +175,17 @@ func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID,
 	return resp
 }
 
-// TestPostInvoiceHandler_NotConnectedOwnerGetsConnectRequired proves an
-// Owner attempting to create the first Invoice at an unconnected Practice
-// gets routed toward the #79 connect flow instead of an Invoice, and that
-// nothing is created or sent to Stripe.
-func TestPostInvoiceHandler_NotConnectedOwnerGetsConnectRequired(t *testing.T) {
+// TestPostInvoiceHandler_NotConnectedRefuses proves an Invoice attempted
+// at a Practice with no Stripe Connect account at all 409s with
+// MsgClientsCannotPay, whatever role the caller holds -- #270 collapsed
+// the old 200 connectRequired/isOwner gate (which routed an Owner into
+// the #79 connect flow and told a non-Owner to ask one) into a single
+// role-blind refusal, because the frontend now decides that routing
+// itself from EngagementDetail.ClientsCanPay before the form is ever
+// shown.
+func TestPostInvoiceHandler_NotConnectedRefuses(t *testing.T) {
 	db := testdb.New(t)
-	const uid = "invoice-gate-owner"
+	const uid = "invoice-gate-not-connected"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedSignedContract(t, db, engagementID)
@@ -177,21 +197,21 @@ func TestPostInvoiceHandler_NotConnectedOwnerGetsConnectRequired(t *testing.T) {
 	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var out payments.PostInvoiceResponse
+	var out struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !out.ConnectRequired {
-		t.Fatal("connectRequired = false, want true")
+	if out.Code != string(apierr.CodeFailedPrecondition) {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
-	if !out.IsOwner {
-		t.Fatal("isOwner = false, want true")
-	}
-	if out.Invoice != nil {
-		t.Fatalf("invoice = %+v, want nil", out.Invoice)
+	if out.Message != payments.MsgClientsCannotPay {
+		t.Fatalf("message = %q, want %q", out.Message, payments.MsgClientsCannotPay)
 	}
 	if len(client.CreateInvoiceCalls) != 0 {
 		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
@@ -201,16 +221,62 @@ func TestPostInvoiceHandler_NotConnectedOwnerGetsConnectRequired(t *testing.T) {
 	}
 }
 
-// TestPostInvoiceHandler_NotConnectedNonOwnerGetsAskAnOwnerState proves a
-// non-Owner Staff member gets the same connectRequired gate but with
-// isOwner false, so the frontend shows the static "ask an Owner" message
-// instead of a connect button.
-func TestPostInvoiceHandler_NotConnectedNonOwnerGetsAskAnOwnerState(t *testing.T) {
+// TestPostInvoiceHandler_RestrictedCardPaymentsRefuses proves the gate bug
+// #270 found: an Owner who opened the Stripe account, abandoned the
+// hosted form halfway (or was reviewed and declined) leaves
+// stripe_connect_account_id non-null with card_payments still
+// 'restricted' -- fetchConnectAccount's old "an account id is stored"
+// test would have let this Invoice through even though Stripe will not
+// let anyone pay it. The tightened gate refuses it the same way an
+// unconnected Practice is refused.
+func TestPostInvoiceHandler_RestrictedCardPaymentsRefuses(t *testing.T) {
 	db := testdb.New(t)
-	const uid = "invoice-gate-non-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner
+	const uid = "invoice-gate-restricted"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
+		PracticeID:   practiceID,
+		PracticeName: fixturePracticeName,
+		BusinessURL:  fixtureOwnSiteURL,
+	})
+	if err != nil {
+		t.Fatalf("fixture CreateAccount: %v", err)
+	}
+	seedConnectAccountWithCardStatus(t, db, practiceID, accountID, "restricted")
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	if len(client.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
+	}
+	if got := invoiceCount(t, db); got != 0 {
+		t.Fatalf("invoices row count = %d, want 0", got)
+	}
+}
+
+// TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500 proves
+// fetchConnectAccountID's own guard: nothing in the schema ties
+// card_payments_status to stripe_connect_account_id, so a row that
+// somehow reaches 'active' with no account id linked -- unreachable
+// through the webhook, which only ever writes that column by matching an
+// existing account id, but not through a bare UPDATE -- 500s rather than
+// calling Stripe with an empty account id.
+func TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-active-no-account"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	testdb.SeedClientsCanPay(t, db, practiceID)
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -219,21 +285,11 @@ func TestPostInvoiceHandler_NotConnectedNonOwnerGetsAskAnOwnerState(t *testing.T
 	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
-	var out payments.PostInvoiceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if !out.ConnectRequired {
-		t.Fatal("connectRequired = false, want true")
-	}
-	if out.IsOwner {
-		t.Fatal("isOwner = true, want false")
-	}
-	if got := invoiceCount(t, db); got != 0 {
-		t.Fatalf("invoices row count = %d, want 0", got)
+	if len(client.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never reach Stripe with an empty account id", len(client.CreateInvoiceCalls))
 	}
 }
 
@@ -269,30 +325,24 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
-	var out payments.PostInvoiceResponse
+	var out payments.InvoiceView
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.ConnectRequired {
-		t.Fatal("connectRequired = true, want false")
+	if out.ContractID != contractID {
+		t.Fatalf("invoice.contractId = %q, want %q", out.ContractID, contractID)
 	}
-	if out.Invoice == nil {
-		t.Fatal("invoice is nil, want a created Invoice")
+	if out.Status != invoiceStatusOpen {
+		t.Fatalf("invoice.status = %q, want %q", out.Status, invoiceStatusOpen)
 	}
-	if out.Invoice.ContractID != contractID {
-		t.Fatalf("invoice.contractId = %q, want %q", out.Invoice.ContractID, contractID)
+	if out.AmountCents != 15000 {
+		t.Fatalf("invoice.amountCents = %d, want 15000", out.AmountCents)
 	}
-	if out.Invoice.Status != invoiceStatusOpen {
-		t.Fatalf("invoice.status = %q, want %q", out.Invoice.Status, invoiceStatusOpen)
+	if out.Currency != "usd" {
+		t.Fatalf("invoice.currency = %q, want %q", out.Currency, "usd")
 	}
-	if out.Invoice.AmountCents != 15000 {
-		t.Fatalf("invoice.amountCents = %d, want 15000", out.Invoice.AmountCents)
-	}
-	if out.Invoice.Currency != "usd" {
-		t.Fatalf("invoice.currency = %q, want %q", out.Invoice.Currency, "usd")
-	}
-	if out.Invoice.PaidAt != nil {
-		t.Fatalf("invoice.paidAt = %v, want nil", out.Invoice.PaidAt)
+	if out.PaidAt != nil {
+		t.Fatalf("invoice.paidAt = %v, want nil", out.PaidAt)
 	}
 
 	if len(client.CreateInvoiceCalls) != 1 {
@@ -328,7 +378,7 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 		t.Fatalf("FinalizeInvoice calls = %d, want 1", len(client.FinalizeInvoiceIDs))
 	}
 
-	if got := invoiceStatus(t, db, out.Invoice.ID); got != invoiceStatusOpen {
+	if got := invoiceStatus(t, db, out.ID); got != invoiceStatusOpen {
 		t.Fatalf("persisted invoice status = %q, want %q", got, invoiceStatusOpen)
 	}
 }

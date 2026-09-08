@@ -22,17 +22,6 @@ export interface Invoice {
 	paidAt?: string;
 }
 
-/** The body of a POST invoices response -- either the created Invoice, or
- * a state to route the Owner into the #79 connect flow (isOwner true) or
- * show a non-Owner the static "ask an Owner" message (isOwner false),
- * per #78's lazy-connect-prompt rule. Mirrors the Go BFF's
- * PostInvoiceResponse (api/internal/payments/invoice.go). */
-export interface CreateInvoiceResult {
-	connectRequired: boolean;
-	isOwner?: boolean;
-	invoice?: Invoice;
-}
-
 /** One row of the Practice-wide Invoice list (#265) -- the same Invoice,
  * plus who it is for and the Engagement it is a way in to. It extends
  * `Invoice` rather than replacing it because the wire shape really is a
@@ -57,6 +46,11 @@ export interface PracticeInvoicePage {
 	outstandingCents: number;
 	outstandingCount: number;
 	paidCents: number;
+	/** Whether Clients can pay this Practice at all (#270) -- an aggregate
+	 * fact alongside the three totals above, not derived from them: an
+	 * empty book looks the same whether nobody has billed anything yet or
+	 * Clients cannot pay this Practice at all. */
+	clientsCanPay: boolean;
 }
 
 /** The Practice-wide Invoice list's path -- exported so the route's
@@ -106,16 +100,18 @@ export async function loadInvoices(fetcher: Fetcher, practiceId: string, engagem
 }
 
 /** Creates an Invoice against engagementId's current Contract for
- * amountCents -- or, if the Practice hasn't connected Stripe yet, returns
- * the connectRequired gate state instead (no Invoice is created in that
- * case). Throws with the response body text on a non-2xx response (e.g.
- * no Contract exists yet, or an invalid amount). */
+ * amountCents. Whether Clients can pay this Practice at all is a standing
+ * fact the caller already has (EngagementDetail.clientsCanPay, #270) and
+ * checks before ever showing the form that calls this -- so a refusal
+ * here (409, e.g. Stripe still not connected) is always thrown like any
+ * other non-2xx response, with the response body text, never a routed
+ * gate state. */
 export async function createInvoice(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string,
 	amountCents: number
-): Promise<CreateInvoiceResult> {
+): Promise<Invoice> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -173,3 +169,18 @@ export function unbillableContractMessage(status: string): string {
 	}
 	return 'Invoicing is unavailable until the Client signs this Contract.';
 }
+
+/** The message InvoiceSection shows in place of the Create Invoice form
+ * when Clients cannot pay this Practice yet (#270) -- a fact about the
+ * Practice, not a refusal aimed at whoever is looking at the form, and
+ * naming the role that clears it rather than fetching the Staff roster
+ * to name a person (a Practice may have more than one Owner). */
+export const clientsCannotPayMessage =
+	'Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.';
+
+/** The message InvoiceSection shows in place of the Create Invoice form
+ * when the Client has no email on file (#270) -- moved ahead of the
+ * submit attempt that used to be the only place this was discovered,
+ * per #255's own principle: state it as standing information rather than
+ * only as feedback after a Send. */
+export const clientHasNoEmailMessage = 'This Client has no email address on file. Add one before creating an Invoice.';

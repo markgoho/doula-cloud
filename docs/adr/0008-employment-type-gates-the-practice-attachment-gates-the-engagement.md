@@ -298,6 +298,7 @@ Inside one Practice, RLS-fenced as ADR-0006 already established.
 | Plan Template and Contract Template | ✓ | ✓ | ✓ | ✓ | ✗ |
 | Credit balance and ledger | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Stripe Connect state — the status enum and capability flags, never the details Stripe holds | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Whether the Practice can raise an Invoice at all — a plain boolean fact, never Stripe's account detail | all | all | all at the Practice | on her Engagements | ✗ |
 | Staff roster | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Her own Offer row | — | — | — | — | Client first initial, general area, exact due date, her fee, free-text terms |
 
@@ -329,6 +330,8 @@ everything; the Offer settles her claim and nothing else
 [#230](https://github.com/markgoho/doula-cloud/issues/230)).
 
 **Stripe Connect state was added later**, on [#267](https://github.com/markgoho/doula-cloud/issues/267), and it is a placement rather than a new argument. The row sits with Invoice history and the Credit ledger because it is the same kind of fact: the state of the rail those Invoices are paid on. `CONTEXT.md` defines an Admin as covering the business side of a Practice — Clients, Contracts, Invoices and scheduling — so an Admin who cannot see that Stripe is refusing payouts cannot do the job the glossary gives her, which is the reason ADR-0006 already used to widen the roster cell to Admin. A Doula keeps ✗ under the same standard the table applies everywhere else: no journey has given her a reason to need it, and the three walks that raised this filed her seeing it as the gap. What the row covers is the status enum, the two capability flags, and Stripe's own machine-readable list of the field paths it is still waiting on (`configuration.merchant.mcc` and the like) — the DTO ships the paths, and the screen renders only how many there are, because a path names nothing a person recognizes. Never the values behind them: those live at Stripe and never reach Doula Cloud. Reading widens to Admin; starting or resuming hosted onboarding stays the Owner's alone.
+
+**Whether the Practice can raise an Invoice at all was added on [#270](https://github.com/markgoho/doula-cloud/issues/270), and it is a second row rather than a widening of Stripe Connect state's.** They read as the same fact until tested the way #267 itself tests every row: who needs it and why. Stripe Connect state carries a requirements count about the Owner's own identity documents — an errand, and one only an Owner or Admin has a reason to read. This row carries nothing about anybody: it is a plain yes/no a Doula meets the moment she opens the Invoice section on an Engagement she may already see, the same row every other Engagement-scoped fact above it follows (Engagements/Visits/Messages, Plan Instances, Contract scope). Gating it to Owner/Admin would not protect anything Stripe holds — the boolean carries none of Stripe's own account detail — it would only reproduce DW-G2, the exact confusion #270 exists to remove, one level down: a Doula meeting a raw permission refusal in place of the fact that nobody has connected Stripe yet.
 
 ## The write table — new content; ADR-0006 covered reads only
 

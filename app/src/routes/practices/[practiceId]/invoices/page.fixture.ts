@@ -51,7 +51,8 @@ export const data: PracticeInvoicePage = {
 	hasMore: false,
 	outstandingCents: 450_000,
 	outstandingCount: 1,
-	paidCents: 250_000
+	paidCents: 250_000,
+	clientsCanPay: true
 };
 
 export const fixture: RouteFixture<RouteParameters> = {

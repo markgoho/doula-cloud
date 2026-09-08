@@ -29,6 +29,27 @@ func TestSeedPractice(t *testing.T) {
 	}
 }
 
+// TestSeedClientsCanPay proves the practices row flips to
+// stripe_connect_card_payments_status = 'active', the one column
+// payments.ClientsCanPay reads -- no stripe_connect_account_id, since
+// this fixture is for the readers that only ever consult that column.
+func TestSeedClientsCanPay(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Clients Can Pay Test")
+
+	testdb.SeedClientsCanPay(t, db, practiceID)
+
+	var status string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT stripe_connect_card_payments_status FROM practices WHERE id = $1`, practiceID,
+	).Scan(&status); err != nil {
+		t.Fatalf("read seeded card payments status: %v", err)
+	}
+	if status != "active" {
+		t.Fatalf("stripe_connect_card_payments_status = %q, want active", status)
+	}
+}
+
 // TestSeedStaffAtPractice proves SeedStaffAtPractice's Staff row and
 // practice_memberships row land with the roles and employment type
 // passed in -- every package composing seed helpers on top of this one

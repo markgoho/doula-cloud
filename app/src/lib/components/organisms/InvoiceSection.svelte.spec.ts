@@ -7,10 +7,13 @@ import type { Invoice } from '#lib/invoice.js';
 interface SetupOptions {
 	invoices?: Invoice[];
 	contractStatus?: string;
-	connectGate?: { isOwner: boolean };
+	clientsCanPay?: boolean;
+	hasClientEmail?: boolean;
+	isOwner?: boolean;
 	onCreate?: (amountCents: number) => Promise<void>;
-	onConnect?: () => Promise<void>;
 }
+
+const paymentsSettingsHref = 'https://example.test/practices/practice-1/settings/payments';
 
 const invoiceOpen: Invoice = {
 	id: 'inv-1',
@@ -34,12 +37,21 @@ const invoicePaid: Invoice = {
 async function setup({
 	invoices = [],
 	contractStatus = 'signed',
-	connectGate,
-	onCreate = vi.fn().mockResolvedValue(undefined),
-	onConnect = vi.fn().mockResolvedValue(undefined)
+	clientsCanPay = true,
+	hasClientEmail = true,
+	isOwner = false,
+	onCreate = vi.fn().mockResolvedValue(undefined)
 }: SetupOptions = {}) {
-	await render(InvoiceSection, { invoices, contractStatus, connectGate, onCreate, onConnect });
-	return { onCreate, onConnect };
+	await render(InvoiceSection, {
+		invoices,
+		contractStatus,
+		clientsCanPay,
+		hasClientEmail,
+		isOwner,
+		paymentsSettingsHref,
+		onCreate
+	});
+	return { onCreate };
 }
 
 describe('InvoiceSection.svelte', () => {
@@ -69,7 +81,7 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByText('$150.00 — unknown_status')).toBeInTheDocument();
 	});
 
-	it('shows the amount form when not gated', async () => {
+	it('shows the amount form when the Contract is billable, Clients can pay, and the Client has an email', async () => {
 		await setup();
 
 		await expect.element(page.getByLabelText('Amount (USD)')).toBeInTheDocument();
@@ -119,50 +131,41 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByText('Failed to create invoice')).toBeInTheDocument();
 	});
 
-	it('shows a Connect Stripe button instead of the form when connectGate.isOwner is true', async () => {
-		await setup({ connectGate: { isOwner: true } });
+	// #270: clientsCanPay is a standing fact read before the form ever
+	// shows, replacing the old post-submit connectRequired/isOwner gate.
+	it('shows the cannot-pay Notice and a link to Payments settings for an Owner when Clients cannot pay', async () => {
+		await setup({ clientsCanPay: false, isOwner: true });
 
-		await expect.element(page.getByRole('button', { name: 'Connect Stripe' })).toBeInTheDocument();
+		await expect
+			.element(page.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
+			.toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).toBeVisible();
 		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
 	});
 
-	it('calls onConnect when the Connect Stripe button is clicked', async () => {
-		const { onConnect } = await setup({ connectGate: { isOwner: true } });
+	it('shows the cannot-pay Notice with no link for a non-Owner when Clients cannot pay', async () => {
+		await setup({ clientsCanPay: false, isOwner: false });
 
-		await page.getByRole('button', { name: 'Connect Stripe' }).click();
-
-		expect(onConnect).toHaveBeenCalled();
-	});
-
-	it('shows an error when onConnect throws', async () => {
-		const onConnect = vi.fn().mockRejectedValue(new Error('some other failure'));
-		await setup({ connectGate: { isOwner: true }, onConnect });
-
-		await page.getByRole('button', { name: 'Connect Stripe' }).click();
-
-		await expect.element(page.getByText('some other failure')).toBeInTheDocument();
-	});
-
-	it('falls back to a generic message when onConnect rejects with a non-Error', async () => {
-		const onConnect = vi.fn().mockRejectedValue('boom');
-		await setup({ connectGate: { isOwner: true }, onConnect });
-
-		await page.getByRole('button', { name: 'Connect Stripe' }).click();
-
-		await expect.element(page.getByText('Failed to start Stripe Connect onboarding')).toBeInTheDocument();
-	});
-
-	it('shows the static ask-an-Owner message instead of the form or a button when connectGate.isOwner is false', async () => {
-		await setup({ connectGate: { isOwner: false } });
-
-		await expect.element(page.getByText('Ask a Practice Owner to connect Stripe.')).toBeInTheDocument();
+		await expect
+			.element(page.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
+			.toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).not.toBeInTheDocument();
 		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
-		await expect.element(page.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+	});
+
+	it('shows a Notice naming the missing email instead of the form when the Client has no email', async () => {
+		await setup({ hasClientEmail: false });
+
+		await expect
+			.element(page.getByText('This Client has no email address on file. Add one before creating an Invoice.'))
+			.toBeVisible();
+		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
 	});
 
 	// #275: a Contract that cannot be billed hides Create Invoice and says
-	// why, taking priority over the connect gate -- a voided Contract at an
-	// unconnected Practice must not show "Connect Stripe" first.
+	// why, taking priority over the clientsCanPay/hasClientEmail checks --
+	// a voided Contract at a Practice Clients cannot pay must not show the
+	// cannot-pay Notice first.
 	it('shows why billing is unavailable instead of the form on a draft Contract', async () => {
 		await setup({ contractStatus: 'draft' });
 
@@ -192,10 +195,10 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
 	});
 
-	it('takes priority over the connect gate on an unbillable Contract', async () => {
-		await setup({ contractStatus: 'voided', connectGate: { isOwner: true } });
+	it('takes priority over the cannot-pay Notice on an unbillable Contract', async () => {
+		await setup({ contractStatus: 'voided', clientsCanPay: false, isOwner: true });
 
-		await expect.element(page.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).not.toBeInTheDocument();
 		await expect.element(page.getByText(/This Contract has been voided/)).toBeVisible();
 	});
 });

@@ -184,7 +184,7 @@ describe('payments settings screen', () => {
 
 		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
-		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
+		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 		// The checklist is written in the second person to whoever will sit
 		// through Stripe's form -- "have your phone and your bank details
@@ -201,7 +201,7 @@ describe('payments settings screen', () => {
 		mockApi({ status: 'not_connected', roles: ['admin'], websiteMode: 'undeclared' });
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).toBeVisible();
+		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Answer the website question' })).not.toBeInTheDocument();
 	});
 
@@ -226,7 +226,7 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: /Stripe/ })).not.toBeInTheDocument();
-		await expect.element(testPage.getByText('Ask a Practice Owner to connect Stripe.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).not.toBeInTheDocument();
 	});
 
 	it('offers to continue onboarding for an Owner mid-onboarding', async () => {
@@ -283,7 +283,7 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 
 		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
 		await expect
-			.element(testPage.getByText('Stripe is reviewing the details you submitted. Nothing is needed from you.'))
+			.element(testPage.getByText('Stripe is reviewing the details already submitted. Nothing more is needed right now.'))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).not.toBeInTheDocument();
 	});
@@ -295,7 +295,7 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
 		await expect
 			.element(
-				testPage.getByText('Clients can pay their invoices, but Stripe cannot send the money to your bank yet.')
+				testPage.getByText("Clients can pay their invoices, but Stripe cannot send the money to this Practice's bank yet.")
 			)
 			.toBeVisible();
 	});
@@ -347,7 +347,7 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 		await expect
 			.element(
 				testPage.getByText(
-					'Stripe will not let you take Client payments until it can see where you are online.',
+					'Stripe will not process Client payments until it can see this Practice online.',
 					{ exact: false }
 				)
 			)
@@ -378,7 +378,7 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 		await render(Page, {});
 
 		await expect
-			.element(testPage.getByText('The page we publish for you is not loading', { exact: false }))
+			.element(testPage.getByText('The page published for this Practice is not loading', { exact: false }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Go to website settings' })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
@@ -433,7 +433,7 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 		await render(Page, {});
 
 		await expect
-			.element(testPage.getByText('Stripe still needs something from you before Clients can pay.', { exact: false }))
+			.element(testPage.getByText('Stripe still needs something before Clients can pay this Practice.', { exact: false }))
 			.toBeVisible();
 		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: false })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
@@ -493,7 +493,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 		await expect
-			.element(testPage.getByText('Clients can pay their invoices and payouts reach your bank.'))
+			.element(testPage.getByText("Clients can pay their invoices, and payouts reach this Practice's bank."))
 			.toBeVisible();
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).not.toBeInTheDocument();
 		expect(statusRegion?.textContent).toContain('Active');

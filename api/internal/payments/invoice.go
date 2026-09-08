@@ -42,17 +42,19 @@ type CreateInvoiceRequest struct {
 	AmountCents int64 `json:"amountCents"`
 }
 
-// PostInvoiceResponse is the body of PostInvoiceHandler's response. Per
-// #78's lazy-connect-prompt rule, a single 200 response covers three
-// distinct outcomes the frontend switches on: ConnectRequired true with
-// IsOwner true (route the Owner into the #79 connect flow), ConnectRequired
-// true with IsOwner false (show the static "ask an Owner" message), or
-// ConnectRequired false with Invoice set (the Invoice was created).
-type PostInvoiceResponse struct {
-	ConnectRequired bool         `json:"connectRequired"`
-	IsOwner         bool         `json:"isOwner,omitempty"`
-	Invoice         *InvoiceView `json:"invoice,omitempty"`
-}
+// MsgClientsCannotPay is PostInvoiceHandler's refusal (#270) when this
+// Practice cannot yet take a Client's card payment -- Stripe Connect
+// either isn't linked at all or its card_payments capability isn't
+// active. A fact about the Practice and the role that clears it, not a
+// refusal aimed at whoever happened to press Create Invoice: #78's old
+// 200 gate response routed an Owner into the connect flow and told a
+// non-Owner to ask one, both in the words of a person being refused
+// something. The frontend now carries that same routing decision itself,
+// from EngagementDetail.ClientsCanPay -- a standing fact read before the
+// form is ever shown -- so this is only reachable by a caller that
+// bypasses the UI (or a race against a webhook mid-flight), and needs no
+// role-specific wording of its own.
+const MsgClientsCannotPay = "Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe before an Invoice can be sent."
 
 // ListInvoicesResponse is the standard cursor-pagination envelope from
 // docs/api-design.md section 4, mirroring message.ListResponse.
@@ -65,12 +67,14 @@ type ListInvoicesResponse struct {
 // PostInvoiceHandler creates an Invoice against :engagementId's current
 // Contract for the amount Staff supplies -- open to any Staff with
 // practice access, no assigned-staff or Owner gating (matching Contract's
-// default, #68). If the Practice has no Stripe Connect account linked yet
-// (practices.stripe_connect_account_id is null), no Invoice is created and
-// a 200 gate response is returned instead: an Owner gets ConnectRequired
-// so the frontend can route them into the #79 connect flow, a non-Owner
-// gets the same flag so the frontend can show the static "ask an Owner"
-// message.
+// default, #68). If Clients cannot yet pay this Practice --
+// stripe_connect_card_payments_status is not 'active', whether because no
+// Stripe Connect account is linked at all or because one exists but isn't
+// through onboarding -- no Invoice is created and the request 409s with
+// MsgClientsCannotPay instead (#270). This is the same charges-active
+// test EngagementDetail.ClientsCanPay reads, which is what the frontend
+// now consults before ever showing the Create Invoice form -- reaching
+// this refusal from the UI would mean the two disagreed.
 //
 // Before any of that, #275: the Contract must be billable at all, per
 // contracts.TransitionBill -- Signed and still in force. A Draft, a Sent
@@ -89,20 +93,21 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
-		accountID, connected, err := fetchConnectAccount(r.Context(), tx, practiceID)
+		canPay, err := ClientsCanPay(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if !connected {
-			reader, has := staffauth.ReaderFrom(r.Context())
-			if !has {
-				// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-			apierr.WriteJSON(w, http.StatusOK, PostInvoiceResponse{ConnectRequired: true, IsOwner: reader.Has("owner")})
+		if !canPay {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgClientsCannotPay, nil)
+			return
+		}
+
+		accountID, err := fetchConnectAccountID(r.Context(), tx, practiceID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -192,15 +197,13 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusCreated, PostInvoiceResponse{
-			Invoice: &InvoiceView{
-				ID:          invoiceID,
-				ContractID:  contractID,
-				Status:      "open",
-				AmountCents: req.AmountCents,
-				Currency:    "usd",
-				CreatedAt:   createdAt,
-			},
+		apierr.WriteJSON(w, http.StatusCreated, InvoiceView{
+			ID:          invoiceID,
+			ContractID:  contractID,
+			Status:      "open",
+			AmountCents: req.AmountCents,
+			Currency:    "usd",
+			CreatedAt:   createdAt,
 		})
 	})
 }
@@ -337,18 +340,27 @@ func fetchCurrentContract(ctx context.Context, tx *sql.Tx, engagementID string) 
 	return id, contracts.Status(rawStatus), nil
 }
 
-// fetchConnectAccount reads practiceID's stored Stripe Connect account id,
-// reporting connected=false (rather than an error) when none is linked
-// yet -- the lazy-connect-check case #78's ticket body describes.
-func fetchConnectAccount(ctx context.Context, tx *sql.Tx, practiceID string) (accountID string, connected bool, err error) {
+// fetchConnectAccountID reads practiceID's stored Stripe Connect account
+// id, for the Stripe API calls PostInvoiceHandler makes once ClientsCanPay
+// has already confirmed card_payments is active -- which the webhook that
+// writes that column only ever does by matching an existing
+// stripe_connect_account_id (see PostAccountWebhookHandler), so a null
+// account id here should be unreachable. Nothing in the schema enforces
+// that pairing, though, so this still checks rather than trusting it:
+// erroring here is cheap, and the alternative is calling Stripe with an
+// empty account id.
+func fetchConnectAccountID(ctx context.Context, tx *sql.Tx, practiceID string) (accountID string, err error) {
 	var acct sql.NullString
 	if err := tx.QueryRowContext(ctx,
 		`SELECT stripe_connect_account_id FROM practices WHERE id = $1`, practiceID,
 	).Scan(&acct); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", false, fmt.Errorf("payments: fetch connect account: %w", err)
+		return "", fmt.Errorf("payments: fetch connect account: %w", err)
 	}
-	return acct.String, acct.Valid, nil
+	if !acct.Valid {
+		return "", fmt.Errorf("payments: card_payments active with no connect account linked for practice %s", practiceID)
+	}
+	return acct.String, nil
 }
 
 // errClientNoEmail is fetchClientContact's refusal when the Engagement's

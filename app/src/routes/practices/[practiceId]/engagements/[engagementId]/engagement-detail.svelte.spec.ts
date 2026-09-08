@@ -549,10 +549,17 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		).toHaveLength(0);
 	});
 
-	it('disables "Send portal invite" and states the reason once the Client has no email on file', async () => {
+	// #270 converted this from a disabled button with a visually-hidden
+	// hint into a Notice naming the missing thing, the same shape #275
+	// established on InvoiceSection -- block over warn, never a control
+	// silently withheld with only a hidden explanation.
+	it('replaces "Send portal invite" with a Notice once the Client has no email on file', async () => {
 		await setup({ ...fixtureDetail, clientHasEmail: false });
 
-		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).toBeDisabled();
+		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' })).not.toBeInTheDocument();
+		await expect
+			.element(testPage.getByText('This Client has no email address on file. Add one before sending a portal invite.'))
+			.toBeVisible();
 		await expect
 			.element(testPage.getByText(/no email on file, so the client cannot be invited yet/i))
 			.toBeVisible();

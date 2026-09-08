@@ -62,6 +62,13 @@ export interface EngagementSummary {
 	 * pre-#255 assumption). A Client with none cannot be invited to the
 	 * portal at all. */
 	clientHasEmail?: boolean;
+	/** Whether Clients can pay this Practice at all (#270), sourced from
+	 * practices.stripe_connect_card_payments_status being 'active'. A
+	 * standing fact InvoiceSection reads before ever showing the Create
+	 * Invoice form -- absent on an older cached response, which reads as
+	 * "can pay" so a stale cache never manufactures a block that isn't
+	 * real. */
+	clientsCanPay?: boolean;
 }
 
 /** ADR-0015's six named reasons a completed Engagement may carry, in the
