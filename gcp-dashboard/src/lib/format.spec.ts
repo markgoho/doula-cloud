@@ -4,6 +4,7 @@ import {
 	formatClock,
 	formatCompact,
 	formatDay,
+	formatGibibytes,
 	formatHours,
 	formatShare,
 	formatUsd
@@ -58,5 +59,15 @@ describe('formatCompact', () => {
 
 	it('says so when Cloud Monitoring reported no such metric', () => {
 		expect(formatCompact(undefined)).toBe(NOT_REPORTED);
+	});
+});
+
+describe('formatGibibytes', () => {
+	it('renders a disk quota in bytes as the GiB a bill is read in', () => {
+		expect(formatGibibytes(10_464_022_528)).toBe('9.7');
+	});
+
+	it('says so when Cloud Monitoring reported no quota', () => {
+		expect(formatGibibytes(undefined)).toBe(NOT_REPORTED);
 	});
 });

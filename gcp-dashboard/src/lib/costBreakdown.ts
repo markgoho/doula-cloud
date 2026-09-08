@@ -34,6 +34,12 @@ export const EXPORT_FRESHNESS_CAVEAT = 'the billing export lags usage by about 2
 export const CLOUD_RUN_SERVICE_DESCRIPTION = 'Cloud Run';
 
 /**
+ * How the billing export names Cloud SQL, which is what pairs the Cloud SQL
+ * usage panel with the cost that produced it.
+ */
+export const CLOUD_SQL_SERVICE_DESCRIPTION = 'Cloud SQL';
+
+/**
  * One SKU's share of a service's cost.
  */
 export interface SkuCost {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
 		CLOUD_RUN_SERVICE_DESCRIPTION,
+		CLOUD_SQL_SERVICE_DESCRIPTION,
 		EXPORT_FRESHNESS_CAVEAT,
 		findServiceCost,
 		USAGE_DETAIL_UNAVAILABLE_LABEL
@@ -11,6 +12,7 @@
 		formatClock,
 		formatCompact,
 		formatDay,
+		formatGibibytes,
 		formatHours,
 		formatShare,
 		formatUsd
@@ -21,6 +23,7 @@
 	const breakdown = $derived(sync.breakdown);
 	const usage = $derived(sync.usage);
 	const cloudRunCost = $derived(findServiceCost(breakdown, CLOUD_RUN_SERVICE_DESCRIPTION));
+	const cloudSqlCost = $derived(findServiceCost(breakdown, CLOUD_SQL_SERVICE_DESCRIPTION));
 	const isLoading = $derived(sync.state === 'loading');
 </script>
 
@@ -127,27 +130,27 @@
 						<div class="stat">
 							<dt class="stat-label">billable instance time</dt>
 							<dd class="stat-num">
-								{formatHours(usage.metrics.billableInstanceTime)}<span class="unit">hrs</span>
+								{formatHours(usage.cloudRun.billableInstanceTime)}<span class="unit">hrs</span>
 							</dd>
 						</div>
 						<div class="stat">
 							<dt class="stat-label">CPU allocated</dt>
 							<dd class="stat-num">
-								{formatCompact(usage.metrics.cpuAllocationTime)}<span class="unit">vCPU&#8209;s</span
+								{formatCompact(usage.cloudRun.cpuAllocationTime)}<span class="unit">vCPU&#8209;s</span
 								>
 							</dd>
 						</div>
 						<div class="stat">
 							<dt class="stat-label">memory allocated</dt>
 							<dd class="stat-num">
-								{formatCompact(usage.metrics.memoryAllocationTime)}<span class="unit"
+								{formatCompact(usage.cloudRun.memoryAllocationTime)}<span class="unit"
 									>GiB&#8209;s</span
 								>
 							</dd>
 						</div>
 						<div class="stat">
 							<dt class="stat-label">requests</dt>
-							<dd class="stat-num">{formatCompact(usage.metrics.requestCount)}</dd>
+							<dd class="stat-num">{formatCompact(usage.cloudRun.requestCount)}</dd>
 						</div>
 					</dl>
 
@@ -157,6 +160,39 @@
 					</p>
 				{:else}
 					<p class="caveat">Sync to see the usage that produced the Cloud Run bill.</p>
+				{/if}
+			</section>
+
+			<section class="card usage">
+				<h2>Cloud SQL usage</h2>
+
+				{#if usage}
+					<p class="panel-cost">
+						{formatUsd(cloudSqlCost)}<span class="unit">billed this period</span>
+					</p>
+
+					<!-- One stat, in the same grid the Cloud Run panel uses. Provisioned
+					     disk is the only Cloud SQL figure the bill actually moves with:
+					     compute is charged flat per instance-tier-hour, so CPU and memory
+					     utilization would be sizing signals dressed up as cost. The grid
+					     is not padded to fill itself. -->
+					<dl class="stat-grid">
+						<div class="stat">
+							<dt class="stat-label">provisioned disk</dt>
+							<dd class="stat-num">
+								{formatGibibytes(usage.cloudSql.diskQuotaBytes)}<span class="unit">GiB</span>
+							</dd>
+						</div>
+					</dl>
+
+					<p class="caveat">
+						The peak provisioned this billing period, read at {formatClock(
+							Date.parse(usage.through)
+						)} today. A quota only steps upward, so this is the size being paid for. The cost beside
+						it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+					</p>
+				{:else}
+					<p class="caveat">Sync to see the usage that produced the Cloud SQL bill.</p>
 				{/if}
 			</section>
 		</main>
@@ -191,8 +227,9 @@
 		}
 	}
 
-	/* The panels stack, whatever room the column has. There is one usage panel
-	   so far, so nothing here assumes a row of them. */
+	/* The panels stack, whatever room the column has: each one is as wide as
+	   the column, so a stat grid inside it has the same room whichever panel
+	   it is in. */
 	.main {
 		align-content: start;
 		display: grid;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMonitoringUsageSource } from './monitoringUsageSource.ts';
-import { buildUsageRequest, CLOUD_RUN_METRICS } from './usageQuery.ts';
+import { buildUsageRequest, CLOUD_RUN_SCOPE, CLOUD_SQL_SCOPE } from './usageQuery.ts';
 
 const constructed = vi.fn();
 const listTimeSeries = vi.fn();
@@ -28,6 +28,10 @@ function double(value: number) {
 	return [[{ points: [{ value: { doubleValue: value } }] }]];
 }
 
+function int64(value: string) {
+	return [[{ points: [{ value: { int64Value: value } }] }]];
+}
+
 describe('createMonitoringUsageSource', () => {
 	beforeEach(() => {
 		constructed.mockClear();
@@ -41,12 +45,15 @@ describe('createMonitoringUsageSource', () => {
 		expect(constructed).toHaveBeenCalledWith();
 	});
 
-	it('asks Monitoring for each Cloud Run metric over the billing period', async () => {
+	it('asks Monitoring for every Cloud Run and Cloud SQL metric over the billing period', async () => {
 		await createMonitoringUsageSource(now)();
 
-		expect(listTimeSeries.mock.calls.map(([request]) => request)).toEqual(
-			CLOUD_RUN_METRICS.map((metric) => buildUsageRequest(metric, readAt))
-		);
+		expect(listTimeSeries.mock.calls.map(([request]) => request)).toEqual([
+			...CLOUD_RUN_SCOPE.metrics.map((metric) =>
+				buildUsageRequest(CLOUD_RUN_SCOPE, metric, readAt)
+			),
+			...CLOUD_SQL_SCOPE.metrics.map((metric) => buildUsageRequest(CLOUD_SQL_SCOPE, metric, readAt))
+		]);
 	});
 
 	it('reads the DOUBLE the allocation-time metrics report', async () => {
@@ -54,21 +61,29 @@ describe('createMonitoringUsageSource', () => {
 
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage.metrics.billableInstanceTime).toBe(620_750.6);
+		expect(usage.cloudRun.billableInstanceTime).toBe(620_750.6);
 	});
 
 	it('reads the INT64 request count Monitoring hands back as a string', async () => {
-		listTimeSeries.mockResolvedValue([[{ points: [{ value: { int64Value: '4785' } }] }]]);
+		listTimeSeries.mockResolvedValue(int64('4785'));
 
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage.metrics.requestCount).toBe(4785);
+		expect(usage.cloudRun.requestCount).toBe(4785);
+	});
+
+	it('reads the disk quota, which is an INT64 count of bytes', async () => {
+		listTimeSeries.mockResolvedValue(int64('10464022528'));
+
+		const usage = await createMonitoringUsageSource(now)();
+
+		expect(usage.cloudSql.diskQuotaBytes).toBe(10_464_022_528);
 	});
 
 	it('leaves a metric out rather than calling an unreported one zero', async () => {
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage.metrics).toEqual({});
+		expect(usage).toMatchObject({ cloudRun: {}, cloudSql: {} });
 	});
 
 	it('leaves it out when the series came back without a point too', async () => {
@@ -76,7 +91,7 @@ describe('createMonitoringUsageSource', () => {
 
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage.metrics).toEqual({});
+		expect(usage).toMatchObject({ cloudRun: {}, cloudSql: {} });
 	});
 
 	it('leaves it out when the point carries no value at all', async () => {
@@ -84,7 +99,7 @@ describe('createMonitoringUsageSource', () => {
 
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage.metrics).toEqual({});
+		expect(usage).toMatchObject({ cloudRun: {}, cloudSql: {} });
 	});
 
 	it('says which window the figures cover, so they do not read as the cost period', async () => {

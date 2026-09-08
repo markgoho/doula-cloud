@@ -10,6 +10,8 @@ const hours = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
 
 const SECONDS_PER_HOUR = 3600;
+const BYTES_PER_GIBIBYTE = 1024 ** 3;
+const gibibytes = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 
 /**
  * Stands in for a value the billing export did not report.
@@ -61,4 +63,13 @@ export function formatHours(seconds: number | undefined): string {
  */
 export function formatCompact(value: number | undefined): string {
 	return value === undefined ? NOT_REPORTED : compact.format(value);
+}
+
+/**
+ * A count of bytes as gibibytes, e.g. `10464022528` renders as `9.7`. Cloud
+ * Monitoring reports a disk quota in bytes; a Cloud SQL bill is read in GiB.
+ * A metric Monitoring did not report renders as {@link NOT_REPORTED}.
+ */
+export function formatGibibytes(bytes: number | undefined): string {
+	return bytes === undefined ? NOT_REPORTED : gibibytes.format(bytes / BYTES_PER_GIBIBYTE);
 }
