@@ -111,6 +111,13 @@ func resolveAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext
 // Reports whether the named Staff member is an employee, which is what
 // decides whether she goes on to be granted an attachment. The string
 // comparison against employeeType lives here and nowhere else (#914).
+//
+// The three rules themselves live in decideNameable (nameable.go), which
+// AssigneesHandler's read calls too -- so the picker on the screen and
+// the refusal here cannot disagree (#911). What stayed here is the
+// gathering of the facts for one named person and the writing of the
+// refusal: which rule failed, and the sentence it has always answered
+// with, are both unchanged.
 func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID, staffID string) (isEmployee, ok bool) {
 	hasMembership, isDoula, employmentType, err := doulaMembership(r.Context(), c.tx, c.practiceID, staffID)
 	if err != nil {
@@ -118,30 +125,25 @@ func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c visitWrit
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return false, false
 	}
-	if !hasMembership {
-		apierr.WriteError(w, "staff member not found at this practice", http.StatusBadRequest)
-		return false, false
-	}
-	if !isDoula {
-		apierr.WriteError(w, "staff member does not hold the Doula role at this practice", http.StatusBadRequest)
-		return false, false
-	}
 	isEmployee = employmentType == employeeType
 	// A contractor is put on a birth by her own acceptance of an Offer
 	// and by nothing else (CONTEXT.md's Attachment entry), so handing
 	// her a Visit is refused unless she already holds the attachment
-	// that says she agreed.
-	if !isEmployee {
-		attached, err := hasGrantedAttachment(r.Context(), c.tx, engagementID, staffID)
+	// that says she agreed. Read only when the earlier two rules have
+	// already passed and she is a contractor, so a Staff member who is
+	// not a Doula here still costs one query rather than two.
+	attached := false
+	if hasMembership && isDoula && !isEmployee {
+		attached, err = hasGrantedAttachment(r.Context(), c.tx, engagementID, staffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return false, false
 		}
-		if !attached {
-			apierr.WriteError(w, "that contractor has not accepted an offer on this engagement", http.StatusBadRequest)
-			return false, false
-		}
+	}
+	if reason := decideNameable(hasMembership, isDoula, employmentType, attached); reason != "" {
+		apierr.WriteError(w, refusalMessage(reason), http.StatusBadRequest)
+		return false, false
 	}
 	return isEmployee, true
 }
@@ -187,8 +189,7 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 	err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS(
 			SELECT 1 FROM engagement_attachments
-			WHERE engagement_id = $1 AND staff_id = $2
-			  AND origin = 'granted' AND ended_at IS NULL
+			WHERE engagement_id = $1 AND staff_id = $2 AND `+grantedAttachmentPredicate+`
 		)`,
 		engagementID, staffID,
 	).Scan(&attached)

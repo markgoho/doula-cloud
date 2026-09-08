@@ -46,6 +46,14 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	// doc comment.
 	g.Get("/api/practices/{practiceId}/visits", staffauth.AnyStaff, PracticeScheduleHandler())
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, ListHandler())
+	// Who may be named on a Visit at this Engagement (#911). OwnerAndAdmin,
+	// not AnyStaff: it answers a roster question, and naming a colleague is
+	// scheduling, which ADR-0006 and ADR-0008 put with the Owner and the
+	// Admin. A sibling of /visits rather than a child of it -- it is about
+	// the Engagement, not about any one Visit, and both pickers on the page
+	// (create and reassign) read the one list.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visit-assignees",
+		staffauth.OwnerAndAdmin, AssigneesHandler())
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/visits", true, CreateHandler())
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}",
 		"plain UPDATE staff_id = $1 WHERE id = $2; sets the assignment to the given value, so re-sending the same body is a no-op",

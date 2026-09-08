@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	assigneeBlock,
+	CONTRACTOR_WITHOUT_ACCEPTED_OFFER,
 	doulaOptions,
+	loadVisitAssignees,
+	loadVisitAssigneesOrNone,
+	unnameableHint,
+	visitAssigneeOptions,
 	endSessions,
 	loadDoulas,
 	loadDoulasOrNone,
@@ -349,5 +355,114 @@ describe('doulaOptions', () => {
 				{ value: 'staff-3', label: 'Kanyakumari Balasubramanian' }
 			]);
 		});
+	});
+});
+
+/*
+ * #911. The Practice-wide roster cannot answer "may she be named on a
+ * Visit *here*", so the pickers offered names the BFF then refused with a
+ * 400. These four cover the Engagement-scoped read that replaced it and
+ * the three derivations the two pickers share.
+ */
+const nameableEmployee = {
+	staffId: 'staff-1',
+	name: 'Bess Nakamura-Oduya',
+	employmentType: 'employee',
+	nameable: true
+};
+const unattachedContractor = {
+	staffId: 'staff-2',
+	name: 'Maya Oyelaran-Fitzgerald',
+	employmentType: 'contractor',
+	nameable: false,
+	reason: CONTRACTOR_WITHOUT_ACCEPTED_OFFER
+};
+
+describe('loadVisitAssignees', () => {
+	it('asks the Engagement, not the Practice roster, and unwraps the envelope', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [nameableEmployee] }));
+
+		expect(await loadVisitAssignees(fetcher, 'practice-1', 'engagement-1')).toEqual([
+			nameableEmployee
+		]);
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/engagement-1/visit-assignees'
+		);
+	});
+
+	// The same "a refusal is an absence, an outage is an error" contract
+	// `loadDoulasOrNone` establishes, over the endpoint that replaced the
+	// roster read on the Engagement page.
+	it('answers undefined when the read refuses, and throws when it fails', async () => {
+		const refused = vi.fn().mockResolvedValue(response('not permitted to read this', 403));
+		expect(await loadVisitAssigneesOrNone(refused, 'practice-1', 'engagement-1')).toBeUndefined();
+
+		const broken = vi.fn().mockResolvedValue(response('the database is down', 500));
+		await expect(loadVisitAssigneesOrNone(broken, 'practice-1', 'engagement-1')).rejects.toThrow(
+			'the database is down'
+		);
+	});
+});
+
+describe('visitAssigneeOptions', () => {
+	// Nobody is dropped, and the one who cannot be named says so in her own
+	// label -- text, so a person listening to the picker is told too.
+	it('keeps everybody, marking the ones who cannot be named yet', () => {
+		expect(visitAssigneeOptions([nameableEmployee, unattachedContractor])).toEqual([
+			{ value: 'staff-1', label: 'Bess Nakamura-Oduya' },
+			{ value: 'staff-2', label: 'Maya Oyelaran-Fitzgerald (cannot be named yet)' }
+		]);
+	});
+
+	// One derivation, three axes (#909 + #911): the current assignee is
+	// excluded, the caller is hoisted and marked "(you)", and what is left
+	// carries this Engagement's own marking. Exclusion first, so a person
+	// filtered out is never marked either way.
+	it("composes with #909's caller and current-assignee axes, in that order", () => {
+		const excluded = { ...nameableEmployee, staffId: 'staff-3', name: 'Ada Brennan' };
+		expect(
+			visitAssigneeOptions([excluded, unattachedContractor, nameableEmployee], {
+				callerStaffId: 'staff-1',
+				currentAssigneeStaffId: 'staff-3'
+			})
+		).toEqual([
+			{ value: 'staff-1', label: 'Bess Nakamura-Oduya (you)' },
+			{ value: 'staff-2', label: 'Maya Oyelaran-Fitzgerald (cannot be named yet)' }
+		]);
+	});
+});
+
+describe('unnameableHint', () => {
+	it('explains the marker, and says nothing when nobody carries it', () => {
+		expect(unnameableHint([nameableEmployee, unattachedContractor])).toContain(
+			'Send her an Offer, then name her on a Visit'
+		);
+		expect(unnameableHint([nameableEmployee])).toBe('');
+	});
+});
+
+describe('assigneeBlock', () => {
+	const assignees = [nameableEmployee, unattachedContractor];
+
+	// The hard block, with the act that lifts it -- GOV.UK's rule that an
+	// error says what is wrong and what to do about it.
+	it('refuses a person this Engagement cannot admit, naming the remedy', () => {
+		expect(assigneeBlock(assignees, 'staff-2')).toBe(
+			'Maya Oyelaran-Fitzgerald is a contractor who has not accepted an Offer on this Engagement, so she cannot be named on a Visit here yet. Send her an Offer, then name her.'
+		);
+	});
+
+	it('refuses nothing for a person who can be named, or for no choice at all', () => {
+		expect(assigneeBlock(assignees, 'staff-1')).toBe('');
+		expect(assigneeBlock(assignees, '')).toBe('');
+	});
+
+	// Lenient on a reason this build does not recognize, for the reason
+	// `roleLabel` gives: the choice is still blocked, and the screen still
+	// says she cannot be named, rather than being thrown away over a word.
+	it('still blocks, in plainer words, on a reason it does not recognize', () => {
+		expect(
+			assigneeBlock([{ ...unattachedContractor, reason: 'some_future_rule' }], 'staff-2')
+		).toBe('Maya Oyelaran-Fitzgerald cannot be named on a Visit on this Engagement yet.');
 	});
 });
