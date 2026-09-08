@@ -14,9 +14,11 @@
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import type { FormError } from '#lib/formErrors.js';
 	import IntakeQuestion from '../IntakeQuestion.svelte';
-	import { knownAs } from '../intake.js';
+	import { DATE_OF_BIRTH_GROUP, knownAs } from '../intake.js';
 
-	const GROUP = 'intake-date-of-birth';
+	// One literal, shared with `intakeFieldIds` so the summary entry and
+	// the boxes it points at cannot drift apart.
+	const GROUP = DATE_OF_BIRTH_GROUP;
 
 	/*
 	 * The boxes hold what was typed; the draft holds the composed

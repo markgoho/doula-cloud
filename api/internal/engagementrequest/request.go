@@ -86,7 +86,13 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			practiceID, clientID, kind, dueDate, note, staffID,
 		).Scan(&requestID); err != nil {
 			if pgerr.IsUniqueViolation(err) {
-				apierr.WriteError(w, "a pending request for this client and kind already exists", http.StatusConflict)
+				// Named on the kind field, the same shape the staff
+				// invite's already-a-member 409 takes (#488): the
+				// duplicate is per client *and kind*, and kind is the one
+				// control on this form she can change to get past it.
+				apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
+					"a pending request for this client and kind already exists",
+					map[string]string{fieldKind: MsgKindAlreadyRequested})
 				return
 			}
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -150,6 +156,11 @@ func clientExists(ctx context.Context, tx *sql.Tx, clientID string) bool {
 	return exists
 }
 
+// fieldKind is the kind json tag, which this package keys both of its
+// kind-related Details under and which approve.go's activity diff
+// already spells the same way.
+const fieldKind = "kind"
+
 // The sentences this package puts in APIError.Details (#488), following
 // the GOV.UK rules app/src/lib/formErrors.ts is already gated on and
 // apierr's TestDetailsWording holds this side to.
@@ -161,6 +172,10 @@ const (
 	// MsgDueDateMalformed is the dueDate field, which may be left empty
 	// but has to be a real date when it is given at all.
 	MsgDueDateMalformed = "Enter a due date as a real date, like 2027-04-23"
+	// MsgKindAlreadyRequested is the kind field again, on the 409 a
+	// second request for the same Client and kind meets. It says what to
+	// do, since the other kind is still open to her.
+	MsgKindAlreadyRequested = "This Client already has a pending request of this kind. Choose the other kind, or withdraw the open one."
 )
 
 // parseRequestBody validates kind and, if present, dueDate. Writes its
@@ -169,7 +184,7 @@ func parseRequestBody(w http.ResponseWriter, body RequestBody) (kind string, due
 	kind = strings.TrimSpace(body.Kind)
 	if !validKinds[kind] {
 		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "kind must be 'birth' or 'postpartum'",
-			map[string]string{"kind": MsgKindNeeded})
+			map[string]string{fieldKind: MsgKindNeeded})
 		return "", sql.NullString{}, false
 	}
 	due := strings.TrimSpace(body.DueDate)

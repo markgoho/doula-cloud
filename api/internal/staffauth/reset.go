@@ -129,7 +129,7 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 		if len(req.NewPassword) < minPasswordLength {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				fmt.Sprintf("newPassword must be at least %d characters", minPasswordLength),
-				map[string]string{"newPassword": fmt.Sprintf("Password must be %d characters or more", minPasswordLength)})
+				map[string]string{"newPassword": MsgPasswordTooShort})
 			return
 		}
 

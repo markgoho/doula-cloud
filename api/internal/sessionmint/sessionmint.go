@@ -76,6 +76,12 @@ type Refusal struct {
 	Code apierr.Code
 	// Message is the body text a caller reads.
 	Message string
+	// Details is docs/api-design.md section 7's field-keyed map, for a
+	// refusal a person caused by filling in a form (#488) -- nil for
+	// most, which have no field to name. A Step that sets it is saying
+	// which control the message belongs above; accept-invite's own
+	// missing name and work state are the two that do.
+	Details map[string]string
 	// Keep tells Issue to commit the transaction despite refusing to
 	// mint, for the one caller whose step wrote something that must
 	// survive the refusal -- staffauth's accept-invite flips a pending
@@ -253,7 +259,7 @@ func writeRefusal(w http.ResponseWriter, tx *sql.Tx, ref *Refusal) (committed bo
 	if code == "" {
 		code = apierr.CodeForStatus(ref.Status)
 	}
-	apierr.Write(w, ref.Status, code, ref.Message, nil)
+	apierr.Write(w, ref.Status, code, ref.Message, ref.Details)
 	return committed
 }
 

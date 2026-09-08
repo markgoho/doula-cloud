@@ -15,16 +15,27 @@ package staffauth
 // comment gives: the same refusal has to read the same way wherever it
 // happens, and a person who trips the client check and then the server
 // one should not be told off in two different wordings.
+
 // fieldEmail is the DTO json tag every address field in this package
 // carries, and so the Details key each of their refusals is written
 // under.
 const fieldEmail = "email"
+
+// fieldWorkState is the workState json tag, which three of this
+// package's refusals key their Details under -- signup, the account
+// page's own correction, and invitation acceptance.
+const fieldWorkState = "workState"
 
 const (
 	// MsgPracticeNameNeeded is signup's practiceName field.
 	MsgPracticeNameNeeded = "Enter the name of your Practice"
 	// MsgStaffNameNeeded is signup's staffName field.
 	MsgStaffNameNeeded = "Enter your name"
+	// MsgOwnNameNeeded is the name field on the invitation-acceptance
+	// form, which is the same question signup's staffName asks -- one
+	// sentence apart because that form's own control is called `name`,
+	// and a Details key is the DTO's json tag, not the concept's.
+	MsgOwnNameNeeded = "Enter your name"
 	// MsgWorkStateNeeded is the workState field, on both the screens that
 	// ask for it -- signup and the account page's own correction (#437).
 	// The pair of MsgWorkStateRequired, which is the summary line the
@@ -54,4 +65,11 @@ const (
 	// rule only the server knows, said in the reader's words and keyed
 	// onto the control that caused it.
 	MsgMembershipAlreadyHeld = "That address already holds a membership at this Practice"
+	// MsgPasswordTooShort is the newPassword field on the reset screen.
+	// Spelled out rather than built with fmt.Sprintf from
+	// minPasswordLength: TestDetailsWording reads a literal or a constant
+	// and skips a call expression rather than guessing at it, so a
+	// formatted sentence would be the one Details value the gate cannot
+	// see. TestPasswordTooShortMatchesTheLimit keeps the number honest.
+	MsgPasswordTooShort = "Password must be 6 characters or more"
 )

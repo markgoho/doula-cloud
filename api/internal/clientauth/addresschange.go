@@ -30,6 +30,11 @@ const AddressChangeLifetime = 24 * time.Hour
 // this route. Nothing about her own account is disclosed.
 const msgNotAPortalAccount = "this is not a portal account"
 
+// fieldEmail is the email json tag every address-keyed refusal in this
+// package writes its Details under -- the address-change request's own
+// field, and the magic-link request's (#488).
+const fieldEmail = "email"
+
 // The two refusals a new address can draw, in GOV.UK's own wording
 // (ADR-0021): start with the field's noun, say what to do about it, and
 // never write "please", "valid", "invalid" or "required".
@@ -103,12 +108,12 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		// that focuses it -- a bare message would leave both adrift.
 		if address == "" {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgAddressRequired,
-				map[string]string{"email": MsgAddressRequired})
+				map[string]string{fieldEmail: MsgAddressRequired})
 			return
 		}
 		if !looksLikeAddress(address) {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgAddressMalformed,
-				map[string]string{"email": MsgAddressMalformed})
+				map[string]string{fieldEmail: MsgAddressMalformed})
 			return
 		}
 

@@ -213,11 +213,18 @@ func TestSignupHandler_MissingWorkState(t *testing.T) {
 // assert which field the BFF said was at fault (#488).
 func decodeDetails(t *testing.T, resp *http.Response) map[string]string {
 	t.Helper()
+	return decodeRefusal(t, resp).Details
+}
+
+// decodeRefusal reads a refusal's whole section 7 envelope, for a test
+// that needs Message and Details together (#488).
+func decodeRefusal(t *testing.T, resp *http.Response) apierr.APIError {
+	t.Helper()
 	var body apierr.APIError
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode refusal: %v", err)
 	}
-	return body.Details
+	return body
 }
 
 func TestSignupHandler_Success(t *testing.T) {

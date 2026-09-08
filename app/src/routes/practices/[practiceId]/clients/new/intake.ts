@@ -53,6 +53,43 @@ export function givenNameRefusal(
 		: [{ message: "Enter the Client's given name on the Name step" }];
 }
 
+/**
+ * The BFF's own field names (`client.Record`'s json tags) mapped onto
+ * the controls of the step being saved from (#488).
+ *
+ * Per-step, because intake is a sequence of pages and only one of them
+ * is showing at a time: a `givenName` refusal saved from the name step
+ * has a control right there, and the same refusal saved from the summary
+ * is a page away. An entry with nowhere useful to send the reader is
+ * rendered as plain text rather than as a link that goes nowhere, which
+ * is what an empty map here produces -- the same rule `givenNameRefusal`
+ * follows.
+ *
+ * The date group's first box is the target, which is GOV.UK's rule for a
+ * group: the group itself is a `<fieldset>` and is not focusable. The
+ * two ids are written here rather than in each page so the summary and
+ * the control cannot drift apart.
+ */
+export function intakeFieldIds(stepId: string): Record<string, string> {
+	switch (stepId) {
+		case 'name': {
+			return { givenName: GIVEN_NAME_ID };
+		}
+		case 'date-of-birth': {
+			return { dateOfBirth: `${DATE_OF_BIRTH_GROUP}-day` };
+		}
+		default: {
+			return {};
+		}
+	}
+}
+
+/**
+ * The `name` the date-of-birth step's three boxes share, which is also
+ * what each box's id is built from (`<name>-day`).
+ */
+export const DATE_OF_BIRTH_GROUP = 'intake-date-of-birth';
+
 export function basePath(practiceId: string): string {
 	return resolve('/practices/[practiceId]/clients/new', { practiceId });
 }

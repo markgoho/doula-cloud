@@ -111,7 +111,7 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		workState, ok := NormalizeWorkState(req.WorkState)
 		if !ok {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgWorkStateRequired,
-				map[string]string{"workState": MsgWorkStateNeeded})
+				map[string]string{fieldWorkState: MsgWorkStateNeeded})
 			return
 		}
 		req.WorkState = workState

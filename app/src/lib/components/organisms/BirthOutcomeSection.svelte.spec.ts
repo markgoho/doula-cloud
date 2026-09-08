@@ -9,6 +9,18 @@ const recorded: BirthOutcomeResult = {
 	facts: { birthOutcome: 'live_birth', pregnancyEndedOn: '2026-08-14' }
 };
 
+/*
+ * The map the component hands `onRecord` alongside every request (#488):
+ * the BFF's own field names against this component's control ids, so a
+ * `details` entry the endpoint sends lands on the right box. Asserted on
+ * every call rather than ignored with `expect.anything()`, because a
+ * key that stopped matching would silently untarget the refusal.
+ */
+const BIRTH_OUTCOME_FIELD_IDS = {
+	birthOutcome: 'birth-outcome-live_birth',
+	pregnancyEndedOn: 'pregnancy-ended-on-day'
+};
+
 const frozen: BirthOutcomeResult = {
 	kind: 'confirmable',
 	message: 'this Engagement already has a birth outcome; only a Practice Owner can correct it'
@@ -119,10 +131,10 @@ describe('BirthOutcomeSection', () => {
 		await chooseAndDate('The pregnancy ended without a living baby', '8', '14', '2026');
 		await page.getByRole('button', { name: 'Record this outcome' }).click();
 
-		expect(onRecord).toHaveBeenCalledWith({
-			birthOutcome: 'loss',
-			pregnancyEndedOn: '2026-08-14'
-		});
+		expect(onRecord).toHaveBeenCalledWith(
+			{ birthOutcome: 'loss', pregnancyEndedOn: '2026-08-14' },
+			BIRTH_OUTCOME_FIELD_IDS
+		);
 	});
 
 	it('sends no date, and no correction flag, for a first unknown outcome', async () => {
@@ -131,7 +143,10 @@ describe('BirthOutcomeSection', () => {
 		await page.getByLabelText('The Practice never learned what happened').click();
 		await page.getByRole('button', { name: 'Record this outcome' }).click();
 
-		expect(onRecord).toHaveBeenCalledWith({ birthOutcome: 'unknown', pregnancyEndedOn: undefined });
+		expect(onRecord).toHaveBeenCalledWith(
+			{ birthOutcome: 'unknown', pregnancyEndedOn: undefined },
+			BIRTH_OUTCOME_FIELD_IDS
+		);
 	});
 
 	it('refuses a submit with nothing chosen', async () => {
@@ -198,11 +213,10 @@ describe('BirthOutcomeSection', () => {
 		await page.getByLabelText('The baby was born alive').click();
 		await page.getByRole('button', { name: 'Save the correction' }).click();
 
-		expect(onRecord).toHaveBeenCalledWith({
-			birthOutcome: 'live_birth',
-			pregnancyEndedOn: '2026-08-14',
-			correction: true
-		});
+		expect(onRecord).toHaveBeenCalledWith(
+			{ birthOutcome: 'live_birth', pregnancyEndedOn: '2026-08-14', correction: true },
+			BIRTH_OUTCOME_FIELD_IDS
+		);
 	});
 
 	it('lets an Owner clear a wrongly recorded outcome, behind a named confirmation', async () => {
@@ -214,8 +228,11 @@ describe('BirthOutcomeSection', () => {
 			.toBeVisible();
 		await page.getByRole('dialog').getByRole('button', { name: 'Remove this record' }).click();
 
-		// eslint-disable-next-line unicorn/no-null -- the wire value for a clear.
-		expect(onRecord).toHaveBeenCalledWith({ birthOutcome: null, correction: true });
+		expect(onRecord).toHaveBeenCalledWith(
+			// eslint-disable-next-line unicorn/no-null -- the wire value for a clear.
+			{ birthOutcome: null, correction: true },
+			BIRTH_OUTCOME_FIELD_IDS
+		);
 	});
 
 	it('renders a frozen row as a confirmation an Owner presses through', async () => {
@@ -231,11 +248,10 @@ describe('BirthOutcomeSection', () => {
 
 		await page.getByRole('button', { name: 'Overwrite it with what I entered' }).click();
 
-		expect(onRecord).toHaveBeenLastCalledWith({
-			birthOutcome: 'live_birth',
-			pregnancyEndedOn: '2026-08-14',
-			correction: true
-		});
+		expect(onRecord).toHaveBeenLastCalledWith(
+			{ birthOutcome: 'live_birth', pregnancyEndedOn: '2026-08-14', correction: true },
+			BIRTH_OUTCOME_FIELD_IDS
+		);
 	});
 
 	it('reports a refusal of the pressed-through correction itself', async () => {

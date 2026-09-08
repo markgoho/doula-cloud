@@ -75,7 +75,15 @@
 		/** Owns the API call and whatever the page does with the result;
 		 * this component owns what was typed and what the answer looked
 		 * like on screen. */
-		onRecord: (request: BirthOutcomeRequest) => Promise<BirthOutcomeResult>;
+		/**
+		 * `fieldIds` maps the BFF's own field names onto this component's
+		 * controls (#488) -- passed out rather than known by the caller,
+		 * because the ids belong to the markup here.
+		 */
+		onRecord: (
+			request: BirthOutcomeRequest,
+			fieldIds: Record<string, string>
+		) => Promise<BirthOutcomeResult>;
 	}
 
 	let { outcome, endedOn, canRecord, canCorrect, onRecord }: Properties = $props();
@@ -91,6 +99,13 @@
 	   its first option -- GOV.UK's own rule, and what the hub's ending
 	   reason group already does. */
 	const OUTCOME_FIELD_ID = `${OUTCOME_NAME}-${BIRTH_OUTCOMES[0]!.value}`;
+	/* Keyed by `engagement.BirthOutcomeRequest`'s json tags (#488). The
+	   date's first box is the target, GOV.UK's rule for a group: the
+	   group itself is a <fieldset> and is not focusable. */
+	const FIELD_IDS = {
+		birthOutcome: OUTCOME_FIELD_ID,
+		pregnancyEndedOn: `${DATE_NAME}-day`
+	};
 
 	let isFormShown = $state(false);
 	let choice = $state('');
@@ -147,7 +162,7 @@
 	 * refusing anything.
 	 */
 	async function send(request: BirthOutcomeRequest): Promise<FormError[]> {
-		const result = await onRecord(request);
+		const result = await onRecord(request, FIELD_IDS);
 		if (result.kind === 'recorded') {
 			isFormShown = false;
 			return [];

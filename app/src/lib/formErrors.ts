@@ -137,11 +137,12 @@ export async function refusalMessage(response: Response): Promise<string> {
  * section 7), each one becomes its own entry, mapped through fieldIds
  * onto the control it is about -- a key with no entry in fieldIds still
  * reports its message, just with no link, the same way `authRefusal`
- * leaves a whole-submission refusal untargeted. Most endpoints don't
- * populate `details` yet (tracked on #488), so most callers see the same
- * single untargeted entry `refusalMessage` would have shown; a route
- * that passes fieldIds keeps working once its endpoint catches up,
- * with no further change on the client.
+ * leaves a whole-submission refusal untargeted. #488 gave every 4xx a
+ * person can cause by filling in a form a `details` map naming the field
+ * at fault; a refusal that belongs to no field still carries none, and
+ * reads as the single untargeted entry `refusalMessage` would have
+ * shown. A route that passes fieldIds for a key the BFF doesn't send
+ * loses nothing -- the entry is simply untargeted.
  */
 export async function refusalErrors(
 	response: Response,
@@ -238,7 +239,10 @@ export function errorsFromCause(
 	if (cause instanceof RefusalError) {
 		return targetedErrors(cause.message, cause.details, fieldIds);
 	}
-	if (cause instanceof Error) return [{ message: cause.message }];
+	// An `Error` with no message of its own says nothing a reader can
+	// act on, so it reads as ours -- the same guard `orThrownMessage`
+	// makes, kept identical so the two do not disagree.
+	if (cause instanceof Error && cause.message) return [{ message: cause.message }];
 	return [{ message: SERVICE_PROBLEM }];
 }
 

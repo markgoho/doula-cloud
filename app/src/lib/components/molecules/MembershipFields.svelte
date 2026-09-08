@@ -31,6 +31,18 @@
 		 * to agree on one string.
 		 */
 		rolesFieldId?: string;
+		/**
+		 * The `name` the employment-type radios share, which is also what
+		 * their ids are built from (`<name>-employee`). Handed in for the
+		 * same reason `rolesFieldId` is: the route builds the error
+		 * summary and the two have to agree on one string (#488).
+		 */
+		employmentTypeName?: string;
+		/**
+		 * A refusal that belongs to the employment-type group, rendered
+		 * under its legend the way `rolesError` is.
+		 */
+		employmentTypeError?: string;
 	}
 
 	let {
@@ -39,7 +51,9 @@
 		onRolesChange,
 		onEmploymentTypeChange,
 		rolesError,
-		rolesFieldId
+		rolesFieldId,
+		employmentTypeName,
+		employmentTypeError
 	}: Properties = $props();
 
 	const rolesErrorId = $props.id();
@@ -92,9 +106,11 @@
 
 	<RadioGroup
 		legend="Employment type"
+		name={employmentTypeName}
 		options={employmentOptions}
 		value={employmentType}
 		onChange={onEmploymentTypeChange}
+		error={employmentTypeError}
 	/>
 </stack-l>
 
