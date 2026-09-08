@@ -158,9 +158,11 @@
 	cannot be kind to every Client is the wrong word, never a word wanting
 	a condition, so there is no branch here to keep true.
 
-	The Practice's name has not gone anywhere: `serviceName` below folds it
-	into `<title>` and the page renders it in its service-name slot, so a
-	Client still knows whose portal she is in.
+	The Practice's name has not gone anywhere: `serviceName` below is what
+	`PageTitle` folds into `<title>`, and the portal shell above this route
+	-- `portal/(authenticated)/+layout.svelte`'s `PortalTopBar` -- renders
+	it on the page itself, which is why losing it from the `<h1>` loses
+	nothing a Client needs to know about whose portal she is in.
 -->
 <RecordDetail
 	title="Your care"

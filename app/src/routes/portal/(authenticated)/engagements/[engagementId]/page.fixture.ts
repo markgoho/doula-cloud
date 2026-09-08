@@ -3,14 +3,23 @@
  * (#595).
  *
  * `practiceName` reaches this screen two ways at once: through the
- * ancestor `+layout.ts`'s `page.data` (`RecordDetail`'s `serviceName`,
- * which is also what `<title>` is folded from) and through this route's
- * own `onMount` fetch (the summary's facts). Both carry #530's own URL,
- * since a Practice's registered name is exactly the value that broke a
- * grid track there. It no longer reaches the `<h1>`: #296 made that a
- * literal, so the hostile URL is measured here through `serviceName`
- * rather than through the heading, and `practices/[practiceId]`'s
- * fixture still puts it in an `<h1>` for `Heading`'s own sake.
+ * ancestor `+layout.ts`'s `page.data` (`RecordDetail`'s `serviceName`)
+ * and through this route's own `onMount` fetch (the summary's facts).
+ * Both carry #530's own URL, since a Practice's registered name is
+ * exactly the value that broke a grid track there.
+ *
+ * Neither is painted any more, and that is a real change this fixture
+ * has to own rather than imply. #296 made the `<h1>` a literal, and
+ * `serviceName` only ever reached `<svelte:head>` -- so the visible text
+ * this fixture now hands the sweep is the summary's Status and Due date
+ * and the two document links, with the hostile URL nowhere in it. The
+ * route genuinely renders the Practice's name nowhere itself: what a
+ * Client sees is the portal shell's `PortalTopBar`, above this route,
+ * and a fixture is not the place to invent a carrier the screen does not
+ * have. The unbreakable-string measurement lives where such a string is
+ * actually painted: `practices/[practiceId]`'s fixture still puts this
+ * very URL in an `<h1>`, and the `portal-top-bar` style-guide page
+ * measures the bar itself under a Practice name of its own.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../../routeFixture.js';

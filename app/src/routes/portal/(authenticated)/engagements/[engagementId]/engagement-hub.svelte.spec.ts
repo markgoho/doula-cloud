@@ -136,24 +136,29 @@ describe('Client portal Engagement hub', () => {
  * passing quietly.
  */
 describe("the hub's heading (#296)", () => {
+	// The fixture's own Engagement is the happy path; a state this ticket
+	// has to hold for is a spread of it, never a second record.
+	async function setup(record: unknown = detail) {
+		mockFetch(record);
+		return await render(Hub);
+	}
+
 	it("names the page with the register's own word, and greets nobody", async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		const { container } = await render(Hub);
+		await setup();
 
 		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
-		// Still exactly one <h1>, so the document outline and where a screen
-		// reader lands are unchanged by the rewording.
-		expect(container.querySelectorAll('h1')).toHaveLength(1);
-		expect(container.textContent).not.toMatch(/welcome/i);
-	});
-
-	it("keeps the Practice's name in the tab title", async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Hub);
-
-		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		// Still the page's only <h1>, so the document outline and where a
+		// screen reader lands are unchanged by the rewording. A heading is
+		// announced, so `level: 1` says this through the role tree rather
+		// than reaching past it into the DOM for a tag name.
+		expect(await page.getByRole('heading', { level: 1 }).all()).toHaveLength(1);
+		await expect.element(page.getByText(/welcome/i)).not.toBeInTheDocument();
+		// The Practice's name left the heading and not the product: it is
+		// still what `<title>` is built from, which is also what SvelteKit's
+		// navigation announcer reads aloud. The other half of that -- the
+		// name a Client *sees* -- belongs to the portal shell's own top bar
+		// and is asserted in `portal-authenticated-layout.svelte.spec.ts`,
+		// since rendering `+page.svelte` alone has no shell around it.
 		expect(document.title).toContain(practiceName);
 	});
 
@@ -161,8 +166,9 @@ describe("the hub's heading (#296)", () => {
 	// record a Client comes back to after a loss. That last one is a
 	// `completed` Engagement with no due date left to speak of and a Birth
 	// Plan she still owns -- shaped from the DTO alone, because this ticket
-	// must not read `birth_outcome` (#294 owns the surface that does) and
-	// the point here is precisely that the heading reads no such fact.
+	// must not read `birth_outcome` (#293 adds the column and #294 owns the
+	// surface that reads it), and the point here is precisely that the
+	// heading reads no such fact.
 	const records = [
 		{ name: 'an Engagement in intake', detail: { ...detail, status: 'intake' } },
 		{ name: 'an active Engagement', detail: { ...detail, status: 'active' } },
@@ -174,12 +180,10 @@ describe("the hub's heading (#296)", () => {
 	];
 
 	it.each(records)('says the same words to $name', async ({ detail: record }) => {
-		mockFetch(record);
-
-		const { container } = await render(Hub);
+		await setup(record);
 
 		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
-		expect(container.textContent).not.toMatch(/welcome/i);
+		await expect.element(page.getByText(/welcome/i)).not.toBeInTheDocument();
 	});
 });
 
