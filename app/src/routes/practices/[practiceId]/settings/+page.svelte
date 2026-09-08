@@ -77,6 +77,19 @@
 		...(isPracticeOwnerOrAdmin
 			? [
 					{
+						// #966: the flat amount this Practice charges for each
+						// Engagement kind. Gated the same notch as Getting paid
+						// and blocked addresses -- its screen reads and writes
+						// an Owner-or-Admin endpoint.
+						label: 'Rates',
+						description: 'What this Practice charges for birth and postpartum care.',
+						href: resolve('/practices/[practiceId]/settings/rates', { practiceId })
+					}
+				]
+			: []),
+		...(isPracticeOwnerOrAdmin
+			? [
+					{
 						label: 'Blocked email addresses',
 						description:
 							'The addresses Doula Cloud has stopped writing to, and why each one stopped.',
