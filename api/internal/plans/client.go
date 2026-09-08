@@ -34,17 +34,21 @@ func ClientGetBirthPlanHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		kind, err := fetchEngagementKind(r.Context(), tx, engagementID)
+		inputs, err := fetchBirthPlanInputs(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if !engagement.OffersBirthPlan(engagement.BirthPlanInputs{Kind: kind}) {
-			// ADR-0015: a Birth Plan is offered only where kind = birth.
+		if !engagement.OffersBirthPlan(inputs) {
+			// ADR-0015: a Birth Plan is offered where kind = birth (#311)
+			// and the Engagement has a living or expected baby (#294).
 			// Refused at the API independently of the portal's own nav/hub
-			// gating (#311), so a direct request for a postpartum-only
-			// Engagement never sees an empty "not yet" document.
+			// gating, so a direct request never sees an empty "not yet"
+			// document -- the same refusal a postpartum-only Engagement
+			// gets, and the same one an Engagement whose pregnancy ended
+			// in a loss gets, with nothing on the Plan Instance changed to
+			// produce it.
 			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
 			return
 		}
@@ -83,6 +87,23 @@ func ClientAcknowledgeBirthPlanHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 		clientID, _ := clientauth.ClientID(r.Context())
+
+		inputs, err := fetchBirthPlanInputs(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !engagement.OffersBirthPlan(inputs) {
+			// ADR-0015, the same gate ClientGetBirthPlanHandler carries:
+			// a Client who is not offered a Birth Plan cannot stamp
+			// client_acknowledged_at on one either. Hiding the read and
+			// leaving the write open would let a stale portal tab record
+			// that she read a document the product has stopped offering
+			// her.
+			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+			return
+		}
 
 		fields, answers, _, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -158,15 +179,21 @@ func recordBirthPlanAcknowledged(ctx context.Context, tx *sql.Tx, engagementID, 
 	return nil
 }
 
-// fetchEngagementKind reads engagementID's kind -- clientauth.Middleware
-// has already confirmed the caller's Client owns this Engagement, so this
-// is a plain lookup rather than a second ownership check.
-func fetchEngagementKind(ctx context.Context, tx *sql.Tx, engagementID string) (engagement.Kind, error) {
+// fetchBirthPlanInputs reads the two facts engagement.OffersBirthPlan
+// asks an Engagement for -- clientauth.Middleware has already confirmed
+// the caller's Client owns this Engagement, so this is a plain lookup
+// rather than a second ownership check. Neither fact leaves this
+// package: they are read to answer the derived question and discarded,
+// so the birth outcome never reaches a Client-facing response.
+func fetchBirthPlanInputs(ctx context.Context, tx *sql.Tx, engagementID string) (engagement.BirthPlanInputs, error) {
 	var kind string
-	err := tx.QueryRowContext(ctx, `SELECT kind::text FROM engagements WHERE id = $1`, engagementID).Scan(&kind)
+	var birthOutcome *string
+	err := tx.QueryRowContext(ctx,
+		`SELECT kind::text, birth_outcome::text FROM engagements WHERE id = $1`,
+		engagementID).Scan(&kind, &birthOutcome)
 	// coverage:ignore reason: clientauth.Middleware already confirmed the row exists; a query failure here is a DB-level fault, not exercised by unit tests
 	if err != nil {
-		return "", fmt.Errorf("plans: fetch engagement kind: %w", err)
+		return engagement.BirthPlanInputs{}, fmt.Errorf("plans: fetch birth plan inputs: %w", err)
 	}
-	return engagement.Kind(kind), nil
+	return engagement.BirthPlanInputs{Kind: engagement.Kind(kind), BirthOutcome: birthOutcome}, nil
 }

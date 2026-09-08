@@ -91,9 +91,13 @@
 					engagementId
 				})
 			},
-			// #311: offered only where the Engagement's kind calls for one --
-			// a postpartum-only Engagement offers no Birth Plan anywhere in
-			// the portal, this nav item included.
+			// ADR-0015's standing rule, resolved server-side and handed here
+			// as one answer: a Birth Plan is offered where the Engagement's
+			// kind calls for one (#311) and the Engagement has a living or
+			// expected baby (#294). A postpartum-only Engagement, and one
+			// whose pregnancy ended, both offer no Birth Plan anywhere in
+			// the portal -- this nav item included, and dropped from the
+			// list rather than disabled, so the focus order stays whole.
 			...(detail.offersBirthPlan
 				? [
 						{

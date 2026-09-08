@@ -161,15 +161,16 @@ func ClientGetBirthPlanPDFHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		kind, err := fetchEngagementKind(r.Context(), tx, engagementID)
+		inputs, err := fetchBirthPlanInputs(r.Context(), tx, engagementID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if !engagement.OffersBirthPlan(engagement.BirthPlanInputs{Kind: kind}) {
+		if !engagement.OffersBirthPlan(inputs) {
 			// ADR-0015, mirroring ClientGetBirthPlanHandler: refused at the
-			// API independently of the portal's own nav/hub gating (#311).
+			// API independently of the portal's own nav/hub gating
+			// (#311's kind half, #294's outcome half).
 			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
 			return
 		}

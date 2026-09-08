@@ -345,7 +345,7 @@ func TestPutTemplateHandler_Success(t *testing.T) {
 
 	putResp := putTemplate(t, srv, session, practiceID, birthPlanType, plans.TemplateResponse{Fields: []plans.Field{
 		{ID: secondFieldID, Type: "checkbox", Label: "Consent", Order: 99},
-		{ID: firstFieldID, Type: "single_select", Label: "Location", Options: []string{"Home", "Hospital"}, Order: 1},
+		{ID: firstFieldID, Type: "single_select", Label: "Location", Options: []string{"Home", hospital}, Order: 1},
 	}})
 	defer putResp.Body.Close()
 
