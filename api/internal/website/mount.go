@@ -13,7 +13,10 @@ import (
 // is published. Written by an Owner alone (PutHandler).
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, nudge tasknudge.Enqueuer) {
 	g.Get("/api/practices/{practiceId}/website", staffauth.AnyStaff, GetHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/website",
+	// Owner-only declared here rather than in PutHandler (#1016,
+	// following #970 and #990), so the rule is visible at the route table
+	// and guarded by GatedWrite's startup panic.
+	ir.ExemptGated("PUT /api/practices/{practiceId}/website",
 		"one declaration per Practice, replaced whole (PUT semantics) -- the handler's own doc comment already says re-sending the same body is safe -- and the rebuild nudge only fires when the page becomes newly stale",
-		false, PutHandler(nudge))
+		false, staffauth.OwnerOnly, PutHandler(nudge))
 }

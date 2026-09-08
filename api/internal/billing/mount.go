@@ -9,7 +9,10 @@ import (
 // Admin only, ADR-0008) and the Checkout Session purchase kicks off.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, stripeClient StripeClient) {
 	g.Get("/api/practices/{practiceId}/billing", staffauth.OwnerAndAdmin, GetBalanceHandler(stripeClient))
-	ir.Exempt("POST /api/practices/{practiceId}/billing/purchases",
+	// The purchase declares the same OwnerAndAdmin seat as the balance
+	// read above, here rather than in PostPurchaseHandler (#1016,
+	// following #970 and #990).
+	ir.ExemptGated("POST /api/practices/{practiceId}/billing/purchases",
 		"creates a Stripe Checkout Session URL only; the ledger is credited by the purchase webhook against the actual completed payment, so a duplicate call yields an extra unused Checkout Session, never a double charge or double credit",
-		false, PostPurchaseHandler(stripeClient))
+		false, staffauth.OwnerAndAdmin, PostPurchaseHandler(stripeClient))
 }

@@ -13,7 +13,10 @@ import (
 // RLS).
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	g.Get("/api/practices/{practiceId}/client-field-template", staffauth.AnyStaff, GetHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/client-field-template",
+	// Owner-or-Admin declared here rather than in PutHandler (#1016,
+	// following #970 and #990); client_field_templates_insert/_update
+	// enforce the same rule again in RLS.
+	ir.ExemptGated("PUT /api/practices/{practiceId}/client-field-template",
 		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
-		false, PutHandler())
+		false, staffauth.OwnerAndAdmin, PutHandler())
 }

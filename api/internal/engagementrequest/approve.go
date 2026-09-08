@@ -41,9 +41,16 @@ const liveEngagementWarning = "this client already has a live engagement"
 // ErrNoCreditsRemaining path, which must queue the out-of-Credits
 // Notification on a connection that survives this request's own
 // rollback (mirrors the pre-#397 engagement.CreateHandler this replaces).
+//
+// Owner and Admin is declared at the mount, not checked here (#1016,
+// following #970's and #990's own move): the handler no longer calls
+// staffauth.RequireOwnerOrAdmin, because a Doula is refused by the gate
+// before this runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func ApproveHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

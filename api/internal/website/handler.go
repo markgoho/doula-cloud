@@ -51,15 +51,18 @@ func GetHandler() http.Handler {
 // Owner only. She is the person Stripe onboards, the person whose
 // statement descriptor the declared URL sets, and the person the
 // published page speaks for -- the same rule the payments screen already
-// applies to starting Connect onboarding. Enforced by
-// staffauth.RequireOwner at the boundary rather than by the screen
-// hiding a button.
+// applies to starting Connect onboarding. Enforced at the boundary
+// rather than by the screen hiding a button: declared at the mount
+// (#1016, following #970's and #990's own move), so the handler no
+// longer calls staffauth.RequireOwner itself, and widening or narrowing
+// the route means editing its role list in mount.go.
 //
 // PUT, not POST: one answer per Practice, replaced whole, so re-sending
 // the same body is safe and needs no Idempotency-Key.
 func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

@@ -17,9 +17,13 @@ var validRoles = map[string]bool{roleOwner: true, roleAdmin: true, "doula": true
 // holds the 'owner' role at that Practice, writing the appropriate error
 // response itself if not. Zero-query: the Reader already carries the
 // roles Middleware resolved for this request. Shared by Owner-only
-// handlers across packages (invite, role assignment, here, and
-// billing.PostPurchaseHandler) the same way RequireTx is -- exported so
-// billing doesn't need its own copy of the owner check.
+// handlers across packages (invite, role assignment, Practice deletion,
+// export, and client.EraseEligibilityHandler) the same way RequireTx is
+// -- exported so no package needs its own copy of the owner check. A
+// write whose Owner-only rule is the whole rule belongs at the mount
+// instead, through idempotency.Router.ExemptGated (#970, #990, #1016);
+// what is left here is the GETs and the routes mounted outside that
+// door.
 func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {
@@ -77,12 +81,15 @@ func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sq
 	return tx, practiceID, true
 }
 
-// RequireOwnerOrAdmin is RequireOwner widened by one role, for the writes
-// ADR-0008 puts in an Admin's hands as well as an Owner's -- making an
-// Offer, withdrawing one, completing an Engagement. Owner-only stays the
-// default for anything that changes who is at the Practice at all
+// RequireOwnerOrAdmin is RequireOwner widened by one role, for the acts
+// ADR-0008 puts in an Admin's hands as well as an Owner's -- completing
+// an Engagement, and the Owner/Admin reads that carry the same seat
+// (contracts.awaiting, engagementrequest.List/Detail). Owner-only stays
+// the default for anything that changes who is at the Practice at all
 // (inviting, editing a Membership); this is for running the work.
-// Zero-query, for the same reason RequireOwner is.
+// Zero-query, for the same reason RequireOwner is. As with RequireOwner,
+// a write whose Owner-or-Admin rule is the whole rule declares it at the
+// mount instead (#970, #990, #1016), not here.
 func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {

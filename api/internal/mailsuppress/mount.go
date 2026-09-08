@@ -12,7 +12,9 @@ import (
 // roster it is drawn from.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, bounceClearer BounceClearer) {
 	g.Get("/api/practices/{practiceId}/email-suppressions", staffauth.OwnerAndAdmin, ListHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/email-suppressions/clear",
+	// Clearing declares the same OwnerAndAdmin seat as the list above,
+	// here rather than in ClearHandler (#1016, following #970 and #990).
+	ir.ExemptGated("POST /api/practices/{practiceId}/email-suppressions/clear",
 		"state-guarded UPDATE ... WHERE cleared_at IS NULL AND cause = 'bounce', and Mailgun's own DELETE answers 404 for an address already off its list; a retry after the first commit 404s instead of clearing twice",
-		false, ClearHandler(bounceClearer))
+		false, staffauth.OwnerAndAdmin, ClearHandler(bounceClearer))
 }

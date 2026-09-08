@@ -23,12 +23,15 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, nudge t
 	// order a person meets them.
 	g.Get("/api/practices/{practiceId}/engagement-requests", staffauth.OwnerAndAdmin, ListHandler())
 	g.Get("/api/practices/{practiceId}/engagement-requests/{requestId}", staffauth.OwnerAndAdmin, DetailHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/approve",
+	// approve and refuse declare their Owner-or-Admin rule here rather
+	// than in the handler (#1016, following #970 and #990) -- the same
+	// seat the two reads above already declare.
+	ir.ExemptGated("POST /api/practices/{practiceId}/engagement-requests/{requestId}/approve",
 		"approve() locks the Request FOR UPDATE and checks state = pending inside the same transaction; a retry after the first commit finds it already decided and 409s instead of creating a second Engagement or spending a second Credit",
-		false, ApproveHandler(db, nudge))
-	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/refuse",
+		false, staffauth.OwnerAndAdmin, ApproveHandler(db, nudge))
+	ir.ExemptGated("POST /api/practices/{practiceId}/engagement-requests/{requestId}/refuse",
 		"state-guarded UPDATE ... WHERE state = 'pending'; a retry after the first commit affects zero rows and 409s instead of refusing twice",
-		false, RefuseHandler())
+		false, staffauth.OwnerAndAdmin, RefuseHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/engagement-requests/{requestId}/withdraw",
 		"state-guarded UPDATE ... WHERE requested_by = $1 AND state = 'pending'; a retry after the first commit affects zero rows and 409s instead of withdrawing twice",
 		false, WithdrawHandler())

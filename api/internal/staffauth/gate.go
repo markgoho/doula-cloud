@@ -152,12 +152,12 @@ func (g *GatedRouter) Write(pattern string, h http.Handler) {
 // or contractor, no matter what she is attached to, which AttachingWrite's
 // reach test cannot express (it asks "can she reach this Engagement",
 // never "is this act hers to do"). A role-gated write is not new by
-// itself -- payments.PutBillingModeHandler, payments.PostManualPaymentHandler,
-// the by-hand Invoice void/write-off, and practicerate.PutRateHandler all
-// checked staffauth.RequireOwner/RequireOwnerOrAdmin in-handler before
-// #990 moved them here, invisible to any startup guardrail the same way
-// Contract void was -- what is new here is the mount declaring it, the
-// way GET already does. roles
+// itself -- the payments and rate writes #990 moved here, and the nine
+// Offer, Engagement Request, suppression, purchase, erasure, website and
+// Client Field Template writes #1016 moved after them, all checked
+// staffauth.RequireOwner/RequireOwnerOrAdmin in-handler first, invisible
+// to any startup guardrail the same way Contract void was -- what is new
+// here is the mount declaring it, the way GET already does. roles
 // must be non-empty -- pass AnyStaff to declare the write open to any
 // Staff member who reaches it, the same opt-out Get uses. Panics at
 // startup if roles is empty, so a forgotten declaration fails the binary
