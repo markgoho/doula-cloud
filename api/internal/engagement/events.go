@@ -31,8 +31,8 @@ type statusEvent struct {
 // Record: this is ADR-0015's own staff-only audit table, distinct from
 // the (portal-visible-by-default) activity ledger TransitionHandler also
 // writes to for the two moves ADR-0022 names -- see TransitionHandler's
-// own doc comment. #293's own writer (birth_outcome) will call this
-// table with event_type = 'birth_outcome_recorded' the same way.
+// own doc comment. recordOutcomeEvent below is this table's second
+// writer, under event_type 'birth_outcome_recorded' (#293).
 func recordStatusEvent(ctx context.Context, tx *sql.Tx, e statusEvent) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO engagement_events
@@ -44,6 +44,43 @@ func recordStatusEvent(ctx context.Context, tx *sql.Tx, e statusEvent) error {
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("engagement: record status event: %w", err)
+	}
+	return nil
+}
+
+// outcomeEvent is one row RecordBirthOutcomeHandler writes to
+// engagement_events -- the same table and the same both-sides shape
+// statusEvent uses, under event_type 'birth_outcome_recorded'. One event
+// type covers recording and correcting alike: a row whose previous side
+// is null is a first recording, one whose previous side is set is a
+// correction, and one whose new side is null un-records a value entered
+// on the wrong Engagement -- so the distinction is read off the row
+// rather than asserted twice.
+type outcomeEvent struct {
+	practiceID               string
+	engagementID             string
+	previousBirthOutcome     *string
+	birthOutcome             *string
+	previousPregnancyEndedOn *string
+	pregnancyEndedOn         *string
+	actorStaffID             *string
+}
+
+// recordOutcomeEvent writes one 'birth_outcome_recorded'
+// engagement_events row.
+func recordOutcomeEvent(ctx context.Context, tx *sql.Tx, e outcomeEvent) error {
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO engagement_events
+		     (practice_id, engagement_id, event_type,
+		      previous_birth_outcome, birth_outcome,
+		      previous_pregnancy_ended_on, pregnancy_ended_on, actor_staff_id)
+		 VALUES ($1, $2, 'birth_outcome_recorded', $3, $4, $5::date, $6::date, $7)`,
+		e.practiceID, e.engagementID,
+		e.previousBirthOutcome, e.birthOutcome,
+		e.previousPregnancyEndedOn, e.pregnancyEndedOn, e.actorStaffID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("engagement: record outcome event: %w", err)
 	}
 	return nil
 }

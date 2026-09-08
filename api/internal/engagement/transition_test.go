@@ -136,10 +136,10 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 		roles          []string
 		employmentType string
 	}{
-		{"owner", []string{ownerRole}, employeeType},
-		{"admin", []string{adminRole}, employeeType},
-		{"employee doula", []string{doulaRole}, employeeType},
-		{"contractor doula", []string{doulaRole}, "contractor"},
+		{ownerRole, []string{ownerRole}, employeeType},
+		{adminRole, []string{adminRole}, employeeType},
+		{employeeDoulaKind, []string{doulaRole}, employeeType},
+		{"contractor doula", []string{doulaRole}, contractorType},
 	}
 
 	for _, move := range moves {
@@ -152,7 +152,7 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 				srv := newTransitionServer(t, db)
 
 				isReopen := move.from == engagement.StatusCompleted && move.to == engagement.StatusActive
-				wantOK := rk.employmentType != "contractor" && (!isReopen || rk.kind != "employee doula")
+				wantOK := rk.employmentType != contractorType && (!isReopen || rk.kind != employeeDoulaKind)
 
 				status, body := transitionAs(t, db, srv, uid, practiceID, engagementID,
 					transitionBody(move.to, move.endingReason, ""))
