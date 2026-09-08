@@ -57,6 +57,7 @@ func TestListActivityHandler_EmployeeDoulaSeesMoneyEntries(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(doulaID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.SystemActor())
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSent), activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractPriced), activity.StaffActor(doulaID))
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -70,8 +71,8 @@ func TestListActivityHandler_EmployeeDoulaSeesMoneyEntries(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got.Items) != 5 {
-		t.Fatalf("employee Doula got %d items, want 5 (no filtering)", len(got.Items))
+	if len(got.Items) != 6 {
+		t.Fatalf("employee Doula got %d items, want 6 (no filtering)", len(got.Items))
 	}
 }
 
@@ -79,7 +80,9 @@ func TestListActivityHandler_EmployeeDoulaSeesMoneyEntries(t *testing.T) {
 // the contractor column: neither Invoice/payment nor the Practice's
 // Contract price ever reach her, per ADR-0008 as amended by #282 ("her
 // own agreed fee only ... never the Practice's price"). Her own Offer
-// acceptance is not in the money set and stays visible.
+// acceptance and the Contract entity's own lifecycle (#972: no longer in
+// the money set) both stay visible; only the price itself
+// (contract_priced) and Invoice/payment history are held back.
 func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "contractor-activity-money"
@@ -90,6 +93,7 @@ func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.
 
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferAccepted), activity.StaffActor(contractorID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSigned), activity.ClientActor(clientID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractPriced), activity.StaffActor(contractorID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoicePaid), activity.SystemActor())
 
 	srv, session := newServer(t, db, identityUID)
@@ -104,8 +108,12 @@ func TestListActivityHandler_ContractorExcludesMoneyAndPracticePrice(t *testing.
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionOfferAccepted) {
-		t.Fatalf("contractor got %+v, want exactly [offer_accepted]", got.Items)
+	gotActions := map[string]bool{}
+	for _, item := range got.Items {
+		gotActions[item.Action] = true
+	}
+	if len(got.Items) != 2 || !gotActions[string(activity.ActionOfferAccepted)] || !gotActions[string(activity.ActionContractSigned)] {
+		t.Fatalf("contractor got %+v, want exactly [offer_accepted, contract_signed]", got.Items)
 	}
 }
 

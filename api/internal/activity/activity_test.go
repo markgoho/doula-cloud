@@ -144,14 +144,9 @@ func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
 		got[a] = true
 	}
 	want := []activity.EngagementAction{
-		activity.ActionContractCreated,
-		activity.ActionContractSent,
-		activity.ActionContractSigned,
-		activity.ActionContractVoided,
+		activity.ActionContractPriced,
 		activity.ActionContractAmountOverridden,
 		activity.ActionContractAmountRepriced,
-		activity.ActionContractVoidRequested,
-		activity.ActionContractVoidDeclined,
 		activity.ActionInvoiceRaised,
 		activity.ActionInvoicePaid,
 		activity.ActionPaymentRecorded,

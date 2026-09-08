@@ -70,12 +70,17 @@ func buildMoneyActionsNotIn() string {
 // activitygate.CanAccessSubject gate (#485), which reuses the same
 // reader.CanAccessEngagement check visit.ListHandler and DetailHandler
 // apply: 404s a contractor with no open, granted attachment exactly as
-// they do. The money filter beneath that gate is ADR-0008's read table,
-// via activitygate.Bypasses/RestrictedActions: Owner and Admin see every
-// entry; anyone else -- an employed Doula or a contractor alike -- never
-// sees a Contract-price or Invoice/payment entry, applied as a SQL
-// predicate so no row it excludes ever leaves the database. Must be
-// mounted behind staffauth.Middleware.
+// they do. The money filter beneath that gate is ADR-0008's read table as
+// amended by #282, via activitygate.Bypasses/RestrictedActions: Owner,
+// Admin and an employed Doula see every entry; only a contractor never
+// sees the Practice's Contract price (contract_priced,
+// contract_amount_overridden, contract_amount_repriced) or an
+// Invoice/payment entry -- the Contract entity's own lifecycle
+// (contract_created, contract_sent, contract_signed, contract_voided,
+// contract_void_requested, contract_void_declined) carries no price and
+// reaches her the same as anyone else (#972). Applied as a SQL predicate
+// so no row it excludes ever leaves the database. Must be mounted behind
+// staffauth.Middleware.
 func ListActivityHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)

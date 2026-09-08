@@ -84,10 +84,31 @@ const (
 	// engagement.TransitionHandler.
 	ActionCarePhaseChanged EngagementAction = "care_phase_changed"
 
+	// ActionContractCreated, ActionContractSent, ActionContractSigned and
+	// ActionContractVoided name the Contract *entity*'s own lifecycle --
+	// not in moneyActions below (#972): an employed Doula performs three
+	// of these four herself under #282, and a rule that hid a person's
+	// own act from her was incoherent. #967 gave a Contract's amount a
+	// real column, so none of these four carries a price in its diff any
+	// more either -- ActionContractPriced is the one action that does.
 	ActionContractCreated EngagementAction = "contract_created"
 	ActionContractSent    EngagementAction = "contract_sent"
 	ActionContractSigned  EngagementAction = "contract_signed"
 	ActionContractVoided  EngagementAction = "contract_voided"
+
+	// ActionContractPriced records a Contract's amount being set for the
+	// first time, at creation -- PostContractHandler's own write,
+	// alongside (never instead of) ActionContractCreated (#972). Diff
+	// carries amountCentsBefore (always 0: nothing existed to have a
+	// price before) and amountCentsAfter, the same shape
+	// ActionContractAmountOverridden and ActionContractAmountRepriced
+	// already use, so a reader never needs a fourth diff shape for a
+	// Contract's price. In the money set: this is the fact
+	// ActionContractCreated's own diff used to carry until #972 moved it
+	// out, when leaving it in ActionContractCreated's diff would have
+	// leaked the Practice's price to a contractor now that entity action
+	// is unrestricted.
+	ActionContractPriced EngagementAction = "contract_priced"
 
 	// ActionContractAmountOverridden records an Owner or an Admin
 	// overriding a Contract's rate-card-derived amount (#967) -- Diff
@@ -215,35 +236,30 @@ const (
 	ActionPushNotificationsDisabled EngagementAction = "push_notifications_disabled"
 )
 
-// moneyActions is what ADR-0008's read table keeps off an employed
-// Doula's ledger, and off a contractor's alongside it: the Practice's
-// price (Contract) and its Invoice/payment history. A contractor's own
-// agreed fee is a different fact -- it lives on the Offer she accepted,
-// which is not in this set and stays on her ledger.
+// moneyActions is what ADR-0008's read table keeps off a contractor's
+// ledger: the Practice's price (Contract) and its Invoice/payment
+// history. It no longer keeps these off an employed Doula's, per #282 --
+// bypassesRestriction (api/internal/activitygate/gate.go) is what still
+// admits her. A contractor's own agreed fee is a different fact -- it
+// lives on the Offer she accepted, which is not in this set and stays on
+// her ledger.
+//
+// #972 removed ActionContractCreated, ActionContractSent,
+// ActionContractSigned and ActionContractVoided from this set: none of
+// the four carries a price any more (ActionContractPriced does), so
+// hiding the Contract *entity*'s own lifecycle from a contractor served
+// no purpose ADR-0008's money tier actually asks for -- only the price
+// itself does. ActionContractVoidRequested and ActionContractVoidDeclined
+// (#971) stay out for the same reason: neither carries a dollar figure.
 var moneyActions = map[EngagementAction]bool{
-	ActionContractCreated:          true,
-	ActionContractSent:             true,
-	ActionContractSigned:           true,
-	ActionContractVoided:           true,
+	ActionContractPriced:           true,
 	ActionContractAmountOverridden: true,
 	ActionContractAmountRepriced:   true,
-	// ActionContractVoidRequested and ActionContractVoidDeclined join the
-	// rest of the Contract lifecycle here, not because either names a
-	// dollar figure -- a request's reason and a decline's reason carry
-	// none -- but because every entry above already groups by *entity*
-	// (any ledger row about the Contract) rather than by whether that
-	// specific row happens to show a price, and a contractor's own
-	// ledger read hides the whole entity the same way (ADR-0008: "Money
-	// entries in the activity ledger ... contractor: ✗"). Splitting these
-	// two out as the one Contract action a contractor can read would be
-	// the drift, not the consistency.
-	ActionContractVoidRequested: true,
-	ActionContractVoidDeclined:  true,
-	ActionInvoiceRaised:         true,
-	ActionInvoicePaid:           true,
-	ActionPaymentRecorded:       true,
-	ActionInvoiceVoided:         true,
-	ActionInvoiceWrittenOff:     true,
+	ActionInvoiceRaised:            true,
+	ActionInvoicePaid:              true,
+	ActionPaymentRecorded:          true,
+	ActionInvoiceVoided:            true,
+	ActionInvoiceWrittenOff:        true,
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,
