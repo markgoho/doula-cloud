@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/testdb"
@@ -242,32 +243,12 @@ func TestPostContractHandler_RecordsCreatedAndPricedSeparately(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 
-	var createdActorStaffID string
-	var createdDiff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id, diff FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_created'`,
-		engagementID,
-	).Scan(&createdActorStaffID, &createdDiff); err != nil {
-		t.Fatalf("query contract_created activity: %v", err)
-	}
-	if createdActorStaffID != staffID {
-		t.Fatalf("contract_created actor_staff_id = %q, want %q", createdActorStaffID, staffID)
-	}
+	createdDiff := assertActivityActor(t, db, engagementID, activity.ActionContractCreated, staffID)
 	if string(createdDiff) != "{}" {
 		t.Fatalf("contract_created diff = %q, want no price carried -- it left the money set (#972)", createdDiff)
 	}
 
-	var pricedActorStaffID string
-	var pricedDiff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id, diff FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_priced'`,
-		engagementID,
-	).Scan(&pricedActorStaffID, &pricedDiff); err != nil {
-		t.Fatalf("query contract_priced activity: %v", err)
-	}
-	if pricedActorStaffID != staffID {
-		t.Fatalf("contract_priced actor_staff_id = %q, want %q", pricedActorStaffID, staffID)
-	}
+	pricedDiff := assertActivityActor(t, db, engagementID, activity.ActionContractPriced, staffID)
 	var parsedDiff struct {
 		AmountCentsBefore int64 `json:"amountCentsBefore"`
 		AmountCentsAfter  int64 `json:"amountCentsAfter"`

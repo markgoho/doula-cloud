@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/testdb"
@@ -151,21 +152,11 @@ func TestPostVoidRequestHandler_Success(t *testing.T) {
 	}
 
 	// #1012's own AC: the request lands in the activity ledger too, not
-	// just the response body -- a direct SELECT, mirroring
-	// amount_test.go's own TestPutContractAmountHandler_Success, so this
-	// stays independent of #972's read-side money filter, which dropped
-	// this action from the money set without changing what row is
-	// written.
-	var actorStaffID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_void_requested'`,
-		engagementID,
-	).Scan(&actorStaffID); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
-	if actorStaffID != staffID {
-		t.Fatalf("actor_staff_id = %q, want %q (the requester)", actorStaffID, staffID)
-	}
+	// just the response body -- a direct SELECT, so this stays
+	// independent of #972's read-side money filter, which dropped this
+	// action from the money set without changing what row is written.
+	// The actor must be the requester.
+	assertActivityActor(t, db, engagementID, activity.ActionContractVoidRequested, staffID)
 }
 
 // TestPostVoidRequestHandler_DuplicateOpenRefused proves the same person
@@ -323,16 +314,7 @@ func TestPostVoidRequestDeclineHandler_Success(t *testing.T) {
 
 	// #1012's own AC: the decline lands in the activity ledger too, actor
 	// the decliner (adminID) rather than the original requester.
-	var actorStaffID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_void_declined'`,
-		engagementID,
-	).Scan(&actorStaffID); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
-	if actorStaffID != adminID {
-		t.Fatalf("actor_staff_id = %q, want %q (the decliner)", actorStaffID, adminID)
-	}
+	assertActivityActor(t, db, engagementID, activity.ActionContractVoidDeclined, adminID)
 }
 
 // TestPostVoidRequestDeclineHandler_AlreadyResolved proves a second

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
@@ -165,17 +166,7 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 		t.Fatalf("values[price] after override = %q, want %q", getOut.Values[priceKey], "$300.00")
 	}
 
-	var action, actorStaffID string
-	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT action, actor_staff_id, diff FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'contract_amount_overridden'`,
-		engagementID,
-	).Scan(&action, &actorStaffID, &diff); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
-	if actorStaffID != staffID {
-		t.Fatalf("actor_staff_id = %q, want %q", actorStaffID, staffID)
-	}
+	diff := assertActivityActor(t, db, engagementID, activity.ActionContractAmountOverridden, staffID)
 	var parsedDiff struct {
 		AmountCentsBefore int64 `json:"amountCentsBefore"`
 		AmountCentsAfter  int64 `json:"amountCentsAfter"`
