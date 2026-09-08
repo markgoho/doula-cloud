@@ -61,9 +61,16 @@ type CreateResponse struct {
 // registered rather than fired because Middleware's commit -- which
 // decides whether that row survives at all -- runs after this handler
 // has returned.
+//
+// Owner and Admin is declared at the mount, not checked here (#1016,
+// following #970's and #990's own move): the handler no longer calls
+// staffauth.RequireOwnerOrAdmin, because a Doula is refused by the gate
+// before this runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

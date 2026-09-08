@@ -17,9 +17,15 @@ var validRoles = map[string]bool{roleOwner: true, roleAdmin: true, "doula": true
 // holds the 'owner' role at that Practice, writing the appropriate error
 // response itself if not. Zero-query: the Reader already carries the
 // roles Middleware resolved for this request. Shared by Owner-only
-// handlers across packages (invite, role assignment, here, and
-// billing.PostPurchaseHandler) the same way RequireTx is -- exported so
-// billing doesn't need its own copy of the owner check.
+// handlers across packages -- inside staffauth (invite, role assignment,
+// the MFA switch, ending sessions, the recovery vouch) and outside it
+// (Practice deletion, export, payments Connect onboarding, and
+// client.EraseEligibilityHandler) -- the same way RequireTx is, exported
+// so no package needs its own copy of the owner check. A write whose
+// Owner-only rule is the whole rule can declare it at the mount instead,
+// through idempotency.Router.ExemptGated (#970, #990, #1016); the calls
+// left here are the GETs, whose role the mount already declares through
+// GatedRouter.Get, and the writes not yet moved.
 func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {
@@ -77,12 +83,15 @@ func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sq
 	return tx, practiceID, true
 }
 
-// RequireOwnerOrAdmin is RequireOwner widened by one role, for the writes
-// ADR-0008 puts in an Admin's hands as well as an Owner's -- making an
-// Offer, withdrawing one, completing an Engagement. Owner-only stays the
-// default for anything that changes who is at the Practice at all
-// (inviting, editing a Membership); this is for running the work.
-// Zero-query, for the same reason RequireOwner is.
+// RequireOwnerOrAdmin is RequireOwner widened by one role, for what
+// ADR-0008 puts in an Admin's hands as well as an Owner's: running the
+// work, rather than deciding who is at the Practice at all (inviting,
+// editing a Membership), which stays Owner-only. Zero-query, for the
+// same reason RequireOwner is. Every caller left is a GET whose seat the
+// mount already declares through GatedRouter.Get -- the awaiting-signature
+// and awaiting-void-decision reads, and the Engagement Request list and
+// detail -- because a write whose Owner-or-Admin rule is the whole rule
+// declares it at the mount instead (#970, #990, #1016), not here.
 func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {

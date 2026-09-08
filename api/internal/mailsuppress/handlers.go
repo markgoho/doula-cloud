@@ -69,13 +69,17 @@ type clearRequest struct {
 // part may legitimately contain '+' and '/', and a path segment is the
 // one place those need escaping that callers reliably forget.
 //
-// Owner or Admin, per staffauth.RequireOwnerOrAdmin's own division --
-// Owner-only guards who is at the Practice at all, and this is running
-// the work: an address that bounced once cannot receive the invite,
-// the Contract, or the payment notice until somebody lifts it.
+// Owner or Admin, per ADR-0008's own division -- Owner-only guards who
+// is at the Practice at all, and this is running the work: an address
+// that bounced once cannot receive the invite, the Contract, or the
+// payment notice until somebody lifts it. That rule is declared at the
+// mount (#1016, following #970's and #990's own move), not checked here:
+// the handler no longer calls staffauth.RequireOwnerOrAdmin, because a
+// Doula is refused by the gate before this runs.
 func ClearHandler(clearer BounceClearer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

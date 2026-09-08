@@ -98,9 +98,16 @@ type erasureScope struct {
 // quietly collapse back onto the other.
 //
 // Must be mounted behind staffauth.Middleware.
+//
+// Owner-only is declared at the mount, not checked here (#1016,
+// following #970's and #990's own move): the handler no longer calls
+// staffauth.RequireOwner, because an Admin or a Doula is refused by the
+// gate before this runs. Widening or narrowing this route means editing
+// its role list in mount.go.
 func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
@@ -202,8 +209,10 @@ func EraseEligibilityHandler() http.Handler {
 			// coverage:ignore reason: belt-and-braces -- client.Mount's own
 			// OwnerOnly declaration (g.Get) already refuses a non-owner caller
 			// before this handler runs, so !ok is unreachable through the real
-			// mount. EraseHandler's own RequireOwner above has no such mount-level
-			// gate (writes carry none, ADR-0008) and stays the real enforcement.
+			// mount. Since #1016 the erasure POST is declared the same way
+			// (ir.ExemptGated with staffauth.OwnerOnly), so this in-handler
+			// call is the redundant half of a pair, not the last line of
+			// defense it once was.
 			return
 		}
 		clientID := r.PathValue("clientId")

@@ -31,9 +31,16 @@ type PurchaseResponse struct {
 // is never credited here -- only PostPurchaseWebhookHandler does that,
 // once Stripe confirms the payment actually succeeded. Must be mounted
 // behind staffauth.Middleware.
+//
+// Owner and Admin is declared at the mount, not checked here (#1016,
+// following #970's and #990's own move): the handler no longer calls
+// staffauth.RequireOwnerOrAdmin, because a Doula is refused by the gate
+// before this runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

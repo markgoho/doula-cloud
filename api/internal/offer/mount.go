@@ -33,7 +33,12 @@ var offerRules = []ratelimit.Rule{
 // exists yet, authenticated by the Invitation token and the emailed
 // access code, so both sit outside staffauth.Middleware entirely.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, nudge tasknudge.Enqueuer) {
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/offers", false, CreateHandler(nudge))
+	// #1016 moved CreateHandler's Owner-or-Admin rule from an in-handler
+	// staffauth.RequireOwnerOrAdmin call to this declaration, through
+	// ReplayableGated (#990's door for a write that needs both a role
+	// gate and Wrap): making an Offer stays Replayable, because a
+	// double-click must not send the same Offer twice.
+	ir.ReplayableGated("POST /api/practices/{practiceId}/engagements/{engagementId}/offers", false, staffauth.OwnerAndAdmin, CreateHandler(nudge))
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/offers", staffauth.OwnerAndAdmin, EngagementListHandler())
 	g.Get("/api/practices/{practiceId}/offers", staffauth.AnyStaff, InboxHandler())
 	ir.Exempt("POST /api/practices/{practiceId}/offers/{offerId}/accept",
@@ -42,9 +47,13 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, nudge t
 	ir.Exempt("POST /api/practices/{practiceId}/offers/{offerId}/decline",
 		"documented idempotent by design (#229): declining an already-declined Offer succeeds again rather than erroring",
 		false, DeclineHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/offers/{offerId}/withdraw",
+	// Owner-or-Admin declared here rather than in WithdrawHandler (#1016,
+	// following #970 and #990): taking an Offer back is the Practice's
+	// half of #229, not a reach question, so the mount is where the rule
+	// belongs.
+	ir.ExemptGated("POST /api/practices/{practiceId}/offers/{offerId}/withdraw",
 		"state-guarded UPDATE ... WHERE state = 'offered'; a retry after the first commit affects zero rows and 409s instead of withdrawing twice",
-		false, WithdrawHandler())
+		false, staffauth.OwnerAndAdmin, WithdrawHandler())
 
 	g.OpenGet("/api/offers/{offerId}",
 		"pre-account Offer read (ADR-0008, #230): no session exists yet -- authenticated by the Invitation token and the emailed access code",
