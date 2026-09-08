@@ -395,9 +395,12 @@ export async function loadAttachmentPreviews(
  * rather than shown broken.
  *
  * The Doulas the section offers are no longer read here (#268). They come
- * from `staff.ts`'s `loadDoulasOrNone`, which the page fetches once and
- * hands to the Offers section and to the Visit pickers alike -- the same
- * roster, one request, and one place that decides what a refusal means.
+ * from `staff.ts`'s `loadVisitAssigneesOrNone`, which the page fetches
+ * once and hands to the Offers section and to the Visit pickers alike --
+ * the same people, one request, and one place that decides what a refusal
+ * means. That read moved from the Practice roster to the Engagement in
+ * #911; the Offers section takes the identity half of each row, which is
+ * unchanged, and ignores the per-Engagement marking the pickers need.
  *
  * `loadOffers` is injected rather than imported so this module does not
  * depend on `offer.ts` for one call -- and so a test can drive the refusal

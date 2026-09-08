@@ -22,7 +22,13 @@
 		sendPortalInvite,
 		type Visit
 	} from '#lib/engagementDetail.js';
-	import { doulaOptions, loadDoulasOrNone, type Doula } from '#lib/staff.js';
+	import {
+		assigneeBlock,
+		loadVisitAssigneesOrNone,
+		unnameableHint,
+		visitAssigneeOptions,
+		type VisitAssignee
+	} from '#lib/staff.js';
 	import {
 		hasAcceptedPortalInvite,
 		hasNeverBeenInvited,
@@ -379,17 +385,30 @@
 	// read, so the two sections can never disagree about who is on the
 	// roster, and one place that decides what a refusal means.
 	//
+	// Read through the Engagement, not through the Practice-wide roster
+	// (#911). Whether a Doula may be *named on a Visit here* is an
+	// Engagement-scoped fact -- a contractor needs the attachment her own
+	// acceptance of an Offer opened -- and the roster read could not know
+	// it, so both pickers offered names the BFF then refused with a 400.
+	// The BFF answers it now, from the same code its own write enforces
+	// with (api/internal/visit/nameable.go). The Offers section takes the
+	// same rows: it wants the identity half, which has not changed.
+	//
 	// `undefined` is "this reader may not be offered a colleague at all"
-	// -- `GET .../staff` is Owner/Admin (ADR-0008), and loadDoulasOrNone
+	// -- the read is Owner/Admin (ADR-0008), and loadVisitAssigneesOrNone
 	// answers a refusal with an absence rather than a throw. Every
 	// assign-shaped control on this page is drawn off that absence, which
 	// is #274: the screen must not offer a Visit write the reader's own
 	// role will refuse. It is drawing only, never the gate -- the BFF
 	// refuses the same call whether or not the control was rendered
 	// (api/internal/visit/roles.go).
-	const rosterState = new SectionState<Doula[] | undefined>(undefined);
+	const rosterState = new SectionState<VisitAssignee[] | undefined>(undefined);
 	const doulas = $derived(rosterState.value);
 	const canAssignVisits = $derived(doulas !== undefined);
+	// What the "(cannot be named yet)" marker in those labels means, said
+	// once above the field rather than left for a reader to discover by
+	// choosing somebody. The empty string when nobody is marked.
+	const assigneeHint = $derived(unnameableHint(doulas ?? []));
 	// A Doula logging her own Visit needs no roster and no picker: an
 	// absent assignee means "me". An Owner or Admin who is not a Doula has
 	// no self to log, so for her the picker is the only way in.
@@ -411,6 +430,17 @@
 		doulas?.some((doula) => doula.staffId === callerStaffId) ? callerStaffId : ''
 	);
 	const visitStaffId = $derived(newVisitStaffId ?? defaultVisitStaffId);
+	// One derivation, both pickers (#911), taking #909's per-caller axis on
+	// the way through: two independently built lists on one page is the
+	// failure this closes, so neither picker can come to disagree with the
+	// other about who is on offer or about how she is drawn. The reassign
+	// picker adds its own per-Visit exclusion at the call site.
+	const createAssigneeOptions = $derived(visitAssigneeOptions(doulas ?? [], { callerStaffId }));
+	// The hard block, derived rather than raised on submit: the refusal
+	// and its remedy are on screen the moment she picks the name, and
+	// handleCreateVisit below returns without sending anything. Prevented
+	// here, still enforced at the BFF (api/internal/visit/roles.go).
+	const newVisitBlock = $derived(assigneeBlock(doulas ?? [], visitStaffId));
 	// The Offers section turns on the Offers read alone, not on the roster.
 	// The two happen to be the same pair of roles today (both Owner and
 	// Admin), so tying Offers to `canAssignVisits` looked free -- but it
@@ -682,16 +712,23 @@
 
 	// Silent about a *refusal*, and only about a refusal: a roster read
 	// this reader's role does not admit her to is her role, not a failure,
-	// and loadDoulasOrNone answers it with `undefined` rather than a
-	// throw. Anything else -- a 500, a dropped connection -- it rethrows,
-	// and rosterState.error carries it to the Notice above the Visits
-	// table, because the alternative is an Owner watching every
+	// and loadVisitAssigneesOrNone answers it with `undefined` rather than
+	// a throw. Anything else -- a 500, a dropped connection -- it
+	// rethrows, and rosterState.error carries it to the Notice above the
+	// Visits table, because the alternative is an Owner watching every
 	// assign-shaped control on this page vanish with no reason given.
 	async function loadRoster() {
 		await rosterState.load(
-			() => loadDoulasOrNone(apiFetchWithSession, reference.practiceId),
+			() => loadVisitAssigneesOrNone(apiFetchWithSession, reference.practiceId, reference.engagementId),
 			'We could not load the Practice roster, so there is nobody to pick from. Try again.'
 		);
+	}
+
+	// The same block the create picker carries, asked per row: the
+	// reassign picker offers the same people from the same list, so it
+	// refuses the same choice with the same words.
+	function reassignBlock(visitId: string): string {
+		return assigneeBlock(doulas ?? [], reassignStaffId[visitId] ?? '');
 	}
 
 	async function handleCreateOffer(offer: NewOffer) {
@@ -744,6 +781,10 @@
 	// before the field existed.
 	async function handleCreateVisit(event: SubmitEvent) {
 		event.preventDefault();
+		// #911: the request is never sent for somebody this Engagement
+		// cannot admit. The refusal and its remedy are already on screen,
+		// beside the field, from the moment she was picked.
+		if (newVisitBlock) return;
 		const scheduledAt = newVisitScheduledAt ? new Date(newVisitScheduledAt).toISOString() : undefined;
 		const staffId = visitStaffId || undefined;
 		if (
@@ -762,6 +803,8 @@
 
 	async function handleReassign(visitId: string, event: SubmitEvent) {
 		event.preventDefault();
+		// #911, the same block the create form makes.
+		if (reassignBlock(visitId)) return;
 		const section = (reassignSections[visitId] ??= new SectionState<void>(undefined));
 		const wasReassigned = await section.mutate(
 			() => reassignVisit(apiFetchWithSession, reference, visitId, reassignStaffId[visitId] ?? ''),
@@ -979,8 +1022,10 @@
 			eligible name, there is no move left to make, and the control
 			says so rather than presenting an empty picker with a
 			placeholder and no explanation.
+			#911: what is left is marked the same way the create picker
+			marks it -- the same derivation, so the two cannot disagree.
 		-->
-		{@const reassignOptions = doulaOptions(doulas ?? [], {
+		{@const reassignOptions = visitAssigneeOptions(doulas ?? [], {
 			callerStaffId,
 			currentAssigneeStaffId: visit.staffId
 		})}
@@ -988,7 +1033,12 @@
 			<p>There is nobody else to reassign this Visit to.</p>
 		{:else}
 			<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-				<LabeledField id={`reassign-staff-${visit.visitId}`} label="Reassign to">
+				<LabeledField
+					id={`reassign-staff-${visit.visitId}`}
+					label="Reassign to"
+					hint={assigneeHint}
+					error={reassignBlock(visit.visitId)}
+				>
 					{#snippet children({ id, describedBy, invalid })}
 						<Select
 							{id}
@@ -1093,14 +1143,22 @@
 					a question, and this departs from it on purpose -- the reason
 					is recorded in docs/design/govuk-alignment.md, on the commit
 					that departed.
+					#911: and every name says whether this Engagement can admit
+					her, with the hint explaining the marker and the error
+					refusing the choice before anything is sent.
 				-->
-				<LabeledField id="new-visit-staff" label="Who is this Visit for?">
+				<LabeledField
+					id="new-visit-staff"
+					label="Who is this Visit for?"
+					hint={assigneeHint}
+					error={newVisitBlock}
+				>
 					{#snippet children({ id, describedBy, invalid })}
 						<Select
 							{id}
 							{describedBy}
 							{invalid}
-							options={doulaOptions(doulas ?? [], { callerStaffId })}
+							options={createAssigneeOptions}
 							placeholder="Choose a Doula"
 							value={visitStaffId}
 							onChange={(value) => (newVisitStaffId = value)}

@@ -66,6 +66,29 @@ const roster = [
 	}
 ];
 
+/*
+ * Who may be named on a Visit at *this* Engagement (#911) -- what the two
+ * Visit pickers are drawn from now, rather than the Practice-wide roster
+ * above. Every third roster member is a contractor, and none of them is
+ * attached here, so the picker has to carry the widest realistic name
+ * *plus* its "(cannot be named yet)" marker at 320px (ADR-0024,
+ * ADR-0025). `staff-1` is the caller -- an Owner who is also a Doula, and
+ * a contractor -- and she is nameable regardless, because naming yourself
+ * takes the self rule and never the attachment one.
+ */
+export const visitAssignees = roster
+	.filter((member) => member.roles.includes('doula'))
+	.map(({ staffId, name, employmentType }) => {
+		const canBeNamed = staffId === 'staff-1' || employmentType === 'employee';
+		return {
+			staffId,
+			name,
+			employmentType,
+			nameable: canBeNamed,
+			...(!canBeNamed && { reason: 'contractor_without_accepted_offer' })
+		};
+	});
+
 export const detail = {
 	engagementId: 'engagement-1',
 	clientId: 'client-1',
@@ -105,6 +128,7 @@ export const fixture: RouteFixture<RouteParameters> = {
 	},
 	respond: (path) => {
 		if (/\/engagements\/engagement-1$/.test(path)) return jsonResponse(detail);
+		if (path.endsWith('/visit-assignees')) return jsonResponse({ items: visitAssignees });
 		if (path.includes('/visits')) {
 			return jsonResponse({
 				items: [

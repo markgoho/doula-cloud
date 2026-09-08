@@ -136,6 +136,10 @@ async function renderWithFixtureResponder(
 // -- a 200 is the Owner or Admin who may be offered a colleague to pick,
 // a 403 is the plain Doula the endpoint refuses. At the outer scope
 // because eslint's unicorn/consistent-function-scoping asks for it there.
+//
+// The read the pickers are drawn from is the Engagement-scoped one now
+// (#911), not the Practice-wide roster, so that is the path a refusal or
+// an outage is injected on.
 async function setupWithRoster(
 	rosterResponse?: Response,
 	roles: string[] = ['owner', 'doula'],
@@ -144,7 +148,7 @@ async function setupWithRoster(
 	await testPage.viewport(1440, 900);
 	const respond = toApiResponder(fixture);
 	apiFetchWithSession.mockImplementation((path: string) => {
-		if (rosterResponse && path.endsWith('/staff')) return Promise.resolve(rosterResponse);
+		if (rosterResponse && path.endsWith('/visit-assignees')) return Promise.resolve(rosterResponse);
 		return respond(path);
 	});
 	await render(Page, {
@@ -999,18 +1003,14 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		// the defect, so the control says what is true instead.
 		it('says there is nobody to reassign to rather than showing an empty picker', async () => {
 			const soleDoula = {
-				members: [
+				items: [
 					{
 						staffId: 'staff-1',
 						name: 'Anne-Marie Ochieng-Whitfield',
-						email: 'solo@example.test',
-						roles: ['owner', 'doula'],
 						employmentType: 'employee',
-						workState: 'NY',
-						workStateReportedAt: '2026-01-01T00:00:00Z'
+						nameable: true
 					}
-				],
-				invitations: { items: [] }
+				]
 			};
 			await setupWithRoster(jsonResponse(soleDoula));
 
@@ -1055,5 +1055,103 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 			'/api/practices/practice-1/engagements/engagement-1/visits/visit-1',
 			expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ staffId: 'staff-2' }) })
 		);
+	});
+});
+
+/*
+ * #911: the pickers were drawn from the Practice-wide roster, which
+ * cannot know anything about *this* Engagement -- so an Owner or Admin
+ * saw a contractor's name, picked it, and met a `400` she had no way to
+ * anticipate. The fixture's roster makes every third member a contractor
+ * and attaches none of them here, so `staff-4` is exactly that person.
+ * The BFF still refuses the write whatever this screen drew: see
+ * api/internal/visit/nameable_test.go.
+ */
+describe('who can be named on a Visit at this Engagement (#911)', () => {
+	// The unattached contractor the fixture's own roster produces.
+	const unattached = 'Guadalupe Fernández-Castellanos';
+	const unattachedOption = `${unattached} (cannot be named yet)`;
+
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	// She is marked, not dropped: a contractor who has not accepted an
+	// Offer is precisely the person an Admin is trying to get onto the
+	// birth, and losing her name would read as "she is not on the roster".
+	// And she stays choosable -- a bare `disabled` option carries no
+	// reason, so choosing her is what produces one.
+	it('lists an unattached contractor by name, marked, and still choosable', async () => {
+		await setupWithRoster();
+
+		const picker = testPage.getByLabelText('Who is this Visit for?');
+		await expect.element(picker).toBeVisible();
+		const option = picker.getByRole('option', { name: unattachedOption });
+		expect(option.elements()).toHaveLength(1);
+		expect(option.element().hasAttribute('disabled')).toBe(false);
+	});
+
+	// One derived list, both pickers -- two independently filtered lists on
+	// one page is the failure this ticket exists to close.
+	it('marks her the same way in the reassign picker', async () => {
+		await setupWithRoster();
+
+		const picker = testPage.getByLabelText('Reassign to').first();
+		await expect.element(picker).toBeVisible();
+		expect(picker.getByRole('option', { name: unattachedOption }).elements()).toHaveLength(1);
+	});
+
+	// What the marker means and what changes it, in text, before anybody
+	// has to choose a name to find out -- not conveyed by color and not by
+	// a bare `disabled` attribute.
+	it('says in text what the marker means and what makes her nameable', async () => {
+		await setupWithRoster();
+
+		await expect
+			.element(testPage.getByText(/Send her an Offer, then name her on a Visit/).first())
+			.toBeVisible();
+	});
+
+	// The hard block: the request is never sent, and the refusal names the
+	// act that changes it (GOV.UK's error-message rule).
+	it('blocks the create submit rather than letting the BFF 400 be the first news', async () => {
+		await setupWithRoster();
+		await testPage.getByLabelText('Who is this Visit for?').selectOptions(unattachedOption);
+		apiFetchWithSession.mockClear();
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		await expect
+			.element(
+				testPage.getByText(new RegExp(`^${unattached} is a contractor who has not accepted`))
+			)
+			.toBeVisible();
+	});
+
+	it('blocks the reassign submit the same way', async () => {
+		await setupWithRoster();
+		await testPage.getByLabelText('Reassign to').first().selectOptions(unattachedOption);
+		apiFetchWithSession.mockClear();
+		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
+
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	// The caller's own row takes the self rule, not the named-colleague
+	// one: `assignee` (api/internal/visit/roles.go) takes the self path
+	// whenever the requested id equals the caller's own, so the fixture's
+	// Owner -- herself a contractor Doula with no attachment here -- is
+	// accepted by the write when she names herself, and the picker must
+	// not block a write the BFF allows.
+	it('offers the caller herself without the marker, though she is an unattached contractor', async () => {
+		await setupWithRoster();
+
+		const picker = testPage.getByLabelText('Who is this Visit for?');
+		await expect.element(picker).toBeVisible();
+		// "(you)" is #909's own marking of her row; what matters here is
+		// that "(cannot be named yet)" is not on it.
+		expect(
+			picker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
+		).toHaveLength(1);
 	});
 });

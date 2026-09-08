@@ -323,3 +323,138 @@ export function doulaOptions(
 		label: isCaller(doula) ? `${doula.name}${SELF_SUFFIX}` : doula.name
 	}));
 }
+
+/**
+ * A Doula, plus whether she can be named on a Visit at *one* Engagement
+ * -- mirrors `visit.Assignee` (api/internal/visit/nameable.go).
+ *
+ * `Doula` alone is a Practice-wide fact and so cannot answer the
+ * question the Visit pickers actually ask (#911): the write applies a
+ * second, Engagement-scoped rule, and a picker drawn off the roster
+ * offered names the BFF would refuse. `reason` is the BFF's own stable
+ * token, never a sentence -- the wording below is this module's, so it
+ * can change without the contract changing.
+ */
+export interface VisitAssignee extends Doula {
+	nameable: boolean;
+	reason?: string;
+}
+
+/** The BFF's token for the one reason a Doula on the roster cannot be
+ * named on this Engagement: she is a contractor and has not accepted an
+ * Offer here. Named once, so no screen spells the token out. */
+export const CONTRACTOR_WITHOUT_ACCEPTED_OFFER = 'contractor_without_accepted_offer';
+
+/** What follows a person's name when she cannot be named -- the reason
+ * and the act that changes it, in one sentence (GOV.UK's error-message
+ * rule: say what is wrong and what to do about it).
+ *
+ * Lenient on an unrecognized token, for the reason `roleLabel` gives: a
+ * reason the BFF grows before this map catches up still blocks the
+ * choice and still says she cannot be named, rather than throwing the
+ * screen away over a word. */
+function unnameableClause(reason: string | undefined): string {
+	if (reason === CONTRACTOR_WITHOUT_ACCEPTED_OFFER) {
+		return 'is a contractor who has not accepted an Offer on this Engagement, so she cannot be named on a Visit here yet. Send her an Offer, then name her.';
+	}
+	return 'cannot be named on a Visit on this Engagement yet.';
+}
+
+/** The short marker carried in the option's own text. Text, not color and
+ * not a bare `disabled` attribute: a person listening to the picker is
+ * told the state as she moves through the names, which neither of the
+ * other two would do. */
+const UNNAMEABLE_MARKER = 'cannot be named yet';
+
+/**
+ * The one derived option list both Visit pickers read (#911). Nobody is
+ * dropped -- a contractor who has not accepted an Offer is precisely the
+ * person an Admin is trying to get onto the birth -- and the ones who
+ * cannot be named say so in their own label.
+ *
+ * One derivation, not one per picker: two independently filtered lists on
+ * one page is the failure this exists to close. It is `doulaOptions` plus
+ * one marking rather than a second list-builder, so #909's per-caller and
+ * per-Visit axes -- who is me, who already holds this Visit -- and this
+ * ticket's per-Engagement one land on the same rows in the same order:
+ * exclusion first, then "(you)", then "(cannot be named yet)". The
+ * caller's own row is always nameable (she takes the self rule), so no
+ * name ever carries both markers.
+ */
+export function visitAssigneeOptions(
+	assignees: readonly VisitAssignee[],
+	context: DoulaPickerContext = {}
+): LabeledValue[] {
+	const nameableById = new Map(assignees.map(({ staffId, nameable }) => [staffId, nameable]));
+	return doulaOptions(assignees, context).map((option) =>
+		nameableById.get(option.value)
+			? option
+			: { ...option, label: `${option.label} (${UNNAMEABLE_MARKER})` }
+	);
+}
+
+/** The hint the picker carries whenever it is offering somebody who
+ * cannot be named: what the marker in those labels means, before a
+ * reader has to choose one to find out. The empty string when everybody
+ * listed can be named, so the field is not carrying an explanation of a
+ * state nobody is in. */
+export function unnameableHint(assignees: readonly VisitAssignee[]): string {
+	if (assignees.every((assignee) => assignee.nameable)) return '';
+	return `Somebody marked "${UNNAMEABLE_MARKER}" is a contractor who has not accepted an Offer on this Engagement. Send her an Offer, then name her on a Visit.`;
+}
+
+/**
+ * The refusal a picker shows *instead of sending the request*, or the
+ * empty string when the choice is fine.
+ *
+ * A hard block with the route out, prevented here and still enforced at
+ * the BFF (`requireEligibleAssignee`) -- never a dismissible warning, and
+ * never letting the BFF's own `400` be the first a person hears of it.
+ * An id that is not on the list at all is not this function's refusal to
+ * make: an empty picker is the field's own `required`, and an unknown id
+ * is the BFF's.
+ */
+export function assigneeBlock(assignees: readonly VisitAssignee[], staffId: string): string {
+	const chosen = assignees.find((assignee) => assignee.staffId === staffId);
+	if (!chosen || chosen.nameable) return '';
+	return `${chosen.name} ${unnameableClause(chosen.reason)}`;
+}
+
+/** Loads who may be named on a Visit at one Engagement: every Doula on
+ * the Practice's roster, each marked with whether this Engagement admits
+ * her now. Throws with the response body text on a non-2xx response,
+ * carrying the status as the Error's `cause`, the same contract
+ * `loadStaff` established. */
+export async function loadVisitAssignees(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<VisitAssignee[]> {
+	const response = await fetcher(
+		`/api/practices/${practiceId}/engagements/${engagementId}/visit-assignees`
+	);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response), { cause: response.status });
+	}
+	const body: { items: VisitAssignee[] } = await response.json();
+	return body.items;
+}
+
+/** `loadVisitAssignees`, with a refusal answered as an absence rather
+ * than a throw -- `loadDoulasOrNone`'s contract exactly, for the same
+ * reasons, over the endpoint that replaced the roster read on the
+ * Engagement page. */
+export async function loadVisitAssigneesOrNone(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<VisitAssignee[] | undefined> {
+	try {
+		return await loadVisitAssignees(fetcher, practiceId, engagementId);
+	} catch (error) {
+		if (isRosterRefusal(error)) {
+			return undefined;
+		}
+		throw error;
+	}
+}
