@@ -99,7 +99,18 @@ export const detail = {
 	// #253: the one legal move from 'active' every role in the fixture's
 	// own role table reaches, so the continuum check sees the status
 	// section's "Mark care complete" control rendered, not hidden.
-	statusMoves: ['completed']
+	statusMoves: ['completed'],
+	// #943: a recorded pair, so the sweep sees the Birth outcome section's
+	// read-back and both of an Owner's controls beside it rather than only
+	// its "nothing recorded yet" line. Recorded on an `active` Engagement
+	// on purpose -- ADR-0015 forbids auto-completion on a recorded
+	// outcome, because postpartum and bereavement care continue after it.
+	// The contractor Doula branch is not a variant here: her tree is a
+	// strict subset of this one (the same read-back, no controls), so it
+	// realizes nothing this fixture has not already measured, and
+	// BirthOutcomeSection's own style-guide page sweeps it directly.
+	birthOutcome: 'live_birth',
+	pregnancyEndedOn: '2026-08-14'
 };
 
 export const fixture: RouteFixture<RouteParameters> = {

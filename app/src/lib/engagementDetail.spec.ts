@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from './testResponse.js';
 import {
+	birthOutcomeLabel,
+	birthOutcomeURL,
 	changeEngagementStatus,
 	createVisit,
 	downloadAttachment,
@@ -13,6 +15,7 @@ import {
 	messagesURL,
 	portalInviteURL,
 	reassignVisit,
+	recordBirthOutcome,
 	saveVisitNotes,
 	scheduleVisit,
 	sendMessage,
@@ -437,10 +440,101 @@ describe('downloadAttachment', () => {
 	});
 });
 
+describe('recordBirthOutcome', () => {
+	it('puts the outcome and the date, with no idempotency key', async () => {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ birthOutcome: 'loss', pregnancyEndedOn: '2026-08-14' }));
+
+		const result = await recordBirthOutcome(fetcher, reference, {
+			birthOutcome: 'loss',
+			pregnancyEndedOn: '2026-08-14'
+		});
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/birth-outcome`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ birthOutcome: 'loss', pregnancyEndedOn: '2026-08-14' })
+		});
+		expect(result).toEqual({
+			kind: 'recorded',
+			facts: { birthOutcome: 'loss', pregnancyEndedOn: '2026-08-14' }
+		});
+	});
+
+	// The response body, not Detail: BirthOutcomeResponse carries no
+	// `omitempty`, so a clear really does answer `birthOutcome: null`, and
+	// the page's own "is anything recorded?" test is `=== undefined`.
+	it('normalizes a cleared pair to absent, so the page stops reading it as recorded', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			// eslint-disable-next-line unicorn/no-null
+			jsonResponse({ engagementId: 'engagement-1', birthOutcome: null, pregnancyEndedOn: null })
+		);
+
+		const result = await recordBirthOutcome(fetcher, reference, {
+			// eslint-disable-next-line unicorn/no-null -- the wire value for a clear.
+			birthOutcome: null,
+			correction: true
+		});
+
+		expect(result).toEqual({ kind: 'recorded', facts: {} });
+	});
+
+	it('reads BIRTH_OUTCOME_FROZEN as the press-through, not as an error', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			jsonResponse(
+				{
+					code: 'BIRTH_OUTCOME_FROZEN',
+					message: 'this Engagement already has a birth outcome; only a Practice Owner can correct it'
+				},
+				409
+			)
+		);
+
+		const result = await recordBirthOutcome(fetcher, reference, { birthOutcome: 'loss' });
+
+		expect(result).toEqual({
+			kind: 'confirmable',
+			message: 'this Engagement already has a birth outcome; only a Practice Owner can correct it'
+		});
+	});
+
+	it('reads the endpoint other 409 as a refusal to fix, not a press-through', async () => {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(
+				jsonResponse({ message: 'this Engagement has no birth outcome to correct' }, 409)
+			);
+
+		const result = await recordBirthOutcome(fetcher, reference, {
+			birthOutcome: 'loss',
+			correction: true
+		});
+
+		expect(result).toEqual({
+			kind: 'errors',
+			errors: [{ message: 'this Engagement has no birth outcome to correct' }]
+		});
+	});
+});
+
+describe('birthOutcomeLabel', () => {
+	it('names each stored outcome in ADR-0015 own words', () => {
+		expect(birthOutcomeLabel('live_birth')).toBe('The baby was born alive');
+		expect(birthOutcomeLabel('loss')).toBe('The pregnancy ended without a living baby');
+		expect(birthOutcomeLabel('unknown')).toBe('The Practice never learned what happened');
+	});
+
+	it('prints an outcome this build has not labeled rather than hiding it', () => {
+		expect(birthOutcomeLabel('stillbirth')).toBe('stillbirth');
+	});
+});
+
 describe('URL builders', () => {
 	it('build every path off the one Engagement reference', () => {
 		expect(visitsURL(reference)).toBe(`${base}/visits`);
 		expect(messagesURL(reference)).toBe(`${base}/messages`);
 		expect(portalInviteURL(reference)).toBe(`${base}/portal-invite`);
+		expect(birthOutcomeURL(reference)).toBe(`${base}/birth-outcome`);
 	});
 });

@@ -33,6 +33,21 @@
 	</section>
 
 	<section>
+		<h2>With a hint</h2>
+		<p>
+			What this particular date is, where the legend alone cannot say it (#943). Announced from
+			the group and from each of the three boxes, not left as a paragraph beside them.
+		</p>
+		<DateFields
+			name="style-guide-hinted"
+			legend="When did the pregnancy end?"
+			hint="The day the pregnancy ended, which is often not the day you are recording it. For example, 11 3 2026 for November 3, 2026."
+			parts={grouped}
+			onChange={(next) => (grouped = next)}
+		/>
+	</section>
+
+	<section>
 		<h2>Refused</h2>
 		<p>The refusal is announced once, from the group, and only the box it is about is marked.</p>
 		<DateFields

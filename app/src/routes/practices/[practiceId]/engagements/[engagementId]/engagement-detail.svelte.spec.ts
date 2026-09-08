@@ -48,6 +48,8 @@ interface Detail {
 	createdAt: string;
 	dueDate?: string;
 	statusMoves: string[];
+	birthOutcome?: string;
+	pregnancyEndedOn?: string;
 	clientPortalInviteStatus?: string;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
@@ -1153,5 +1155,70 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 		expect(
 			picker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
 		).toHaveLength(1);
+	});
+});
+
+/*
+ * #943: the Engagement hub is the only screen that records ADR-0015's
+ * birth outcome. The section's own states are BirthOutcomeSection's
+ * spec; what is asserted here is the wiring only -- that the hub reads
+ * the two fields off `engagement.Detail`, draws the control for a reader
+ * who may record and never for a contractor Doula, and puts to #293's
+ * own endpoint.
+ */
+describe('the birth outcome section', () => {
+	const unrecorded: Detail = { ...fixtureDetail, birthOutcome: undefined, pregnancyEndedOn: undefined };
+
+	interface OutcomeOptions {
+		detail?: Detail;
+		roles?: string[];
+		isContractor?: boolean;
+	}
+
+	async function setupOutcome({
+		detail = fixtureDetail,
+		roles = ['owner', 'doula'],
+		isContractor = false
+	}: OutcomeOptions = {}) {
+		await testPage.viewport(1440, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		await render(Page, {
+			data: { ...detail, session: { ...sessionFor(roles), isContractor } },
+			params: fixture.params
+		});
+	}
+
+	it("reads a recorded outcome off the Engagement's own read", async () => {
+		await setupOutcome();
+
+		await expect.element(testPage.getByRole('heading', { name: 'Birth outcome' })).toBeVisible();
+		await expect.element(testPage.getByText('The baby was born alive')).toBeVisible();
+	});
+
+	it("offers a contractor Doula no way to record it, matching the BFF's own refusal", async () => {
+		await setupOutcome({ detail: unrecorded, roles: ['doula'], isContractor: true });
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Record what happened' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('puts what was entered to the birth-outcome endpoint, and reads it back', async () => {
+		await setupOutcome({ detail: unrecorded });
+		await testPage.getByRole('button', { name: 'Record what happened' }).click();
+		await testPage.getByLabelText('The Practice never learned what happened').click();
+		apiFetchWithSession.mockClear();
+		apiFetchWithSession.mockResolvedValue(
+			jsonResponse({ engagementId: 'engagement-1', birthOutcome: 'unknown' })
+		);
+		await testPage.getByRole('button', { name: 'Record this outcome' }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/engagement-1/birth-outcome',
+			expect.objectContaining({ method: 'PUT' })
+		);
+		await expect
+			.element(testPage.getByText('The Practice never learned what happened').first())
+			.toBeVisible();
 	});
 });

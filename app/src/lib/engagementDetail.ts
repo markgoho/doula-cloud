@@ -29,6 +29,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './api.js';
+import { refusalOrConfirmable, type Refusal } from './formErrors.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
 /** Which Engagement, at which Practice. Passed as one value because every
@@ -50,6 +51,15 @@ export interface EngagementSummary {
 	 * her role or the current status admits no move. The hub renders
 	 * exactly these, never a hand-copied role table of its own. */
 	statusMoves: string[];
+	/** ADR-0015's birth outcome (#293) -- `live_birth`, `loss` or
+	 * `unknown`, absent until a Practice records it. Staff-only: the
+	 * portal's own Engagement read (portal.Detail) does not carry it,
+	 * and nothing in `routes/portal/` reads this field. */
+	birthOutcome?: string;
+	/** The date the pregnancy ended, `YYYY-MM-DD` (#293) -- recorded with
+	 * the outcome, and distinct from the day a Staff member typed it in.
+	 * Absent for an `unknown` outcome, and for one not yet recorded. */
+	pregnancyEndedOn?: string;
 	/** The Client's portal-invite state (#255), using the same
 	 * derivation the Clients list's own ClientListItem.portalInviteStatus
 	 * carries -- absent when she has never been invited. */
@@ -205,6 +215,118 @@ export async function changeEngagementStatus(
 	});
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
 	return (await response.json()) as Pick<EngagementSummary, 'status' | 'statusMoves'>;
+}
+
+/**
+ * ADR-0015's three birth outcomes, in the words that ADR itself defines
+ * them with -- "the baby was born alive", "the pregnancy ended without a
+ * living baby", "the Engagement ended and the Practice never learned".
+ *
+ * The wording is the decision here, not a label lookup. This is the one
+ * question in the product that may be asked of a Practice about a
+ * pregnancy that ended in a loss, so no option presumes a living baby
+ * and none of them says "birth" as though a birth is what happened. The
+ * order is best case, loss, never learned, because that is the order
+ * ADR-0015 states them in and a reader scanning three radios should not
+ * meet the loss first.
+ */
+export const BIRTH_OUTCOMES: readonly { value: string; label: string; description: string }[] = [
+	{
+		value: 'live_birth',
+		label: 'The baby was born alive',
+		description: 'Still the answer if the baby died later. A neonatal death is a separate, later event.'
+	},
+	{
+		value: 'loss',
+		label: 'The pregnancy ended without a living baby',
+		description: 'Care after a loss continues on this same Engagement.'
+	},
+	{
+		value: 'unknown',
+		label: 'The Practice never learned what happened',
+		description: 'For a Client who left before the end. No date is recorded with this answer.'
+	}
+];
+
+/** The recorded outcome in the reader's words, or the stored value if
+ * this build has not labeled it -- lenient for the reason `roleLabel` in
+ * `roles.ts` gives. */
+export function birthOutcomeLabel(outcome: string): string {
+	return BIRTH_OUTCOMES.find((option) => option.value === outcome)?.label ?? outcome;
+}
+
+/**
+ * The two facts the birth-outcome endpoint writes and answers with.
+ */
+export type BirthOutcomeFacts = Pick<EngagementSummary, 'birthOutcome' | 'pregnancyEndedOn'>;
+
+/** What is sent. `birthOutcome: null` clears a recorded pair, which the
+ * BFF takes only as a correction; `correction` is the caller's explicit
+ * acknowledgment that a frozen pair is being rewritten. */
+export interface BirthOutcomeRequest {
+	birthOutcome: string | null;
+	pregnancyEndedOn?: string;
+	correction?: boolean;
+}
+
+/**
+ * What a birth-outcome write turned out to be: recorded, a refusal to
+ * fix, or `BIRTH_OUTCOME_FROZEN` -- the press-through an Owner confirms.
+ */
+export type BirthOutcomeResult = Refusal | { kind: 'recorded'; facts: BirthOutcomeFacts };
+
+export function birthOutcomeURL(reference: EngagementReference): string {
+	return `${engagementURL(reference)}/birth-outcome`;
+}
+
+/**
+ * Records what happened to the pregnancy, and when (#293, #943).
+ *
+ * `PUT` and no `Idempotency-Key`: the endpoint reads the row first and
+ * answers a request for what is already there as a no-op, so a retry
+ * writes nothing and raises no second audit row.
+ *
+ * The 409 is not folded into the error list. `BIRTH_OUTCOME_FROZEN` says
+ * the pair is already recorded and that the same request re-sent with
+ * `correction: true` goes through, which is a confirmation an Owner
+ * presses through rather than something she can fix by retyping --
+ * `refusalOrConfirmable` is the same reading #610's sign-in eviction
+ * already gets, and the code is matched rather than its prose (#692),
+ * because this endpoint's *other* 409 (a correction offered where
+ * nothing is recorded) is not a press-through at all.
+ */
+export async function recordBirthOutcome(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	request: BirthOutcomeRequest
+): Promise<BirthOutcomeResult> {
+	const response = await fetcher(birthOutcomeURL(reference), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(request)
+	});
+	if (!response.ok) {
+		return refusalOrConfirmable(response, {}, 'BIRTH_OUTCOME_FROZEN');
+	}
+	/*
+	 * Normalized to `undefined`, not passed through. `Detail` omits both
+	 * fields when they are null (`omitempty`), but `BirthOutcomeResponse`
+	 * does not -- a successful clear answers `birthOutcome: null`, and the
+	 * page's own "is anything recorded?" test is `=== undefined`. Left as
+	 * `null`, a cleared Engagement would go on rendering the recorded
+	 * branch: the read-back, the Owner's correct and remove controls, and
+	 * a next submit carrying `correction: true` onto an empty row, which
+	 * the BFF answers with the 409 that is *not* a press-through. One
+	 * shape reaches the page, whichever of the two endpoints it came from.
+	 */
+	const body = (await response.json()) as { birthOutcome?: string | null; pregnancyEndedOn?: string | null };
+	return {
+		kind: 'recorded',
+		facts: {
+			birthOutcome: body.birthOutcome ?? undefined,
+			pregnancyEndedOn: body.pregnancyEndedOn ?? undefined
+		}
+	};
 }
 
 /**
