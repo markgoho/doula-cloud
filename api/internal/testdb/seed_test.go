@@ -560,6 +560,25 @@ func TestSeedPendingPortalInvite(t *testing.T) {
 	}
 }
 
+// TestSeedPracticeRate proves the row lands for the given kind and
+// amount, readable back the way practicerate.GetRatesHandler reads it.
+func TestSeedPracticeRate(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Practice Rate Test Practice")
+
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", 15000)
+
+	var amountCents int64
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT amount_cents FROM practice_rates WHERE practice_id = $1 AND kind = 'birth'::engagement_kind`, practiceID,
+	).Scan(&amountCents); err != nil {
+		t.Fatalf("read seeded practice rate: %v", err)
+	}
+	if amountCents != 15000 {
+		t.Fatalf("amount_cents = %d, want 15000", amountCents)
+	}
+}
+
 // TestSeedPushSubscription proves the row lands with the given endpoint,
 // readable back by its returned id.
 func TestSeedPushSubscription(t *testing.T) {

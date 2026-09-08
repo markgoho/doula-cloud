@@ -51,6 +51,13 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract",
 		"full-replace UPDATE of the Contract's merge field values; re-sending the same body is a no-op",
 		true, staffauth.AnyStaff, PutContractHandler())
+	// #967: overriding a Contract's rate-card-derived amount is Owner and
+	// Admin only. #970 moved every Contract write's role to the mount, so
+	// the declaration lives here rather than inside the handler. Not
+	// attaching -- Owner and Admin bypass Attachment entirely.
+	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract/amount",
+		"full-replace UPDATE of the Contract's amount; a retry with the same value changes nothing and records nothing new",
+		false, staffauth.OwnerAndAdmin, PutContractAmountHandler())
 	ir.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
 		"state-guarded (status != 'draft' -> 409); a retry after the first commit finds the Contract already sent and 409s instead of pushing the Client notification twice",
 		true, staffauth.AnyStaff, PostSendContractHandler(pusher))

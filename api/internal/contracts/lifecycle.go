@@ -60,9 +60,20 @@ var TransitionVoid = Transition{PastTense: "voided", Requires: StatusSigned}
 // anything of Stripe.
 var TransitionBill = Transition{PastTense: "billed", Requires: StatusSigned}
 
+// TransitionOverrideAmount is PutContractAmountHandler's precondition
+// (#967): only a Draft Contract's amount may be overridden, the same
+// Requires TransitionEdit carries -- an Owner or Admin correction is one
+// more kind of Draft-only edit, not a new lifecycle stage of its own.
+// This is stricter than #967's AC literally requires ("a signed
+// Contract's amount never changes"), which would also permit overriding
+// a Sent Contract's amount; Draft-only is the narrower, safer reading,
+// consistent with every other merge-field edit already being refused
+// once a Contract leaves Draft (TransitionEdit).
+var TransitionOverrideAmount = Transition{PastTense: "amount overridden", Requires: StatusDraft}
+
 // Transitions is every declared Contract lifecycle precondition, walked
 // by lifecycle_test.go's guardrail.
-var Transitions = []Transition{TransitionEdit, TransitionSend, TransitionSign, TransitionVoid, TransitionBill}
+var Transitions = []Transition{TransitionEdit, TransitionSend, TransitionSign, TransitionVoid, TransitionBill, TransitionOverrideAmount}
 
 // Check reports whether current satisfies t (ok=true, no refusal
 // message), or, if not, the 409 message a caller should write -- naming

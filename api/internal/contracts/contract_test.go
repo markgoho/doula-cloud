@@ -27,6 +27,14 @@ const (
 	// therefore the value resolveMergeFieldValues resolves client_name to
 	// for every Contract seeded through the default SeedEngagement.
 	testClientName = "Test Client"
+
+	// testRateAmountCents and testRateAmountDollars are the practice_rates
+	// amount this file seeds wherever a test creates a Contract through
+	// PostContractHandler (#967: no rate set for the Engagement's kind
+	// means no Contract at all), and the "price" merge field's resolved
+	// rendering of that same amount.
+	testRateAmountCents   = 15000
+	testRateAmountDollars = "$150.00"
 )
 
 func contractURL(srv *httptest.Server, practiceID, engagementID string) string {
@@ -174,6 +182,7 @@ func TestPostContractHandler_Success(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -201,20 +210,29 @@ func TestPostContractHandler_Success(t *testing.T) {
 	if len(out.MergeFields) != 2 || out.MergeFields[0] != clientNameKey || out.MergeFields[1] != priceKey {
 		t.Fatalf("mergeFields = %v, want [client_name price]", out.MergeFields)
 	}
-	if len(out.Values) != 1 || out.Values[clientNameKey] != testClientName {
+	if len(out.Values) != 2 || out.Values[clientNameKey] != testClientName {
 		t.Fatalf("values = %+v, want client_name prefilled from the Engagement's Client", out.Values)
+	}
+	if out.Values[priceKey] != testRateAmountDollars {
+		t.Fatalf("values[price] = %q, want %q -- resolved from the practice's rate card, #967", out.Values[priceKey], testRateAmountDollars)
 	}
 }
 
 // TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty proves
 // resolveMergeFieldValues's other branch: a Template whose prose never
-// asks for client_name or practice_name gets no prefill at all.
+// asks for client_name or practice_name gets no prefill at all. Prose
+// uses a plain scope field rather than {{price}} -- price is no longer
+// resolved by resolveMergeFieldValues at all (#967: it is resolved
+// separately, from a real column, never stored in merge_field_values),
+// so a prose that only asks for it would prove nothing about this
+// function's own empty branch.
 func TestPostContractHandler_NoClientNameFieldLeavesValuesEmpty(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-no-client-name-field"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractTemplate(t, db, practiceID, "Agreement at {{price}}.")
+	seedContractTemplate(t, db, practiceID, "Agreement for {{scope_of_service}}.")
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -240,6 +258,7 @@ func TestPostContractHandler_ResolvesPracticeName(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContractTemplate(t, db, practiceID, "This agreement is between {{practice_name}} and {{client_name}} for doula services.")
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -269,6 +288,7 @@ func TestPutContractHandler_OverwrittenResolvedValueSurvivesReload(t *testing.T)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContractTemplate(t, db, practiceID, "This agreement is between {{practice_name}} and {{client_name}} for doula services.")
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -307,6 +327,7 @@ func TestPostContractHandler_DedupesRepeatedMergeField(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContractTemplate(t, db, practiceID, "Hello {{client_name}}, this agreement is for {{client_name}}.")
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -331,6 +352,7 @@ func TestPostContractHandler_Duplicate(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -663,8 +685,33 @@ func TestPutContractHandler_EmptyBodyDefaultsToEmptyValues(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(out.Values) != 0 {
-		t.Fatalf("values = %+v, want empty", out.Values)
+	// price still resolves even against an otherwise-empty Values map --
+	// it is never sourced from what Staff PUTs (#967).
+	if len(out.Values) != 1 || out.Values[priceKey] != testRateAmountDollars {
+		t.Fatalf("values = %+v, want only the resolved price", out.Values)
+	}
+}
+
+// TestPutContractHandler_PriceRejected proves #967's AC directly: price
+// is a reserved merge field resolved by the product, never a value a
+// person fills in on the Contract form -- a PUT that tries anyway is a
+// 400, not a silent overwrite the way client_name/practice_name allow.
+func TestPutContractHandler_PriceRejected(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "put-price-rejected"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := putContract(t, srv, session, practiceID, engagementID,
+		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "$1"})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 }
 
@@ -681,7 +728,7 @@ func TestPutContractHandler_Success(t *testing.T) {
 	defer srv.Close()
 
 	putResp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
+		contracts.MergeFieldValues{clientNameKey: jamieName})
 	defer putResp.Body.Close()
 
 	if putResp.StatusCode != http.StatusOK {
@@ -694,7 +741,10 @@ func TestPutContractHandler_Success(t *testing.T) {
 	if err := json.NewDecoder(getResp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode GET response: %v", err)
 	}
-	if out.Values[clientNameKey] != jamieName || out.Values[priceKey] != testPriceValue {
+	// price is resolved from amount_cents, never from what was PUT (#967);
+	// seedContract's own hardcoded amount_cents (template_test.go) is
+	// what this renders as.
+	if out.Values[clientNameKey] != jamieName || out.Values[priceKey] != testRateAmountDollars {
 		t.Fatalf("values = %+v, want the just-written values", out.Values)
 	}
 }
@@ -709,6 +759,7 @@ func TestContract_TemplateEditDoesNotAlterExistingSnapshot(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()

@@ -47,7 +47,7 @@ func seedContractTemplate(t *testing.T, db *testdb.DB, practiceID, prose string)
 func seedContract(t *testing.T, db *testdb.DB, engagementID, status, prose string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose) VALUES ($1, $2::contract_status, $3)`,
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, $2::contract_status, $3, 15000)`,
 		engagementID, status, prose,
 	); err != nil {
 		t.Fatalf("seed contract: %v", err)
@@ -69,7 +69,7 @@ func seedContractWithValues(t *testing.T, db *testdb.DB, engagementID string, va
 		t.Fatalf("marshal values: %v", err)
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, merge_field_values) VALUES ($1, 'draft'::contract_status, $2, $3)`,
+		`INSERT INTO contracts (engagement_id, status, prose, merge_field_values, amount_cents) VALUES ($1, 'draft'::contract_status, $2, $3, 15000)`,
 		engagementID, mergeFieldProse, valuesJSON,
 	); err != nil {
 		t.Fatalf("seed contract: %v", err)
@@ -112,8 +112,8 @@ func seedPriorSignedContract(t *testing.T, db *testdb.DB, engagementID string) (
 func seedSignedContractRow(t *testing.T, db *testdb.DB, engagementID string, status contracts.Status, age string) (contractID, pdfObjectPath string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, created_at)
-		 VALUES ($1, $2::contract_status, $3, now() - $4::interval) RETURNING id`,
+		`INSERT INTO contracts (engagement_id, status, prose, created_at, amount_cents)
+		 VALUES ($1, $2::contract_status, $3, now() - $4::interval, 15000) RETURNING id`,
 		engagementID, string(status), mergeFieldProse, age,
 	).Scan(&contractID); err != nil {
 		t.Fatalf("seed signed contract: %v", err)

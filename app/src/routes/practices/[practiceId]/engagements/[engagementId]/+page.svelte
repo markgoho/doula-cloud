@@ -65,6 +65,7 @@
 		setMergeFieldValue,
 		mergeFieldLabel,
 		missingMergeFieldKeys,
+		editableMergeFields,
 		type Contract
 	} from '#lib/contract.js';
 	import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
@@ -1356,7 +1357,7 @@
 			<Text text="Contract text" />
 			<ContractView prose={contract.prose} values={contract.values} />
 			<ContractForm
-				mergeFields={contract.mergeFields}
+				mergeFields={editableMergeFields(contract.mergeFields)}
 				values={contract.values}
 				readOnly={contract.status !== 'draft'}
 				onValueChange={handleContractValueChange}

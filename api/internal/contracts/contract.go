@@ -115,6 +115,23 @@ func PostContractHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+
+		// #967: a Contract's amount is snapshotted from the Practice's
+		// rate card at creation, never left for Staff to type in. No
+		// rate for the Engagement's kind means no Contract -- refused
+		// before any row is written, naming the kind so an Owner or
+		// Admin knows exactly what to set.
+		amountCents, kind, hasRate, err := resolveContractAmount(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !hasRate {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, noRateSetMsg(kind), nil)
+			return
+		}
+
 		valuesJSON, err := json.Marshal(values)
 		if err != nil {
 			// coverage:ignore reason: MergeFieldValues always marshals cleanly, not exercised by unit tests
@@ -123,8 +140,8 @@ func PostContractHandler() http.Handler {
 		}
 
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO contracts (engagement_id, prose, merge_field_values) VALUES ($1, $2, $3)`,
-			engagementID, prose, valuesJSON,
+			`INSERT INTO contracts (engagement_id, prose, merge_field_values, amount_cents) VALUES ($1, $2, $3, $4)`,
+			engagementID, prose, valuesJSON, amountCents,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, "a contract already exists for this engagement", http.StatusConflict)
@@ -135,11 +152,18 @@ func PostContractHandler() http.Handler {
 			return
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
+		createdDiff, err := json.Marshal(map[string]int64{"amountCents": amountCents})
+		if err != nil {
+			// coverage:ignore reason: a fixed, always-serializable map never fails
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 		if err := activity.Record(r.Context(), tx, activity.Entry{
 			PracticeID:  practiceID,
 			SubjectKind: activity.SubjectEngagement,
 			SubjectID:   engagementID,
 			Action:      string(activity.ActionContractCreated),
+			Diff:        createdDiff,
 			Actor:       activity.StaffActor(staffID),
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -152,7 +176,7 @@ func PostContractHandler() http.Handler {
 			Status:       string(StatusDraft),
 			Prose:        prose,
 			MergeFields:  mergeFields,
-			Values:       values,
+			Values:       withResolvedPrice(mergeFields, values, amountCents),
 		}
 		apierr.WriteJSON(w, http.StatusCreated, out)
 	})
@@ -196,7 +220,7 @@ func GetContractHandler() http.Handler {
 			return
 		}
 
-		_, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
+		_, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -206,13 +230,14 @@ func GetContractHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		mergeFields := extractMergeFields(prose)
 
 		full := ContractResponse{
 			EngagementID: engagementID,
 			Status:       status,
 			Prose:        prose,
-			MergeFields:  extractMergeFields(prose),
-			Values:       values.nonEmpty(),
+			MergeFields:  mergeFields,
+			Values:       withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, full)
@@ -236,7 +261,7 @@ func PutContractHandler() http.Handler {
 			return
 		}
 
-		id, prose, status, _, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, _, amountCents, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -256,6 +281,11 @@ func PutContractHandler() http.Handler {
 			return
 		}
 		req.Values = req.Values.nonEmpty()
+
+		if _, present := req.Values[priceMergeKey]; present {
+			apierr.WriteError(w, "price is resolved automatically from the practice's rate card and cannot be set directly", http.StatusBadRequest)
+			return
+		}
 
 		mergeFields := extractMergeFields(prose)
 		if errMsg := validateMergeFieldValues(mergeFields, req.Values); errMsg != "" {
@@ -284,7 +314,7 @@ func PutContractHandler() http.Handler {
 			Status:       status,
 			Prose:        prose,
 			MergeFields:  mergeFields,
-			Values:       req.Values,
+			Values:       withResolvedPrice(mergeFields, req.Values, amountCents),
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
@@ -306,38 +336,53 @@ func PutContractHandler() http.Handler {
 // re-deriving "the current row" via engagement_id in their own UPDATE,
 // so a concurrent create-after-void can never make an UPDATE land on the
 // wrong row.
-func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, err error) {
+// fetchContract's amountCents return is the real column #967 added --
+// every caller that builds a response or renders prose resolves the
+// "price" merge field from it via withResolvedPrice, rather than trusting
+// any stored copy (there is none: price is never written into
+// merge_field_values).
+func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, amountCents int64, err error) {
 	var rawValues []byte
 	err = tx.QueryRowContext(ctx,
-		`SELECT id, prose, status, merge_field_values FROM contracts
+		`SELECT id, prose, status, merge_field_values, amount_cents FROM contracts
 		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
-	).Scan(&id, &prose, &status, &rawValues)
+	).Scan(&id, &prose, &status, &rawValues, &amountCents)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", "", nil, fmt.Errorf("contracts: fetch contract: %w", err)
+		return "", "", "", nil, 0, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return "", "", "", nil, fmt.Errorf("contracts: fetch contract: %w", err)
+		return "", "", "", nil, 0, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 
 	if err := json.Unmarshal(rawValues, &values); err != nil {
 		// coverage:ignore reason: stored JSON is always written by PostContractHandler/PutContractHandler, not exercised by unit tests
-		return "", "", "", nil, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
+		return "", "", "", nil, 0, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
 	}
-	return id, prose, status, values, nil
+	return id, prose, status, values, amountCents, nil
 }
 
 // clientNameMergeKey and practiceNameMergeKey are the merge fields this
-// package resolves for the caller rather than leaving blank for Staff to
-// type -- per #258's brief, the resolvable set today is exactly these
-// two: the Practice name and the Client's legal name (ADR-0017:
-// client_name always resolves to the legal name, never the preferred
-// one). Every other merge field -- engagement dates, price, scope of
+// package resolves for the caller and stores in merge_field_values --
+// per #258's brief, the Practice name and the Client's legal name
+// (ADR-0017: client_name always resolves to the legal name, never the
+// preferred one). Every other merge field -- engagement dates, scope of
 // service, or any ad hoc token a Practice Owner wrote into its own
 // prose -- has no column backing it and stays blank for Staff to fill
-// in via PutContractHandler. Do not add columns to grow this set; #258
-// deliberately scoped it to data the product already holds.
+// in via PutContractHandler.
+//
+// #967 overturns this comment's original limit ("do not add columns to
+// grow this set") for exactly one more key: priceMergeKey (price.go).
+// The recorded reason a Contract's price is different from these two:
+// client_name duplicates a fact that already lives on the Client, so
+// growing this set with more of those would be duplication; a price has
+// no other home in the system at all. It is not declared alongside these
+// two because it does not work the same way -- it is resolved fresh at
+// read/render time (withResolvedPrice) from a real column
+// (contracts.amount_cents), never written into this row's
+// merge_field_values, so there is no stored copy for PutContractHandler
+// to let Staff overwrite the way it lets them overwrite these two.
 const (
 	clientNameMergeKey   = "client_name"
 	practiceNameMergeKey = "practice_name"

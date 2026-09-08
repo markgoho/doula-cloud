@@ -398,6 +398,24 @@ func SeedPendingPortalInvite(t *testing.T, db *DB, clientID string) (clientPorta
 	return clientPortalUserID
 }
 
+// SeedPracticeRate inserts a practice_rates row for practiceID/kind
+// (e.g. "birth"), using the superuser Admin connection. #967 made a
+// rate for the Engagement's kind a precondition of creating a Contract
+// at all (PostContractHandler 409s without one), so every test in
+// another package that creates a Contract through the handler -- not
+// via a direct INSERT INTO contracts, which sets amount_cents itself --
+// needs one seeded first.
+func SeedPracticeRate(t *testing.T, db *DB, practiceID, kind string, amountCents int64) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_rates (practice_id, kind, amount_cents) VALUES ($1, $2::engagement_kind, $3)`,
+		practiceID, kind, amountCents,
+	); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed practice rate for kind %q: %v", kind, err)
+	}
+}
+
 // SeedPushSubscription inserts a push_subscriptions row for
 // ownerType/ownerID, using the superuser Admin connection. p256dh_key and
 // auth_key are fixed placeholder values -- no caller asserts on them,

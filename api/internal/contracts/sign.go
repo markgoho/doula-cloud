@@ -62,7 +62,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 
-		id, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -76,6 +76,7 @@ func ClientPostSignContractHandler(store objectstore.ObjectStore) http.Handler {
 			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
+		values = withResolvedPrice(extractMergeFields(prose), values, amountCents)
 
 		pdfBytes, err := renderContractPDF(fillProse(prose, values))
 		if err != nil {
