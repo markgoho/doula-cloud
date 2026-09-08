@@ -120,7 +120,7 @@ func TestGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
-	assertErrorMessage(t, resp, contracts.MsgNoSignedContract)
+	assertNoSignedContractMessage(t, resp)
 }
 
 // TestGetSignedContractPDFHandler_MissingObjectReturnsNotFound proves a
@@ -260,6 +260,7 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
+	assertNoSignedContractMessage(t, resp)
 }
 
 // TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound
@@ -284,12 +285,14 @@ func TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testi
 	}
 }
 
-// assertErrorMessage reads an apierr error body and checks the message
-// it carries. Used to pin MsgNoSignedContract: the refusal must be about
-// a document that was never produced, not about the Contract's status
+// assertNoSignedContractMessage reads an apierr error body and checks it
+// carries MsgNoSignedContract. Every refusal this package's two PDF
+// routes produce for a missing document is that one message, so the
+// helper pins it rather than taking it: the refusal must be about a
+// document that was never produced, not about the Contract's status
 // right now, and a status-shaped message drifting back in is the exact
 // regression #299 fixed.
-func assertErrorMessage(t *testing.T, resp *http.Response, want string) {
+func assertNoSignedContractMessage(t *testing.T, resp *http.Response) {
 	t.Helper()
 	var body struct {
 		Message string `json:"message"`
@@ -297,8 +300,8 @@ func assertErrorMessage(t *testing.T, resp *http.Response, want string) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode error body: %v", err)
 	}
-	if body.Message != want {
-		t.Fatalf("error message = %q, want %q", body.Message, want)
+	if body.Message != contracts.MsgNoSignedContract {
+		t.Fatalf("error message = %q, want %q", body.Message, contracts.MsgNoSignedContract)
 	}
 }
 
@@ -307,7 +310,7 @@ func assertErrorMessage(t *testing.T, resp *http.Response, want string) {
 // on the Practice route. Voiding cancels the agreement and deliberately
 // leaves signed_pdf_object_path and the stored object alone (void.go),
 // so refusing to serve it lost the Practice its own copy of what it
-// cancelled.
+// canceled.
 func TestGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-pdf-voided"
@@ -487,4 +490,40 @@ func TestClientGetSignedContractPDFHandler_VoidedStaysThisClientsOnly(t *testing
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
+}
+
+// TestSignedContractPDFHandlers_DraftNotFound is the other half of "has
+// never been signed": a Draft Contract has no stored PDF either, and both
+// routes still refuse it. The sent-but-unsigned case has its own test
+// above; this one exists because the refusal is now the absence of a
+// stored PDF rather than a status comparison, so every status that has
+// never carried one has to be shown still refusing.
+func TestSignedContractPDFHandlers_DraftNotFound(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-pdf-draft"
+	const identityUID = "client-get-pdf-draft"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContractPDF(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("practice route status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+	assertNoSignedContractMessage(t, resp)
+
+	portalSrv, portalSession := newPortalServer(t, db, identityUID)
+	defer portalSrv.Close()
+
+	portalResp := getClientContractPDF(t, portalSrv, portalSession, engagementID)
+	defer portalResp.Body.Close()
+	if portalResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("portal route status = %d, want %d", portalResp.StatusCode, http.StatusNotFound)
+	}
+	assertNoSignedContractMessage(t, portalResp)
 }

@@ -295,7 +295,7 @@ func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, pr
 	var rawValues []byte
 	err = tx.QueryRowContext(ctx,
 		`SELECT id, prose, status, merge_field_values FROM contracts
-		 WHERE engagement_id = $1 ORDER BY created_at DESC LIMIT 1`,
+		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
 	).Scan(&id, &prose, &status, &rawValues)
 	if errors.Is(err, sql.ErrNoRows) {

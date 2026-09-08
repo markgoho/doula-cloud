@@ -88,7 +88,7 @@ func seedContractWithValues(t *testing.T, db *testdb.DB, engagementID string, va
 // key, unless the test wants the "PDF row found but object missing" case.
 func seedSignedContract(t *testing.T, db *testdb.DB, engagementID string) (contractID, pdfObjectPath string) {
 	t.Helper()
-	return seedSignedContractRow(t, db, engagementID, "signed", "now()")
+	return seedSignedContractRow(t, db, engagementID, contracts.StatusSigned, "0 seconds")
 }
 
 // seedPriorSignedContract seeds an *older* Contract on the same
@@ -100,21 +100,21 @@ func seedSignedContract(t *testing.T, db *testdb.DB, engagementID string) (contr
 // decided by the fixture, not by two clock reads a microsecond apart.
 func seedPriorSignedContract(t *testing.T, db *testdb.DB, engagementID string) (contractID, pdfObjectPath string) {
 	t.Helper()
-	return seedSignedContractRow(t, db, engagementID, "voided", "now() - interval '1 hour'")
+	return seedSignedContractRow(t, db, engagementID, contracts.StatusVoided, "1 hour")
 }
 
 // seedSignedContractRow is the shared body of the two helpers above. It
 // inserts, reads the generated id back, and only then writes the object
-// path, because contracts.SignedPDFObjectPath is keyed on that id.
-// status and createdAt are SQL fragments rather than bind parameters:
-// both are fixture-controlled constants named at the two call sites
-// above, never test input.
-func seedSignedContractRow(t *testing.T, db *testdb.DB, engagementID, status, createdAt string) (contractID, pdfObjectPath string) {
+// path, because contracts.SignedPDFObjectPath is keyed on that id. age is
+// how far behind the DB clock the row's created_at sits, as a Postgres
+// interval -- the fixture, not two clock reads, decides which of an
+// Engagement's Contracts is the most recent one.
+func seedSignedContractRow(t *testing.T, db *testdb.DB, engagementID string, status contracts.Status, age string) (contractID, pdfObjectPath string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO contracts (engagement_id, status, prose, created_at)
-		 VALUES ($1, '`+status+`'::contract_status, $2, `+createdAt+`) RETURNING id`,
-		engagementID, mergeFieldProse,
+		 VALUES ($1, $2::contract_status, $3, now() - $4::interval) RETURNING id`,
+		engagementID, string(status), mergeFieldProse, age,
 	).Scan(&contractID); err != nil {
 		t.Fatalf("seed signed contract: %v", err)
 	}
@@ -137,7 +137,8 @@ func seedSignedContractRow(t *testing.T, db *testdb.DB, engagementID, status, cr
 func voidContractRow(t *testing.T, db *testdb.DB, contractID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE contracts SET status = 'voided'::contract_status WHERE id = $1`, contractID,
+		`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
+		string(contracts.StatusVoided), contractID,
 	); err != nil {
 		t.Fatalf("void contract row: %v", err)
 	}
