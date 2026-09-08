@@ -17,7 +17,7 @@ afterEach(() => {
 const emptyPage = { items: [], hasMore: false };
 
 describe('contracts/+page.ts load', () => {
-	it('fetches the Practice-wide awaiting-signature path and returns the page', async () => {
+	it('fetches both Practice-wide roll-up paths and returns both pages', async () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
@@ -27,7 +27,11 @@ describe('contracts/+page.ts load', () => {
 			'/api/practices/practice-1/contracts/awaiting-signature',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		expect(result).toEqual(emptyPage);
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/practices/practice-1/contracts/void-requests',
+			expect.objectContaining({ credentials: 'include' })
+		);
+		expect(result).toEqual({ contracts: emptyPage, voidRequests: emptyPage });
 	});
 
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
