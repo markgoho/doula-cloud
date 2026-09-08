@@ -118,6 +118,42 @@ type engagementStatusRow struct {
 	status       string
 	endingReason *string
 	endingNote   *string
+	// birthOutcome is read but never written here (#940): it decides
+	// whether a completion may proceed at all, and nothing on this path
+	// ever sets it -- see refuseUnexplainedCompletion.
+	birthOutcome *string
+}
+
+// refuseUnexplainedCompletion is #940's half of ADR-0015's
+// engagements_completed_is_explained (00094): an Engagement may not
+// reach 'completed' while its birth outcome is null. It writes the
+// refusal itself and reports whether the request was refused, the same
+// polarity refuseFactWrite and refuseFrozenWrite use.
+//
+// The refusal is the whole of this path's involvement with the outcome.
+// The alternative -- growing TransitionRequest a birthOutcome field and
+// writing it on the way to 'completed' -- would put a second writer in
+// front of a column whose freeze, correction door, date rule and audit
+// row all live in RecordBirthOutcomeHandler, and "a completion never
+// silently overwrites an outcome already recorded" would become a second
+// freeze implementation rather than something that holds because nothing
+// here writes. 00094's own comment carries the full reasoning.
+//
+// The message names 'unknown' in ADR-0015's own words, because that is
+// how an Engagement nobody ever got near a birth with reaches
+// 'completed' at all, and it needs no date
+// (engagements_outcome_is_dated). A reader who meets this refusal has
+// the control that answers it already on her screen: #943 put the
+// birth-outcome section on the same Engagement hub as the completion
+// question.
+func refuseUnexplainedCompletion(w http.ResponseWriter, current engagementStatusRow, target string) bool {
+	if target != StatusCompleted || current.birthOutcome != nil {
+		return false
+	}
+	apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeRequired,
+		"record what happened to the pregnancy before completing this Engagement; "+
+			"if the Practice never learned, say so, and that answer needs no date", nil)
+	return true
 }
 
 // TransitionHandler is the single Engagement status-transition endpoint
@@ -140,8 +176,19 @@ type engagementStatusRow struct {
 //
 // Re-requesting the status an Engagement already holds is a no-op: no
 // field write, no audit row, but the completion cascade still runs, so
-// anything a partial earlier run left behind still closes. Must be
-// mounted behind staffauth.Middleware.
+// anything a partial earlier run left behind still closes.
+//
+// Completing takes two facts, and this endpoint collects only one of
+// them (#940). ADR-0015's engagements_completed_is_explained wants an
+// ending reason and a birth outcome on every 'completed' row; the reason
+// is asked for here because it is a fact about the ending itself, and
+// the outcome is not, because ADR-0015 records it "whenever it becomes
+// known" and RecordBirthOutcomeHandler already owns every rule attached
+// to it. So a completion with no outcome recorded is refused by name
+// rather than collecting one -- see refuseUnexplainedCompletion, and
+// 00094's own comment for the full argument.
+//
+// Must be mounted behind staffauth.Middleware.
 func TransitionHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
@@ -187,8 +234,9 @@ func TransitionHandler() http.Handler {
 
 		var current engagementStatusRow
 		err := tx.QueryRowContext(r.Context(),
-			`SELECT status, ending_reason, ending_note FROM engagements WHERE id = $1`, engagementID,
-		).Scan(&current.status, &current.endingReason, &current.endingNote)
+			`SELECT status, ending_reason, ending_note, birth_outcome::text
+			   FROM engagements WHERE id = $1`, engagementID,
+		).Scan(&current.status, &current.endingReason, &current.endingNote, &current.birthOutcome)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
@@ -213,6 +261,16 @@ func TransitionHandler() http.Handler {
 		// the 400 above. What is left to gate here is role, not legality.
 		if !isNoOp && isReopen && !reader.IsOwnerOrAdmin() {
 			apierr.WriteError(w, "only a Practice Owner or Admin can reopen a completed Engagement", http.StatusForbidden)
+			return
+		}
+
+		// Before the write, so a refused completion runs neither the
+		// UPDATE nor the cascade below it (offer.CloseOnCompletion,
+		// staffauth.EndAttachments): nothing is written on this refusal.
+		// A same-status re-request of 'completed' is never refused here
+		// and needs no exception -- the row is already 'completed', so
+		// 00094's own CHECK is what guarantees it carries an outcome.
+		if refuseUnexplainedCompletion(w, current, req.Status) {
 			return
 		}
 

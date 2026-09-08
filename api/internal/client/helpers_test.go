@@ -84,8 +84,10 @@ func seedClientFull(t *testing.T, db *testdb.DB, practiceID, givenName, familyNa
 func seedEngagementForClient(t *testing.T, db *testdb.DB, clientID, practiceID, status, kind string) (engagementID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		clientID, practiceID, status, kind, testdb.EndingReasonForStatus(status),
+		`INSERT INTO engagements (client_id, practice_id, status, kind, ending_reason, birth_outcome)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+		clientID, practiceID, status, kind,
+		testdb.EndingReasonForStatus(status), testdb.BirthOutcomeForStatus(status),
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)
 	}

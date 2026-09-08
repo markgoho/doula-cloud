@@ -273,6 +273,26 @@ the Practice never got near a birth with, must still be marked `unknown`. That i
 that ever causes it to be written down. Without it the column stays null forever on every abandoned
 Engagement, and *was this recorded, or did nobody ask?* becomes unanswerable.
 
+**Completion refuses; it does not collect.**
+[#940](https://github.com/markgoho/doula-cloud/issues/940) landed the constraint as
+`engagements_completed_is_explained` (`00094_engagement_completion_requires_outcome.sql`) and chose
+the first of the two shapes it could have taken: the status-transition endpoint answers `409
+BIRTH_OUTCOME_REQUIRED` when the outcome is null, rather than growing a field and writing the
+outcome on the way to `completed`. The deciding argument is the freeze. Every rule attached to this
+fact — the vocabulary, the date rule above, the `BEFORE UPDATE` freeze, the Owner-only correction
+door, the `birth_outcome_recorded` audit row — lives in one handler behind `PUT
+.../birth-outcome`, and a second writer would have to re-answer all of them, starting with *a
+completion never silently overwrites an outcome already recorded*. Refusing makes that hold because
+the completion path never writes the column at all. It also keeps the outcome where this ADR puts
+it: recorded whenever it becomes known, which for a postpartum-only Engagement is at intake, before
+there is any status move to hang it on. The refusal names `unknown` as an answer, because that is
+how the abandoned Engagement above reaches `completed`, and it needs no date.
+
+The cost is that clearing an outcome — the un-recording the correction hatch below allows — is
+refused on an Engagement that has already reached `completed`, since it would leave a row the
+constraint forbids. That refusal is named too, and it names the order that works: reopen, then
+remove. Reopening unfreezes nothing, so the clear still costs a deliberate Owner-only correction.
+
 ## Kind: what the Practice sold
 
 An Engagement carries a **kind** — `birth` or `postpartum` — as a `NOT NULL` column the Practice
@@ -634,9 +654,11 @@ CONSTRAINT engagements_completed_is_explained CHECK (
 ),
 
 CONSTRAINT engagements_outcome_is_dated CHECK (
-    (birth_outcome IS NULL AND pregnancy_ended_on IS NULL)
-    OR birth_outcome = 'unknown'
-    OR pregnancy_ended_on IS NOT NULL
+    CASE
+        WHEN birth_outcome IS NULL     THEN pregnancy_ended_on IS NULL
+        WHEN birth_outcome = 'unknown' THEN true
+        ELSE pregnancy_ended_on IS NOT NULL
+    END
 )
 ```
 
@@ -651,6 +673,13 @@ birth happened, or did not, out of sight — and there is no honest date for tha
 make every abandoned Engagement uncloseable until someone invented a date, which is exactly the lie
 `unknown` exists to avoid. So `unknown` carries a date when the Practice happens to know it and none
 when it does not, while a null outcome still forbids a date outright.
+
+A `CASE` rather than the three-way `OR` this block printed until
+[#940](https://github.com/markgoho/doula-cloud/issues/940). In the `OR` form a row carrying a date
+and no outcome satisfies the third disjunct and passes, which is exactly what the paragraph above
+says must not happen; `00093_engagement_birth_outcome.sql` landed the `CASE` and recorded the
+departure in its own comment, and this block now prints what the database holds. The `CASE` states
+each of the three rules once, and no branch can be satisfied by another's.
 
 An `unknown` outcome with no date leaves Visits untypeable on that Engagement. That costs nothing:
 the living-baby rule already presumes no baby for `unknown`, so no surface downstream of it is asking
