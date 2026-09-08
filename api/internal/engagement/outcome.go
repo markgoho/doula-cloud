@@ -211,26 +211,32 @@ func validateOutcome(w http.ResponseWriter, req BirthOutcomeRequest) (endedOn *s
 			return nil, false
 		}
 		if req.PregnancyEndedOn != nil && *req.PregnancyEndedOn != "" {
-			apierr.WriteError(w,
-				"an Engagement with no birth outcome carries no date either", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"an Engagement with no birth outcome carries no date either",
+				map[string]string{fieldPregnancyEndedOn: MsgEndedOnUnwanted})
 			return nil, false
 		}
 		return nil, true
 	}
 	if !birthOutcomes[*req.BirthOutcome] {
-		apierr.WriteError(w, "birthOutcome must be 'live_birth', 'loss' or 'unknown'", http.StatusBadRequest)
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+			"birthOutcome must be 'live_birth', 'loss' or 'unknown'",
+			map[string]string{"birthOutcome": MsgBirthOutcomeUnknown})
 		return nil, false
 	}
 	if req.PregnancyEndedOn == nil || *req.PregnancyEndedOn == "" {
 		if *req.BirthOutcome != OutcomeUnknown {
-			apierr.WriteError(w,
-				"pregnancyEndedOn is required unless the birth outcome is 'unknown'", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"pregnancyEndedOn is required unless the birth outcome is 'unknown'",
+				map[string]string{fieldPregnancyEndedOn: MsgEndedOnNeeded})
 			return nil, false
 		}
 		return nil, true
 	}
 	if _, err := time.Parse(dateLayout, *req.PregnancyEndedOn); err != nil {
-		apierr.WriteError(w, "pregnancyEndedOn must be a date, as YYYY-MM-DD", http.StatusBadRequest)
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+			"pregnancyEndedOn must be a date, as YYYY-MM-DD",
+			map[string]string{fieldPregnancyEndedOn: MsgEndedOnMalformed})
 		return nil, false
 	}
 	return req.PregnancyEndedOn, true

@@ -8,7 +8,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import type { ClientRecord, EngagementSummary } from './clientDetail.js';
-import { apiErrorMessage } from './apiErrorMessage.js';
+import { refusalError } from './formErrors.js';
 
 /** One row of the Clients list, Client-shaped: one row per Client, never
  * one per Client+Engagement pair (ADR-0017) -- mirrors the Go BFF's
@@ -104,7 +104,7 @@ export async function loadClients(
 ): Promise<ClientListPage> {
 	const response = await fetcher(`${clientsPath(practiceId)}${clientsQuery(options)}`);
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return response.json();
 }
@@ -188,7 +188,7 @@ export async function createClient(
 		return { conflict: true, matches: body.matches };
 	}
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return { conflict: false, record: await response.json() };
 }
@@ -229,7 +229,7 @@ export async function searchClients(
 ): Promise<ClientMatch[]> {
 	const response = await fetcher(searchPath(practiceId, fields));
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	const body: { matches: ClientMatch[] } = await response.json();
 	return body.matches;
@@ -292,7 +292,7 @@ export async function editClient(
 		};
 	}
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return { conflict: false, record: await response.json() };
 }
@@ -321,7 +321,7 @@ export async function mergeClient(
 		body: JSON.stringify({ ...fields, otherClientId })
 	});
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return response.json();
 }

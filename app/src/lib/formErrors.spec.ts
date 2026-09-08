@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
 	authRefusal,
+	errorsFromCause,
 	isMultiFactorAuthRequired,
 	passwordReauthRefusal,
+	RefusalError,
+	refusalError,
 	refusalErrors,
 	refusalMessage,
 	refusalOrConfirmable,
@@ -443,5 +446,67 @@ describe('refusalOrConfirmable', () => {
 		const refusal = await refusalOrConfirmable(jsonResponse('boom', 500));
 
 		expect(refusal).toEqual({ kind: 'errors', errors: [{ message: SERVICE_PROBLEM }] });
+	});
+});
+
+describe('refusalError and errorsFromCause', () => {
+	it('carries the BFF details through a throw and targets each one', async () => {
+		const cause = await refusalError(
+			jsonResponse(
+				{
+					code: 'INVALID_ARGUMENT',
+					message: 'givenName is required',
+					details: { givenName: "Enter the Client's first name" }
+				},
+				400
+			)
+		);
+
+		expect(cause).toBeInstanceOf(RefusalError);
+		expect(cause.message).toBe('givenName is required');
+		expect(errorsFromCause(cause, { givenName: 'given-name-field' })).toEqual([
+			{ message: "Enter the Client's first name", targetId: 'given-name-field' }
+		]);
+	});
+
+	it('leaves a details key the route does not map untargeted', async () => {
+		const cause = await refusalError(
+			jsonResponse(
+				{ code: 'INVALID_ARGUMENT', message: 'refused', details: { note: 'Shorten the note' } },
+				400
+			)
+		);
+
+		expect(errorsFromCause(cause, { givenName: 'given-name-field' })).toEqual([
+			{ message: 'Shorten the note', targetId: undefined }
+		]);
+	});
+
+	it('degrades to the one untargeted message when the BFF names no field', async () => {
+		const cause = await refusalError(
+			jsonResponse({ code: 'CONFLICT', message: 'already merged' }, 409)
+		);
+
+		expect(errorsFromCause(cause, { givenName: 'given-name-field' })).toEqual([
+			{ message: 'already merged' }
+		]);
+	});
+
+	it("shows a 5xx's own message, matching what apiErrorMessage did at these call sites", async () => {
+		const cause = await refusalError(
+			jsonResponse({ code: 'INTERNAL_ERROR', message: 'mailgun refused' }, 502)
+		);
+
+		expect(errorsFromCause(cause)).toEqual([{ message: 'mailgun refused' }]);
+	});
+
+	it('reads an ordinary Error as its own message', () => {
+		expect(errorsFromCause(new Error('Failed to fetch'))).toEqual([
+			{ message: 'Failed to fetch' }
+		]);
+	});
+
+	it('reads something thrown that is not an Error as the service problem', () => {
+		expect(errorsFromCause('a bare string')).toEqual([{ message: SERVICE_PROBLEM }]);
 	});
 });

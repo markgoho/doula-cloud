@@ -222,12 +222,16 @@ func TransitionHandler() http.Handler {
 			return
 		}
 		if req.Status != StatusActive && req.Status != StatusCompleted {
-			apierr.WriteError(w, "status must be 'active' or 'completed'", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"status must be 'active' or 'completed'",
+				map[string]string{"status": MsgStatusUnknown})
 			return
 		}
 		if req.Status == StatusCompleted {
 			if req.EndingReason == nil || !endingReasons[*req.EndingReason] {
-				apierr.WriteError(w, "endingReason is required to complete an Engagement", http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+					"endingReason is required to complete an Engagement",
+					map[string]string{"endingReason": MsgEndingReasonNeeded})
 				return
 			}
 		}

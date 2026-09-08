@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,11 @@ func TestRequestResetHandler_MissingEmail(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	// #488: the refusal names the field at fault, keyed by the DTO json
+	// tag the screen maps onto its own control.
+	if details := decodeDetails(t, resp); details["email"] != staffauth.MsgOwnAddressNeeded {
+		t.Fatalf("details = %v, want email entry", details)
 	}
 }
 
@@ -160,6 +166,21 @@ func TestSpendResetHandler_PasswordTooShort(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	// #488: the refusal names newPassword, and the sentence it names it
+	// with agrees with the limit the Message reports. MsgPasswordTooShort
+	// spells the number out rather than building it from
+	// minPasswordLength -- TestDetailsWording can read a constant but not
+	// a fmt.Sprintf -- so this is what stops the two from drifting if the
+	// limit ever moves.
+	body := decodeRefusal(t, resp)
+	if body.Details["newPassword"] != staffauth.MsgPasswordTooShort {
+		t.Fatalf("details = %v, want newPassword entry", body.Details)
+	}
+	limit := regexp.MustCompile(`\d+`).FindString(body.Message)
+	if want := "Password must be " + limit + " characters or more"; staffauth.MsgPasswordTooShort != want {
+		t.Fatalf("detail = %q, want %q -- the Message reports a minimum of %q",
+			staffauth.MsgPasswordTooShort, want, limit)
 	}
 }
 

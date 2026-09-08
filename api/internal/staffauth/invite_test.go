@@ -213,6 +213,12 @@ func TestInviteHandler_AlreadyAMemberConflicts(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
+	// docs/api-design.md section 7's own worked example (#488): a rule
+	// only the server knows, said in the reader's words and keyed onto
+	// the control that caused it.
+	if details := decodeDetails(t, resp); details["email"] != staffauth.MsgMembershipAlreadyHeld {
+		t.Fatalf("details = %v, want email entry", details)
+	}
 }
 
 func TestInviteHandler_Rejects(t *testing.T) {

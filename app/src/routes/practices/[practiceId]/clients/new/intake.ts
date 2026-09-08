@@ -11,7 +11,7 @@ import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { apiFetchWithSession } from '#lib/api.js';
 import { createClient } from '#lib/client.js';
-import { SERVICE_PROBLEM, type FormError } from '#lib/formErrors.js';
+import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { CHANGE_PARAMETER, CHANGE_VALUE } from '#lib/intakeJourney.js';
 
@@ -52,6 +52,43 @@ export function givenNameRefusal(
 		? [{ message: "Enter the Client's given name", targetId: GIVEN_NAME_ID }]
 		: [{ message: "Enter the Client's given name on the Name step" }];
 }
+
+/**
+ * The BFF's own field names (`client.Record`'s json tags) mapped onto
+ * the controls of the step being saved from (#488).
+ *
+ * Per-step, because intake is a sequence of pages and only one of them
+ * is showing at a time: a `givenName` refusal saved from the name step
+ * has a control right there, and the same refusal saved from the summary
+ * is a page away. An entry with nowhere useful to send the reader is
+ * rendered as plain text rather than as a link that goes nowhere, which
+ * is what an empty map here produces -- the same rule `givenNameRefusal`
+ * follows.
+ *
+ * The date group's first box is the target, which is GOV.UK's rule for a
+ * group: the group itself is a `<fieldset>` and is not focusable. The
+ * two ids are written here rather than in each page so the summary and
+ * the control cannot drift apart.
+ */
+export function intakeFieldIds(stepId: string): Record<string, string> {
+	switch (stepId) {
+		case 'name': {
+			return { givenName: GIVEN_NAME_ID };
+		}
+		case 'date-of-birth': {
+			return { dateOfBirth: `${DATE_OF_BIRTH_GROUP}-day` };
+		}
+		default: {
+			return {};
+		}
+	}
+}
+
+/**
+ * The `name` the date-of-birth step's three boxes share, which is also
+ * what each box's id is built from (`<name>-day`).
+ */
+export const DATE_OF_BIRTH_GROUP = 'intake-date-of-birth';
 
 export function basePath(practiceId: string): string {
 	return resolve('/practices/[practiceId]/clients/new', { practiceId });
@@ -117,7 +154,8 @@ export function checkOr(
  */
 export async function saveIntake(
 	practiceId: string,
-	shouldOverride: boolean
+	shouldOverride: boolean,
+	fieldIds: Record<string, string> = {}
 ): Promise<FormError[] | undefined> {
 	try {
 		const result = await createClient(
@@ -136,6 +174,12 @@ export async function saveIntake(
 		await goto(detailHref(practiceId, clientId));
 		return undefined;
 	} catch (error) {
-		return [{ message: error instanceof Error && error.message ? error.message : SERVICE_PROBLEM }];
+		// A server refusal that names fields becomes one entry each
+		// (#488), each pointed at the control the caller says holds it.
+		// Callers away from the field pass nothing, and those entries
+		// stay untargeted for the reason `givenNameRefusal` gives: GOV.UK
+		// renders an entry with nowhere useful to send the reader as
+		// plain text rather than as a link that goes nowhere.
+		return errorsFromCause(error, fieldIds);
 	}
 }

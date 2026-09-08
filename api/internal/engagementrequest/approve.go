@@ -179,7 +179,7 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 // 'engagement' (activity.SubjectEngagement), subject_id the Engagement's
 // own new id.
 func recordEngagementCreated(ctx context.Context, tx *sql.Tx, practiceID, engagementID, kind, approverStaffID string) error {
-	diff, err := json.Marshal(map[string]string{"kind": kind})
+	diff, err := json.Marshal(map[string]string{fieldKind: kind})
 	if err != nil {
 		// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
 		return fmt.Errorf("engagementrequest: marshal engagement created diff: %w", err)

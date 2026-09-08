@@ -36,7 +36,7 @@
 	import { journeySteps, nextStepHref, previousStepHref, type StepId } from '#lib/intakeJourney.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import IntakeActions from './IntakeActions.svelte';
-	import { JOURNEY, basePath, checkOr, saveIntake, searchHref } from './intake.js';
+	import { JOURNEY, basePath, checkOr, intakeFieldIds, saveIntake, searchHref } from './intake.js';
 
 	interface Properties {
 		stepId: StepId;
@@ -98,7 +98,13 @@
 
 	async function handleSaveForLater() {
 		if (isRefused()) return;
-		await submission.run(() => saveIntake(practiceId, false), orServiceProblem);
+		// Which of the BFF's field names this step has a control for
+		// (#488) -- an empty map on the steps that have none, whose
+		// entries then render as plain text rather than dead links.
+		await submission.run(
+			() => saveIntake(practiceId, false, intakeFieldIds(stepId)),
+			orServiceProblem
+		);
 	}
 </script>
 

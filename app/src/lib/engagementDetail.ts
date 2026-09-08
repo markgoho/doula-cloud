@@ -311,7 +311,15 @@ export function birthOutcomeURL(reference: EngagementReference): string {
 export async function recordBirthOutcome(
 	fetcher: Fetcher,
 	reference: EngagementReference,
-	request: BirthOutcomeRequest
+	request: BirthOutcomeRequest,
+	/**
+	 * The BFF's own field names (`engagement.BirthOutcomeRequest`'s json
+	 * tags) mapped onto the caller's controls, so a refusal it names
+	 * lands on the right one (#488). Defaulted to the empty map: a
+	 * caller with no form -- the clear-what-was-recorded path -- has no
+	 * control to point at, and those entries stay plain text.
+	 */
+	fieldIds: Record<string, string> = {}
 ): Promise<BirthOutcomeResult> {
 	const response = await fetcher(birthOutcomeURL(reference), {
 		method: 'PUT',
@@ -319,7 +327,7 @@ export async function recordBirthOutcome(
 		body: JSON.stringify(request)
 	});
 	if (!response.ok) {
-		return refusalOrConfirmable(response, {}, 'BIRTH_OUTCOME_FROZEN');
+		return refusalOrConfirmable(response, fieldIds, 'BIRTH_OUTCOME_FROZEN');
 	}
 	/*
 	 * Normalized to `undefined`, not passed through. `Detail` omits both

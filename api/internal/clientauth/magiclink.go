@@ -44,7 +44,8 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 		}
 		address := staffauth.NormalizeAddress(req.Email)
 		if address == "" {
-			apierr.WriteError(w, "email is required", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "email is required",
+				map[string]string{fieldEmail: MsgAddressRequired})
 			return
 		}
 

@@ -13,8 +13,8 @@ formErrors.ts, this one shows a 5xx's own message where there is one
 that), so `parsed` here is never `undefined`: text is always read, and an
 empty body projects to `''`, the same as before #840.
 
-Dependency-free on purpose: several lib modules (client.ts, contract.ts,
-offer.ts, and others) deliberately avoid importing api.ts, since api.ts
+Dependency-free on purpose: several lib modules (contract.ts, offer.ts,
+and others) deliberately avoid importing api.ts, since api.ts
 pulls in SvelteKit's `$app` modules and firebase/auth and those modules
 are unit-tested without either -- see their own "decoupled from
 SvelteKit" doc comments. formErrors.ts carries no such import either (its

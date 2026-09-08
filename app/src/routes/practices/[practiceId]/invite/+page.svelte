@@ -15,7 +15,18 @@
 	const rolesFieldId = 'invite-roles';
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- the POST body a few lines below.
-	const inviteFieldIds = { email: emailId, roles: rolesFieldId };
+	// The employment-type radios share one name, and RadioGroup builds
+	// each option's id from it, so the summary entry points at the first
+	// one -- GOV.UK's rule for a group, the same shape rolesFieldId takes.
+	const employmentTypeName = 'invite-employment-type';
+	const employmentTypeFieldId = `${employmentTypeName}-employee`;
+	// Keyed by the BFF's own json tags (staffauth.InviteRequest), so a
+	// refusal it names lands on the control it is about (#488).
+	const inviteFieldIds = {
+		email: emailId,
+		roles: rolesFieldId,
+		employmentType: employmentTypeFieldId
+	};
 
 	let email = $state('');
 	let roles = $state<string[]>(['doula']);
@@ -91,7 +102,9 @@
 		{roles}
 		{employmentType}
 		{rolesFieldId}
+		{employmentTypeName}
 		rolesError={submission.errorFor(rolesFieldId)}
+		employmentTypeError={submission.errorFor(employmentTypeFieldId)}
 		onRolesChange={(next) => (roles = next)}
 		onEmploymentTypeChange={(next) => (employmentType = next)}
 	/>

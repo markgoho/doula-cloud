@@ -160,7 +160,8 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 		// again here should not be told off in different words.
 		normalized, valid := NormalizeWorkState(req.WorkState)
 		if !valid {
-			apierr.WriteError(w, MsgWorkStateRequired, http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgWorkStateRequired,
+				map[string]string{fieldWorkState: MsgWorkStateNeeded})
 			return
 		}
 

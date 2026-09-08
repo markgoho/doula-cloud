@@ -4,7 +4,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { SectionState } from '#lib/sectionState.svelte.js';
-	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
 		changeEngagementStatus,
@@ -199,6 +199,11 @@
 	let completeReasonValue = $state('');
 	let completeNoteValue = $state('');
 	const endingReasonFieldId = `ending-reason-${endingReasons[0]!.value}`;
+	// Keyed by the BFF's own json tags (engagement.TransitionRequest), so
+	// a refusal it names lands on the control it is about (#488). `status`
+	// has no control -- the two paths are named buttons -- so a refusal
+	// naming it stays an untargeted summary entry.
+	const completeFieldIds = { endingReason: endingReasonFieldId };
 
 	async function handleCompleteSubmit(event: SubmitEvent) {
 		event.preventDefault();
@@ -216,7 +221,7 @@
 			isCompleteFormShown = false;
 			completeReasonValue = '';
 			completeNoteValue = '';
-		}, orThrownMessage);
+		}, orThrownErrors(completeFieldIds));
 	}
 
 	// #943: what happened to the pregnancy, overlaid on the load-time read
@@ -245,8 +250,11 @@
 		!isAmbientContractor(data.session) && (isPracticeOwnerOrAdmin || isDoula(data.session))
 	);
 
-	async function handleRecordBirthOutcome(request: BirthOutcomeRequest) {
-		const result = await recordBirthOutcome(apiFetchWithSession, reference, request);
+	async function handleRecordBirthOutcome(
+		request: BirthOutcomeRequest,
+		fieldIds: Record<string, string>
+	) {
+		const result = await recordBirthOutcome(apiFetchWithSession, reference, request, fieldIds);
 		if (result.kind === 'recorded') birthOutcomeOverride = result.facts;
 		return result;
 	}
