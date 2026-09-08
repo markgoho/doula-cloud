@@ -203,16 +203,18 @@
 	// #943: what happened to the pregnancy, overlaid on the load-time read
 	// once a record succeeds, exactly as statusOverride above does -- so
 	// the section reads back the new pair without a reload. `undefined`
-	// means "nothing recorded on this page view", which falls back to
-	// `detail`; a cleared pair is a recorded fact of its own, and comes
-	// back from the endpoint as `{}`, so the overlay holds the object
-	// rather than the outcome string.
+	// means "no write on this page view", which falls back to `detail`.
+	// The overlay holds the whole pair rather than the outcome alone,
+	// because a *cleared* pair is a write whose result is two absences,
+	// and two separate overrides could not tell that apart from "nothing
+	// written yet" (recordBirthOutcome normalizes the endpoint's own
+	// `null`s to absent before this ever sees them).
 	let birthOutcomeOverride = $state<BirthOutcomeFacts | undefined>();
-	const displayBirthOutcome = $derived(
-		birthOutcomeOverride === undefined ? detail?.birthOutcome : birthOutcomeOverride.birthOutcome
-	);
-	const displayPregnancyEndedOn = $derived(
-		birthOutcomeOverride === undefined ? detail?.pregnancyEndedOn : birthOutcomeOverride.pregnancyEndedOn
+	const birthOutcome = $derived<BirthOutcomeFacts>(
+		birthOutcomeOverride ?? {
+			birthOutcome: detail?.birthOutcome,
+			pregnancyEndedOn: detail?.pregnancyEndedOn
+		}
 	);
 
 	// The app-side mirror of api/internal/engagement/transition.go's own
@@ -1410,8 +1412,8 @@
 -->
 {#snippet birthOutcomeSection()}
 	<BirthOutcomeSection
-		outcome={displayBirthOutcome}
-		endedOn={displayPregnancyEndedOn}
+		outcome={birthOutcome.birthOutcome}
+		endedOn={birthOutcome.pregnancyEndedOn}
 		canRecord={canRecordBirthOutcome}
 		canCorrect={isPracticeOwner}
 		onRecord={handleRecordBirthOutcome}

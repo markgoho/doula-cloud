@@ -44,6 +44,16 @@
 		 */
 		legend?: string;
 		/**
+		 * What this particular date is, where the legend alone cannot say
+		 * it -- GOV.UK's hint text (#943: "the day the pregnancy ended,
+		 * which is often not the day you are recording it"). A prop rather
+		 * than a paragraph the caller renders above the group, because a
+		 * hint only works if it is announced: this joins it to the fieldset
+		 * and to each of the three boxes by `aria-describedby`, which a
+		 * sibling paragraph outside the component cannot do.
+		 */
+		hint?: string;
+		/**
 		 * The refusal for the group. Announced by role="alert", the same
 		 * arrangement `RadioGroup` uses for a group with no legend to be
 		 * described by.
@@ -55,9 +65,17 @@
 		invalidField?: DateField;
 	}
 
-	let { name, parts, onChange, legend, error, invalidField }: Properties = $props();
+	let { name, parts, onChange, legend, hint, error, invalidField }: Properties = $props();
 
 	const errorId = $derived(`${name}-error`);
+	const hintId = $derived(`${name}-hint`);
+	/* The hint first, then the refusal: a screen reader announces them in
+	   this order, and what the box is for has to come before what is wrong
+	   with what is in it. `undefined` rather than an empty string, so a
+	   group with neither carries no attribute at all. */
+	const describedBy = $derived(
+		[hint ? hintId : undefined, error ? errorId : undefined].filter(Boolean).join(' ') || undefined
+	);
 
 	const boxes = $derived([
 		{ field: 'month' as const, label: 'Month', width: 2 },
@@ -69,6 +87,12 @@
 		onChange({ ...parts, [field]: value });
 	}
 </script>
+
+{#snippet hintText()}
+	{#if hint}
+		<p id={hintId} class="hint">{hint}</p>
+	{/if}
+{/snippet}
 
 {#snippet errorMessage()}
 	{#if error}
@@ -94,7 +118,7 @@
 					inputmode="numeric"
 					maxlength={box.width}
 					invalid={invalidField === box.field}
-					describedBy={error ? errorId : undefined}
+					{describedBy}
 					autocomplete="off"
 				/>
 			</div>
@@ -104,11 +128,13 @@
 {/snippet}
 
 {#if legend === undefined}
+	{@render hintText()}
 	{@render errorMessage()}
 	{@render dateBoxes()}
 {:else}
-	<fieldset aria-describedby={error ? errorId : undefined}>
+	<fieldset aria-describedby={describedBy}>
 		<legend>{legend}</legend>
+		{@render hintText()}
 		{@render errorMessage()}
 		{@render dateBoxes()}
 	</fieldset>
@@ -127,6 +153,14 @@
 			margin-block-end: var(--space-5);
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface);
+		}
+
+		/* The same quiet, smaller step `LabeledField`'s own hint carries,
+		   so a hint reads the same wherever it appears. */
+		.hint {
+			margin: 0 0 var(--space-3);
+			color: var(--color-on-surface-muted);
+			font-size: var(--text-body-sm-size);
 		}
 
 		/* The same weight and color every other refusal in the app

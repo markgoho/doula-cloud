@@ -3,11 +3,15 @@
 	import type { BirthOutcomeResult } from '#lib/engagementDetail.js';
 
 	/*
-	 * Four states, because every one of them is a different screen and a
+	 * Five states, because every one of them is a different screen and a
 	 * style-guide entry that shows one hides the rest (govuk-alignment.md,
 	 * rule 4): nothing recorded, a recorded live birth an Owner may
 	 * correct, a recorded loss read by somebody who may not, and the same
 	 * unrecorded state as a contractor Doula sees it -- no control at all.
+	 * The question itself opens behind a control, so the sweep mounts
+	 * these five with the form closed; the form's own two controls are
+	 * swept on `/style-guide/radio-group` and `/style-guide/date-fields`,
+	 * and the composition was walked by hand at 320px (govuk-alignment.md).
 	 *
 	 * The recorded pair is a `loss` in one of them on purpose. That is the
 	 * hardest thing this section ever says, and the sweep should measure

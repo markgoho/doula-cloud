@@ -462,8 +462,14 @@ describe('recordBirthOutcome', () => {
 		});
 	});
 
-	it('reports a cleared pair as recorded, since not-recorded is a state of its own', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ engagementId: 'engagement-1' }));
+	// The response body, not Detail: BirthOutcomeResponse carries no
+	// `omitempty`, so a clear really does answer `birthOutcome: null`, and
+	// the page's own "is anything recorded?" test is `=== undefined`.
+	it('normalizes a cleared pair to absent, so the page stops reading it as recorded', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			// eslint-disable-next-line unicorn/no-null
+			jsonResponse({ engagementId: 'engagement-1', birthOutcome: null, pregnancyEndedOn: null })
+		);
 
 		const result = await recordBirthOutcome(fetcher, reference, {
 			// eslint-disable-next-line unicorn/no-null -- the wire value for a clear.

@@ -308,8 +308,25 @@ export async function recordBirthOutcome(
 	if (!response.ok) {
 		return refusalOrConfirmable(response, {}, 'BIRTH_OUTCOME_FROZEN');
 	}
-	const body = (await response.json()) as BirthOutcomeFacts;
-	return { kind: 'recorded', facts: { birthOutcome: body.birthOutcome, pregnancyEndedOn: body.pregnancyEndedOn } };
+	/*
+	 * Normalized to `undefined`, not passed through. `Detail` omits both
+	 * fields when they are null (`omitempty`), but `BirthOutcomeResponse`
+	 * does not -- a successful clear answers `birthOutcome: null`, and the
+	 * page's own "is anything recorded?" test is `=== undefined`. Left as
+	 * `null`, a cleared Engagement would go on rendering the recorded
+	 * branch: the read-back, the Owner's correct and remove controls, and
+	 * a next submit carrying `correction: true` onto an empty row, which
+	 * the BFF answers with the 409 that is *not* a press-through. One
+	 * shape reaches the page, whichever of the two endpoints it came from.
+	 */
+	const body = (await response.json()) as { birthOutcome?: string | null; pregnancyEndedOn?: string | null };
+	return {
+		kind: 'recorded',
+		facts: {
+			birthOutcome: body.birthOutcome ?? undefined,
+			pregnancyEndedOn: body.pregnancyEndedOn ?? undefined
+		}
+	};
 }
 
 /**

@@ -46,8 +46,10 @@
 		type DateParts
 	} from '#lib/intakeDate.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
+	import { SectionState } from '#lib/sectionState.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
@@ -85,6 +87,10 @@
 	   `${name}-${value}` and DateFields names its boxes `${name}-${field}`. */
 	const OUTCOME_NAME = 'birth-outcome';
 	const DATE_NAME = 'pregnancy-ended-on';
+	/* An error-summary entry links to a control, and a radio group's is
+	   its first option -- GOV.UK's own rule, and what the hub's ending
+	   reason group already does. */
+	const OUTCOME_FIELD_ID = `${OUTCOME_NAME}-${BIRTH_OUTCOMES[0]!.value}`;
 
 	let isFormShown = $state(false);
 	let choice = $state('');
@@ -123,28 +129,35 @@
 	function openForm() {
 		choice = outcome ?? '';
 		parts = endedOn === undefined ? { ...EMPTY_DATE_PARTS } : splitDate(endedOn);
+		// Both refusals, not just the summary's: `dateRefusal` outlives
+		// `submission.errors` otherwise, and a form reopened after a
+		// refused date renders the old message against boxes nobody has
+		// typed in yet.
 		submission.errors = [];
+		dateRefusal = undefined;
+		clearState.error = '';
 		isFormShown = true;
 	}
 
 	/**
-	 * Sends one request and reads its answer. Returns what
-	 * `FormSubmission.run` treats as a refusal (`FormError[]`), or
-	 * `undefined` for anything that is not one -- a recorded pair, and the
-	 * frozen press-through, which opens a confirmation instead.
+	 * Sends one request and reads its answer, reporting what is left to
+	 * show the reader. The empty array is "nothing to report", which
+	 * covers two unrelated answers on purpose: a recorded pair, and the
+	 * frozen press-through, which opens a confirmation rather than
+	 * refusing anything.
 	 */
-	async function send(request: BirthOutcomeRequest): Promise<FormError[] | undefined> {
+	async function send(request: BirthOutcomeRequest): Promise<FormError[]> {
 		const result = await onRecord(request);
 		if (result.kind === 'recorded') {
 			isFormShown = false;
-			return undefined;
+			return [];
 		}
 		if (result.kind === 'confirmable') {
 			if (!canCorrect) return [{ message: result.message }];
 			frozenMessage = result.message;
 			pendingRequest = { ...request, correction: true };
 			isFrozenDialogShown = true;
-			return undefined;
+			return [];
 		}
 		return result.errors;
 	}
@@ -154,12 +167,7 @@
 		await submission.run(async () => {
 			dateRefusal = undefined;
 			if (choice === '') {
-				return [
-					{
-						message: 'Select what happened to the pregnancy',
-						targetId: `${OUTCOME_NAME}-${BIRTH_OUTCOMES[0]!.value}`
-					}
-				];
+				return [{ message: 'Select what happened to the pregnancy', targetId: OUTCOME_FIELD_ID }];
 			}
 			let pregnancyEndedOn: string | undefined;
 			if (isDateAsked) {
@@ -186,17 +194,29 @@
 		}, orServiceProblem);
 	}
 
+	/* Both dialogs go back through the submission they continue, rather
+	   than writing `submission.errors` by hand: `run` is also what catches
+	   a thrown fetch, so a dropped connection on the pressed-through
+	   correction says so instead of rejecting into nothing. */
 	async function handleFrozenConfirm() {
 		isFrozenDialogShown = false;
-		const errors = await send(pendingRequest);
-		if (errors) submission.errors = errors;
+		await submission.run(() => send(pendingRequest), orServiceProblem);
 	}
+
+	/* The clear is not a refused form -- no field was filled in and there
+	   is none to send her back to -- so it reports as a section-local
+	   operation outcome, which is what #467 assigns this page's `Notice`
+	   and what `SectionState` already holds for every other control on
+	   the hub. */
+	const clearState = new SectionState<void>(undefined);
 
 	async function handleClear() {
 		isClearDialogShown = false;
-		// eslint-disable-next-line unicorn/no-null
-		const errors = await send({ birthOutcome: null, correction: true });
-		if (errors) submission.errors = errors;
+		await clearState.mutate(async () => {
+			// eslint-disable-next-line unicorn/no-null
+			const errors = await send({ birthOutcome: null, correction: true });
+			if (errors.length > 0) throw new Error(errors.map((entry) => entry.message).join(' '));
+		}, 'Failed to remove the recorded outcome');
 	}
 
 	function recordedItems(recorded: string, date: string | undefined): { label: string; value: string }[] {
@@ -213,10 +233,10 @@
 </script>
 
 <stack-l space="var(--space-4)">
-	<!-- Above everything, including the read-back: a clear that was
-	     refused has no form on screen to sit under. -->
-	{#if submission.errors.length > 0}
-		<ErrorSummary errors={submission.errors} />
+	<!-- A clear is a control's own outcome, not a refused form: it says so
+	     where it happened, which is what #467 settled for this page. -->
+	{#if clearState.error}
+		<Notice variant="error" message={clearState.error} />
 	{/if}
 
 	{#if outcome === undefined}
@@ -252,31 +272,36 @@
 	{#if isFormShown}
 		<form onsubmit={handleSubmit} novalidate>
 			<stack-l space="var(--space-5)">
+				<!--
+					A refused *form*, so the summary rather than a Notice: the
+					same shape the hub's own "Mark care complete" question uses
+					a few hundred lines up, and the same reason #467 gives for
+					it -- there are fields to send her back to. #467's Notice
+					exception on this page is for a control's own outcome,
+					which is what the clear above renders as.
+				-->
+				{#if submission.errors.length > 0}
+					<ErrorSummary errors={submission.errors} />
+				{/if}
 				<RadioGroup
 					legend="What happened to the pregnancy?"
 					name={OUTCOME_NAME}
 					options={BIRTH_OUTCOMES}
 					value={choice}
 					onChange={(value) => (choice = value)}
-					error={submission.errorFor(`${OUTCOME_NAME}-${BIRTH_OUTCOMES[0]!.value}`)}
+					error={submission.errorFor(OUTCOME_FIELD_ID)}
 				/>
 
 				{#if isDateAsked}
-					<stack-l space="var(--space-3)">
-						<Text
-							step="body-sm"
-							tone="muted"
-							text="The day the pregnancy ended, which is often not the day you are recording it. For example, 11 3 2026 for 3 November 2026."
-						/>
-						<DateFields
-							legend="When did the pregnancy end?"
-							name={DATE_NAME}
-							{parts}
-							onChange={(next) => (parts = next)}
-							error={dateRefusal?.message}
-							invalidField={dateRefusal?.field}
-						/>
-					</stack-l>
+					<DateFields
+						legend="When did the pregnancy end?"
+						hint="The day the pregnancy ended, which is often not the day you are recording it. For example, 11 3 2026 for November 3, 2026."
+						name={DATE_NAME}
+						{parts}
+						onChange={(next) => (parts = next)}
+						error={dateRefusal?.message}
+						invalidField={dateRefusal?.field}
+					/>
 				{/if}
 
 				<cluster-l space="var(--space-3)">

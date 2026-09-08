@@ -7,6 +7,7 @@ import type { DateField, DateParts } from '#lib/intakeDate.js';
 interface SetupOptions {
 	parts?: DateParts;
 	legend?: string;
+	hint?: string;
 	error?: string;
 	invalidField?: DateField;
 }
@@ -99,5 +100,41 @@ describe('DateFields', () => {
 		await expect
 			.element(page.getByRole('group', { name: 'Date of birth' }))
 			.toHaveAttribute('aria-describedby', 'dob-error');
+	});
+
+	// #943: a hint nobody hears is not a hint. It has to reach a reader
+	// who never sees the paragraph -- from the group, and from each box
+	// she tabs into.
+	it('announces a hint from the group and from every box', async () => {
+		await setup({ legend: 'When did the pregnancy end?', hint: 'The day the pregnancy ended.' });
+
+		await expect.element(page.getByText('The day the pregnancy ended.')).toBeVisible();
+		await expect
+			.element(page.getByRole('group', { name: 'When did the pregnancy end?' }))
+			.toHaveAttribute('aria-describedby', 'dob-hint');
+		await expect.element(page.getByLabelText('Month')).toHaveAttribute('aria-describedby', 'dob-hint');
+	});
+
+	// The hint first, then the refusal: what the box is for has to be
+	// announced before what is wrong with what is in it.
+	it('announces the hint before the refusal when it carries both', async () => {
+		await setup({
+			legend: 'When did the pregnancy end?',
+			hint: 'The day the pregnancy ended.',
+			error: 'Enter the date the pregnancy ended'
+		});
+
+		await expect
+			.element(page.getByRole('group', { name: 'When did the pregnancy end?' }))
+			.toHaveAttribute('aria-describedby', 'dob-hint dob-error');
+	});
+
+	// No legend is the question-page shape (#464): the Template owns the
+	// fieldset, so the hint has nothing to hang off but the boxes.
+	it('announces a hint from the boxes alone when the Template owns the group', async () => {
+		await setup({ hint: 'The day the pregnancy ended.' });
+
+		await expect.element(page.getByText('The day the pregnancy ended.')).toBeVisible();
+		await expect.element(page.getByLabelText('Year')).toHaveAttribute('aria-describedby', 'dob-hint');
 	});
 });

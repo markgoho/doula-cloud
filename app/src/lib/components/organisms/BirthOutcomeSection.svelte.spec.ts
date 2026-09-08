@@ -281,7 +281,7 @@ describe('BirthOutcomeSection', () => {
 			.toBeVisible();
 	});
 
-	it('reports a refused clear where the reader can see it', async () => {
+	it('reports a refused clear where it happened, not as a refused form', async () => {
 		await setup({
 			outcome: 'loss',
 			endedOn: '2026-08-14',
@@ -293,6 +293,48 @@ describe('BirthOutcomeSection', () => {
 		await expect
 			.element(page.getByText('This Engagement has no birth outcome to correct').first())
 			.toBeVisible();
+		// A Notice, not the summary: no field was filled in, so there is
+		// nothing to send her back to (#467).
+		await expect.element(page.getByText('There is a problem')).not.toBeInTheDocument();
+	});
+
+	// A dropped connection is not a refusal the BFF wrote; without the
+	// wrapper it would reject into nothing and leave the screen unchanged.
+	it('says so when the clear never reaches the service', async () => {
+		const onRecord = vi.fn(async () => {
+			throw new Error('Failed to fetch');
+		});
+		await render(BirthOutcomeSection, {
+			outcome: 'loss',
+			endedOn: '2026-08-14',
+			canRecord: true,
+			canCorrect: true,
+			onRecord
+		});
+		await page.getByRole('button', { name: 'Remove this record' }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Remove this record' }).click();
+
+		await expect.element(page.getByText('Failed to fetch')).toBeVisible();
+	});
+
+	// The date refusal lives beside the summary's own copy, so it has to
+	// be cleared beside it too.
+	it('reopens the question with no stale refusal against the date boxes', async () => {
+		await setup();
+		await openForm();
+		await page.getByLabelText('The baby was born alive').click();
+		await page.getByRole('button', { name: 'Record this outcome' }).click();
+		await expect
+			.element(page.getByText('Enter the date the pregnancy ended').first())
+			.toBeVisible();
+
+		await page.getByRole('button', { name: 'Cancel' }).click();
+		await openForm();
+		await page.getByLabelText('The baby was born alive').click();
+
+		await expect
+			.element(page.getByText('Enter the date the pregnancy ended'))
+			.not.toBeInTheDocument();
 	});
 
 	it('closes the question on Cancel, asking nothing', async () => {

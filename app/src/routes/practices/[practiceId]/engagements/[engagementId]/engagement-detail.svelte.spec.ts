@@ -1169,7 +1169,17 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 describe('the birth outcome section', () => {
 	const unrecorded: Detail = { ...fixtureDetail, birthOutcome: undefined, pregnancyEndedOn: undefined };
 
-	async function setupOutcome(detail: Detail = fixtureDetail, roles = ['owner', 'doula'], isContractor = false) {
+	interface OutcomeOptions {
+		detail?: Detail;
+		roles?: string[];
+		isContractor?: boolean;
+	}
+
+	async function setupOutcome({
+		detail = fixtureDetail,
+		roles = ['owner', 'doula'],
+		isContractor = false
+	}: OutcomeOptions = {}) {
 		await testPage.viewport(1440, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 		await render(Page, {
@@ -1186,7 +1196,7 @@ describe('the birth outcome section', () => {
 	});
 
 	it("offers a contractor Doula no way to record it, matching the BFF's own refusal", async () => {
-		await setupOutcome(unrecorded, ['doula'], true);
+		await setupOutcome({ detail: unrecorded, roles: ['doula'], isContractor: true });
 
 		await expect
 			.element(testPage.getByRole('button', { name: 'Record what happened' }))
@@ -1194,7 +1204,7 @@ describe('the birth outcome section', () => {
 	});
 
 	it('puts what was entered to the birth-outcome endpoint, and reads it back', async () => {
-		await setupOutcome(unrecorded);
+		await setupOutcome({ detail: unrecorded });
 		await testPage.getByRole('button', { name: 'Record what happened' }).click();
 		await testPage.getByLabelText('The Practice never learned what happened').click();
 		apiFetchWithSession.mockClear();
