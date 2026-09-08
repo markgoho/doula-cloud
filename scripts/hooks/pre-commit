@@ -27,9 +27,13 @@ if [ -n "$staged_app_files" ]; then
     #    per-row budgets all live in the unit suite. It runs here rather
     #    than only in CI because the brief's own argument is that a
     #    commitment nobody measures decays, and the cheapest place to
-    #    measure is before the commit exists. ~6s on top of the ~7s
-    #    above; the Playwright e2e suite deliberately stays out, since it
-    #    builds the app and starts Postgres, the BFF and an emulator.
+    #    measure is before the commit exists. Measured on an idle 14-CPU
+    #    machine: ~16s and a ~4.9GB peak for 2689 tests at 100% coverage.
+    #    Most of that peak is headless Chromium, because app/vite.config.ts
+    #    runs its `client` project in browser mode -- see the maxWorkers
+    #    comment there for why the browser pool is capped (#935). The
+    #    Playwright e2e suite deliberately stays out, since it builds the
+    #    app and starts Postgres, the BFF and an emulator.
     echo "Running unit tests and the coverage gate on app/..." >&2
     bun run --cwd app test:unit:coverage || exit 1
 fi

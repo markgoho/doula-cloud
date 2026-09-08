@@ -7,9 +7,52 @@
 `scripts/hooks/pre-commit` runs:
 1. **`api/` (Go)**: blocks any commit that stages an unformatted `.go` file, prompting to run `gofmt -w <file>` on it.
 2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
-3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Roughly 6s on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the BFF and the Auth emulator.
+3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Measured on an idle 14-CPU machine, this step is ~16s and peaks around 4.9 GB for 2689 tests at 100% coverage, on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the BFF and the Auth emulator. See "The memory this gate costs, and why the browser pool is capped" below for where that 4.9 GB goes.
 
 The CI jobs are the actual enforcement backstop regardless of whether the local hook is enabled — required PR status checks reject a push that would have failed it (see `docs/agents/worktree-flow.md`).
+
+## The memory this gate costs, and why the browser pool is capped
+
+The gate above is the heaviest thing this repo runs locally, and the reason is not obvious from its name: `app/vite.config.ts` runs its `client` project in **browser mode**, so `test:unit:coverage` starts headless Chromium. The browsers belong to the pre-commit gate, not to the e2e suite the gate deliberately excludes.
+
+Vitest sizes that pool as `Math.min(12, ncpu - 1)` — a guard against the main thread choking, with nothing in it that asks what memory is free, and nothing that knows how many other sessions are doing the same thing. Several Claude sessions run against this repo at once (`docs/agents/worktree-flow.md`), each free to commit whenever it likes. On a 24 GB machine whose non-repo residents (a browser, the `claude` processes, the Podman VM) already come to ~10 GB, two uncapped gates at ~7 GB each do not fit, and the harness kills the commit with "system is running low on memory". That was [#935](https://github.com/markgoho/doula-cloud/issues/935).
+
+So the `client` project pins `maxWorkers` to `Math.min(6, availableParallelism() - 1)`. Measured on an idle 14-CPU machine:
+
+| Renderers | Peak (browsers + Vitest) | Wall time |
+| --- | --- | --- |
+| 12 (Vitest's default here) | ~7.0 GB | 19.9s |
+| **6 (what we pin)** | **4.9 GB** | **16.3s** |
+| 4 | 4.5 GB | 18.0s |
+
+Six is not a trade of speed for memory — it is faster *and* smaller, because twelve renderers oversubscribe 14 cores. It is clamped rather than a bare constant so CI is untouched: a 4-vCPU `ubuntu-latest` runner already resolves to 3, and a constant 6 would have raised the parallelism there.
+
+Two things to know before you change it:
+
+- **`--maxWorkers` on the command line will not override this.** The browser pool reads the project's own `maxWorkers`, not the root config's. A run with `--maxWorkers=4` still spawns 12 renderers. Edit the `client` project in `app/vite.config.ts`.
+- **The `server` project carries `sequence: { groupOrder: 1 }` because of this cap.** Vitest refuses two projects that share a `groupOrder` but disagree on `maxWorkers`. Splitting them is a second memory win, not a formality: the Node forks no longer overlap the Chromium renderers, so the run has one peak instead of two stacked together.
+
+Capping one run does not coordinate several. Two concurrent gates now fit (~10 GB of headroom used); three still would not, because roughly 3.5 GB per gate is fixed cost that no worker count removes. Cross-session admission control is tracked separately in [#936](https://github.com/markgoho/doula-cloud/issues/936).
+
+### When a commit is killed for memory
+
+The failure looks like a hung or killed commit, not a test failure, so check the machine rather than the diff:
+
+```sh
+# What the test browsers are costing right now. `grep -i chrome` is no use
+# here -- it also matches your own browser. ms-playwright is the giveaway.
+ps -Ao pid,rss,command | grep ms-playwright | grep -v grep
+
+# How many renderers are live -- this is the number the cap controls.
+ps -Ao command= | grep ms-playwright | grep -v grep | grep -c -- --type=renderer
+
+# Current pressure. Prefer this to `sysctl vm.swapusage`: macOS never
+# shrinks its swap-used counter, so a high figure there is a record of the
+# worst moment since boot, not a reading of now.
+memory_pressure | tail -3
+```
+
+If renderers from another session are live, wait rather than kill them — they exit on their own and the memory comes back. A fix that races another session is worse than the wait.
 
 ## Smoothness: gated on causes, not on frame rate
 
