@@ -153,7 +153,7 @@ func RecordBirthOutcomeHandler() http.Handler {
 		if refuseFrozenWrite(w, reader, current.outcome != nil, req.Correction) {
 			return
 		}
-		if refuseClearOnCompleted(w, current.status, req.BirthOutcome) {
+		if refuseClearOnCompleted(w, current, req.BirthOutcome) {
 			return
 		}
 		if req.Correction {
@@ -262,30 +262,6 @@ func sameString(a, b *string) bool {
 // with a 403. A correction offered where nothing is recorded is refused
 // too: there is nothing to correct, and accepting it would let the
 // deliberate act be the caller's default.
-// refuseClearOnCompleted guards the one write on this endpoint that
-// 00094's engagements_completed_is_explained forbids outright: clearing
-// the outcome off an Engagement that has already reached 'completed'.
-// The correction hatch stays open on a completed Engagement for every
-// other move it makes -- a `loss` recorded where a `live_birth` belongs
-// is still correctable in place -- because only the null case can leave
-// a 'completed' row with no outcome at all.
-//
-// Named here rather than left to the database, because the constraint
-// would surface as a raw violation and a 500. The reader is told the
-// order that works: reopening (completed -> active, Owner/Admin) frees
-// the row, and it can be completed again afterwards. That order is safe
-// for the reason ADR-0015 gives -- reopening unfreezes nothing, so the
-// clear still costs a deliberate correction.
-func refuseClearOnCompleted(w http.ResponseWriter, status string, outcome *string) bool {
-	if outcome != nil || status != StatusCompleted {
-		return false
-	}
-	apierr.WriteError(w,
-		"a completed Engagement must keep a birth outcome. Reopen it first, then remove the record.",
-		http.StatusConflict)
-	return true
-}
-
 func refuseFrozenWrite(w http.ResponseWriter, reader staffauth.Reader, frozen, correction bool) bool {
 	switch {
 	case frozen && !correction:
@@ -300,4 +276,39 @@ func refuseFrozenWrite(w http.ResponseWriter, reader staffauth.Reader, frozen, c
 		return true
 	}
 	return false
+}
+
+// refuseClearOnCompleted guards the one write on this endpoint that
+// 00094's engagements_completed_is_explained forbids outright: clearing
+// the outcome off an Engagement that has already reached 'completed'.
+// The correction hatch stays open on a completed Engagement for every
+// other move it makes -- a 'loss' recorded where a 'live_birth' belongs
+// is still correctable in place -- because only the null case can leave
+// a 'completed' row with no outcome at all.
+//
+// Named here rather than left to the database, because the constraint
+// would surface as a raw violation and a 500. It carries
+// CodeBirthOutcomeRequired, the same code TransitionHandler's own
+// refusal does, because both say the one thing: a 'completed'
+// Engagement carries a birth outcome. Sharing it is what keeps this 409
+// tellable from the endpoint's other one (a correction offered where
+// nothing is recorded) by its code rather than its prose, which is what
+// #692 requires.
+//
+// The reader is told the order that works: reopening (completed ->
+// active, Owner/Admin) frees the row, and it can be completed again
+// afterwards. That order is safe for the reason ADR-0015 gives --
+// reopening unfreezes nothing, so the clear still costs a deliberate
+// Owner-only correction.
+//
+// It takes the row rather than the one column it reads, matching
+// refuseUnexplainedCompletion's own shape: both guards ask a question
+// about the Engagement as it stands, not about a field.
+func refuseClearOnCompleted(w http.ResponseWriter, current birthOutcomeRow, outcome *string) bool {
+	if outcome != nil || current.status != StatusCompleted {
+		return false
+	}
+	apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeRequired,
+		"a completed Engagement keeps a birth outcome; reopen it first, then remove the record", nil)
+	return true
 }

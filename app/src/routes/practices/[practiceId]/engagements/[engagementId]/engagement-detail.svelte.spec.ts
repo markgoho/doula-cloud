@@ -294,7 +294,7 @@ describe('the status-move controls (#253)', () => {
 					{
 						code: 'BIRTH_OUTCOME_REQUIRED',
 						message:
-							'record what happened to the pregnancy before completing this Engagement. If the Practice never learned, say so -- that answer needs no date.'
+							'record what happened to the pregnancy before completing this Engagement; if the Practice never learned, say so, and that answer needs no date'
 					},
 					409
 				)

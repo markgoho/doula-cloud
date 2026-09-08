@@ -271,6 +271,29 @@ func TestSeedEngagementInStatus(t *testing.T) {
 	}
 }
 
+// TestSeedBirthOutcome proves the helper puts the dateless 'unknown' on
+// an Engagement that has none -- the state #940's
+// engagements_completed_is_explained demands before a completion is
+// allowed through, which is why two other packages' tests call this.
+func TestSeedBirthOutcome(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Birth Outcome Test Practice")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	testdb.SeedBirthOutcome(t, db, engagementID)
+
+	var outcome string
+	var endedOn *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT birth_outcome::text, pregnancy_ended_on::text FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&outcome, &endedOn); err != nil {
+		t.Fatalf("read seeded engagement: %v", err)
+	}
+	if outcome != "unknown" || endedOn != nil {
+		t.Fatalf("outcome=%q endedOn=%v, want unknown with no date", outcome, endedOn)
+	}
+}
+
 // TestSeedEngagementInStatus_CompletedSetsBothFacts proves a "completed"
 // status also sets ending_reason to 'care_complete' and birth_outcome to
 // 'unknown' -- #940's engagements_completed_is_explained CHECK demands

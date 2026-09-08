@@ -49,6 +49,19 @@
 
 ALTER TABLE engagements DROP CONSTRAINT engagements_completed_has_reason;
 
+-- Every row already 'completed' was completed under the half-constraint,
+-- so it may carry no outcome and would fail the new one. 'unknown' is
+-- the backfill for the same reason it is the answer a Practice types:
+-- the Engagement ended and nobody recorded what happened, which is what
+-- 'unknown' says. It carries no pregnancy_ended_on, which
+-- engagements_outcome_is_dated (00093) allows, so this invents no date.
+-- Written as a plain UPDATE rather than NOT VALID: pre-launch there is
+-- no production data and no table big enough for the lock to matter, and
+-- a NOT VALID constraint would leave exactly the un-answered rows this
+-- ticket exists to stop.
+UPDATE engagements SET birth_outcome = 'unknown'
+ WHERE status = 'completed' AND birth_outcome IS NULL;
+
 ALTER TABLE engagements ADD CONSTRAINT engagements_completed_is_explained CHECK (
     status <> 'completed'
     OR (birth_outcome IS NOT NULL AND ending_reason IS NOT NULL)

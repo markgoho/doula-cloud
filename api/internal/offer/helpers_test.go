@@ -40,21 +40,6 @@ const (
 // .../complete these tests used to drive).
 var completeStatusBody = map[string]string{"status": engagement.StatusCompleted, "endingReason": "care_complete"}
 
-// seedBirthOutcome puts ADR-0015's second fact on the Engagement, which
-// #940's engagements_completed_is_explained demands before any
-// completion is allowed through. Written directly rather than through
-// PUT .../birth-outcome: what reaches this package is the completion
-// cascade, and the outcome is only the precondition that lets a
-// completion happen at all. 'unknown' carries no date, which is the one
-// pair engagements_outcome_is_dated accepts without one.
-func seedBirthOutcome(t *testing.T, db *testdb.DB, engagementID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET birth_outcome = 'unknown' WHERE id = $1`, engagementID); err != nil {
-		t.Fatalf("seed birth outcome: %v", err)
-	}
-}
-
 // newServer mounts this package's whole surface through offer.Mount --
 // the Practice side and the pre-account token-authenticated side both --
 // the same call main.go makes on the real GatedRouter and

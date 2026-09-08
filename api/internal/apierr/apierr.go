@@ -76,19 +76,27 @@ const (
 	// press-through at all, and a caller that told the two apart by
 	// their prose would be doing what #692 forbids.
 	CodeBirthOutcomeFrozen Code = "BIRTH_OUTCOME_FROZEN"
-	// CodeBirthOutcomeRequired is #940's completion refusal: ADR-0015's
-	// engagements_completed_is_explained (00094) will not let an
-	// Engagement reach 'completed' while its birth outcome is null, and
-	// the status-transition endpoint says so by name rather than letting
-	// the caller meet a raw constraint violation as a 500. Nothing is
-	// written on the refusal, and it is answered by recording the outcome
-	// through PUT .../birth-outcome -- never by re-sending the same
-	// transition, which is what makes it a different thing from
-	// CodeBirthOutcomeFrozen's press-through. Its own code rather than
-	// the generic CodeConflict, because a caller that told this apart
-	// from any other 409 by its prose would be doing what #692 forbids,
-	// and this is the one 409 whose fix is a control on a different part
-	// of the same screen.
+	// CodeBirthOutcomeRequired is #940's constraint said out loud: a
+	// 'completed' Engagement carries a birth outcome
+	// (engagements_completed_is_explained, 00094), and the two endpoints
+	// that could otherwise break that rule say so by name rather than
+	// letting the caller meet a raw constraint violation as a 500. The
+	// status transition answers it when completion is asked for on a row
+	// with no outcome; the birth-outcome endpoint answers it when a
+	// correction would clear the outcome off a row already completed.
+	// Nothing is written on either refusal, and neither is a
+	// press-through: re-sending the same request changes nothing, which
+	// is what makes this a different thing from CodeBirthOutcomeFrozen.
+	//
+	// Its own code rather than the generic CodeConflict, because both
+	// endpoints already answer some *other* 409 -- the frozen
+	// press-through, and a correction offered where nothing is recorded
+	// -- and a caller that told them apart by their prose would be doing
+	// what #692 forbids. No screen branches on it today: the app shows
+	// the BFF's own sentence in the completion form's error summary,
+	// since the control that answers it is a section of the same page
+	// rather than a field of that form. The code exists so a caller can
+	// branch, the same reasoning CodePracticePendingDeletion records.
 	CodeBirthOutcomeRequired Code = "BIRTH_OUTCOME_REQUIRED"
 )
 

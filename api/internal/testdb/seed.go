@@ -220,6 +220,24 @@ func BirthOutcomeForStatus(status string) any {
 	return nil
 }
 
+// SeedBirthOutcome puts that same 'unknown' onto an Engagement already
+// seeded, which is what a test in any package needs before it can drive
+// a completion through the API at all. A direct write rather than a call
+// to PUT .../birth-outcome: what that endpoint does with the fact is
+// engagement/outcome_test.go's own subject, and a completion test that
+// had to drive it first would be asserting two endpoints at once. Shared
+// from here for the reason SeedAttachment records (#706): package
+// engagement and package offer both need it, and two identical copies is
+// where the decision starts drifting.
+func SeedBirthOutcome(t *testing.T, db *DB, engagementID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET birth_outcome = 'unknown' WHERE id = $1`, engagementID); err != nil {
+		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed birth outcome: %v", err)
+	}
+}
+
 // SeedEngagementInStatus is SeedNamedEngagement with an explicit
 // Engagement status, for a test that needs the Engagement in a specific
 // state rather than the default "intake". A status of "completed" also

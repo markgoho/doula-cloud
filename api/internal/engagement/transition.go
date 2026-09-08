@@ -151,8 +151,8 @@ func refuseUnexplainedCompletion(w http.ResponseWriter, current engagementStatus
 		return false
 	}
 	apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeRequired,
-		"record what happened to the pregnancy before completing this Engagement. "+
-			"If the Practice never learned, say so -- that answer needs no date.", nil)
+		"record what happened to the pregnancy before completing this Engagement; "+
+			"if the Practice never learned, say so, and that answer needs no date", nil)
 	return true
 }
 
