@@ -492,7 +492,7 @@
 	<ConfirmDialog
 		bind:open={isDeleteLoginDialogOpen}
 		title="Delete your login"
-		consequence="Your login, and your membership of every practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those practices."
+		consequence="Your login, and your membership of every practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those practices, and Doula Cloud keeps its own record that this account existed."
 		confirmLabel="Delete your login"
 		onConfirm={handleDeleteLogin}
 	/>

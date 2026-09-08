@@ -28,13 +28,37 @@ ALTER TABLE staff_auth_events ADD CONSTRAINT staff_auth_events_actor_shape CHECK
 --
 -- So a second policy, not an edit to the first. Postgres ORs permissive
 -- policies together, so the work-state self-edit 00044 exists for is
--- untouched, and this one admits exactly one shape of write and no
--- other: the caller's own row, in the pre-Practice window, leaving with
--- deleted_at stamped and identity_uid holding the sentinel this policy
--- names in full. A caller cannot reach another person's row (USING), and
--- cannot use this policy to write anything but the redaction (WITH
--- CHECK) -- the sentinel's exact spelling lives here, at the boundary
--- that can actually enforce it, as well as in the handler.
+-- untouched, and *this* policy admits exactly one shape of write: the
+-- caller's own row (USING), in the pre-Practice window, leaving with
+-- deleted_at stamped and identity_uid holding the sentinel spelled out
+-- below (WITH CHECK).
+--
+-- What that does and does not buy, said plainly rather than left to be
+-- discovered. It buys the sentinel: 00044 refuses any write that walks
+-- the row away from the caller's own identity_uid, so before this policy
+-- the redaction was impossible, and the sentinel's exact spelling now
+-- lives at a boundary that can enforce it. It does *not* make the
+-- redaction the only write she can make to her own row -- 00044 is
+-- row-level by its own stated design ("this permits her to update any
+-- column of her own row"), so stamping deleted_at while keeping her
+-- identity_uid is still admitted, by that policy rather than this one.
+-- Narrowing 00044 to close that would take the work-state self-edit down
+-- with it, for a write no route exposes. The pairing of the stamp and
+-- the sentinel is therefore the handler's guarantee -- one statement,
+-- checked to have affected exactly one row -- and this policy's job is
+-- to make that one statement possible at all.
+-- One more thing this policy does not do on its own, worth knowing here
+-- because the code that depends on it is two packages away. Postgres
+-- checks a table's SELECT policies against the *new* row of an UPDATE,
+-- and the new row's identity_uid is the sentinel, which
+-- staff_self_visibility (00006) does not match. So the redaction also
+-- needs a SELECT policy that admits the row it is about to become, and
+-- the only one that does is staff_notification_worker (00033) --
+-- DeleteLoginHandler sets app.notification_worker_trusted for what looks
+-- like an unrelated reason (reading across every Practice she belongs
+-- to) and this is the second thing that flag buys.
+--
+-- staffauth's rls_test.go pins every case above, including that one.
 --
 -- The sentinel is 'deleted:' || id, which is unique because id is, and
 -- which cannot collide with an Identity Platform uid (those are 28

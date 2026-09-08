@@ -119,6 +119,17 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 		// trust flag RotateSavedCodesHandler makes, and for the same
 		// reason: this act reads across every Practice she belongs to,
 		// which no per-Practice policy can admit by construction.
+		//
+		// It is load-bearing a second time, in a way that is not visible
+		// from that sentence and would not survive a cleanup that trusted
+		// it. Postgres checks this table's SELECT policies against the
+		// *new* row of an UPDATE, and the redaction's new row carries the
+		// sentinel identity_uid, which staff_self_visibility (00006) does
+		// not match. staff_notification_worker (00033) is the only SELECT
+		// policy left that admits it. Drop this flag as "only needed for
+		// the reads" and every deletion 500s at the redaction.
+		// rls_test.go's own TestRLS_LoginDeletionNeedsTheTrustedFlagToSeeItsOwnNewRow
+		// fails first, which is the point of it.
 		if _, err := tx.ExecContext(r.Context(),
 			`SELECT set_config('app.current_identity_uid', $1, true),
 			        set_config('app.notification_worker_trusted', 'true', true)`, uid); err != nil {
@@ -272,7 +283,12 @@ func listOwnMemberships(ctx context.Context, tx *sql.Tx, staffID string) ([]ownM
 // soleOwnerPractices names every Practice where she holds 'owner', no
 // other Member does, and the Practice has not been finalized.
 //
-// It is isSoleOwnerAnywhere's question widened from a yes/no to a list --
+// It is isSoleOwnerAnywhere's question widened from a yes/no to a list,
+// with one predicate the other does not have. The two deliberately do not
+// agree about a finalized Practice: #615's saved-recovery-code
+// eligibility counts her as its sole Owner (she is), and this refusal
+// does not (nobody can reach it). Spelled out because it is the kind of
+// divergence that reads as a copy someone forgot to keep in step --
 // a person refused this act deserves to be told which Practices are in
 // the way, not merely that some are. The deleted_at filter is what makes
 // a finalized Practice stop blocking: nobody can reach it any more, so an
@@ -427,18 +443,26 @@ func redactStaffRow(ctx context.Context, tx *sql.Tx, staffID, uid string, now ti
 	return nil
 }
 
-// mailAddressedTo is one outbox table's "every pending row for this uid"
+// pendingMailAddressedToHer is one outbox table's "every pending row for this uid"
 // statement. Written out one per table rather than built from a table
 // name and a column name: the interpolation that would take would be a
 // SQL string this file assembles at runtime, which is the shape gosec
 // refuses on sight and which no reader can check by eye. Four literals
 // are longer and are exactly what they appear to be.
-var mailAddressedTo = []string{
+var pendingMailAddressedToHer = []string{
 	`UPDATE staff_token_mail_outbox   SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
-	`UPDATE staff_email_change_outbox SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
 	`UPDATE session_notice_outbox     SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
 	`UPDATE staff_mfa_recovery_outbox SET status = 'sent', sent_at = $1 WHERE recipient_identity_uid = $2 AND status = 'pending'`,
 }
+
+// staff_email_change_outbox is deliberately not in that list, and this is
+// the one omission worth naming rather than leaving to be noticed. Its
+// notice is composed from the old_email captured on the row, reads
+// nothing about her at send time, and is still true afterwards: somebody
+// changed the address on an account, and the person who used to own that
+// mailbox is exactly who needs to hear it, whatever became of the account
+// since. Suppressing it would hand anyone who reached her session a way
+// to move her address and then silence the notice by deleting the login.
 
 // resolveQueuedMail marks every pending outbox row addressed to her sent,
 // having sent nothing -- ADR-0033's skip-at-send recheck, moved to the
@@ -459,7 +483,7 @@ var mailAddressedTo = []string{
 // guess. Here there is no guess to make -- this uid is hers, and she just
 // asked for it to stop existing.
 func resolveQueuedMail(ctx context.Context, tx *sql.Tx, uid string, now time.Time) error {
-	for _, statement := range mailAddressedTo {
+	for _, statement := range pendingMailAddressedToHer {
 		if _, err := tx.ExecContext(ctx, statement, now, uid); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return fmt.Errorf("staffauth: resolve queued mail: %w", err)

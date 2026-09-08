@@ -555,7 +555,6 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 
 	for _, table := range []string{
 		"staff_token_mail_outbox",
-		"staff_email_change_outbox",
 		"session_notice_outbox",
 		"staff_mfa_recovery_outbox",
 	} {
@@ -564,6 +563,16 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 			`SELECT count(*) FROM `+table+` WHERE status = 'pending'`); n != 0 {
 			t.Fatalf("%s: pending rows = %d, want every one addressed to her resolved", table, n)
 		}
+	}
+
+	// And the one deliberately left to send: somebody changed the address
+	// on an account, and the person who used to own that mailbox is
+	// exactly who needs to hear it. Suppressing it would hand anyone who
+	// reached her session a way to move her address and then silence the
+	// notice by deleting the login.
+	if n := countRows(t, db,
+		`SELECT count(*) FROM staff_email_change_outbox WHERE status = 'pending'`); n != 1 {
+		t.Fatalf("staff_email_change_outbox: pending rows = %d, want the address-change notice still to go out", n)
 	}
 }
 
