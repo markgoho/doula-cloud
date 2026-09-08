@@ -58,11 +58,14 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	// Connect onboarding; the one-time initial set instead rides
 	// PostInvoiceHandler's own request (billing_mode.go's own comment).
 	// PUT is a full replacement, inherently idempotent (docs/api-design.md
-	// section 3), so it goes through Exempt rather than Replayable.
+	// section 3), so it goes through ExemptGated rather than Replayable.
+	// Owner-only is declared here (#990, following #970's own move for
+	// Contract writes): PutBillingModeHandler no longer calls
+	// staffauth.RequireOwner itself.
 	g.Get("/api/practices/{practiceId}/payments/billing-mode", staffauth.AnyStaff, GetBillingModeHandler())
-	ir.Exempt("PUT /api/practices/{practiceId}/payments/billing-mode",
+	ir.ExemptGated("PUT /api/practices/{practiceId}/payments/billing-mode",
 		"full-replacement PUT, inherently idempotent (docs/api-design.md section 3); no Idempotency-Key applies",
-		false, PutBillingModeHandler())
+		false, staffauth.OwnerOnly, PutBillingModeHandler())
 
 	// Recording a Payment that did not come through Stripe (#271): Owner
 	// and Admin only -- narrower than the read above, which #282 opened
@@ -71,19 +74,24 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	// Admin records a Payment, overrides an amount, or voids/writes off
 	// an Invoice, regardless of who may read it. Money-creating, so
 	// Replayable like Invoice creation above: a double-click must not
-	// record the same check twice.
-	ir.Replayable("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments", false, PostManualPaymentHandler(client))
+	// record the same check twice. #990 moved the Owner-or-Admin rule from
+	// an in-handler check to this declaration, through ReplayableGated --
+	// PostManualPaymentHandler no longer calls
+	// staffauth.RequireOwnerOrAdmin itself.
+	ir.ReplayableGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments", false, staffauth.OwnerAndAdmin, PostManualPaymentHandler(client))
 
 	// Void and write-off (#271) exist only so a by-hand Invoice -- which
 	// nothing else in the model ever moves out of 'open' -- is not stuck
 	// there forever on a mistyped amount. Both are state-guarded
 	// transitions, refused unless the Invoice is still 'open' and by-hand,
 	// so a retry after the first success 409s rather than repeating the
-	// effect -- Exempt, not Replayable.
-	ir.Exempt("POST /api/practices/{practiceId}/invoices/{invoiceId}/void",
+	// effect -- ExemptGated, not Replayable. #990 moved both handlers'
+	// shared Owner-or-Admin check (transitionByHandInvoice) from in-handler
+	// to these two declarations.
+	ir.ExemptGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/void",
 		"refuses unless the Invoice is open and by-hand, so a retry 409s instead of voiding twice",
-		false, PostVoidInvoiceHandler())
-	ir.Exempt("POST /api/practices/{practiceId}/invoices/{invoiceId}/write-off",
+		false, staffauth.OwnerAndAdmin, PostVoidInvoiceHandler())
+	ir.ExemptGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/write-off",
 		"refuses unless the Invoice is open and by-hand, so a retry 409s instead of writing off twice",
-		false, PostWriteOffInvoiceHandler())
+		false, staffauth.OwnerAndAdmin, PostWriteOffInvoiceHandler())
 }

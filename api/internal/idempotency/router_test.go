@@ -146,3 +146,40 @@ func TestRouter_ExemptGatedRecordsRoles(t *testing.T) {
 		t.Fatalf("plain Exempt route Roles = %v, want empty", routes[1].Roles)
 	}
 }
+
+// TestRouter_ReplayableGatedRecordsRoles proves a route registered
+// through ReplayableGated carries both its Replayable flag and its role
+// declaration on the registry -- #990's
+// TestRoutes_PaymentAndRateWritesDeclareRoles walks this field against
+// the real route table routes() builds, the same way #970's own
+// ExemptGated test does above. Registered twice, attaching=true and
+// attaching=false, so both of ReplayableGated's branches run.
+func TestRouter_ReplayableGatedRecordsRoles(t *testing.T) {
+	rt := idempotency.NewRouter(discardMounter{}, nil)
+	rt.ReplayableGated("POST /api/practices/{practiceId}/engagements/{engagementId}/widgets",
+		true, []string{ownerRole, adminRole}, http.NotFoundHandler())
+	rt.ReplayableGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments",
+		false, []string{ownerRole, adminRole}, http.NotFoundHandler())
+
+	routes := rt.Routes()
+	if len(routes) != 2 {
+		t.Fatalf("Routes() = %d entries, want 2", len(routes))
+	}
+	for _, route := range routes {
+		if !route.Replayable {
+			t.Errorf("route %q Replayable = false, want true", route.Pattern)
+		}
+		if route.Reason != "" {
+			t.Errorf("route %q Reason = %q, want empty", route.Pattern, route.Reason)
+		}
+		if len(route.Roles) != 2 {
+			t.Errorf("route %q Roles = %v, want [owner admin]", route.Pattern, route.Roles)
+		}
+	}
+	if !routes[0].Attaching {
+		t.Error("first route Attaching = false, want true")
+	}
+	if routes[1].Attaching {
+		t.Error("second route Attaching = true, want false")
+	}
+}
