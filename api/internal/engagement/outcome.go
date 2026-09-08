@@ -11,7 +11,8 @@ import (
 )
 
 // ownerRole is the practice_role enum member (00002_practice_staff_tenancy.sql)
-// this file cares about: correcting a frozen birth outcome is the one
+// this file cares about (helpers_test.go names it a second time, for
+// the external test package): correcting a frozen birth outcome is the one
 // act ADR-0015 gives to an Owner alone: not an Admin, not a Doula, because
 // it is a hatch rather than an editing surface.
 const ownerRole = "owner"
@@ -41,12 +42,18 @@ var birthOutcomes = map[string]bool{
 }
 
 // BirthOutcomeRequest records what happened to the pregnancy, and when.
-// Correction is the caller's explicit acknowledgement that an already
+// Correction is the caller's explicit acknowledgment that an already
 // recorded outcome is being overwritten: a plain record onto a frozen
 // row is refused rather than silently applied, so the one act that can
 // rewrite a woman's record is always deliberate.
 type BirthOutcomeRequest struct {
-	BirthOutcome     string  `json:"birthOutcome"`
+	// BirthOutcome is nullable on the way in as well as on the row: a
+	// null outcome with correction: true un-records one, which is the
+	// state ADR-0015's own motivating typo needs. A loss entered on the
+	// wrong Engagement leaves that Engagement never having had an
+	// outcome, and 'unknown' would not say so -- 'unknown' means the
+	// Practice looked and never learned.
+	BirthOutcome     *string `json:"birthOutcome"`
 	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
 	Correction       bool    `json:"correction,omitempty"`
 }
@@ -54,7 +61,7 @@ type BirthOutcomeRequest struct {
 // BirthOutcomeResponse confirms the two facts the Engagement now holds.
 type BirthOutcomeResponse struct {
 	EngagementID     string  `json:"engagementId"`
-	BirthOutcome     string  `json:"birthOutcome"`
+	BirthOutcome     *string `json:"birthOutcome"`
 	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
 }
 
@@ -138,7 +145,7 @@ func RecordBirthOutcomeHandler() http.Handler {
 			})
 			return
 		}
-		if !refuseFrozenWrite(w, reader, current.outcome != nil, req.Correction) {
+		if refuseFrozenWrite(w, reader, current.outcome != nil, req.Correction) {
 			return
 		}
 		if req.Correction {
@@ -186,15 +193,28 @@ func RecordBirthOutcomeHandler() http.Handler {
 // validateOutcome checks req against ADR-0015's vocabulary and its
 // engagements_outcome_is_dated rule before the database does, so a
 // caller gets a named 400 rather than a constraint violation. It reports
-// the normalized date to write, which is nil only for an 'unknown'
-// outcome the Practice has no date for.
+// the normalized date to write, which is nil for an un-recording, and for
+// an 'unknown' outcome the Practice has no date for.
 func validateOutcome(w http.ResponseWriter, req BirthOutcomeRequest) (endedOn *string, valid bool) {
-	if !birthOutcomes[req.BirthOutcome] {
+	if req.BirthOutcome == nil {
+		if !req.Correction {
+			apierr.WriteError(w,
+				"birthOutcome may only be cleared as a correction", http.StatusBadRequest)
+			return nil, false
+		}
+		if req.PregnancyEndedOn != nil && *req.PregnancyEndedOn != "" {
+			apierr.WriteError(w,
+				"an Engagement with no birth outcome carries no date either", http.StatusBadRequest)
+			return nil, false
+		}
+		return nil, true
+	}
+	if !birthOutcomes[*req.BirthOutcome] {
 		apierr.WriteError(w, "birthOutcome must be 'live_birth', 'loss' or 'unknown'", http.StatusBadRequest)
 		return nil, false
 	}
 	if req.PregnancyEndedOn == nil || *req.PregnancyEndedOn == "" {
-		if req.BirthOutcome != OutcomeUnknown {
+		if *req.BirthOutcome != OutcomeUnknown {
 			apierr.WriteError(w,
 				"pregnancyEndedOn is required unless the birth outcome is 'unknown'", http.StatusBadRequest)
 			return nil, false
@@ -210,19 +230,25 @@ func validateOutcome(w http.ResponseWriter, req BirthOutcomeRequest) (endedOn *s
 
 // unchanged reports whether the request asks for exactly what the row
 // already holds -- the no-op that makes this endpoint safe to retry.
-func unchanged(current birthOutcomeRow, outcome string, endedOn *string) bool {
-	if current.outcome == nil || *current.outcome != outcome {
-		return false
+func unchanged(current birthOutcomeRow, outcome, endedOn *string) bool {
+	return sameString(current.outcome, outcome) && sameString(current.endedOn, endedOn)
+}
+
+// sameString compares two nullable strings, treating null as a value of
+// its own -- "not recorded" is a state this endpoint both reads and
+// writes, so it has to compare equal to itself.
+func sameString(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
 	}
-	if current.endedOn == nil || endedOn == nil {
-		return current.endedOn == nil && endedOn == nil
-	}
-	return *current.endedOn == *endedOn
+	return *a == *b
 }
 
 // refuseFrozenWrite guards ADR-0015's correction hatch, writing the
-// refusal itself and reporting whether the write may go on. A frozen
-// outcome refuses a plain record with a 409 whoever is asking -- an
+// refusal itself and reporting whether the request was refused -- the
+// same polarity refuseFactWrite uses, so both gates read the same way at
+// their call sites. A frozen outcome refuses a plain record with a 409
+// whoever is asking -- an
 // Owner included, because block-over-warn means the overwrite is always
 // a deliberate act -- and refuses a correction from anyone but an Owner
 // with a 403. A correction offered where nothing is recorded is refused
@@ -231,16 +257,15 @@ func unchanged(current birthOutcomeRow, outcome string, endedOn *string) bool {
 func refuseFrozenWrite(w http.ResponseWriter, reader staffauth.Reader, frozen, correction bool) bool {
 	switch {
 	case frozen && !correction:
-		apierr.WriteError(w,
-			"this Engagement already has a birth outcome; only a Practice Owner can correct it",
-			http.StatusConflict)
-		return false
+		apierr.Write(w, http.StatusConflict, apierr.CodeBirthOutcomeFrozen,
+			"this Engagement already has a birth outcome; only a Practice Owner can correct it", nil)
+		return true
 	case frozen && !reader.Has(ownerRole):
 		apierr.WriteError(w, "only a Practice Owner can correct a recorded birth outcome", http.StatusForbidden)
-		return false
+		return true
 	case !frozen && correction:
 		apierr.WriteError(w, "this Engagement has no birth outcome to correct", http.StatusConflict)
-		return false
+		return true
 	}
-	return true
+	return false
 }

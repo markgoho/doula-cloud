@@ -12,8 +12,7 @@
 -- doing it, but demanding the outcome at completion is a change to the
 -- status-transition endpoint's request contract (it would have to
 -- collect an outcome on the way to 'completed'), not a one-line
--- constraint -- so it is filed as its own ticket rather than smuggled
--- in here.
+-- constraint -- so it is filed as #940 rather than smuggled in here.
 
 CREATE TYPE birth_outcome AS ENUM ('live_birth', 'loss', 'unknown');
 

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/testdb"
@@ -20,8 +21,12 @@ const lossOn = "2027-03-04"
 // this file needs no import of the package's exported request type.
 // pregnancyEndedOn is omitted entirely when "", the "absent, not
 // empty-string" shape a real caller sends for an undated 'unknown'.
+// An outcome of "" sends birthOutcome: null, the un-recording shape.
 func outcomeBody(outcome, endedOn string, correction bool) map[string]any {
-	body := map[string]any{"birthOutcome": outcome}
+	body := map[string]any{"birthOutcome": nil}
+	if outcome != "" {
+		body["birthOutcome"] = outcome
+	}
 	if endedOn != "" {
 		body["pregnancyEndedOn"] = endedOn
 	}
@@ -31,10 +36,15 @@ func outcomeBody(outcome, endedOn string, correction bool) map[string]any {
 	return body
 }
 
+// outcomeResponseBody is both shapes this endpoint answers with: the
+// success DTO, and apierr's own error envelope, whose Code a caller is
+// required to branch on rather than on the prose beside it
+// (docs/api-design.md section 7).
 type outcomeResponseBody struct {
 	EngagementID     string  `json:"engagementId"`
-	BirthOutcome     string  `json:"birthOutcome"`
+	BirthOutcome     *string `json:"birthOutcome"`
 	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
+	Code             string  `json:"code"`
 }
 
 // recordOutcomeAs PUTs a birth outcome as uid and returns the status
@@ -58,10 +68,8 @@ func recordOutcomeAs(t *testing.T, db *testdb.DB, srv *httptest.Server, uid, pra
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out outcomeResponseBody
-	if resp.StatusCode == http.StatusOK {
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			t.Fatalf("decode response: %v", err)
-		}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
 	return resp.StatusCode, out
 }
@@ -128,7 +136,8 @@ func TestRecordBirthOutcomeHandler_RolesMayRecord(t *testing.T) {
 			if status != http.StatusOK {
 				t.Fatalf("status = %d, want 200", status)
 			}
-			if body.BirthOutcome != engagement.OutcomeLoss || body.PregnancyEndedOn == nil || *body.PregnancyEndedOn != lossOn {
+			if body.BirthOutcome == nil || *body.BirthOutcome != engagement.OutcomeLoss ||
+				body.PregnancyEndedOn == nil || *body.PregnancyEndedOn != lossOn {
 				t.Fatalf("body = %+v, want loss on %s", body, lossOn)
 			}
 			gotOutcome, gotEndedOn := readEngagementOutcome(t, db, engagementID)
@@ -193,10 +202,16 @@ func TestRecordBirthOutcomeHandler_FrozenValueRefusesAPlainRecord(t *testing.T) 
 		outcomeBody(engagement.OutcomeLoss, lossOn, false)); status != http.StatusOK {
 		t.Fatalf("first record status = %d, want 200", status)
 	}
-	status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+	status, body := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
 		outcomeBody(engagement.OutcomeLiveBirth, lossOn, false))
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
+	}
+	// The refusal is a press-through, and #692's rule is that a caller
+	// tells it apart by its code, never by its prose -- the other 409
+	// this endpoint answers with cannot be pressed through at all.
+	if body.Code != string(apierr.CodeBirthOutcomeFrozen) {
+		t.Fatalf("code = %q, want %s", body.Code, apierr.CodeBirthOutcomeFrozen)
 	}
 	gotOutcome, _ := readEngagementOutcome(t, db, engagementID)
 	if gotOutcome == nil || *gotOutcome != engagement.OutcomeLoss {
@@ -302,8 +317,8 @@ func TestRecordBirthOutcomeHandler_ResendingIsANoOp(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want 200", status)
 		}
-		if body.BirthOutcome != engagement.OutcomeLiveBirth {
-			t.Fatalf("birthOutcome = %q, want live_birth", body.BirthOutcome)
+		if body.BirthOutcome == nil || *body.BirthOutcome != engagement.OutcomeLiveBirth {
+			t.Fatalf("birthOutcome = %v, want live_birth", body.BirthOutcome)
 		}
 	}
 	if n := countEngagementEvents(t, db, engagementID); n != 1 {
@@ -338,10 +353,13 @@ func TestRecordBirthOutcomeHandler_CorrectingAnUnrecordedOutcome(t *testing.T) {
 	const uid = "correct-nothing-owner"
 	srv, practiceID, engagementID := newOutcomeServer(t, db, uid, []string{ownerRole}, employeeType)
 
-	status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+	status, body := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
 		outcomeBody(engagement.OutcomeLoss, lossOn, true))
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
+	}
+	if body.Code == string(apierr.CodeBirthOutcomeFrozen) {
+		t.Fatalf("code = %s, want the plain conflict -- nothing here can be pressed through", body.Code)
 	}
 }
 
@@ -434,5 +452,69 @@ func TestDetailHandler_BirthOutcome(t *testing.T) {
 	}
 	if d.PregnancyEndedOn == nil || *d.PregnancyEndedOn != lossOn {
 		t.Fatalf("pregnancyEndedOn = %v, want %s", d.PregnancyEndedOn, lossOn)
+	}
+}
+
+// TestRecordBirthOutcomeHandler_AnOwnerCanUnrecord is ADR-0015's own
+// motivating typo: a loss entered on the wrong Engagement. The right
+// state for that Engagement is never-recorded, not 'unknown' -- which
+// means the Practice looked and never learned -- so the correction hatch
+// takes a null outcome, and the audit row says what was cleared.
+func TestRecordBirthOutcomeHandler_AnOwnerCanUnrecord(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "unrecord-owner"
+	srv, practiceID, engagementID := newOutcomeServer(t, db, uid, []string{ownerRole}, employeeType)
+	if status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+		outcomeBody(engagement.OutcomeLoss, lossOn, false)); status != http.StatusOK {
+		t.Fatalf("first record status = %d, want 200", status)
+	}
+
+	status, body := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID, outcomeBody("", "", true))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if body.BirthOutcome != nil {
+		t.Fatalf("birthOutcome = %v, want null", *body.BirthOutcome)
+	}
+	gotOutcome, gotEndedOn := readEngagementOutcome(t, db, engagementID)
+	if gotOutcome != nil || gotEndedOn != nil {
+		t.Fatalf("row = (%v, %v), want both cleared", gotOutcome, gotEndedOn)
+	}
+	if n := countEngagementEvents(t, db, engagementID); n != 2 {
+		t.Fatalf("engagement_events rows = %d, want 2 -- the record and the un-recording", n)
+	}
+}
+
+// TestRecordBirthOutcomeHandler_ClearingIsAlwaysACorrection proves a
+// null outcome is refused unless the caller says it is a correction, and
+// that it cannot carry a date -- engagements_outcome_is_dated's own rule,
+// answered as a named 400 rather than a constraint violation.
+func TestRecordBirthOutcomeHandler_ClearingIsAlwaysACorrection(t *testing.T) {
+	cases := []struct {
+		name string
+		body map[string]any
+	}{
+		{"no correction flag", outcomeBody("", "", false)},
+		{"a date with no outcome", outcomeBody("", lossOn, true)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "clear-refused-" + tc.name
+			srv, practiceID, engagementID := newOutcomeServer(t, db, uid, []string{ownerRole}, employeeType)
+			if status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID,
+				outcomeBody(engagement.OutcomeLoss, lossOn, false)); status != http.StatusOK {
+				t.Fatalf("first record status = %d, want 200", status)
+			}
+
+			status, _ := recordOutcomeAs(t, db, srv, uid, practiceID, engagementID, tc.body)
+			if status != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", status)
+			}
+			gotOutcome, _ := readEngagementOutcome(t, db, engagementID)
+			if gotOutcome == nil {
+				t.Fatal("birth_outcome was cleared, want the frozen loss left alone")
+			}
+		})
 	}
 }

@@ -31,8 +31,8 @@ type statusEvent struct {
 // Record: this is ADR-0015's own staff-only audit table, distinct from
 // the (portal-visible-by-default) activity ledger TransitionHandler also
 // writes to for the two moves ADR-0022 names -- see TransitionHandler's
-// own doc comment. #293's own writer (birth_outcome) will call this
-// table with event_type = 'birth_outcome_recorded' the same way.
+// own doc comment. recordOutcomeEvent below is this table's second
+// writer, under event_type 'birth_outcome_recorded' (#293).
 func recordStatusEvent(ctx context.Context, tx *sql.Tx, e statusEvent) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO engagement_events
@@ -52,14 +52,15 @@ func recordStatusEvent(ctx context.Context, tx *sql.Tx, e statusEvent) error {
 // engagement_events -- the same table and the same both-sides shape
 // statusEvent uses, under event_type 'birth_outcome_recorded'. One event
 // type covers recording and correcting alike: a row whose previous side
-// is null is a first recording, and one whose previous side is set is a
-// correction, so the distinction is read off the row rather than
-// asserted twice.
+// is null is a first recording, one whose previous side is set is a
+// correction, and one whose new side is null un-records a value entered
+// on the wrong Engagement -- so the distinction is read off the row
+// rather than asserted twice.
 type outcomeEvent struct {
 	practiceID               string
 	engagementID             string
 	previousBirthOutcome     *string
-	birthOutcome             string
+	birthOutcome             *string
 	previousPregnancyEndedOn *string
 	pregnancyEndedOn         *string
 	actorStaffID             *string

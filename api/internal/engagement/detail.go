@@ -1,5 +1,6 @@
 // Package engagement holds the Staff-side BFF handlers for Engagement
-// detail and its status transition (#253). All handlers rely on staffauth.Middleware
+// detail, its status transition (#253) and its birth outcome (#293).
+// All handlers rely on staffauth.Middleware
 // having already resolved the caller's Staff/Practice ids and opened a
 // request-scoped *sql.Tx with app.current_practice_id set, the same way
 // staffauth's own Owner-only handlers (invite, role assignment) do. The

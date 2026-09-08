@@ -19,7 +19,7 @@ const reasonPortalWrite = "clientauth.Middleware-scoped portal write, not a Staf
 
 var exemptEngagementWriteRoutes = map[string]string{
 	"PATCH /api/practices/{practiceId}/engagements/{engagementId}/status":           "engagement.TransitionHandler runs its own ADR-0008 cascade on reaching 'completed' (ending every open attachment); it is an Engagement lifecycle transition, not one of #350's four named write surfaces",
-	"PUT /api/practices/{practiceId}/engagements/{engagementId}/birth-outcome":      "engagement.RecordBirthOutcomeHandler refuses a contractor Doula outright (ADR-0015's role table), which is stricter than the attachment test AttachingWrite applies; it is not one of #350's four named write surfaces",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/birth-outcome":      "engagement.RecordBirthOutcomeHandler gates the same way the status transition beside it does -- ADR-0015's role table, which refuses a contractor Doula outright rather than testing her attachment; it is not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices": "payments.PostInvoiceHandler is open to any Staff with practice access by design (#68); it is not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/offers":            "offer.CreateHandler is the Practice side of the Offer flow (Owner/Admin, per its own Mount comment); it is not one of #350's four named write surfaces",
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/portal-invite":     "portalinvite.InviteHandler invites the Client to the portal; it is not one of #350's four named write surfaces",

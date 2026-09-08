@@ -66,6 +66,16 @@ const (
 	// comment gives, for any caller (a stale tab, a direct API client)
 	// that reaches one of them anyway.
 	CodePracticePendingDeletion Code = "PRACTICE_PENDING_DELETION"
+	// CodeBirthOutcomeFrozen is #293's press-through, the same shape
+	// CodeSessionEvictionUnconfirmed names: the Engagement already
+	// carries a birth outcome, ADR-0015 freezes it, and the same request
+	// re-sent by a Practice Owner with correction: true goes through.
+	// Nothing is written on the refusal. Its own code rather than the
+	// generic CodeConflict, because the endpoint's other 409 -- a
+	// correction offered where nothing is recorded -- is not
+	// press-through at all, and a caller that told the two apart by
+	// their prose would be doing what #692 forbids.
+	CodeBirthOutcomeFrozen Code = "BIRTH_OUTCOME_FROZEN"
 )
 
 // APIError is docs/api-design.md section 7's structured error shape.
