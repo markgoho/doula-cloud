@@ -130,11 +130,13 @@
 	let { data }: PageProperties = $props();
 	const detail = $derived(data);
 
-	// The Contract's PDF download is Owner/Admin only (ADR-0008's money
-	// row, matching the endpoint's own OwnerAndAdmin gate) -- this drawing
-	// decision is not the gate: contract.ts's downloadSignedContractPdf
-	// hits the real endpoint, which refuses any other role on its own.
+	// The Contract's PDF download opens to an Owner, an Admin, and an
+	// employed Doula (ADR-0008's money row as amended by #282) and refuses
+	// only a contractor -- this drawing decision is not the gate:
+	// contract.ts's downloadSignedContractPdf hits the real endpoint,
+	// which refuses a contractor on its own.
 	const isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(data.session));
+	const canReadContractMoney = $derived(!isAmbientContractor(data.session));
 
 	// InvoiceSection's Owner branch (#270): only an Owner gets the link to
 	// the Payments settings screen, matching PostConnectHandler's own
@@ -418,10 +420,9 @@
 
 	// #258: block over warn -- the same precondition PostSendContractHandler
 	// enforces server-side, checked here so the Send control never offers a
-	// click that the server would refuse anyway. `contract.values` already
-	// carries the union of scope and money values (contract.ts's
-	// normalizeContract folds moneyValues in at load time), so an Owner/Admin
-	// seeing a filled money field never sees it flagged as missing.
+	// click that the server would refuse anyway. `contract.values` carries
+	// every merge field value in one map (#969 retired the money/scope
+	// split), so a filled money field is never flagged as missing.
 	const missingMergeFields = $derived(
 		contract ? missingMergeFieldKeys(contract.mergeFields, contract.values) : []
 	);
@@ -1344,7 +1345,7 @@
 			<ContractStatus
 				status={contract.status}
 				onVoid={handleVoidContract}
-				onDownloadPdf={isPracticeOwnerOrAdmin ? handleDownloadSignedContractPdf : undefined}
+				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}
 			/>
 			<!--
 				#258: Staff reads the same filled document the Client will,

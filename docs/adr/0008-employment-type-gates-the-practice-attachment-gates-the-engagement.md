@@ -700,6 +700,22 @@ a Practice can type carries a price anywhere. `ContractScope`, `ContractFull` an
 `isMoneyMergeFieldKey` are deleted rather than repaired, and the query seam's
 un-backstopped convention — named as a cost below — loses its only Contract case.
 
+**Built in two steps, not one.** [#969](https://github.com/markgoho/doula-cloud/issues/969)
+did the read-boundary half above — the corrected table, `ContractScope`/`ContractFull`/
+`ReadContract`/`isMoneyMergeFieldKey` deleted, and every route this table governs
+(Invoice history, the Practice-wide Invoice book, the signed Contract PDF, and
+`client.shapeOpenEngagement`'s rollup) keying on `!reader.IsAmbientContractor()`
+rather than `reader.IsOwnerOrAdmin()`. It could not also make money stop being a
+merge field: that needs the rate card and the Contract's real amount column, which
+is [#966](https://github.com/markgoho/doula-cloud/issues/966) (built) and
+[#967](https://github.com/markgoho/doula-cloud/issues/967) (not yet). Until #967
+lands, a Contract's price is still whatever a Practice typed into its Template
+prose, so a contractor on a granted attachment — no longer filtered by the deleted
+convention — reads this Contract's merge field values unfiltered, including a price
+if the Template names one. #282's own named exit condition accepts exactly this
+cost rather than resurrecting the query seam to avoid it; #967's column is what
+closes it for good.
+
 **Provisional, pending [#243](https://github.com/markgoho/doula-cloud/issues/243).**
 One rate per Engagement kind rather than tiers; postpartum as a package rather than
 hourly; and an employed Doula sending her own Client's Contract. The last is the

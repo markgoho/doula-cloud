@@ -339,12 +339,14 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 // :engagementId's Contract(s), newest first, cursor-paginated -- by
 // Engagement rather than "the current Contract row" alone, so an
 // Invoice's billing history survives a Contract Void-then-recreate
-// (#72): a superseded, voided Contract's Invoices stay visible. Must be
-// mounted behind staffauth.Middleware.
+// (#72): a superseded, voided Contract's Invoices stay visible. Who may
+// read it: Owner, Admin, and an employed Doula (ADR-0008's money row as
+// amended by #282); RequireNotAmbientContractor refuses a contractor
+// regardless of any attachment she holds, since her own fee is never
+// this route. Must be mounted behind staffauth.Middleware.
 func GetInvoicesHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireTx(w, r)
-		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		tx, practiceID, ok := staffauth.RequireNotAmbientContractor(w, r)
 		if !ok {
 			return
 		}

@@ -152,10 +152,10 @@ func TestRestrictedActions_UnregisteredKindIsNil(t *testing.T) {
 	}
 }
 
-// TestCanSeeAction_Engagement proves the row-level decision an
-// Owner/Admin bypasses ADR-0008's money tier and nobody else does,
-// regardless of employment type -- matching
-// engagement_test.TestListActivityHandler_EmployeeDoulaExcludesMoneyEntries
+// TestCanSeeAction_Engagement proves the row-level decision an Owner, an
+// Admin, and an employed Doula bypass ADR-0008's money tier as amended
+// by #282, and only a plain contractor does not -- matching
+// engagement_test.TestListActivityHandler_EmployeeDoulaSeesMoneyEntries
 // and its contractor counterpart one layer up.
 func TestCanSeeAction_Engagement(t *testing.T) {
 	db := testdb.New(t)
@@ -174,8 +174,8 @@ func TestCanSeeAction_Engagement(t *testing.T) {
 	}{
 		{"owner sees invoice_paid", ownerID, []string{ownerRole}, employeeType, invoicePaidAction, true},
 		{"owner sees contract_signed", ownerID, []string{ownerRole}, employeeType, contractSignedAction, true},
-		{"employee denied invoice_paid", employeeID, []string{doulaRole}, employeeType, invoicePaidAction, false},
-		{"employee denied contract_signed", employeeID, []string{doulaRole}, employeeType, contractSignedAction, false},
+		{"employee sees invoice_paid", employeeID, []string{doulaRole}, employeeType, invoicePaidAction, true},
+		{"employee sees contract_signed", employeeID, []string{doulaRole}, employeeType, contractSignedAction, true},
 		{"employee sees visit_logged", employeeID, []string{doulaRole}, employeeType, "visit_logged", true},
 		{"contractor denied invoice_paid", contractorID, []string{doulaRole}, contractorType, invoicePaidAction, false},
 		{"contractor denied contract_signed", contractorID, []string{doulaRole}, contractorType, contractSignedAction, false},
@@ -255,19 +255,25 @@ func TestCanAccessSubject_ClientFieldTemplateUnregistered(t *testing.T) {
 
 // TestBypasses proves Bypasses (the SQL-parameter form
 // engagement.ListActivityHandler passes as its query's moneyGate
-// placeholder) agrees with CanSeeAction's own Owner/Admin check.
+// placeholder) agrees with CanSeeAction's own check: an Owner and an
+// employed Doula both bypass; a contractor does not.
 func TestBypasses(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Gate Bypasses Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-bypasses-owner", []string{ownerRole}, employeeType)
 	employeeID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-bypasses-employee", []string{doulaRole}, employeeType)
+	contractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-bypasses-contractor", []string{doulaRole}, contractorType)
 
 	ownerReader, _ := buildReader(t, db, practiceID, ownerID, []string{ownerRole}, employeeType)
 	if !activitygate.Bypasses(ownerReader) {
 		t.Fatal("Bypasses(owner) = false, want true")
 	}
 	employeeReader, _ := buildReader(t, db, practiceID, employeeID, []string{doulaRole}, employeeType)
-	if activitygate.Bypasses(employeeReader) {
-		t.Fatal("Bypasses(employee doula) = true, want false")
+	if !activitygate.Bypasses(employeeReader) {
+		t.Fatal("Bypasses(employee doula) = false, want true")
+	}
+	contractorReader, _ := buildReader(t, db, practiceID, contractorID, []string{doulaRole}, contractorType)
+	if activitygate.Bypasses(contractorReader) {
+		t.Fatal("Bypasses(contractor doula) = true, want false")
 	}
 }

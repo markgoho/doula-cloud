@@ -41,6 +41,42 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	return tx, practiceID, true
 }
 
+// MsgContractorMoneyRefused is the 403 body every route ADR-0008's money
+// row (as amended by #282) refuses a contractor Doula with -- named once
+// so RequireNotAmbientContractor and a route that needs the reader-only
+// check without a tx (contracts.GetSignedContractPDFHandler) can never
+// drift onto two different wordings for the same refusal.
+const MsgContractorMoneyRefused = "a contractor Doula cannot read the Practice's money -- only her own agreed fee, on an Engagement she holds a granted attachment on"
+
+// RequireNotAmbientContractor resolves the caller's Reader and
+// request-scoped tx from context and confirms the caller is not a plain
+// contractor Doula -- ADR-0008's money row as amended by #282: a
+// Contract's amount, its Invoice and payment history, and the ledger's
+// money entries open to an Owner, an Admin, and an employed Doula alike;
+// only a contractor is refused, and her own agreed fee reaches her
+// through her Engagement attachment, never this route. Zero-query, for
+// the same reason RequireOwnerOrAdmin is.
+func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
+	tx, has := Tx(r.Context())
+	if !has {
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, "", false
+	}
+	practiceID, _ = PracticeID(r.Context())
+	reader, has := ReaderFrom(r.Context())
+	if !has {
+		// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, "", false
+	}
+	if reader.IsAmbientContractor() {
+		apierr.WriteError(w, MsgContractorMoneyRefused, http.StatusForbidden)
+		return nil, "", false
+	}
+	return tx, practiceID, true
+}
+
 // RequireOwnerOrAdmin is RequireOwner widened by one role, for the writes
 // ADR-0008 puts in an Admin's hands as well as an Owner's -- making an
 // Offer, withdrawing one, completing an Engagement. Owner-only stays the

@@ -213,21 +213,25 @@ func TestPracticeHandler_UnregisteredSubjectKindNeverAppears(t *testing.T) {
 }
 
 // TestPracticeHandler_MoneyTierAppliedPerRow proves ADR-0008's money tier
-// is enforced row by row in the cross-subject feed (via
-// activitygate.CanSeeAction), not only by engagement.ListActivityHandler's
-// own single-subject SQL exclusion: an employed Doula sees an ordinary
-// Engagement event but never an Invoice one.
+// (as amended by #282) is enforced row by row in the cross-subject feed
+// (via activitygate.CanSeeAction), not only by
+// engagement.ListActivityHandler's own single-subject SQL exclusion: a
+// contractor Doula sees an ordinary Engagement event but never an
+// Invoice one. An employed Doula no longer excludes money rows at all
+// under #282, so the contractor -- not the employee -- is the population
+// that still proves this row-level enforcement.
 func TestPracticeHandler_MoneyTierAppliedPerRow(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "doula-feed-money-tier"
+	const contractorUID = "contractor-feed-money-tier"
 	practiceID := testdb.SeedPractice(t, db, "Feed Money Tier Practice")
-	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, employeeType)
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Feed Client", "feed-money-tier@example.com", "active")
+	testdb.SeedGrantedAttachment(t, db, engagementID, contractorID)
 
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(doulaID))
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(doulaID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(contractorID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(contractorID))
 
-	srv, session := newServer(t, db, identityUID)
+	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
 
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")

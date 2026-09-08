@@ -28,12 +28,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	ir.Exempt("POST /api/practices/{practiceId}/engagements/{engagementId}/contract",
 		"guarded by contracts' unique constraint on engagement_id; a retry after the first succeeds hits the constraint and 409s rather than creating a duplicate Contract",
 		true, PostContractHandler())
-	// Contract read is the sharpest #231 case: scope reaches every role
-	// (narrowed by attachment for a contractor, same as above), but money
-	// -- and Invoice history -- is Owner/Admin only, never a Doula's,
-	// employee or contractor. GetContractHandler does the scope-vs-money
-	// split itself via staffauth.Reader + ContractScope/ContractFull, so
-	// the mount stays AnyStaff.
+	// Contract read (narrowed by attachment for a contractor, same as
+	// above): #282 retired the scope-vs-money split #231 built here, so
+	// GetContractHandler now returns the whole Contract to any reader who
+	// reaches the Engagement at all. The mount stays AnyStaff.
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract", staffauth.AnyStaff, GetContractHandler())
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/contract",
 		"full-replace UPDATE of the Contract's merge field values; re-sending the same body is a no-op",
@@ -46,8 +44,11 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 		true, PostVoidContractHandler())
 	// The Signed PDF is a rendered, unredactable document -- it can't be
 	// split into scope/money views the way the JSON Contract read can, so
-	// it follows the money row: Owner/Admin only.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/pdf", staffauth.OwnerAndAdmin, GetSignedContractPDFHandler(store))
+	// it follows the money row wholesale: Owner, Admin, and an employed
+	// Doula (ADR-0008 as amended by #282), refused in-handler for a
+	// contractor since her fee is never on this document at all. Mount
+	// stays AnyStaff; GetSignedContractPDFHandler enforces the refusal.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/pdf", staffauth.AnyStaff, GetSignedContractPDFHandler(store))
 
 	g.OpenGet("/api/portal/engagements/{engagementId}/contract", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetContractHandler()))

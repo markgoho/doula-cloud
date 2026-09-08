@@ -840,6 +840,50 @@ func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 	}
 }
 
+// TestGetInvoicesHandler_EmployedDoulaSees proves ADR-0008's money row
+// as amended by #282: an employed Doula reaches the per-Engagement
+// Invoice history the same as an Owner or Admin. Filed alongside #969:
+// no test previously asserted this route's role rule at all.
+func TestGetInvoicesHandler_EmployedDoulaSees(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-list-employee"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+// TestGetInvoicesHandler_RefusesAContractor proves the one role
+// ADR-0008's money row as amended by #282 still refuses: a contractor
+// Doula, even one holding a granted attachment on the Engagement.
+func TestGetInvoicesHandler_RefusesAContractor(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-list-contractor"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
 // TestGetInvoicesHandler_PaginatesWithCursor proves a page beyond
 // invoicePageSize (30) sets hasMore/nextCursor, and that cursor correctly
 // resumes on the next page.

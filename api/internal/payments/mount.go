@@ -25,18 +25,22 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	// billed the Client twice. Money-creating, same as the six routes
 	// already wrapped below.
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", false, PostInvoiceHandler(client))
-	// Invoice history rides the same money row as Contract money -- see
-	// above. A contractor's own-fee narrowing (rather than an outright
-	// no) is #317's to build once the Offer/Attachment flow exists.
-	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", staffauth.OwnerAndAdmin, GetInvoicesHandler())
+	// Invoice history: Owner, Admin, and an employed Doula (ADR-0008's
+	// money row as amended by #282); GetInvoicesHandler refuses a
+	// contractor in-handler, so the mount stays AnyStaff. A contractor's
+	// own-fee narrowing (rather than an outright no) is #317's to build
+	// once the Offer/Attachment flow exists.
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", staffauth.AnyStaff, GetInvoicesHandler())
 	// The Practice-wide Invoice list (#265): every Invoice the Practice
 	// has billed, with the whole book's outstanding and paid totals, so
 	// "who owes us money" is one screen rather than every Engagement
-	// opened in turn. A contractor's own-fee narrowing has nothing to
-	// narrow here -- an aggregate of the Practice's whole book is not a
-	// view of her own Engagements -- so it stays where the per-Engagement
-	// Contract read already puts it.
-	g.Get("/api/practices/{practiceId}/invoices", staffauth.OwnerAndAdmin, GetPracticeInvoicesHandler())
+	// opened in turn. Same rule as per-Engagement Invoice history above --
+	// Owner, Admin, and an employed Doula, refused in-handler for a
+	// contractor. A contractor's own-fee narrowing has nothing to narrow
+	// here -- an aggregate of the Practice's whole book is not a view of
+	// her own Engagements -- so it stays where the per-Engagement Contract
+	// read already puts it.
+	g.Get("/api/practices/{practiceId}/invoices", staffauth.AnyStaff, GetPracticeInvoicesHandler())
 
 	// Billing mode (#271): a Practice-level choice between billing through
 	// Stripe and billing by hand. Reading is any Staff -- a Doula meets
@@ -53,11 +57,13 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 		false, PutBillingModeHandler())
 
 	// Recording a Payment that did not come through Stripe (#271): Owner
-	// and Admin only, matching ADR-0008's Contract-money read row and this
-	// Mount's own Owner/Admin invoice-history routes above -- a write
-	// gated more loosely than the read of the same data is the harder
-	// position to defend. Money-creating, so Replayable like Invoice
-	// creation above: a double-click must not record the same check twice.
+	// and Admin only -- narrower than the read above, which #282 opened
+	// to an employed Doula too. Reading a number and being allowed to set
+	// one are different things (#282's own write table): only an Owner or
+	// Admin records a Payment, overrides an amount, or voids/writes off
+	// an Invoice, regardless of who may read it. Money-creating, so
+	// Replayable like Invoice creation above: a double-click must not
+	// record the same check twice.
 	ir.Replayable("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments", false, PostManualPaymentHandler(client))
 
 	// Void and write-off (#271) exist only so a by-hand Invoice -- which

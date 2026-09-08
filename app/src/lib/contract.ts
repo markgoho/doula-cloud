@@ -19,38 +19,6 @@ export interface Contract {
 	prose: string;
 	mergeFields: string[];
 	values: Record<string, string>;
-	/** The money-tagged merge field values, present only when
-	 * GetContractHandler's response comes back as the Go BFF's
-	 * ContractFull (ADR-0008: an Owner or Admin reader) -- every other
-	 * reader, and every POST/PUT/Send response (which return the whole
-	 * map unsplit as `values`), never carries this field. Callers should
-	 * not read it directly; `normalizeContract` folds it into `values`
-	 * at the data-access boundary so the rest of the app reads one flat
-	 * map. */
-	moneyValues?: Record<string, string>;
-}
-
-/** The full merge field values a Contract carries, money and scope
- * together. GetContractHandler splits money into a separate
- * `moneyValues` field for an Owner/Admin reader (ADR-0008's split, #231),
- * so reading `values` alone would render a filled money field as blank
- * and flag it as missing. A no-op merge where `moneyValues` is absent --
- * every other reader, and every response that already returns the whole
- * map unsplit as `values`. */
-function mergedContractValues(contract: Pick<Contract, 'values' | 'moneyValues'>): Record<string, string> {
-	return { ...contract.values, ...contract.moneyValues };
-}
-
-/** Folds a freshly loaded/saved Contract's `moneyValues` into `values`,
- * so every local copy this module hands back carries the full merge
- * field map in one place. Without this, editing a Draft with a
- * money-tagged field would read the value from `moneyValues` but
- * `saveContractValues`'s full-replacement PUT sends `values` alone --
- * silently dropping the money value on save. Called once at each of this
- * module's Contract-returning functions, so every caller reads and
- * writes `values` alone from here on. */
-function normalizeContract(contract: Contract): Contract {
-	return { ...contract, values: mergedContractValues(contract) };
 }
 
 /** Merge field keys among mergeFields whose entry in values is absent,
@@ -126,7 +94,7 @@ export async function loadContract(
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	return normalizeContract(await response.json());
+	return response.json();
 }
 
 /** Downloads the Signed PDF for engagementId's Contract from the
@@ -139,7 +107,8 @@ export async function downloadClientSignedContractPdf(fetcher: Fetcher, engageme
 }
 
 /** Downloads the Signed PDF for engagementId's Contract from the Practice
- * route (#302), Owner/Admin only per ADR-0008's money row -- mirrors
+ * route (#302) -- Owner, Admin, and an employed Doula per ADR-0008's
+ * money row as amended by #282, refused for a contractor. Mirrors
  * downloadClientSignedContractPdf above. Throws with the response body
  * text on a non-2xx response. */
 export async function downloadSignedContractPdf(
@@ -163,7 +132,7 @@ export async function createContract(
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	return normalizeContract(await response.json());
+	return response.json();
 }
 
 /** Replaces the full merge field Values map of the Contract for
@@ -184,7 +153,7 @@ export async function saveContractValues(
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	return normalizeContract(await response.json());
+	return response.json();
 }
 
 /** Transitions the Contract for engagementId from Draft to Sent --
@@ -200,7 +169,7 @@ export async function sendContract(
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	return normalizeContract(await response.json());
+	return response.json();
 }
 
 /** Signs the sent Contract for engagementId -- transitions it to signed,
@@ -239,7 +208,7 @@ export async function voidContract(
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	return normalizeContract(await response.json());
+	return response.json();
 }
 
 /** Sets the value for a merge field key within values, returning a new

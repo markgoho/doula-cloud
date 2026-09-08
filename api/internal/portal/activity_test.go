@@ -138,7 +138,7 @@ func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
 }
 
 // TestActivityHandler_KeepsMoneyEntries proves CONTEXT.md's "her money"
-// half: unlike an employed Doula under ADR-0008's money tier, a Client
+// half: unlike a contractor Doula under ADR-0008's money tier, a Client
 // keeps every Contract and Invoice entry on her own Engagement -- this
 // reader applies no money filter at all.
 func TestActivityHandler_KeepsMoneyEntries(t *testing.T) {

@@ -155,13 +155,20 @@ func PostContractHandler() http.Handler {
 	})
 }
 
-// GetContractHandler views the Contract for :engagementId: scope reaches
-// every role that can reach the Engagement at all (narrowed by
-// ADR-0008's attachment rule for a contractor Doula), but money -- and,
-// separately, Invoice history -- is Owner/Admin only. The split is
-// enforced at the type level by ReadContract, not by redacting a value:
-// staffauth.Reader picks which of ContractScope/ContractFull comes back.
-// Must be mounted behind staffauth.Middleware.
+// GetContractHandler views the Contract for :engagementId, in full, for
+// anyone who can reach the Engagement at all (narrowed by ADR-0008's
+// attachment rule for a contractor Doula). #282 deleted the scope-vs-
+// money split this handler used to enforce (ContractScope/ContractFull,
+// ReadContract, the money_ merge-field-key convention): the premise both
+// shared -- that a Client's money is hidden from a Doula -- was wrong for
+// an employed Doula, and #282's named exit condition retires the split
+// entirely rather than re-aiming it, since narrowing a contractor's read
+// alone would need the same per-field classification back. Until #967
+// gives a Contract a real amount column, a contractor on a granted
+// attachment reads this Contract's merge field values unfiltered,
+// including a money-tagged one if the Practice's Template used the old
+// convention -- the interim cost #969 accepts and #967 closes. Must be
+// mounted behind staffauth.Middleware.
 func GetContractHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)
@@ -205,7 +212,7 @@ func GetContractHandler() http.Handler {
 			Values:       values.nonEmpty(),
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, ReadContract(reader, full))
+		apierr.WriteJSON(w, http.StatusOK, full)
 	})
 }
 

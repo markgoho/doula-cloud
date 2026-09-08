@@ -21,8 +21,7 @@ const (
 
 	// Shared across contracts_test files: goconst flags repeated literals
 	// package-wide, not just within one file.
-	testPriceValue     = "$1,200"
-	testScopeOfService = "12 prenatal visits"
+	testPriceValue = "$1,200"
 	// testClientName is SeedEngagement's default Client given name
 	// (testdb.SeedNamedEngagement's own "Test Client" argument), and
 	// therefore the value resolveMergeFieldValues resolves client_name to
@@ -406,13 +405,19 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 
 // TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope proves
 // the other half of that rule: a granted, open attachment reaches the
-// Contract's scope -- but never its money, regardless of attachment.
+// Contract's scope. It also pins #969's documented interim gap, per
+// ADR-0008's "Amended on #282" section: with the money_/ContractScope/
+// ContractFull split deleted and no real amount column yet (#967), a
+// contractor's raw merge field values -- including a price, if the
+// Practice's Template names one -- are not filtered at all. That is the
+// accepted cost, closed by #967's column rather than by resurrecting the
+// deleted split.
 func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-contractor-attached"
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newContractServer(t, db, uid)
@@ -430,6 +435,38 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 	}
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
+	}
+	if out.Values[priceKey] != testPriceValue {
+		t.Fatalf("Values[price] = %q, want %q -- #969's documented interim gap, closed by #967", out.Values[priceKey], testPriceValue)
+	}
+}
+
+// TestGetContractHandler_EmployedDoulaSeesMoney proves ADR-0008's money
+// row as amended by #282: #969 deleted the ContractScope/ContractFull
+// split, and an employed Doula now reads the Contract's price merge
+// field the same as an Owner or Admin -- previously withheld entirely.
+func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-employee-money"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Values[priceKey] != testPriceValue {
+		t.Fatalf("Values[price] = %q, want %q -- an employed Doula reads Contract money now", out.Values[priceKey], testPriceValue)
 	}
 }
 
