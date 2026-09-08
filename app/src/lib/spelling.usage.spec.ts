@@ -13,7 +13,8 @@ import { describe, expect, it } from 'vitest';
  * #899 actually found in the tree, each one a substring with no American
  * homograph, so a match is never a judgment call:
  *
- *   offence   colour   behaviour   centre   recognise
+ *   offence   colour   behaviour   centre   recognise    spelling:ignore: the
+ *   one place the forbidden words are named, so the rule can be read
  *
  * Each pattern hides one of its letters behind a unicode escape rather than
  * spelling the word out, for two reasons: the file would otherwise fail its

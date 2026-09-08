@@ -154,7 +154,7 @@ That last point deserves its own sentence. **Buttondown, a Stripe-billed SaaS wi
 
 ### Fathom Analytics
 
-- Footer: **Privacy** (`/legal/privacy`), **Terms** (`/legal/terms`), GDPR compliance, **Contact** (`/about/contact`), **Help Centre** (`/docs`) — spelled that way on Fathom's own footer, so quoted verbatim rather than Americanized — Imprint, Status, Sitemap. **Observed.** No `/sitemap.xml`; `robots.txt` points at `/sitemap-index.xml`. No standalone refund URL anywhere in it.
+- Footer: **Privacy** (`/legal/privacy`), **Terms** (`/legal/terms`), GDPR compliance, **Contact** (`/about/contact`), **Help Centre** (`/docs`) <!-- spelling:ignore: Fathom's own footer label, quoted verbatim --> — spelled that way on Fathom's own footer, so quoted verbatim rather than Americanized — Imprint, Status, Sitemap. **Observed.** No `/sitemap.xml`; `robots.txt` points at `/sitemap-index.xml`. No standalone refund URL anywhere in it.
 - Refund position, a **titled subsection inside** `/legal/terms` — **observed**:
 
 > Refunds
