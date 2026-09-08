@@ -19,6 +19,14 @@ import (
 // 00013_plan_instances_client_birth_plan_read.sql's RLS policy allows.
 const birthPlanType = "birth_plan"
 
+// msgNoBirthPlan is the one thing a Client-portal caller is ever told
+// about a Birth Plan she cannot have: whether the Plan Instance was
+// never created, or the Engagement's kind never called for one, or the
+// pregnancy ended, she gets the same words. CONTEXT.md's Birth Plan
+// entry: where it does not apply she meets no mention of it at all, so
+// the refusal must not distinguish the three cases for her.
+const msgNoBirthPlan = "no birth plan found for this engagement"
+
 // ClientGetBirthPlanHandler views the Birth Plan instance for the
 // Client-portal caller's Engagement -- clientauth.Middleware has already
 // confirmed the caller's Client owns :engagementId. Read-only: there is no
@@ -34,28 +42,13 @@ func ClientGetBirthPlanHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		inputs, err := fetchBirthPlanInputs(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !engagement.OffersBirthPlan(inputs) {
-			// ADR-0015: a Birth Plan is offered where kind = birth (#311)
-			// and the Engagement has a living or expected baby (#294).
-			// Refused at the API independently of the portal's own nav/hub
-			// gating, so a direct request never sees an empty "not yet"
-			// document -- the same refusal a postpartum-only Engagement
-			// gets, and the same one an Engagement whose pregnancy ended
-			// in a loss gets, with nothing on the Plan Instance changed to
-			// produce it.
-			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+		if refuseUnlessBirthPlanOffered(r.Context(), w, tx, engagementID) {
 			return
 		}
 
 		fields, answers, clientAcknowledgedAt, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
 		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, msgNoBirthPlan, http.StatusNotFound)
 			return
 		}
 		if err != nil {
@@ -88,26 +81,18 @@ func ClientAcknowledgeBirthPlanHandler() http.Handler {
 		engagementID, _ := clientauth.EngagementID(r.Context())
 		clientID, _ := clientauth.ClientID(r.Context())
 
-		inputs, err := fetchBirthPlanInputs(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !engagement.OffersBirthPlan(inputs) {
-			// ADR-0015, the same gate ClientGetBirthPlanHandler carries:
-			// a Client who is not offered a Birth Plan cannot stamp
-			// client_acknowledged_at on one either. Hiding the read and
-			// leaving the write open would let a stale portal tab record
-			// that she read a document the product has stopped offering
-			// her.
-			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+		// The same gate the read carries: a Client who is not offered a
+		// Birth Plan cannot stamp client_acknowledged_at on one either.
+		// Hiding the read and leaving the write open would let a stale
+		// portal tab record that she read a document the product has
+		// stopped offering her.
+		if refuseUnlessBirthPlanOffered(r.Context(), w, tx, engagementID) {
 			return
 		}
 
 		fields, answers, _, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
 		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, msgNoBirthPlan, http.StatusNotFound)
 			return
 		}
 		if err != nil {
@@ -177,6 +162,30 @@ func recordBirthPlanAcknowledged(ctx context.Context, tx *sql.Tx, engagementID, 
 		return fmt.Errorf("plans: record birth plan acknowledged: %w", err)
 	}
 	return nil
+}
+
+// refuseUnlessBirthPlanOffered applies ADR-0015's suppression rule to a
+// Client-portal request, writing the refusal itself and reporting
+// whether the request was refused -- the one place all three
+// Client-facing Birth Plan endpoints (read, PDF, acknowledgement) ask
+// the question, so none of them can drift from the others or from the
+// portal's own nav and hub gating. It is asked at the API rather than
+// left to the UI, so a direct request never sees an empty "not yet"
+// document: a postpartum-only Engagement (#311) and an Engagement whose
+// pregnancy ended (#294) get the same refusal, with nothing on the Plan
+// Instance changed to produce it.
+func refuseUnlessBirthPlanOffered(ctx context.Context, w http.ResponseWriter, tx *sql.Tx, engagementID string) bool {
+	inputs, err := fetchBirthPlanInputs(ctx, tx, engagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return true
+	}
+	if !engagement.OffersBirthPlan(inputs) {
+		apierr.WriteError(w, msgNoBirthPlan, http.StatusNotFound)
+		return true
+	}
+	return false
 }
 
 // fetchBirthPlanInputs reads the two facts engagement.OffersBirthPlan

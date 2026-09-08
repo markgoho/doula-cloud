@@ -49,10 +49,17 @@ func HasLivingOrExpectedBaby(birthOutcome *string) bool {
 // A Birth Plan is offered when the Practice sold a birth Engagement
 // (#311) and that Engagement has a living or expected baby (#294).
 //
-// Both halves are derived, never stored: nothing is retired, archived or
-// hidden on the Plan Instance, so correcting an outcome from 'loss' back
-// to 'live_birth' gives the Birth Plan back with no separate act and no
-// flag to reverse.
+// This is the Client-facing offer, which is why 'live_birth' still
+// answers true: ADR-0015's table keeps an existing plan readable two
+// days after the birth, and its "offer to create ... when the birth
+// outcome is null" prose is about the Practice's authoring affordance,
+// which this function does not gate.
+//
+// ADR-0015 calls the suppressed state "retired, not deleted", and
+// retirement here is entirely derived: no flag is stored on the Plan
+// Instance and nothing about it is changed, so correcting an outcome
+// from 'loss' back to 'live_birth' gives the Birth Plan back with no
+// separate act and nothing to reverse.
 func OffersBirthPlan(in BirthPlanInputs) bool {
 	return in.Kind == KindBirth && HasLivingOrExpectedBaby(in.BirthOutcome)
 }
