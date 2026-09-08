@@ -117,6 +117,76 @@ describe('Client portal Engagement hub', () => {
 	});
 });
 
+/*
+ * #296. The hub used to head itself `Welcome to {practiceName}` -- a
+ * first-visit greeting rendered on every visit for the life of the
+ * Engagement, which on the loss journey is the first thing the screen
+ * says to a woman coming back three weeks after her pregnancy ended.
+ *
+ * It is now CONTEXT.md's own Client word for an Engagement: the entry's
+ * `_Client says_:` line reads `my care ("Your care" as a heading)`.
+ *
+ * There is deliberately no first-visit-versus-returning test here,
+ * because there is deliberately no such branch to test: the heading is a
+ * literal in `+page.svelte` and consults nothing -- not the record, not a
+ * visit count, not an outcome. What these tests prove instead is that
+ * claim from the outside -- the same words across every Engagement state
+ * the DTO can be in, including the shape a Client comes back to after a
+ * loss -- so a conditional reintroduced later fails here rather than
+ * passing quietly.
+ */
+describe("the hub's heading (#296)", () => {
+	// The fixture's own Engagement is the happy path; a state this ticket
+	// has to hold for is a spread of it, never a second record.
+	async function setup(record: unknown = detail) {
+		mockFetch(record);
+		return await render(Hub);
+	}
+
+	it("names the page with the register's own word, and greets nobody", async () => {
+		await setup();
+
+		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		// Still the page's only <h1>, so the document outline and where a
+		// screen reader lands are unchanged by the rewording. A heading is
+		// announced, so `level: 1` says this through the role tree rather
+		// than reaching past it into the DOM for a tag name.
+		expect(await page.getByRole('heading', { level: 1 }).all()).toHaveLength(1);
+		await expect.element(page.getByText(/welcome/i)).not.toBeInTheDocument();
+		// The Practice's name left the heading and not the product: it is
+		// still what `<title>` is built from, which is also what SvelteKit's
+		// navigation announcer reads aloud. The other half of that -- the
+		// name a Client *sees* -- belongs to the portal shell's own top bar
+		// and is asserted in `portal-authenticated-layout.svelte.spec.ts`,
+		// since rendering `+page.svelte` alone has no shell around it.
+		expect(document.title).toContain(practiceName);
+	});
+
+	// The three values CONTEXT.md's Engagement entry defines, plus the
+	// record a Client comes back to after a loss. That last one is a
+	// `completed` Engagement with no due date left to speak of and a Birth
+	// Plan she still owns -- shaped from the DTO alone, because this ticket
+	// must not read `birth_outcome` (#293 adds the column and #294 owns the
+	// surface that reads it), and the point here is precisely that the
+	// heading reads no such fact.
+	const records = [
+		{ name: 'an Engagement in intake', detail: { ...detail, status: 'intake' } },
+		{ name: 'an active Engagement', detail: { ...detail, status: 'active' } },
+		{ name: 'a completed Engagement', detail: { ...detail, status: 'completed' } },
+		{
+			name: 'a Client returning after a loss',
+			detail: { ...detail, status: 'completed', dueDate: undefined }
+		}
+	];
+
+	it.each(records)('says the same words to $name', async ({ detail: record }) => {
+		await setup(record);
+
+		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
+		await expect.element(page.getByText(/welcome/i)).not.toBeInTheDocument();
+	});
+});
+
 // #486 AC5: CONTEXT.md's own vocabulary for this to a Client -- "Everything
 // that has happened" -- behind a closed disclosure, per the design brief's
 // own #433 amendment for the Client portal.

@@ -47,7 +47,7 @@
 			color: var(--color-on-surface);
 			/*
 			 * #595: a hub's title interpolates a Practice's own name
-			 * (`RecordDetail`/`OverviewHub`'s `Welcome to ${practiceName}`),
+			 * (`OverviewHub`'s `Welcome to ${practiceName}`),
 			 * and a Practice's registered name is one this repo has already
 			 * seen typed as a bare URL (#530) -- no space or hyphen for a
 			 * browser to break on. Every other free-text surface this repo

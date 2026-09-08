@@ -15,7 +15,7 @@ test('Client-portal login lands on their engagement-scoped URL', async ({ page, 
 	await signInPortalClient(page, request, clientEmail);
 
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
-	await expect(page.locator('h1')).toHaveText(`Welcome to ${practiceName}`);
+	await expect(page.locator('h1')).toHaveText('Your care');
 
 	// HttpOnly means no script on the page -- including one smuggled in by
 	// an XSS bug -- can read the session credential this way. Name only,
@@ -31,7 +31,7 @@ test('Client-portal login lands on their engagement-scoped URL', async ({ page, 
 	const reopened = await page.context().newPage();
 	await reopened.goto(`/portal/engagements/${engagementId}`);
 	await expect(reopened).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
-	await expect(reopened.locator('h1')).toHaveText(`Welcome to ${practiceName}`);
+	await expect(reopened.locator('h1')).toHaveText('Your care');
 });
 
 /*
