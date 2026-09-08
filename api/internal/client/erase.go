@@ -209,8 +209,10 @@ func EraseEligibilityHandler() http.Handler {
 			// coverage:ignore reason: belt-and-braces -- client.Mount's own
 			// OwnerOnly declaration (g.Get) already refuses a non-owner caller
 			// before this handler runs, so !ok is unreachable through the real
-			// mount. EraseHandler's own RequireOwner above has no such mount-level
-			// gate (writes carry none, ADR-0008) and stays the real enforcement.
+			// mount. Since #1016 the erasure POST is declared the same way
+			// (ir.ExemptGated with staffauth.OwnerOnly), so this in-handler
+			// call is the redundant half of a pair, not the last line of
+			// defense it once was.
 			return
 		}
 		clientID := r.PathValue("clientId")

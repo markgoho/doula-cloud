@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-// bookingWriteRoutes are the nine writes #1016 exists to gate: the ones
+// bookingAndSettingsWriteRoutes are the nine writes #1016 exists to gate: the ones
 // #970 and #990 left behind. Each was mounted through the role-free
 // idempotency.Router.Exempt or Replayable door while checking its role
 // only inside the handler (staffauth.RequireOwner /
@@ -12,7 +12,7 @@ import "testing"
 // The map's value is unused -- only the key set matters -- kept as a map
 // rather than a slice so the test below can strike off each pattern it
 // finds and report any it never saw.
-var bookingWriteRoutes = map[string]bool{
+var bookingAndSettingsWriteRoutes = map[string]bool{
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/offers":       true,
 	"POST /api/practices/{practiceId}/offers/{offerId}/withdraw":               true,
 	"POST /api/practices/{practiceId}/engagement-requests/{requestId}/approve": true,
@@ -31,16 +31,16 @@ var bookingWriteRoutes = map[string]bool{
 // the gated door, but it cannot catch one of these writes mounted
 // through the role-free Exempt/Replayable door instead -- that path
 // never calls GatedWrite at all. This walks the real registry
-// idempotency.Router builds and fails if any of bookingWriteRoutes'
+// idempotency.Router builds and fails if any of bookingAndSettingsWriteRoutes'
 // patterns is missing a role declaration, or missing from the registry
 // entirely (mounted under a different pattern, or not mounted through
 // ExemptGated / ReplayableGated).
 func TestRoutes_BookingAndSettingsWritesDeclareRoles(t *testing.T) {
 	_, _, irRoutes := routes(testDeps())
 
-	seen := make(map[string]bool, len(bookingWriteRoutes))
+	seen := make(map[string]bool, len(bookingAndSettingsWriteRoutes))
 	for _, route := range irRoutes {
-		if !bookingWriteRoutes[route.Pattern] {
+		if !bookingAndSettingsWriteRoutes[route.Pattern] {
 			continue
 		}
 		seen[route.Pattern] = true
@@ -48,7 +48,7 @@ func TestRoutes_BookingAndSettingsWritesDeclareRoles(t *testing.T) {
 			t.Errorf("write %q carries no role declaration -- #1016's own gap, reopened", route.Pattern)
 		}
 	}
-	for pattern := range bookingWriteRoutes {
+	for pattern := range bookingAndSettingsWriteRoutes {
 		if !seen[pattern] {
 			t.Errorf("write %q not found in the registry -- did it move, or stop being mounted through ExemptGated/ReplayableGated?", pattern)
 		}
