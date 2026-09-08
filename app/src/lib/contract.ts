@@ -21,6 +21,30 @@ export interface Contract {
 	values: Record<string, string>;
 }
 
+/** The "price" merge field key is reserved: the Go BFF resolves it from
+ * the Practice's rate card at creation time and never accepts it back
+ * through PutContractHandler (#967's AC -- "never a value a person fills
+ * in on the Contract form"). ContractForm renders every other merge
+ * field as an editable input; the filled prose (ContractView, fillProse)
+ * still shows price wherever the Practice's own template asks for it. */
+const RESERVED_MERGE_FIELD_KEY = 'price';
+
+/** mergeFields with the reserved price key removed, for ContractForm's
+ * own editable-field list -- price has nothing to edit. */
+export function editableMergeFields(mergeFields: string[]): string[] {
+	return mergeFields.filter((key) => key !== RESERVED_MERGE_FIELD_KEY);
+}
+
+/** values with the reserved price key removed, for a PUT request body --
+ * PutContractHandler refuses a request that carries price at all (#967),
+ * so a caller building a full-replacement Values map from a Contract
+ * already loaded (whose values always carry price resolved, per
+ * withResolvedPrice) must strip it back out before saving, or the whole
+ * save 400s. */
+export function editableValues(values: Record<string, string>): Record<string, string> {
+	return Object.fromEntries(Object.entries(values).filter(([key]) => key !== RESERVED_MERGE_FIELD_KEY));
+}
+
 /** Merge field keys among mergeFields whose entry in values is absent,
  * empty, or whitespace-only -- mirrors the Go BFF's own Send precondition
  * (contracts.missingMergeFieldKeys, #258). Used to block the Staff-side

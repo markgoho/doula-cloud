@@ -333,8 +333,10 @@ func TestPostSendContractHandler_PushFailureDoesNotBlockSend(t *testing.T) {
 // completeness precondition: Send refuses 409 FAILED_PRECONDITION when a
 // merge field parsed out of the prose has no value at all, before any
 // write -- the Contract stays a draft, no contract-sent activity entry
-// is written, and no push fires. mergeFieldProse parses two keys and
-// neither is filled, so the refusal names both, not just the first.
+// is written, and no push fires. mergeFieldProse parses two keys;
+// client_name is never filled and is refused, while price resolves
+// automatically from amount_cents (#967) and is never among the missing
+// fields, however empty merge_field_values is.
 func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-blank-merge-field"
@@ -363,8 +365,8 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 	if _, ok := out.Details[clientNameKey]; !ok {
 		t.Fatalf("details = %+v, want an entry for %q", out.Details, clientNameKey)
 	}
-	if _, ok := out.Details[priceKey]; !ok {
-		t.Fatalf("details = %+v, want an entry for %q", out.Details, priceKey)
+	if _, ok := out.Details[priceKey]; ok {
+		t.Fatalf("details = %+v, want no entry for %q -- it resolves automatically from amount_cents (#967)", out.Details, priceKey)
 	}
 
 	getResp := getContract(t, srv, session, practiceID, engagementID)
@@ -394,14 +396,18 @@ func TestPostSendContractHandler_BlankMergeFieldRejected(t *testing.T) {
 // TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected proves a
 // value that is only whitespace counts as missing, the same as an empty
 // string or an absent key, and that a Contract with one filled key and
-// one blank key is refused naming only the blank one.
+// one blank key is refused naming only the blank one. Uses client_name
+// as the blank field and price as the filled one: price can no longer be
+// blank at all (#967 resolves it from amount_cents on every read,
+// regardless of what seedContractWithValues stores for it), so it is the
+// "filled" side of this proof rather than a candidate for it.
 func TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "send-whitespace-merge-field"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Whitespace Client", "whitespace@example.com")
 	seedContractWithValues(t, db, engagementID,
-		contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "   "})
+		contracts.MergeFieldValues{clientNameKey: "   "})
 	testdb.SeedPendingPortalInvite(t, db, clientID)
 
 	srv, session := newContractServer(t, db, uid)
@@ -417,10 +423,10 @@ func TestPostSendContractHandler_WhitespaceOnlyMergeFieldRejected(t *testing.T) 
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if _, ok := out.Details[priceKey]; !ok {
-		t.Fatalf("details = %+v, want an entry for %q", out.Details, priceKey)
+	if _, ok := out.Details[clientNameKey]; !ok {
+		t.Fatalf("details = %+v, want an entry for %q", out.Details, clientNameKey)
 	}
-	if _, ok := out.Details[clientNameKey]; ok {
-		t.Fatalf("details = %+v, want no entry for the filled %q", out.Details, clientNameKey)
+	if _, ok := out.Details[priceKey]; ok {
+		t.Fatalf("details = %+v, want no entry for the auto-resolved %q", out.Details, priceKey)
 	}
 }

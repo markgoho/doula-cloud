@@ -73,7 +73,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		id, prose, status, values, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -100,6 +100,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 		}
 
 		mergeFields := extractMergeFields(prose)
+		values = withResolvedPrice(mergeFields, values, amountCents)
 		if missing := missingMergeFieldKeys(mergeFields, values); len(missing) > 0 {
 			details := make(map[string]string, len(missing))
 			for _, key := range missing {

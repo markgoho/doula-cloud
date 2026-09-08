@@ -4,6 +4,8 @@ import {
 	createContract,
 	downloadClientSignedContractPdf,
 	downloadSignedContractPdf,
+	editableMergeFields,
+	editableValues,
 	fillProse,
 	loadClientContract,
 	loadContract,
@@ -327,6 +329,37 @@ describe('missingMergeFieldKeys', () => {
 	it('names every missing key, not only the first', () => {
 		const result = missingMergeFieldKeys(['practice_name', 'client_name', 'price'], { client_name: 'Jamie' });
 		expect(result).toEqual(['practice_name', 'price']);
+	});
+});
+
+describe('editableMergeFields', () => {
+	it('removes the reserved price key', () => {
+		expect(editableMergeFields(['client_name', 'price', 'scope_of_service'])).toEqual([
+			'client_name',
+			'scope_of_service'
+		]);
+	});
+
+	it('returns every key unchanged when price is absent', () => {
+		expect(editableMergeFields(['client_name', 'scope_of_service'])).toEqual(['client_name', 'scope_of_service']);
+	});
+
+	it('returns an empty array unchanged', () => {
+		expect(editableMergeFields([])).toEqual([]);
+	});
+});
+
+describe('editableValues', () => {
+	it('removes the reserved price key', () => {
+		expect(editableValues({ client_name: 'Jamie', price: '$150.00' })).toEqual({ client_name: 'Jamie' });
+	});
+
+	it('returns every entry unchanged when price is absent', () => {
+		expect(editableValues({ client_name: 'Jamie' })).toEqual({ client_name: 'Jamie' });
+	});
+
+	it('returns an empty object unchanged', () => {
+		expect(editableValues({})).toEqual({});
 	});
 });
 

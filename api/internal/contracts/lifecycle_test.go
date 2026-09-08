@@ -81,18 +81,18 @@ func TestTransitions_DeclaresEveryContractRoute(t *testing.T) {
 
 // TestTransitions_TableIsComplete proves contracts.Transitions -- the
 // registry the guardrail above exists to keep honest -- carries exactly
-// the five declared preconditions, each requiring the status its route's
-// doc comment says it does. A sixth Transition added to the var block
-// without a matching entry here (or a matching route above) is exactly
-// the drift #275 found once, on the Invoice route that had no entry at
-// all.
+// the declared preconditions, each requiring the status its route's doc
+// comment says it does. A new Transition added to the var block without
+// a matching entry here (or a matching route above) is exactly the drift
+// #275 found once, on the Invoice route that had no entry at all.
 func TestTransitions_TableIsComplete(t *testing.T) {
 	want := map[string]contracts.Status{
-		"edited":   contracts.StatusDraft,
-		statusSent: contracts.StatusDraft,
-		"signed":   contracts.StatusSent,
-		"voided":   contracts.StatusSigned,
-		"billed":   contracts.StatusSigned,
+		"edited":            contracts.StatusDraft,
+		statusSent:          contracts.StatusDraft,
+		"signed":            contracts.StatusSent,
+		"voided":            contracts.StatusSigned,
+		"billed":            contracts.StatusSigned,
+		"amount overridden": contracts.StatusDraft,
 	}
 	if len(contracts.Transitions) != len(want) {
 		t.Fatalf("len(Transitions) = %d, want %d", len(contracts.Transitions), len(want))

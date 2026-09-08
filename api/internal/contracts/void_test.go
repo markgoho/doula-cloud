@@ -189,6 +189,7 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	testdb.SeedPendingPortalInvite(t, db, clientID)
 	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+	testdb.SeedPracticeRate(t, db, practiceID, "birth", testRateAmountCents)
 	_, oldObjectPath := seedSignedContract(t, db, engagementID)
 
 	srv, session := newContractServer(t, db, uid)
@@ -214,12 +215,12 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	}
 
 	// #258: Send now refuses a Contract with any blank merge field.
-	// client_name is already prefilled from the Engagement's Client, but
-	// mergeFieldProse's other field, price, is still Staff-typed, so it
-	// has to be filled in before Send for this test's own concern (the
-	// recreate-after-void flow) to reach the assertions below.
+	// client_name is already prefilled from the Engagement's Client, and
+	// mergeFieldProse's other field, price, resolves automatically from
+	// amount_cents (#967) -- neither needs a PUT to reach the assertions
+	// below, so this just round-trips client_name unchanged.
 	putResp := putContract(t, srv, session, practiceID, engagementID,
-		contracts.MergeFieldValues{clientNameKey: created.Values[clientNameKey], priceKey: testPriceValue})
+		contracts.MergeFieldValues{clientNameKey: created.Values[clientNameKey]})
 	defer putResp.Body.Close()
 	if putResp.StatusCode != http.StatusOK {
 		t.Fatalf("put status = %d, want %d", putResp.StatusCode, http.StatusOK)

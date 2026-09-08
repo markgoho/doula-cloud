@@ -89,6 +89,14 @@ const (
 	ActionContractSigned  EngagementAction = "contract_signed"
 	ActionContractVoided  EngagementAction = "contract_voided"
 
+	// ActionContractAmountOverridden records an Owner or an Admin
+	// overriding a Contract's rate-card-derived amount (#967) -- Diff
+	// carries amountCentsBefore and amountCentsAfter, mirroring
+	// practicerate's own rateDiff shape. Never fired once a Contract is
+	// signed or voided: PutContractAmountHandler refuses both (#967's
+	// AC, "a signed Contract's amount never changes for any reason").
+	ActionContractAmountOverridden EngagementAction = "contract_amount_overridden"
+
 	ActionVisitLogged     EngagementAction = "visit_logged"
 	ActionVisitReassigned EngagementAction = "visit_reassigned"
 
@@ -190,15 +198,16 @@ const (
 // agreed fee is a different fact -- it lives on the Offer she accepted,
 // which is not in this set and stays on her ledger.
 var moneyActions = map[EngagementAction]bool{
-	ActionContractCreated:   true,
-	ActionContractSent:      true,
-	ActionContractSigned:    true,
-	ActionContractVoided:    true,
-	ActionInvoiceRaised:     true,
-	ActionInvoicePaid:       true,
-	ActionPaymentRecorded:   true,
-	ActionInvoiceVoided:     true,
-	ActionInvoiceWrittenOff: true,
+	ActionContractCreated:          true,
+	ActionContractSent:             true,
+	ActionContractSigned:           true,
+	ActionContractVoided:           true,
+	ActionContractAmountOverridden: true,
+	ActionInvoiceRaised:            true,
+	ActionInvoicePaid:              true,
+	ActionPaymentRecorded:          true,
+	ActionInvoiceVoided:            true,
+	ActionInvoiceWrittenOff:        true,
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,

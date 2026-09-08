@@ -2,7 +2,14 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { sessionCookieFrom } from './auth';
 import { signInEnrolled } from './mfa';
-import { seedClientPortalUser, seedEngagement, readStaffInviteToken, MAILBOX_URL, WORKER_SECRET } from './stack';
+import {
+	seedClientPortalUser,
+	seedEngagement,
+	seedPracticeRate,
+	readStaffInviteToken,
+	MAILBOX_URL,
+	WORKER_SECRET
+} from './stack';
 import { seedFoundingOwner } from './staffSignup';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
@@ -255,6 +262,9 @@ export async function seedPortalClient(
 	expect(createClient.ok(), `create client failed: ${createClient.status()} ${createClientBody}`).toBe(true);
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
+	// #967: PostContractHandler refuses without a rate for the
+	// Engagement's kind ('birth', seedEngagement's own default).
+	seedPracticeRate(practiceId);
 
 	// A Portal Account for the Client-portal login (#617: no Identity
 	// Platform account any more) -- linked to that Client via

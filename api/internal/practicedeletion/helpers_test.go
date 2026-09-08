@@ -104,7 +104,7 @@ func seedUnsettledInvoice(t *testing.T, db *testdb.DB, practiceID string) {
 		t.Fatalf("seed engagement: %v", err)
 	}
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose) VALUES ($1, 'signed', '') RETURNING id`,
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'signed', '', 15000) RETURNING id`,
 		engagementID,
 	).Scan(&contractID); err != nil {
 		t.Fatalf("seed contract: %v", err)

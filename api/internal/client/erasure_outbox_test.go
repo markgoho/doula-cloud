@@ -62,8 +62,8 @@ func seedInvoicedClient(t *testing.T, db *testdb.DB, practiceID, clientID, custo
 	}
 	var contractID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, prose, merge_field_values)
-		 VALUES ($1, 'Ada Lovelace agrees to...', '{"client_name":"Ada Lovelace"}'::jsonb) RETURNING id`,
+		`INSERT INTO contracts (engagement_id, prose, merge_field_values, amount_cents)
+		 VALUES ($1, 'Ada Lovelace agrees to...', '{"client_name":"Ada Lovelace"}'::jsonb, 15000) RETURNING id`,
 		engagementID,
 	).Scan(&contractID); err != nil {
 		t.Fatalf("seed contract: %v", err)
