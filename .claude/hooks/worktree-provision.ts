@@ -12,7 +12,9 @@
 // one machine's absolute paths.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
+import { BASE_PORTS, PORT_STEP } from '../../app/e2e/ports.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
 const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
@@ -169,32 +171,79 @@ function livePortOffsets(): Set<number> {
 	return claimed;
 }
 
-function ensurePortOffset(worktreePath: string, messages: string[]): void {
+// Every port an offset would bind. BASE_PORTS comes from app/e2e/ports.ts,
+// the single source of truth for the local stack's ports -- a second copy
+// of the list here is exactly how the two drift apart.
+export function portsForOffset(offset: number): number[] {
+	return BASE_PORTS.map(base => base + offset * PORT_STEP);
+}
+
+// True when nothing on this machine is already listening on `port`.
+// Binding it is the only honest test: lsof may not be installed, and a
+// port can be held by a process this user cannot see.
+function isPortFree(port: number): Promise<boolean> {
+	return new Promise(resolve => {
+		const server = net.createServer();
+		server.once('error', () => resolve(false));
+		server.once('listening', () => server.close(() => resolve(true)));
+		server.listen(port, '127.0.0.1');
+	});
+}
+
+export interface OffsetChoice {
+	offset: number;
+	// One `offset N (port P in use)` note per offset passed over, so the
+	// reason an offset was skipped is visible where it happened rather
+	// than surfacing later as an unexplained bind failure in startStack.
+	skipped: string[];
+}
+
+// Pure but for the injected probe, so the decision is unit-testable
+// without binding real ports. Claimed offsets belong to another live
+// worktree; blocked ones are free to claim but unusable right now.
+export async function chooseOffset(
+	claimed: Set<number>,
+	probe: (port: number) => Promise<boolean>
+): Promise<OffsetChoice> {
+	const skipped: string[] = [];
+	for (let offset = 1; offset <= MAX_PORT_OFFSET; offset++) {
+		if (claimed.has(offset)) continue;
+		let busy: number | null = null;
+		for (const port of portsForOffset(offset)) {
+			if (!(await probe(port))) {
+				busy = port;
+				break;
+			}
+		}
+		if (busy === null) return { offset, skipped };
+		skipped.push(`offset ${offset} (port ${busy} in use)`);
+	}
+	throw new Error(
+		`no usable port offset: ${claimed.size} of ${MAX_PORT_OFFSET} claimed by live worktrees` +
+			(skipped.length ? `, and ${skipped.join(', ')}` : '') +
+			`. Prune stale worktrees (worktree-prune.ts --dry-run), or free the ports above.`
+	);
+}
+
+async function ensurePortOffset(worktreePath: string, messages: string[]): Promise<void> {
 	const offsetFile = path.join(worktreePath, '.port-offset');
 	if (fs.existsSync(offsetFile)) {
 		messages.push(`left existing port offset (${fs.readFileSync(offsetFile, 'utf8').trim()})`);
 		return;
 	}
 
-	const claimed = livePortOffsets();
-	let offset = 1;
-	while (claimed.has(offset) && offset <= MAX_PORT_OFFSET) offset++;
-	if (offset > MAX_PORT_OFFSET) {
-		throw new Error(
-			`all ${MAX_PORT_OFFSET} worktree port offsets are in use -- prune stale worktrees ` +
-				`(worktree-prune.ts --dry-run) before creating another one`
-		);
-	}
+	const { offset, skipped } = await chooseOffset(livePortOffsets(), isPortFree);
 	fs.writeFileSync(offsetFile, `${offset}\n`);
+	if (skipped.length) messages.push(`skipped ${skipped.join(', ')}`);
 	messages.push(`assigned port offset ${offset}`);
 }
 
-export function provisionWorktree(worktreePath: string): void {
+export async function provisionWorktree(worktreePath: string): Promise<void> {
 	const messages: string[] = [];
 	const envMessage = ensureAppEnvLocal(worktreePath);
 	if (envMessage) messages.push(envMessage);
 	ensureNodeModules(worktreePath, messages);
-	ensurePortOffset(worktreePath, messages);
+	await ensurePortOffset(worktreePath, messages);
 	log(messages.join('; '));
 }
 
@@ -269,7 +318,7 @@ async function runAsPostToolUseHook(): Promise<void> {
 		process.exit(0);
 	}
 
-	provisionWorktree(worktreePath);
+	await provisionWorktree(worktreePath);
 }
 
 if (import.meta.main) {

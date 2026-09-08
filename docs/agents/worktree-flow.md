@@ -51,11 +51,23 @@ its own once required checks pass.
   `app/node_modules` would clobber each other's generated state even without the `rootDirs`
   bug. The dependency-manifest check above still governs whether this is a *fresh* install or
   a left-alone existing one — it just never chooses a symlink for `app/`.
-- Assigns a port offset (`.port-offset`, gitignored) — the lowest value 1–9 not already
-  claimed by another live worktree. `app/e2e/ports.ts` shifts every port by
-  `offset * 100`, so two worktrees can run `bun run dev:full` or the e2e suite at the same
-  time without colliding. The main checkout and CI have no `.port-offset` file, so they
-  always run at offset 0 — today's exact ports, unchanged.
+- Assigns a port offset (`.port-offset`, gitignored) — the lowest value 1–9 that is neither
+  claimed by another live worktree nor blocked by a port already bound on this machine.
+  `app/e2e/ports.ts` shifts every port by `offset * 100`, so two worktrees can run
+  `bun run dev:full` or the e2e suite at the same time without colliding. The main checkout
+  and CI have no `.port-offset` file, so they always run at offset 0 — today's exact ports,
+  unchanged.
+
+  The bound-port check exists because "unclaimed" and "available" are not the same thing
+  (#927): an unrelated local service holding one of an offset's ports is invisible to the
+  worktree bookkeeping, and the collision would otherwise surface much later as a bind
+  failure inside `startStack` that reads like a broken emulator rather than an unusable
+  offset. Observed for real — a local process on `127.0.0.1:9999` made offset 9 (the Auth
+  emulator, `9099 + 900`) unusable while every other offset-9 port was free. Provisioning
+  now probes every port in `BASE_PORTS` (exported from `app/e2e/ports.ts`, so there is no
+  second copy of the list to drift), skips an offset whose port is taken and says which
+  port that was, and refuses with both causes named rather than handing out an offset that
+  cannot work.
 
 **Never run `bun install` through a live `node_modules` symlink** — it mutates the main
 checkout's modules for every worktree sharing them at once. The provisioning hook already
