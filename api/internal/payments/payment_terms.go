@@ -100,7 +100,11 @@ func invoiceDueAt(ctx context.Context, tx *sql.Tx, practiceID string) (time.Time
 	}
 	var dueAt time.Time
 	if err := tx.QueryRowContext(ctx,
-		`SELECT now() + make_interval(days => $1)`, netDays,
+		// Truncated to the second, which is the resolution Stripe's own
+		// due_date carries: the value sent as a Unix timestamp and the
+		// value stored on the row are then literally the same instant,
+		// rather than the same instant to within a microsecond.
+		`SELECT date_trunc('second', now() + make_interval(days => $1))`, netDays,
 	).Scan(&dueAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return time.Time{}, fmt.Errorf("payments: compute invoice due date: %w", err)

@@ -392,9 +392,17 @@ export function dueLabel(invoice: Invoice, now: Date): string {
 	if (invoice.status !== 'open') {
 		return due;
 	}
+	// Late is "the instant has passed", not "a whole day has passed" --
+	// the same test the BFF's own overdue totals and narrowing use. The
+	// day count is how late, which is a second question: without this
+	// split, an Invoice that fell due an hour ago would be counted in the
+	// Practice's overdue figure while its own row said nothing.
+	if (new Date(invoice.dueAt).getTime() >= now.getTime()) {
+		return due;
+	}
 	const late = daysOverdue(invoice.dueAt, now);
 	if (late === 0) {
-		return due;
+		return `${due} — overdue`;
 	}
 	return `${due} — ${late} ${late === 1 ? 'day' : 'days'} overdue`;
 }

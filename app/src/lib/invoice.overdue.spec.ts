@@ -53,6 +53,14 @@ describe('dueLabel', () => {
 		expect(dueLabel(openInvoice, new Date('2026-10-04T00:00:00Z'))).toContain('3 days overdue');
 	});
 
+	it('calls an invoice overdue from the instant it falls due, not a day later', () => {
+		// The BFF counts this Invoice in the Practice's overdue total the
+		// moment the date passes, so the row it lists must not read as if
+		// nothing had happened for the rest of that day.
+		expect(dueLabel(openInvoice, new Date('2026-10-01T01:00:00Z'))).toContain('overdue');
+		expect(dueLabel(openInvoice, new Date('2026-10-01T01:00:00Z'))).not.toContain('day');
+	});
+
 	it('says only the date while an invoice is still within its terms', () => {
 		expect(dueLabel(openInvoice, new Date('2026-09-15T00:00:00Z'))).not.toContain('overdue');
 	});

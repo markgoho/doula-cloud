@@ -63,7 +63,7 @@
 			value: String(data.outstandingCount)
 		},
 		{ label: 'Paid', value: formatAmount(data.paidCents) },
-		// #768: the ageing figure sits beside the outstanding one it is a
+		// #768: the aging figure sits beside the outstanding one it is a
 		// slice of, so "who owes me, and for how long" is answered by the
 		// same block rather than by opening a second screen.
 		{ label: 'Overdue', value: formatAmount(data.overdueCents) },
