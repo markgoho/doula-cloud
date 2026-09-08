@@ -16,10 +16,13 @@
 		loadMessagesPage,
 		loadVisitsPage,
 		reassignVisit,
+		recordBirthOutcome,
 		saveVisitNotes,
 		scheduleVisit,
 		sendMessage,
 		sendPortalInvite,
+		type BirthOutcomeFacts,
+		type BirthOutcomeRequest,
 		type Visit
 	} from '#lib/engagementDetail.js';
 	import {
@@ -64,7 +67,8 @@
 		missingMergeFieldKeys,
 		type Contract
 	} from '#lib/contract.js';
-	import { isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import BirthOutcomeSection from '#lib/components/organisms/BirthOutcomeSection.svelte';
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
@@ -93,6 +97,10 @@
 		createdAt: string;
 		dueDate?: string;
 		statusMoves: string[];
+		// #293/#943: ADR-0015's birth outcome and the date the pregnancy
+		// ended, both absent until a Practice records them.
+		birthOutcome?: string;
+		pregnancyEndedOn?: string;
 		// #255: the Client's portal-invite state, mirroring
 		// engagementDetail.ts's own EngagementSummary fields.
 		clientPortalInviteStatus?: string;
@@ -190,6 +198,36 @@
 			completeReasonValue = '';
 			completeNoteValue = '';
 		}, orThrownMessage);
+	}
+
+	// #943: what happened to the pregnancy, overlaid on the load-time read
+	// once a record succeeds, exactly as statusOverride above does -- so
+	// the section reads back the new pair without a reload. `undefined`
+	// means "nothing recorded on this page view", which falls back to
+	// `detail`; a cleared pair is a recorded fact of its own, and comes
+	// back from the endpoint as `{}`, so the overlay holds the object
+	// rather than the outcome string.
+	let birthOutcomeOverride = $state<BirthOutcomeFacts | undefined>();
+	const displayBirthOutcome = $derived(
+		birthOutcomeOverride === undefined ? detail?.birthOutcome : birthOutcomeOverride.birthOutcome
+	);
+	const displayPregnancyEndedOn = $derived(
+		birthOutcomeOverride === undefined ? detail?.pregnancyEndedOn : birthOutcomeOverride.pregnancyEndedOn
+	);
+
+	// The app-side mirror of api/internal/engagement/transition.go's own
+	// refuseFactWrite: a contractor Doula may not record this fact, and
+	// neither may a member holding none of the three roles. Drawing only,
+	// never the gate -- the endpoint refuses her whether or not the
+	// control was drawn (ADR-0006).
+	const canRecordBirthOutcome = $derived(
+		!isAmbientContractor(data.session) && (isPracticeOwnerOrAdmin || isDoula(data.session))
+	);
+
+	async function handleRecordBirthOutcome(request: BirthOutcomeRequest) {
+		const result = await recordBirthOutcome(apiFetchWithSession, reference, request);
+		if (result.kind === 'recorded') birthOutcomeOverride = result.facts;
+		return result;
 	}
 
 	/** The label a status-move button carries -- "Reopen" reads as a
@@ -1370,6 +1408,16 @@
 	in body text, the actor muted. Last in `sections` (below), matching the
 	design brief's #433 amendment: it sits low on every page it appears on.
 -->
+{#snippet birthOutcomeSection()}
+	<BirthOutcomeSection
+		outcome={displayBirthOutcome}
+		endedOn={displayPregnancyEndedOn}
+		canRecord={canRecordBirthOutcome}
+		canCorrect={isPracticeOwner}
+		onRecord={handleRecordBirthOutcome}
+	/>
+{/snippet}
+
 {#snippet activitySection()}
 	{#if activityError}
 		<Notice variant="error" message={activityError} />
@@ -1402,6 +1450,7 @@
 	{actions}
 	isContentsShown
 	sections={[
+		{ heading: 'Birth outcome', content: birthOutcomeSection },
 		{ heading: 'Visits', content: visitsSection },
 		{ heading: 'Care Plan', content: carePlanSection },
 		{ heading: 'Birth Plan', content: birthPlanSection },

@@ -166,8 +166,18 @@ function toErrors(
 }
 
 /*
- * What a refused sign-in turned out to be: something to fix, or
- * something to press through.
+ * What a refusal turned out to be: something to fix, or something to
+ * press through.
+ *
+ * `confirmableCode` is which press-through this caller is reading for,
+ * and it defaults to the sign-in one below because that is where the
+ * shape started. #943 is the second: `BIRTH_OUTCOME_FROZEN` is the same
+ * arrangement -- nothing is wrong with what she submitted, the same
+ * request re-sent by an Owner with `correction: true` goes through, and
+ * the words shown are the BFF's own. A caller names its own code rather
+ * than this function matching every press-through code it knows,
+ * because a screen that pressed through a refusal it was not expecting
+ * would be overriding a rule it has never read.
  *
  * Three screens sign a person in behind a Continue-style button, and all
  * three can be refused by #610's cross-population check -- a browser
@@ -194,10 +204,11 @@ export type Refusal =
 
 export async function refusalOrConfirmable(
 	response: Response,
-	fieldIds: Record<string, string> = {}
+	fieldIds: Record<string, string> = {},
+	confirmableCode = 'SESSION_EVICTION_UNCONFIRMED'
 ): Promise<Refusal> {
 	const parsed = await parseRefusal(response);
-	if (response.status === 409 && parsed?.code === 'SESSION_EVICTION_UNCONFIRMED' && parsed.message) {
+	if (response.status === 409 && parsed?.code === confirmableCode && parsed.message) {
 		return { kind: 'confirmable', message: parsed.message };
 	}
 	return { kind: 'errors', errors: toErrors(parsed, fieldIds) };
