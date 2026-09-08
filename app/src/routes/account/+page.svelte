@@ -58,6 +58,8 @@
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import { deleteOwnLogin } from '#lib/loginDeletion.js';
+	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { loadAccountSession } from './session.svelte.js';
 
 	const workStateId = 'account-work-state';
@@ -299,6 +301,56 @@
 			if (!didRemove) mfaStep = 'password';
 		}, (refusal) => (Array.isArray(refusal) ? refusal : [totpCodeRefusal(refusal, mfaCodeId)]));
 	}
+
+	/*
+	 * #892: deleting her own login, the third direction ADR-0033 records
+	 * -- a person asking Doula Cloud, where Erasure is a Client asking her
+	 * Practice and Deletion is a Practice asking Doula Cloud.
+	 *
+	 * It lives here rather than on a Practice screen for the same reason
+	 * the work state does: her login is one fact about one person, however
+	 * many Practices she works at, and a control for it inside a
+	 * per-Practice frame would be telling the same small lie about its own
+	 * reach that this whole route exists to avoid.
+	 *
+	 * Unlike the work state above, this one does get a ConfirmDialog, and
+	 * for the reason handleSubmit's comment says a confirmation has to
+	 * earn: the act is irreversible. What it destroys and what it keeps is
+	 * stated in the section itself, before the button, rather than only in
+	 * the dialog -- someone deciding needs it while she decides, not once
+	 * she has already pressed.
+	 */
+	let isDeleteLoginDialogOpen = $state(false);
+	let isDeletingLogin = $state(false);
+	let deleteLoginError = $state('');
+
+	async function handleDeleteLogin() {
+		deleteLoginError = '';
+		isDeletingLogin = true;
+		try {
+			await deleteOwnLogin(apiFetchWithSession);
+		} catch (error) {
+			// The last-Owner refusal names the Practices in the way, so it is
+			// rendered verbatim rather than replaced with a generic sentence.
+			deleteLoginError = error instanceof Error ? error.message : SERVICE_PROBLEM;
+			// Rethrown so ConfirmDialog leaves itself open over a failure --
+			// its own documented contract for a caller that renders the error.
+			throw error;
+		} finally {
+			isDeletingLogin = false;
+		}
+
+		/*
+		 * Her session rows are already gone server-side and the cookie is
+		 * cleared on the response, so nothing here is racing a live
+		 * credential. Signing the client-side Identity Platform SDK out too
+		 * is #167's shared-device rule, the same call the MFA flow above
+		 * makes: the account is destroyed, but a stale SDK session object in
+		 * this tab is not something to leave lying around.
+		 */
+		signOutOfMfaFirebaseSDK();
+		await goto(resolve('/(signed-out)/login'));
+	}
 </script>
 
 {#snippet intro()}
@@ -400,6 +452,46 @@
 	{/if}
 {/snippet}
 
+{#snippet deleteLoginSection()}
+	<!--
+		Named in full, and split the way ADR-0033 splits it: what goes, and
+		what stays. The second half matters as much as the first -- someone
+		leaving a Practice has every reason to fear she is taking its record
+		of her work with her, and she is not.
+
+		Plain Text elements rather than a list component: three sentences
+		read as prose here, and the alternative would be introducing a list
+		this page has no other use for (docs/design's own rule about
+		choosing a component being a layout decision).
+	-->
+	<Text text="Deleting your login ends your access to Doula Cloud everywhere, at once. It cannot be undone." />
+	<Text
+		text="This deletes your login and your membership of every practice you work at, and signs you out on every device."
+		tone="variant"
+	/>
+	<Text
+		text="Everything you did stays with the practices you did it for &mdash; the messages you sent, the contracts you are named on, the visits you worked. Doula Cloud keeps its own record that this account existed and that you deleted it."
+		tone="variant"
+	/>
+	<Button
+		type="button"
+		variant="destructive"
+		label="Delete your login"
+		loading={isDeletingLogin}
+		onClick={() => (isDeleteLoginDialogOpen = true)}
+	/>
+	<ConfirmDialog
+		bind:open={isDeleteLoginDialogOpen}
+		title="Delete your login"
+		consequence="Your login, and your membership of every practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those practices."
+		confirmLabel="Delete your login"
+		onConfirm={handleDeleteLogin}
+	/>
+	{#if deleteLoginError}
+		<Notice variant="error" message={deleteLoginError} />
+	{/if}
+{/snippet}
+
 {#snippet errorSummary()}
 	<ErrorSummary errors={saveSubmission.errors} />
 {/snippet}
@@ -453,7 +545,8 @@
 		fieldsets={isLoaded
 			? [
 					{ legend: `Your details, ${name}`, content: workState },
-					{ legend: 'Two-factor authentication', content: mfaSection }
+					{ legend: 'Two-factor authentication', content: mfaSection },
+					{ legend: 'Delete your login', content: deleteLoginSection }
 				]
 			: []}
 		errorSummary={saveSubmission.errors.length > 0 ? errorSummary : undefined}
