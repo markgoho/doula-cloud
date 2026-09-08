@@ -151,6 +151,24 @@ func TestPutPaymentTermsHandler_RefusesAnImpossibleTerm(t *testing.T) {
 	}
 }
 
+// TestPutPaymentTermsHandler_RefusesAMalformedBody covers the decode
+// refusal ahead of the range check: a body that is not JSON at all is
+// answered before anything reads a number out of it.
+func TestPutPaymentTermsHandler_RefusesAMalformedBody(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "payment-terms-malformed"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+
+	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
+	defer srv.Close()
+
+	resp := requestPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
 // TestPutPaymentTermsHandler_RefusesADoula proves the write side is
 // narrower than the read side: every Staff member reads the terms, only
 // an Owner or Admin sets them (#282's write table). The refusal comes
