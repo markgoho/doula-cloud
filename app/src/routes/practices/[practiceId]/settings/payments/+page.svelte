@@ -20,12 +20,21 @@
 	 * answered #440's question, and PostConnectHandler refuses to mint an
 	 * Account Link in that state whatever this screen does.
 	 */
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
-	import { loadConnectStatus, connect, type ConnectStatus, type ConnectStatusResult } from '#lib/payments.js';
+	import {
+		loadConnectStatus,
+		connect,
+		canConnectStatusStillMove,
+		pollConnectStatus,
+		CONNECT_STATUS_CHECK_FAILED_MESSAGE,
+		type ConnectStatus,
+		type ConnectStatusResult,
+		type ConnectStatusPollHandle
+	} from '#lib/payments.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -56,6 +65,28 @@
 	let connectError = $state('');
 	let isConnecting = $state(false);
 
+	// #259. Coming back from Stripe is a full document load, so the one
+	// fetch in onMount below is already fresh -- but it can land before
+	// Stripe's own Account object reflects the form just submitted, which
+	// is exactly what MO-G11 watched happen. There is no navigation event
+	// to hook a re-read to once she is already sitting on this page (an
+	// external redirect, not a client-side one), so the fix is a short
+	// poll rather than an invalidate -- reasoning captured in #259's own
+	// re-verified triage comment. `refreshError` never clears `status`: a
+	// failed re-read keeps the last good answer on screen rather than
+	// blanking it or routing through FormPage's `loadError`, which would
+	// replace the whole page over a check that merely didn't go through.
+	let refreshError = $state('');
+	let isCheckingStatus = $state(false);
+	let isPolling = $state(false);
+	let pollHandle: ConnectStatusPollHandle | undefined;
+	// Plain, not $state: only onMount's own async chain reads it, to
+	// decide whether it is still allowed to start a poll after leaving
+	// the two awaits below. A visit that leaves fast enough to destroy
+	// this screen before either fetch resolves must not start a poll
+	// that nothing will ever be left to stop.
+	let isDestroyed = false;
+
 	onMount(async () => {
 		// A Doula is never asked (#267), the same guard the MFA settings
 		// screen already uses one notch narrower. Firing the request anyway
@@ -70,8 +101,55 @@
 			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
+			return;
+		}
+		if (isDestroyed) return;
+		// Only the return trip starts the poll, and only while the status
+		// can still move on its own -- a settled status, or arriving
+		// without `connect=return` at all, must never trigger an extra
+		// read (verified by the "no extra read" spec below).
+		if (connectParameter === 'return' && canConnectStatusStillMove(status)) {
+			isPolling = true;
+			pollHandle = pollConnectStatus(apiFetchWithSession, page.params.practiceId!, status, {
+				onResult: (result) => {
+					status = result;
+					refreshError = '';
+				},
+				onError: () => {
+					refreshError = CONNECT_STATUS_CHECK_FAILED_MESSAGE;
+				},
+				onStopped: () => {
+					isPolling = false;
+				}
+			});
 		}
 	});
+
+	// Stops a running poll the moment this screen is left, so nothing
+	// keeps reading Connect status for a page nobody is looking at --
+	// and marks `isDestroyed` for onMount's own chain above, in case this
+	// runs before that chain has even started its poll.
+	onDestroy(() => {
+		isDestroyed = true;
+		pollHandle?.stop();
+	});
+
+	/* The on-demand half of #259: a visible, focusable control that reads
+	   status again right now, independent of whatever the poll above is
+	   doing. It exists so nothing depends on a timer she cannot see --
+	   the poll is a small, bounded convenience, this is the fallback that
+	   always works, including after the poll's ceiling is reached. */
+	async function handleCheckStatus() {
+		refreshError = '';
+		isCheckingStatus = true;
+		try {
+			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
+		} catch {
+			refreshError = CONNECT_STATUS_CHECK_FAILED_MESSAGE;
+		} finally {
+			isCheckingStatus = false;
+		}
+	}
 
 	async function handleConnect() {
 		connectError = '';
@@ -270,7 +348,16 @@
 			branch that never takes its false path, which the coverage gate
 			would then refuse.
 		-->
-		<cluster-l>
+		<!--
+			aria-live="polite" on both regions below (#259): a re-read, from
+			the poll or from the on-demand button, replaces status wholesale,
+			and the badge, the explanation and the requirement count have to
+			be announced as the update they are rather than sit there
+			silently changed. Two regions, not one, so the return/refresh
+			banner between them -- which carries its own role via Notice --
+			is never nested inside another live region.
+		-->
+		<cluster-l aria-live="polite">
 			<Text text="Stripe Connect status:" />
 			<Badge label={statusCopy[status!.status].label} variant={statusCopy[status!.status].variant} />
 		</cluster-l>
@@ -280,32 +367,56 @@
 				variant="error"
 				message="Stripe still needs something from you before Clients can pay. Open the form again below and finish what it asks for."
 			/>
-		{:else if connectParameter === 'return'}
+		{:else if connectParameter === 'return' && isPolling}
+			<!-- The banner's wording matches what the screen actually does
+			     (#259): it only promises to keep checking while a poll is
+			     actually running. -->
 			<Notice
 				variant="status"
-				message="Stripe onboarding finished. Status updates once Stripe confirms your account is active."
+				message="Stripe onboarding finished. We're checking with Stripe again shortly, in case its review is still catching up."
 			/>
+		{:else if connectParameter === 'return'}
+			<!-- No poll is running -- the status already settled on the
+			     first read, or the poll already reached its ceiling -- so
+			     this stops short of promising an update that is not coming. -->
+			<Notice variant="status" message="Stripe onboarding finished." />
 		{:else if connectParameter === 'refresh'}
 			<Notice variant="status" message="Your Stripe onboarding link expired. Start again below." />
 		{/if}
 
-		<Text text={statusCopy[status!.status].explanation} />
+		<stack-l space="var(--space-2)" aria-live="polite">
+			<Text text={statusCopy[status!.status].explanation} />
 
-		<!-- The count, not the list. requirementsDue holds Stripe's own
-		machine-readable field paths ("configuration.merchant.mcc"), which
-		name nothing an Owner recognizes. The place those get asked in words
-		is Stripe's hosted form, which the button below opens; the paths stay
-		in the database for the audit trail.
+			<!-- The count, not the list. requirementsDue holds Stripe's own
+			machine-readable field paths ("configuration.merchant.mcc"), which
+			name nothing an Owner recognizes. The place those get asked in words
+			is Stripe's hosted form, which the button below opens; the paths stay
+			in the database for the audit trail.
 
-		"from you" is only true of the Owner: she is the one Stripe will ask,
-		and PostConnectHandler refuses anybody else. An Admin reads the same
-		count as a fact about the Practice's account rather than as an errand
-		of her own -- the same reason the branch below tells her who connects
-		Stripe instead of handing her the checklist. -->
-		{#if status!.requirementsDue.length > 0}
-			<Text
-				text={requirementsSentence(status!.requirementsDue.length, isPracticeOwner)}
-			/>
+			"from you" is only true of the Owner: she is the one Stripe will ask,
+			and PostConnectHandler refuses anybody else. An Admin reads the same
+			count as a fact about the Practice's account rather than as an errand
+			of her own -- the same reason the branch below tells her who connects
+			Stripe instead of handing her the checklist. -->
+			{#if status!.requirementsDue.length > 0}
+				<Text
+					text={requirementsSentence(status!.requirementsDue.length, isPracticeOwner)}
+				/>
+			{/if}
+		</stack-l>
+
+		<!--
+			The on-demand half of #259. Always offered, whatever `status` is
+			and whatever the poll above is doing -- "at any time" per the
+			issue's acceptance criteria -- so nothing about seeing the
+			current answer depends on a timer she cannot see or on having
+			just come back from Stripe at all.
+		-->
+		<cluster-l space="var(--space-3)">
+			<Button label="Check status again" variant="secondary" size="sm" onClick={handleCheckStatus} loading={isCheckingStatus} />
+		</cluster-l>
+		{#if refreshError}
+			<Notice variant="error" message={refreshError} />
 		{/if}
 
 		{#if canStartOnboarding && !isPracticeOwner}

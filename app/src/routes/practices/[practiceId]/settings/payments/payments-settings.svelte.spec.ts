@@ -1,7 +1,8 @@
 import { page as testPage } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { CONNECT_STATUS_CHECK_FAILED_MESSAGE, CONNECT_STATUS_POLL_DELAYS_MS } from '#lib/payments.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -105,6 +106,64 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	pageState.url = new URL(fixture.url);
 });
+
+afterEach(() => {
+	vi.useRealTimers();
+});
+
+/** How many times the connect-status endpoint itself has been asked --
+ * excludes the website read, which every test below leaves fixed. */
+function connectCallCount(): number {
+	return apiFetchWithSession.mock.calls.filter((call: unknown[]) => !(call[0] as string).endsWith('/website'))
+		.length;
+}
+
+type StatusReply = 'error' | { status: string; requirementsDue?: string[] };
+
+/* Answers the connect-status endpoint with one entry per call, holding on
+   the last entry once the list runs out -- so a test can drive the exact
+   sequence a poll, or the on-demand button, will see across several
+   reads. The website endpoint is answered once, fixed, with a website
+   already declared: these tests are about the Connect status re-read,
+   not the website gates the existing describe blocks above already
+   cover. */
+function mockApiSequence(replies: StatusReply[], { roles = ['owner'] }: { roles?: string[] } = {}) {
+	pageState.data = {
+		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+	};
+	let call = 0;
+	apiFetchWithSession.mockImplementation((path: string) => {
+		if (path.endsWith('/website')) {
+			return Promise.resolve(
+				jsonResponse({
+					mode: 'own',
+					ownUrl: 'https://rochesterdoulas.com',
+					serviceDescription: '',
+					cancellationPolicy: '',
+					updatedBy: '',
+					updatedAt: '',
+					pageState: '',
+					pageCheckedAt: '',
+					pageCheckDetail: '',
+					pageUrl: ''
+				})
+			);
+		}
+		const reply = replies[Math.min(call, replies.length - 1)];
+		call += 1;
+		if (reply === 'error') {
+			return Promise.resolve(new Response('Connect status check failed', { status: 500 }));
+		}
+		return Promise.resolve(
+			jsonResponse({
+				status: reply.status,
+				cardPaymentsStatus: 'unsupported',
+				payoutsStatus: 'unsupported',
+				requirementsDue: reply.requirementsDue ?? []
+			})
+		);
+	});
+}
 
 describe('payments settings screen', () => {
 	it('shows a Connect Stripe button for an Owner when not connected', async () => {
@@ -398,5 +457,198 @@ describe('payments settings screen: the one question the two website answers do 
 		await expect
 			.element(testPage.getByText('A short description of what your Practice offers', { exact: false }))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe('payments settings screen: re-reading Connect status on return from Stripe (#259)', () => {
+	it('re-reads Connect status after a growing delay while the status can still move on its own', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		mockApiSequence([{ status: 'pending' }, { status: 'active' }]);
+
+		await render(Page, {});
+		expect(connectCallCount()).toBe(1);
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
+
+		expect(connectCallCount()).toBe(2);
+		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+	});
+
+	it('updates the badge, explanation, requirement count and banner together, and announces the change', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		mockApiSequence([
+			{ status: 'payouts_restricted', requirementsDue: [] },
+			{ status: 'active' }
+		]);
+
+		const { container } = await render(Page, {});
+		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
+		const statusRegion = container.querySelector('[aria-live="polite"]');
+		expect(statusRegion).not.toBeNull();
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
+
+		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByText('Clients can pay their invoices and payouts reach your bank.'))
+			.toBeVisible();
+		await expect.element(testPage.getByText('Taking payments, payouts on hold')).not.toBeInTheDocument();
+		expect(statusRegion?.textContent).toContain('Active');
+	});
+
+	it('promises to keep checking only while a check is actually still scheduled', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		mockApiSequence([{ status: 'pending' }, { status: 'active' }]);
+
+		await render(Page, {});
+		await expect
+			.element(
+				testPage.getByText("We're checking with Stripe again shortly", { exact: false })
+			)
+			.toBeVisible();
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
+
+		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByText("We're checking with Stripe again", { exact: false }))
+			.not.toBeInTheDocument();
+	});
+
+	it('shows the plain finished banner, with no promise to keep checking, for a status already settled', async () => {
+		returnedFromStripe('return');
+		mockApiSequence([{ status: 'active' }]);
+
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByText("We're checking with Stripe again", { exact: false }))
+			.not.toBeInTheDocument();
+	});
+
+	it('does not read again once the status has settled', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		mockApiSequence([{ status: 'active' }]);
+
+		await render(Page, {});
+		expect(connectCallCount()).toBe(1);
+
+		const totalDelay = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
+		await vi.advanceTimersByTimeAsync(totalDelay);
+
+		expect(connectCallCount()).toBe(1);
+	});
+
+	it('does not read again without the return parameter, even for a status that could still move', async () => {
+		vi.useFakeTimers();
+		mockApiSequence([{ status: 'pending' }]);
+
+		await render(Page, {});
+		expect(connectCallCount()).toBe(1);
+
+		const totalDelay = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
+		await vi.advanceTimersByTimeAsync(totalDelay);
+
+		expect(connectCallCount()).toBe(1);
+	});
+
+	it('stops re-reading once the delay schedule is exhausted, rather than reading forever', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		// Every reply is 'pending' -- an account whose review never finishes
+		// inside the schedule, the case the ceiling exists for.
+		mockApiSequence([{ status: 'pending' }]);
+
+		await render(Page, {});
+
+		const totalDelay = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
+		await vi.advanceTimersByTimeAsync(totalDelay);
+		expect(connectCallCount()).toBe(1 + CONNECT_STATUS_POLL_DELAYS_MS.length);
+
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(connectCallCount()).toBe(1 + CONNECT_STATUS_POLL_DELAYS_MS.length);
+	});
+
+	it('stops re-reading once the screen is left', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		mockApiSequence([{ status: 'pending' }]);
+
+		const { unmount } = await render(Page, {});
+		expect(connectCallCount()).toBe(1);
+		// Lets onMount's own async work -- the two awaited fetches, then
+		// starting the poll -- finish assigning `pollHandle` before this
+		// leaves, the same way a real visit always outlives that work.
+		await vi.advanceTimersByTimeAsync(0);
+
+		await unmount();
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
+
+		expect(connectCallCount()).toBe(1);
+	});
+
+	it('never starts a poll for a screen left before its own first read finishes', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		mockApiSequence([{ status: 'pending' }]);
+
+		// Unmounts before the awaited initial fetch settles, and before
+		// `pollHandle` has anything to stop -- the guard this is proving is
+		// the `destroyed` flag onMount checks between its own two awaits
+		// and the point it would otherwise start the poll.
+		const { unmount } = await render(Page, {});
+		await unmount();
+		await vi.advanceTimersByTimeAsync(60_000);
+
+		expect(connectCallCount()).toBe(1);
+	});
+
+	it('keeps the last good status on screen and reports failure when a re-read fails', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		mockApiSequence([{ status: 'pending' }, 'error']);
+
+		await render(Page, {});
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
+
+		// Still the same status -- not blanked, and not replaced by
+		// FormPage's whole-page loadError, which would drop this text.
+		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+		await expect.element(testPage.getByText(CONNECT_STATUS_CHECK_FAILED_MESSAGE)).toBeVisible();
+	});
+
+	it('lets the person check the status again on demand, and the Continue button follows the new answer', async () => {
+		mockApiSequence([
+			{ status: 'payouts_restricted', requirementsDue: ['configuration.merchant.mcc'] },
+			{ status: 'payouts_restricted', requirementsDue: [] }
+		]);
+
+		await render(Page, {});
+		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
+
+		await testPage.getByRole('button', { name: 'Check status again' }).click();
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('reports a failed on-demand check without blanking the status', async () => {
+		mockApiSequence([{ status: 'not_connected' }, 'error']);
+
+		await render(Page, {});
+		await testPage.getByRole('button', { name: 'Check status again' }).click();
+
+		await expect.element(testPage.getByText(CONNECT_STATUS_CHECK_FAILED_MESSAGE)).toBeVisible();
+		await expect.element(testPage.getByText('Not connected')).toBeVisible();
 	});
 });
