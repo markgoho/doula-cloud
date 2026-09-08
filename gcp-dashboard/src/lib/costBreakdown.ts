@@ -40,6 +40,28 @@ export const CLOUD_RUN_SERVICE_DESCRIPTION = 'Cloud Run';
 export const CLOUD_SQL_SERVICE_DESCRIPTION = 'Cloud SQL';
 
 /**
+ * How the billing export names Cloud Storage. Read off the export on
+ * 2026-09-08, where it bills at $0.00 — free-tier usage still produces a row.
+ */
+export const CLOUD_STORAGE_SERVICE_DESCRIPTION = 'Cloud Storage';
+
+/**
+ * How the billing export would name Firestore.
+ *
+ * Unverified, unlike the others: the export has never carried a Firestore row
+ * for this project, because the project stores its data in Postgres. Until
+ * one appears the Firestore panel shows no cost beside its figures, which is
+ * the honest reading — there is no Firestore bill to pair them with.
+ */
+export const FIRESTORE_SERVICE_DESCRIPTION = 'Cloud Firestore';
+
+/**
+ * How the billing export names Firebase Hosting. Read off the export on
+ * 2026-09-08, where it bills at $0.00 — free-tier usage still produces a row.
+ */
+export const FIREBASE_HOSTING_SERVICE_DESCRIPTION = 'Firebase Hosting';
+
+/**
  * One SKU's share of a service's cost.
  */
 export interface SkuCost {

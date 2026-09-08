@@ -12,8 +12,8 @@ const UPSTREAM_FAILURE = 502;
 const usageSource = createMonitoringUsageSource();
 
 /**
-One fresh read of Cloud Run and Cloud SQL usage for the billing period.
-Nothing is cached.
+One fresh read of every panel's usage — Cloud Run, Cloud SQL, Cloud Storage,
+Firestore and Firebase Hosting — for the billing period. Nothing is cached.
 */
 export const GET: RequestHandler = async () => {
 	try {

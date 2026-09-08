@@ -2,13 +2,17 @@
 	import {
 		CLOUD_RUN_SERVICE_DESCRIPTION,
 		CLOUD_SQL_SERVICE_DESCRIPTION,
+		CLOUD_STORAGE_SERVICE_DESCRIPTION,
 		EXPORT_FRESHNESS_CAVEAT,
+		FIREBASE_HOSTING_SERVICE_DESCRIPTION,
 		findServiceCost,
+		FIRESTORE_SERVICE_DESCRIPTION,
 		USAGE_DETAIL_UNAVAILABLE_LABEL
 	} from '#lib/costBreakdown.js';
 	import { loadDashboard } from '#lib/dashboard.js';
 	import { DashboardSync } from '#lib/dashboardSync.svelte.js';
 	import {
+		formatBytes,
 		formatClock,
 		formatCompact,
 		formatDay,
@@ -24,6 +28,14 @@
 	const usage = $derived(sync.usage);
 	const cloudRunCost = $derived(findServiceCost(breakdown, CLOUD_RUN_SERVICE_DESCRIPTION));
 	const cloudSqlCost = $derived(findServiceCost(breakdown, CLOUD_SQL_SERVICE_DESCRIPTION));
+	const cloudStorageCost = $derived(findServiceCost(breakdown, CLOUD_STORAGE_SERVICE_DESCRIPTION));
+	const firestoreCost = $derived(findServiceCost(breakdown, FIRESTORE_SERVICE_DESCRIPTION));
+	const firebaseHostingCost = $derived(
+		findServiceCost(breakdown, FIREBASE_HOSTING_SERVICE_DESCRIPTION)
+	);
+	const storedBytes = $derived(formatBytes(usage?.cloudStorage.storedBytes));
+	const sentBytes = $derived(formatBytes(usage?.cloudStorage.sentBytes));
+	const monthlySentBytes = $derived(formatBytes(usage?.firebaseHosting.monthlySentBytes));
 	const isLoading = $derived(sync.state === 'loading');
 </script>
 
@@ -114,87 +126,198 @@
 				{/if}
 			</section>
 
-			<section class="card usage">
-				<h2>Cloud Run usage</h2>
+			<!-- The panels sit side by side wherever there is room for two and
+			     stack where there is not. `auto-fit` reads the space the column
+			     actually has, so no breakpoint and no query is needed for it. -->
+			<div class="usage-panels">
+				<section class="card usage">
+					<h2>Cloud Run usage</h2>
 
-				{#if usage}
-					<p class="panel-cost">
-						{formatUsd(cloudRunCost)}<span class="unit">billed this period</span>
-					</p>
+					{#if usage}
+						<p class="panel-cost">
+							{formatUsd(cloudRunCost)}<span class="unit">billed this period</span>
+						</p>
 
-					<!-- Each stat is a term and its value, so it is a description list. The
-					     term is written first, which is both what HTML requires inside a
-					     `<dl>` and the order a screen reader should hear it in; the panel
-					     draws the figure above its label with `column-reverse`. -->
-					<dl class="stat-grid">
-						<div class="stat">
-							<dt class="stat-label">billable instance time</dt>
-							<dd class="stat-num">
-								{formatHours(usage.cloudRun.billableInstanceTime)}<span class="unit">hrs</span>
-							</dd>
-						</div>
-						<div class="stat">
-							<dt class="stat-label">CPU allocated</dt>
-							<dd class="stat-num">
-								{formatCompact(usage.cloudRun.cpuAllocationTime)}<span class="unit">vCPU&#8209;s</span
-								>
-							</dd>
-						</div>
-						<div class="stat">
-							<dt class="stat-label">memory allocated</dt>
-							<dd class="stat-num">
-								{formatCompact(usage.cloudRun.memoryAllocationTime)}<span class="unit"
-									>GiB&#8209;s</span
-								>
-							</dd>
-						</div>
-						<div class="stat">
-							<dt class="stat-label">requests</dt>
-							<dd class="stat-num">{formatCompact(usage.cloudRun.requestCount)}</dd>
-						</div>
-					</dl>
+						<!-- Each stat is a term and its value, so it is a description list. The
+						     term is written first, which is both what HTML requires inside a
+						     `<dl>` and the order a screen reader should hear it in; the panel
+						     draws the figure above its label with `column-reverse`. -->
+						<dl class="stat-grid">
+							<div class="stat">
+								<dt class="stat-label">billable instance time</dt>
+								<dd class="stat-num">
+									{formatHours(usage.cloudRun.billableInstanceTime)}<span class="unit">hrs</span>
+								</dd>
+							</div>
+							<div class="stat">
+								<dt class="stat-label">CPU allocated</dt>
+								<dd class="stat-num">
+									{formatCompact(usage.cloudRun.cpuAllocationTime)}<span class="unit">vCPU&#8209;s</span
+									>
+								</dd>
+							</div>
+							<div class="stat">
+								<dt class="stat-label">memory allocated</dt>
+								<dd class="stat-num">
+									{formatCompact(usage.cloudRun.memoryAllocationTime)}<span class="unit"
+										>GiB&#8209;s</span
+									>
+								</dd>
+							</div>
+							<div class="stat">
+								<dt class="stat-label">requests</dt>
+								<dd class="stat-num">{formatCompact(usage.cloudRun.requestCount)}</dd>
+							</div>
+						</dl>
 
-					<p class="caveat">
-						This billing period, through {formatClock(Date.parse(usage.through))} today: Cloud
-						Monitoring reports usage live. The cost beside it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
-					</p>
-				{:else}
-					<p class="caveat">Sync to see the usage that produced the Cloud Run bill.</p>
-				{/if}
-			</section>
+						<p class="caveat">
+							This billing period, through {formatClock(Date.parse(usage.through))} today: Cloud
+							Monitoring reports usage live. The cost beside it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+						</p>
+					{:else}
+						<p class="caveat">Sync to see the usage that produced the Cloud Run bill.</p>
+					{/if}
+				</section>
 
-			<section class="card usage">
-				<h2>Cloud SQL usage</h2>
+				<section class="card usage">
+					<h2>Cloud SQL usage</h2>
 
-				{#if usage}
-					<p class="panel-cost">
-						{formatUsd(cloudSqlCost)}<span class="unit">billed this period</span>
-					</p>
+					{#if usage}
+						<p class="panel-cost">
+							{formatUsd(cloudSqlCost)}<span class="unit">billed this period</span>
+						</p>
 
-					<!-- One stat, in the same grid the Cloud Run panel uses. Provisioned
-					     disk is the only Cloud SQL figure the bill actually moves with:
-					     compute is charged flat per instance-tier-hour, so CPU and memory
-					     utilization would be sizing signals dressed up as cost. The grid
-					     is not padded to fill itself. -->
-					<dl class="stat-grid">
-						<div class="stat">
-							<dt class="stat-label">provisioned disk</dt>
-							<dd class="stat-num">
-								{formatGibibytes(usage.cloudSql.diskQuotaBytes)}<span class="unit">GiB</span>
-							</dd>
-						</div>
-					</dl>
+						<!-- One stat, in the same grid the Cloud Run panel uses. Provisioned
+						     disk is the only Cloud SQL figure the bill actually moves with:
+						     compute is charged flat per instance-tier-hour, so CPU and memory
+						     utilization would be sizing signals dressed up as cost. The grid
+						     is not padded to fill itself. -->
+						<dl class="stat-grid">
+							<div class="stat">
+								<dt class="stat-label">provisioned disk</dt>
+								<dd class="stat-num">
+									{formatGibibytes(usage.cloudSql.diskQuotaBytes)}<span class="unit">GiB</span>
+								</dd>
+							</div>
+						</dl>
 
-					<p class="caveat">
-						The peak provisioned this billing period, read at {formatClock(
-							Date.parse(usage.through)
-						)} today. A quota only steps upward, so this is the size being paid for. The cost beside
-						it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
-					</p>
-				{:else}
-					<p class="caveat">Sync to see the usage that produced the Cloud SQL bill.</p>
-				{/if}
-			</section>
+						<p class="caveat">
+							The peak provisioned this billing period, read at {formatClock(
+								Date.parse(usage.through)
+							)} today. A quota only steps upward, so this is the size being paid for. The cost beside
+							it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+						</p>
+					{:else}
+						<p class="caveat">Sync to see the usage that produced the Cloud SQL bill.</p>
+					{/if}
+				</section>
+
+				<section class="card usage">
+					<h2>Cloud Storage usage</h2>
+
+					{#if usage}
+						<p class="panel-cost">
+							{formatUsd(cloudStorageCost)}<span class="unit">billed this period</span>
+						</p>
+
+						<!-- The two things Cloud Storage charges for: what is held, and what
+						     leaves. Every bucket in the project is counted, because every
+						     bucket produces the bill. -->
+						<dl class="stat-grid">
+							<div class="stat">
+								<dt class="stat-label">stored</dt>
+								<dd class="stat-num">
+									{storedBytes.value}<span class="unit">{storedBytes.unit}</span>
+								</dd>
+							</div>
+							<div class="stat">
+								<dt class="stat-label">network egress</dt>
+								<dd class="stat-num">
+									{sentBytes.value}<span class="unit">{sentBytes.unit}</span>
+								</dd>
+							</div>
+						</dl>
+
+						<p class="caveat">
+							Stored is the average held across every bucket this billing period, added up —
+							which is what a byte-hour charge is read from. Egress is what was served out of
+							them, read at {formatClock(Date.parse(usage.through))} today. The cost beside them
+							stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+						</p>
+					{:else}
+						<p class="caveat">Sync to see the usage that produced the Cloud Storage bill.</p>
+					{/if}
+				</section>
+
+				<section class="card usage">
+					<h2>Firestore usage</h2>
+
+					{#if usage}
+						<p class="panel-cost">
+							{formatUsd(firestoreCost)}<span class="unit">billed this period</span>
+						</p>
+
+						<!-- Firestore charges per document operation, so the three counters
+						     are the usage. This project keeps its data in Postgres, so they
+						     usually report nothing at all — which reads as "not reported",
+						     not as zero. -->
+						<dl class="stat-grid">
+							<div class="stat">
+								<dt class="stat-label">document reads</dt>
+								<dd class="stat-num">{formatCompact(usage.firestore.documentReads)}</dd>
+							</div>
+							<div class="stat">
+								<dt class="stat-label">document writes</dt>
+								<dd class="stat-num">{formatCompact(usage.firestore.documentWrites)}</dd>
+							</div>
+							<div class="stat">
+								<dt class="stat-label">document deletes</dt>
+								<dd class="stat-num">{formatCompact(usage.firestore.documentDeletes)}</dd>
+							</div>
+						</dl>
+
+						<p class="caveat">
+							This billing period, through {formatClock(Date.parse(usage.through))} today. A dash
+							means Cloud Monitoring reported no series at all, which is what an unused
+							Firestore looks like. The cost beside it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+						</p>
+					{:else}
+						<p class="caveat">Sync to see the usage that produced the Firestore bill.</p>
+					{/if}
+				</section>
+
+				<section class="card usage">
+					<h2>Firebase Hosting usage</h2>
+
+					{#if usage}
+						<p class="panel-cost">
+							{formatUsd(firebaseHostingCost)}<span class="unit">billed this period</span>
+						</p>
+
+						<!-- One stat, in the same grid the other panels use. Bytes served is
+						     the only Firebase Hosting figure that is charged, and Monitoring
+						     publishes one project-wide total rather than a figure per site.
+						     The grid is not padded to fill itself. -->
+						<dl class="stat-grid">
+							<div class="stat">
+								<dt class="stat-label">served</dt>
+								<dd class="stat-num">
+									{monthlySentBytes.value}<span class="unit">{monthlySentBytes.unit}</span>
+								</dd>
+							</div>
+						</dl>
+
+						<p class="caveat">
+							Month to date, as of the newest sample Cloud Monitoring holds — read at {formatClock(
+								Date.parse(usage.through)
+							)} today. The counter resets at the start of each month. The cost beside it stops
+							earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+						</p>
+					{:else}
+						<p class="caveat">Sync to see the usage that produced the Firebase Hosting bill.</p>
+					{/if}
+				</section>
+			</div>
 		</main>
 	</div>
 </div>
@@ -227,9 +350,19 @@
 		}
 	}
 
-	/* The panels stack, whatever room the column has: each one is as wide as
-	   the column, so a stat grid inside it has the same room whichever panel
-	   it is in. */
+	/* Five panels in one column is a long scroll, so they lay themselves out
+	   two-up wherever the column can hold two and stack where it cannot.
+	   `auto-fit` asks the column how wide it is, so this needs no breakpoint
+	   and no query — at a 320px viewport the column is about 18rem and one
+	   panel fills it. */
+	.usage-panels {
+		display: grid;
+		gap: 1.25rem;
+		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+	}
+
+	/* The breakdown and the block of panels stack, whatever room the column
+	   has. */
 	.main {
 		align-content: start;
 		display: grid;

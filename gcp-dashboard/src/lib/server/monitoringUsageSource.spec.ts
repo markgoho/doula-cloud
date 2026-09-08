@@ -1,6 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMonitoringUsageSource } from './monitoringUsageSource.ts';
-import { buildUsageRequest, CLOUD_RUN_SCOPE, CLOUD_SQL_SCOPE } from './usageQuery.ts';
+import {
+	buildUsageRequest,
+	CLOUD_RUN_SCOPE,
+	CLOUD_SQL_SCOPE,
+	CLOUD_STORAGE_SCOPE,
+	FIREBASE_HOSTING_SCOPE,
+	FIRESTORE_SCOPE,
+	type UsageScope
+} from './usageQuery.ts';
+
+// The order the source reads them in, which is the order the panels are
+// written in and the order the requests are expected to arrive.
+const EVERY_SCOPE: readonly UsageScope[] = [
+	CLOUD_RUN_SCOPE,
+	CLOUD_SQL_SCOPE,
+	CLOUD_STORAGE_SCOPE,
+	FIRESTORE_SCOPE,
+	FIREBASE_HOSTING_SCOPE
+];
+
+const EMPTY_SNAPSHOT = {
+	cloudRun: {},
+	cloudSql: {},
+	cloudStorage: {},
+	firestore: {},
+	firebaseHosting: {}
+};
 
 const constructed = vi.fn();
 const listTimeSeries = vi.fn();
@@ -45,15 +71,14 @@ describe('createMonitoringUsageSource', () => {
 		expect(constructed).toHaveBeenCalledWith();
 	});
 
-	it('asks Monitoring for every Cloud Run and Cloud SQL metric over the billing period', async () => {
+	it("asks Monitoring for every panel's metrics over the billing period", async () => {
 		await createMonitoringUsageSource(now)();
 
-		expect(listTimeSeries.mock.calls.map(([request]) => request)).toEqual([
-			...CLOUD_RUN_SCOPE.metrics.map((metric) =>
-				buildUsageRequest(CLOUD_RUN_SCOPE, metric, readAt)
-			),
-			...CLOUD_SQL_SCOPE.metrics.map((metric) => buildUsageRequest(CLOUD_SQL_SCOPE, metric, readAt))
-		]);
+		expect(listTimeSeries.mock.calls.map(([request]) => request)).toEqual(
+			EVERY_SCOPE.flatMap((scope) =>
+				scope.metrics.map((metric) => buildUsageRequest(scope, metric, readAt))
+			)
+		);
 	});
 
 	it('reads the DOUBLE the allocation-time metrics report', async () => {
@@ -83,7 +108,7 @@ describe('createMonitoringUsageSource', () => {
 	it('leaves a metric out rather than calling an unreported one zero', async () => {
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage).toMatchObject({ cloudRun: {}, cloudSql: {} });
+		expect(usage).toMatchObject(EMPTY_SNAPSHOT);
 	});
 
 	it('leaves it out when the series came back without a point too', async () => {
@@ -91,7 +116,7 @@ describe('createMonitoringUsageSource', () => {
 
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage).toMatchObject({ cloudRun: {}, cloudSql: {} });
+		expect(usage).toMatchObject(EMPTY_SNAPSHOT);
 	});
 
 	it('leaves it out when the point carries no value at all', async () => {
@@ -99,7 +124,43 @@ describe('createMonitoringUsageSource', () => {
 
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage).toMatchObject({ cloudRun: {}, cloudSql: {} });
+		expect(usage).toMatchObject(EMPTY_SNAPSHOT);
+	});
+
+	it('reads the DOUBLE Cloud Storage reports its stored bytes as', async () => {
+		listTimeSeries.mockResolvedValue(double(567_149.5));
+
+		const usage = await createMonitoringUsageSource(now)();
+
+		expect(usage.cloudStorage.storedBytes).toBe(567_149.5);
+	});
+
+	it('reads the INT64 egress counter Monitoring hands back as a string', async () => {
+		listTimeSeries.mockResolvedValue(int64('918273'));
+
+		const usage = await createMonitoringUsageSource(now)();
+
+		expect(usage.cloudStorage.sentBytes).toBe(918_273);
+	});
+
+	it('reads all three Firestore document counters', async () => {
+		listTimeSeries.mockResolvedValue(int64('42'));
+
+		const usage = await createMonitoringUsageSource(now)();
+
+		expect(usage.firestore).toEqual({
+			documentReads: 42,
+			documentWrites: 42,
+			documentDeletes: 42
+		});
+	});
+
+	it('reads the bytes Firebase Hosting has served this month', async () => {
+		listTimeSeries.mockResolvedValue(int64('9467734'));
+
+		const usage = await createMonitoringUsageSource(now)();
+
+		expect(usage.firebaseHosting.monthlySentBytes).toBe(9_467_734);
 	});
 
 	it('says which window the figures cover, so they do not read as the cost period', async () => {
